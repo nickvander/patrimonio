@@ -1,0 +1,53 @@
+services:
+  # Rust API server
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgres://patrimonio:patrimonio@postgres:5432/patrimonio
+      REDIS_URL: redis://redis:6379
+      PLAID_CLIENT_ID: ${PLAID_CLIENT_ID:-}
+      PLAID_SECRET: ${PLAID_SECRET:-}
+      PLAID_ENV: ${PLAID_ENV:-sandbox}
+      EXCHANGE_RATE_API_KEY: ${EXCHANGE_RATE_API_KEY:-}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-dev-key-change-in-prod}
+      RUST_LOG: patrimonio=debug,tower_http=debug
+    restart: unless-stopped
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:17-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: patrimonio
+      POSTGRES_PASSWORD: patrimonio
+      POSTGRES_DB: patrimonio
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U patrimonio"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  pgdata:
+  redisdata:

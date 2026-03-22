@@ -1,0 +1,34 @@
+# Dependencies
+/backend/target/
+/frontend/.dart_tool/
+/frontend/build/
+node_modules/
+
+# Environment (contains secrets)
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker volumes
+pgdata/
+redisdata/
+
+# Logs
+*.log
+
+# Rust
+*.pdb
+
+# Flutter
+/frontend/.packages
+/frontend/.flutter-plugins
+/frontend/.flutter-plugins-dependencies
