@@ -4,6 +4,7 @@ use axum::{
     Json, Router,
 };
 use serde::Serialize;
+use sqlx::Row;
 
 use crate::AppState;
 
@@ -15,8 +16,7 @@ pub fn router() -> Router<AppState> {
 
 /// List all accounts across all institutions
 async fn list_accounts(State(state): State<AppState>) -> Json<Vec<AccountResponse>> {
-    let accounts = sqlx::query_as!(
-        AccountRow,
+    let rows = sqlx::query(
         r#"
         SELECT a.id, a.name, a.account_type, a.currency,
                a.current_balance, a.available_balance, a.credit_limit,
@@ -30,32 +30,53 @@ async fn list_accounts(State(state): State<AppState>) -> Json<Vec<AccountRespons
     .await
     .unwrap_or_default();
 
-    Json(accounts.into_iter().map(AccountResponse::from).collect())
+    let accounts = rows.iter().map(|row| {
+        AccountResponse {
+            id: row.get::<uuid::Uuid, _>("id").to_string(),
+            name: row.get("name"),
+            account_type: row.get("account_type"),
+            currency: row.get("currency"),
+            current_balance: row.try_get::<rust_decimal::Decimal, _>("current_balance")
+                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)),
+            available_balance: row.try_get::<rust_decimal::Decimal, _>("available_balance")
+                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)),
+            credit_limit: row.try_get::<rust_decimal::Decimal, _>("credit_limit")
+                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)),
+            institution_name: row.get("institution_name"),
+            country: row.get("country"),
+            updated_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("updated_at")
+                .ok().map(|d| d.to_rfc3339()).unwrap_or_default(),
+        }
+    }).collect();
+
+    Json(accounts)
 }
 
 /// Get a summary of all accounts (total assets, liabilities, net worth)
 async fn accounts_summary(State(state): State<AppState>) -> Json<AccountsSummary> {
-    let summary = sqlx::query!(
+    let row = sqlx::query(
         r#"
         SELECT
-            COALESCE(SUM(CASE WHEN account_type NOT IN ('credit') THEN current_balance ELSE 0 END), 0) as "total_assets!",
-            COALESCE(SUM(CASE WHEN account_type = 'credit' THEN ABS(current_balance) ELSE 0 END), 0) as "total_liabilities!",
-            COUNT(*) as "account_count!"
+            COALESCE(SUM(CASE WHEN account_type NOT IN ('credit') THEN current_balance ELSE 0 END), 0) as total_assets,
+            COALESCE(SUM(CASE WHEN account_type = 'credit' THEN ABS(current_balance) ELSE 0 END), 0) as total_liabilities,
+            COUNT(*) as account_count
         FROM accounts
         "#
     )
     .fetch_one(&state.db)
     .await;
 
-    match summary {
+    match row {
         Ok(row) => {
-            let assets: f64 = row.total_assets.to_string().parse().unwrap_or(0.0);
-            let liabilities: f64 = row.total_liabilities.to_string().parse().unwrap_or(0.0);
+            let assets: f64 = row.try_get::<rust_decimal::Decimal, _>("total_assets")
+                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+            let liabilities: f64 = row.try_get::<rust_decimal::Decimal, _>("total_liabilities")
+                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
             Json(AccountsSummary {
                 total_assets: assets,
                 total_liabilities: liabilities,
                 net_worth: assets - liabilities,
-                account_count: row.account_count as i32,
+                account_count: row.try_get::<i64, _>("account_count").unwrap_or(0) as i32,
             })
         }
         Err(_) => Json(AccountsSummary {
@@ -79,36 +100,6 @@ struct AccountResponse {
     institution_name: String,
     country: String,
     updated_at: String,
-}
-
-struct AccountRow {
-    id: uuid::Uuid,
-    name: String,
-    account_type: String,
-    currency: String,
-    current_balance: Option<rust_decimal::Decimal>,
-    available_balance: Option<rust_decimal::Decimal>,
-    credit_limit: Option<rust_decimal::Decimal>,
-    institution_name: String,
-    country: String,
-    updated_at: Option<chrono::DateTime<chrono::Utc>>,
-}
-
-impl From<AccountRow> for AccountResponse {
-    fn from(row: AccountRow) -> Self {
-        Self {
-            id: row.id.to_string(),
-            name: row.name,
-            account_type: row.account_type,
-            currency: row.currency,
-            current_balance: row.current_balance.map(|d| d.to_string().parse().unwrap_or(0.0)),
-            available_balance: row.available_balance.map(|d| d.to_string().parse().unwrap_or(0.0)),
-            credit_limit: row.credit_limit.map(|d| d.to_string().parse().unwrap_or(0.0)),
-            institution_name: row.institution_name,
-            country: row.country,
-            updated_at: row.updated_at.map(|d| d.to_rfc3339()).unwrap_or_default(),
-        }
-    }
 }
 
 #[derive(Serialize)]

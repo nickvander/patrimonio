@@ -1,7 +1,6 @@
 use anyhow::Result;
 use axum::{
     extract::State,
-    http::StatusCode,
     response::Json,
     routing::get,
     Router,
@@ -84,17 +83,16 @@ async fn main() -> Result<()> {
 }
 
 /// Health check endpoint
-async fn health(State(state): State<AppState>) -> Result<Json<HealthResponse>, StatusCode> {
-    // Verify database connection
-    sqlx::query("SELECT 1")
+async fn health(State(state): State<AppState>) -> Json<HealthResponse> {
+    let db_ok = sqlx::query("SELECT 1")
         .execute(&state.db)
         .await
-        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+        .is_ok();
 
-    Ok(Json(HealthResponse {
-        status: "ok".to_string(),
-        database: "connected".to_string(),
-    }))
+    Json(HealthResponse {
+        status: if db_ok { "ok" } else { "degraded" }.to_string(),
+        database: if db_ok { "connected" } else { "disconnected" }.to_string(),
+    })
 }
 
 /// Version endpoint

@@ -4,6 +4,7 @@ use axum::{
     Json, Router,
 };
 use serde::Serialize;
+use sqlx::Row;
 
 use crate::AppState;
 
@@ -15,11 +16,11 @@ pub fn router() -> Router<AppState> {
 /// Dashboard overview: net worth, account breakdown, recent changes
 async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOverview> {
     // Net worth by currency
-    let by_currency = sqlx::query!(
+    let currency_rows = sqlx::query(
         r#"
         SELECT currency,
-               COALESCE(SUM(CASE WHEN account_type NOT IN ('credit') THEN current_balance ELSE 0 END), 0) as "assets!",
-               COALESCE(SUM(CASE WHEN account_type = 'credit' THEN ABS(current_balance) ELSE 0 END), 0) as "liabilities!"
+               COALESCE(SUM(CASE WHEN account_type NOT IN ('credit') THEN current_balance ELSE 0 END), 0) as assets,
+               COALESCE(SUM(CASE WHEN account_type = 'credit' THEN ABS(current_balance) ELSE 0 END), 0) as liabilities
         FROM accounts
         GROUP BY currency
         "#
@@ -28,13 +29,14 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
     .await
     .unwrap_or_default();
 
-    let currency_breakdown: Vec<CurrencyBreakdown> = by_currency
-        .into_iter()
+    let currency_breakdown: Vec<CurrencyBreakdown> = currency_rows.iter()
         .map(|r| {
-            let assets: f64 = r.assets.to_string().parse().unwrap_or(0.0);
-            let liabilities: f64 = r.liabilities.to_string().parse().unwrap_or(0.0);
+            let assets: f64 = r.try_get::<rust_decimal::Decimal, _>("assets")
+                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+            let liabilities: f64 = r.try_get::<rust_decimal::Decimal, _>("liabilities")
+                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
             CurrencyBreakdown {
-                currency: r.currency,
+                currency: r.get("currency"),
                 assets,
                 liabilities,
                 net: assets - liabilities,
@@ -43,11 +45,11 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
         .collect();
 
     // Account type breakdown
-    let by_type = sqlx::query!(
+    let type_rows = sqlx::query(
         r#"
         SELECT account_type,
-               COUNT(*) as "count!",
-               COALESCE(SUM(current_balance), 0) as "total!"
+               COUNT(*) as count,
+               COALESCE(SUM(current_balance), 0) as total
         FROM accounts
         GROUP BY account_type
         "#
@@ -56,38 +58,38 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
     .await
     .unwrap_or_default();
 
-    let type_breakdown: Vec<TypeBreakdown> = by_type
-        .into_iter()
+    let type_breakdown: Vec<TypeBreakdown> = type_rows.iter()
         .map(|r| TypeBreakdown {
-            account_type: r.account_type,
-            count: r.count as i32,
-            total: r.total.to_string().parse().unwrap_or(0.0),
+            account_type: r.get("account_type"),
+            count: r.try_get::<i64, _>("count").unwrap_or(0) as i32,
+            total: r.try_get::<rust_decimal::Decimal, _>("total")
+                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
         })
         .collect();
 
     // Institution breakdown
-    let by_institution = sqlx::query!(
+    let institution_rows = sqlx::query(
         r#"
         SELECT i.name as institution_name, i.country,
-               COUNT(*) as "account_count!",
-               COALESCE(SUM(a.current_balance), 0) as "total!"
+               COUNT(*) as account_count,
+               COALESCE(SUM(a.current_balance), 0) as total
         FROM accounts a
         JOIN institutions i ON a.institution_id = i.id
         GROUP BY i.name, i.country
-        ORDER BY "total!" DESC
+        ORDER BY total DESC
         "#
     )
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
 
-    let institution_breakdown: Vec<InstitutionBreakdown> = by_institution
-        .into_iter()
+    let institution_breakdown: Vec<InstitutionBreakdown> = institution_rows.iter()
         .map(|r| InstitutionBreakdown {
-            name: r.institution_name,
-            country: r.country,
-            account_count: r.account_count as i32,
-            total: r.total.to_string().parse().unwrap_or(0.0),
+            name: r.get("institution_name"),
+            country: r.get("country"),
+            account_count: r.try_get::<i64, _>("account_count").unwrap_or(0) as i32,
+            total: r.try_get::<rust_decimal::Decimal, _>("total")
+                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
         })
         .collect();
 

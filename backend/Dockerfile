@@ -1,22 +1,30 @@
 # Build stage
-FROM rust:1.85-slim AS builder
+FROM rust:1.88-slim AS builder
 
 WORKDIR /app
 
-# Install dependencies for sqlx (OpenSSL, pkg-config)
+# Install build dependencies
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 
-# Cache dependencies: copy Cargo files first
-COPY Cargo.toml Cargo.lock* ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN cargo build --release 2>/dev/null || true
-RUN rm -rf src
+# Cache dependencies: copy Cargo files and build deps only
+COPY Cargo.toml ./
+RUN mkdir src && echo "fn main() {println!(\"dummy\");}" > src/main.rs
+RUN cargo build --release || true
+# Remove the dummy build artifacts for the main binary, but keep dep caches
+RUN rm -f target/release/deps/patrimonio* target/release/patrimonio*
 
-# Copy actual source and build
+# Copy actual source
 COPY . .
-# Skip sqlx compile-time checks in Docker (no DB available at build time)
+# Touch main.rs so cargo knows it changed
+RUN touch src/main.rs
+
+# Build the real binary
+# SQLX_OFFLINE skips compile-time DB checks for sqlx macros 
 ENV SQLX_OFFLINE=true
 RUN cargo build --release
+
+# Verify the binary exists and is not trivially small
+RUN ls -la target/release/patrimonio && test $(stat -c%s target/release/patrimonio) -gt 1000000
 
 # Runtime stage
 FROM debian:bookworm-slim

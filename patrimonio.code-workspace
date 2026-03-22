@@ -1,0 +1,81 @@
+{
+  "folders": [
+    {
+      "path": "."
+    }
+  ],
+  "settings": {
+    // Rust
+    "rust-analyzer.cargo.features": "all",
+    "rust-analyzer.check.command": "clippy",
+    "rust-analyzer.linkedProjects": ["backend/Cargo.toml"],
+
+    // Editor
+    "editor.formatOnSave": true,
+    "editor.rulers": [100],
+    "editor.tabSize": 2,
+    "[rust]": {
+      "editor.tabSize": 4,
+      "editor.defaultFormatter": "rust-lang.rust-analyzer"
+    },
+    "[dart]": {
+      "editor.defaultFormatter": "Dart-Code.dart-code",
+      "editor.tabSize": 2
+    },
+
+    // Files
+    "files.exclude": {
+      "**/target": true,
+      "**/.dart_tool": true,
+      "**/build": true
+    },
+    "files.watcherExclude": {
+      "**/target/**": true
+    },
+
+    // Docker
+    "docker.defaultRegistryPath": "patrimonio",
+
+    // Search exclusions
+    "search.exclude": {
+      "**/target": true,
+      "**/build": true,
+      "**/.dart_tool": true
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      // Rust
+      "rust-lang.rust-analyzer",
+      "tamasfe.even-better-toml",
+      "serayuzgur.crates",
+      "vadimcn.vscode-lldb",
+
+      // Flutter / Dart
+      "Dart-Code.dart-code",
+      "Dart-Code.flutter",
+
+      // Database / SQL
+      "mtxr.sqltools",
+      "mtxr.sqltools-driver-pg",
+
+      // Docker
+      "ms-azuretools.vscode-docker",
+
+      // API Testing
+      "humao.rest-client",
+
+      // Git
+      "eamodio.gitlens",
+
+      // Markdown (for work/ docs)
+      "yzhang.markdown-all-in-one",
+      "bierner.markdown-mermaid",
+
+      // General
+      "mikestead.dotenv",
+      "redhat.vscode-yaml",
+      "ms-vscode.makefile-tools"
+    ]
+  }
+}
