@@ -32,3 +32,7 @@ redisdata/
 /frontend/.packages
 /frontend/.flutter-plugins
 /frontend/.flutter-plugins-dependencies
+
+# Temporary files
+/tmp/
+.tmp/
