@@ -1,7 +1,7 @@
-# Current Phase: Phase 1 — Foundation ✅ (mostly complete)
+# Current Phase: Phase 2 — Plaid Integration 🚀
 
 > **Last Updated:** 2026-03-22
-> **Status:** Backend running, Docker verified, pushed to GitHub
+> **Status:** Phase 1 complete. Starting Plaid setup.
 
 ## What's Done
 - Rust backend with axum (4 API modules, 5 models, 2 services)
@@ -10,13 +10,12 @@
 - All API endpoints verified working (0–33ms response times)
 - `work/` directory with specs, decisions, and 5 phase specs
 - VS Code workspace config
+- **Flutter frontend scaffolded**
+- **Exchange rate service with Redis caching implemented**
 
 ## What's Next
-Pick up the remaining Phase 1 items, then move to Phase 2:
-
-1. **Flutter frontend scaffold** — basic app shell with routing
-2. **Exchange rate service** — wire up live USD/MXN fetching
-3. Then proceed to → [Phase 2: Plaid Integration](phases/PHASE-2-PLAID.md)
+Proceed to Phase 2 to begin working on US financial data pulling:
+1. **[Phase 2: Plaid Integration](phases/PHASE-2-PLAID.md)**
 
 ## How to Continue Work
 

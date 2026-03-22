@@ -7,12 +7,17 @@ Cross-platform personal finance tracker (US + Mexico). Tracks accounts across 14
 
 ## Tech Stack
 - **Backend:** Rust + axum (in `backend/`)
-- **Frontend:** Flutter/Dart (in `frontend/` — not yet created)
+- **Frontend:** Flutter/Dart (in `frontend/`)
 - **Database:** PostgreSQL 17 (via Docker)
 - **Cache:** Redis 7 (via Docker)
 - **Containerization:** Docker Compose
 
 ## Quick Reference
+
+### Prerequisites
+- Docker (for DB, Redis, and running the backend)
+- Rust toolchain (for backend development)
+- Flutter SDK (for frontend development - e.g., `sudo snap install flutter --classic`)
 
 ### Running the project
 ```bash

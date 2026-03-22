@@ -24,6 +24,7 @@ use config::AppConfig;
 #[derive(Clone)]
 pub struct AppState {
     pub db: sqlx::PgPool,
+    pub redis: redis::Client,
     pub config: Arc<AppConfig>,
 }
 
@@ -55,9 +56,13 @@ async fn main() -> Result<()> {
         .await?;
     tracing::info!("Migrations complete");
 
+    // Connect to Redis
+    let redis_client = redis::Client::open(config.redis_url.clone())?;
+
     // Build shared state
     let state = AppState {
         db,
+        redis: redis_client,
         config: Arc::new(config.clone()),
     };
 

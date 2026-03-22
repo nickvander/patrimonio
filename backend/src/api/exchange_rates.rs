@@ -19,6 +19,48 @@ async fn get_latest_rate(
     State(state): State<AppState>,
     Path((base, target)): Path<(String, String)>,
 ) -> Json<ExchangeRateResponse> {
+    let cache_key = format!("fx:{}:{}", base.to_uppercase(), target.to_uppercase());
+
+    // 1. Check Redis Cache
+    if let Ok(mut conn) = state.redis.get_multiplexed_async_connection().await {
+        if let Ok(cached_rate) = redis::cmd("GET")
+            .arg(&cache_key)
+            .query_async(&mut conn)
+            .await
+        {
+            tracing::debug!("FX cache hit for {}", cache_key);
+            return Json(ExchangeRateResponse {
+                base: base.to_uppercase(),
+                target: target.to_uppercase(),
+                rate: cached_rate,
+                recorded_at: chrono::Utc::now().to_rfc3339(),
+            });
+        }
+    }
+
+    // 2. Not in Cache, Fetch from API
+    match crate::services::exchange_rate::fetch_and_store_rate(
+        &state.db,
+        &state.redis,
+        &base,
+        &target,
+    )
+    .await
+    {
+        Ok(rate) => {
+            return Json(ExchangeRateResponse {
+                base: base.to_uppercase(),
+                target: target.to_uppercase(),
+                rate,
+                recorded_at: chrono::Utc::now().to_rfc3339(),
+            });
+        }
+        Err(e) => {
+            tracing::warn!("Failed to fetch live rate, falling back to DB: {}", e);
+        }
+    }
+
+    // 3. Fallback to DB
     let rate = sqlx::query(
         r#"
         SELECT rate, recorded_at

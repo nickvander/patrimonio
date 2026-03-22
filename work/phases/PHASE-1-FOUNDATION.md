@@ -6,14 +6,14 @@
 - [x] Git repo initialized
 - [x] Project structure created
 - [x] `work/` directory with specs and decision tracking
-- [ ] Rust backend scaffold (axum, health endpoint)
-- [ ] PostgreSQL schema + migrations (sqlx)
-- [ ] Redis connection setup
-- [ ] Flutter frontend scaffold (web + desktop targets)
-- [ ] Docker Compose (backend + postgres + redis)
-- [ ] Basic API endpoints: health, config
-- [ ] Exchange rate service (fetch + cache)
-- [ ] README with setup instructions
+- [x] Rust backend scaffold (axum, health endpoint)
+- [x] PostgreSQL schema + migrations (sqlx)
+- [x] Redis connection setup
+- [x] Flutter frontend scaffold (web + desktop targets)
+- [x] Docker Compose (backend + postgres + redis)
+- [x] Basic API endpoints: health, config
+- [x] Exchange rate service (fetch + cache)
+- [x] README with setup instructions
 
 ## Architecture Decisions Made
 - See [DECISIONS.md](../DECISIONS.md)
