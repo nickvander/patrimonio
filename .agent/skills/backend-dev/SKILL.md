@@ -1,4 +1,5 @@
 ---
+name: backend-dev
 description: How to add new API endpoints, database tables, and services to the Patrimonio backend
 ---
 

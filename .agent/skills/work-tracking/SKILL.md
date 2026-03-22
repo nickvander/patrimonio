@@ -1,4 +1,5 @@
 ---
+name: work-tracking
 description: How to track project progress, make decisions, and transition between phases in Patrimonio
 ---
 

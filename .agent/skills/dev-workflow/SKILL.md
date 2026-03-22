@@ -1,4 +1,5 @@
 ---
+name: dev-workflow
 description: How to run, build, and test the Patrimonio development environment
 ---
 
