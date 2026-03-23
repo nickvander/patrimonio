@@ -160,54 +160,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                           ),
                         ),
-                  const SizedBox(width: 24),
-                  Expanded(
-                    flex: 1,
-                    child: FxWidget(
-                      latestRate: _fxRate ?? {},
+                        const SizedBox(width: 24),
+                        Expanded(
+                          flex: 1,
+                          child: FxWidget(
+                            latestRate: _fxRate ?? {},
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
+                    const SizedBox(height: 24),
 
-              // 2. Middle Row: Portfolio and Breakdowns
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: PortfolioCard(
-                      portfolioData: _portfolioData ?? {},
+                    // 2. Middle Row: Portfolio and Breakdowns
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: PortfolioCard(
+                            portfolioData: _portfolioData ?? {},
+                          ),
+                        ),
+                        const SizedBox(width: 24),
+                        Expanded(
+                          flex: 1,
+                          child: AccountsBreakdownCard(
+                            typeBreakdown: _overview?['type_breakdown'] ?? [],
+                            institutionBreakdown: _overview?['institution_breakdown'] ?? [],
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 24),
-                  Expanded(
-                    flex: 1,
-                    child: AccountsBreakdownCard(
-                      typeBreakdown: _overview?['type_breakdown'] ?? [],
-                      institutionBreakdown: _overview?['institution_breakdown'] ?? [],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
+                    const SizedBox(height: 24),
 
-              // 3. Bottom Row: Credit Utilization and Sync Status
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: CreditUtilizationCard(
-                      creditData: _creditData ?? [],
+                    // 3. Bottom Row: Credit Utilization and Sync Status
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: CreditUtilizationCard(
+                            creditData: _creditData ?? [],
+                          ),
+                        ),
+                        const SizedBox(width: 24),
+                        Expanded(
+                          child: SyncStatusCard(
+                            syncData: _syncData ?? [],
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 24),
-                  Expanded(
-                    child: SyncStatusCard(
-                      syncData: _syncData ?? [],
-                    ),
-                  ),
                   ],
                 ),
               ),

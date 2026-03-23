@@ -58,15 +58,15 @@ class AccountsListWidget extends StatelessWidget {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            Expanded(
-              child: ListView(
-                children: [
-                  if (cashAccounts.isNotEmpty) _buildAccountGroup('Cash & Banking', cashAccounts, Icons.account_balance_wallet, false),
-                  if (investmentAccounts.isNotEmpty) _buildAccountGroup('Investments', investmentAccounts, Icons.trending_up, false),
-                  if (creditAccounts.isNotEmpty) _buildAccountGroup('Credit Cards', creditAccounts, Icons.credit_card, true),
-                  if (loanAccounts.isNotEmpty) _buildAccountGroup('Loans', loanAccounts, Icons.home_work, true),
-                ],
-              ),
+            ListView(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                if (cashAccounts.isNotEmpty) _buildAccountGroup('Cash & Banking', cashAccounts, Icons.account_balance_wallet, false),
+                if (investmentAccounts.isNotEmpty) _buildAccountGroup('Investments', investmentAccounts, Icons.trending_up, false),
+                if (creditAccounts.isNotEmpty) _buildAccountGroup('Credit Cards', creditAccounts, Icons.credit_card, true),
+                if (loanAccounts.isNotEmpty) _buildAccountGroup('Loans', loanAccounts, Icons.home_work, true),
+              ],
             ),
           ],
         ),

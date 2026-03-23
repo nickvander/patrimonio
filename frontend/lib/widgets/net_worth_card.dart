@@ -77,7 +77,7 @@ class NetWorthCard extends StatelessWidget {
         borderData: FlBorderData(show: false),
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
-            tooltipBgColor: const Color(0xFF2A2A35),
+            getTooltipColor: (_) => const Color(0xFF2A2A35),
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {
                 final currencyFormat = NumberFormat.simpleCurrency(name: 'USD');
