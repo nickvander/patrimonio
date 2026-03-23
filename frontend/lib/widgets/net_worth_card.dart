@@ -56,8 +56,10 @@ class NetWorthCard extends StatelessWidget {
     // Provide a beautiful empty-state flat line so it doesn't look broken when user has no snapshot history
     if (chartHistory.isEmpty && netWorth > 0) {
       final now = DateTime.now();
+      // Generate some points for the last 30 days
       chartHistory = [
         {'date': now.subtract(const Duration(days: 30)).toIso8601String().split('T')[0], 'net_worth': netWorth},
+        {'date': now.subtract(const Duration(days: 15)).toIso8601String().split('T')[0], 'net_worth': netWorth},
         {'date': now.toIso8601String().split('T')[0], 'net_worth': netWorth},
       ];
     } else if (chartHistory.isEmpty) {
@@ -65,34 +67,56 @@ class NetWorthCard extends StatelessWidget {
     }
 
     // Determine min date to use as X axis 0
-    DateTime minDate = DateTime.parse(chartHistory.first['date'] as String);
-    for (var point in chartHistory) {
-      final dt = DateTime.parse(point['date'] as String);
-      if (dt.isBefore(minDate)) minDate = dt;
+    DateTime minDate;
+    try {
+      minDate = DateTime.parse(chartHistory.first['date'] as String);
+      for (var point in chartHistory) {
+        final dt = DateTime.parse(point['date'] as String);
+        if (dt.isBefore(minDate)) minDate = dt;
+      }
+    } catch (e) {
+      return const Center(child: Text('Error parsing historical data.'));
     }
 
     final spots = chartHistory.map((point) {
-      final dt = DateTime.parse(point['date'] as String);
-      final x = dt.difference(minDate).inDays.toDouble();
-      final y = (point['net_worth'] as num?)?.toDouble() ?? 0.0;
-      return FlSpot(x, y);
-    }).toList();
+      try {
+        final dt = DateTime.parse(point['date'] as String);
+        final x = dt.difference(minDate).inDays.toDouble();
+        final y = (point['net_worth'] as num?)?.toDouble() ?? 0.0;
+        return FlSpot(x, y);
+      } catch (e) {
+        return const FlSpot(0, 0);
+      }
+    }).where((spot) => spot.x >= 0).toList();
+
+    if (spots.isEmpty) {
+      return const Center(child: Text('No valid historical data points.'));
+    }
 
     return LineChart(
       LineChartData(
         gridData: FlGridData(
           show: true,
           drawVerticalLine: false,
-          horizontalInterval: 10000,
+          horizontalInterval: (spots.map((e) => e.y).reduce((a, b) => a > b ? a : b) / 5).clamp(1000, 1000000),
           getDrawingHorizontalLine: (value) {
-            return FlLine(
+            return const FlLine(
               color: Colors.white10,
               strokeWidth: 1,
               dashArray: [5, 5],
             );
           },
         ),
-        titlesData: FlTitlesData(show: false),
+        titlesData: const FlTitlesData(
+          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: false,
+            ),
+          ),
+        ),
         borderData: FlBorderData(show: false),
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
@@ -116,17 +140,10 @@ class NetWorthCard extends StatelessWidget {
             color: const Color(0xFF00E676),
             barWidth: 3,
             isStrokeCapRound: true,
-            dotData: FlDotData(show: false),
+            dotData: const FlDotData(show: false),
             belowBarData: BarAreaData(
               show: true,
-              gradient: LinearGradient(
-                colors: [
-                  const Color(0xFF00E676).withOpacity(0.3),
-                  const Color(0xFF00E676).withOpacity(0.0),
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
+              color: const Color(0xFF00E676).withOpacity(0.1),
             ),
           ),
         ],

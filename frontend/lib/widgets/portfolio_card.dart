@@ -18,6 +18,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
   int? _sortColumnIndex = 3; // Default sort by Value
   bool _isAscending = false;
   late List<dynamic> _holdings;
+  int _touchedIndex = -1;
 
   @override
   void initState() {
@@ -157,16 +158,16 @@ class _PortfolioCardState extends State<PortfolioCard> {
               ],
             ),
             const SizedBox(height: 48),
-            Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white10),
-                borderRadius: BorderRadius.circular(16),
+            Theme(
+              data: Theme.of(context).copyWith(
+                cardTheme: CardThemeData(
+                  color: const Color(0xFF1A1A24),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                dividerColor: Colors.white12,
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: _buildHoldingsTable(currencyFormat),
-              ),
+              child: _buildHoldingsTable(currencyFormat),
             ),
           ],
         ),
@@ -182,13 +183,13 @@ class _PortfolioCardState extends State<PortfolioCard> {
       );
     }
 
-    return DataTable(
-      headingRowColor: MaterialStateProperty.all(const Color(0xFF1A1A24)),
-      headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
-      dataRowHeight: 64,
+    return PaginatedDataTable(
+      header: const Text('Asset Breakdown', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+      rowsPerPage: 5,
+      showFirstLastButtons: true,
+      arrowHeadColor: const Color(0xFF00E676),
       sortColumnIndex: _sortColumnIndex,
       sortAscending: _isAscending,
-      showCheckboxColumn: false,
       columns: [
         DataColumn(label: const Text('Asset'), onSort: _sort),
         DataColumn(label: const Text('Shares'), numeric: true, onSort: _sort),
@@ -196,48 +197,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
         DataColumn(label: const Text('Total Value'), numeric: true, onSort: _sort),
         DataColumn(label: const Text('All-Time Return'), numeric: true, onSort: _sort),
       ],
-      rows: _holdings.map((h) {
-        final gain = (h['gain_loss'] as num?)?.toDouble() ?? 0.0;
-        final gainPct = (h['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
-        final quantity = (h['quantity'] as num?)?.toDouble() ?? 0.0;
-        final price = (h['price'] as num?)?.toDouble() ?? 0.0;
-        final value = (h['value'] as num?)?.toDouble() ?? 0.0;
-        final isGain = gain >= 0;
-
-        return DataRow(cells: [
-          DataCell(
-            Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: const Color(0xFF2A2A35),
-                  child: Text(
-                    (h['symbol'] ?? '?').toString().substring(0, 1).toUpperCase(),
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(h['symbol'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text(h['institution_name'] ?? '', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          DataCell(Text(quantity.toStringAsFixed(4), style: const TextStyle(fontSize: 15))),
-          DataCell(Text(format.format(price), style: const TextStyle(fontSize: 15))),
-          DataCell(Text(format.format(value), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
-          DataCell(
-            Text(
-              '${isGain ? '+' : ''}${format.format(gain)} (${gainPct.toStringAsFixed(2)}%)',
-              style: TextStyle(color: isGain ? const Color(0xFF00E676) : Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 15),
-            ),
-          ),
-        ]);
-      }).toList(),
+      source: _HoldingsDataSource(_holdings, format, context),
     );
   }
 
@@ -264,6 +224,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
       if (value <= 0) continue;
       final percentage = value / widget.portfolioData['total_value'];
+      final isTouched = i == _touchedIndex;
+      final radius = isTouched ? 60.0 : 50.0;
 
       if (i < 4) {
         final color = colors[i % colors.length];
@@ -271,11 +233,12 @@ class _PortfolioCardState extends State<PortfolioCard> {
           PieChartSectionData(
             color: color,
             value: value,
-            title: '', // Turn off ugly overlapping titles
-            radius: 50,
+            title: isTouched ? '${(percentage * 100).toStringAsFixed(1)}%' : '',
+            radius: radius,
+            titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
           ),
         );
-        legendItems.add(_buildLegendItem(color, h['symbol'], percentage));
+        legendItems.add(_buildLegendItem(color, h['symbol'], percentage, isTouched));
       } else {
         otherValue += value;
       }
@@ -283,15 +246,18 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
     if (otherValue > 0) {
       final percentage = otherValue / widget.portfolioData['total_value'];
+      final isTouched = _touchedIndex == 4;
+      final radius = isTouched ? 60.0 : 50.0;
       sections.add(
         PieChartSectionData(
           color: Colors.grey.shade700,
           value: otherValue,
-          title: '',
-          radius: 50,
+          title: isTouched ? '${(percentage * 100).toStringAsFixed(1)}%' : '',
+          radius: radius,
+          titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
         ),
       );
-      legendItems.add(_buildLegendItem(Colors.grey.shade700, 'Other', percentage));
+      legendItems.add(_buildLegendItem(Colors.grey.shade700, 'Other', percentage, isTouched));
     }
 
     return Row(
@@ -300,8 +266,21 @@ class _PortfolioCardState extends State<PortfolioCard> {
           flex: 3,
           child: PieChart(
             PieChartData(
+              pieTouchData: PieTouchData(
+                touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                  setState(() {
+                    if (!event.isInterestedForInteractions ||
+                        pieTouchResponse == null ||
+                        pieTouchResponse.touchedSection == null) {
+                      _touchedIndex = -1;
+                      return;
+                    }
+                    _touchedIndex = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                  });
+                },
+              ),
               sections: sections,
-              centerSpaceRadius: 50, // creates a modern donut chart
+              centerSpaceRadius: 50,
               sectionsSpace: 4,
             ),
           ),
@@ -319,17 +298,109 @@ class _PortfolioCardState extends State<PortfolioCard> {
     );
   }
 
-  Widget _buildLegendItem(Color color, String label, double percentage) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
+  Widget _buildLegendItem(Color color, String label, double percentage, bool isTouched) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+      decoration: BoxDecoration(
+        color: isTouched ? color.withOpacity(0.1) : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Row(
         children: [
-          Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              boxShadow: isTouched ? [BoxShadow(color: color.withOpacity(0.5), blurRadius: 4)] : [],
+            ),
+          ),
           const SizedBox(width: 8),
-          Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600))),
-          Text('${(percentage * 100).toStringAsFixed(1)}%', style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+          Expanded(child: Text(label, style: TextStyle(fontWeight: isTouched ? FontWeight.bold : FontWeight.w600, color: isTouched ? color : Colors.white))),
+          Text('${(percentage * 100).toStringAsFixed(1)}%', style: TextStyle(color: isTouched ? color : Colors.grey, fontWeight: FontWeight.bold)),
         ],
       ),
     );
   }
+}
+
+class _HoldingsDataSource extends DataTableSource {
+  final List<dynamic> holdings;
+  final NumberFormat format;
+  final BuildContext context;
+
+  _HoldingsDataSource(this.holdings, this.format, this.context);
+
+  @override
+  DataRow? getRow(int index) {
+    if (index >= holdings.length) return null;
+    final h = holdings[index];
+    final gain = (h['gain_loss'] as num?)?.toDouble() ?? 0.0;
+    final gainPct = (h['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
+    final quantity = (h['quantity'] as num?)?.toDouble() ?? 0.0;
+    final price = (h['price'] as num?)?.toDouble() ?? 0.0;
+    final value = (h['value'] as num?)?.toDouble() ?? 0.0;
+    final isGain = gain >= 0;
+
+    return DataRow(
+      color: MaterialStateProperty.resolveWith<Color?>((states) {
+        if (states.contains(MaterialState.hovered)) {
+          return Colors.white.withOpacity(0.05);
+        }
+        return null; // Use default
+      }),
+      cells: [
+        DataCell(
+          Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: const Color(0xFF2A2A35),
+                radius: 16,
+                child: Text(
+                  (h['symbol'] ?? '?').toString().substring(0, 1).toUpperCase(),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(h['symbol'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  Text(h['institution_name'] ?? '', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                ],
+              ),
+            ],
+          ),
+        ),
+        DataCell(Text(quantity.toStringAsFixed(4), style: const TextStyle(fontSize: 14))),
+        DataCell(Text(format.format(price), style: const TextStyle(fontSize: 14))),
+        DataCell(Text(format.format(value), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+        DataCell(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: (isGain ? const Color(0xFF00E676) : Colors.redAccent).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              '${isGain ? '+' : ''}${gainPct.toStringAsFixed(2)}%',
+              style: TextStyle(color: isGain ? const Color(0xFF00E676) : Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  bool get isRowCountApproximate => false;
+
+  @override
+  int get rowCount => holdings.length;
+
+  @override
+  int get selectedRowCount => 0;
 }
