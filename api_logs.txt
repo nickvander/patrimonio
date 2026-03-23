@@ -1,0 +1,4 @@
+api-1  | [2m2026-03-23T00:16:54.374308Z[0m [32m INFO[0m [2mpatrimonio[0m[2m:[0m Starting Patrimonio API server
+api-1  | [2m2026-03-23T00:16:54.380854Z[0m [32m INFO[0m [2mpatrimonio[0m[2m:[0m Running database migrations...
+api-1  | [2m2026-03-23T00:16:54.385496Z[0m [32m INFO[0m [2mpatrimonio[0m[2m:[0m Migrations complete
+api-1  | [2m2026-03-23T00:16:54.385948Z[0m [32m INFO[0m [2mpatrimonio[0m[2m:[0m Listening on 0.0.0.0:8080
