@@ -6,6 +6,7 @@ import '../widgets/portfolio_card.dart';
 import '../widgets/fx_widget.dart';
 import '../widgets/credit_utilization_card.dart';
 import '../widgets/sync_status_card.dart';
+import '../widgets/accounts_list_widget.dart';
 import 'connect_bank_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -128,23 +129,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1600),
-          child: Column(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Top Row: Net Worth and FX
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: SizedBox(
-                      height: 350,
-                      child: NetWorthCard(
-                        netWorth: (_overview?['net_worth'] as num?)?.toDouble() ?? 0.0,
-                        history: _netWorthHistory ?? [],
-                      ),
-                    ),
-                  ),
+              // Left Column: Accounts List Sidebar
+              Expanded(
+                flex: 1,
+                child: AccountsListWidget(
+                  accounts: _overview?['accounts'] ?? [],
+                ),
+              ),
+              const SizedBox(width: 24),
+              // Right Column: Charts and Breakdowns
+              Expanded(
+                flex: 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 1. Top Row: Net Worth and FX
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: SizedBox(
+                            height: 350,
+                            child: NetWorthCard(
+                              netWorth: (_overview?['net_worth'] as num?)?.toDouble() ?? 0.0,
+                              history: _netWorthHistory ?? [],
+                            ),
+                          ),
+                        ),
                   const SizedBox(width: 24),
                   Expanded(
                     flex: 1,
@@ -193,7 +208,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       syncData: _syncData ?? [],
                     ),
                   ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),

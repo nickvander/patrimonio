@@ -67,7 +67,14 @@ class AccountsBreakdownCard extends StatelessWidget {
     if (data.isEmpty) return const Center(child: Text('No data'));
 
     final currencyFormat = NumberFormat.compactCurrency(name: 'USD', symbol: '\$');
-    final colors = [Colors.teal, Colors.blue, Colors.orange, Colors.purple, Colors.red, Colors.green];
+    final colors = [
+      const Color(0xFF00E676),
+      const Color(0xFF00B0FF),
+      const Color(0xFFFFD54F),
+      const Color(0xFFFF5252),
+      const Color(0xFFB388FF),
+      const Color(0xFF64FFDA),
+    ];
 
     List<PieChartSectionData> sections = [];
     for (int i = 0; i < data.length; i++) {

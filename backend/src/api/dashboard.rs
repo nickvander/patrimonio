@@ -97,6 +97,31 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
         })
         .collect();
 
+    // Individual Accounts
+    let accounts_rows = sqlx::query(
+        r#"
+        SELECT a.id, a.name, a.account_type, a.current_balance, a.currency, i.name as institution_name
+        FROM accounts a
+        JOIN institutions i ON a.institution_id = i.id
+        ORDER BY a.account_type, a.name
+        "#
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let accounts: Vec<AccountDetail> = accounts_rows.iter()
+        .map(|r| AccountDetail {
+            id: r.get::<uuid::Uuid, _>("id").to_string(),
+            name: r.get("name"),
+            institution_name: r.get("institution_name"),
+            account_type: r.get("account_type"),
+            current_balance: r.try_get::<rust_decimal::Decimal, _>("current_balance")
+                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
+            currency: r.get("currency"),
+        })
+        .collect();
+
     let total_net: f64 = currency_breakdown.iter().map(|c| c.net).sum();
 
     Json(DashboardOverview {
@@ -104,6 +129,7 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
         currency_breakdown,
         type_breakdown,
         institution_breakdown,
+        accounts,
     })
 }
 
@@ -267,6 +293,17 @@ struct DashboardOverview {
     currency_breakdown: Vec<CurrencyBreakdown>,
     type_breakdown: Vec<TypeBreakdown>,
     institution_breakdown: Vec<InstitutionBreakdown>,
+    accounts: Vec<AccountDetail>,
+}
+
+#[derive(Serialize)]
+struct AccountDetail {
+    id: String,
+    name: String,
+    institution_name: String,
+    account_type: String,
+    current_balance: f64,
+    currency: String,
 }
 
 #[derive(Serialize)]

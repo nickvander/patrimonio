@@ -61,20 +61,53 @@ class NetWorthCard extends StatelessWidget {
 
     return LineChart(
       LineChartData(
-        gridData: FlGridData(show: false),
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: 10000,
+          getDrawingHorizontalLine: (value) {
+            return FlLine(
+              color: Colors.white10,
+              strokeWidth: 1,
+              dashArray: [5, 5],
+            );
+          },
+        ),
         titlesData: FlTitlesData(show: false),
         borderData: FlBorderData(show: false),
+        lineTouchData: LineTouchData(
+          touchTooltipData: LineTouchTooltipData(
+            tooltipBgColor: const Color(0xFF2A2A35),
+            getTooltipItems: (touchedSpots) {
+              return touchedSpots.map((spot) {
+                final currencyFormat = NumberFormat.simpleCurrency(name: 'USD');
+                return LineTooltipItem(
+                  currencyFormat.format(spot.y),
+                  const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                );
+              }).toList();
+            },
+          ),
+          handleBuiltInTouches: true,
+        ),
         lineBarsData: [
           LineChartBarData(
             spots: spots,
             isCurved: true,
-            color: Colors.teal,
+            color: const Color(0xFF00E676),
             barWidth: 3,
             isStrokeCapRound: true,
             dotData: FlDotData(show: false),
             belowBarData: BarAreaData(
               show: true,
-              color: Colors.teal.withOpacity(0.1),
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFF00E676).withOpacity(0.3),
+                  const Color(0xFF00E676).withOpacity(0.0),
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
             ),
           ),
         ],
