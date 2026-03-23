@@ -2,6 +2,7 @@ use axum::{
     extract::State,
     routing::{get, post},
     Json, Router,
+    response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
@@ -12,9 +13,24 @@ use crate::services::encryption;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_institutions).post(create_institution))
+        .route("/sync", post(trigger_sync))
         .route("/link-token", post(create_link_token))
         .route("/exchange-token", post(exchange_public_token))
         .route("/webhook", post(plaid_webhook))
+}
+
+/// Manually trigger a sync for all institutions
+async fn trigger_sync(State(state): State<AppState>) -> axum::response::Response {
+    let config = state.config.clone();
+    let db = state.db.clone();
+    if let Err(e) = crate::services::sync::sync_all_institutions(&db, &config).await {
+        tracing::error!("Manual Plaid sync failed: {}", e);
+        return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, axum::response::Json(serde_json::json!({
+            "error": "Sync failed",
+            "details": e.to_string()
+        }))).into_response();
+    }
+    Json(serde_json::json!({"status": "ok"})).into_response()
 }
 
 /// List all linked institutions
@@ -122,7 +138,7 @@ async fn create_link_token(State(state): State<AppState>) -> Json<serde_json::Va
 async fn exchange_public_token(
     State(state): State<AppState>,
     Json(req): Json<ExchangeTokenRequest>,
-) -> Json<InstitutionResponse> {
+) -> axum::response::Response {
     let client = reqwest::Client::new();
     let url = format!("https://{}.plaid.com/item/public_token/exchange", state.config.plaid_env);
     
@@ -137,8 +153,25 @@ async fn exchange_public_token(
         .send().await.expect("Failed to call Plaid /item/public_token/exchange")
         .json::<serde_json::Value>().await.expect("Failed to parse Plaid response");
 
-    let access_token = res["access_token"].as_str().expect("Plaid response missing access_token");
-    let item_id = res["item_id"].as_str().expect("Plaid response missing item_id");
+    if let Some(err) = res["error_message"].as_str() {
+        tracing::error!("Plaid Exchange Error: {}", err);
+        return (axum::http::StatusCode::BAD_REQUEST, axum::response::Json(serde_json::json!({
+            "error": "Plaid API error",
+            "details": err
+        }))).into_response();
+    }
+
+    let access_token = match res["access_token"].as_str() {
+        Some(t) => t,
+        None => {
+            tracing::error!("Plaid response missing access_token: {:?}", res);
+            return (axum::http::StatusCode::BAD_REQUEST, axum::response::Json(serde_json::json!({
+                "error": "Missing access_token",
+                "details": res.to_string()
+            }))).into_response();
+        }
+    };
+    let item_id = res["item_id"].as_str().unwrap_or("unknown_item");
 
     let enc_key = state.config.encryption_key.as_ref().expect("ENCRYPTION_KEY not configured in .env");
     let encrypted_token = encryption::encrypt(enc_key, access_token)
@@ -159,6 +192,14 @@ async fn exchange_public_token(
     .fetch_one(&state.db)
     .await.expect("Failed to insert institution into database");
 
+    let config = state.config.clone();
+    let db = state.db.clone();
+    tokio::spawn(async move {
+        if let Err(e) = crate::services::sync::sync_all_institutions(&db, &config).await {
+            tracing::error!("Immediate Plaid sync failed for new institution: {}", e);
+        }
+    });
+
     Json(InstitutionResponse {
         id: row.get::<uuid::Uuid, _>("id").to_string(),
         name: row.get("name"),
@@ -171,7 +212,7 @@ async fn exchange_public_token(
             .unwrap_or_else(|_| "pending".to_string()),
         created_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
             .ok().map(|d| d.to_rfc3339()).unwrap_or_default(),
-    })
+    }).into_response()
 }
 
 #[derive(Deserialize)]

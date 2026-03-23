@@ -98,8 +98,8 @@ patrimonio/
 ## Roadmap
 
 - [x] **Phase 1:** Foundation — Backend scaffold, database, Docker setup
-- [ ] **Phase 2:** Plaid Integration — Link US accounts, sync data
-- [ ] **Phase 3:** Dashboard — Charts, breakdowns, exchange rate widget
+- [x] **Phase 2:** Plaid Integration — Link US accounts, sync data
+- [x] **Phase 3:** Dashboard — Charts, breakdowns, exchange rate widget
 - [ ] **Phase 4:** Mexican Institutions — CSV/PDF import, multi-currency
 - [ ] **Phase 5:** Polish & Deploy — Mobile, GCP, backups
 

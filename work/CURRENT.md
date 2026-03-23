@@ -1,7 +1,7 @@
-# Current Phase: Phase 2 — Plaid Integration 🚀
+# Current Phase: Phase 4 — Mexican Institutions 🇲🇽
 
-> **Last Updated:** 2026-03-22
-> **Status:** Phase 1 complete. Starting Plaid setup.
+> **Last Updated:** 2026-03-23
+> **Status:** Phase 3 (Dashboard UI) complete. Starting Phase 4 (Mexican Institutions).
 
 ## What's Done
 - Rust backend with axum (4 API modules, 5 models, 2 services)
@@ -10,12 +10,14 @@
 - All API endpoints verified working (0–33ms response times)
 - `work/` directory with specs, decisions, and 5 phase specs
 - VS Code workspace config
-- **Flutter frontend scaffolded**
 - **Exchange rate service with Redis caching implemented**
+- **Plaid API Token Exchange & Sandbox Web UI Implemented**
+- **Plaid Sync Engines for Balances, Transactions, and Holdings mapped**
+- **Flutter Dashboard UI implemented (Net Worth, Breakdowns, Portfolio, FX, Utilization, Sync Status)**
 
 ## What's Next
-Proceed to Phase 2 to begin working on US financial data pulling:
-1. **[Phase 2: Plaid Integration](phases/PHASE-2-PLAID.md)**
+Proceed to Phase 4 to handle manual CSV imports for Mexican institutions:
+1. **[Phase 4: Mexican Institutions](phases/PHASE-4-MEXICO.md)**
 
 ## How to Continue Work
 

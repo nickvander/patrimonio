@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'screens/connect_bank_screen.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'screens/dashboard_screen.dart';
 
 void main() {
   runApp(const PatrimonioApp());
@@ -12,46 +13,34 @@ class PatrimonioApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Patrimonio',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+        brightness: Brightness.dark,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF00E676), // Emerald green accent
+          brightness: Brightness.dark,
+          surface: const Color(0xFF1A1A24), // Softer dark card background
+          background: const Color(0xFF101016), // Softer main background
+        ),
         useMaterial3: true,
-      ),
-      home: const HomeScreen(),
-    );
-  }
-}
-
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('Patrimonio Dashboard'),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'Welcome to Patrimonio! 🚀',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => ConnectBankScreen()),
-                );
-              },
-              child: const Text('Add Linked Account'),
-            ),
-          ],
+        textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
+        cardTheme: CardThemeData(
+          color: const Color(0xFF1A1A24),
+          elevation: 4,
+          shadowColor: Colors.black26,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF101016),
+          elevation: 0,
+          centerTitle: false,
+        ),
+        dataTableTheme: DataTableThemeData(
+          headingRowColor: MaterialStateProperty.all(Colors.black12),
+          dataRowColor: MaterialStateProperty.all(Colors.transparent),
         ),
       ),
+      home: const DashboardScreen(),
     );
   }
 }

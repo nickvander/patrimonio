@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:plaid_flutter/plaid_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:web/web.dart' as web;
 
 class ConnectBankScreen extends StatefulWidget {
   @override
@@ -14,8 +15,12 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
 
   Future<void> _startPlaidLink() async {
     setState(() => _isLoading = true);
+    
+    // Dynamically detect host to support VM/Docker test networks correctly
+    final host = web.window.location.hostname.isEmpty ? 'localhost' : web.window.location.hostname;
+    
     try {
-      final response = await http.post(Uri.parse('http://localhost:8080/api/institutions/link-token'));
+      final response = await http.post(Uri.parse('http://$host:8080/api/institutions/link-token'));
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -46,8 +51,10 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
       final String publicToken = event.publicToken;
       final String institutionName = event.metadata.institution?.name ?? 'Unknown Institution';
       
+      final host = web.window.location.hostname.isEmpty ? 'localhost' : web.window.location.hostname;
+      
       final response = await http.post(
-        Uri.parse('http://localhost:8080/api/institutions/exchange-token'),
+        Uri.parse('http://$host:8080/api/institutions/exchange-token'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'public_token': publicToken,
