@@ -156,9 +156,11 @@ pub async fn sync_all_institutions(db: &PgPool, config: &AppConfig) -> Result<()
             }
         }
 
+        let _ = sqlx::query("UPDATE institutions SET last_synced_at = NOW(), sync_status = 'synced' WHERE id = $1")
+            .bind(inst_id)
+            .execute(db).await;
+
         tracing::info!("Successfully synced accounts & balances for {}", inst_name);
     }
-
-    tracing::info!("Sync engine: sync complete");
     Ok(())
 }

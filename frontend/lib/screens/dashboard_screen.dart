@@ -69,35 +69,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Patrimonio', style: TextStyle(fontWeight: FontWeight.bold)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add_link),
-            tooltip: 'Link New Institution',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => ConnectBankScreen()),
-              ).then((_) => _loadAllData());
-            },
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Patrimonio', style: TextStyle(fontWeight: FontWeight.bold)),
+          bottom: const TabBar(
+            indicatorColor: Color(0xFF00E676),
+            labelColor: Color(0xFF00E676),
+            unselectedLabelColor: Colors.grey,
+            tabs: [
+              Tab(text: 'Overview'),
+              Tab(text: 'Portfolio'),
+              Tab(text: 'Management'),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () async {
-              setState(() => _isLoading = true);
-              try {
-                await _apiService.syncInstitutions();
-              } catch (e) {
-                print("Sync error: $e");
-              }
-              _loadAllData();
-            },
-          ),
-        ],
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.add_link),
+              tooltip: 'Link New Institution',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ConnectBankScreen()),
+                ).then((_) => _loadAllData());
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: () async {
+                setState(() => _isLoading = true);
+                try {
+                  await _apiService.syncInstitutions();
+                } catch (e) {
+                  print("Sync error: $e");
+                }
+                _loadAllData();
+              },
+            ),
+          ],
+        ),
+        body: _buildBody(),
       ),
-      body: _buildBody(),
     );
   }
 
@@ -124,99 +137,81 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24.0),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1600),
-          child: Row(
+    Widget buildTabContainer(Widget child) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1600),
+            child: child,
+          ),
+        ),
+      );
+    }
+
+    final overviewTab = buildTabContainer(
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 1,
+            child: AccountsListWidget(accounts: _overview?['accounts'] ?? []),
+          ),
+          const SizedBox(width: 24),
+          Expanded(
+            flex: 3,
+            child: SizedBox(
+              height: 500,
+              child: NetWorthCard(
+                netWorth: (_overview?['net_worth'] as num?)?.toDouble() ?? 0.0,
+                history: _netWorthHistory ?? [],
+              ),
+            ),
+          ),
+        ],
+      )
+    );
+
+    final portfolioTab = buildTabContainer(
+      PortfolioCard(portfolioData: _portfolioData ?? {}),
+    );
+
+    final managementTab = buildTabContainer(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Left Column: Accounts List Sidebar
-              Expanded(
-                flex: 1,
-                child: AccountsListWidget(
-                  accounts: _overview?['accounts'] ?? [],
-                ),
-              ),
+              Expanded(child: SyncStatusCard(syncData: _syncData ?? [])),
               const SizedBox(width: 24),
-              // Right Column: Charts and Breakdowns
+              Expanded(child: FxWidget(latestRate: _fxRate ?? {})),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: CreditUtilizationCard(creditData: _creditData ?? [])),
+              const SizedBox(width: 24),
               Expanded(
-                flex: 3,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 1. Top Row: Net Worth and FX
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: SizedBox(
-                            height: 350,
-                            child: NetWorthCard(
-                              netWorth: (_overview?['net_worth'] as num?)?.toDouble() ?? 0.0,
-                              history: _netWorthHistory ?? [],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 24),
-                        Expanded(
-                          flex: 1,
-                          child: FxWidget(
-                            latestRate: _fxRate ?? {},
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-
-                    // 2. Middle Row: Portfolio and Breakdowns
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: PortfolioCard(
-                            portfolioData: _portfolioData ?? {},
-                          ),
-                        ),
-                        const SizedBox(width: 24),
-                        Expanded(
-                          flex: 1,
-                          child: AccountsBreakdownCard(
-                            typeBreakdown: _overview?['type_breakdown'] ?? [],
-                            institutionBreakdown: _overview?['institution_breakdown'] ?? [],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-
-                    // 3. Bottom Row: Credit Utilization and Sync Status
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: CreditUtilizationCard(
-                            creditData: _creditData ?? [],
-                          ),
-                        ),
-                        const SizedBox(width: 24),
-                        Expanded(
-                          child: SyncStatusCard(
-                            syncData: _syncData ?? [],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                child: AccountsBreakdownCard(
+                  typeBreakdown: _overview?['type_breakdown'] ?? [],
+                  institutionBreakdown: _overview?['institution_breakdown'] ?? [],
                 ),
               ),
             ],
           ),
-        ),
-      ),
+        ],
+      )
+    );
+
+    return TabBarView(
+      children: [
+        overviewTab,
+        portfolioTab,
+        managementTab,
+      ],
     );
   }
 }
