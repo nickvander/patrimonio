@@ -1,7 +1,7 @@
-# Current Phase: Phase 4 — Mexican Institutions 🇲🇽
+# Current Phase: Phase 5 — Manual CSV Imports 🇲🇽
 
-> **Last Updated:** 2026-03-23
-> **Status:** Phase 3 (Dashboard UI) complete. Starting Phase 4 (Mexican Institutions).
+> **Last Updated:** 2026-03-24
+> **Status:** Phase 4 (Financial Insights) complete. Proceeding to Phase 5 (Manual CSV Imports).
 
 ## What's Done
 - Rust backend with axum (4 API modules, 5 models, 2 services)
@@ -14,10 +14,13 @@
 - **Plaid API Token Exchange & Sandbox Web UI Implemented**
 - **Plaid Sync Engines for Balances, Transactions, and Holdings mapped**
 - **Flutter Dashboard UI implemented (Net Worth, Breakdowns, Portfolio, FX, Utilization, Sync Status)**
+- **Transaction Ledger implemented (Backend API + Frontend Tab)**
+- **Multi-Currency Bridge (USD/MXN toggle) implemented globally**
+- **Performance Benchmarking (S&P 500) implemented on Net Worth Chart**
 
 ## What's Next
-Proceed to Phase 4 to handle manual CSV imports for Mexican institutions:
-1. **[Phase 4: Mexican Institutions](phases/PHASE-4-MEXICO.md)**
+Proceed to Phase 5 to handle manual CSV imports for Mexican institutions:
+1. **[Phase 5: Manual CSV Imports](phases/PHASE-5-CSV.md)**
 
 ## How to Continue Work
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../widgets/net_worth_card.dart';
 import '../widgets/accounts_breakdown_card.dart';
@@ -7,6 +8,7 @@ import '../widgets/fx_widget.dart';
 import '../widgets/credit_utilization_card.dart';
 import '../widgets/sync_status_card.dart';
 import '../widgets/accounts_list_widget.dart';
+import '../widgets/transactions_tab.dart';
 import 'connect_bank_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -27,6 +29,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<dynamic>? _creditData;
   List<dynamic>? _syncData;
   Map<String, dynamic>? _fxRate;
+  List<dynamic>? _transactions;
+  String _targetCurrency = 'USD'; // Master currency state
 
   @override
   void initState() {
@@ -48,6 +52,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _apiService.getCreditUtilization(),
         _apiService.getSyncStatus(),
         _apiService.getExchangeRate('USD', 'MXN'),
+        _apiService.getTransactions(),
       ]);
 
       setState(() {
@@ -57,6 +62,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _creditData = results[3] as List<dynamic>;
         _syncData = results[4] as List<dynamic>;
         _fxRate = results[5] as Map<String, dynamic>;
+        _transactions = results[6] as List<dynamic>;
         _isLoading = false;
       });
     } catch (e) {
@@ -70,21 +76,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Patrimonio', style: TextStyle(fontWeight: FontWeight.bold)),
           bottom: const TabBar(
+            isScrollable: false, // Changed from true to ensure all tabs are visible
             indicatorColor: Color(0xFF00E676),
             labelColor: Color(0xFF00E676),
             unselectedLabelColor: Colors.grey,
             tabs: [
               Tab(text: 'Overview'),
               Tab(text: 'Portfolio'),
+              Tab(text: 'Transactions'),
               Tab(text: 'Management'),
             ],
           ),
           actions: [
+            TextButton.icon(
+              onPressed: () {
+                setState(() {
+                  _targetCurrency = _targetCurrency == 'USD' ? 'MXN' : 'USD';
+                });
+              },
+              icon: Icon(Icons.currency_exchange, color: _targetCurrency == 'MXN' ? const Color(0xFF00E676) : Colors.white70),
+              label: Text(_targetCurrency, style: TextStyle(color: _targetCurrency == 'MXN' ? const Color(0xFF00E676) : Colors.white70, fontWeight: FontWeight.bold)),
+            ),
             IconButton(
               icon: const Icon(Icons.add_link),
               tooltip: 'Link New Institution',
@@ -137,6 +154,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
+    final fxRate = (_fxRate?['rate'] as num?)?.toDouble() ?? 1.0;
+    final conversionFactor = _targetCurrency == 'MXN' ? fxRate : 1.0;
+    final currencyFormat = NumberFormat.simpleCurrency(name: _targetCurrency);
+
     Widget buildTabContainer(Widget child) {
       return SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
@@ -155,7 +176,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           Expanded(
             flex: 1,
-            child: AccountsListWidget(accounts: _overview?['accounts'] ?? []),
+            child: AccountsListWidget(
+              accounts: _overview?['accounts'] ?? [],
+              conversionFactor: conversionFactor,
+              currencyFormat: currencyFormat,
+            ),
           ),
           const SizedBox(width: 24),
           Expanded(
@@ -163,8 +188,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: SizedBox(
               height: 500,
               child: NetWorthCard(
-                netWorth: (_overview?['net_worth'] as num?)?.toDouble() ?? 0.0,
+                netWorth: ((_overview?['net_worth'] as num?)?.toDouble() ?? 0.0) * conversionFactor,
                 history: _netWorthHistory ?? [],
+                conversionFactor: conversionFactor,
+                currencyFormat: currencyFormat,
               ),
             ),
           ),
@@ -173,7 +200,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
 
     final portfolioTab = buildTabContainer(
-      PortfolioCard(portfolioData: _portfolioData ?? {}),
+      PortfolioCard(
+        portfolioData: _portfolioData ?? {},
+        conversionFactor: conversionFactor,
+        currencyFormat: currencyFormat,
+      ),
+    );
+
+    final transactionsTab = buildTabContainer(
+      TransactionsTab(
+        transactions: _transactions ?? [],
+        conversionFactor: conversionFactor,
+        currencyFormat: currencyFormat,
+      ),
     );
 
     final managementTab = buildTabContainer(
@@ -192,12 +231,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: CreditUtilizationCard(creditData: _creditData ?? [])),
+              Expanded(child: CreditUtilizationCard(
+                creditData: _creditData ?? [],
+                conversionFactor: conversionFactor,
+                currencyFormat: currencyFormat,
+              )),
               const SizedBox(width: 24),
               Expanded(
                 child: AccountsBreakdownCard(
                   typeBreakdown: _overview?['type_breakdown'] ?? [],
                   institutionBreakdown: _overview?['institution_breakdown'] ?? [],
+                  conversionFactor: conversionFactor,
+                  currencyFormat: currencyFormat,
                 ),
               ),
             ],
@@ -210,6 +255,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       children: [
         overviewTab,
         portfolioTab,
+        transactionsTab,
         managementTab,
       ],
     );

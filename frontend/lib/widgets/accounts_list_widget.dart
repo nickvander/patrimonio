@@ -3,8 +3,15 @@ import 'package:intl/intl.dart';
 
 class AccountsListWidget extends StatelessWidget {
   final List<dynamic> accounts;
+  final double conversionFactor;
+  final NumberFormat currencyFormat;
 
-  const AccountsListWidget({Key? key, required this.accounts}) : super(key: key);
+  const AccountsListWidget({
+    Key? key,
+    required this.accounts,
+    required this.conversionFactor,
+    required this.currencyFormat,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -75,8 +82,6 @@ class AccountsListWidget extends StatelessWidget {
   }
 
   Widget _buildAccountGroup(String title, List<dynamic> groupAccounts, IconData icon, bool isLiability) {
-    final currencyFormat = NumberFormat.simpleCurrency(name: 'USD');
-    
     // Sort within group by balance descending
     groupAccounts.sort((a, b) {
       final balA = ((a['current_balance'] ?? 0.0) as num).toDouble().abs();
@@ -105,7 +110,7 @@ class AccountsListWidget extends StatelessWidget {
                 ],
               ),
               Text(
-                currencyFormat.format(total),
+                currencyFormat.format(total * conversionFactor),
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ],
@@ -130,7 +135,7 @@ class AccountsListWidget extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    currencyFormat.format(balance),
+                    currencyFormat.format(balance * conversionFactor),
                     style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                   ),
                 ],

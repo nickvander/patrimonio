@@ -15,6 +15,7 @@ pub fn router() -> Router<AppState> {
         .route("/holdings", get(holdings))
         .route("/credit-utilization", get(credit_utilization))
         .route("/sync-status", get(sync_status))
+        .route("/transactions", get(recent_transactions))
 }
 
 /// Dashboard overview: net worth, account breakdown, recent changes
@@ -287,6 +288,43 @@ async fn sync_status(State(state): State<AppState>) -> Json<Vec<SyncStatusEntry>
     )
 }
 
+/// Recent transactions across all accounts
+async fn recent_transactions(State(state): State<AppState>) -> Json<Vec<TransactionEntry>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT t.id, t.account_id, a.name as account_name, t.amount, t.currency,
+               t.date, t.description, t.category, t.pending
+        FROM transactions t
+        JOIN accounts a ON t.account_id = a.id
+        ORDER BY t.date DESC, t.created_at DESC
+        LIMIT 50
+        "#
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    Json(
+        rows.iter()
+            .map(|r| {
+                let amount: f64 = r.try_get::<rust_decimal::Decimal, _>("amount")
+                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+                TransactionEntry {
+                    id: r.get::<uuid::Uuid, _>("id").to_string(),
+                    account_id: r.get::<uuid::Uuid, _>("account_id").to_string(),
+                    account_name: r.get("account_name"),
+                    amount,
+                    currency: r.get("currency"),
+                    date: r.get::<chrono::NaiveDate, _>("date").to_string(),
+                    description: r.get("description"),
+                    category: r.get("category"),
+                    pending: r.get("pending"),
+                }
+            })
+            .collect(),
+    )
+}
+
 #[derive(Serialize)]
 struct DashboardOverview {
     net_worth: f64,
@@ -378,4 +416,17 @@ struct SyncStatusEntry {
     country: String,
     sync_status: String,
     last_synced_at: Option<String>,
+}
+
+#[derive(Serialize)]
+struct TransactionEntry {
+    id: String,
+    account_id: String,
+    account_name: String,
+    amount: f64,
+    currency: String,
+    date: String,
+    description: String,
+    category: Option<String>,
+    pending: bool,
 }

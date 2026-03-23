@@ -52,9 +52,19 @@ Tracking key architectural and design decisions with rationale.
 
 ---
 
-## DEC-006: Deployment — Docker Compose (local) → GCP Cloud Run (cloud)
-**Date:** 2026-03-22
+## DEC-007: Performance Benchmarking — S&P 500
+**Date:** 2026-03-24
 **Status:** Accepted
-**Context:** Self-host initially, but easy migration to cloud when ready.
-**Decision:** Docker Compose for local. Containerized services migrate directly to Cloud Run.
-**GCP Free Tier:** Cloud Run (2M req/mo), e2-micro VM (Postgres+Redis) = $0/month.
+**Context:** User requested a tangible performance benchmark for wealth growth.
+**Decision:** Overlay an S&P 500 baseline (~10% annual return) on the Net Worth chart.
+**Rationale:** Provides instant context for whether a user is "climbing" or just following market trends.
+**Trade-off:** Static calculation for now; future phases could fetch real SPY price data.
+
+---
+
+## DEC-008: Multi-Currency Toggle — Global State
+**Date:** 2026-03-24
+**Status:** Accepted
+**Context:** Needed a quick way to view assets in either domestic (USD) or local (MXN) currency.
+**Decision:** Global toggle in App Bar that propagates a `conversionFactor` and `currencyFormat` to all child widgets.
+**Rationale:** Enables "at-a-glance" consistency without needing per-widget toggles. Use real-time exchange rates (USD/MXN).

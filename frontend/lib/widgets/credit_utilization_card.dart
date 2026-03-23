@@ -3,14 +3,31 @@ import 'package:intl/intl.dart';
 
 class CreditUtilizationCard extends StatelessWidget {
   final List<dynamic> creditData;
+  final double conversionFactor;
+  final NumberFormat currencyFormat;
 
   const CreditUtilizationCard({
     Key? key,
     required this.creditData,
+    required this.conversionFactor,
+    required this.currencyFormat,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    if (creditData.isEmpty) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(24.0),
+          child: Center(child: Text('No credit accounts found.', style: TextStyle(color: Colors.grey))),
+        ),
+      );
+    }
+
+    final totalBalance = creditData.fold<double>(0.0, (sum, item) => sum + ((item['balance'] ?? 0.0) as num).toDouble());
+    final totalLimit = creditData.fold<double>(0.0, (sum, item) => sum + ((item['credit_limit'] ?? 0.0) as num).toDouble());
+    final totalUtilization = totalLimit > 0 ? (totalBalance / totalLimit) * 100 : 0.0;
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -19,76 +36,72 @@ class CreditUtilizationCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Credit Card Utilization',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Credit Utilization', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(
+                  '${totalUtilization.toStringAsFixed(1)}%',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: totalUtilization > 30 ? Colors.orange : const Color(0xFF00E676),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: LinearProgressIndicator(
+                value: (totalUtilization / 100).clamp(0.0, 1.0),
+                backgroundColor: Colors.white12,
+                color: totalUtilization > 30 ? Colors.orange : const Color(0xFF00E676),
+                minHeight: 8,
+              ),
             ),
             const SizedBox(height: 24),
-            if (creditData.isEmpty)
-              const Center(child: Text('No credit cards found.'))
-            else
-              ...creditData.map((card) => _buildCreditRow(card)).toList(),
+            ...creditData.map((item) {
+              final balance = ((item['balance'] ?? 0.0) as num).toDouble();
+              final limit = ((item['credit_limit'] ?? 0.0) as num).toDouble();
+              final util = limit > 0 ? (balance / limit) * 100 : 0.0;
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(item['name'] ?? 'Credit Account', style: const TextStyle(fontWeight: FontWeight.w500)),
+                            Text(item['institution_name'] ?? '', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                          ],
+                        ),
+                        Text(
+                          '${currencyFormat.format(balance * conversionFactor)} / ${currencyFormat.format(limit * conversionFactor)}',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: (util / 100).clamp(0.0, 1.0),
+                        backgroundColor: Colors.white10,
+                        color: util > 30 ? Colors.orange.withOpacity(0.7) : const Color(0xFF00E676).withOpacity(0.7),
+                        minHeight: 4,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildCreditRow(Map<String, dynamic> card) {
-    final currencyFormat = NumberFormat.simpleCurrency(name: 'USD');
-    final balance = (card['balance'] as num?)?.toDouble() ?? 0.0;
-    final limit = (card['credit_limit'] as num?)?.toDouble() ?? 0.0;
-    final pct = (card['utilization_pct'] as num?)?.toDouble() ?? 0.0;
-    
-    // Determine color based on utilization
-    Color progressColor = Colors.green;
-    if (pct > 70) {
-      progressColor = Colors.red;
-    } else if (pct > 30) {
-      progressColor = Colors.orange;
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '${card['institution_name']} - ${card['name']}',
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              Text(
-                '${pct.toStringAsFixed(1)}%',
-                style: TextStyle(fontWeight: FontWeight.bold, color: progressColor),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          LinearProgressIndicator(
-            value: limit > 0 ? (balance / limit).clamp(0.0, 1.0) : 0,
-            backgroundColor: Colors.grey.withOpacity(0.2),
-            valueColor: AlwaysStoppedAnimation<Color>(progressColor),
-            minHeight: 8,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Balance: ${currencyFormat.format(balance)}',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-              ),
-              Text(
-                'Limit: ${currencyFormat.format(limit)}',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }

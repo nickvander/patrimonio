@@ -57,6 +57,14 @@ class ApiService {
     throw Exception('Failed to load exchange rate');
   }
 
+  Future<List<dynamic>> getTransactions() async {
+    final response = await http.get(Uri.parse('$_baseUrl/dashboard/transactions'));
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Failed to load transactions');
+  }
+
   Future<void> syncInstitutions() async {
     final response = await http.post(Uri.parse('$_baseUrl/institutions/sync'));
     if (response.statusCode != 200) {

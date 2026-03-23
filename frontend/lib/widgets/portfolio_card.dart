@@ -4,10 +4,14 @@ import 'package:intl/intl.dart';
 
 class PortfolioCard extends StatefulWidget {
   final Map<String, dynamic> portfolioData;
+  final double conversionFactor;
+  final NumberFormat currencyFormat;
 
   const PortfolioCard({
     Key? key,
     required this.portfolioData,
+    required this.conversionFactor,
+    required this.currencyFormat,
   }) : super(key: key);
 
   @override
@@ -31,7 +35,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
   @override
   void didUpdateWidget(PortfolioCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.portfolioData != oldWidget.portfolioData) {
+    if (widget.portfolioData != oldWidget.portfolioData || widget.conversionFactor != oldWidget.conversionFactor) {
       _holdings = List.from(widget.portfolioData['holdings'] ?? []);
       _sort(_sortColumnIndex ?? 3, _isAscending);
     }
@@ -85,11 +89,10 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
   @override
   Widget build(BuildContext context) {
-    final totalValue = (widget.portfolioData['total_value'] as num?)?.toDouble() ?? 0.0;
-    final totalGainLoss = (widget.portfolioData['total_gain_loss'] as num?)?.toDouble() ?? 0.0;
+    final totalValue = ((widget.portfolioData['total_value'] as num?)?.toDouble() ?? 0.0) * widget.conversionFactor;
+    final totalGainLoss = ((widget.portfolioData['total_gain_loss'] as num?)?.toDouble() ?? 0.0) * widget.conversionFactor;
     final totalGainLossPct = (widget.portfolioData['total_gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
 
-    final currencyFormat = NumberFormat.simpleCurrency(name: 'USD');
     final isPositive = totalGainLoss >= 0;
 
     return Card(
@@ -112,7 +115,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                       const SizedBox(height: 32),
                       const Text('Total Value', style: TextStyle(color: Colors.grey, fontSize: 16)),
                       Text(
-                        currencyFormat.format(totalValue),
+                        widget.currencyFormat.format(totalValue),
                         style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w800, letterSpacing: -1.0),
                       ),
                       const SizedBox(height: 8),
@@ -133,7 +136,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
-                                  '${isPositive ? '+' : ''}${currencyFormat.format(totalGainLoss.abs())} (${totalGainLossPct.toStringAsFixed(2)}%)',
+                                  '${isPositive ? '+' : ''}${widget.currencyFormat.format(totalGainLoss.abs())} (${totalGainLossPct.toStringAsFixed(2)}%)',
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
@@ -166,8 +169,13 @@ class _PortfolioCardState extends State<PortfolioCard> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
                 dividerColor: Colors.white12,
+                // Attempt to fix pagination centering by making the table footer area more focused
+                dataTableTheme: DataTableThemeData(
+                  horizontalMargin: 24,
+                  columnSpacing: 48,
+                ),
               ),
-              child: _buildHoldingsTable(currencyFormat),
+              child: _buildHoldingsTable(),
             ),
           ],
         ),
@@ -175,7 +183,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
     );
   }
 
-  Widget _buildHoldingsTable(NumberFormat format) {
+  Widget _buildHoldingsTable() {
     if (_holdings.isEmpty) {
       return const Padding(
         padding: EdgeInsets.all(32.0),
@@ -183,21 +191,31 @@ class _PortfolioCardState extends State<PortfolioCard> {
       );
     }
 
-    return PaginatedDataTable(
-      header: const Text('Asset Breakdown', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-      rowsPerPage: 5,
-      showFirstLastButtons: true,
-      arrowHeadColor: const Color(0xFF00E676),
-      sortColumnIndex: _sortColumnIndex,
-      sortAscending: _isAscending,
-      columns: [
-        DataColumn(label: const Text('Asset'), onSort: _sort),
-        DataColumn(label: const Text('Shares'), numeric: true, onSort: _sort),
-        DataColumn(label: const Text('Price'), numeric: true, onSort: _sort),
-        DataColumn(label: const Text('Total Value'), numeric: true, onSort: _sort),
-        DataColumn(label: const Text('All-Time Return'), numeric: true, onSort: _sort),
-      ],
-      source: _HoldingsDataSource(_holdings, format, context),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Container(
+          width: constraints.maxWidth,
+          child: PaginatedDataTable(
+            header: const Text('Asset Breakdown', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            rowsPerPage: 5,
+            showFirstLastButtons: true,
+            arrowHeadColor: const Color(0xFF00E676),
+            sortColumnIndex: _sortColumnIndex,
+            sortAscending: _isAscending,
+            // Force the table to take up available width which pushes pagination "under" the data more naturally
+            columnSpacing: (constraints.maxWidth - 600) / 5 > 0 ? (constraints.maxWidth - 600) / 5 : 24,
+            horizontalMargin: 24,
+            columns: [
+              DataColumn(label: const Text('Asset'), onSort: _sort),
+              DataColumn(label: const Text('Shares'), numeric: true, onSort: _sort),
+              DataColumn(label: const Text('Price'), numeric: true, onSort: _sort),
+              DataColumn(label: const Text('Total Value'), numeric: true, onSort: _sort),
+              DataColumn(label: const Text('All-Time Return'), numeric: true, onSort: _sort),
+            ],
+            source: _HoldingsDataSource(_holdings, widget.currencyFormat, widget.conversionFactor, context),
+          ),
+        );
+      }
     );
   }
 
@@ -329,9 +347,10 @@ class _PortfolioCardState extends State<PortfolioCard> {
 class _HoldingsDataSource extends DataTableSource {
   final List<dynamic> holdings;
   final NumberFormat format;
+  final double conversionFactor;
   final BuildContext context;
 
-  _HoldingsDataSource(this.holdings, this.format, this.context);
+  _HoldingsDataSource(this.holdings, this.format, this.conversionFactor, this.context);
 
   @override
   DataRow? getRow(int index) {
@@ -340,8 +359,8 @@ class _HoldingsDataSource extends DataTableSource {
     final gain = (h['gain_loss'] as num?)?.toDouble() ?? 0.0;
     final gainPct = (h['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
     final quantity = (h['quantity'] as num?)?.toDouble() ?? 0.0;
-    final price = (h['price'] as num?)?.toDouble() ?? 0.0;
-    final value = (h['value'] as num?)?.toDouble() ?? 0.0;
+    final price = ((h['price'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
+    final value = ((h['value'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
     final isGain = gain >= 0;
 
     return DataRow(
