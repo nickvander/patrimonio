@@ -10,6 +10,7 @@ pub struct Institution {
     pub institution_type: String,
     pub country: String,
     pub integration_type: String,
+    pub plaid_access_token_enc: Option<Vec<u8>>,
     pub plaid_item_id: Option<String>,
     pub last_synced_at: Option<DateTime<Utc>>,
     pub sync_status: Option<String>,

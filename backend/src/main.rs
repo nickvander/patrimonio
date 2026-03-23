@@ -1,4 +1,5 @@
 use anyhow::Result;
+use tokio_cron_scheduler::{Job, JobScheduler};
 use axum::{
     extract::State,
     response::Json,
@@ -61,10 +62,36 @@ async fn main() -> Result<()> {
 
     // Build shared state
     let state = AppState {
-        db,
+        db: db.clone(),
         redis: redis_client,
         config: Arc::new(config.clone()),
     };
+
+    // Initialize Cron Scheduler for daily balance snapshots
+    let sched = JobScheduler::new().await.expect("Failed to create cron scheduler");
+    let cron_db = db.clone();
+    
+    sched.add(
+        Job::new_async("0 0 0 * * *", move |_uuid, mut _l| {
+            let db = cron_db.clone();
+            Box::pin(async move {
+                tracing::info!("Running daily balance snapshot cron...");
+                let today = chrono::Utc::now().naive_utc().date();
+                let _ = sqlx::query(
+                    r#"
+                    INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd)
+                    SELECT id, current_balance, $1, currency, current_balance
+                    FROM accounts
+                    ON CONFLICT (account_id, as_of_date) DO NOTHING
+                    "#
+                )
+                .bind(today)
+                .execute(&db).await;
+            })
+        }).expect("Failed to add cron job")
+    ).await.expect("Failed to register job");
+    
+    sched.start().await.expect("Failed to start scheduler");
 
     // Build the router
     let app = Router::new()
