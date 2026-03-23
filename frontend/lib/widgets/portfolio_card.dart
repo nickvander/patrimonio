@@ -92,73 +92,81 @@ class _PortfolioCardState extends State<PortfolioCard> {
     final isPositive = totalGainLoss >= 0;
 
     return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 6,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(32.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Investment Portfolio',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Total Value', style: TextStyle(color: Colors.grey)),
-                    Text(
-                      currencyFormat.format(totalValue),
-                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    const Text('Total Return', style: TextStyle(color: Colors.grey)),
-                    Row(
-                      children: [
-                        Icon(
-                          isPositive ? Icons.arrow_upward : Icons.arrow_downward,
-                          color: isPositive ? const Color(0xFF00E676) : Colors.redAccent,
-                          size: 16,
-                        ),
-                        Text(
-                          '${currencyFormat.format(totalGainLoss.abs())} (${totalGainLossPct.toStringAsFixed(2)}%)',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: isPositive ? const Color(0xFF00E676) : Colors.redAccent,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
-                  flex: 2,
-                  child: _buildHoldingsTable(currencyFormat),
+                  flex: 1,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Investment Portfolio', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
+                      const SizedBox(height: 32),
+                      const Text('Total Value', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                      Text(
+                        currencyFormat.format(totalValue),
+                        style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w800, letterSpacing: -1.0),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isPositive ? const Color(0xFF00E676).withOpacity(0.1) : Colors.redAccent.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isPositive ? Icons.trending_up : Icons.trending_down,
+                                  color: isPositive ? const Color(0xFF00E676) : Colors.redAccent,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${isPositive ? '+' : ''}${currencyFormat.format(totalGainLoss.abs())} (${totalGainLossPct.toStringAsFixed(2)}%)',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: isPositive ? const Color(0xFF00E676) : Colors.redAccent,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(width: 24),
                 Expanded(
                   flex: 1,
                   child: SizedBox(
-                    height: 250,
+                    height: 240,
                     child: _buildAllocationChart(),
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 48),
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white10),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: _buildHoldingsTable(currencyFormat),
+              ),
             ),
           ],
         ),
@@ -168,22 +176,27 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
   Widget _buildHoldingsTable(NumberFormat format) {
     if (_holdings.isEmpty) {
-      return const Center(child: Text('No investment holdings found.'));
+      return const Padding(
+        padding: EdgeInsets.all(32.0),
+        child: Center(child: Text('No investment holdings found.', style: TextStyle(color: Colors.grey))),
+      );
     }
 
     return DataTable(
-      headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white70),
+      headingRowColor: MaterialStateProperty.all(const Color(0xFF1A1A24)),
+      headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
+      dataRowHeight: 64,
       sortColumnIndex: _sortColumnIndex,
       sortAscending: _isAscending,
       showCheckboxColumn: false,
       columns: [
-        DataColumn(label: const Text('Symbol'), onSort: _sort),
+        DataColumn(label: const Text('Asset'), onSort: _sort),
         DataColumn(label: const Text('Shares'), numeric: true, onSort: _sort),
         DataColumn(label: const Text('Price'), numeric: true, onSort: _sort),
-        DataColumn(label: const Text('Value'), numeric: true, onSort: _sort),
-        DataColumn(label: const Text('Return'), numeric: true, onSort: _sort),
+        DataColumn(label: const Text('Total Value'), numeric: true, onSort: _sort),
+        DataColumn(label: const Text('All-Time Return'), numeric: true, onSort: _sort),
       ],
-      rows: _holdings.take(8).map((h) {
+      rows: _holdings.map((h) {
         final gain = (h['gain_loss'] as num?)?.toDouble() ?? 0.0;
         final gainPct = (h['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
         final quantity = (h['quantity'] as num?)?.toDouble() ?? 0.0;
@@ -193,22 +206,34 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
         return DataRow(cells: [
           DataCell(
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
+            Row(
               children: [
-                Text(h['symbol'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold)),
-                Text(h['institution_name'] ?? '', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                CircleAvatar(
+                  backgroundColor: const Color(0xFF2A2A35),
+                  child: Text(
+                    (h['symbol'] ?? '?').toString().substring(0, 1).toUpperCase(),
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(h['symbol'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(h['institution_name'] ?? '', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  ],
+                ),
               ],
             ),
           ),
-          DataCell(Text(quantity.toStringAsFixed(4))),
-          DataCell(Text(format.format(price))),
-          DataCell(Text(format.format(value), style: const TextStyle(fontWeight: FontWeight.w600))),
+          DataCell(Text(quantity.toStringAsFixed(4), style: const TextStyle(fontSize: 15))),
+          DataCell(Text(format.format(price), style: const TextStyle(fontSize: 15))),
+          DataCell(Text(format.format(value), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
           DataCell(
             Text(
               '${isGain ? '+' : ''}${format.format(gain)} (${gainPct.toStringAsFixed(2)}%)',
-              style: TextStyle(color: isGain ? const Color(0xFF00E676) : Colors.redAccent, fontWeight: FontWeight.w500),
+              style: TextStyle(color: isGain ? const Color(0xFF00E676) : Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 15),
             ),
           ),
         ]);
@@ -225,13 +250,12 @@ class _PortfolioCardState extends State<PortfolioCard> {
       const Color(0xFFFFD54F),
       const Color(0xFFFF5252),
       const Color(0xFFB388FF),
-      const Color(0xFF64FFDA),
-      const Color(0xFFFF8A65),
     ];
 
     final sortedHoldings = List.from(_holdings)..sort((a, b) => ((b['value'] ?? 0) as num).compareTo((a['value'] ?? 0) as num));
 
     List<PieChartSectionData> sections = [];
+    List<Widget> legendItems = [];
     double otherValue = 0.0;
 
     for (int i = 0; i < sortedHoldings.length; i++) {
@@ -239,48 +263,73 @@ class _PortfolioCardState extends State<PortfolioCard> {
       final value = (h['value'] ?? 0.0).toDouble();
 
       if (value <= 0) continue;
+      final percentage = value / widget.portfolioData['total_value'];
 
-      if (i < 5) {
+      if (i < 4) {
+        final color = colors[i % colors.length];
         sections.add(
           PieChartSectionData(
-            color: colors[i % colors.length],
+            color: color,
             value: value,
-            title: '${h['symbol']}\n${((value / widget.portfolioData['total_value']) * 100).toStringAsFixed(1)}%',
-            radius: 80,
-            titleStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black87),
+            title: '', // Turn off ugly overlapping titles
+            radius: 50,
           ),
         );
+        legendItems.add(_buildLegendItem(color, h['symbol'], percentage));
       } else {
         otherValue += value;
       }
     }
 
     if (otherValue > 0) {
+      final percentage = otherValue / widget.portfolioData['total_value'];
       sections.add(
         PieChartSectionData(
-          color: Colors.grey.shade800,
+          color: Colors.grey.shade700,
           value: otherValue,
-          title: 'Other\n${((otherValue / widget.portfolioData['total_value']) * 100).toStringAsFixed(1)}%',
-          radius: 80,
-          titleStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+          title: '',
+          radius: 50,
         ),
       );
+      legendItems.add(_buildLegendItem(Colors.grey.shade700, 'Other', percentage));
     }
 
-    return Column(
+    return Row(
       children: [
-        const Text('Allocation', style: TextStyle(fontWeight: FontWeight.w600)),
-        const SizedBox(height: 16),
         Expanded(
+          flex: 3,
           child: PieChart(
             PieChartData(
               sections: sections,
-              centerSpaceRadius: 20,
-              sectionsSpace: 2,
+              centerSpaceRadius: 50, // creates a modern donut chart
+              sectionsSpace: 4,
             ),
           ),
         ),
+        const SizedBox(width: 24),
+        Expanded(
+          flex: 2,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: legendItems,
+          ),
+        ),
       ],
+    );
+  }
+
+  Widget _buildLegendItem(Color color, String label, double percentage) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        children: [
+          Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+          Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600))),
+          Text('${(percentage * 100).toStringAsFixed(1)}%', style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+        ],
+      ),
     );
   }
 }

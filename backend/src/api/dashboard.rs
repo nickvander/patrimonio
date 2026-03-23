@@ -231,7 +231,7 @@ async fn credit_utilization(State(state): State<AppState>) -> Json<Vec<CreditUti
                i.name as institution_name
         FROM accounts a
         JOIN institutions i ON a.institution_id = i.id
-        WHERE a.account_type = 'credit'
+        WHERE a.account_type IN ('credit', 'credit card')
         ORDER BY i.name, a.name
         "#
     )

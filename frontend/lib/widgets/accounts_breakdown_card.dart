@@ -81,13 +81,15 @@ class AccountsBreakdownCard extends StatelessWidget {
       final item = data[i];
       final value = ((item['total'] as num?)?.toDouble() ?? 0.0).abs(); // Use abs to show liabilities as positive slices
       if (value > 0) {
+        final percentage = (value / data.fold<double>(0.0, (sum, item) => sum + (((item['total'] as num?)?.toDouble() ?? 0.0).abs())));
         sections.add(
           PieChartSectionData(
             color: colors[i % colors.length],
             value: value,
             title: '${item[labelKey]}\n${currencyFormat.format(value)}',
-            radius: 80,
-            titleStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+            radius: percentage > 0.1 ? 80 : 70,
+            showTitle: percentage > 0.08, // Hide text if slice is too thin
+            titleStyle: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white, height: 1.1),
           ),
         );
       }

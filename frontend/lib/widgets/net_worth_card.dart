@@ -51,12 +51,31 @@ class NetWorthCard extends StatelessWidget {
   }
 
   Widget _buildChart() {
-    if (history.isEmpty) {
-      return const Center(child: Text('No historical data yet.'));
+    List<dynamic> chartHistory = List.from(history);
+
+    // Provide a beautiful empty-state flat line so it doesn't look broken when user has no snapshot history
+    if (chartHistory.isEmpty && netWorth > 0) {
+      final now = DateTime.now();
+      chartHistory = [
+        {'date': now.subtract(const Duration(days: 30)).toIso8601String().split('T')[0], 'net_worth': netWorth},
+        {'date': now.toIso8601String().split('T')[0], 'net_worth': netWorth},
+      ];
+    } else if (chartHistory.isEmpty) {
+      return const Center(child: Text('No historical data yet. Check back tomorrow!'));
     }
 
-    final spots = history.asMap().entries.map((e) {
-      return FlSpot(e.key.toDouble(), (e.value['net_worth'] as num?)?.toDouble() ?? 0.0);
+    // Determine min date to use as X axis 0
+    DateTime minDate = DateTime.parse(chartHistory.first['date'] as String);
+    for (var point in chartHistory) {
+      final dt = DateTime.parse(point['date'] as String);
+      if (dt.isBefore(minDate)) minDate = dt;
+    }
+
+    final spots = chartHistory.map((point) {
+      final dt = DateTime.parse(point['date'] as String);
+      final x = dt.difference(minDate).inDays.toDouble();
+      final y = (point['net_worth'] as num?)?.toDouble() ?? 0.0;
+      return FlSpot(x, y);
     }).toList();
 
     return LineChart(
