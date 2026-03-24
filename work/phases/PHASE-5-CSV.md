@@ -14,7 +14,7 @@ Since most Mexican banks lack public APIs or reliable Plaid support, this phase 
 - [x] PDF parser for Nu Mexico (Regex-based text extraction)
 - [x] PDF parser for Cetesdirecto (Regex-based text extraction)
 - [x] Auto-detection logic in `detect_and_parse`
-- [ ] Unit tests for each parser with sample data [x]
+- [x] Unit tests for each parser with sample data
 
 ### 5.2 Frontend Import UI
 - [x] File picker for .csv and .pdf
@@ -26,10 +26,10 @@ Since most Mexican banks lack public APIs or reliable Plaid support, this phase 
 ### 5.3 Data Integrity & Deduplication
 - [x] Deterministic `external_id` generation for manual imports
 - [x] `ON CONFLICT DO NOTHING` logic for transaction insertion
-- [ ] Balance synchronization after import (Optional) [x]
+- [x] Balance synchronization after import (Optional)
 
 ## Success Criteria
-- [ ] User can upload a Nu Bank PDF and see accurate transactions on the dashboard.
-- [ ] User can upload a Cetesdirecto PDF and see holdings/transactions.
-- [ ] No duplicate transactions are created if the same file is uploaded twice.
-- [ ] Multi-currency (MXN) is correctly handled and converted to USD for net worth.
+- [x] User can upload a Nu Bank PDF and see accurate transactions on the dashboard.
+- [x] User can upload a Cetesdirecto PDF and see holdings/transactions.
+- [x] No duplicate transactions are created if the same file is uploaded twice.
+- [x] Multi-currency (MXN) is correctly handled and converted to USD for net worth.
