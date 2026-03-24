@@ -3,6 +3,7 @@ pub mod nu_mexico_pdf;
 pub mod banamex;
 pub mod cetes;
 pub mod cetes_pdf;
+pub mod banamex_pdf;
 
 #[cfg(test)]
 mod tests;
@@ -33,6 +34,9 @@ pub fn detect_and_parse(file_name: &str, data: &[u8]) -> Result<Vec<ParsedTransa
         }
         if lower_name.contains("cetes") {
             return cetes_pdf::parse(data);
+        }
+        if lower_name.contains("banamex") {
+            return banamex_pdf::parse(data);
         }
     }
     

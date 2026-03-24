@@ -67,3 +67,14 @@ fn test_parse_cetes_pdf_text() {
     assert_eq!(result[0].amount, Decimal::from_str("1000.00").unwrap());
     assert_eq!(result[1].amount, Decimal::from_str("5500.25").unwrap());
 }
+
+#[test]
+fn test_parse_banamex_pdf_text() {
+    let text = "15 MAR COMPRA OXXO $ 50.00\n16 MAR DEPOSITO $ 1,200.50";
+    let result = banamex_pdf::parse_text(text).unwrap();
+    
+    assert_eq!(result.len(), 2);
+    assert_eq!(result[0].description, "COMPRA OXXO");
+    assert_eq!(result[0].amount, Decimal::from_str("-50.00").unwrap()); // Matches amount_str.replace(",", "") and Decimal::from_str
+    assert_eq!(result[1].amount, Decimal::from_str("1200.50").unwrap());
+}
