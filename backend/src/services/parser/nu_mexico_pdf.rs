@@ -1,0 +1,75 @@
+use lopdf::Document;
+use crate::models::import::ParsedTransaction;
+use anyhow::{Result, anyhow};
+use tracing::info;
+use regex::Regex;
+use chrono::{Datelike, NaiveDate};
+use rust_decimal::Decimal;
+use std::str::FromStr;
+
+pub fn parse(data: &[u8]) -> Result<Vec<ParsedTransaction>> {
+    let doc = Document::load_mem(data).map_err(|e| anyhow!("Failed to load PDF: {}", e))?;
+    let mut full_text = String::new();
+    
+    // Extract text from all pages
+    let pages = doc.get_pages();
+    for (page_num, _) in pages.iter() {
+        if let Ok(text) = doc.extract_text(&[*page_num]) {
+            full_text.push_str(&text);
+            full_text.push('\n');
+        }
+    }
+    
+    info!("Extracted {} characters from PDF", full_text.len());
+    
+    parse_text(&full_text)
+}
+
+pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
+    let mut transactions = Vec::new();
+    
+    // Pattern for Nu Mexico (approximated, PDF extraction varies):
+    // "15 MAR Uber Mexico $ 150.50" or similar
+    // We look for: Day (1-2 digits), Month (3 letters), Description (lazy), $, Amount
+    let re = Regex::new(r"(?P<day>\d{1,2})\s+(?P<month>[A-Z]{3})\s+(?P<desc>.+?)\s+\$\s+(?P<amount>-?\d[\d,.]*)")?;
+    
+    let current_year = chrono::Utc::now().year();
+
+    for cap in re.captures_iter(text) {
+        let day_str = cap.name("day").unwrap().as_str();
+        let month_str = cap.name("month").unwrap().as_str();
+        let desc = cap.name("desc").unwrap().as_str().trim();
+        let amount_str = cap.name("amount").unwrap().as_str().replace(",", "");
+        
+        let month_num = match month_str.to_uppercase().as_str() {
+            "ENE" => 1, "FEB" => 2, "MAR" => 3, "ABR" => 4,
+            "MAY" => 5, "JUN" => 6, "JUL" => 7, "AGO" => 8,
+            "SEP" => 9, "OCT" => 10, "NOV" => 11, "DIC" => 12,
+            _ => 1,
+        };
+        
+        let day_num = day_str.parse::<u32>().unwrap_or(1);
+        let date = NaiveDate::from_ymd_opt(current_year, month_num, day_num)
+            .unwrap_or_else(|| NaiveDate::from_ymd_opt(current_year, 1, 1).unwrap());
+        
+        let amount = Decimal::from_str(&amount_str).unwrap_or_default();
+        
+        transactions.push(ParsedTransaction {
+            date,
+            description: desc.to_string(),
+            amount,
+            currency: "MXN".to_string(),
+            category: None,
+        });
+    }
+    
+    info!("Parsed {} transactions from Nu PDF", transactions.len());
+    
+    if transactions.is_empty() {
+        // Fallback or debug: show a snippet of text if nothing found
+        let snippet: String = text.chars().take(200).collect();
+        info!("No transactions found. PDF snippet: {}", snippet);
+    }
+    
+    Ok(transactions)
+}

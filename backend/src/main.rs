@@ -13,21 +13,7 @@ use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod config;
-mod api;
-mod db;
-mod models;
-mod services;
-
-use config::AppConfig;
-
-/// Shared application state available to all handlers
-#[derive(Clone)]
-pub struct AppState {
-    pub db: sqlx::PgPool,
-    pub redis: redis::Client,
-    pub config: Arc<AppConfig>,
-}
+use patrimonio::{config::AppConfig, AppState};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -97,10 +83,11 @@ async fn main() -> Result<()> {
     let app = Router::new()
         .route("/api/health", get(health))
         .route("/api/version", get(version))
-        .nest("/api/accounts", api::accounts::router())
-        .nest("/api/institutions", api::institutions::router())
-        .nest("/api/fx", api::exchange_rates::router())
-        .nest("/api/dashboard", api::dashboard::router())
+        .nest("/api/accounts", patrimonio::api::accounts::router())
+        .nest("/api/institutions", patrimonio::api::institutions::router())
+        .nest("/api/fx", patrimonio::api::exchange_rates::router())
+        .nest("/api/dashboard", patrimonio::api::dashboard::router())
+        .nest("/api/imports", patrimonio::api::imports::router())
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state);
