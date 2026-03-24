@@ -9,7 +9,9 @@ import '../widgets/credit_utilization_card.dart';
 import '../widgets/sync_status_card.dart';
 import '../widgets/accounts_list_widget.dart';
 import '../widgets/transactions_tab.dart';
+import '../widgets/add_account_dialog.dart';
 import 'connect_bank_screen.dart';
+import 'import_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -180,6 +182,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               accounts: _overview?['accounts'] ?? [],
               conversionFactor: conversionFactor,
               currencyFormat: currencyFormat,
+              onBalanceUpdate: (id, bal) async {
+                try {
+                  await _apiService.updateAccountBalance(id, bal);
+                  _loadAllData();
+                } catch (e) {
+                   ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Update failed: $e')),
+                  );
+                }
+              },
             ),
           ),
           const SizedBox(width: 24),
@@ -226,6 +238,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(width: 24),
               Expanded(child: FxWidget(latestRate: _fxRate ?? {})),
             ],
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.upload_file),
+              label: const Text('Import Mexican Statement (CSV/PDF)'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                backgroundColor: Colors.white12,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ImportScreen()),
+                ).then((_) => _loadAllData());
+              },
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.add_circle_outline),
+              label: const Text('Add Manual Account'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                backgroundColor: Colors.white12,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => AddAccountDialog(onAccountCreated: _loadAllData),
+                );
+              },
+            ),
           ),
           const SizedBox(height: 24),
           Row(
