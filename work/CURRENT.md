@@ -1,7 +1,7 @@
 # Current Phase: Phase 5 — Manual CSV Imports 🇲🇽
 
 > **Last Updated:** 2026-03-24
-> **Status:** Phase 4 (Financial Insights) complete. Proceeding to Phase 5 (Manual CSV Imports).
+> **Status:** Phase 5 (Manual CSV Imports) complete. Preparing for Phase 6 (Wealth Projection).
 
 ## What's Done
 - Rust backend with axum (4 API modules, 5 models, 2 services)
@@ -18,9 +18,13 @@
 - **Multi-Currency Bridge (USD/MXN toggle) implemented globally**
 - **Performance Benchmarking (S&P 500) implemented on Net Worth Chart**
 
+- **Manual CSV/PDF Imports implemented for Nu Mexico, Banamex, and CetesDirecto**
+- **Backend restructured as a library with comprehensive parser unit tests**
+- **API body limit increased to 10MB to support large statement uploads**
+
 ## What's Next
-Proceed to Phase 5 to handle manual CSV imports for Mexican institutions:
-1. **[Phase 5: Manual CSV Imports](phases/PHASE-5-CSV.md)**
+Proceed to Phase 6 to implement wealth projections and fire tracking:
+1. **[Phase 6: Wealth Projection](phases/PHASE-6-FIRE.md)** (To be drafted)
 
 ## How to Continue Work
 

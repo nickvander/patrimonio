@@ -68,3 +68,13 @@ Tracking key architectural and design decisions with rationale.
 **Context:** Needed a quick way to view assets in either domestic (USD) or local (MXN) currency.
 **Decision:** Global toggle in App Bar that propagates a `conversionFactor` and `currencyFormat` to all child widgets.
 **Rationale:** Enables "at-a-glance" consistency without needing per-widget toggles. Use real-time exchange rates (USD/MXN).
+
+---
+
+## DEC-009: Backend Library Structuring for Testability
+**Date:** 2026-03-24
+**Status:** Accepted
+**Context:** Needed a robust way to unit test parser logic without depending on a running database or complex integration tests.
+**Decision:** Extracted core logic from `main.rs` into a `lib.rs` target.
+**Rationale:** Standard Rust pattern for binaries that need internal module testing. Allows the `tests/` directory and internal `mod tests` to access private modules in a controlled way.
+**Trade-off:** Minimal overhead in project structure, greatly improved parser reliability.
