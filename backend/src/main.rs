@@ -88,6 +88,7 @@ async fn main() -> Result<()> {
         .nest("/api/fx", patrimonio::api::exchange_rates::router())
         .nest("/api/dashboard", patrimonio::api::dashboard::router())
         .nest("/api/imports", patrimonio::api::imports::router())
+        .nest("/api/projections", patrimonio::api::projections::router())
         .layer(tower_http::limit::RequestBodyLimitLayer::new(10 * 1024 * 1024))
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())

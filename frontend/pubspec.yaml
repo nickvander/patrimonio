@@ -39,6 +39,7 @@ dependencies:
   fl_chart: ^0.70.2
   intl: ^0.20.2
   google_fonts: ^6.2.1
+  file_picker: ^10.3.10
 
 dev_dependencies:
   flutter_test:

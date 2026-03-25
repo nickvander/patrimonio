@@ -123,10 +123,34 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
         })
         .collect();
 
-    let total_net: f64 = currency_breakdown.iter().map(|c| c.net).sum();
+    // Calculate total net worth in USD by converting each currency balance
+    let mut total_net_usd = 0.0;
+    
+    // Get latest USD/MXN rate for conversion
+    let fx_rate = sqlx::query(
+        "SELECT rate FROM exchange_rates WHERE base_currency = 'USD' AND target_currency = 'MXN' ORDER BY recorded_at DESC LIMIT 1"
+    )
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()
+    .map(|r| r.get::<rust_decimal::Decimal, _>("rate"))
+    .and_then(|d| d.to_string().parse::<f64>().ok())
+    .unwrap_or(20.0); // Fallback to 20 if no rate found
+
+    for c in &currency_breakdown {
+        if c.currency == "USD" {
+            total_net_usd += c.net;
+        } else if c.currency == "MXN" {
+            total_net_usd += c.net / fx_rate;
+        } else {
+            // Default 1:1 for other currencies for now
+            total_net_usd += c.net;
+        }
+    }
 
     Json(DashboardOverview {
-        net_worth: total_net,
+        net_worth: total_net_usd,
         currency_breakdown,
         type_breakdown,
         institution_breakdown,
@@ -136,11 +160,13 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
 
 /// Historical net worth data for charting (aggregated from balance_snapshots)
 async fn net_worth_history(State(state): State<AppState>) -> Json<Vec<NetWorthPoint>> {
+    // We need to properly aggregate historical points in USD
+    // Since balance_snapshots table has balance_usd, we use that for a consistent base.
     let rows = sqlx::query(
         r#"
         SELECT bs.as_of_date,
-               COALESCE(SUM(CASE WHEN a.account_type NOT IN ('credit') THEN bs.balance ELSE 0 END), 0) as total_assets,
-               COALESCE(SUM(CASE WHEN a.account_type = 'credit' THEN ABS(bs.balance) ELSE 0 END), 0) as total_liabilities
+               COALESCE(SUM(CASE WHEN a.account_type NOT IN ('credit') THEN bs.balance_usd ELSE 0 END), 0) as total_assets_usd,
+               COALESCE(SUM(CASE WHEN a.account_type = 'credit' THEN ABS(bs.balance_usd) ELSE 0 END), 0) as total_liabilities_usd
         FROM balance_snapshots bs
         JOIN accounts a ON bs.account_id = a.id
         GROUP BY bs.as_of_date
@@ -154,9 +180,9 @@ async fn net_worth_history(State(state): State<AppState>) -> Json<Vec<NetWorthPo
     Json(
         rows.iter()
             .map(|r| {
-                let assets: f64 = r.try_get::<rust_decimal::Decimal, _>("total_assets")
+                let assets: f64 = r.try_get::<rust_decimal::Decimal, _>("total_assets_usd")
                     .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
-                let liabilities: f64 = r.try_get::<rust_decimal::Decimal, _>("total_liabilities")
+                let liabilities: f64 = r.try_get::<rust_decimal::Decimal, _>("total_liabilities_usd")
                     .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
                 NetWorthPoint {
                     date: r.try_get::<chrono::NaiveDate, _>("as_of_date")

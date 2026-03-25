@@ -5,12 +5,14 @@ class AccountsListWidget extends StatelessWidget {
   final List<dynamic> accounts;
   final double conversionFactor;
   final NumberFormat currencyFormat;
+  final Function(String, double)? onBalanceUpdate;
 
   const AccountsListWidget({
     Key? key,
     required this.accounts,
     required this.conversionFactor,
     required this.currencyFormat,
+    this.onBalanceUpdate,
   }) : super(key: key);
 
   @override
@@ -69,10 +71,10 @@ class AccountsListWidget extends StatelessWidget {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               children: [
-                if (cashAccounts.isNotEmpty) _buildAccountGroup('Cash & Banking', cashAccounts, Icons.account_balance_wallet, false),
-                if (investmentAccounts.isNotEmpty) _buildAccountGroup('Investments', investmentAccounts, Icons.trending_up, false),
-                if (creditAccounts.isNotEmpty) _buildAccountGroup('Credit Cards', creditAccounts, Icons.credit_card, true),
-                if (loanAccounts.isNotEmpty) _buildAccountGroup('Loans', loanAccounts, Icons.home_work, true),
+                if (cashAccounts.isNotEmpty) _buildAccountGroup(context, 'Cash & Banking', cashAccounts, Icons.account_balance_wallet, false),
+                if (investmentAccounts.isNotEmpty) _buildAccountGroup(context, 'Investments', investmentAccounts, Icons.trending_up, false),
+                if (creditAccounts.isNotEmpty) _buildAccountGroup(context, 'Credit Cards', creditAccounts, Icons.credit_card, true),
+                if (loanAccounts.isNotEmpty) _buildAccountGroup(context, 'Loans', loanAccounts, Icons.home_work, true),
               ],
             ),
           ],
@@ -81,7 +83,7 @@ class AccountsListWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildAccountGroup(String title, List<dynamic> groupAccounts, IconData icon, bool isLiability) {
+  Widget _buildAccountGroup(BuildContext context, String title, List<dynamic> groupAccounts, IconData icon, bool isLiability) {
     // Sort within group by balance descending
     groupAccounts.sort((a, b) {
       final balA = ((a['current_balance'] ?? 0.0) as num).toDouble().abs();
@@ -138,10 +140,59 @@ class AccountsListWidget extends StatelessWidget {
                     currencyFormat.format(balance * conversionFactor),
                     style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                   ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, size: 16, color: Colors.grey),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () => _showEditBalanceDialog(context, acc),
+                    tooltip: 'Update Balance',
+                  ),
                 ],
               ),
             );
           }).toList(),
+        ],
+      ),
+    );
+  }
+
+  void _showEditBalanceDialog(BuildContext context, Map<String, dynamic> account) {
+    final controller = TextEditingController(text: account['current_balance'].toString());
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A24),
+        title: Text('Update ${account['name']} Balance'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.numberWithOptions(decimal: true),
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: 'Current Balance (${account['currency']})',
+            prefixText: '\$ ',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              final newBalance = double.tryParse(controller.text);
+              if (newBalance != null) {
+                try {
+                  // In a real app we'd use a Provider or Bloc, here we call ApiService directly
+                  // For simplicity, I'll suggest the parent handles the API call via onBalanceUpdate
+                  Navigator.pop(context);
+                  if (onBalanceUpdate != null) {
+                    onBalanceUpdate!(account['id'], newBalance);
+                  }
+                } catch (e) {
+                  debugPrint('Failed to update: $e');
+                }
+              }
+            },
+            child: const Text('Save'),
+          ),
         ],
       ),
     );

@@ -12,6 +12,7 @@ import '../widgets/transactions_tab.dart';
 import '../widgets/add_account_dialog.dart';
 import 'connect_bank_screen.dart';
 import 'import_screen.dart';
+import 'wealth_projection_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -78,7 +79,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Patrimonio', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -91,6 +92,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Tab(text: 'Overview'),
               Tab(text: 'Portfolio'),
               Tab(text: 'Transactions'),
+              Tab(text: 'Projections'),
               Tab(text: 'Management'),
             ],
           ),
@@ -160,16 +162,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final conversionFactor = _targetCurrency == 'MXN' ? fxRate : 1.0;
     final currencyFormat = NumberFormat.simpleCurrency(name: _targetCurrency);
 
-    Widget buildTabContainer(Widget child) {
-      return SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1600),
-            child: child,
-          ),
+    Widget buildTabContainer(Widget child, {bool scrollable = true}) {
+      final content = Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1600),
+          child: child,
         ),
       );
+
+      return scrollable 
+        ? SingleChildScrollView(padding: const EdgeInsets.all(24.0), child: content)
+        : Padding(padding: const EdgeInsets.all(24.0), child: content);
     }
 
     final overviewTab = buildTabContainer(
@@ -225,6 +228,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         conversionFactor: conversionFactor,
         currencyFormat: currencyFormat,
       ),
+    );
+
+    final projectionsTab = buildTabContainer(
+      WealthProjectionScreen(
+        currentNetWorth: (_overview?['net_worth'] as num?)?.toDouble() ?? 0.0,
+        conversionFactor: conversionFactor,
+        currencyFormat: currencyFormat,
+      ),
+      scrollable: false,
     );
 
     final managementTab = buildTabContainer(
@@ -306,6 +318,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         overviewTab,
         portfolioTab,
         transactionsTab,
+        projectionsTab,
         managementTab,
       ],
     );

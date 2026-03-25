@@ -6,3 +6,4 @@ pub mod institution;
 pub mod holding;
 pub mod exchange_rate;
 pub mod transaction;
+pub mod import;

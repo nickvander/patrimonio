@@ -78,3 +78,13 @@ Tracking key architectural and design decisions with rationale.
 **Decision:** Extracted core logic from `main.rs` into a `lib.rs` target.
 **Rationale:** Standard Rust pattern for binaries that need internal module testing. Allows the `tests/` directory and internal `mod tests` to access private modules in a controlled way.
 **Trade-off:** Minimal overhead in project structure, greatly improved parser reliability.
+
+---
+
+## DEC-010: Dashboard Tab Layout — Optional Scrolling
+**Date:** 2026-03-24
+**Status:** Accepted
+**Context:** Transitioning to complex, full-page tabs (like Wealth Projections) caused layout conflicts (`Expanded` inside `SingleChildScrollView`).
+**Decision:** Modified `buildTabContainer` to support an optional `scrollable` parameter (default: true).
+**Rationale:** Components using `fl_chart` or other responsive, space-filling widgets require finite vertical constraints for `Expanded` to calculate heights correctly. A mandatory top-level scroll view breaks this.
+**Trade-off:** Some screens may now overflow on very small viewports if they don't implement their own internal scrolling for specific sub-components.

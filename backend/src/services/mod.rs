@@ -4,3 +4,5 @@
 pub mod encryption;
 pub mod exchange_rate;
 pub mod sync;
+pub mod parser;
+pub mod projections;

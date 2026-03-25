@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:web/web.dart' as web;
 
@@ -70,5 +71,98 @@ class ApiService {
     if (response.statusCode != 200) {
       throw Exception('Failed to sync institutions');
     }
+  }
+
+  Future<Map<String, dynamic>> uploadStatement(String fileName, Uint8List bytes) async {
+    final request = http.MultipartRequest('POST', Uri.parse('$_baseUrl/imports/upload'));
+    request.files.add(http.MultipartFile.fromBytes(
+      'file',
+      bytes,
+      filename: fileName,
+    ));
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      throw Exception('Upload failed: ${response.body}');
+    }
+  }
+
+  Future<Map<String, dynamic>> confirmImport(String accountId, List<dynamic> transactions) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/imports/confirm'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'account_id': accountId,
+        'transactions': transactions,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    } else {
+      throw Exception('Confirmation failed: ${response.body}');
+    }
+  }
+
+  Future<void> updateAccountBalance(String accountId, double balance) async {
+    final response = await http.patch(
+      Uri.parse('$_baseUrl/accounts/$accountId/balance'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'current_balance': balance}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update balance');
+    }
+  }
+
+  Future<void> createAccount({
+    required String name,
+    required String type,
+    required String currency,
+    required double initialBalance,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/accounts'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'name': name,
+        'account_type': type,
+        'currency': currency,
+        'initial_balance': initialBalance,
+      }),
+    );
+    if (response.statusCode != 201) {
+      throw Exception('Failed to create account: ${response.body}');
+    }
+  }
+
+  Future<Map<String, dynamic>> getWealthProjection({
+    required double startBalance,
+    required double monthlyContribution,
+    required double annualReturnRate,
+    required double annualExpenses,
+    required double withdrawalRate,
+    int years = 30,
+  }) async {
+    final queryParams = {
+      'start_balance': startBalance.toString(),
+      'monthly_contribution': monthlyContribution.toString(),
+      'annual_return_rate': annualReturnRate.toString(),
+      'annual_expenses': annualExpenses.toString(),
+      'withdrawal_rate': withdrawalRate.toString(),
+      'years': years.toString(),
+    };
+    
+    final uri = Uri.parse('$_baseUrl/projections/calculate').replace(queryParameters: queryParams);
+    final response = await http.get(uri);
+    
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Failed to load wealth projection');
   }
 }
