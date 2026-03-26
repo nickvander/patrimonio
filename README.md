@@ -1,8 +1,11 @@
-# Patrimonio 💰
+# Patrimonio — Personal Finance Tracker
 
-A cross-platform personal finance tracker for US and Mexican accounts.
+**Cross-platform personal finance tracker (US + Mexico). Tracks accounts across 14+ institutions with real-time USD/MXN exchange rates.**
 
-**One dashboard** to see all your finances across banking, credit cards, brokerages, retirement, and HSA — with real-time USD/MXN exchange rates.
+[![Documentation](https://img.shields.io/badge/docs-MkDocs-blue.svg)](https://your-username.github.io/patrimonio/)
+
+## Getting Started
+See the [Project Overview](docs/index.md) or the [Deployment Guide](docs/deployment.md) to get started.
 
 ## Institutions Supported
 
