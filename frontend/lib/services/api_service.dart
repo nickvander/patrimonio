@@ -26,6 +26,22 @@ class ApiService {
     throw Exception('Failed to load net worth history');
   }
 
+  Future<List<dynamic>> getAllocationData() async {
+    final response = await http.get(Uri.parse('$_baseUrl/dashboard/allocation'));
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Failed to load allocation data');
+  }
+
+  Future<List<dynamic>> getTrendData() async {
+    final response = await http.get(Uri.parse('$_baseUrl/dashboard/trends'));
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Failed to load trend data');
+  }
+
   Future<Map<String, dynamic>> getHoldings() async {
     final response = await http.get(Uri.parse('$_baseUrl/dashboard/holdings'));
     if (response.statusCode == 200) {
@@ -81,13 +97,19 @@ class ApiService {
       filename: fileName,
     ));
 
-    final streamedResponse = await request.send();
-    final response = await http.Response.fromStream(streamedResponse);
+    try {
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 30));
+      final response = await http.Response.fromStream(streamedResponse);
 
-    if (response.statusCode == 200) {
-      return json.decode(response.body) as Map<String, dynamic>;
-    } else {
-      throw Exception('Upload failed: ${response.body}');
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      } else {
+        throw Exception('Server returned ${response.statusCode}: ${response.body}');
+      }
+    } on http.ClientException catch (e) {
+      throw Exception('Network error during upload. Please check your connection and try again. ($e)');
+    } catch (e) {
+      throw Exception('Upload failed: $e');
     }
   }
 

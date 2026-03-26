@@ -99,9 +99,9 @@ async fn upload_handler(
         let data = match field.bytes().await {
             Ok(bytes) => bytes,
             Err(e) => {
-                error!("Failed to read multipart bytes: {}", e);
+                error!("Failed to read multipart bytes for field {}: {:?}", name, e);
                 return (StatusCode::BAD_REQUEST, Json(ImportResponse {
-                    message: format!("Failed to read file: {}", e),
+                    message: format!("Failed to read multipart data: {}", e),
                     status: "error".to_string(),
                     transactions_count: 0,
                     transactions: vec![],

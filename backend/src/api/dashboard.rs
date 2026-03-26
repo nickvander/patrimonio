@@ -13,6 +13,8 @@ pub fn router() -> Router<AppState> {
         .route("/overview", get(dashboard_overview))
         .route("/net-worth-history", get(net_worth_history))
         .route("/holdings", get(holdings))
+        .route("/allocation", get(asset_allocation))
+        .route("/trends", get(cash_flow_trends))
         .route("/credit-utilization", get(credit_utilization))
         .route("/sync-status", get(sync_status))
         .route("/transactions", get(recent_transactions))
@@ -351,6 +353,82 @@ async fn recent_transactions(State(state): State<AppState>) -> Json<Vec<Transact
     )
 }
 
+/// Asset allocation by category and sub-category (account/holding)
+async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationEntry>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT category, sub_category, SUM(value_usd) as value
+        FROM (
+            -- Holdings
+            SELECT COALESCE(holding_type, 'Stocks/ETFs') as category, 
+                   COALESCE(symbol, name) as sub_category,
+                   value as value_usd
+            FROM holdings
+            UNION ALL
+            -- Cash accounts
+            SELECT 'Cash' as category,
+                   name as sub_category,
+                   current_balance as value_usd -- simplified conversion for now
+            FROM accounts
+            WHERE account_type IN ('checking', 'savings', 'cash')
+        ) sub
+        GROUP BY category, sub_category
+        ORDER BY value DESC
+        "#
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    Json(
+        rows.iter()
+            .map(|r| {
+                let value: f64 = r.try_get::<rust_decimal::Decimal, _>("value")
+                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+                AllocationEntry {
+                    category: r.get("category"),
+                    sub_category: r.get("sub_category"),
+                    value,
+                }
+            })
+            .collect(),
+    )
+}
+
+/// Monthly income and spending trends
+async fn cash_flow_trends(State(state): State<AppState>) -> Json<Vec<CashFlowPoint>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT TO_CHAR(date, 'YYYY-MM') as month,
+               SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
+               SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as spending
+        FROM transactions
+        WHERE date >= CURRENT_DATE - INTERVAL '12 months'
+        GROUP BY month
+        ORDER BY month ASC
+        "#
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    Json(
+        rows.iter()
+            .map(|r| {
+                let income: f64 = r.try_get::<rust_decimal::Decimal, _>("income")
+                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+                let spending: f64 = r.try_get::<rust_decimal::Decimal, _>("spending")
+                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+                CashFlowPoint {
+                    month: r.get("month"),
+                    income,
+                    spending,
+                }
+            })
+            .collect(),
+    )
+}
+
 #[derive(Serialize)]
 struct DashboardOverview {
     net_worth: f64,
@@ -455,4 +533,18 @@ struct TransactionEntry {
     description: String,
     category: Option<String>,
     pending: bool,
+}
+
+#[derive(Serialize)]
+struct AllocationEntry {
+    category: String,
+    sub_category: String,
+    value: f64,
+}
+
+#[derive(Serialize)]
+struct CashFlowPoint {
+    month: String,
+    income: f64,
+    spending: f64,
 }

@@ -123,6 +123,19 @@ class NetWorthCard extends StatelessWidget {
 
     return LineChart(
       LineChartData(
+        lineTouchData: LineTouchData(
+          touchTooltipData: LineTouchTooltipData(
+            getTooltipItems: (touchedSpots) {
+              return touchedSpots.map((spot) {
+                final point = history[spot.x.toInt()];
+                return LineTooltipItem(
+                  '${point['date']}\nNet Worth: ${currencyFormat.format(point['net_worth'] * conversionFactor)}\nAssets: ${currencyFormat.format(point['total_assets'] * conversionFactor)}\nLiabilities: ${currencyFormat.format(point['total_liabilities'] * conversionFactor)}',
+                  const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10),
+                );
+              }).toList();
+            },
+          ),
+        ),
         gridData: FlGridData(
           show: true,
           drawVerticalLine: false,

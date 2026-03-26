@@ -1,0 +1,248 @@
+[  +29 ms] Unable to locate an Android SDK.
+[   +5 ms] executing: uname -m
+[   +3 ms] Exit code 0 from: uname -m
+[        ] x86_64
+[   +6 ms] Artifact Instance of 'MaterialFonts' is not required, skipping update.
+[        ] Artifact Instance of 'GradleWrapper' is not required, skipping update.
+[        ] Artifact Instance of 'AndroidGenSnapshotArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'AndroidInternalBuildArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IOSEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterWebSdk' is not required, skipping update.
+[        ] Artifact Instance of 'LegacyCanvasKitRemover' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterSdk' is not required, skipping update.
+[        ] Artifact Instance of 'WindowsEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'MacOSEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'LinuxEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'LinuxFuchsiaSDKArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'MacOSFuchsiaSDKArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterRunnerSDKArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterRunnerDebugSymbols' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FontSubsetArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'PubDependencies' is not required, skipping update.
+[   +1 ms] executing: [/home/nickvander/snap/flutter/common/flutter/] git -c log.showSignature=false log HEAD -n 1 --pretty=format:%ad --date=iso
+[   +4 ms] Exit code 0 from: git -c log.showSignature=false log HEAD -n 1 --pretty=format:%ad --date=iso
+[        ] 2026-03-17 16:14:01 -0700
+[  +17 ms] Artifact Instance of 'AndroidGenSnapshotArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'AndroidInternalBuildArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IOSEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterWebSdk' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterEngineStamp' is not required, skipping update.
+[        ] Artifact Instance of 'LegacyCanvasKitRemover' is not required, skipping update.
+[   +1 ms] Artifact Instance of 'WindowsEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'MacOSEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'LinuxEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'LinuxFuchsiaSDKArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'MacOSFuchsiaSDKArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterRunnerSDKArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterRunnerDebugSymbols' is not required, skipping update.
+[  +36 ms] Artifact Instance of 'MaterialFonts' is not required, skipping update.
+[        ] Artifact Instance of 'GradleWrapper' is not required, skipping update.
+[        ] Artifact Instance of 'AndroidGenSnapshotArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'AndroidInternalBuildArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IOSEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterEngineStamp' is not required, skipping update.
+[   +1 ms] Artifact Instance of 'FlutterSdk' is not required, skipping update.
+[        ] Artifact Instance of 'WindowsEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'MacOSEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'LinuxEngineArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'LinuxFuchsiaSDKArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'MacOSFuchsiaSDKArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterRunnerSDKArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FlutterRunnerDebugSymbols' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'IosUsbArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'FontSubsetArtifacts' is not required, skipping update.
+[        ] Artifact Instance of 'PubDependencies' is not required, skipping update.
+[  +10 ms] Skipping pub get: version match.
+[  +85 ms] Found plugin plaid_flutter at /home/nickvander/.pub-cache/hosted/pub.dev/plaid_flutter-5.1.1/
+[  +15 ms] Found plugin path_provider at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider-2.1.5/
+[   +2 ms] Found plugin path_provider_windows at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider_windows-2.3.0/
+[   +5 ms] Found plugin path_provider_linux at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider_linux-2.2.1/
+[   +4 ms] Found plugin path_provider_foundation at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider_foundation-2.6.0/
+[  +13 ms] Found plugin path_provider_android at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider_android-2.2.22/
+[  +10 ms] Found plugin file_picker at /home/nickvander/.pub-cache/hosted/pub.dev/file_picker-10.3.10/
+[  +12 ms] Found plugin flutter_plugin_android_lifecycle at /home/nickvander/.pub-cache/hosted/pub.dev/flutter_plugin_android_lifecycle-2.0.33/
+[  +65 ms] Found plugin plaid_flutter at /home/nickvander/.pub-cache/hosted/pub.dev/plaid_flutter-5.1.1/
+[   +7 ms] Found plugin path_provider at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider-2.1.5/
+[   +1 ms] Found plugin path_provider_windows at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider_windows-2.3.0/
+[   +4 ms] Found plugin path_provider_linux at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider_linux-2.2.1/
+[   +2 ms] Found plugin path_provider_foundation at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider_foundation-2.6.0/
+[   +9 ms] Found plugin path_provider_android at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider_android-2.2.22/
+[   +3 ms] Found plugin file_picker at /home/nickvander/.pub-cache/hosted/pub.dev/file_picker-10.3.10/
+[   +2 ms] Found plugin flutter_plugin_android_lifecycle at /home/nickvander/.pub-cache/hosted/pub.dev/flutter_plugin_android_lifecycle-2.0.33/
+[  +15 ms] Skipping generating web_plugin_registrant.dart because it is up-to-date.
+[  +30 ms] Found plugin plaid_flutter at /home/nickvander/.pub-cache/hosted/pub.dev/plaid_flutter-5.1.1/
+[   +6 ms] Found plugin path_provider at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider-2.1.5/
+[   +1 ms] Found plugin path_provider_windows at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider_windows-2.3.0/
+[   +3 ms] Found plugin path_provider_linux at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider_linux-2.2.1/
+[   +2 ms] Found plugin path_provider_foundation at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider_foundation-2.6.0/
+[   +6 ms] Found plugin path_provider_android at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider_android-2.2.22/
+[   +2 ms] Found plugin file_picker at /home/nickvander/.pub-cache/hosted/pub.dev/file_picker-10.3.10/
+[   +3 ms] Found plugin flutter_plugin_android_lifecycle at /home/nickvander/.pub-cache/hosted/pub.dev/flutter_plugin_android_lifecycle-2.0.33/
+[  +13 ms] Skipping generating generated_plugin_registrant.h because it is up-to-date.
+[   +1 ms] Skipping generating generated_plugin_registrant.cc because it is up-to-date.
+[   +1 ms] Skipping generating generated_plugins.cmake because it is up-to-date.
+[   +1 ms] Skipping generating generated_plugin_registrant.h because it is up-to-date.
+[        ] Skipping generating generated_plugin_registrant.cc because it is up-to-date.
+[   +1 ms] Skipping generating generated_plugins.cmake because it is up-to-date.
+[   +1 ms] Skipping generating GeneratedPluginRegistrant.swift because it is up-to-date.
+[  +50 ms] Found plugin plaid_flutter at /home/nickvander/.pub-cache/hosted/pub.dev/plaid_flutter-5.1.1/
+[   +8 ms] Found plugin path_provider at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider-2.1.5/
+[        ] Found plugin path_provider_windows at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider_windows-2.3.0/
+[   +2 ms] Found plugin path_provider_linux at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider_linux-2.2.1/
+[   +1 ms] Found plugin path_provider_foundation at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider_foundation-2.6.0/
+[   +8 ms] Found plugin path_provider_android at /home/nickvander/.pub-cache/hosted/pub.dev/path_provider_android-2.2.22/
+[   +2 ms] Found plugin file_picker at /home/nickvander/.pub-cache/hosted/pub.dev/file_picker-10.3.10/
+[   +2 ms] Found plugin flutter_plugin_android_lifecycle at /home/nickvander/.pub-cache/hosted/pub.dev/flutter_plugin_android_lifecycle-2.0.33/
+[   +4 ms] generated_plugin_registrant.dart not found. Skipping.
+[   +1 ms] Compiling lib/main.dart for the Web...
+[   +5 ms] Initializing file store
+[   +4 ms] Done initializing file store
+[  +49 ms] Skipping target: web_entrypoint
+[   +1 ms] invalidated build due to missing files: /home/nickvander/patrimonio/frontend/web/*/index.html, /home/nickvander/patrimonio/frontend/web/flutter_bootstrap.js
+[   +1 ms] Skipping target: dart_build
+[        ] Skipping target: gen_localizations
+[   +2 ms] web_templated_files: Starting due to {InvalidatedReasonKind.outputMissing: The following outputs were missing: /home/nickvander/patrimonio/frontend/build/web/*/index.html, InvalidatedReasonKind.inputMissing: The following inputs were missing: /home/nickvander/patrimonio/frontend/web/*/index.html,/home/nickvander/patrimonio/frontend/web/flutter_bootstrap.js, InvalidatedReasonKind.inputChanged: The following inputs have updated contents: /home/nickvander/patrimonio/frontend/build/web/flutter_bootstrap.js}
+[ +350 ms] web_static_assets: Starting due to {InvalidatedReasonKind.outputMissing: The following outputs were missing: /home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/flutter.js,/home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/canvaskit/canvaskit.js.symbols,/home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/canvaskit/chromium/canvaskit.js.symbols,/home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/canvaskit/chromium/canvaskit.wasm,/home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/canvaskit/chromium/canvaskit.js,/home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/canvaskit/wimp.js.symbols,/home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/canvaskit/wimp.js,/home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/canvaskit/skwasm_heavy.wasm,/home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/canvaskit/skwasm_heavy.js.symbols,/home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/canvaskit/canvaskit.wasm,/home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/canvaskit/skwasm.wasm,/home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/canvaskit/wimp.wasm,/home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/canvaskit/skwasm_heavy.js,/home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/canvaskit/skwasm.js.symbols,/home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/canvaskit/canvaskit.js,/home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/canvaskit/skwasm.js}
+[  +29 ms] dart2js: Starting due to {InvalidatedReasonKind.buildKeyChanged: The target build key changed., InvalidatedReasonKind.outputSetAddition: The following outputs were added to the output set: /home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/main.dart.js}
+[   +6 ms] executing: /home/nickvander/snap/flutter/common/flutter/bin/cache/dart-sdk/bin/dart compile js --platform-binaries=/home/nickvander/snap/flutter/common/flutter/bin/cache/flutter_web_sdk/kernel --invoker=flutter_tool -Ddart.vm.product=true -DFLUTTER_VERSION=3.41.5 -DFLUTTER_CHANNEL=stable -DFLUTTER_GIT_URL=https://github.com/flutter/flutter.git -DFLUTTER_FRAMEWORK_REVISION=2c9eb20739 -DFLUTTER_ENGINE_REVISION=052f31d115 -DFLUTTER_DART_VERSION=3.11.3 -DFLUTTER_WEB_USE_SKIA=true -DFLUTTER_WEB_USE_SKWASM=false -DFLUTTER_WEB_CANVASKIT_URL=https://www.gstatic.com/flutter-canvaskit/052f31d115eceda8cbff1b3481fcde4330c4ae12/ --native-null-assertions --no-source-maps -O4 --minify -o /home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/app.dill --packages=/home/nickvander/patrimonio/frontend/.dart_tool/package_config.json --cfe-only /home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/main.dart
+[   +1 ms] web_static_assets: Complete
+[   +2 ms] dart2wasm: Starting due to {}
+[   +1 ms] executing: /home/nickvander/snap/flutter/common/flutter/bin/cache/dart-sdk/bin/dart compile wasm --packages=/home/nickvander/patrimonio/frontend/.dart_tool/package_config.json --extra-compiler-option=--platform=/home/nickvander/snap/flutter/common/flutter/bin/cache/flutter_web_sdk/kernel/dart2wasm_platform.dill -Ddart.vm.profile=false -Ddart.vm.product=true --extra-compiler-option=--delete-tostring-package-uri=dart:ui --extra-compiler-option=--delete-tostring-package-uri=package:flutter --extra-compiler-option=--import-shared-memory --extra-compiler-option=--shared-memory-max-pages=32768 -DFLUTTER_VERSION=3.41.5 -DFLUTTER_CHANNEL=stable -DFLUTTER_GIT_URL=https://github.com/flutter/flutter.git -DFLUTTER_FRAMEWORK_REVISION=2c9eb20739 -DFLUTTER_ENGINE_REVISION=052f31d115 -DFLUTTER_DART_VERSION=3.11.3 -DFLUTTER_WEB_USE_SKIA=false -DFLUTTER_WEB_USE_SKWASM=true -DFLUTTER_WEB_CANVASKIT_URL=https://www.gstatic.com/flutter-canvaskit/052f31d115eceda8cbff1b3481fcde4330c4ae12/ --extra-compiler-option=--depfile=/home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/dart2wasm.d -O2 --strip-wasm --no-source-maps --minify --extra-compiler-option=--dry-run -o /home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/main.dart.wasm /home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/main.dart
+[  +37 ms] web_templated_files: Complete
+[+12628 ms] lib/components/allocation_heatmap.dart:49:17:
+            Error: No named parameter with the name 'colorValueMapper'.
+                            colorValueMapper: (int index) => data[index].color,
+                            ^^^^^^^^^^^^^^^^
+            ../../.pub-cache/hosted/pub.dev/syncfusion_flutter_treemap-28.2.12/lib/treemap.dart:1827:9:
+            Info: Found this candidate, but the arguments don't match.
+              const SfTreemap({
+                    ^^^^^^^^^
+            lib/components/trends_chart.dart:46:31:
+            Error: No named parameter with the name 'axisSide'.
+                                          axisSide: meta.axisSide,
+                                          ^^^^^^^^
+            ../../.pub-cache/hosted/pub.dev/fl_chart-0.70.2/lib/src/chart/base/axis_chart/axis_chart_widgets.dart:16:9:
+            Info: Found this candidate, but the arguments don't match.
+              const SideTitleWidget({
+                    ^^^^^^^^^^^^^^^
+            Error: Compilation failed.
+[+31793 ms] Found incompatibilities with WebAssembly.
+
+            file:///home/nickvander/.pub-cache/hosted/pub.dev/plaid_flutter-5.1.1/lib/src/platform/plaid_js_map.dart 44:7 - invalid_runtime_check_with_js_interop_types lint violation: Runtime check between 'Object?' and 'JSAny' checks whether a Dart value is a JS interop type, which might not be platform-consistent. (7)
+[   +1 ms] Wasm dry run findings:
+[   +1 ms] Found incompatibilities with WebAssembly.
+
+           file:///home/nickvander/.pub-cache/hosted/pub.dev/plaid_flutter-5.1.1/lib/src/platform/plaid_js_map.dart 44:7 - invalid_runtime_check_with_js_interop_types lint violation: Runtime check between 'Object?' and 'JSAny' checks whether a Dart value is a JS interop type, which might not be platform-consistent. (7)
+
+[        ] Consider addressing these issues to enable wasm builds. See docs for more info: https://docs.flutter.dev/platform-integration/web/wasm
+
+[   +8 ms] Use --no-wasm-dry-run to disable these warnings.
+[        ] dart2wasm: Complete
+[   +1 ms] Persisting file store
+[   +8 ms] Done persisting file store
+[   +3 ms] Target dart2js failed: ProcessException: Process exited abnormally with exit code 1:
+           lib/components/allocation_heatmap.dart:49:17:
+           Error: No named parameter with the name 'colorValueMapper'.
+                           colorValueMapper: (int index) => data[index].color,
+                           ^^^^^^^^^^^^^^^^
+           ../../.pub-cache/hosted/pub.dev/syncfusion_flutter_treemap-28.2.12/lib/treemap.dart:1827:9:
+           Info: Found this candidate, but the arguments don't match.
+             const SfTreemap({
+                   ^^^^^^^^^
+           lib/components/trends_chart.dart:46:31:
+           Error: No named parameter with the name 'axisSide'.
+                                         axisSide: meta.axisSide,
+                                         ^^^^^^^^
+           ../../.pub-cache/hosted/pub.dev/fl_chart-0.70.2/lib/src/chart/base/axis_chart/axis_chart_widgets.dart:16:9:
+           Info: Found this candidate, but the arguments don't match.
+             const SideTitleWidget({
+                   ^^^^^^^^^^^^^^^
+           Error: Compilation failed.
+             Command: /home/nickvander/snap/flutter/common/flutter/bin/cache/dart-sdk/bin/dart compile js --platform-binaries=/home/nickvander/snap/flutter/common/flutter/bin/cache/flutter_web_sdk/kernel --invoker=flutter_tool -Ddart.vm.product=true -DFLUTTER_VERSION=3.41.5 -DFLUTTER_CHANNEL=stable -DFLUTTER_GIT_URL=https://github.com/flutter/flutter.git -DFLUTTER_FRAMEWORK_REVISION=2c9eb20739 -DFLUTTER_ENGINE_REVISION=052f31d115 -DFLUTTER_DART_VERSION=3.11.3 -DFLUTTER_WEB_USE_SKIA=true -DFLUTTER_WEB_USE_SKWASM=false -DFLUTTER_WEB_CANVASKIT_URL=https://www.gstatic.com/flutter-canvaskit/052f31d115eceda8cbff1b3481fcde4330c4ae12/ --native-null-assertions --no-source-maps -O4 --minify -o /home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/app.dill --packages=/home/nickvander/patrimonio/frontend/.dart_tool/package_config.json --cfe-only /home/nickvander/patrimonio/frontend/.dart_tool/flutter_build/a1ac51d10877b167e98279923a8384eb/main.dart
+           #0      RunResult.throwException (package:flutter_tools/src/base/process.dart:153:5)
+           #1      _DefaultProcessUtils.run (package:flutter_tools/src/base/process.dart:379:19)
+           <asynchronous suspension>
+           #2      Dart2JSTarget.build (package:flutter_tools/src/build_system/targets/web.dart:208:5)
+           <asynchronous suspension>
+           #3      _BuildInstance._invokeInternal (package:flutter_tools/src/build_system/build_system.dart:937:9)
+           <asynchronous suspension>
+           #4      Future.wait.<anonymous closure> (dart:async/future.dart:546:21)
+           <asynchronous suspension>
+           #5      _BuildInstance.invokeTarget (package:flutter_tools/src/build_system/build_system.dart:875:32)
+           <asynchronous suspension>
+           #6      Future.wait.<anonymous closure> (dart:async/future.dart:546:21)
+           <asynchronous suspension>
+           #7      _BuildInstance.invokeTarget (package:flutter_tools/src/build_system/build_system.dart:875:32)
+           <asynchronous suspension>
+           #8      FlutterBuildSystem.build (package:flutter_tools/src/build_system/build_system.dart:684:16)
+           <asynchronous suspension>
+           #9      WebBuilder.buildWeb (package:flutter_tools/src/web/compile.dart:107:34)
+           <asynchronous suspension>
+           #10     BuildWebCommand.runCommand (package:flutter_tools/src/commands/build_web.dart:300:5)
+           <asynchronous suspension>
+           #11     FlutterCommand.run.<anonymous closure> (package:flutter_tools/src/runner/flutter_command.dart:1590:27)
+           <asynchronous suspension>
+           #12     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+           <asynchronous suspension>
+           #13     CommandRunner.runCommand (package:args/command_runner.dart:212:13)
+           <asynchronous suspension>
+           #14     FlutterCommandRunner.runCommand.<anonymous closure> (package:flutter_tools/src/runner/flutter_command_runner.dart:496:9)
+           <asynchronous suspension>
+           #15     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+           <asynchronous suspension>
+           #16     FlutterCommandRunner.runCommand (package:flutter_tools/src/runner/flutter_command_runner.dart:431:5)
+           <asynchronous suspension>
+           #17     FlutterCommandRunner.run.<anonymous closure> (package:flutter_tools/src/runner/flutter_command_runner.dart:307:33)
+           <asynchronous suspension>
+           #18     run.<anonymous closure>.<anonymous closure> (package:flutter_tools/runner.dart:104:11)
+           <asynchronous suspension>
+           #19     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+           <asynchronous suspension>
+           #20     main (package:flutter_tools/executable.dart:103:3)
+           <asynchronous suspension>
+
+[   +1 ms] Compiling lib/main.dart for the Web... (completed in 44.9s)
+[        ] "flutter web" took 45,433ms.
+[  +13 ms] Error: Failed to compile application for the Web.
+[        ] 
+           #0      throwToolExit (package:flutter_tools/src/base/common.dart:34:3)
+           #1      WebBuilder.buildWeb (package:flutter_tools/src/web/compile.dart:152:7)
+           <asynchronous suspension>
+           #2      BuildWebCommand.runCommand (package:flutter_tools/src/commands/build_web.dart:300:5)
+           <asynchronous suspension>
+           #3      FlutterCommand.run.<anonymous closure> (package:flutter_tools/src/runner/flutter_command.dart:1590:27)
+           <asynchronous suspension>
+           #4      AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+           <asynchronous suspension>
+           #5      CommandRunner.runCommand (package:args/command_runner.dart:212:13)
+           <asynchronous suspension>
+           #6      FlutterCommandRunner.runCommand.<anonymous closure> (package:flutter_tools/src/runner/flutter_command_runner.dart:496:9)
+           <asynchronous suspension>
+           #7      AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+           <asynchronous suspension>
+           #8      FlutterCommandRunner.runCommand (package:flutter_tools/src/runner/flutter_command_runner.dart:431:5)
+           <asynchronous suspension>
+           #9      FlutterCommandRunner.run.<anonymous closure> (package:flutter_tools/src/runner/flutter_command_runner.dart:307:33)
+           <asynchronous suspension>
+           #10     run.<anonymous closure>.<anonymous closure> (package:flutter_tools/runner.dart:104:11)
+           <asynchronous suspension>
+           #11     AppContext.run.<anonymous closure> (package:flutter_tools/src/base/context.dart:154:19)
+           <asynchronous suspension>
+           #12     main (package:flutter_tools/executable.dart:103:3)
+           <asynchronous suspension>
+
+
+[        ] Running 1 shutdown hook
+[        ] Shutdown hooks complete
+[   +2 ms] exiting with code 1

@@ -13,6 +13,9 @@ import '../widgets/add_account_dialog.dart';
 import 'connect_bank_screen.dart';
 import 'import_screen.dart';
 import 'wealth_projection_screen.dart';
+import '../components/date_range_selector.dart';
+import '../components/allocation_heatmap.dart';
+import '../components/trends_chart.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -33,6 +36,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<dynamic>? _syncData;
   Map<String, dynamic>? _fxRate;
   List<dynamic>? _transactions;
+  List<AllocationData>? _allocationData;
+  List<Map<String, dynamic>>? _trendData;
+  DateRange _selectedRange = DateRange.oneYear;
   String _targetCurrency = 'USD'; // Master currency state
 
   @override
@@ -56,7 +62,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _apiService.getSyncStatus(),
         _apiService.getExchangeRate('USD', 'MXN'),
         _apiService.getTransactions(),
+        _apiService.getAllocationData(),
+        _apiService.getTrendData(),
       ]);
+
+      debugPrint("All data loaded successfully");
+
+      final allocationRaw = results[7] as List<dynamic>;
+      final trendsRaw = results[8] as List<dynamic>;
+
+      final categoryColors = {
+        'Cash': const Color(0xFF00B0FF), // Azure Blue
+        'Stocks/ETFs': const Color(0xFF1DE9B6), // Teal
+        'Investment': const Color(0xFF00E676), // Emerald Green
+        'Crypto': const Color(0xFF651FFF), // Deep Purple
+        'Fixed Income': const Color(0xFFFFD600), // Yellow
+        'Other': const Color(0xFFFF3D00), // Deep Orange
+      };
 
       setState(() {
         _overview = results[0] as Map<String, dynamic>;
@@ -66,9 +88,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _syncData = results[4] as List<dynamic>;
         _fxRate = results[5] as Map<String, dynamic>;
         _transactions = results[6] as List<dynamic>;
+        
+        _allocationData = allocationRaw.map((e) {
+          final category = e['category'] as String;
+          final subCategory = e['sub_category'] as String;
+          final value = (e['value'] as num).toDouble();
+          
+          return AllocationData(
+            category,
+            subCategory,
+            value,
+            categoryColors[category] ?? Colors.blueGrey,
+          );
+        }).toList();
+
+        _trendData = trendsRaw.map((e) => e as Map<String, dynamic>).toList();
         _isLoading = false;
       });
+      
+      debugPrint("State updated with Phase 7 data: ${_allocationData?.length} categories, ${_trendData?.length} trend months");
     } catch (e) {
+      debugPrint("Data load error: $e");
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -200,14 +240,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(width: 24),
           Expanded(
             flex: 3,
-            child: SizedBox(
-              height: 500,
-              child: NetWorthCard(
-                netWorth: ((_overview?['net_worth'] as num?)?.toDouble() ?? 0.0) * conversionFactor,
-                history: _netWorthHistory ?? [],
-                conversionFactor: conversionFactor,
-                currencyFormat: currencyFormat,
-              ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Net Worth History',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    DateRangeSelector(
+                      selectedRange: _selectedRange,
+                      onRangeChanged: (range) {
+                        setState(() => _selectedRange = range);
+                        // In a real app, we'd refetch data for specific range here
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 480,
+                  child: NetWorthCard(
+                    netWorth: ((_overview?['net_worth'] as num?)?.toDouble() ?? 0.0) * conversionFactor,
+                    history: _netWorthHistory ?? [],
+                    conversionFactor: conversionFactor,
+                    currencyFormat: currencyFormat,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                if (_trendData != null)
+                  CashFlowTrendsChart(trends: _trendData!),
+              ],
             ),
           ),
         ],
@@ -215,10 +279,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
 
     final portfolioTab = buildTabContainer(
-      PortfolioCard(
-        portfolioData: _portfolioData ?? {},
-        conversionFactor: conversionFactor,
-        currencyFormat: currencyFormat,
+      Column(
+        children: [
+          if (_allocationData != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 24.0),
+              child: AllocationHeatmap(data: _allocationData!),
+            ),
+          PortfolioCard(
+            portfolioData: _portfolioData ?? {},
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
+          ),
+        ],
       ),
     );
 
