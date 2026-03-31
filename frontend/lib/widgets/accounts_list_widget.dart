@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../screens/account_transactions_screen.dart';
 
 class AccountsListWidget extends StatelessWidget {
   final List<dynamic> accounts;
@@ -71,10 +72,10 @@ class AccountsListWidget extends StatelessWidget {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               children: [
-                if (cashAccounts.isNotEmpty) _buildAccountGroup(context, 'Cash & Banking', cashAccounts, Icons.account_balance_wallet, false),
-                if (investmentAccounts.isNotEmpty) _buildAccountGroup(context, 'Investments', investmentAccounts, Icons.trending_up, false),
-                if (creditAccounts.isNotEmpty) _buildAccountGroup(context, 'Credit Cards', creditAccounts, Icons.credit_card, true),
-                if (loanAccounts.isNotEmpty) _buildAccountGroup(context, 'Loans', loanAccounts, Icons.home_work, true),
+                if (cashAccounts.isNotEmpty) _buildAccountGroup(context, 'Cash', cashAccounts, Icons.wallet, false, const Color(0xFF00B0FF)),
+                if (investmentAccounts.isNotEmpty) _buildAccountGroup(context, 'Investments', investmentAccounts, Icons.show_chart, false, const Color(0xFF00E676)),
+                if (creditAccounts.isNotEmpty) _buildAccountGroup(context, 'Credit Cards', creditAccounts, Icons.credit_card_rounded, true, const Color(0xFFFF5252)),
+                if (loanAccounts.isNotEmpty) _buildAccountGroup(context, 'Loans & Mortgages', loanAccounts, Icons.home_rounded, true, const Color(0xFFFFD54F)),
               ],
             ),
           ],
@@ -83,7 +84,7 @@ class AccountsListWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildAccountGroup(BuildContext context, String title, List<dynamic> groupAccounts, IconData icon, bool isLiability) {
+  Widget _buildAccountGroup(BuildContext context, String title, List<dynamic> groupAccounts, IconData icon, bool isLiability, Color accentColor) {
     // Sort within group by balance descending
     groupAccounts.sort((a, b) {
       final balA = ((a['current_balance'] ?? 0.0) as num).toDouble().abs();
@@ -96,59 +97,87 @@ class AccountsListWidget extends StatelessWidget {
       return sum + bal;
     });
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 24.0),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24.0),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.02),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(icon, color: const Color(0xFF00E676), size: 20),
-                  const SizedBox(width: 8),
-                  Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white70)),
-                ],
-              ),
-              Text(
-                currencyFormat.format(total * conversionFactor),
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ],
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: accentColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(icon, color: accentColor, size: 18),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
+                  ],
+                ),
+                Text(
+                  currencyFormat.format(total * conversionFactor),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: accentColor),
+                ),
+              ],
+            ),
           ),
-          const Divider(color: Colors.white24, height: 24),
+          const Divider(color: Colors.white12, height: 1),
           ...groupAccounts.map((acc) {
             final balance = ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
             final name = acc['name'] ?? 'Unknown Account';
             final inst = acc['institution_name'] ?? '';
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
-                        if (inst.isNotEmpty) Text(inst, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                      ],
+            return InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AccountTransactionsScreen(
+                      account: acc,
+                      conversionFactor: conversionFactor,
+                      currencyFormat: currencyFormat,
+                      onBalanceUpdate: onBalanceUpdate,
                     ),
                   ),
-                  Text(
-                    currencyFormat.format(balance * conversionFactor),
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.edit_outlined, size: 16, color: Colors.grey),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () => _showEditBalanceDialog(context, acc),
-                    tooltip: 'Update Balance',
-                  ),
-                ],
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white70), overflow: TextOverflow.ellipsis),
+                          if (inst.isNotEmpty) Text(inst, style: const TextStyle(fontSize: 11, color: Colors.grey, letterSpacing: 0.2)),
+                        ],
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Text(
+                          currencyFormat.format(balance * conversionFactor),
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white, fontFeatures: [FontFeature.tabularFigures()]),
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.chevron_right, size: 14, color: Colors.white24),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             );
           }).toList(),
@@ -157,44 +186,4 @@ class AccountsListWidget extends StatelessWidget {
     );
   }
 
-  void _showEditBalanceDialog(BuildContext context, Map<String, dynamic> account) {
-    final controller = TextEditingController(text: account['current_balance'].toString());
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A24),
-        title: Text('Update ${account['name']} Balance'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.numberWithOptions(decimal: true),
-          autofocus: true,
-          decoration: InputDecoration(
-            labelText: 'Current Balance (${account['currency']})',
-            prefixText: '\$ ',
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              final newBalance = double.tryParse(controller.text);
-              if (newBalance != null) {
-                try {
-                  // In a real app we'd use a Provider or Bloc, here we call ApiService directly
-                  // For simplicity, I'll suggest the parent handles the API call via onBalanceUpdate
-                  Navigator.pop(context);
-                  if (onBalanceUpdate != null) {
-                    onBalanceUpdate!(account['id'], newBalance);
-                  }
-                } catch (e) {
-                  debugPrint('Failed to update: $e');
-                }
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
 }

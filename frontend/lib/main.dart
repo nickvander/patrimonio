@@ -1,13 +1,50 @@
+import 'dart:js_interop';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'screens/dashboard_screen.dart';
 
+@JS('__splashProgress')
+external void _splashProgress(int percent, String message);
+
+@JS('__splashDone')
+external void _splashDone();
+
+void _updateSplash(int percent, String message) {
+  if (kIsWeb) {
+    try { _splashProgress(percent, message); } catch (_) {}
+  }
+}
+
+void _dismissSplash() {
+  if (kIsWeb) {
+    try { _splashDone(); } catch (_) {}
+  }
+}
+
 void main() {
+  _updateSplash(60, 'Starting app…');
   runApp(const PatrimonioApp());
 }
 
-class PatrimonioApp extends StatelessWidget {
+class PatrimonioApp extends StatefulWidget {
   const PatrimonioApp({super.key});
+
+  @override
+  State<PatrimonioApp> createState() => _PatrimonioAppState();
+}
+
+class _PatrimonioAppState extends State<PatrimonioApp> {
+  @override
+  void initState() {
+    super.initState();
+    _updateSplash(80, 'Rendering UI…');
+    // Dismiss the HTML splash after Flutter paints its first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateSplash(100, 'Ready');
+      _dismissSplash();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

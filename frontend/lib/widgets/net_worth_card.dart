@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import '../components/date_range_selector.dart';
 
 class NetWorthCard extends StatelessWidget {
   final double netWorth;
   final List<dynamic> history;
   final double conversionFactor;
   final NumberFormat currencyFormat;
+  final DateRange selectedRange;
 
   const NetWorthCard({
     Key? key,
@@ -14,7 +16,41 @@ class NetWorthCard extends StatelessWidget {
     required this.history,
     required this.conversionFactor,
     required this.currencyFormat,
+    this.selectedRange = DateRange.all,
   }) : super(key: key);
+
+  /// Filter history data based on the selected date range
+  List<dynamic> _filterByRange(List<dynamic> data) {
+    if (data.isEmpty || selectedRange == DateRange.all) return data;
+
+    final now = DateTime.now();
+    DateTime cutoff;
+
+    switch (selectedRange) {
+      case DateRange.oneMonth:
+        cutoff = now.subtract(const Duration(days: 30));
+        break;
+      case DateRange.yearToDate:
+        cutoff = DateTime(now.year, 1, 1);
+        break;
+      case DateRange.oneYear:
+        cutoff = now.subtract(const Duration(days: 365));
+        break;
+      case DateRange.fiveYears:
+        cutoff = now.subtract(const Duration(days: 365 * 5));
+        break;
+      case DateRange.all:
+        return data;
+    }
+
+    return data.where((point) {
+      final dateStr = point['date']?.toString() ?? '';
+      if (dateStr.length < 10) return true;
+      final date = DateTime.tryParse(dateStr);
+      if (date == null) return true;
+      return date.isAfter(cutoff) || date.isAtSameMomentAs(cutoff);
+    }).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,11 +68,16 @@ class NetWorthCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Total Net Worth', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                    const Text('Total Net Worth', style: TextStyle(color: Colors.white60, fontSize: 14, fontWeight: FontWeight.w500, letterSpacing: 0.5)),
                     const SizedBox(height: 4),
                     Text(
                       currencyFormat.format(netWorth),
-                      style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 42, 
+                        fontWeight: FontWeight.w900, 
+                        letterSpacing: -1.2,
+                        color: Colors.white,
+                      ),
                     ),
                   ],
                 ),
@@ -87,7 +128,8 @@ class NetWorthCard extends StatelessWidget {
       return _renderLineChart(mockData);
     }
 
-    return _renderLineChart(history);
+    final filtered = _filterByRange(history);
+    return _renderLineChart(filtered);
   }
 
   Widget _renderLineChart(List<dynamic> data) {
@@ -121,16 +163,78 @@ class NetWorthCard extends StatelessWidget {
     minY -= padding;
     maxY += padding;
 
+    // Calculate a smart Y-axis interval to avoid duplicate labels
+    final yRange = maxY - minY;
+    final rawInterval = yRange / 5; // aim for ~5 labels
+    // Round to a nice number (1k, 5k, 10k, 25k, 50k, 100k, etc.)
+    double yInterval;
+    if (rawInterval <= 1000) {
+      yInterval = 1000;
+    } else if (rawInterval <= 2500) {
+      yInterval = 2500;
+    } else if (rawInterval <= 5000) {
+      yInterval = 5000;
+    } else if (rawInterval <= 10000) {
+      yInterval = 10000;
+    } else if (rawInterval <= 25000) {
+      yInterval = 25000;
+    } else if (rawInterval <= 50000) {
+      yInterval = 50000;
+    } else {
+      yInterval = (rawInterval / 50000).ceil() * 50000;
+    }
+
     return LineChart(
       LineChartData(
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
+            getTooltipColor: (touchedSpot) => const Color(0xFF1A1A24).withOpacity(0.9),
+            tooltipRoundedRadius: 12,
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {
-                final point = history[spot.x.toInt()];
+                if (spot.barIndex == 0) return null; // Only show tooltip for main wealth line
+                
+                final idx = spot.x.toInt().clamp(0, data.length - 1);
+                final point = data[idx];
+                final dateStr = point['date'].toString();
+                final date = DateTime.tryParse(dateStr) ?? DateTime.now();
+                
+                final nw = point['net_worth'];
+                final ta = point['total_assets'];
+                final tl = point['total_liabilities'];
+                
+                final children = <TextSpan>[
+                  TextSpan(
+                    text: '${DateFormat('MMM d, yyyy').format(date)}\n',
+                    style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.normal),
+                  ),
+                  TextSpan(
+                    text: 'Net Worth: ${currencyFormat.format((nw as num).toDouble() * conversionFactor)}\n',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                ];
+                
+                if (ta != null && tl != null) {
+                  children.addAll([
+                    const TextSpan(
+                      text: '───────────────\n',
+                      style: TextStyle(color: Colors.white10),
+                    ),
+                    TextSpan(
+                      text: 'Assets: ${currencyFormat.format((ta as num).toDouble() * conversionFactor)}\n',
+                      style: const TextStyle(color: Color(0xFF00E676), fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                    TextSpan(
+                      text: 'Liabilities: ${currencyFormat.format((tl as num).toDouble() * conversionFactor)}',
+                      style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ]);
+                }
+                
                 return LineTooltipItem(
-                  '${point['date']}\nNet Worth: ${currencyFormat.format(point['net_worth'] * conversionFactor)}\nAssets: ${currencyFormat.format(point['total_assets'] * conversionFactor)}\nLiabilities: ${currencyFormat.format(point['total_liabilities'] * conversionFactor)}',
-                  const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10),
+                  '',
+                  const TextStyle(color: Colors.white),
+                  children: children,
                 );
               }).toList();
             },
@@ -139,6 +243,7 @@ class NetWorthCard extends StatelessWidget {
         gridData: FlGridData(
           show: true,
           drawVerticalLine: false,
+          horizontalInterval: yInterval,
           getDrawingHorizontalLine: (value) => FlLine(color: Colors.white10, strokeWidth: 1),
         ),
         titlesData: FlTitlesData(
@@ -156,7 +261,11 @@ class NetWorthCard extends StatelessWidget {
                   final dateStr = data[index]['date'].toString();
                   if (dateStr.length >= 10) {
                     final date = DateTime.parse(dateStr);
-                    return Text(DateFormat('MMM d').format(date), style: const TextStyle(color: Colors.grey, fontSize: 10));
+                    // Adapt format based on range
+                    final fmt = selectedRange == DateRange.oneMonth
+                        ? DateFormat('MMM d')
+                        : DateFormat("MMM ''yy");
+                    return Text(fmt.format(date), style: const TextStyle(color: Colors.grey, fontSize: 10));
                   }
                 }
                 return const Text('');
@@ -166,13 +275,16 @@ class NetWorthCard extends StatelessWidget {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
+              interval: yInterval,
               getTitlesWidget: (value, meta) {
+                // Skip the very first/last to avoid clipping
+                if (value <= minY || value >= maxY) return const SizedBox();
                 return Text(
                   NumberFormat.compactSimpleCurrency(name: currencyFormat.currencyName).format(value),
                   style: const TextStyle(color: Colors.grey, fontSize: 10),
                 );
               },
-              reservedSize: 40,
+              reservedSize: 50,
             ),
           ),
         ),

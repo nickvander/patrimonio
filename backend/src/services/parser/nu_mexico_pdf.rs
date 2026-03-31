@@ -1,7 +1,7 @@
 use lopdf::Document;
 use crate::models::import::ParsedTransaction;
 use anyhow::{Result, anyhow};
-use tracing::info;
+use tracing::{info, debug};
 use regex::Regex;
 use chrono::{Datelike, NaiveDate};
 use rust_decimal::Decimal;
@@ -20,7 +20,7 @@ pub fn parse(data: &[u8]) -> Result<Vec<ParsedTransaction>> {
         }
     }
     
-    info!("Extracted {} characters from PDF", full_text.len());
+    info!("Extracted {} characters from Nu PDF", full_text.len());
     
     parse_text(&full_text)
 }
@@ -28,10 +28,9 @@ pub fn parse(data: &[u8]) -> Result<Vec<ParsedTransaction>> {
 pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
     let mut transactions = Vec::new();
     
-    // Pattern for Nu Mexico (approximated, PDF extraction varies):
-    // "15 MAR Uber Mexico $ 150.50" or similar
-    // We look for: Day (1-2 digits), Month (3 letters), Description (lazy), $, Amount
-    let re = Regex::new(r"(?P<day>\d{1,2})\s+(?P<month>[A-Z]{3})\s+(?P<desc>.+?)\s+\$\s+(?P<amount>-?\d[\d,.]*)")?;
+    // Improved pattern for Nu Mexico:
+    // Supports: "15 MAR Uber Mexico $ 150.50", "15 mar Pago de tarjeta 5,000.00", etc.
+    let re = Regex::new(r"(?P<day>\d{1,2})\s+(?P<month>[a-zA-Z]{3})\s+(?P<desc>.+?)\s+[\$]?\s*(?P<amount>-?\d[\d,.]*\.\d{2})")?;
     
     let current_year = chrono::Utc::now().year();
 
@@ -45,7 +44,10 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
             "ENE" => 1, "FEB" => 2, "MAR" => 3, "ABR" => 4,
             "MAY" => 5, "JUN" => 6, "JUL" => 7, "AGO" => 8,
             "SEP" => 9, "OCT" => 10, "NOV" => 11, "DIC" => 12,
-            _ => 1,
+            _ => {
+                debug!("Skipping match with unknown month: {}", month_str);
+                continue;
+            }
         };
         
         let day_num = day_str.parse::<u32>().unwrap_or(1);
@@ -53,6 +55,11 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
             .unwrap_or_else(|| NaiveDate::from_ymd_opt(current_year, 1, 1).unwrap());
         
         let amount = Decimal::from_str(&amount_str).unwrap_or_default();
+        
+        // Nu Mexico specific: often positive values for purchases, but we should treat them as negative
+        // if they are obviously spendings. However, simplest is to follow the PDF's lead.
+        // If the amount doesn't have a sign, but the description looks like spending (not "ABONO" or "TRANSFERENCIA"),
+        // we could negate it, but usually Nu PDF uses "-" for expenses.
         
         transactions.push(ParsedTransaction {
             date,
@@ -66,9 +73,8 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
     info!("Parsed {} transactions from Nu PDF", transactions.len());
     
     if transactions.is_empty() {
-        // Fallback or debug: show a snippet of text if nothing found
-        let snippet: String = text.chars().take(200).collect();
-        info!("No transactions found. PDF snippet: {}", snippet);
+        let snippet: String = text.chars().take(500).collect();
+        info!("No transactions found in Nu PDF. Extraction snippet: \n---\n{}\n---", snippet);
     }
     
     Ok(transactions)

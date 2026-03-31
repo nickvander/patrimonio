@@ -82,6 +82,14 @@ class ApiService {
     throw Exception('Failed to load transactions');
   }
 
+  Future<List<dynamic>> getAccountTransactions(String accountId) async {
+    final response = await http.get(Uri.parse('$_baseUrl/accounts/$accountId/transactions'));
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Failed to load account transactions');
+  }
+
   Future<void> syncInstitutions() async {
     final response = await http.post(Uri.parse('$_baseUrl/institutions/sync'));
     if (response.statusCode != 200) {
@@ -89,13 +97,16 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> uploadStatement(String fileName, Uint8List bytes) async {
+  Future<Map<String, dynamic>> uploadStatement(String fileName, Uint8List bytes, {String? password}) async {
     final request = http.MultipartRequest('POST', Uri.parse('$_baseUrl/imports/upload'));
     request.files.add(http.MultipartFile.fromBytes(
       'file',
       bytes,
       filename: fileName,
     ));
+    if (password != null && password.isNotEmpty) {
+      request.fields['password'] = password;
+    }
 
     try {
       final streamedResponse = await request.send().timeout(const Duration(seconds: 30));

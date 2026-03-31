@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:syncfusion_flutter_treemap/treemap.dart';
+import 'package:intl/intl.dart';
 
 class AllocationData {
   final String category;
@@ -17,17 +17,34 @@ class AllocationHeatmap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Get unique categories and their colors for the legend
-    final categories = <String, Color>{};
+    if (data.isEmpty) return const SizedBox.shrink();
+
+    final totalValue = data.fold<double>(0, (sum, item) => sum + item.value);
+    
+    // Group data by category
+    final groupedData = <String, List<AllocationData>>{};
+    final categoryColors = <String, Color>{};
     for (var item in data) {
-      categories[item.category] = item.color;
+      groupedData.putIfAbsent(item.category, () => []).add(item);
+      categoryColors[item.category] = item.color;
     }
 
+    // Sort categories by total value descending
+    final sortedCategories = groupedData.keys.toList()
+      ..sort((a, b) {
+        final sumA = groupedData[a]!.fold<double>(0, (sum, item) => sum + item.value);
+        final sumB = groupedData[b]!.fold<double>(0, (sum, item) => sum + item.value);
+        return sumB.compareTo(sumA);
+      });
+
+    final currencyFormat = NumberFormat.compactCurrency(symbol: '\$');
+
     return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 6,
+      shadowColor: Colors.black45,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -35,83 +52,157 @@ class AllocationHeatmap extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Asset Allocation',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  'Asset Distribution',
+                  style: TextStyle(
+                    fontSize: 22, 
+                    fontWeight: FontWeight.w800, 
+                    letterSpacing: -0.5
+                  ),
                 ),
-                // Legend
-                Wrap(
-                  spacing: 12,
-                  children: categories.entries.map((e) => Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: e.value.withOpacity(0.8),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(e.key, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                    ],
-                  )).toList(),
+                Text(
+                  'Total: ${currencyFormat.format(totalValue)}',
+                  style: const TextStyle(
+                    fontSize: 14, 
+                    color: Colors.grey, 
+                    fontWeight: FontWeight.w600
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 20),
-            SizedBox(
-              height: 220, // Reduced height as requested
-              child: SfTreemap(
-                dataCount: data.length,
-                weightValueMapper: (int index) => data[index].value,
-                levels: [
-                  TreemapLevel(
-                    groupMapper: (int index) => data[index].category,
-                    padding: const EdgeInsets.all(1.0),
-                    labelBuilder: (BuildContext context, TreemapTile tile) {
-                      return const SizedBox.shrink(); // Categories shown in legend/outer color
-                    },
-                  ),
-                  TreemapLevel(
-                    groupMapper: (int index) => data[index].subCategory,
-                    padding: const EdgeInsets.all(2.0),
-                    labelBuilder: (BuildContext context, TreemapTile tile) {
-                      if (tile.weight < 1000) return const SizedBox.shrink(); // Hide tiny labels
-                      return Padding(
-                        padding: const EdgeInsets.all(4.0),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+            const SizedBox(height: 24),
+            // The "Tree-like" Horizontal Bar View
+            ...sortedCategories.map((cat) {
+              final items = groupedData[cat]!;
+              final catTotal = items.fold<double>(0, (sum, i) => sum + i.value);
+              final catPercentage = catTotal / totalValue;
+              final color = categoryColors[cat]!;
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
                           children: [
-                            Text(
-                              tile.group,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 11,
+                            Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: color,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: color.withOpacity(0.4),
+                                    blurRadius: 8,
+                                    spreadRadius: 1,
+                                  )
+                                ],
                               ),
-                              overflow: TextOverflow.ellipsis,
                             ),
+                            const SizedBox(width: 12),
                             Text(
-                              '\$${tile.weight >= 1000 ? (tile.weight / 1000).toStringAsFixed(1) + "k" : tile.weight.toStringAsFixed(0)}',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.8),
-                                fontSize: 9,
+                              cat,
+                              style: const TextStyle(
+                                fontSize: 16, 
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
                               ),
                             ),
                           ],
                         ),
-                      );
-                    },
-                  ),
-                ],
-                // colorValueMapper is missing in this version, it seems to use the first level by default
-                colorMappers: categories.entries.map((e) => TreemapColorMapper.value(
-                  value: e.key,
-                  color: e.value.withOpacity(0.8),
-                )).toList(),
-              ),
-            ),
+                        Text(
+                          '${(catPercentage * 100).toStringAsFixed(1)}%',
+                          style: TextStyle(
+                            fontSize: 14, 
+                            fontWeight: FontWeight.w800,
+                            color: color,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    // Main Category Bar
+                    Stack(
+                      children: [
+                        Container(
+                          height: 12,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.white12,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        FractionallySizedBox(
+                          widthFactor: catPercentage.clamp(0.0, 1.0),
+                          child: Container(
+                            height: 12,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  color,
+                                  color.withOpacity(0.7),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(6),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: color.withOpacity(0.3),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                )
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    // Sub-items (the "Tree" detail)
+                    Wrap(
+                      spacing: 16,
+                      runSpacing: 8,
+                      children: items.map((item) {
+                        final subPercentage = item.value / catTotal;
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 4,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.withOpacity(0.5),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              item.subCategory,
+                              style: const TextStyle(
+                                fontSize: 12, 
+                                color: Colors.grey,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              currencyFormat.format(item.value),
+                              style: const TextStyle(
+                                fontSize: 11, 
+                                color: Colors.white70,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
           ],
         ),
       ),

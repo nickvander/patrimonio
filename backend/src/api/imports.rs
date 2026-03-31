@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Multipart, State},
+    extract::{Multipart, State, DefaultBodyLimit},
     http::StatusCode,
     response::IntoResponse,
     routing::post,
@@ -22,7 +22,7 @@ pub struct ImportResponse {
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/upload", post(upload_handler))
+        .route("/upload", post(upload_handler).layer(DefaultBodyLimit::max(20 * 1024 * 1024)))
         .route("/confirm", post(confirm_handler))
 }
 
@@ -88,20 +88,20 @@ async fn upload_handler(
     State(_state): State<AppState>,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    while let Some(field) = multipart.next_field().await.unwrap_or(None) {
-        let name = field.name().unwrap_or("file").to_string();
-        let file_name = field.file_name().unwrap_or("unknown").to_string();
-        let content_type = field.content_type().unwrap_or("application/octet-stream").to_string();
+    let mut file_name = String::new();
+    let mut file_data = Vec::new();
+    let mut password = None;
+
+    loop {
+        let field_result = multipart.next_field().await;
         
-        info!("Receiving upload: {} ({}) - type: {}", name, file_name, content_type);
-        
-        // Read buffer
-        let data = match field.bytes().await {
-            Ok(bytes) => bytes,
+        let field = match field_result {
+            Ok(Some(f)) => f,
+            Ok(None) => break, // End of multipart stream
             Err(e) => {
-                error!("Failed to read multipart bytes for field {}: {:?}", name, e);
+                error!("Multipart error: {:?}", e);
                 return (StatusCode::BAD_REQUEST, Json(ImportResponse {
-                    message: format!("Failed to read multipart data: {}", e),
+                    message: format!("Failed to parse upload request: {}", e),
                     status: "error".to_string(),
                     transactions_count: 0,
                     transactions: vec![],
@@ -109,36 +109,82 @@ async fn upload_handler(
             }
         };
 
-        info!("Read {} bytes. Auto-detecting parser...", data.len());
-        
-        // Call auto-detection parser
-        let transactions = match parser::detect_and_parse(&file_name, &data) {
-            Ok(txs) => txs,
-            Err(e) => {
-                error!("Parser failed for {}: {}", file_name, e);
-                return (StatusCode::UNPROCESSABLE_ENTITY, Json(ImportResponse {
-                    message: format!("Parser failed: {}", e),
-                    status: "error".to_string(),
-                    transactions_count: 0,
-                    transactions: vec![],
-                })).into_response();
+        let name = field.name().unwrap_or("").to_string();
+        if name == "password" {
+            let pwd = field.text().await.unwrap_or_default();
+            if !pwd.trim().is_empty() {
+                password = Some(pwd);
             }
-        };
+        } else if name == "file" || field.file_name().is_some() {
+            file_name = field.file_name().unwrap_or("unknown").to_string();
+            match field.bytes().await {
+                Ok(bytes) => {
+                    file_data = bytes.to_vec();
+                }
+                Err(e) => {
+                    error!("Failed to read file bytes: {:?}", e);
+                    return (StatusCode::BAD_REQUEST, Json(ImportResponse {
+                        message: format!("Failed to read file data: {}", e),
+                        status: "error".to_string(),
+                        transactions_count: 0,
+                        transactions: vec![],
+                    })).into_response();
+                }
+            }
+        }
+    }
 
-        info!("Parsed {} transactions from {}", transactions.len(), file_name);
-        
-        return (StatusCode::OK, Json(ImportResponse {
-            message: format!("Successfully parsed {} transactions from {}", transactions.len(), file_name),
-            status: "success".to_string(),
-            transactions_count: transactions.len(),
-            transactions,
+    if file_data.is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(ImportResponse {
+            message: "No file was found in the upload request. Please ensure you are uploading a valid statement.".to_string(),
+            status: "error".to_string(),
+            transactions_count: 0,
+            transactions: vec![],
         })).into_response();
     }
 
-    (StatusCode::BAD_REQUEST, Json(ImportResponse {
-        message: "No file found in request".to_string(),
-        status: "error".to_string(),
-        transactions_count: 0,
-        transactions: vec![],
+    info!("Read {} bytes. Auto-detecting parser...", file_data.len());
+    
+    // Call auto-detection parser
+    let transactions = match parser::detect_and_parse(&file_name, &file_data, password.as_deref()) {
+        Ok(txs) => txs,
+        Err(e) => {
+            let error_msg = e.to_string();
+            
+            if error_msg.contains("PASSWORD_REQUIRED") {
+                return (StatusCode::OK, Json(ImportResponse {
+                    message: "This statement is encrypted. Please enter your PDF password (e.g., your RFC) to unlock it.".to_string(),
+                    status: "password_required".to_string(),
+                    transactions_count: 0,
+                    transactions: vec![],
+                })).into_response();
+            }
+            
+            if error_msg.contains("INCORRECT_PASSWORD") {
+                return (StatusCode::OK, Json(ImportResponse {
+                    message: "The provided password was incorrect. Please try again.".to_string(),
+                    status: "password_required".to_string(),
+                    transactions_count: 0,
+                    transactions: vec![],
+                })).into_response();
+            }
+
+            error!("Parser failed for {}: {}", file_name, error_msg);
+            return (StatusCode::UNPROCESSABLE_ENTITY, Json(ImportResponse {
+                message: format!("Processing Error: {}", error_msg),
+                status: "error".to_string(),
+                transactions_count: 0,
+                transactions: vec![],
+            })).into_response();
+        }
+    };
+
+    info!("Parsed {} transactions from {}", transactions.len(), file_name);
+    
+    (StatusCode::OK, Json(ImportResponse {
+        message: format!("Successfully parsed {} transactions from {}", transactions.len(), file_name),
+        status: "success".to_string(),
+        transactions_count: transactions.len(),
+        transactions,
     })).into_response()
 }

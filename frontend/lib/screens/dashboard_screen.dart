@@ -258,19 +258,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 SizedBox(
-                  height: 480,
+                  height: 440, // Slightly reduced to improve overall page balance
                   child: NetWorthCard(
                     netWorth: ((_overview?['net_worth'] as num?)?.toDouble() ?? 0.0) * conversionFactor,
                     history: _netWorthHistory ?? [],
                     conversionFactor: conversionFactor,
                     currencyFormat: currencyFormat,
+                    selectedRange: _selectedRange,
                   ),
                 ),
                 const SizedBox(height: 24),
                 if (_trendData != null)
-                  CashFlowTrendsChart(trends: _trendData!),
+                  CashFlowTrendsChart(
+                    trends: _trendData!,
+                    conversionFactor: conversionFactor,
+                    currencyFormat: currencyFormat,
+                  ),
               ],
             ),
           ),

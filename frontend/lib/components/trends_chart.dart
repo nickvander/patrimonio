@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
 
 class CashFlowTrendsChart extends StatelessWidget {
   final List<Map<String, dynamic>> trends;
+  final double conversionFactor;
+  final NumberFormat currencyFormat;
 
-  const CashFlowTrendsChart({super.key, required this.trends});
+  const CashFlowTrendsChart({
+    super.key, 
+    required this.trends,
+    required this.conversionFactor,
+    required this.currencyFormat,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -14,9 +22,21 @@ class CashFlowTrendsChart extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Cash Flow Trends',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Cash Flow Trends',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                Row(
+                  children: [
+                    _buildLegendItem(Colors.greenAccent, 'Income'),
+                    const SizedBox(width: 16),
+                    _buildLegendItem(Colors.redAccent, 'Spending'),
+                  ],
+                ),
+              ],
             ),
             const SizedBox(height: 24),
             SizedBox(
@@ -29,7 +49,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                     touchTooltipData: BarTouchTooltipData(
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         return BarTooltipItem(
-                          '${rodIndex == 0 ? "Income" : "Spending"}\n\$${rod.toY.toStringAsFixed(0)}',
+                          '${rodIndex == 0 ? "Income" : "Spending"}\n${currencyFormat.format(rod.toY * conversionFactor)}',
                           const TextStyle(color: Colors.white),
                         );
                       },
@@ -42,11 +62,26 @@ class CashFlowTrendsChart extends StatelessWidget {
                         showTitles: true,
                         getTitlesWidget: (value, meta) {
                           if (value.toInt() >= 0 && value.toInt() < trends.length) {
+                            final monthStr = trends[value.toInt()]['month'] as String; // e.g. "2026-03"
+                            final parts = monthStr.split('-');
+                            String label;
+                            try {
+                              final date = DateTime(int.parse(parts[0]), int.parse(parts[1]));
+                              // Show "Mar" for most, "Mar '26" for Jan or first/last entry
+                              final isFirst = value.toInt() == 0;
+                              final isLast = value.toInt() == trends.length - 1;
+                              final isJan = parts[1] == '01';
+                              label = (isFirst || isLast || isJan)
+                                  ? DateFormat("MMM ''yy").format(date)
+                                  : DateFormat('MMM').format(date);
+                            } catch (_) {
+                              label = parts.length > 1 ? parts[1] : monthStr;
+                            }
                             return SideTitleWidget(
                               meta: meta,
                               child: Text(
-                                trends[value.toInt()]['month'].split('-')[1], // Just month
-                                style: const TextStyle(fontSize: 10),
+                                label,
+                                style: const TextStyle(fontSize: 10, color: Colors.grey),
                               ),
                             );
                           }
@@ -54,7 +89,23 @@ class CashFlowTrendsChart extends StatelessWidget {
                         },
                       ),
                     ),
-                    leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 60,
+                        getTitlesWidget: (value, meta) {
+                          if (value == 0) return const SizedBox();
+                          return SideTitleWidget(
+                            meta: meta,
+                            child: Text(
+                              currencyFormat.format(value * conversionFactor).split('.')[0], // No decimals for compactness
+                              style: const TextStyle(fontSize: 10, color: Colors.grey),
+                              maxLines: 1,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                     topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                     rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   ),
@@ -94,6 +145,16 @@ class CashFlowTrendsChart extends StatelessWidget {
       if (t['income'] > max) max = t['income'];
       if (t['spending'] > max) max = t['spending'];
     }
-    return max * 1.2;
+    return max == 0 ? 100 : max * 1.2;
+  }
+
+  Widget _buildLegendItem(Color color, String label) {
+    return Row(
+      children: [
+        Container(width: 12, height: 12, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+      ],
+    );
   }
 }

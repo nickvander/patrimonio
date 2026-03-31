@@ -13,6 +13,24 @@ description: How to run, build, and test the Patrimonio development environment
 // turbo
 3. Test the API: `curl -s http://localhost:8080/api/health | python3 -m json.tool`
 
+## Building and serving the Flutter frontend
+
+**IMPORTANT: The Flutter web build takes ~50 seconds. This is normal — do NOT cancel it.**
+
+// turbo
+1. Build the web app: `cd ~/patrimonio/frontend && flutter build web --dart-define=API_BASE_URL=http://localhost:8080/api 2>&1`
+   - Use `command_status` with `WaitDurationSeconds: 120` to wait for completion
+   - Expected output: `✓ Built build/web` with exit code 0
+// turbo
+2. Kill any old server and start fresh: `pkill -f 'python3 -m http.server' 2>/dev/null; sleep 1; cd ~/patrimonio/frontend/build/web && nohup python3 -m http.server 3000 --bind 0.0.0.0 > /tmp/flutter_serve.log 2>&1 & sleep 1; curl -s -o /dev/null -w 'HTTP %{http_code}' http://localhost:3000/`
+   - Expected output: `HTTP 200`
+3. The app is now available at `http://localhost:3000`
+
+### Known issues
+- The **browser subagent** cannot connect to localhost servers (sandbox limitation). Use `curl` to verify the server is responding, and ask the user to test in their browser.
+- `flutter run -d web-server` is unreliable in this environment — always use `flutter build web` + `python3 -m http.server` instead.
+- The build takes ~50s. Set `WaitMsBeforeAsync: 500` and then use `command_status` with `WaitDurationSeconds: 120` to avoid appearing stuck.
+
 ## Rebuilding after backend changes
 // turbo
 1. Rebuild and restart the API: `cd ~/patrimonio && docker compose up --build -d api`
@@ -21,8 +39,16 @@ description: How to run, build, and test the Patrimonio development environment
 // turbo
 3. Verify health: `curl -s http://localhost:8080/api/health`
 
+## Rebuilding after frontend changes
+// turbo
+1. Rebuild: `cd ~/patrimonio/frontend && flutter build web --dart-define=API_BASE_URL=http://localhost:8080/api 2>&1`
+   - Wait with `command_status` using `WaitDurationSeconds: 120`
+// turbo
+2. Restart server: `pkill -f 'python3 -m http.server' 2>/dev/null; sleep 1; cd ~/patrimonio/frontend/build/web && nohup python3 -m http.server 3000 --bind 0.0.0.0 > /tmp/flutter_serve.log 2>&1 & sleep 1; curl -s -o /dev/null -w 'HTTP %{http_code}' http://localhost:3000/`
+
 ## Stopping the environment
 1. Stop all services: `cd ~/patrimonio && docker compose down`
+2. Stop frontend server: `pkill -f 'python3 -m http.server' 2>/dev/null`
 
 ## Running a full test cycle
 // turbo

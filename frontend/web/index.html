@@ -1,48 +1,161 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Patrimonio — Personal Finance Tracker">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="patrimonio">
+  <meta name="apple-mobile-web-app-title" content="Patrimonio">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>patrimonio</title>
+  <title>Patrimonio</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- ===== Splash / Loading Screen Styles ===== -->
+  <style>
+    /* Match the app's dark theme so there's no flash */
+    html, body {
+      margin: 0;
+      padding: 0;
+      background-color: #101016;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    #splash {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background-color: #101016;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      transition: opacity 0.5s ease-out;
+    }
+
+    #splash.fade-out {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Logo mark */
+    .splash-logo {
+      width: 72px;
+      height: 72px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #00E676 0%, #00C853 50%, #009624 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 24px;
+      box-shadow: 0 8px 32px rgba(0, 230, 118, 0.25);
+      animation: pulse-glow 2s ease-in-out infinite;
+    }
+
+    .splash-logo svg {
+      width: 40px;
+      height: 40px;
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 8px 32px rgba(0, 230, 118, 0.25); }
+      50% { box-shadow: 0 8px 48px rgba(0, 230, 118, 0.45); }
+    }
+
+    .splash-title {
+      color: #E0E0E0;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+    }
+
+    .splash-subtitle {
+      color: #888;
+      font-size: 14px;
+      font-weight: 400;
+      margin-bottom: 40px;
+    }
+
+    /* Progress bar */
+    .progress-track {
+      width: 200px;
+      height: 3px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 10%;
+      background: linear-gradient(90deg, #00E676, #69F0AE);
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+
+    .splash-status {
+      color: #666;
+      font-size: 12px;
+      margin-top: 16px;
+      min-height: 18px;
+    }
+  </style>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
+  <!-- ===== Splash Screen (pure HTML — shows instantly) ===== -->
+  <div id="splash">
+    <div class="splash-logo">
+      <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <text x="50%" y="52%" dominant-baseline="middle" text-anchor="middle"
+              font-family="Inter, sans-serif" font-weight="800" font-size="26" fill="white">P</text>
+      </svg>
+    </div>
+    <div class="splash-title">Patrimonio</div>
+    <div class="splash-subtitle">Personal Finance Tracker</div>
+    <div class="progress-track">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+    <div class="splash-status" id="splash-status">Initializing…</div>
+  </div>
 
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
   <!-- Plaid Link Runtime -->
   <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+
+  <script>
+    // ===== Progress helper =====
+    const progressBar = document.getElementById('progress-bar');
+    const splashStatus = document.getElementById('splash-status');
+    const splash = document.getElementById('splash');
+
+    window.__splashProgress = function(percent, message) {
+      if (progressBar) progressBar.style.width = percent + '%';
+      if (splashStatus) splashStatus.textContent = message;
+    };
+
+    window.__splashDone = function() {
+      if (!splash) return;
+      setTimeout(() => {
+        splash.classList.add('fade-out');
+        setTimeout(() => splash.remove(), 600);
+      }, 200);
+    };
+
+    window.__splashProgress(15, 'Loading engine…');
+  </script>
+
+  <!-- Flutter bootstrap (generated by build, sets buildConfig + calls loader) -->
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

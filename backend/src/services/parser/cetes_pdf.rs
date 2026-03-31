@@ -62,5 +62,10 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
     
     info!("Parsed {} transactions from Cetes PDF", transactions.len());
     
+    if transactions.is_empty() {
+        let snippet: String = text.chars().take(500).collect();
+        info!("No transactions found in Cetes PDF. Extraction snippet: \n---\n{}\n---", snippet);
+    }
+    
     Ok(transactions)
 }

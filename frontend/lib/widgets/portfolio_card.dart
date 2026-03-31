@@ -113,33 +113,48 @@ class _PortfolioCardState extends State<PortfolioCard> {
                     children: [
                       const Text('Investment Portfolio', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
                       const SizedBox(height: 32),
-                      const Text('Total Value', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                      const Text('Total Value', style: TextStyle(color: Colors.white60, fontSize: 14, fontWeight: FontWeight.w500, letterSpacing: 0.5)),
+                      const SizedBox(height: 4),
                       Text(
                         widget.currencyFormat.format(totalValue),
-                        style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w800, letterSpacing: -1.0),
+                        style: const TextStyle(
+                          fontSize: 56, 
+                          fontWeight: FontWeight.w900, 
+                          letterSpacing: -1.5,
+                          height: 1.1,
+                          color: Colors.white,
+                        ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 16),
                       Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                             decoration: BoxDecoration(
-                              color: isPositive ? const Color(0xFF00E676).withOpacity(0.1) : Colors.redAccent.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(20),
+                              gradient: LinearGradient(
+                                colors: isPositive 
+                                  ? [const Color(0xFF00E676).withOpacity(0.2), const Color(0xFF00E676).withOpacity(0.05)]
+                                  : [Colors.redAccent.withOpacity(0.2), Colors.redAccent.withOpacity(0.05)],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isPositive ? const Color(0xFF00E676).withOpacity(0.3) : Colors.redAccent.withOpacity(0.3),
+                                width: 1,
+                              ),
                             ),
                             child: Row(
                               children: [
                                 Icon(
-                                  isPositive ? Icons.trending_up : Icons.trending_down,
+                                  isPositive ? Icons.arrow_upward : Icons.arrow_downward,
                                   color: isPositive ? const Color(0xFF00E676) : Colors.redAccent,
-                                  size: 18,
+                                  size: 16,
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(width: 6),
                                 Text(
                                   '${isPositive ? '+' : ''}${widget.currencyFormat.format(totalGainLoss.abs())} (${totalGainLossPct.toStringAsFixed(2)}%)',
                                   style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
                                     color: isPositive ? const Color(0xFF00E676) : Colors.redAccent,
                                   ),
                                 ),
@@ -223,11 +238,11 @@ class _PortfolioCardState extends State<PortfolioCard> {
     if (_holdings.isEmpty) return const SizedBox.shrink();
 
     final colors = [
-      const Color(0xFF00E676),
-      const Color(0xFF00B0FF),
-      const Color(0xFFFFD54F),
-      const Color(0xFFFF5252),
-      const Color(0xFFB388FF),
+      const Color(0xFF00E676), // Emerald
+      const Color(0xFF00B0FF), // Azure
+      const Color(0xFFFFD54F), // Amber
+      const Color(0xFFFF5252), // Candy Red
+      const Color(0xFFB388FF), // Lavender
     ];
 
     final sortedHoldings = List.from(_holdings)..sort((a, b) => ((b['value'] ?? 0) as num).compareTo((a['value'] ?? 0) as num));
@@ -248,13 +263,23 @@ class _PortfolioCardState extends State<PortfolioCard> {
       if (i < 4) {
         final color = colors[i % colors.length];
         sections.add(
-          PieChartSectionData(
-            color: color,
-            value: value,
-            title: isTouched ? '${(percentage * 100).toStringAsFixed(1)}%' : '',
-            radius: radius,
-            titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-          ),
+            PieChartSectionData(
+              color: color,
+              value: value,
+              title: isTouched ? '${(percentage * 100).toStringAsFixed(1)}%' : '',
+              radius: radius,
+              titleStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.white, shadows: [Shadow(color: Colors.black54, blurRadius: 4)]),
+              badgeWidget: isTouched ? Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: color.withOpacity(0.5), blurRadius: 8)],
+                ),
+                child: Icon(Icons.star, color: color, size: 12),
+              ) : null,
+              badgePositionPercentageOffset: 1.1,
+            ),
         );
         legendItems.add(_buildLegendItem(color, h['symbol'], percentage, isTouched));
       } else {

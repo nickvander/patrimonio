@@ -16,6 +16,7 @@ pub fn router() -> Router<AppState> {
         .route("/", get(list_accounts).post(create_account))
         .route("/summary", get(accounts_summary))
         .route("/{id}/balance", patch(update_account_balance))
+        .route("/{id}/transactions", get(get_account_transactions))
 }
 
 #[derive(Deserialize)]
@@ -286,4 +287,54 @@ struct AccountsSummary {
     total_liabilities: f64,
     net_worth: f64,
     account_count: i32,
+}
+
+#[derive(Serialize)]
+pub struct TransactionResponse {
+    pub id: String,
+    pub date: String,
+    pub description: String,
+    pub amount: f64,
+    pub currency: String,
+    pub category: String,
+    pub account_name: String,
+    pub institution_name: String,
+}
+
+/// Get all historical transactions for a specific account
+async fn get_account_transactions(
+    State(state): State<AppState>,
+    Path(id): Path<uuid::Uuid>,
+) -> Json<Vec<TransactionResponse>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT t.id, t.date, t.description, t.amount, t.currency, t.category,
+               a.name as account_name, i.name as institution_name
+        FROM transactions t
+        JOIN accounts a ON t.account_id = a.id
+        JOIN institutions i ON a.institution_id = i.id
+        WHERE t.account_id = $1
+        ORDER BY t.date DESC, t.created_at DESC
+        "#
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let txs = rows.iter().map(|row| TransactionResponse {
+        id: row.get::<uuid::Uuid, _>("id").to_string(),
+        date: row.try_get::<chrono::NaiveDate, _>("date")
+            .map(|d| d.to_string())
+            .unwrap_or_default(),
+        description: row.try_get::<String, _>("description").unwrap_or_default(),
+        amount: row.try_get::<rust_decimal::Decimal, _>("amount")
+            .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
+        currency: row.try_get::<String, _>("currency").unwrap_or_else(|_| "USD".to_string()),
+        category: row.try_get::<String, _>("category").unwrap_or_else(|_| "Uncategorized".to_string()),
+        account_name: row.get("account_name"),
+        institution_name: row.get("institution_name"),
+    }).collect();
+
+    Json(txs)
 }
