@@ -168,9 +168,19 @@ class AccountsListWidget extends StatelessWidget {
                     ),
                     Row(
                       children: [
-                        Text(
-                          currencyFormat.format(balance * conversionFactor),
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white, fontFeatures: [FontFeature.tabularFigures()]),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              currencyFormat.format(balance * conversionFactor),
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white, fontFeatures: [FontFeature.tabularFigures()]),
+                            ),
+                            if (acc['currency'] != null)
+                              Text(
+                                'Orig: ${NumberFormat.simpleCurrency(name: acc['currency']).format(balance)} ${acc['currency']}',
+                                style: const TextStyle(fontSize: 10, color: Colors.grey, fontFeatures: [FontFeature.tabularFigures()]),
+                              ),
+                          ],
                         ),
                         const SizedBox(width: 8),
                         const Icon(Icons.chevron_right, size: 14, color: Colors.white24),

@@ -107,10 +107,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       });
       
       debugPrint("State updated with Phase 7 data: ${_allocationData?.length} categories, ${_trendData?.length} trend months");
-    } catch (e) {
-      debugPrint("Data load error: $e");
+    } catch (e, stack) {
+      debugPrint("Data load error: $e\n$stack");
       setState(() {
-        _error = e.toString();
+        _error = "Error: $e";
         _isLoading = false;
       });
     }
@@ -144,30 +144,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 });
               },
               icon: Icon(Icons.currency_exchange, color: _targetCurrency == 'MXN' ? const Color(0xFF00E676) : Colors.white70),
-              label: Text(_targetCurrency, style: TextStyle(color: _targetCurrency == 'MXN' ? const Color(0xFF00E676) : Colors.white70, fontWeight: FontWeight.bold)),
+              label: Text(
+                '$_targetCurrency (${_fxRate != null ? (_fxRate!['rate'] as num).toStringAsFixed(2) : "..."})',
+                style: TextStyle(color: _targetCurrency == 'MXN' ? const Color(0xFF00E676) : Colors.white70, fontWeight: FontWeight.bold)
+              ),
             ),
-            IconButton(
-              icon: const Icon(Icons.add_link),
-              tooltip: 'Link New Institution',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => ConnectBankScreen()),
-                ).then((_) => _loadAllData());
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: () async {
-                setState(() => _isLoading = true);
-                try {
-                  await _apiService.syncInstitutions();
-                } catch (e) {
-                  print("Sync error: $e");
-                }
-                _loadAllData();
-              },
-            ),
+            const SizedBox(width: 8),
           ],
         ),
         body: _buildBody(),
@@ -330,6 +312,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.sync),
+                  label: const Text('Sync External Accounts'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    backgroundColor: Colors.blueAccent.withOpacity(0.2),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: () async {
+                    setState(() => _isLoading = true);
+                    try {
+                      await _apiService.syncInstitutions();
+                    } catch (e) {
+                      debugPrint("Sync error: $e");
+                    }
+                    _loadAllData();
+                  },
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.add_link),
+                  label: const Text('Link Plaid Institution'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    backgroundColor: const Color(0xFF1DE9B6).withOpacity(0.2),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => ConnectBankScreen()),
+                    ).then((_) => _loadAllData());
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -353,7 +378,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             width: double.infinity,
             child: ElevatedButton.icon(
               icon: const Icon(Icons.add_circle_outline),
-              label: const Text('Add Manual Account'),
+              label: const Text('Add Manual Account / Crypto'),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 20),
                 backgroundColor: Colors.white12,

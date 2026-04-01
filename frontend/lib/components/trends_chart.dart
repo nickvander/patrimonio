@@ -31,9 +31,9 @@ class CashFlowTrendsChart extends StatelessWidget {
                 ),
                 Row(
                   children: [
-                    _buildLegendItem(Colors.greenAccent, 'Income'),
+                    _buildLegendItem(const Color(0xFF1DE9B6), 'Income'),
                     const SizedBox(width: 16),
-                    _buildLegendItem(Colors.redAccent, 'Spending'),
+                    _buildLegendItem(const Color(0xFFFF4081), 'Spending'),
                   ],
                 ),
               ],
@@ -117,15 +117,33 @@ class CashFlowTrendsChart extends StatelessWidget {
                       barRods: [
                         BarChartRodData(
                           toY: e.value['income'],
-                          color: Colors.greenAccent,
-                          width: 12,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF1DE9B6), Color(0xFF00BFA5)], // Neon Teal to Deep Teal
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                          ),
+                          width: 14,
                           borderRadius: BorderRadius.circular(4),
+                          backDrawRodData: BackgroundBarChartRodData(
+                            show: true,
+                            toY: _getMaxValue(),
+                            color: Colors.white.withOpacity(0.05),
+                          ),
                         ),
                         BarChartRodData(
                           toY: e.value['spending'],
-                          color: Colors.redAccent,
-                          width: 12,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFFF4081), Color(0xFFD50000)], // Bright Pink to Deep Red
+                            begin: Alignment.bottomCenter,
+                            end: Alignment.topCenter,
+                          ),
+                          width: 14,
                           borderRadius: BorderRadius.circular(4),
+                          backDrawRodData: BackgroundBarChartRodData(
+                            show: true,
+                            toY: _getMaxValue(),
+                            color: Colors.white.withOpacity(0.05),
+                          ),
                         ),
                       ],
                     );

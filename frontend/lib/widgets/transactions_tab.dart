@@ -118,6 +118,11 @@ class TransactionsTab extends StatelessWidget {
                             color: isExpense ? Colors.white : const Color(0xFF00E676),
                           ),
                         ),
+                        if (tx['currency'] != null)
+                          Text(
+                            '${NumberFormat.simpleCurrency(name: tx['currency']).format((tx['amount'] as num).abs())} ${tx['currency']}',
+                            style: const TextStyle(fontSize: 11, color: Colors.grey),
+                          ),
                         if (tx['pending'] == true)
                           const Text(
                             'Pending',

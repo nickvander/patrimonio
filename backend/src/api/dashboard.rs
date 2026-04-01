@@ -386,8 +386,8 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
                 let value: f64 = r.try_get::<rust_decimal::Decimal, _>("value")
                     .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
                 AllocationEntry {
-                    category: r.get("category"),
-                    sub_category: r.get("sub_category"),
+                    category: r.try_get::<String, _>("category").unwrap_or_else(|_| "Other".to_string()),
+                    sub_category: r.try_get::<String, _>("sub_category").unwrap_or_else(|_| "Unknown".to_string()),
                     value,
                 }
             })

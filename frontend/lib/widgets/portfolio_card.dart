@@ -238,11 +238,11 @@ class _PortfolioCardState extends State<PortfolioCard> {
     if (_holdings.isEmpty) return const SizedBox.shrink();
 
     final colors = [
-      const Color(0xFF00E676), // Emerald
-      const Color(0xFF00B0FF), // Azure
-      const Color(0xFFFFD54F), // Amber
-      const Color(0xFFFF5252), // Candy Red
-      const Color(0xFFB388FF), // Lavender
+      const Color(0xFF1DE9B6), // Neon Teal
+      const Color(0xFF7C4DFF), // Deep Violet
+      const Color(0xFFFF4081), // Pink Accent
+      const Color(0xFFFFD740), // Bright Gold
+      const Color(0xFF2979FF), // Vivid Blue
     ];
 
     final sortedHoldings = List.from(_holdings)..sort((a, b) => ((b['value'] ?? 0) as num).compareTo((a['value'] ?? 0) as num));
@@ -268,17 +268,17 @@ class _PortfolioCardState extends State<PortfolioCard> {
               value: value,
               title: isTouched ? '${(percentage * 100).toStringAsFixed(1)}%' : '',
               radius: radius,
-              titleStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.white, shadows: [Shadow(color: Colors.black54, blurRadius: 4)]),
+              titleStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.white, shadows: [Shadow(color: Colors.black, blurRadius: 6)]),
               badgeWidget: isTouched ? Container(
-                padding: const EdgeInsets.all(4),
+                padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: const Color(0xFF1A1A24),
                   shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: color.withOpacity(0.5), blurRadius: 8)],
+                  boxShadow: [BoxShadow(color: color.withOpacity(0.6), blurRadius: 10, spreadRadius: 2)],
                 ),
-                child: Icon(Icons.star, color: color, size: 12),
+                child: Icon(Icons.show_chart, color: color, size: 14),
               ) : null,
-              badgePositionPercentageOffset: 1.1,
+              badgePositionPercentageOffset: 1.15,
             ),
         );
         legendItems.add(_buildLegendItem(color, h['symbol'], percentage, isTouched));
@@ -420,8 +420,34 @@ class _HoldingsDataSource extends DataTableSource {
           ),
         ),
         DataCell(Text(quantity.toStringAsFixed(4), style: const TextStyle(fontSize: 14))),
-        DataCell(Text(format.format(price), style: const TextStyle(fontSize: 14))),
-        DataCell(Text(format.format(value), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+        DataCell(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(format.format(price), style: const TextStyle(fontSize: 14)),
+              if (h['currency'] != null)
+                Text(
+                  '${NumberFormat.simpleCurrency(name: h['currency']).format(h['price'] as num)} ${h['currency']}',
+                  style: const TextStyle(fontSize: 10, color: Colors.grey),
+                ),
+            ],
+          ),
+        ),
+        DataCell(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(format.format(value), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              if (h['currency'] != null)
+                Text(
+                  '${NumberFormat.simpleCurrency(name: h['currency']).format(h['value'] as num)} ${h['currency']}',
+                  style: const TextStyle(fontSize: 10, color: Colors.grey),
+                ),
+            ],
+          ),
+        ),
         DataCell(
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

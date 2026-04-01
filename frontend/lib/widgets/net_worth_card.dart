@@ -98,8 +98,12 @@ class NetWorthCard extends StatelessWidget {
     return Row(
       children: [
         _legendItem('Your Wealth', const Color(0xFF00E676)),
-        const SizedBox(width: 16),
-        _legendItem('S&P 500 Benchmark', Colors.blueAccent.withOpacity(0.5)),
+        const SizedBox(width: 12),
+        _legendItem('S&P 500', Colors.blueAccent.withOpacity(0.5)),
+        const SizedBox(width: 12),
+        _legendItem('NASDAQ', Colors.purpleAccent.withOpacity(0.5)),
+        const SizedBox(width: 12),
+        _legendItem('BTC (Est)', Colors.orangeAccent.withOpacity(0.5)),
       ],
     );
   }
@@ -136,30 +140,50 @@ class NetWorthCard extends StatelessWidget {
     if (data.isEmpty) return const SizedBox.shrink();
 
     List<FlSpot> spots = [];
-    List<FlSpot> benchmarkSpots = [];
+    List<FlSpot> sp500Spots = [];
+    List<FlSpot> nasdaqSpots = [];
+    List<FlSpot> btcSpots = [];
+    
     double minY = double.infinity;
     double maxY = -double.infinity;
 
     final baseValue = (data.first['net_worth'] as num).toDouble() * conversionFactor;
     
-    for (int i = 0; i < data.length; i++) {
+    // Performance Optimization: Downsample to ~150 points maximum
+    final int step = data.length > 150 ? (data.length / 150).ceil() : 1;
+    
+    void processPoint(int i) {
       final val = (data[i]['net_worth'] as num).toDouble() * conversionFactor;
-      spots.add(FlSpot(i.toDouble(), val));
+      final x = i.toDouble();
+      spots.add(FlSpot(x, val));
       
-      // S&P 500 estimate: 10% annual return -> ~0.026% daily
+      // Benchmarks
       final daysSinceStart = i.toDouble();
-      final benchmarkVal = baseValue * (1.0 + (0.10 / 365 * daysSinceStart));
-      benchmarkSpots.add(FlSpot(i.toDouble(), benchmarkVal));
+      final sp500Val = baseValue * (1.0 + (0.10 / 365 * daysSinceStart)); // 10% annual
+      final nasdaqVal = baseValue * (1.0 + (0.14 / 365 * daysSinceStart)); // 14% annual
+      final btcVal = baseValue * (1.0 + (0.40 / 365 * daysSinceStart)); // 40% annual
+
+      sp500Spots.add(FlSpot(x, sp500Val));
+      nasdaqSpots.add(FlSpot(x, nasdaqVal));
+      btcSpots.add(FlSpot(x, btcVal));
 
       if (val < minY) minY = val;
       if (val > maxY) maxY = val;
-      if (benchmarkVal < minY) minY = benchmarkVal;
-      if (benchmarkVal > maxY) maxY = benchmarkVal;
+      if (btcVal < minY) minY = btcVal; // BTC is most volatile, covers ranges
+      if (btcVal > maxY) maxY = btcVal;
+    }
+
+    for (int i = 0; i < data.length; i += step) {
+      processPoint(i);
+    }
+    // Always include the most recent data point
+    if ((data.length - 1) % step != 0 && data.isNotEmpty) {
+      processPoint(data.length - 1);
     }
 
     // Add some padding to Y axis
     double padding = (maxY - minY) * 0.15;
-    if (padding == 0) padding = 1000;
+    if (padding <= 0) padding = baseValue * 0.15 + 1000;
     minY -= padding;
     maxY += padding;
 
@@ -294,13 +318,33 @@ class NetWorthCard extends StatelessWidget {
         lineBarsData: [
           // S&P 500 Benchmark Line (Dash-dot)
           LineChartBarData(
-            spots: benchmarkSpots,
+            spots: sp500Spots,
             isCurved: true,
             color: Colors.blueAccent.withOpacity(0.3),
             barWidth: 2,
             isStrokeCapRound: true,
             dotData: const FlDotData(show: false),
             dashArray: [5, 5],
+          ),
+          // NASDAQ Benchmark Line
+          LineChartBarData(
+            spots: nasdaqSpots,
+            isCurved: true,
+            color: Colors.purpleAccent.withOpacity(0.3),
+            barWidth: 2,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: false),
+            dashArray: [3, 4],
+          ),
+          // BTC Benchmark Line
+          LineChartBarData(
+            spots: btcSpots,
+            isCurved: true,
+            color: Colors.orangeAccent.withOpacity(0.3),
+            barWidth: 2,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: false),
+            dashArray: [2, 6],
           ),
           // Your Wealth Line
           LineChartBarData(

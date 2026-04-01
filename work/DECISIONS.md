@@ -88,3 +88,13 @@ Tracking key architectural and design decisions with rationale.
 **Decision:** Modified `buildTabContainer` to support an optional `scrollable` parameter (default: true).
 **Rationale:** Components using `fl_chart` or other responsive, space-filling widgets require finite vertical constraints for `Expanded` to calculate heights correctly. A mandatory top-level scroll view breaks this.
 **Trade-off:** Some screens may now overflow on very small viewports if they don't implement their own internal scrolling for specific sub-components.
+
+---
+
+## DEC-011: Performance Opts & Optional Crypto Integrations
+**Date:** 2026-03-31
+**Status:** Accepted
+**Context:** As data grows (historical trends, transactions), chart rendering can become a bottleneck. Also, user requested future-proofing for Crypto (e.g., Coinbase) natively.
+**Decision:** Implement data-downsampling on the backend for multi-year charts to ensure `fl_chart` remains performant. Introduce "Crypto" as a primary optional account/integration type to pave the way for a Coinbase API integration in a future phase.
+**Rationale:** Sending 1000s of data points to Flutter charts halts the main thread during rendering; downsampling preserves shape while fixing framerates.
+

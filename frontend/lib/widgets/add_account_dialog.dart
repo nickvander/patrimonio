@@ -20,7 +20,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
   bool _isSubmitting = false;
 
   final List<String> _types = [
-    'Checking', 'Savings', 'CD', 'Investment', 'Brokerage', 'IRA', '401k', 
+    'Checking', 'Savings', 'CD', 'Investment', 'Brokerage', 'Crypto', 'IRA', '401k', 
     'Credit Card', 'Loan', 'Mortgage', 'Real Estate', 'Other Asset', 'Other Liability'
   ];
 
