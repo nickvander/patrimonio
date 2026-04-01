@@ -16,6 +16,7 @@ pub fn router() -> Router<AppState> {
         .route("/sync", post(trigger_sync))
         .route("/link-token", post(create_link_token))
         .route("/exchange-token", post(exchange_public_token))
+        .route("/crypto", post(link_crypto_institution))
         .route("/webhook", post(plaid_webhook))
 }
 
@@ -197,6 +198,65 @@ async fn exchange_public_token(
     tokio::spawn(async move {
         if let Err(e) = crate::services::sync::sync_all_institutions(&db, &config).await {
             tracing::error!("Immediate Plaid sync failed for new institution: {}", e);
+        }
+    });
+
+    Json(InstitutionResponse {
+        id: row.get::<uuid::Uuid, _>("id").to_string(),
+        name: row.get("name"),
+        institution_type: row.get("institution_type"),
+        country: row.get("country"),
+        integration_type: row.get("integration_type"),
+        last_synced_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("last_synced_at")
+            .ok().map(|d| d.to_rfc3339()),
+        sync_status: row.try_get::<String, _>("sync_status")
+            .unwrap_or_else(|_| "pending".to_string()),
+        created_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
+            .ok().map(|d| d.to_rfc3339()).unwrap_or_default(),
+    }).into_response()
+}
+
+#[derive(Deserialize)]
+struct LinkCryptoRequest {
+    name: String,
+    integration_type: String, // "coinbase" or "bitso"
+    api_key: String,
+    api_secret: String,
+    api_pass: Option<String>,
+}
+
+/// Link a crypto exchange with API credentials
+async fn link_crypto_institution(
+    State(state): State<AppState>,
+    Json(req): Json<LinkCryptoRequest>,
+) -> axum::response::Response {
+    let enc_key = state.config.encryption_key.as_ref().expect("ENCRYPTION_KEY missing");
+    
+    let key_enc = encryption::encrypt(enc_key, &req.api_key).expect("Encryption failed");
+    let secret_enc = encryption::encrypt(enc_key, &req.api_secret).expect("Encryption failed");
+    let pass_enc = req.api_pass.map(|p| encryption::encrypt(enc_key, &p).expect("Encryption failed"));
+
+    let row = sqlx::query(
+        r#"
+        INSERT INTO institutions (name, institution_type, country, integration_type, api_key_enc, api_secret_enc, api_pass_enc)
+        VALUES ($1, 'crypto', 'Global', $2, $3, $4, $5)
+        RETURNING id, name, institution_type, country, integration_type,
+                  last_synced_at, sync_status, created_at
+        "#
+    )
+    .bind(&req.name)
+    .bind(&req.integration_type)
+    .bind(&key_enc)
+    .bind(&secret_enc)
+    .bind(&pass_enc)
+    .fetch_one(&state.db)
+    .await.expect("Failed to link crypto institution");
+
+    let config = state.config.clone();
+    let db = state.db.clone();
+    tokio::spawn(async move {
+        if let Err(e) = crate::services::sync::sync_all_institutions(&db, &config).await {
+            tracing::error!("Immediate crypto sync failed for new institution: {}", e);
         }
     });
 

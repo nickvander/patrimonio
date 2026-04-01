@@ -12,6 +12,9 @@ See the [Project Overview](docs/index.md) or the [Deployment Guide](docs/deploym
 ### US (via Plaid API)
 SoFi · Chase · American Express · Capital One · Bilt · US Bank · Fidelity · Fidelity NetBenefits · Vanguard 401k · HealthEquity HSA · Robinhood
 
+### Crypto (Direct OAuth / API)
+Coinbase · Bitso
+
 ### Mexico (via CSV/PDF upload)
 Nu Bank Mexico · Banamex · Cetesdirecto
 
@@ -23,7 +26,7 @@ Nu Bank Mexico · Banamex · Cetesdirecto
 | Database | PostgreSQL 17 |
 | Cache | Redis 7 |
 | Frontend | Flutter (web, desktop, mobile) |
-| Financial Data | Plaid API |
+| Financial Data | Plaid API & Coinbase OAuth |
 | Exchange Rates | ExchangeRate-API (free tier) |
 | Deployment | Docker Compose (local) / GCP Cloud Run |
 

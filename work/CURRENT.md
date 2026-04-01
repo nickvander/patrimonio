@@ -1,7 +1,7 @@
 # Current Phase: Phase 7 — Enhanced Visualizations (Drafted) 🚀
 
 > **Last Updated:** 2026-03-26
-> **Status:** Phase 7 (Visualizations) implemented and under refinement.
+> **Status:** Phase 8 completed, Phase 9 (Tax Planning) pending.
 
 ## What's Done
 - Rust backend with axum (6 API modules, 7 models, 3 services)
@@ -27,10 +27,17 @@
     - Multi-level Asset Allocation Treemap (Category → Account/Holding hierarchy)
     - Color-coded Portfolio Legend and reduced widget footprint
     - Increased PDF/CSV upload limit (20MB) and robust error handling in `ApiService`
+- **Phase 8 Implementation (Completed)**:
+    - **Coinbase OAuth 2.0**: Redirect/callback flow with token refresh and secure encryption.
+    - **Bitso API**: HMAC-signed API key integration for real-time MXN crypto valuation.
+    - **CryptoPriceService**: Real-time ticker price fetching (BTC, ETH, etc.) for USD/MXN.
+    - **Dashboard Aggregation**: Crypto accounts integrated into Net Worth, Type Breakdown, and Asset Allocation Treemap.
+    - **UI Polish**: "Link Coinbase" (OAuth), refined Bitso dialog with help links, and "Crypto" category in Accounts List.
+    - **Cleanup**: Resolved frontend compilation bugs and removed legacy build logs/dummy files.
 
 ## What's Next
-Proceed with the implementation of **Phase 7: Enhanced Visualizations**:
-1. **[Phase 7: Enhanced Visualizations](phases/PHASE-7-VISUALS.md)** (Implementation)
+Proceed with the implementation of **Phase 9: Tax Planning & Reports**:
+1. **[Phase 9: Tax Planning & Reports](phases/PHASE-9-TAX.md)** (Approved Implementation Plan)
 
 ## How to Continue Work
 

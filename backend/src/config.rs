@@ -21,10 +21,12 @@ pub struct AppConfig {
     pub exchange_rate_api_key: Option<String>,
     /// Encryption key for sensitive data (Plaid tokens, etc.)
     pub encryption_key: Option<String>,
+    pub coinbase_client_id: Option<String>,
+    pub coinbase_client_secret: Option<String>,
+    pub coinbase_redirect_uri: String,
 }
 
 impl AppConfig {
-    /// Load configuration from environment variables
     pub fn from_env() -> Result<Self> {
         Ok(Self {
             database_url: std::env::var("DATABASE_URL")
@@ -43,6 +45,10 @@ impl AppConfig {
                 .unwrap_or_else(|_| "sandbox".to_string()),
             exchange_rate_api_key: std::env::var("EXCHANGE_RATE_API_KEY").ok(),
             encryption_key: std::env::var("ENCRYPTION_KEY").ok(),
+            coinbase_client_id: std::env::var("COINBASE_CLIENT_ID").ok(),
+            coinbase_client_secret: std::env::var("COINBASE_CLIENT_SECRET").ok(),
+            coinbase_redirect_uri: std::env::var("COINBASE_REDIRECT_URI")
+                .unwrap_or_else(|_| "http://localhost:8080/api/auth/coinbase/callback".to_string()),
         })
     }
 }

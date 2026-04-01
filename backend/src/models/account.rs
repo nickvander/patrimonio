@@ -15,5 +15,8 @@ pub struct Account {
     pub current_balance: Option<Decimal>,
     pub available_balance: Option<Decimal>,
     pub credit_limit: Option<Decimal>,
+    pub ticker_symbol: Option<String>,
+    pub crypto_amount: Option<Decimal>,
+    pub coinbase_account_id: Option<String>,
     pub updated_at: Option<DateTime<Utc>>,
 }

@@ -4,3 +4,4 @@ pub mod exchange_rates;
 pub mod dashboard;
 pub mod imports;
 pub mod projections;
+pub mod auth;

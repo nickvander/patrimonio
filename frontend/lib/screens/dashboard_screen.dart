@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:web/web.dart' as web;
 import '../services/api_service.dart';
 import '../widgets/net_worth_card.dart';
 import '../widgets/accounts_breakdown_card.dart';
@@ -10,6 +11,7 @@ import '../widgets/sync_status_card.dart';
 import '../widgets/accounts_list_widget.dart';
 import '../widgets/transactions_tab.dart';
 import '../widgets/add_account_dialog.dart';
+import '../widgets/add_crypto_dialog.dart';
 import 'connect_bank_screen.dart';
 import 'import_screen.dart';
 import 'wealth_projection_screen.dart';
@@ -45,6 +47,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _loadAllData();
+    _checkRedirectStatus();
+  }
+
+  void _checkRedirectStatus() {
+    final uri = Uri.parse(web.window.location.href);
+    final status = uri.queryParameters['status'];
+    if (status == 'success') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Account linked successfully!'),
+            backgroundColor: Color(0xFF00E676),
+          ),
+        );
+      });
+    } else if (status == 'error') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to link account. Please try again.'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      });
+    }
   }
 
   Future<void> _loadAllData() async {
@@ -203,20 +230,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           Expanded(
             flex: 1,
-            child: AccountsListWidget(
-              accounts: _overview?['accounts'] ?? [],
-              conversionFactor: conversionFactor,
-              currencyFormat: currencyFormat,
-              onBalanceUpdate: (id, bal) async {
-                try {
-                  await _apiService.updateAccountBalance(id, bal);
-                  _loadAllData();
-                } catch (e) {
-                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Update failed: $e')),
-                  );
-                }
-              },
+            child: Column(
+              children: [
+                AccountsListWidget(
+                  accounts: _overview?['accounts'] ?? [],
+                  conversionFactor: conversionFactor,
+                  currencyFormat: currencyFormat,
+                  onBalanceUpdate: (id, bal) async {
+                    try {
+                      await _apiService.updateAccountBalance(id, bal);
+                      _loadAllData();
+                    } catch (e) {
+                       ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Update failed: $e')),
+                      );
+                    }
+                  },
+                ),
+                const SizedBox(height: 24),
+                CreditUtilizationCard(
+                  creditData: _creditData ?? [],
+                  conversionFactor: conversionFactor,
+                  currencyFormat: currencyFormat,
+                ),
+              ],
             ),
           ),
           const SizedBox(width: 24),
@@ -242,7 +279,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
-                  height: 440, // Slightly reduced to improve overall page balance
+                  height: 440,
                   child: NetWorthCard(
                     netWorth: ((_overview?['net_worth'] as num?)?.toDouble() ?? 0.0) * conversionFactor,
                     history: _netWorthHistory ?? [],
@@ -278,6 +315,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             conversionFactor: conversionFactor,
             currencyFormat: currencyFormat,
           ),
+          const SizedBox(height: 24),
+          AccountsBreakdownCard(
+            typeBreakdown: _overview?['type_breakdown'] ?? [],
+            institutionBreakdown: _overview?['institution_breakdown'] ?? [],
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
+          ),
         ],
       ),
     );
@@ -303,6 +347,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Text('Data Sources & Sync', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -312,12 +358,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 24),
+          const Text('Connect Standard Accounts', style: TextStyle(fontSize: 16, color: Colors.white70)),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: ElevatedButton.icon(
                   icon: const Icon(Icons.sync),
-                  label: const Text('Sync External Accounts'),
+                  label: const Text('Sync All Accounts'),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 20),
                     backgroundColor: Colors.blueAccent.withOpacity(0.2),
@@ -338,7 +386,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Expanded(
                 child: ElevatedButton.icon(
                   icon: const Icon(Icons.add_link),
-                  label: const Text('Link Plaid Institution'),
+                  label: const Text('Link Plaid (US Banks)'),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 20),
                     backgroundColor: const Color(0xFF1DE9B6).withOpacity(0.2),
@@ -355,59 +403,85 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.upload_file),
-              label: const Text('Import Mexican Statement (CSV/PDF)'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                backgroundColor: Colors.white12,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              ),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const ImportScreen()),
-                ).then((_) => _loadAllData());
-              },
-            ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.add_circle_outline),
-              label: const Text('Add Manual Account / Crypto'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                backgroundColor: Colors.white12,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              ),
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => AddAccountDialog(onAccountCreated: _loadAllData),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 24),
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: CreditUtilizationCard(
-                creditData: _creditData ?? [],
-                conversionFactor: conversionFactor,
-                currencyFormat: currencyFormat,
-              )),
-              const SizedBox(width: 24),
               Expanded(
-                child: AccountsBreakdownCard(
-                  typeBreakdown: _overview?['type_breakdown'] ?? [],
-                  institutionBreakdown: _overview?['institution_breakdown'] ?? [],
-                  conversionFactor: conversionFactor,
-                  currencyFormat: currencyFormat,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.upload_file),
+                  label: const Text('Import Mexico (CSV/PDF)'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    backgroundColor: Colors.white12,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const ImportScreen()),
+                    ).then((_) => _loadAllData());
+                  },
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.add_circle_outline),
+                  label: const Text('Add Manual Account'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    backgroundColor: Colors.white12,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AddAccountDialog(onAccountCreated: _loadAllData),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+          const Text('Connect Crypto Exchanges', style: TextStyle(fontSize: 16, color: Colors.white70)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.login, color: Colors.white),
+                  label: const Text('Link Coinbase'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    backgroundColor: const Color(0xFF0052FF),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: () {
+                    // Start OAuth flow by redirecting to backend
+                    final baseUrl = _apiService.baseUrl;
+                    web.window.location.href = '$baseUrl/auth/coinbase';
+                  },
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.currency_exchange, color: Color(0xFF00E676)),
+                  label: const Text('Connect Bitso'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    backgroundColor: const Color(0xFF00E676).withOpacity(0.1),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AddCryptoDialog(
+                        exchange: 'bitso',
+                        onLinked: _loadAllData,
+                      ),
+                    );
+                  },
                 ),
               ),
             ],

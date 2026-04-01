@@ -57,10 +57,10 @@ docker compose down                     # Stop everything
 
 ### Backend (Rust)
 - Use `sqlx::query()` runtime queries (not `query!` macros) — Docker builds have no DB connection
-- API handlers go in `backend/src/api/`
+- API handlers go in `backend/src/api/` (new `auth.rs` for OAuth flows)
 - Models in `backend/src/models/` derive `FromRow` and `Serialize`
-- Business logic in `backend/src/services/`
-- Config from env vars via `backend/src/config.rs`
+- Business logic in `backend/src/services/` (see `crypto.rs` and `crypto_price.rs`)
+- Config from env vars via `backend/src/config.rs` (needs `COINBASE_CLIENT_ID/SECRET`)
 - Use `tracing::info!` / `tracing::debug!` for logging
 
 ### Adding a new API endpoint

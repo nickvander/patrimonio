@@ -6,3 +6,5 @@ pub mod exchange_rate;
 pub mod sync;
 pub mod parser;
 pub mod projections;
+pub mod crypto;
+pub mod crypto_price;

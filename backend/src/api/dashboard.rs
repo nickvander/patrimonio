@@ -103,7 +103,8 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
     // Individual Accounts
     let accounts_rows = sqlx::query(
         r#"
-        SELECT a.id, a.name, a.account_type, a.current_balance, a.currency, i.name as institution_name
+        SELECT a.id, a.name, a.account_type, a.current_balance, a.currency, 
+               i.name as institution_name, a.ticker_symbol, a.crypto_amount
         FROM accounts a
         JOIN institutions i ON a.institution_id = i.id
         ORDER BY a.account_type, a.name
@@ -122,6 +123,9 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
             current_balance: r.try_get::<rust_decimal::Decimal, _>("current_balance")
                 .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
             currency: r.get("currency"),
+            ticker_symbol: r.get("ticker_symbol"),
+            crypto_amount: r.try_get::<rust_decimal::Decimal, _>("crypto_amount")
+                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)),
         })
         .collect();
 
@@ -368,9 +372,16 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
             -- Cash accounts
             SELECT 'Cash' as category,
                    name as sub_category,
-                   current_balance as value_usd -- simplified conversion for now
+                   current_balance as value_usd
             FROM accounts
             WHERE account_type IN ('checking', 'savings', 'cash')
+            UNION ALL
+            -- Crypto accounts
+            SELECT 'Crypto' as category,
+                   name as sub_category,
+                   current_balance as value_usd
+            FROM accounts
+            WHERE account_type IN ('crypto')
         ) sub
         GROUP BY category, sub_category
         ORDER BY value DESC
@@ -446,6 +457,8 @@ struct AccountDetail {
     account_type: String,
     current_balance: f64,
     currency: String,
+    ticker_symbol: Option<String>,
+    crypto_amount: Option<f64>,
 }
 
 #[derive(Serialize)]

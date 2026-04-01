@@ -89,6 +89,7 @@ async fn main() -> Result<()> {
         .nest("/api/dashboard", patrimonio::api::dashboard::router())
         .nest("/api/imports", patrimonio::api::imports::router())
         .nest("/api/projections", patrimonio::api::projections::router())
+        .nest("/api/auth", patrimonio::api::auth::router())
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state);

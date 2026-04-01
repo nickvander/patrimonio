@@ -45,6 +45,8 @@ thiserror = "2"
 aes-gcm = "0.10"
 hex = "0.4"
 rand = "0.8"
+hmac = "0.12"
+sha2 = "0.10"
 
 # Scheduling
 tokio-cron-scheduler = "0.13"

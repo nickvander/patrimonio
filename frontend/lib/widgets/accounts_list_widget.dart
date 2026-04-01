@@ -38,6 +38,7 @@ class AccountsListWidget extends StatelessWidget {
     final cashAccounts = <dynamic>[];
     final creditAccounts = <dynamic>[];
     final investmentAccounts = <dynamic>[];
+    final cryptoAccounts = <dynamic>[];
     final loanAccounts = <dynamic>[];
 
     for (var acc in accounts) {
@@ -48,6 +49,8 @@ class AccountsListWidget extends StatelessWidget {
         creditAccounts.add(acc);
       } else if (['ira', '401k', 'hsa', 'brokerage', 'investment'].contains(type)) {
         investmentAccounts.add(acc);
+      } else if (['crypto'].contains(type)) {
+        cryptoAccounts.add(acc);
       } else if (['student', 'mortgage', 'loan'].contains(type)) {
         loanAccounts.add(acc);
       } else {
@@ -72,8 +75,9 @@ class AccountsListWidget extends StatelessWidget {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               children: [
-                if (cashAccounts.isNotEmpty) _buildAccountGroup(context, 'Cash', cashAccounts, Icons.wallet, false, const Color(0xFF00B0FF)),
-                if (investmentAccounts.isNotEmpty) _buildAccountGroup(context, 'Investments', investmentAccounts, Icons.show_chart, false, const Color(0xFF00E676)),
+                if (cashAccounts.isNotEmpty) _buildAccountGroup(context, 'Cash', cashAccounts, Icons.wallet_rounded, false, const Color(0xFF00B0FF)),
+                if (investmentAccounts.isNotEmpty) _buildAccountGroup(context, 'Investments', investmentAccounts, Icons.show_chart_rounded, false, const Color(0xFF1DE9B6)),
+                if (cryptoAccounts.isNotEmpty) _buildAccountGroup(context, 'Crypto', cryptoAccounts, Icons.currency_bitcoin_rounded, false, const Color(0xFF651FFF)),
                 if (creditAccounts.isNotEmpty) _buildAccountGroup(context, 'Credit Cards', creditAccounts, Icons.credit_card_rounded, true, const Color(0xFFFF5252)),
                 if (loanAccounts.isNotEmpty) _buildAccountGroup(context, 'Loans & Mortgages', loanAccounts, Icons.home_rounded, true, const Color(0xFFFFD54F)),
               ],
@@ -173,9 +177,14 @@ class AccountsListWidget extends StatelessWidget {
                           children: [
                             Text(
                               currencyFormat.format(balance * conversionFactor),
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white, fontFeatures: [FontFeature.tabularFigures()]),
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white, fontFeatures: [FontFeature.tabularFigures()]),
                             ),
-                            if (acc['currency'] != null)
+                            if (acc['ticker_symbol'] != null && acc['crypto_amount'] != null)
+                              Text(
+                                '${acc['crypto_amount']} ${acc['ticker_symbol']}',
+                                style: const TextStyle(fontSize: 10, color: Color(0xFF651FFF), fontWeight: FontWeight.bold),
+                              )
+                            else if (acc['currency'] != null && acc['currency'] != 'USD' && acc['currency'] != 'MXN')
                               Text(
                                 'Orig: ${NumberFormat.simpleCurrency(name: acc['currency']).format(balance)} ${acc['currency']}',
                                 style: const TextStyle(fontSize: 10, color: Colors.grey, fontFeatures: [FontFeature.tabularFigures()]),

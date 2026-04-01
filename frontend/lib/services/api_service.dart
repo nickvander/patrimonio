@@ -10,6 +10,8 @@ class ApiService {
     return 'http://$host:8080/api';
   }
 
+  String get baseUrl => _baseUrl;
+
   Future<Map<String, dynamic>> getDashboardOverview() async {
     final response = await http.get(Uri.parse('$_baseUrl/dashboard/overview'));
     if (response.statusCode == 200) {
@@ -197,5 +199,28 @@ class ApiService {
       return json.decode(response.body);
     }
     throw Exception('Failed to load wealth projection');
+  }
+
+  Future<void> linkCryptoInstitution({
+    required String name,
+    required String integrationType,
+    required String apiKey,
+    required String apiSecret,
+    String? apiPass,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/institutions/crypto'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'name': name,
+        'integration_type': integrationType,
+        'api_key': apiKey,
+        'api_secret': apiSecret,
+        'api_pass': apiPass,
+      }),
+    );
+    if (response.statusCode != 201 && response.statusCode != 200) {
+      throw Exception('Failed to link crypto: ${response.body}');
+    }
   }
 }
