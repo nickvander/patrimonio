@@ -8,3 +8,4 @@ pub mod parser;
 pub mod projections;
 pub mod crypto;
 pub mod crypto_price;
+pub mod tax;

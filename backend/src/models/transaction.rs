@@ -11,6 +11,7 @@ pub struct Transaction {
     pub external_id: Option<String>,
     pub date: NaiveDate,
     pub description: String,
+    #[serde(with = "rust_decimal::serde::float")]
     pub amount: Decimal,
     pub currency: String,
     pub category: Option<String>,

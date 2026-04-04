@@ -223,4 +223,31 @@ class ApiService {
       throw Exception('Failed to link crypto: ${response.body}');
     }
   }
+
+  Future<Map<String, dynamic>> getTaxSummary({int? year, String? status}) async {
+    final queryParams = <String, String>{};
+    if (year != null) queryParams['year'] = year.toString();
+    if (status != null) queryParams['status'] = status;
+    
+    final uri = Uri.parse('$_baseUrl/tax/summary').replace(queryParameters: queryParams);
+    final response = await http.get(uri);
+    
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Failed to load tax summary');
+  }
+
+  Future<List<dynamic>> getTaxTransactions({int? year}) async {
+     final queryParams = <String, String>{};
+     if (year != null) queryParams['year'] = year.toString();
+
+     final uri = Uri.parse('$_baseUrl/tax/transactions').replace(queryParameters: queryParams);
+     final response = await http.get(uri);
+
+     if (response.statusCode == 200) {
+         return json.decode(response.body);
+     }
+     throw Exception('Failed to load tax transactions');
+  }
 }

@@ -18,6 +18,7 @@ import 'wealth_projection_screen.dart';
 import '../components/date_range_selector.dart';
 import '../components/allocation_heatmap.dart';
 import '../components/trends_chart.dart';
+import 'package:patrimonio/screens/tax_planning_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -146,7 +147,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 5,
+      length: 6,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Patrimonio', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -160,6 +161,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Tab(text: 'Portfolio'),
               Tab(text: 'Transactions'),
               Tab(text: 'Projections'),
+              Tab(text: 'Tax Planning'),
               Tab(text: 'Management'),
             ],
           ),
@@ -343,6 +345,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       scrollable: false,
     );
 
+    final taxPlanningTab = buildTabContainer(
+      TaxPlanningScreen(
+         conversionFactor: conversionFactor,
+         currencyFormat: currencyFormat,
+      ),
+      scrollable: false,
+    );
+
     final managementTab = buildTabContainer(
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -496,6 +506,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         portfolioTab,
         transactionsTab,
         projectionsTab,
+        taxPlanningTab,
         managementTab,
       ],
     );

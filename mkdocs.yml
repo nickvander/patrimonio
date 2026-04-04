@@ -50,6 +50,7 @@ markdown_extensions:
 nav:
   - Overview: index.md
   - Architecture: architecture.md
+  - Adding Accounts: adding-accounts.md
   - Backend: backend.md
   - Frontend: frontend.md
   - Database: database.md
