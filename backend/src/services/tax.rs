@@ -61,6 +61,19 @@ impl TaxService {
         ]
     }
 
+    // Basic 2026 Head of Household Brackets (Approximation)
+    fn get_us_brackets_hoh() -> Vec<TaxBracket> {
+        vec![
+            TaxBracket { rate: dec!(0.10), cutoff: dec!(16550), base_tax: dec!(0) },
+            TaxBracket { rate: dec!(0.12), cutoff: dec!(63100), base_tax: dec!(1655) },
+            TaxBracket { rate: dec!(0.22), cutoff: dec!(100500), base_tax: dec!(7241) },
+            TaxBracket { rate: dec!(0.24), cutoff: dec!(191950), base_tax: dec!(15469) },
+            TaxBracket { rate: dec!(0.32), cutoff: dec!(243700), base_tax: dec!(37417) },
+            TaxBracket { rate: dec!(0.35), cutoff: dec!(609350), base_tax: dec!(53977) },
+            TaxBracket { rate: dec!(0.37), cutoff: Decimal::MAX, base_tax: dec!(181954.5) },
+        ]
+    }
+
     // Mexico 2026 ISR Mensual elevated to Annual
     fn get_mx_brackets() -> Vec<TaxBracket> {
         vec![
@@ -80,6 +93,8 @@ impl TaxService {
     pub fn calculate_us_tax(income: Decimal, status: &str) -> Decimal {
         let brackets = if status == "Married" {
             Self::get_us_brackets_married()
+        } else if status == "Head of Household" {
+            Self::get_us_brackets_hoh()
         } else {
             Self::get_us_brackets_single()
         };
@@ -137,8 +152,31 @@ impl TaxService {
 
         let ordinary_income: Decimal = income_row.try_get("total_income").unwrap_or_default();
 
-        // 2. Realized Capital Gains (Simplified for now - sum of 'Sale' transactions minus an assumed cost basis)
-        // In a real scenario, this requires tracking lot numbers and cost basis.
+        // 2. Realized Capital Gains (Blended Cost Basis Approach)
+        // Scalable generic approach: Determine the overall portfolio cost basis ratio
+        // from the `holdings` table, and apply that ratio globally to sale proceeds.
+        let basis_row = sqlx::query(
+            r#"
+            SELECT COALESCE(SUM(cost_basis), 0) as total_basis, COALESCE(SUM(value), 0) as total_value
+            FROM holdings
+            WHERE value > 0 AND cost_basis IS NOT NULL
+            "#
+        )
+        .fetch_one(db)
+        .await?;
+
+        let total_basis: Decimal = basis_row.try_get("total_basis").unwrap_or_default();
+        let total_value: Decimal = basis_row.try_get("total_value").unwrap_or_default();
+        
+        let mut cost_basis_ratio = dec!(0.8); // fallback conservative 80% basis (20% gains)
+        if total_value > dec!(0) {
+            let actual_ratio = total_basis / total_value;
+            // Prevent nonsense ratios (e.g., basis > value or negative)
+            if actual_ratio > dec!(0) && actual_ratio <= dec!(1) {
+                cost_basis_ratio = actual_ratio;
+            }
+        }
+
         let gains_row = sqlx::query(
             r#"
             SELECT COALESCE(SUM(amount), 0) as total_gains
@@ -154,8 +192,9 @@ impl TaxService {
         .await?;
         
         let sale_proceeds: Decimal = gains_row.try_get("total_gains").unwrap_or_default();
-        // Assuming an average 20% cost basis for simplistic calculation here
-        let capital_gains = sale_proceeds * dec!(0.8);
+        
+        // Capital gains = Proceeds - estimated Cost Basis mapped to those proceeds
+        let capital_gains = sale_proceeds * (dec!(1) - cost_basis_ratio);
 
         let total_taxable = ordinary_income + capital_gains;
 

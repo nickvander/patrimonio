@@ -68,6 +68,18 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     }
   }
 
+  void _export_pdf() async {
+    final String baseUrl = _apiService.baseUrl;
+    final url = Uri.parse('$baseUrl/tax/export/pdf?year=$_selectedYear&status=$_filingStatus');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    } else {
+      if (mounted) {
+         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not launch PDF export.')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -112,7 +124,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
               children: [
                 DropdownButton<String>(
                   value: _filingStatus,
-                  items: <String>['Single', 'Married'].map((String value) {
+                  items: <String>['Single', 'Married', 'Head of Household'].map((String value) {
                     return DropdownMenuItem<String>(value: value, child: Text(value));
                   }).toList(),
                   onChanged: (String? newValue) {
@@ -147,6 +159,13 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                   icon: const Icon(Icons.download),
                   label: const Text('Export CSV'),
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00E676), foregroundColor: Colors.black),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: _export_pdf,
+                  icon: const Icon(Icons.picture_as_pdf),
+                  label: const Text('PDF'),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white),
                 )
               ]
             )
