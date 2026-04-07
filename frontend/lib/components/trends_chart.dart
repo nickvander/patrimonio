@@ -43,7 +43,8 @@ class CashFlowTrendsChart extends StatelessWidget {
               height: 250,
               child: BarChart(
                 BarChartData(
-                  alignment: BarChartAlignment.spaceAround,
+                  alignment: BarChartAlignment.spaceEvenly,
+                  groupsSpace: 16,
                   maxY: _getMaxValue(),
                   barTouchData: BarTouchData(
                     touchTooltipData: BarTouchTooltipData(
@@ -122,7 +123,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                           ),
-                          width: 14,
+                          width: 22,
                           borderRadius: BorderRadius.circular(4),
                           backDrawRodData: BackgroundBarChartRodData(
                             show: true,
@@ -137,7 +138,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                           ),
-                          width: 14,
+                          width: 22,
                           borderRadius: BorderRadius.circular(4),
                           backDrawRodData: BackgroundBarChartRodData(
                             show: true,

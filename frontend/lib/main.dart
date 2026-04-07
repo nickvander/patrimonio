@@ -73,8 +73,8 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
           centerTitle: false,
         ),
         dataTableTheme: DataTableThemeData(
-          headingRowColor: MaterialStateProperty.all(Colors.black12),
-          dataRowColor: MaterialStateProperty.all(Colors.transparent),
+          headingRowColor: WidgetStateProperty.all(Colors.black12),
+          dataRowColor: WidgetStateProperty.all(Colors.transparent),
         ),
       ),
       home: const DashboardScreen(),

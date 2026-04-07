@@ -239,28 +239,56 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         const Text('Taxable Events', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
         Expanded(
-          child: Card(
-            child: ListView.separated(
-              itemCount: _taxTransactions?.length ?? 0,
-              separatorBuilder: (context, index) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final tx = _taxTransactions![index];
-                final date = DateTime.parse(tx['date']);
-                final amount = tx['amount'] * widget.conversionFactor;
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: tx['category'] == 'Investment Sale' ? Colors.purple.withOpacity(0.2) : Colors.blue.withOpacity(0.2),
-                    child: Icon(tx['category'] == 'Investment Sale' ? Icons.show_chart : Icons.work, 
-                      color: tx['category'] == 'Investment Sale' ? Colors.purpleAccent : Colors.blueAccent),
+          child: (_taxTransactions == null || _taxTransactions!.isEmpty)
+            ? Card(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.receipt_long_outlined, size: 56, color: Colors.white.withOpacity(0.15)),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'No taxable events found for this year.',
+                        style: TextStyle(color: Colors.white54, fontSize: 16),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Income, salary, interest, and investment sale transactions will appear here.',
+                        style: TextStyle(color: Colors.white30, fontSize: 12),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
-                  title: Text(tx['description']),
-                  subtitle: Text('${DateFormat('MMM dd, yyyy').format(date)} • ${tx['category']}'),
-                  trailing: Text(widget.currencyFormat.format(amount), 
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.greenAccent)),
-                );
-              },
-            ),
-          ),
+                ),
+              )
+            : Card(
+                child: ListView.separated(
+                  itemCount: _taxTransactions!.length,
+                  separatorBuilder: (context, index) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final tx = _taxTransactions![index];
+                    final date = DateTime.parse(tx['date']);
+                    final amount = tx['amount'] * widget.conversionFactor;
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: tx['category'] == 'Investment Sale' ? Colors.purple.withOpacity(0.2) : Colors.blue.withOpacity(0.2),
+                        child: Icon(tx['category'] == 'Investment Sale' ? Icons.show_chart : Icons.work, 
+                          color: tx['category'] == 'Investment Sale' ? Colors.purpleAccent : Colors.blueAccent),
+                      ),
+                      title: Text(tx['description']),
+                      subtitle: Text('${DateFormat('MMM dd, yyyy').format(date)} • ${tx['category']}'),
+                      trailing: Text(widget.currencyFormat.format(amount), 
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.greenAccent)),
+                    );
+                  },
+                ),
+              ),
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Disclaimer: Tax estimates are approximations using 2026 IRS/SAT brackets. Consult a qualified tax professional for filing.',
+          style: TextStyle(color: Colors.white24, fontSize: 10, fontStyle: FontStyle.italic),
+          textAlign: TextAlign.center,
         ),
       ],
     );

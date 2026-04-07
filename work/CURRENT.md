@@ -34,6 +34,11 @@
     - **Dashboard Aggregation**: Crypto accounts integrated into Net Worth, Type Breakdown, and Asset Allocation Treemap.
     - **UI Polish**: "Link Coinbase" (OAuth), refined Bitso dialog with help links, and "Crypto" category in Accounts List.
     - **Cleanup**: Resolved frontend compilation bugs and removed legacy build logs/dummy files.
+- **Phase 9 Implementation (Completed)**:
+    - **Tax Estimation Engine**: US Federal (Single/Married/HoH) and Mexico ISR bracket calculators.
+    - **Scalable Capital Gains**: Blended cost-basis ratio from `holdings` table applied to Investment Sales.
+    - **CSV & PDF Export**: Download taxable transaction history (CSV) and one-page tax summary (PDF).
+    - **Tax Dashboard**: Interactive Filing Status toggle, Year selector, and empty-state UX for Taxable Events.
 
 ## What's Next
 Proceed with the implementation of **Phase 10: V1 Stability & Polish**:

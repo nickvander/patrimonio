@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-class TransactionsTab extends StatelessWidget {
+class TransactionsTab extends StatefulWidget {
   final List<dynamic> transactions;
   final double conversionFactor;
   final NumberFormat currencyFormat;
@@ -14,8 +14,26 @@ class TransactionsTab extends StatelessWidget {
   }) : super(key: key);
 
   @override
+  State<TransactionsTab> createState() => _TransactionsTabState();
+}
+
+class _TransactionsTabState extends State<TransactionsTab> {
+  String _searchQuery = '';
+
+  List<dynamic> get _filteredTransactions {
+    if (_searchQuery.isEmpty) return widget.transactions;
+    final q = _searchQuery.toLowerCase();
+    return widget.transactions.where((tx) {
+      final desc = (tx['description'] ?? '').toString().toLowerCase();
+      final acct = (tx['account_name'] ?? '').toString().toLowerCase();
+      final cat = (tx['category'] ?? '').toString().toLowerCase();
+      return desc.contains(q) || acct.contains(q) || cat.contains(q);
+    }).toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (transactions.isEmpty) {
+    if (widget.transactions.isEmpty) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -29,6 +47,8 @@ class TransactionsTab extends StatelessWidget {
         ),
       );
     }
+
+    final filtered = _filteredTransactions;
 
     return Card(
       elevation: 4,
@@ -45,23 +65,44 @@ class TransactionsTab extends StatelessWidget {
                   'Recent Transactions',
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
-                Text(
-                  'Showing latest ${transactions.length}',
-                  style: const TextStyle(color: Colors.grey),
+                SizedBox(
+                  width: 280,
+                  height: 40,
+                  child: TextField(
+                    onChanged: (v) => setState(() => _searchQuery = v),
+                    decoration: InputDecoration(
+                      hintText: 'Search transactions…',
+                      hintStyle: const TextStyle(color: Colors.white30, fontSize: 13),
+                      prefixIcon: const Icon(Icons.search, size: 18, color: Colors.white30),
+                      filled: true,
+                      fillColor: Colors.white.withOpacity(0.05),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    style: const TextStyle(fontSize: 13),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 8),
+            Text(
+              'Showing ${filtered.length} of ${widget.transactions.length}',
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+            const SizedBox(height: 16),
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: transactions.length,
+              itemCount: filtered.length,
               separatorBuilder: (context, index) => const Divider(height: 32, color: Colors.white10),
               itemBuilder: (context, index) {
-                final tx = transactions[index];
+                final tx = filtered[index];
                 final date = DateTime.parse(tx['date'] as String);
-                final amount = ((tx['amount'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
-                final isExpense = amount > 0; // In standard accounting, POSITIVE amount is often an expense in bank feeds
+                final amount = ((tx['amount'] as num?)?.toDouble() ?? 0.0) * widget.conversionFactor;
+                final isExpense = amount > 0;
                 
                 return Row(
                   children: [
@@ -69,12 +110,12 @@ class TransactionsTab extends StatelessWidget {
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: _getCategoryColor(tx['category']).withOpacity(0.1),
+                        color: _getCategoryColor(tx['category'], tx['description']).withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
-                        _getCategoryIcon(tx['category']),
-                        color: _getCategoryColor(tx['category']),
+                        _getCategoryIcon(tx['category'], tx['description']),
+                        color: _getCategoryColor(tx['category'], tx['description']),
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -83,7 +124,7 @@ class TransactionsTab extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            tx['description'] ?? 'Unknown Transaction',
+                            _titleCase(tx['description'] ?? 'Unknown Transaction'),
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -140,28 +181,50 @@ class TransactionsTab extends StatelessWidget {
     );
   }
 
-  IconData _getCategoryIcon(String? category) {
-    if (category == null) return Icons.receipt;
-    final cat = category.toLowerCase();
-    if (cat.contains('food') || cat.contains('dining')) return Icons.restaurant;
-    if (cat.contains('travel')) return Icons.flight;
-    if (cat.contains('shopping')) return Icons.shopping_bag;
-    if (cat.contains('transfer')) return Icons.sync_alt;
-    if (cat.contains('payment')) return Icons.payment;
-    if (cat.contains('entertainment')) return Icons.movie;
-    if (cat.contains('personal')) return Icons.person;
+  NumberFormat get currencyFormat => widget.currencyFormat;
+
+  /// Title-case raw bank descriptions for cleaner display
+  String _titleCase(String text) {
+    // If already mostly lowercase or mixed, use as-is
+    if (text != text.toUpperCase()) return text;
+    // Convert ALL CAPS → Title Case
+    return text.split(' ').map((word) {
+      if (word.isEmpty) return word;
+      if (word.length <= 2) return word; // Keep short tokens like "CD", "ACH"
+      return '${word[0]}${word.substring(1).toLowerCase()}';
+    }).join(' ');
+  }
+
+  IconData _getCategoryIcon(String? category, String? description) {
+    final cat = (category ?? '').toLowerCase();
+    final desc = (description ?? '').toLowerCase();
+    // Plaid-style categories
+    if (cat.contains('food') || cat.contains('dining') || desc.contains('starbucks') || desc.contains('mcdonald')) return Icons.restaurant;
+    if (cat.contains('travel') || desc.contains('airline') || desc.contains('united')) return Icons.flight;
+    if (cat.contains('shopping') || desc.contains('amazon')) return Icons.shopping_bag;
+    if (cat.contains('transfer') || desc.contains('ach') || desc.contains('wire')) return Icons.sync_alt;
+    if (cat.contains('payment') || desc.contains('payment') || desc.contains('credit card')) return Icons.payment;
+    if (cat.contains('entertainment') || desc.contains('netflix') || desc.contains('spotify')) return Icons.movie;
+    if (cat.contains('recreation') || desc.contains('climbing') || desc.contains('gym')) return Icons.fitness_center;
+    if (cat.contains('deposit') || desc.contains('deposit')) return Icons.account_balance;
+    if (cat.contains('uber') || desc.contains('uber') || desc.contains('lyft')) return Icons.directions_car;
+    if (cat.contains('personal') || cat.contains('service')) return Icons.person;
     return Icons.receipt;
   }
 
-  Color _getCategoryColor(String? category) {
-    if (category == null) return Colors.grey;
-    final cat = category.toLowerCase();
-    if (cat.contains('food') || cat.contains('dining')) return Colors.orange;
-    if (cat.contains('travel')) return Colors.blue;
-    if (cat.contains('shopping')) return Colors.purple;
-    if (cat.contains('transfer')) return Colors.teal;
-    if (cat.contains('payment')) return Colors.green;
-    if (cat.contains('entertainment')) return Colors.pink;
+  Color _getCategoryColor(String? category, String? description) {
+    final cat = (category ?? '').toLowerCase();
+    final desc = (description ?? '').toLowerCase();
+    if (cat.contains('food') || cat.contains('dining') || desc.contains('starbucks') || desc.contains('mcdonald')) return Colors.orange;
+    if (cat.contains('travel') || desc.contains('airline') || desc.contains('united')) return Colors.blue;
+    if (cat.contains('shopping') || desc.contains('amazon')) return Colors.purple;
+    if (cat.contains('transfer') || desc.contains('ach') || desc.contains('wire')) return Colors.teal;
+    if (cat.contains('payment') || desc.contains('payment') || desc.contains('credit card')) return Colors.green;
+    if (cat.contains('entertainment') || desc.contains('netflix') || desc.contains('spotify')) return Colors.pink;
+    if (cat.contains('recreation') || desc.contains('climbing') || desc.contains('gym')) return const Color(0xFF1DE9B6);
+    if (cat.contains('deposit') || desc.contains('deposit')) return Colors.blueAccent;
+    if (cat.contains('uber') || desc.contains('uber') || desc.contains('lyft')) return Colors.indigo;
     return Colors.grey;
   }
 }
+

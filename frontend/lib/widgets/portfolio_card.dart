@@ -281,7 +281,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
               badgePositionPercentageOffset: 1.15,
             ),
         );
-        legendItems.add(_buildLegendItem(color, h['symbol'], percentage, isTouched));
+        legendItems.add(_buildLegendItem(color, h['name'] ?? h['symbol'] ?? '?', percentage, isTouched));
       } else {
         otherValue += value;
       }
@@ -389,8 +389,8 @@ class _HoldingsDataSource extends DataTableSource {
     final isGain = gain >= 0;
 
     return DataRow(
-      color: MaterialStateProperty.resolveWith<Color?>((states) {
-        if (states.contains(MaterialState.hovered)) {
+      color: WidgetStateProperty.resolveWith<Color?>((states) {
+        if (states.contains(WidgetState.hovered)) {
           return Colors.white.withOpacity(0.05);
         }
         return null; // Use default
