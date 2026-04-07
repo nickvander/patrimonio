@@ -98,3 +98,13 @@ Tracking key architectural and design decisions with rationale.
 **Decision:** Implement data-downsampling on the backend for multi-year charts to ensure `fl_chart` remains performant. Introduce "Crypto" as a primary optional account/integration type to pave the way for a Coinbase API integration in a future phase.
 **Rationale:** Sending 1000s of data points to Flutter charts halts the main thread during rendering; downsampling preserves shape while fixing framerates.
 
+---
+
+## DEC-012: Phase 10 — V1 Polish Strategy
+**Date:** 2026-04-06
+**Status:** Accepted
+**Context:** After all core features were built (Phases 1–9), the app needed a UI/UX consistency pass before declaring V1.
+**Decision:** Focused polish on three high-impact areas: (1) smart category icons with per-category color theming via a mapping function, (2) title-casing raw bank text to improve readability, (3) transaction search for quick filtering.
+**Rationale:** These three changes have outsized UX impact relative to effort. Icon+color gives instant visual scanning. Title-casing eliminates the "raw data dump" feel. Search is essential once transaction count grows.
+**Trade-off:** Icon mapping is hardcoded to Plaid's category taxonomy; custom/manual transactions may fall through to a generic icon. Title-case can produce odd results for acronyms (e.g., "Ach" instead of "ACH").
+
