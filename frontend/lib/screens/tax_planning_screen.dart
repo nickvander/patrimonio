@@ -2,15 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
+import '../utils/currency.dart';
 
 class TaxPlanningScreen extends StatefulWidget {
   final double conversionFactor;
   final NumberFormat currencyFormat;
+  final String targetCurrency;
+  final double usdMxnRate;
 
   const TaxPlanningScreen({
     super.key,
     required this.conversionFactor,
     required this.currencyFormat,
+    required this.targetCurrency,
+    required this.usdMxnRate,
   });
 
   @override
@@ -368,7 +373,16 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                     itemBuilder: (context, index) {
                       final tx = _taxTransactions![index];
                       final date = DateTime.parse(tx['date']);
-                      final amount = tx['amount'] * widget.conversionFactor;
+                      final sourceAmount =
+                          ((tx['amount'] as num?)?.toDouble() ?? 0.0);
+                      final sourceCurrency =
+                          (tx['currency'] ?? widget.targetCurrency).toString();
+                      final amount = convertCurrency(
+                        sourceAmount,
+                        from: sourceCurrency,
+                        to: widget.targetCurrency,
+                        usdMxnRate: widget.usdMxnRate,
+                      );
                       return ListTile(
                         leading: CircleAvatar(
                           backgroundColor: tx['category'] == 'Investment Sale'
@@ -387,12 +401,29 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                         subtitle: Text(
                           '${DateFormat('MMM dd, yyyy').format(date)} • ${tx['category']}',
                         ),
-                        trailing: Text(
-                          widget.currencyFormat.format(amount),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.greenAccent,
-                          ),
+                        trailing: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              widget.currencyFormat.format(amount),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.greenAccent,
+                              ),
+                            ),
+                            if (sourceCurrency != widget.targetCurrency)
+                              Text(
+                                formatCurrencyAmount(
+                                  sourceAmount,
+                                  sourceCurrency,
+                                ),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                          ],
                         ),
                       );
                     },

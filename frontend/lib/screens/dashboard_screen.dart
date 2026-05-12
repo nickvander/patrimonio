@@ -233,7 +233,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final fxRate = (_fxRate?['rate'] as num?)?.toDouble() ?? 1.0;
     final conversionFactor = _targetCurrency == 'MXN' ? fxRate : 1.0;
-    final currencyFormat = NumberFormat.simpleCurrency(name: _targetCurrency);
+    final currencyFormat = NumberFormat.currency(
+      name: _targetCurrency,
+      symbol: '$_targetCurrency ',
+    );
     final rateLabel = _fxRate == null
         ? 'FX loading'
         : '1 USD = ${NumberFormat.decimalPattern().format(fxRate)} MXN';
@@ -434,12 +437,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (_allocationData != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 24.0),
-              child: AllocationHeatmap(data: _allocationData!),
+              child: AllocationHeatmap(
+                data: _allocationData!,
+                conversionFactor: conversionFactor,
+                currencyFormat: currencyFormat,
+              ),
             ),
           PortfolioCard(
             portfolioData: _portfolioData ?? {},
             conversionFactor: conversionFactor,
             currencyFormat: currencyFormat,
+            targetCurrency: _targetCurrency,
+            usdMxnRate: fxRate,
           ),
           const SizedBox(height: 24),
           AccountsBreakdownCard(
@@ -475,6 +484,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       TaxPlanningScreen(
         conversionFactor: conversionFactor,
         currencyFormat: currencyFormat,
+        targetCurrency: _targetCurrency,
+        usdMxnRate: fxRate,
       ),
       scrollable: false,
     );

@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import '../utils/currency.dart';
 
 class PortfolioCard extends StatefulWidget {
   final Map<String, dynamic> portfolioData;
   final double conversionFactor;
   final NumberFormat currencyFormat;
+  final String targetCurrency;
+  final double usdMxnRate;
 
   const PortfolioCard({
     super.key,
     required this.portfolioData,
     required this.conversionFactor,
     required this.currencyFormat,
+    required this.targetCurrency,
+    required this.usdMxnRate,
   });
 
   @override
@@ -303,6 +308,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
               _holdings,
               widget.currencyFormat,
               widget.conversionFactor,
+              widget.targetCurrency,
+              widget.usdMxnRate,
               context,
             ),
           ),
@@ -507,12 +514,16 @@ class _HoldingsDataSource extends DataTableSource {
   final List<dynamic> holdings;
   final NumberFormat format;
   final double conversionFactor;
+  final String targetCurrency;
+  final double usdMxnRate;
   final BuildContext context;
 
   _HoldingsDataSource(
     this.holdings,
     this.format,
     this.conversionFactor,
+    this.targetCurrency,
+    this.usdMxnRate,
     this.context,
   );
 
@@ -523,8 +534,21 @@ class _HoldingsDataSource extends DataTableSource {
     final gain = (h['gain_loss'] as num?)?.toDouble() ?? 0.0;
     final gainPct = (h['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
     final quantity = (h['quantity'] as num?)?.toDouble() ?? 0.0;
-    final price = ((h['price'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
-    final value = ((h['value'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
+    final sourceCurrency = (h['currency'] ?? targetCurrency).toString();
+    final sourcePrice = (h['price'] as num?)?.toDouble() ?? 0.0;
+    final sourceValue = (h['value'] as num?)?.toDouble() ?? 0.0;
+    final price = convertCurrency(
+      sourcePrice,
+      from: sourceCurrency,
+      to: targetCurrency,
+      usdMxnRate: usdMxnRate,
+    );
+    final value = convertCurrency(
+      sourceValue,
+      from: sourceCurrency,
+      to: targetCurrency,
+      usdMxnRate: usdMxnRate,
+    );
     final isGain = gain >= 0;
 
     return DataRow(
@@ -583,9 +607,9 @@ class _HoldingsDataSource extends DataTableSource {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(format.format(price), style: const TextStyle(fontSize: 14)),
-              if (h['currency'] != null)
+              if (sourceCurrency != targetCurrency)
                 Text(
-                  '${NumberFormat.simpleCurrency(name: h['currency']).format(h['price'] as num)} ${h['currency']}',
+                  formatCurrencyAmount(sourcePrice, sourceCurrency),
                   style: const TextStyle(fontSize: 10, color: Colors.grey),
                 ),
             ],
@@ -603,9 +627,9 @@ class _HoldingsDataSource extends DataTableSource {
                   fontSize: 14,
                 ),
               ),
-              if (h['currency'] != null)
+              if (sourceCurrency != targetCurrency)
                 Text(
-                  '${NumberFormat.simpleCurrency(name: h['currency']).format(h['value'] as num)} ${h['currency']}',
+                  formatCurrencyAmount(sourceValue, sourceCurrency),
                   style: const TextStyle(fontSize: 10, color: Colors.grey),
                 ),
             ],

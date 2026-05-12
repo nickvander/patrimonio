@@ -378,6 +378,17 @@ async fn recent_transactions(State(state): State<AppState>) -> Json<Vec<Transact
 
 /// Asset allocation by category and sub-category (account/holding)
 async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationEntry>> {
+    let fx_rate = sqlx::query(
+        "SELECT rate FROM exchange_rates WHERE base_currency = 'USD' AND target_currency = 'MXN' ORDER BY recorded_at DESC LIMIT 1"
+    )
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()
+    .map(|r| r.get::<rust_decimal::Decimal, _>("rate"))
+    .and_then(|d| d.to_string().parse::<f64>().ok())
+    .unwrap_or(20.0);
+
     let rows = sqlx::query(
         r#"
         SELECT category, sub_category, SUM(value_usd) as value
@@ -385,20 +396,29 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
             -- Holdings
             SELECT COALESCE(holding_type, 'Stocks/ETFs') as category, 
                    COALESCE(symbol, name) as sub_category,
-                   value as value_usd
+                   CASE
+                       WHEN currency = 'MXN' THEN value / $1::numeric
+                       ELSE value
+                   END as value_usd
             FROM holdings
             UNION ALL
             -- Cash accounts
             SELECT 'Cash' as category,
                    name as sub_category,
-                   current_balance as value_usd
+                   CASE
+                       WHEN currency = 'MXN' THEN current_balance / $1::numeric
+                       ELSE current_balance
+                   END as value_usd
             FROM accounts
             WHERE account_type IN ('checking', 'savings', 'cash')
             UNION ALL
             -- Crypto accounts
             SELECT 'Crypto' as category,
                    name as sub_category,
-                   current_balance as value_usd
+                   CASE
+                       WHEN currency = 'MXN' THEN current_balance / $1::numeric
+                       ELSE current_balance
+                   END as value_usd
             FROM accounts
             WHERE account_type IN ('crypto')
         ) sub
@@ -406,6 +426,7 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
         ORDER BY value DESC
         "#
     )
+    .bind(fx_rate)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();

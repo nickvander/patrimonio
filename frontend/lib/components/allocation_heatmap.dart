@@ -12,8 +12,15 @@ class AllocationData {
 
 class AllocationHeatmap extends StatelessWidget {
   final List<AllocationData> data;
+  final double conversionFactor;
+  final NumberFormat currencyFormat;
 
-  const AllocationHeatmap({super.key, required this.data});
+  const AllocationHeatmap({
+    super.key,
+    required this.data,
+    required this.conversionFactor,
+    required this.currencyFormat,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -43,8 +50,6 @@ class AllocationHeatmap extends StatelessWidget {
         return sumB.compareTo(sumA);
       });
 
-    final currencyFormat = NumberFormat.compactCurrency(symbol: '\$');
-
     return Card(
       elevation: 6,
       shadowColor: Colors.black45,
@@ -66,7 +71,7 @@ class AllocationHeatmap extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'Total: ${currencyFormat.format(totalValue)}',
+                  'Total: ${currencyFormat.format(totalValue * conversionFactor)}',
                   style: const TextStyle(
                     fontSize: 14,
                     color: Colors.grey,
@@ -190,7 +195,9 @@ class AllocationHeatmap extends StatelessWidget {
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              currencyFormat.format(item.value),
+                              currencyFormat.format(
+                                item.value * conversionFactor,
+                              ),
                               style: const TextStyle(
                                 fontSize: 11,
                                 color: Colors.white70,

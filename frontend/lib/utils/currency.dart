@@ -17,5 +17,6 @@ double convertCurrency(
 }
 
 String formatCurrencyAmount(double amount, String currency) {
-  return '${NumberFormat.simpleCurrency(name: currency).format(amount)} $currency';
+  final code = currency.toUpperCase();
+  return NumberFormat.currency(name: code, symbol: '$code ').format(amount);
 }

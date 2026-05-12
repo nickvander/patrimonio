@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../components/date_range_selector.dart';
+import '../utils/currency.dart';
 
 class NetWorthCard extends StatelessWidget {
   final double netWorth;
@@ -113,7 +114,7 @@ class NetWorthCard extends StatelessWidget {
               final currency = (item['currency'] ?? '').toString();
               final net = ((item['net'] ?? 0.0) as num).toDouble();
               return Text(
-                '${NumberFormat.simpleCurrency(name: currency).format(net)} $currency source',
+                '${formatCurrencyAmount(net, currency)} source',
                 style: const TextStyle(color: Colors.white54, fontSize: 11),
               );
             }).toList(),
