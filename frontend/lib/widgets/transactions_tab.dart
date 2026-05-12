@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../utils/currency.dart';
 
 class TransactionsTab extends StatefulWidget {
   final List<dynamic> transactions;
   final double conversionFactor;
   final NumberFormat currencyFormat;
+  final String targetCurrency;
+  final double usdMxnRate;
 
   const TransactionsTab({
     super.key,
     required this.transactions,
     required this.conversionFactor,
     required this.currencyFormat,
+    required this.targetCurrency,
+    required this.usdMxnRate,
   });
 
   @override
@@ -118,9 +123,16 @@ class _TransactionsTabState extends State<TransactionsTab> {
               itemBuilder: (context, index) {
                 final tx = filtered[index];
                 final date = DateTime.parse(tx['date'] as String);
-                final amount =
-                    ((tx['amount'] as num?)?.toDouble() ?? 0.0) *
-                    widget.conversionFactor;
+                final sourceAmount =
+                    ((tx['amount'] as num?)?.toDouble() ?? 0.0);
+                final sourceCurrency = (tx['currency'] ?? widget.targetCurrency)
+                    .toString();
+                final amount = convertCurrency(
+                  sourceAmount,
+                  from: sourceCurrency,
+                  to: widget.targetCurrency,
+                  usdMxnRate: widget.usdMxnRate,
+                );
                 final isExpense = amount > 0;
 
                 return Row(
@@ -203,9 +215,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
                                 : const Color(0xFF00E676),
                           ),
                         ),
-                        if (tx['currency'] != null)
+                        if (sourceCurrency != widget.targetCurrency)
                           Text(
-                            '${NumberFormat.simpleCurrency(name: tx['currency']).format((tx['amount'] as num).abs())} ${tx['currency']}',
+                            formatCurrencyAmount(
+                              sourceAmount.abs(),
+                              sourceCurrency,
+                            ),
                             style: const TextStyle(
                               fontSize: 11,
                               color: Colors.grey,

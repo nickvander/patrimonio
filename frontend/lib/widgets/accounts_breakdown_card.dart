@@ -58,7 +58,8 @@ class AccountsBreakdownCard extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         ...typeBreakdown.map((item) {
-          final total = ((item['total'] ?? 0.0) as num).toDouble();
+          final total = ((item['total_usd'] ?? item['total'] ?? 0.0) as num)
+              .toDouble();
           return Padding(
             padding: const EdgeInsets.only(bottom: 12.0),
             child: Row(
@@ -97,7 +98,8 @@ class AccountsBreakdownCard extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         ...institutionBreakdown.map((item) {
-          final total = ((item['total'] ?? 0.0) as num).toDouble();
+          final total = ((item['total_usd'] ?? item['total'] ?? 0.0) as num)
+              .toDouble();
           return Padding(
             padding: const EdgeInsets.only(bottom: 12.0),
             child: Row(

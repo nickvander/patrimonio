@@ -7,6 +7,8 @@ class AccountTransactionsScreen extends StatefulWidget {
   final Map<String, dynamic> account;
   final double conversionFactor;
   final NumberFormat currencyFormat;
+  final String targetCurrency;
+  final double usdMxnRate;
   final Function(String, double)? onBalanceUpdate;
 
   const AccountTransactionsScreen({
@@ -14,6 +16,8 @@ class AccountTransactionsScreen extends StatefulWidget {
     required this.account,
     required this.conversionFactor,
     required this.currencyFormat,
+    required this.targetCurrency,
+    required this.usdMxnRate,
     this.onBalanceUpdate,
   });
 
@@ -174,6 +178,8 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         transactions: _transactions!,
         conversionFactor: widget.conversionFactor,
         currencyFormat: widget.currencyFormat,
+        targetCurrency: widget.targetCurrency,
+        usdMxnRate: widget.usdMxnRate,
       ),
     );
   }

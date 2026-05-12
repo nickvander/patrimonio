@@ -8,6 +8,8 @@ class NetWorthCard extends StatelessWidget {
   final List<dynamic> history;
   final double conversionFactor;
   final NumberFormat currencyFormat;
+  final String reportingCurrency;
+  final List<dynamic> sourceBreakdown;
   final DateRange selectedRange;
 
   const NetWorthCard({
@@ -16,6 +18,8 @@ class NetWorthCard extends StatelessWidget {
     required this.history,
     required this.conversionFactor,
     required this.currencyFormat,
+    required this.reportingCurrency,
+    required this.sourceBreakdown,
     this.selectedRange = DateRange.all,
   });
 
@@ -80,9 +84,9 @@ class NetWorthCard extends StatelessWidget {
     final summary = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Total Net Worth',
-          style: TextStyle(
+        Text(
+          'Total Net Worth ($reportingCurrency)',
+          style: const TextStyle(
             color: Colors.white60,
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -100,6 +104,21 @@ class NetWorthCard extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
+        if (sourceBreakdown.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: sourceBreakdown.map((item) {
+              final currency = (item['currency'] ?? '').toString();
+              final net = ((item['net'] ?? 0.0) as num).toDouble();
+              return Text(
+                '${NumberFormat.simpleCurrency(name: currency).format(net)} $currency source',
+                style: const TextStyle(color: Colors.white54, fontSize: 11),
+              );
+            }).toList(),
+          ),
+        ],
       ],
     );
 

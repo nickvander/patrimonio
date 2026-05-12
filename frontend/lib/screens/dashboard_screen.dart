@@ -18,6 +18,7 @@ import 'wealth_projection_screen.dart';
 import '../components/date_range_selector.dart';
 import '../components/allocation_heatmap.dart';
 import '../components/trends_chart.dart';
+import '../utils/currency.dart';
 import 'package:patrimonio/screens/tax_planning_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -175,6 +176,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           actions: [
             TextButton.icon(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
               onPressed: () {
                 setState(() {
                   _targetCurrency = _targetCurrency == 'USD' ? 'MXN' : 'USD';
@@ -187,7 +191,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     : Colors.white70,
               ),
               label: Text(
-                '$_targetCurrency (${_fxRate != null ? (_fxRate!['rate'] as num).toStringAsFixed(2) : "..."})',
+                'Report: $_targetCurrency',
                 style: TextStyle(
                   color: _targetCurrency == 'MXN'
                       ? const Color(0xFF00E676)
@@ -230,6 +234,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final fxRate = (_fxRate?['rate'] as num?)?.toDouble() ?? 1.0;
     final conversionFactor = _targetCurrency == 'MXN' ? fxRate : 1.0;
     final currencyFormat = NumberFormat.simpleCurrency(name: _targetCurrency);
+    final rateLabel = _fxRate == null
+        ? 'FX loading'
+        : '1 USD = ${NumberFormat.decimalPattern().format(fxRate)} MXN';
+
+    Widget buildCurrencyContext() {
+      final sourceBreakdown =
+          (_overview?['currency_breakdown'] as List?)
+              ?.map((item) => item as Map<String, dynamic>)
+              .toList() ??
+          [];
+
+      return Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        child: Wrap(
+          spacing: 14,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              'Reporting currency: $_targetCurrency',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+            Text(
+              rateLabel,
+              style: const TextStyle(color: Colors.white60, fontSize: 12),
+            ),
+            if (sourceBreakdown.isNotEmpty)
+              Text(
+                'Sources: ${sourceBreakdown.map((item) {
+                  final currency = (item['currency'] ?? 'USD').toString();
+                  final net = ((item['net'] ?? 0.0) as num).toDouble();
+                  return formatCurrencyAmount(net, currency);
+                }).join(' · ')}',
+                style: const TextStyle(color: Colors.white60, fontSize: 12),
+              ),
+          ],
+        ),
+      );
+    }
 
     Widget buildTabContainer(Widget child, {bool scrollable = true}) {
       final padding = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
@@ -251,10 +304,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Widget buildAccountsColumn() {
       return Column(
         children: [
+          buildCurrencyContext(),
           AccountsListWidget(
             accounts: _overview?['accounts'] ?? [],
             conversionFactor: conversionFactor,
             currencyFormat: currencyFormat,
+            targetCurrency: _targetCurrency,
+            usdMxnRate: fxRate,
             onBalanceUpdate: (id, bal) async {
               try {
                 await _apiService.updateAccountBalance(id, bal);
@@ -330,6 +386,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               history: _netWorthHistory ?? [],
               conversionFactor: conversionFactor,
               currencyFormat: currencyFormat,
+              reportingCurrency: _targetCurrency,
+              sourceBreakdown: _overview?['currency_breakdown'] ?? [],
               selectedRange: _selectedRange,
             ),
           ),
@@ -399,6 +457,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         transactions: _transactions ?? [],
         conversionFactor: conversionFactor,
         currencyFormat: currencyFormat,
+        targetCurrency: _targetCurrency,
+        usdMxnRate: fxRate,
       ),
     );
 

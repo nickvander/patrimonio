@@ -51,16 +51,36 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
         })
         .collect();
 
+    // Get latest USD/MXN rate for conversion. Dashboard aggregate totals use USD
+    // as their base so the frontend can report them in either USD or MXN.
+    let fx_rate = sqlx::query(
+        "SELECT rate FROM exchange_rates WHERE base_currency = 'USD' AND target_currency = 'MXN' ORDER BY recorded_at DESC LIMIT 1"
+    )
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()
+    .map(|r| r.get::<rust_decimal::Decimal, _>("rate"))
+    .and_then(|d| d.to_string().parse::<f64>().ok())
+    .unwrap_or(20.0);
+
     // Account type breakdown
     let type_rows = sqlx::query(
         r#"
         SELECT account_type,
                COUNT(*) as count,
-               COALESCE(SUM(current_balance), 0) as total
+               COALESCE(SUM(current_balance), 0) as total,
+               COALESCE(SUM(
+                   CASE
+                       WHEN currency = 'MXN' THEN current_balance / $1::numeric
+                       ELSE current_balance
+                   END
+               ), 0) as total_usd
         FROM accounts
         GROUP BY account_type
         "#
     )
+    .bind(fx_rate)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
@@ -71,6 +91,8 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
             count: r.try_get::<i64, _>("count").unwrap_or(0) as i32,
             total: r.try_get::<rust_decimal::Decimal, _>("total")
                 .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
+            total_usd: r.try_get::<rust_decimal::Decimal, _>("total_usd")
+                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
         })
         .collect();
 
@@ -79,13 +101,20 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
         r#"
         SELECT i.name as institution_name, i.country,
                COUNT(*) as account_count,
-               COALESCE(SUM(a.current_balance), 0) as total
+               COALESCE(SUM(a.current_balance), 0) as total,
+               COALESCE(SUM(
+                   CASE
+                       WHEN a.currency = 'MXN' THEN a.current_balance / $1::numeric
+                       ELSE a.current_balance
+                   END
+               ), 0) as total_usd
         FROM accounts a
         JOIN institutions i ON a.institution_id = i.id
         GROUP BY i.name, i.country
         ORDER BY total DESC
         "#
     )
+    .bind(fx_rate)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
@@ -96,6 +125,8 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
             country: r.get("country"),
             account_count: r.try_get::<i64, _>("account_count").unwrap_or(0) as i32,
             total: r.try_get::<rust_decimal::Decimal, _>("total")
+                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
+            total_usd: r.try_get::<rust_decimal::Decimal, _>("total_usd")
                 .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
         })
         .collect();
@@ -131,18 +162,6 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
 
     // Calculate total net worth in USD by converting each currency balance
     let mut total_net_usd = 0.0;
-    
-    // Get latest USD/MXN rate for conversion
-    let fx_rate = sqlx::query(
-        "SELECT rate FROM exchange_rates WHERE base_currency = 'USD' AND target_currency = 'MXN' ORDER BY recorded_at DESC LIMIT 1"
-    )
-    .fetch_optional(&state.db)
-    .await
-    .ok()
-    .flatten()
-    .map(|r| r.get::<rust_decimal::Decimal, _>("rate"))
-    .and_then(|d| d.to_string().parse::<f64>().ok())
-    .unwrap_or(20.0); // Fallback to 20 if no rate found
 
     for c in &currency_breakdown {
         if c.currency == "USD" {
@@ -474,6 +493,7 @@ struct TypeBreakdown {
     account_type: String,
     count: i32,
     total: f64,
+    total_usd: f64,
 }
 
 #[derive(Serialize)]
@@ -482,6 +502,7 @@ struct InstitutionBreakdown {
     country: String,
     account_count: i32,
     total: f64,
+    total_usd: f64,
 }
 
 #[derive(Serialize)]

@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../screens/account_transactions_screen.dart';
+import '../utils/currency.dart';
 
 class AccountsListWidget extends StatelessWidget {
   final List<dynamic> accounts;
   final double conversionFactor;
   final NumberFormat currencyFormat;
+  final String targetCurrency;
+  final double usdMxnRate;
   final Function(String, double)? onBalanceUpdate;
 
   const AccountsListWidget({
@@ -13,6 +16,8 @@ class AccountsListWidget extends StatelessWidget {
     required this.accounts,
     required this.conversionFactor,
     required this.currencyFormat,
+    required this.targetCurrency,
+    required this.usdMxnRate,
     this.onBalanceUpdate,
   });
 
@@ -157,7 +162,14 @@ class AccountsListWidget extends StatelessWidget {
 
     final total = groupAccounts.fold<double>(0.0, (sum, acc) {
       final bal = ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
-      return sum + bal;
+      final sourceCurrency = (acc['currency'] ?? targetCurrency).toString();
+      return sum +
+          convertCurrency(
+            bal,
+            from: sourceCurrency,
+            to: targetCurrency,
+            usdMxnRate: usdMxnRate,
+          );
     });
 
     return Container(
@@ -204,7 +216,7 @@ class AccountsListWidget extends StatelessWidget {
                 const SizedBox(width: 12),
                 Flexible(
                   child: Text(
-                    currencyFormat.format(total * conversionFactor),
+                    currencyFormat.format(total),
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
@@ -223,6 +235,14 @@ class AccountsListWidget extends StatelessWidget {
             final balance = ((acc['current_balance'] ?? 0.0) as num)
                 .toDouble()
                 .abs();
+            final sourceCurrency = (acc['currency'] ?? targetCurrency)
+                .toString();
+            final reportedBalance = convertCurrency(
+              balance,
+              from: sourceCurrency,
+              to: targetCurrency,
+              usdMxnRate: usdMxnRate,
+            );
             final name = acc['name'] ?? 'Unknown Account';
             final inst = acc['institution_name'] ?? '';
             return InkWell(
@@ -234,6 +254,8 @@ class AccountsListWidget extends StatelessWidget {
                       account: acc,
                       conversionFactor: conversionFactor,
                       currencyFormat: currencyFormat,
+                      targetCurrency: targetCurrency,
+                      usdMxnRate: usdMxnRate,
                       onBalanceUpdate: onBalanceUpdate,
                     ),
                   ),
@@ -284,9 +306,7 @@ class AccountsListWidget extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  currencyFormat.format(
-                                    balance * conversionFactor,
-                                  ),
+                                  currencyFormat.format(reportedBalance),
                                   style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
@@ -313,10 +333,12 @@ class AccountsListWidget extends StatelessWidget {
                                     textAlign: TextAlign.right,
                                   )
                                 else if (acc['currency'] != null &&
-                                    acc['currency'] != 'USD' &&
-                                    acc['currency'] != 'MXN')
+                                    sourceCurrency != targetCurrency)
                                   Text(
-                                    'Orig: ${NumberFormat.simpleCurrency(name: acc['currency']).format(balance)} ${acc['currency']}',
+                                    formatCurrencyAmount(
+                                      balance,
+                                      sourceCurrency,
+                                    ),
                                     style: const TextStyle(
                                       fontSize: 10,
                                       color: Colors.grey,
