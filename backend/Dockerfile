@@ -7,7 +7,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 
 # Cache dependencies: copy Cargo files and build deps only
-COPY Cargo.toml ./
+COPY Cargo.toml Cargo.lock ./
 RUN mkdir src && echo "fn main() {println!(\"dummy\");}" > src/main.rs
 RUN cargo build --release || true
 # Remove the dummy build artifacts for the main binary, but keep dep caches

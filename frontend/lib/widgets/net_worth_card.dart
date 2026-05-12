@@ -11,13 +11,13 @@ class NetWorthCard extends StatelessWidget {
   final DateRange selectedRange;
 
   const NetWorthCard({
-    Key? key,
+    super.key,
     required this.netWorth,
     required this.history,
     required this.conversionFactor,
     required this.currencyFormat,
     this.selectedRange = DateRange.all,
-  }) : super(key: key);
+  });
 
   /// Filter history data based on the selected date range
   List<dynamic> _filterByRange(List<dynamic> data) {
@@ -59,51 +59,81 @@ class NetWorthCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Padding(
         padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isCompact = constraints.maxWidth < 640;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Total Net Worth', style: TextStyle(color: Colors.white60, fontSize: 14, fontWeight: FontWeight.w500, letterSpacing: 0.5)),
-                    const SizedBox(height: 4),
-                    Text(
-                      currencyFormat.format(netWorth),
-                      style: const TextStyle(
-                        fontSize: 42, 
-                        fontWeight: FontWeight.w900, 
-                        letterSpacing: -1.2,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-                _buildBenchmarkLegend(),
+                _buildHeader(isCompact),
+                const SizedBox(height: 24),
+                Expanded(child: _buildChart()),
               ],
-            ),
-            const SizedBox(height: 24),
-            Expanded(
-              child: _buildChart(),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildBenchmarkLegend() {
+  Widget _buildHeader(bool isCompact) {
+    final summary = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Total Net Worth',
+          style: TextStyle(
+            color: Colors.white60,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          currencyFormat.format(netWorth),
+          style: TextStyle(
+            fontSize: isCompact ? 34 : 42,
+            fontWeight: FontWeight.w900,
+            color: Colors.white,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+
+    if (isCompact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          summary,
+          const SizedBox(height: 16),
+          _buildBenchmarkLegend(),
+        ],
+      );
+    }
+
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: summary),
+        const SizedBox(width: 16),
+        Flexible(child: _buildBenchmarkLegend()),
+      ],
+    );
+  }
+
+  Widget _buildBenchmarkLegend() {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 8,
       children: [
         _legendItem('Your Wealth', const Color(0xFF00E676)),
-        const SizedBox(width: 12),
-        _legendItem('S&P 500', Colors.blueAccent.withOpacity(0.5)),
-        const SizedBox(width: 12),
-        _legendItem('NASDAQ', Colors.purpleAccent.withOpacity(0.5)),
-        const SizedBox(width: 12),
-        _legendItem('BTC (Est)', Colors.orangeAccent.withOpacity(0.5)),
+        _legendItem('S&P 500', Colors.blueAccent.withValues(alpha: 0.5)),
+        _legendItem('NASDAQ', Colors.purpleAccent.withValues(alpha: 0.5)),
+        _legendItem('BTC (Est)', Colors.orangeAccent.withValues(alpha: 0.5)),
       ],
     );
   }
@@ -111,7 +141,11 @@ class NetWorthCard extends StatelessWidget {
   Widget _legendItem(String label, Color color) {
     return Row(
       children: [
-        Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
         const SizedBox(width: 4),
         Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
       ],
@@ -126,7 +160,8 @@ class NetWorthCard extends StatelessWidget {
         final date = now.subtract(Duration(days: 29 - index));
         return {
           'date': DateFormat('yyyy-MM-dd').format(date),
-          'net_worth': netWorth / conversionFactor, // backend expects base units
+          'net_worth':
+              netWorth / conversionFactor, // backend expects base units
         };
       });
       return _renderLineChart(mockData);
@@ -143,25 +178,29 @@ class NetWorthCard extends StatelessWidget {
     List<FlSpot> sp500Spots = [];
     List<FlSpot> nasdaqSpots = [];
     List<FlSpot> btcSpots = [];
-    
+
     double minY = double.infinity;
     double maxY = -double.infinity;
 
-    final baseValue = (data.first['net_worth'] as num).toDouble() * conversionFactor;
-    
+    final baseValue =
+        (data.first['net_worth'] as num).toDouble() * conversionFactor;
+
     // Performance Optimization: Downsample to ~150 points maximum
     final int step = data.length > 150 ? (data.length / 150).ceil() : 1;
-    
+
     void processPoint(int i) {
       final val = (data[i]['net_worth'] as num).toDouble() * conversionFactor;
       final x = i.toDouble();
       spots.add(FlSpot(x, val));
-      
+
       // Benchmarks
       final daysSinceStart = i.toDouble();
-      final sp500Val = baseValue * (1.0 + (0.10 / 365 * daysSinceStart)); // 10% annual
-      final nasdaqVal = baseValue * (1.0 + (0.14 / 365 * daysSinceStart)); // 14% annual
-      final btcVal = baseValue * (1.0 + (0.40 / 365 * daysSinceStart)); // 40% annual
+      final sp500Val =
+          baseValue * (1.0 + (0.10 / 365 * daysSinceStart)); // 10% annual
+      final nasdaqVal =
+          baseValue * (1.0 + (0.14 / 365 * daysSinceStart)); // 14% annual
+      final btcVal =
+          baseValue * (1.0 + (0.40 / 365 * daysSinceStart)); // 40% annual
 
       sp500Spots.add(FlSpot(x, sp500Val));
       nasdaqSpots.add(FlSpot(x, nasdaqVal));
@@ -212,32 +251,44 @@ class NetWorthCard extends StatelessWidget {
       LineChartData(
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (touchedSpot) => const Color(0xFF1A1A24).withOpacity(0.9),
+            getTooltipColor: (touchedSpot) =>
+                const Color(0xFF1A1A24).withValues(alpha: 0.9),
             tooltipRoundedRadius: 12,
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {
-                if (spot.barIndex == 0) return null; // Only show tooltip for main wealth line
-                
+                if (spot.barIndex == 0) {
+                  return null; // Only show tooltip for main wealth line
+                }
+
                 final idx = spot.x.toInt().clamp(0, data.length - 1);
                 final point = data[idx];
                 final dateStr = point['date'].toString();
                 final date = DateTime.tryParse(dateStr) ?? DateTime.now();
-                
+
                 final nw = point['net_worth'];
                 final ta = point['total_assets'];
                 final tl = point['total_liabilities'];
-                
+
                 final children = <TextSpan>[
                   TextSpan(
                     text: '${DateFormat('MMM d, yyyy').format(date)}\n',
-                    style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.normal),
+                    style: const TextStyle(
+                      color: Colors.grey,
+                      fontSize: 11,
+                      fontWeight: FontWeight.normal,
+                    ),
                   ),
                   TextSpan(
-                    text: 'Net Worth: ${currencyFormat.format((nw as num).toDouble() * conversionFactor)}\n',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                    text:
+                        'Net Worth: ${currencyFormat.format((nw as num).toDouble() * conversionFactor)}\n',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
                   ),
                 ];
-                
+
                 if (ta != null && tl != null) {
                   children.addAll([
                     const TextSpan(
@@ -245,16 +296,26 @@ class NetWorthCard extends StatelessWidget {
                       style: TextStyle(color: Colors.white10),
                     ),
                     TextSpan(
-                      text: 'Assets: ${currencyFormat.format((ta as num).toDouble() * conversionFactor)}\n',
-                      style: const TextStyle(color: Color(0xFF00E676), fontSize: 12, fontWeight: FontWeight.w600),
+                      text:
+                          'Assets: ${currencyFormat.format((ta as num).toDouble() * conversionFactor)}\n',
+                      style: const TextStyle(
+                        color: Color(0xFF00E676),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     TextSpan(
-                      text: 'Liabilities: ${currencyFormat.format((tl as num).toDouble() * conversionFactor)}',
-                      style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.w600),
+                      text:
+                          'Liabilities: ${currencyFormat.format((tl as num).toDouble() * conversionFactor)}',
+                      style: const TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ]);
                 }
-                
+
                 return LineTooltipItem(
                   '',
                   const TextStyle(color: Colors.white),
@@ -268,12 +329,17 @@ class NetWorthCard extends StatelessWidget {
           show: true,
           drawVerticalLine: false,
           horizontalInterval: yInterval,
-          getDrawingHorizontalLine: (value) => FlLine(color: Colors.white10, strokeWidth: 1),
+          getDrawingHorizontalLine: (value) =>
+              FlLine(color: Colors.white10, strokeWidth: 1),
         ),
         titlesData: FlTitlesData(
           show: true,
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -289,7 +355,10 @@ class NetWorthCard extends StatelessWidget {
                     final fmt = selectedRange == DateRange.oneMonth
                         ? DateFormat('MMM d')
                         : DateFormat("MMM ''yy");
-                    return Text(fmt.format(date), style: const TextStyle(color: Colors.grey, fontSize: 10));
+                    return Text(
+                      fmt.format(date),
+                      style: const TextStyle(color: Colors.grey, fontSize: 10),
+                    );
                   }
                 }
                 return const Text('');
@@ -304,7 +373,9 @@ class NetWorthCard extends StatelessWidget {
                 // Skip the very first/last to avoid clipping
                 if (value <= minY || value >= maxY) return const SizedBox();
                 return Text(
-                  NumberFormat.compactSimpleCurrency(name: currencyFormat.currencyName).format(value),
+                  NumberFormat.compactSimpleCurrency(
+                    name: currencyFormat.currencyName,
+                  ).format(value),
                   style: const TextStyle(color: Colors.grey, fontSize: 10),
                 );
               },
@@ -320,7 +391,7 @@ class NetWorthCard extends StatelessWidget {
           LineChartBarData(
             spots: sp500Spots,
             isCurved: true,
-            color: Colors.blueAccent.withOpacity(0.3),
+            color: Colors.blueAccent.withValues(alpha: 0.3),
             barWidth: 2,
             isStrokeCapRound: true,
             dotData: const FlDotData(show: false),
@@ -330,7 +401,7 @@ class NetWorthCard extends StatelessWidget {
           LineChartBarData(
             spots: nasdaqSpots,
             isCurved: true,
-            color: Colors.purpleAccent.withOpacity(0.3),
+            color: Colors.purpleAccent.withValues(alpha: 0.3),
             barWidth: 2,
             isStrokeCapRound: true,
             dotData: const FlDotData(show: false),
@@ -340,7 +411,7 @@ class NetWorthCard extends StatelessWidget {
           LineChartBarData(
             spots: btcSpots,
             isCurved: true,
-            color: Colors.orangeAccent.withOpacity(0.3),
+            color: Colors.orangeAccent.withValues(alpha: 0.3),
             barWidth: 2,
             isStrokeCapRound: true,
             dotData: const FlDotData(show: false),
@@ -350,14 +421,19 @@ class NetWorthCard extends StatelessWidget {
           LineChartBarData(
             spots: spots,
             isCurved: true,
-            gradient: const LinearGradient(colors: [Color(0xFF00E676), Color(0xFF69F0AE)]),
+            gradient: const LinearGradient(
+              colors: [Color(0xFF00E676), Color(0xFF69F0AE)],
+            ),
             barWidth: 4,
             isStrokeCapRound: true,
             dotData: const FlDotData(show: false),
             belowBarData: BarAreaData(
               show: true,
               gradient: LinearGradient(
-                colors: [const Color(0xFF00E676).withOpacity(0.2), const Color(0xFF00E676).withOpacity(0)],
+                colors: [
+                  const Color(0xFF00E676).withValues(alpha: 0.2),
+                  const Color(0xFF00E676).withValues(alpha: 0),
+                ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),

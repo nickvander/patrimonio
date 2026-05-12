@@ -20,7 +20,7 @@ class AllocationHeatmap extends StatelessWidget {
     if (data.isEmpty) return const SizedBox.shrink();
 
     final totalValue = data.fold<double>(0, (sum, item) => sum + item.value);
-    
+
     // Group data by category
     final groupedData = <String, List<AllocationData>>{};
     final categoryColors = <String, Color>{};
@@ -32,8 +32,14 @@ class AllocationHeatmap extends StatelessWidget {
     // Sort categories by total value descending
     final sortedCategories = groupedData.keys.toList()
       ..sort((a, b) {
-        final sumA = groupedData[a]!.fold<double>(0, (sum, item) => sum + item.value);
-        final sumB = groupedData[b]!.fold<double>(0, (sum, item) => sum + item.value);
+        final sumA = groupedData[a]!.fold<double>(
+          0,
+          (sum, item) => sum + item.value,
+        );
+        final sumB = groupedData[b]!.fold<double>(
+          0,
+          (sum, item) => sum + item.value,
+        );
         return sumB.compareTo(sumA);
       });
 
@@ -54,17 +60,17 @@ class AllocationHeatmap extends StatelessWidget {
                 const Text(
                   'Asset Distribution',
                   style: TextStyle(
-                    fontSize: 22, 
-                    fontWeight: FontWeight.w800, 
-                    letterSpacing: -0.5
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
                   ),
                 ),
                 Text(
                   'Total: ${currencyFormat.format(totalValue)}',
                   style: const TextStyle(
-                    fontSize: 14, 
-                    color: Colors.grey, 
-                    fontWeight: FontWeight.w600
+                    fontSize: 14,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
@@ -95,10 +101,10 @@ class AllocationHeatmap extends StatelessWidget {
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: color.withOpacity(0.4),
+                                    color: color.withValues(alpha: 0.4),
                                     blurRadius: 8,
                                     spreadRadius: 1,
-                                  )
+                                  ),
                                 ],
                               ),
                             ),
@@ -106,7 +112,7 @@ class AllocationHeatmap extends StatelessWidget {
                             Text(
                               cat,
                               style: const TextStyle(
-                                fontSize: 16, 
+                                fontSize: 16,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
                               ),
@@ -116,7 +122,7 @@ class AllocationHeatmap extends StatelessWidget {
                         Text(
                           '${(catPercentage * 100).toStringAsFixed(1)}%',
                           style: TextStyle(
-                            fontSize: 14, 
+                            fontSize: 14,
                             fontWeight: FontWeight.w800,
                             color: color,
                           ),
@@ -141,18 +147,15 @@ class AllocationHeatmap extends StatelessWidget {
                             height: 12,
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
-                                colors: [
-                                  color,
-                                  color.withOpacity(0.7),
-                                ],
+                                colors: [color, color.withValues(alpha: 0.7)],
                               ),
                               borderRadius: BorderRadius.circular(6),
                               boxShadow: [
                                 BoxShadow(
-                                  color: color.withOpacity(0.3),
+                                  color: color.withValues(alpha: 0.3),
                                   blurRadius: 10,
                                   offset: const Offset(0, 4),
-                                )
+                                ),
                               ],
                             ),
                           ),
@@ -165,7 +168,6 @@ class AllocationHeatmap extends StatelessWidget {
                       spacing: 16,
                       runSpacing: 8,
                       children: items.map((item) {
-                        final subPercentage = item.value / catTotal;
                         return Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -173,7 +175,7 @@ class AllocationHeatmap extends StatelessWidget {
                               width: 4,
                               height: 4,
                               decoration: BoxDecoration(
-                                color: Colors.grey.withOpacity(0.5),
+                                color: Colors.grey.withValues(alpha: 0.5),
                                 shape: BoxShape.circle,
                               ),
                             ),
@@ -181,7 +183,7 @@ class AllocationHeatmap extends StatelessWidget {
                             Text(
                               item.subCategory,
                               style: const TextStyle(
-                                fontSize: 12, 
+                                fontSize: 12,
                                 color: Colors.grey,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -190,7 +192,7 @@ class AllocationHeatmap extends StatelessWidget {
                             Text(
                               currencyFormat.format(item.value),
                               style: const TextStyle(
-                                fontSize: 11, 
+                                fontSize: 11,
                                 color: Colors.white70,
                                 fontWeight: FontWeight.w400,
                               ),
@@ -202,7 +204,7 @@ class AllocationHeatmap extends StatelessWidget {
                   ],
                 ),
               );
-            }).toList(),
+            }),
           ],
         ),
       ),

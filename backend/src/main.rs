@@ -2,6 +2,10 @@ use anyhow::Result;
 use tokio_cron_scheduler::{Job, JobScheduler};
 use axum::{
     extract::State,
+    http::{
+        header::{AUTHORIZATION, CONTENT_TYPE},
+        HeaderValue, Method,
+    },
     response::Json,
     routing::get,
     Router,
@@ -9,7 +13,7 @@ use axum::{
 use serde::Serialize;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -52,6 +56,7 @@ async fn main() -> Result<()> {
         redis: redis_client,
         config: Arc::new(config.clone()),
     };
+    let cors = build_cors_layer(&config.allowed_origins);
 
     // Initialize Cron Scheduler for daily balance snapshots
     let sched = JobScheduler::new().await.expect("Failed to create cron scheduler");
@@ -91,7 +96,7 @@ async fn main() -> Result<()> {
         .nest("/api/projections", patrimonio::api::projections::router())
         .nest("/api/auth", patrimonio::api::auth::router())
         .nest("/api/tax", patrimonio::api::tax::router())
-        .layer(CorsLayer::permissive())
+        .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
@@ -102,6 +107,22 @@ async fn main() -> Result<()> {
     axum::serve(listener, app).await?;
 
     Ok(())
+}
+
+fn build_cors_layer(allowed_origins: &[String]) -> CorsLayer {
+    if allowed_origins.iter().any(|origin| origin == "*") {
+        return CorsLayer::permissive();
+    }
+
+    let origins: Vec<HeaderValue> = allowed_origins
+        .iter()
+        .filter_map(|origin| origin.parse::<HeaderValue>().ok())
+        .collect();
+
+    CorsLayer::new()
+        .allow_origin(AllowOrigin::list(origins))
+        .allow_methods([Method::GET, Method::POST, Method::PATCH])
+        .allow_headers([CONTENT_TYPE, AUTHORIZATION])
 }
 
 /// Health check endpoint

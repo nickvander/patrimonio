@@ -8,13 +8,13 @@ class TaxPlanningScreen extends StatefulWidget {
   final NumberFormat currencyFormat;
 
   const TaxPlanningScreen({
-    Key? key,
+    super.key,
     required this.conversionFactor,
     required this.currencyFormat,
-  }) : super(key: key);
+  });
 
   @override
-  _TaxPlanningScreenState createState() => _TaxPlanningScreenState();
+  State<TaxPlanningScreen> createState() => _TaxPlanningScreenState();
 }
 
 class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
@@ -40,9 +40,14 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     });
 
     try {
-      final summary = await _apiService.getTaxSummary(year: _selectedYear, status: _filingStatus);
-      final transactions = await _apiService.getTaxTransactions(year: _selectedYear);
-      
+      final summary = await _apiService.getTaxSummary(
+        year: _selectedYear,
+        status: _filingStatus,
+      );
+      final transactions = await _apiService.getTaxTransactions(
+        year: _selectedYear,
+      );
+
       setState(() {
         _taxSummary = summary;
         _taxTransactions = transactions;
@@ -56,26 +61,32 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     }
   }
 
-  void _export_csv() async {
+  void _exportCsv() async {
     final String baseUrl = _apiService.baseUrl;
     final url = Uri.parse('$baseUrl/tax/export?year=$_selectedYear');
     if (await canLaunchUrl(url)) {
       await launchUrl(url);
     } else {
       if (mounted) {
-         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not launch CSV export.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not launch CSV export.')),
+        );
       }
     }
   }
 
-  void _export_pdf() async {
+  void _exportPdf() async {
     final String baseUrl = _apiService.baseUrl;
-    final url = Uri.parse('$baseUrl/tax/export/pdf?year=$_selectedYear&status=$_filingStatus');
+    final url = Uri.parse(
+      '$baseUrl/tax/export/pdf?year=$_selectedYear&status=$_filingStatus',
+    );
     if (await canLaunchUrl(url)) {
       await launchUrl(url);
     } else {
       if (mounted) {
-         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not launch PDF export.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not launch PDF export.')),
+        );
       }
     }
   }
@@ -101,14 +112,26 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       );
     }
 
-    final ordinaryIncome = ((_taxSummary?['ordinary_income'] as num?)?.toDouble() ?? 0) * widget.conversionFactor;
-    final capitalGains = ((_taxSummary?['capital_gains'] as num?)?.toDouble() ?? 0) * widget.conversionFactor;
-    final totalTaxable = ((_taxSummary?['total_taxable'] as num?)?.toDouble() ?? 0) * widget.conversionFactor;
+    final ordinaryIncome =
+        ((_taxSummary?['ordinary_income'] as num?)?.toDouble() ?? 0) *
+        widget.conversionFactor;
+    final capitalGains =
+        ((_taxSummary?['capital_gains'] as num?)?.toDouble() ?? 0) *
+        widget.conversionFactor;
+    final totalTaxable =
+        ((_taxSummary?['total_taxable'] as num?)?.toDouble() ?? 0) *
+        widget.conversionFactor;
 
-    final liabUs = ((_taxSummary?['estimated_liability_us'] as num?)?.toDouble() ?? 0) * widget.conversionFactor;
-    final liabMx = ((_taxSummary?['estimated_liability_mx'] as num?)?.toDouble() ?? 0) * widget.conversionFactor;
-    final rateUs = ((_taxSummary?['effective_rate_us'] as num?)?.toDouble() ?? 0) * 100;
-    final rateMx = ((_taxSummary?['effective_rate_mx'] as num?)?.toDouble() ?? 0) * 100;
+    final liabUs =
+        ((_taxSummary?['estimated_liability_us'] as num?)?.toDouble() ?? 0) *
+        widget.conversionFactor;
+    final liabMx =
+        ((_taxSummary?['estimated_liability_mx'] as num?)?.toDouble() ?? 0) *
+        widget.conversionFactor;
+    final rateUs =
+        ((_taxSummary?['effective_rate_us'] as num?)?.toDouble() ?? 0) * 100;
+    final rateMx =
+        ((_taxSummary?['effective_rate_mx'] as num?)?.toDouble() ?? 0) * 100;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -124,51 +147,67 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
               children: [
                 DropdownButton<String>(
                   value: _filingStatus,
-                  items: <String>['Single', 'Married', 'Head of Household'].map((String value) {
-                    return DropdownMenuItem<String>(value: value, child: Text(value));
-                  }).toList(),
+                  items: <String>['Single', 'Married', 'Head of Household'].map(
+                    (String value) {
+                      return DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(value),
+                      );
+                    },
+                  ).toList(),
                   onChanged: (String? newValue) {
                     if (newValue != null) {
-                       setState(() {
-                         _filingStatus = newValue;
-                       });
-                       _loadTaxData();
+                      setState(() {
+                        _filingStatus = newValue;
+                      });
+                      _loadTaxData();
                     }
                   },
                   underline: const SizedBox(),
                 ),
                 const SizedBox(width: 16),
                 DropdownButton<int>(
-                   value: _selectedYear,
-                   items: <int>[DateTime.now().year, DateTime.now().year - 1].map((int value) {
-                      return DropdownMenuItem<int>(value: value, child: Text(value.toString()));
-                   }).toList(),
-                   onChanged: (int? newValue) {
-                      if (newValue != null) {
-                         setState(() {
-                           _selectedYear = newValue;
-                         });
-                         _loadTaxData();
-                      }
-                   },
-                   underline: const SizedBox(),
+                  value: _selectedYear,
+                  items: <int>[DateTime.now().year, DateTime.now().year - 1]
+                      .map((int value) {
+                        return DropdownMenuItem<int>(
+                          value: value,
+                          child: Text(value.toString()),
+                        );
+                      })
+                      .toList(),
+                  onChanged: (int? newValue) {
+                    if (newValue != null) {
+                      setState(() {
+                        _selectedYear = newValue;
+                      });
+                      _loadTaxData();
+                    }
+                  },
+                  underline: const SizedBox(),
                 ),
                 const SizedBox(width: 16),
                 ElevatedButton.icon(
-                  onPressed: _export_csv,
+                  onPressed: _exportCsv,
                   icon: const Icon(Icons.download),
                   label: const Text('Export CSV'),
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00E676), foregroundColor: Colors.black),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF00E676),
+                    foregroundColor: Colors.black,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
-                  onPressed: _export_pdf,
+                  onPressed: _exportPdf,
                   icon: const Icon(Icons.picture_as_pdf),
                   label: const Text('PDF'),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white),
-                )
-              ]
-            )
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
         const SizedBox(height: 24),
@@ -181,17 +220,38 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Total Taxable Income', style: TextStyle(color: Colors.white70)),
+                      const Text(
+                        'Total Taxable Income',
+                        style: TextStyle(color: Colors.white70),
+                      ),
                       const SizedBox(height: 8),
-                      Text(widget.currencyFormat.format(totalTaxable), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+                      Text(
+                        widget.currencyFormat.format(totalTaxable),
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(height: 16),
                       Row(
-                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                         children: [
-                            Text('Ordinary Income: ${widget.currencyFormat.format(ordinaryIncome)}', style: const TextStyle(fontSize: 12, color: Colors.white54)),
-                            Text('Capital Gains: ${widget.currencyFormat.format(capitalGains)}', style: const TextStyle(fontSize: 12, color: Colors.white54)),
-                         ]
-                      )
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Ordinary Income: ${widget.currencyFormat.format(ordinaryIncome)}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.white54,
+                            ),
+                          ),
+                          Text(
+                            'Capital Gains: ${widget.currencyFormat.format(capitalGains)}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.white54,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -205,17 +265,33 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('US Estimated Liability (IRS)', style: TextStyle(color: Colors.white70)),
+                      const Text(
+                        'US Estimated Liability (IRS)',
+                        style: TextStyle(color: Colors.white70),
+                      ),
                       const SizedBox(height: 8),
-                      Text(widget.currencyFormat.format(liabUs), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                      Text(
+                        widget.currencyFormat.format(liabUs),
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blueAccent,
+                        ),
+                      ),
                       const SizedBox(height: 16),
-                      Text('Effective Rate: ${rateUs.toStringAsFixed(2)}%', style: const TextStyle(fontSize: 12, color: Colors.white54)),
+                      Text(
+                        'Effective Rate: ${rateUs.toStringAsFixed(2)}%',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.white54,
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ),
             ),
-             const SizedBox(width: 24),
+            const SizedBox(width: 24),
             Expanded(
               child: Card(
                 child: Padding(
@@ -223,11 +299,27 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('MX Estimated Liability (SAT)', style: TextStyle(color: Colors.white70)),
+                      const Text(
+                        'MX Estimated Liability (SAT)',
+                        style: TextStyle(color: Colors.white70),
+                      ),
                       const SizedBox(height: 8),
-                      Text(widget.currencyFormat.format(liabMx), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.greenAccent)),
+                      Text(
+                        widget.currencyFormat.format(liabMx),
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.greenAccent,
+                        ),
+                      ),
                       const SizedBox(height: 16),
-                      Text('Effective Rate: ${rateMx.toStringAsFixed(2)}%', style: const TextStyle(fontSize: 12, color: Colors.white54)),
+                      Text(
+                        'Effective Rate: ${rateMx.toStringAsFixed(2)}%',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.white54,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -236,58 +328,85 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           ],
         ),
         const SizedBox(height: 24),
-        const Text('Taxable Events', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        const Text(
+          'Taxable Events',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 16),
         Expanded(
           child: (_taxTransactions == null || _taxTransactions!.isEmpty)
-            ? Card(
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.receipt_long_outlined, size: 56, color: Colors.white.withOpacity(0.15)),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'No taxable events found for this year.',
-                        style: TextStyle(color: Colors.white54, fontSize: 16),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Income, salary, interest, and investment sale transactions will appear here.',
-                        style: TextStyle(color: Colors.white30, fontSize: 12),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
+              ? Card(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.receipt_long_outlined,
+                          size: 56,
+                          color: Colors.white.withValues(alpha: 0.15),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'No taxable events found for this year.',
+                          style: TextStyle(color: Colors.white54, fontSize: 16),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Income, salary, interest, and investment sale transactions will appear here.',
+                          style: TextStyle(color: Colors.white30, fontSize: 12),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : Card(
+                  child: ListView.separated(
+                    itemCount: _taxTransactions!.length,
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final tx = _taxTransactions![index];
+                      final date = DateTime.parse(tx['date']);
+                      final amount = tx['amount'] * widget.conversionFactor;
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: tx['category'] == 'Investment Sale'
+                              ? Colors.purple.withValues(alpha: 0.2)
+                              : Colors.blue.withValues(alpha: 0.2),
+                          child: Icon(
+                            tx['category'] == 'Investment Sale'
+                                ? Icons.show_chart
+                                : Icons.work,
+                            color: tx['category'] == 'Investment Sale'
+                                ? Colors.purpleAccent
+                                : Colors.blueAccent,
+                          ),
+                        ),
+                        title: Text(tx['description']),
+                        subtitle: Text(
+                          '${DateFormat('MMM dd, yyyy').format(date)} • ${tx['category']}',
+                        ),
+                        trailing: Text(
+                          widget.currencyFormat.format(amount),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.greenAccent,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
-              )
-            : Card(
-                child: ListView.separated(
-                  itemCount: _taxTransactions!.length,
-                  separatorBuilder: (context, index) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final tx = _taxTransactions![index];
-                    final date = DateTime.parse(tx['date']);
-                    final amount = tx['amount'] * widget.conversionFactor;
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: tx['category'] == 'Investment Sale' ? Colors.purple.withOpacity(0.2) : Colors.blue.withOpacity(0.2),
-                        child: Icon(tx['category'] == 'Investment Sale' ? Icons.show_chart : Icons.work, 
-                          color: tx['category'] == 'Investment Sale' ? Colors.purpleAccent : Colors.blueAccent),
-                      ),
-                      title: Text(tx['description']),
-                      subtitle: Text('${DateFormat('MMM dd, yyyy').format(date)} • ${tx['category']}'),
-                      trailing: Text(widget.currencyFormat.format(amount), 
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.greenAccent)),
-                    );
-                  },
-                ),
-              ),
         ),
         const SizedBox(height: 12),
         const Text(
           'Disclaimer: Tax estimates are approximations using 2026 IRS/SAT brackets. Consult a qualified tax professional for filing.',
-          style: TextStyle(color: Colors.white24, fontSize: 10, fontStyle: FontStyle.italic),
+          style: TextStyle(
+            color: Colors.white24,
+            fontSize: 10,
+            fontStyle: FontStyle.italic,
+          ),
           textAlign: TextAlign.center,
         ),
       ],

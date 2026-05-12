@@ -7,11 +7,11 @@ class CreditUtilizationCard extends StatelessWidget {
   final NumberFormat currencyFormat;
 
   const CreditUtilizationCard({
-    Key? key,
+    super.key,
     required this.creditData,
     required this.conversionFactor,
     required this.currencyFormat,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -19,14 +19,27 @@ class CreditUtilizationCard extends StatelessWidget {
       return const Card(
         child: Padding(
           padding: EdgeInsets.all(24.0),
-          child: Center(child: Text('No credit accounts found.', style: TextStyle(color: Colors.grey))),
+          child: Center(
+            child: Text(
+              'No credit accounts found.',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ),
         ),
       );
     }
 
-    final totalBalance = creditData.fold<double>(0.0, (sum, item) => sum + ((item['balance'] ?? 0.0) as num).toDouble());
-    final totalLimit = creditData.fold<double>(0.0, (sum, item) => sum + ((item['credit_limit'] ?? 0.0) as num).toDouble());
-    final totalUtilization = totalLimit > 0 ? (totalBalance / totalLimit) * 100 : 0.0;
+    final totalBalance = creditData.fold<double>(
+      0.0,
+      (sum, item) => sum + ((item['balance'] ?? 0.0) as num).toDouble(),
+    );
+    final totalLimit = creditData.fold<double>(
+      0.0,
+      (sum, item) => sum + ((item['credit_limit'] ?? 0.0) as num).toDouble(),
+    );
+    final totalUtilization = totalLimit > 0
+        ? (totalBalance / totalLimit) * 100
+        : 0.0;
 
     return Card(
       elevation: 4,
@@ -39,13 +52,18 @@ class CreditUtilizationCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Credit Utilization', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Credit Utilization',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
                 Text(
                   '${totalUtilization.toStringAsFixed(1)}%',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: totalUtilization > 30 ? Colors.orange : const Color(0xFF00E676),
+                    color: totalUtilization > 30
+                        ? Colors.orange
+                        : const Color(0xFF00E676),
                   ),
                 ),
               ],
@@ -56,7 +74,9 @@ class CreditUtilizationCard extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: (totalUtilization / 100).clamp(0.0, 1.0),
                 backgroundColor: Colors.white12,
-                color: totalUtilization > 30 ? Colors.orange : const Color(0xFF00E676),
+                color: totalUtilization > 30
+                    ? Colors.orange
+                    : const Color(0xFF00E676),
                 minHeight: 8,
               ),
             ),
@@ -76,13 +96,27 @@ class CreditUtilizationCard extends StatelessWidget {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(item['name'] ?? 'Credit Account', style: const TextStyle(fontWeight: FontWeight.w500)),
-                            Text(item['institution_name'] ?? '', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                            Text(
+                              item['name'] ?? 'Credit Account',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Text(
+                              item['institution_name'] ?? '',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
                           ],
                         ),
                         Text(
                           '${currencyFormat.format(balance * conversionFactor)} / ${currencyFormat.format(limit * conversionFactor)}',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ],
                     ),
@@ -92,14 +126,16 @@ class CreditUtilizationCard extends StatelessWidget {
                       child: LinearProgressIndicator(
                         value: (util / 100).clamp(0.0, 1.0),
                         backgroundColor: Colors.white10,
-                        color: util > 30 ? Colors.orange.withOpacity(0.7) : const Color(0xFF00E676).withOpacity(0.7),
+                        color: util > 30
+                            ? Colors.orange.withValues(alpha: 0.7)
+                            : const Color(0xFF00E676).withValues(alpha: 0.7),
                         minHeight: 4,
                       ),
                     ),
                   ],
                 ),
               );
-            }).toList(),
+            }),
           ],
         ),
       ),

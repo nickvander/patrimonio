@@ -8,12 +8,12 @@ class AccountsBreakdownCard extends StatelessWidget {
   final NumberFormat currencyFormat;
 
   const AccountsBreakdownCard({
-    Key? key,
+    super.key,
     required this.typeBreakdown,
     required this.institutionBreakdown,
     required this.conversionFactor,
     required this.currencyFormat,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +25,10 @@ class AccountsBreakdownCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Asset Breakdown', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text(
+              'Asset Breakdown',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 24),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -45,7 +48,14 @@ class AccountsBreakdownCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('By Type', style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold)),
+        const Text(
+          'By Type',
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.grey,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         const SizedBox(height: 16),
         ...typeBreakdown.map((item) {
           final total = ((item['total'] ?? 0.0) as num).toDouble();
@@ -54,15 +64,21 @@ class AccountsBreakdownCard extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(item['account_type'] ?? 'Other', style: const TextStyle(fontSize: 14)),
+                Text(
+                  item['account_type'] ?? 'Other',
+                  style: const TextStyle(fontSize: 14),
+                ),
                 Text(
                   currencyFormat.format(total * conversionFactor),
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
           );
-        }).toList(),
+        }),
       ],
     );
   }
@@ -71,7 +87,14 @@ class AccountsBreakdownCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('By Institution', style: TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.bold)),
+        const Text(
+          'By Institution',
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.grey,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         const SizedBox(height: 16),
         ...institutionBreakdown.map((item) {
           final total = ((item['total'] ?? 0.0) as num).toDouble();
@@ -80,15 +103,21 @@ class AccountsBreakdownCard extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(item['name'] ?? 'Bank', style: const TextStyle(fontSize: 14)),
+                Text(
+                  item['name'] ?? 'Bank',
+                  style: const TextStyle(fontSize: 14),
+                ),
                 Text(
                   currencyFormat.format(total * conversionFactor),
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
           );
-        }).toList(),
+        }),
       ],
     );
   }

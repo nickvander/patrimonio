@@ -1,8 +1,9 @@
 use axum::{
     extract::State,
+    http::StatusCode,
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
-    response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
@@ -71,8 +72,8 @@ async fn list_institutions(State(state): State<AppState>) -> Json<Vec<Institutio
 async fn create_institution(
     State(state): State<AppState>,
     Json(req): Json<CreateInstitutionRequest>,
-) -> Json<InstitutionResponse> {
-    let row = sqlx::query(
+) -> Response {
+    let row = match sqlx::query(
         r#"
         INSERT INTO institutions (name, institution_type, country, integration_type)
         VALUES ($1, $2, $3, $4)
@@ -86,7 +87,13 @@ async fn create_institution(
     .bind(&req.integration_type)
     .fetch_one(&state.db)
     .await
-    .expect("Failed to create institution");
+    {
+        Ok(row) => row,
+        Err(e) => {
+            tracing::error!("Failed to create institution: {}", e);
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to create institution", None);
+        }
+    };
 
     Json(InstitutionResponse {
         id: row.get::<uuid::Uuid, _>("id").to_string(),
@@ -100,7 +107,7 @@ async fn create_institution(
             .unwrap_or_else(|_| "pending".to_string()),
         created_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
             .ok().map(|d| d.to_rfc3339()).unwrap_or_default(),
-    })
+    }).into_response()
 }
 
 #[derive(Deserialize)]
@@ -111,13 +118,24 @@ struct ExchangeTokenRequest {
 }
 
 /// Creates a Plaid Link token
-async fn create_link_token(State(state): State<AppState>) -> Json<serde_json::Value> {
+async fn create_link_token(State(state): State<AppState>) -> Response {
+    let (client_id, secret) = match (&state.config.plaid_client_id, &state.config.plaid_secret) {
+        (Some(client_id), Some(secret)) => (client_id, secret),
+        _ => {
+            return json_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Plaid is not configured",
+                Some("Set PLAID_CLIENT_ID and PLAID_SECRET before linking Plaid accounts"),
+            );
+        }
+    };
+
     let client = reqwest::Client::new();
     let url = format!("https://{}.plaid.com/link/token/create", state.config.plaid_env);
     
     let payload = serde_json::json!({
-        "client_id": state.config.plaid_client_id,
-        "secret": state.config.plaid_secret,
+        "client_id": client_id,
+        "secret": secret,
         "client_name": "Patrimonio",
         "country_codes": ["US"],
         "language": "en",
@@ -127,12 +145,33 @@ async fn create_link_token(State(state): State<AppState>) -> Json<serde_json::Va
         "products": ["transactions", "investments"]
     });
 
-    let res = client.post(&url)
+    let response = match client.post(&url)
         .json(&payload)
-        .send().await.expect("Failed to call Plaid /link/token/create")
-        .json::<serde_json::Value>().await.expect("Failed to parse Plaid response");
+        .send()
+        .await
+    {
+        Ok(response) => response,
+        Err(e) => {
+            tracing::error!("Failed to call Plaid /link/token/create: {}", e);
+            return json_error(StatusCode::BAD_GATEWAY, "Plaid link token request failed", Some(&e.to_string()));
+        }
+    };
 
-    Json(res)
+    let status = response.status();
+    let res = match response.json::<serde_json::Value>().await {
+        Ok(value) => value,
+        Err(e) => {
+            tracing::error!("Failed to parse Plaid link token response: {}", e);
+            return json_error(StatusCode::BAD_GATEWAY, "Plaid returned an invalid response", Some(&e.to_string()));
+        }
+    };
+
+    if !status.is_success() {
+        tracing::error!("Plaid link token error: {:?}", res);
+        return (StatusCode::BAD_GATEWAY, Json(res)).into_response();
+    }
+
+    Json(res).into_response()
 }
 
 /// Exchanges the public token for an access token
@@ -140,19 +179,45 @@ async fn exchange_public_token(
     State(state): State<AppState>,
     Json(req): Json<ExchangeTokenRequest>,
 ) -> axum::response::Response {
+    let (client_id, secret) = match (&state.config.plaid_client_id, &state.config.plaid_secret) {
+        (Some(client_id), Some(secret)) => (client_id, secret),
+        _ => {
+            return json_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Plaid is not configured",
+                Some("Set PLAID_CLIENT_ID and PLAID_SECRET before exchanging Plaid tokens"),
+            );
+        }
+    };
+
     let client = reqwest::Client::new();
     let url = format!("https://{}.plaid.com/item/public_token/exchange", state.config.plaid_env);
     
     let payload = serde_json::json!({
-        "client_id": state.config.plaid_client_id,
-        "secret": state.config.plaid_secret,
+        "client_id": client_id,
+        "secret": secret,
         "public_token": req.public_token
     });
 
-    let res = client.post(&url)
+    let response = match client.post(&url)
         .json(&payload)
-        .send().await.expect("Failed to call Plaid /item/public_token/exchange")
-        .json::<serde_json::Value>().await.expect("Failed to parse Plaid response");
+        .send()
+        .await
+    {
+        Ok(response) => response,
+        Err(e) => {
+            tracing::error!("Failed to call Plaid /item/public_token/exchange: {}", e);
+            return json_error(StatusCode::BAD_GATEWAY, "Plaid token exchange request failed", Some(&e.to_string()));
+        }
+    };
+
+    let res = match response.json::<serde_json::Value>().await {
+        Ok(value) => value,
+        Err(e) => {
+            tracing::error!("Failed to parse Plaid token exchange response: {}", e);
+            return json_error(StatusCode::BAD_GATEWAY, "Plaid returned an invalid response", Some(&e.to_string()));
+        }
+    };
 
     if let Some(err) = res["error_message"].as_str() {
         tracing::error!("Plaid Exchange Error: {}", err);
@@ -174,11 +239,25 @@ async fn exchange_public_token(
     };
     let item_id = res["item_id"].as_str().unwrap_or("unknown_item");
 
-    let enc_key = state.config.encryption_key.as_ref().expect("ENCRYPTION_KEY not configured in .env");
-    let encrypted_token = encryption::encrypt(enc_key, access_token)
-        .expect("Failed to encrypt Plaid access token");
+    let enc_key = match state.config.encryption_key.as_ref() {
+        Some(key) => key,
+        None => {
+            return json_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Encryption is not configured",
+                Some("Set ENCRYPTION_KEY before linking accounts"),
+            );
+        }
+    };
+    let encrypted_token = match encryption::encrypt(enc_key, access_token) {
+        Ok(token) => token,
+        Err(e) => {
+            tracing::error!("Failed to encrypt Plaid access token: {}", e);
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to encrypt Plaid token", None);
+        }
+    };
 
-    let row = sqlx::query(
+    let row = match sqlx::query(
         r#"
         INSERT INTO institutions (name, institution_type, country, integration_type, plaid_item_id, plaid_access_token_enc)
         VALUES ($1, $2, 'US', 'plaid', $3, $4)
@@ -191,7 +270,14 @@ async fn exchange_public_token(
     .bind(item_id)
     .bind(&encrypted_token)
     .fetch_one(&state.db)
-    .await.expect("Failed to insert institution into database");
+    .await
+    {
+        Ok(row) => row,
+        Err(e) => {
+            tracing::error!("Failed to insert Plaid institution: {}", e);
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to save Plaid institution", None);
+        }
+    };
 
     let config = state.config.clone();
     let db = state.db.clone();
@@ -230,13 +316,34 @@ async fn link_crypto_institution(
     State(state): State<AppState>,
     Json(req): Json<LinkCryptoRequest>,
 ) -> axum::response::Response {
-    let enc_key = state.config.encryption_key.as_ref().expect("ENCRYPTION_KEY missing");
+    let enc_key = match state.config.encryption_key.as_ref() {
+        Some(key) => key,
+        None => {
+            return json_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Encryption is not configured",
+                Some("Set ENCRYPTION_KEY before linking crypto exchanges"),
+            );
+        }
+    };
     
-    let key_enc = encryption::encrypt(enc_key, &req.api_key).expect("Encryption failed");
-    let secret_enc = encryption::encrypt(enc_key, &req.api_secret).expect("Encryption failed");
-    let pass_enc = req.api_pass.map(|p| encryption::encrypt(enc_key, &p).expect("Encryption failed"));
+    let key_enc = match encryption::encrypt(enc_key, &req.api_key) {
+        Ok(value) => value,
+        Err(e) => return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to encrypt API key", Some(&e.to_string())),
+    };
+    let secret_enc = match encryption::encrypt(enc_key, &req.api_secret) {
+        Ok(value) => value,
+        Err(e) => return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to encrypt API secret", Some(&e.to_string())),
+    };
+    let pass_enc = match req.api_pass {
+        Some(pass) => match encryption::encrypt(enc_key, &pass) {
+            Ok(value) => Some(value),
+            Err(e) => return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to encrypt API passphrase", Some(&e.to_string())),
+        },
+        None => None,
+    };
 
-    let row = sqlx::query(
+    let row = match sqlx::query(
         r#"
         INSERT INTO institutions (name, institution_type, country, integration_type, api_key_enc, api_secret_enc, api_pass_enc)
         VALUES ($1, 'crypto', 'Global', $2, $3, $4, $5)
@@ -250,7 +357,14 @@ async fn link_crypto_institution(
     .bind(&secret_enc)
     .bind(&pass_enc)
     .fetch_one(&state.db)
-    .await.expect("Failed to link crypto institution");
+    .await
+    {
+        Ok(row) => row,
+        Err(e) => {
+            tracing::error!("Failed to link crypto institution: {}", e);
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to link crypto institution", None);
+        }
+    };
 
     let config = state.config.clone();
     let db = state.db.clone();
@@ -319,4 +433,12 @@ async fn plaid_webhook(
     });
 
     Json(serde_json::json!({"status": "received"}))
+}
+
+fn json_error(status: StatusCode, error: &str, details: Option<&str>) -> Response {
+    let mut payload = serde_json::json!({ "error": error });
+    if let Some(details) = details {
+        payload["details"] = serde_json::Value::String(details.to_string());
+    }
+    (status, Json(payload)).into_response()
 }

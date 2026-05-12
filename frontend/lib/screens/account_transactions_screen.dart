@@ -10,15 +10,16 @@ class AccountTransactionsScreen extends StatefulWidget {
   final Function(String, double)? onBalanceUpdate;
 
   const AccountTransactionsScreen({
-    Key? key,
+    super.key,
     required this.account,
     required this.conversionFactor,
     required this.currencyFormat,
     this.onBalanceUpdate,
-  }) : super(key: key);
+  });
 
   @override
-  _AccountTransactionsScreenState createState() => _AccountTransactionsScreenState();
+  State<AccountTransactionsScreen> createState() =>
+      _AccountTransactionsScreenState();
 }
 
 class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
@@ -40,7 +41,9 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     });
 
     try {
-      final txs = await _apiService.getAccountTransactions(widget.account['id']);
+      final txs = await _apiService.getAccountTransactions(
+        widget.account['id'],
+      );
       setState(() {
         _transactions = txs;
         _isLoading = false;
@@ -54,7 +57,9 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   }
 
   void _showEditBalanceDialog() {
-    final controller = TextEditingController(text: widget.account['current_balance'].toString());
+    final controller = TextEditingController(
+      text: widget.account['current_balance'].toString(),
+    );
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -70,7 +75,10 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () async {
               final newBalance = double.tryParse(controller.text);
@@ -106,7 +114,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             icon: const Icon(Icons.edit, color: Color(0xFF00E676)),
             tooltip: 'Update Balance',
             onPressed: _showEditBalanceDialog,
-          )
+          ),
         ],
       ),
       body: _buildBody(),
@@ -125,7 +133,10 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
           children: [
             const Icon(Icons.error_outline, size: 64, color: Colors.red),
             const SizedBox(height: 16),
-            Text('Error loading transactions: $_error', textAlign: TextAlign.center),
+            Text(
+              'Error loading transactions: $_error',
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _fetchTransactions,
@@ -151,7 +162,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             Text(
               'Records might just be starting, or offline accounts have no history.',
               style: TextStyle(color: Colors.grey[600]),
-            )
+            ),
           ],
         ),
       );

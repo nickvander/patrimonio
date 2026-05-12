@@ -1,18 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 
 class FxWidget extends StatelessWidget {
   final Map<String, dynamic> latestRate;
 
-  const FxWidget({
-    Key? key,
-    required this.latestRate,
-  }) : super(key: key);
+  const FxWidget({super.key, required this.latestRate});
 
   @override
   Widget build(BuildContext context) {
     final rate = latestRate['rate'] ?? 0.0;
-    
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -34,16 +30,27 @@ class FxWidget extends StatelessWidget {
                   children: [
                     Text(
                       'USD / MXN',
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                      style: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontSize: 14,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       rate.toStringAsFixed(4),
-                      style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.tealAccent),
+                      style: const TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.tealAccent,
+                      ),
                     ),
                   ],
                 ),
-                const Icon(Icons.currency_exchange, size: 48, color: Colors.teal),
+                const Icon(
+                  Icons.currency_exchange,
+                  size: 48,
+                  color: Colors.teal,
+                ),
               ],
             ),
           ],

@@ -14,6 +14,9 @@ class DateRangeSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final horizontalPadding = width < 420 ? 10.0 : 16.0;
+
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
@@ -23,25 +26,34 @@ class DateRangeSelector extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildSegment('1M', DateRange.oneMonth),
-          _buildSegment('YTD', DateRange.yearToDate),
-          _buildSegment('1Y', DateRange.oneYear),
-          _buildSegment('5Y', DateRange.fiveYears),
-          _buildSegment('ALL', DateRange.all),
+          _buildSegment('1M', DateRange.oneMonth, horizontalPadding),
+          _buildSegment('YTD', DateRange.yearToDate, horizontalPadding),
+          _buildSegment('1Y', DateRange.oneYear, horizontalPadding),
+          _buildSegment('5Y', DateRange.fiveYears, horizontalPadding),
+          _buildSegment('ALL', DateRange.all, horizontalPadding),
         ],
       ),
     );
   }
 
-  Widget _buildSegment(String label, DateRange range) {
+  Widget _buildSegment(
+    String label,
+    DateRange range,
+    double horizontalPadding,
+  ) {
     final isSelected = selectedRange == range;
     return GestureDetector(
       onTap: () => onRangeChanged(range),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: 8,
+        ),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.greenAccent.withOpacity(0.2) : Colors.transparent,
+          color: isSelected
+              ? Colors.greenAccent.withValues(alpha: 0.2)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(

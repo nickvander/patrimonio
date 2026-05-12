@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
-import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import '../services/api_service.dart';
 
 class ImportScreen extends StatefulWidget {
-  const ImportScreen({Key? key}) : super(key: key);
+  const ImportScreen({super.key});
 
   @override
-  _ImportScreenState createState() => _ImportScreenState();
+  State<ImportScreen> createState() => _ImportScreenState();
 }
 
 class _ImportScreenState extends State<ImportScreen> {
@@ -19,7 +18,7 @@ class _ImportScreenState extends State<ImportScreen> {
   List<dynamic>? _accounts;
   String? _selectedAccountId;
   String? _message;
-  
+
   bool _requiresPassword = false;
   final TextEditingController _passwordController = TextEditingController();
 
@@ -73,7 +72,9 @@ class _ImportScreenState extends State<ImportScreen> {
     if (_previewTransactions == null) return;
     _selectedIndices = {};
     for (int i = 0; i < _previewTransactions!.length; i++) {
-      final desc = (_previewTransactions![i]['description'] ?? '').toString().toUpperCase();
+      final desc = (_previewTransactions![i]['description'] ?? '')
+          .toString()
+          .toUpperCase();
       final shouldDeselect = _autoDeselectPatterns.any((p) => desc.contains(p));
       if (!shouldDeselect) {
         _selectedIndices.add(i);
@@ -93,13 +94,15 @@ class _ImportScreenState extends State<ImportScreen> {
       final response = await _apiService.uploadStatement(
         _selectedFile!.name,
         _selectedFile!.bytes!,
-        password: _passwordController.text.trim().isEmpty ? null : _passwordController.text.trim(),
+        password: _passwordController.text.trim().isEmpty
+            ? null
+            : _passwordController.text.trim(),
       );
 
       setState(() {
         _message = response['message'];
         _isUploading = false;
-        
+
         if (response['status'] == 'password_required') {
           _requiresPassword = true;
           _previewTransactions = null;
@@ -108,14 +111,20 @@ class _ImportScreenState extends State<ImportScreen> {
           _initializeSelection();
         }
       });
-      
+
       if (response['status'] == 'success' && _previewTransactions != null) {
-        final autoDeselected = _previewTransactions!.length - _selectedIndices.length;
+        final autoDeselected =
+            _previewTransactions!.length - _selectedIndices.length;
         final msg = 'Found ${response['transactions_count']} transactions.';
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(autoDeselected > 0 
-            ? '$msg ($autoDeselected auto-deselected as informational)' 
-            : msg)),
+          SnackBar(
+            content: Text(
+              autoDeselected > 0
+                  ? '$msg ($autoDeselected auto-deselected as informational)'
+                  : msg,
+            ),
+          ),
         );
       }
     } catch (e) {
@@ -128,7 +137,14 @@ class _ImportScreenState extends State<ImportScreen> {
 
   Future<void> _confirmImport() async {
     if (_selectedAccountId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a destination account first.', style: TextStyle(color: Colors.redAccent))));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please select a destination account first.',
+            style: TextStyle(color: Colors.redAccent),
+          ),
+        ),
+      );
       return;
     }
     if (_previewTransactions == null) return;
@@ -143,7 +159,9 @@ class _ImportScreenState extends State<ImportScreen> {
 
     if (selectedTxs.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No transactions selected. Please check at least one.')),
+        const SnackBar(
+          content: Text('No transactions selected. Please check at least one.'),
+        ),
       );
       return;
     }
@@ -158,6 +176,7 @@ class _ImportScreenState extends State<ImportScreen> {
         selectedTxs,
       );
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(response['message'] ?? 'Import successful')),
       );
@@ -173,9 +192,7 @@ class _ImportScreenState extends State<ImportScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Import Statement'),
-      ),
+      appBar: AppBar(title: const Text('Import Statement')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -197,19 +214,34 @@ class _ImportScreenState extends State<ImportScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(48),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+                    color: Colors.white.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: Colors.white10, width: 2),
                   ),
                   child: Column(
                     children: [
-                      const Icon(Icons.upload_file, size: 64, color: Color(0xFF00E676)),
+                      const Icon(
+                        Icons.upload_file,
+                        size: 64,
+                        color: Color(0xFF00E676),
+                      ),
                       const SizedBox(height: 16),
                       if (_selectedFile != null)
                         Column(
                           children: [
-                            Text(_selectedFile!.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            Text('${(_selectedFile!.size / 1024).toStringAsFixed(1)} KB', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                            Text(
+                              _selectedFile!.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              '${(_selectedFile!.size / 1024).toStringAsFixed(1)} KB',
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
                           ],
                         )
                       else
@@ -227,159 +259,214 @@ class _ImportScreenState extends State<ImportScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                    const Text('Assign to Account', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                   const SizedBox(height: 12),
-                   if (_accounts != null)
-                     DropdownButtonFormField<String>(
-                       value: _selectedAccountId,
-                       decoration: InputDecoration(
-                         filled: true,
-                         fillColor: Colors.white.withOpacity(0.05),
-                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                       ),
-                       items: _accounts!.map((acc) {
-                         return DropdownMenuItem<String>(
-                           value: acc['id'],
-                           child: Text('${acc['institution_name']} - ${acc['name']}'),
-                         );
-                       }).toList(),
-                       onChanged: (val) => setState(() => _selectedAccountId = val),
-                     )
-                   else
-                     const CircularProgressIndicator(),
-                   const SizedBox(height: 32),
-                   
-                   // Header row with title and selection controls
-                   Row(
-                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                     children: [
-                       Flexible(
-                         child: Text(
-                           'Preview (${_selectedIndices.length}/${_previewTransactions!.length} selected)',
-                           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                         ),
-                       ),
-                       Row(
-                         children: [
-                           TextButton(
-                             onPressed: () {
-                               setState(() {
-                                 _selectedIndices = Set<int>.from(
-                                   List.generate(_previewTransactions!.length, (i) => i)
-                                 );
-                               });
-                             },
-                             child: const Text('Select All', style: TextStyle(color: Color(0xFF00E676))),
-                           ),
-                           const SizedBox(width: 8),
-                           TextButton(
-                             onPressed: () {
-                               setState(() {
-                                 _selectedIndices = {};
-                               });
-                             },
-                             child: const Text('Deselect All', style: TextStyle(color: Colors.grey)),
-                           ),
-                         ],
-                       ),
-                     ],
-                   ),
-                   const SizedBox(height: 16),
-                   ListView.builder(
-                     shrinkWrap: true,
-                     physics: const NeverScrollableScrollPhysics(),
-                     itemCount: _previewTransactions!.length,
-                     itemBuilder: (context, index) {
-                       final tx = _previewTransactions![index];
-                       final isSelected = _selectedIndices.contains(index);
-                       final desc = (tx['description'] ?? '').toString().toUpperCase();
-                       final isAutoDeselected = _autoDeselectPatterns.any((p) => desc.contains(p));
-                       
-                       return Card(
-                         color: isSelected ? Colors.white.withOpacity(0.05) : Colors.transparent,
-                         elevation: 0,
-                         shape: RoundedRectangleBorder(
-                           borderRadius: BorderRadius.circular(8),
-                           side: BorderSide(
-                             color: isSelected ? const Color(0xFF00E676).withOpacity(0.5) : Colors.white10,
-                             width: 1,
-                           )
-                         ),
-                         margin: const EdgeInsets.only(bottom: 8.0),
-                         child: CheckboxListTile(
-                           value: isSelected,
-                           activeColor: const Color(0xFF00E676),
-                           checkColor: Colors.black,
-                           contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-                           onChanged: (val) {
-                             if (val != null) {
-                               setState(() {
-                                 final newSet = Set<int>.from(_selectedIndices);
-                                 if (val) {
-                                   newSet.add(index);
-                                 } else {
-                                   newSet.remove(index);
-                                 }
-                                 _selectedIndices = newSet;
-                               });
-                             }
-                           },
-                           title: Text(
-                             tx['description'] ?? '',
-                             style: TextStyle(
-                               fontWeight: FontWeight.w500,
-                               color: isSelected ? null : Colors.grey,
-                               decoration: isSelected ? null : TextDecoration.lineThrough,
-                             ),
-                           ),
-                           subtitle: Padding(
-                             padding: const EdgeInsets.only(top: 4.0),
-                             child: Row(
-                               children: [
-                                 Text(tx['date'] ?? '', style: TextStyle(color: isSelected ? Colors.grey[400] : Colors.grey[600])),
-                                 const Spacer(),
-                                 Text(
-                                   '${tx['currency']} ${tx['amount']}',
-                                   style: TextStyle(
-                                     fontWeight: FontWeight.bold,
-                                     color: isSelected ? Colors.white : Colors.grey,
-                                   ),
-                                 ),
-                                 if (isAutoDeselected) ...[
-                                   const SizedBox(width: 12),
-                                   Tooltip(
-                                     message: 'Auto-deselected: informational entry',
-                                     child: Icon(Icons.info_outline, size: 16, color: Colors.amber.withOpacity(0.7)),
-                                   ),
-                                 ],
-                               ],
-                             ),
-                           ),
-                         ),
-                       );
-                     },
-                   ),
-                   const SizedBox(height: 32),
-                   SizedBox(
-                     width: double.infinity,
-                     child: ElevatedButton(
-                       style: ElevatedButton.styleFrom(
-                         backgroundColor: const Color(0xFF00E676),
-                         foregroundColor: Colors.black,
-                         padding: const EdgeInsets.symmetric(vertical: 16),
-                       ),
-                       onPressed: _confirmImport,
-                       child: Text(
-                         'Import ${_selectedIndices.length} Transaction${_selectedIndices.length == 1 ? '' : 's'}',
-                         style: const TextStyle(fontWeight: FontWeight.bold),
-                       ),
-                     ),
-                   ),
-                   const SizedBox(height: 12),
-                   TextButton(
-                     onPressed: () => setState(() => _previewTransactions = null),
-                     child: const Center(child: Text('Cancel', style: TextStyle(color: Colors.grey))),
-                   ),
+                  const Text(
+                    'Assign to Account',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_accounts != null)
+                    DropdownButtonFormField<String>(
+                      initialValue: _selectedAccountId,
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.white.withValues(alpha: 0.05),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      items: _accounts!.map((acc) {
+                        return DropdownMenuItem<String>(
+                          value: acc['id'],
+                          child: Text(
+                            '${acc['institution_name']} - ${acc['name']}',
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (val) =>
+                          setState(() => _selectedAccountId = val),
+                    )
+                  else
+                    const CircularProgressIndicator(),
+                  const SizedBox(height: 32),
+
+                  // Header row with title and selection controls
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          'Preview (${_selectedIndices.length}/${_previewTransactions!.length} selected)',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _selectedIndices = Set<int>.from(
+                                  List.generate(
+                                    _previewTransactions!.length,
+                                    (i) => i,
+                                  ),
+                                );
+                              });
+                            },
+                            child: const Text(
+                              'Select All',
+                              style: TextStyle(color: Color(0xFF00E676)),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _selectedIndices = {};
+                              });
+                            },
+                            child: const Text(
+                              'Deselect All',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _previewTransactions!.length,
+                    itemBuilder: (context, index) {
+                      final tx = _previewTransactions![index];
+                      final isSelected = _selectedIndices.contains(index);
+                      final desc = (tx['description'] ?? '')
+                          .toString()
+                          .toUpperCase();
+                      final isAutoDeselected = _autoDeselectPatterns.any(
+                        (p) => desc.contains(p),
+                      );
+
+                      return Card(
+                        color: isSelected
+                            ? Colors.white.withValues(alpha: 0.05)
+                            : Colors.transparent,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: BorderSide(
+                            color: isSelected
+                                ? const Color(0xFF00E676).withValues(alpha: 0.5)
+                                : Colors.white10,
+                            width: 1,
+                          ),
+                        ),
+                        margin: const EdgeInsets.only(bottom: 8.0),
+                        child: CheckboxListTile(
+                          value: isSelected,
+                          activeColor: const Color(0xFF00E676),
+                          checkColor: Colors.black,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16.0,
+                            vertical: 4.0,
+                          ),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() {
+                                final newSet = Set<int>.from(_selectedIndices);
+                                if (val) {
+                                  newSet.add(index);
+                                } else {
+                                  newSet.remove(index);
+                                }
+                                _selectedIndices = newSet;
+                              });
+                            }
+                          },
+                          title: Text(
+                            tx['description'] ?? '',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w500,
+                              color: isSelected ? null : Colors.grey,
+                              decoration: isSelected
+                                  ? null
+                                  : TextDecoration.lineThrough,
+                            ),
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 4.0),
+                            child: Row(
+                              children: [
+                                Text(
+                                  tx['date'] ?? '',
+                                  style: TextStyle(
+                                    color: isSelected
+                                        ? Colors.grey[400]
+                                        : Colors.grey[600],
+                                  ),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  '${tx['currency']} ${tx['amount']}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : Colors.grey,
+                                  ),
+                                ),
+                                if (isAutoDeselected) ...[
+                                  const SizedBox(width: 12),
+                                  Tooltip(
+                                    message:
+                                        'Auto-deselected: informational entry',
+                                    child: Icon(
+                                      Icons.info_outline,
+                                      size: 16,
+                                      color: Colors.amber.withValues(
+                                        alpha: 0.7,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 32),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00E676),
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      onPressed: _confirmImport,
+                      child: Text(
+                        'Import ${_selectedIndices.length} Transaction${_selectedIndices.length == 1 ? '' : 's'}',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () =>
+                        setState(() => _previewTransactions = null),
+                    child: const Center(
+                      child: Text(
+                        'Cancel',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             const SizedBox(height: 32),
@@ -396,8 +483,10 @@ class _ImportScreenState extends State<ImportScreen> {
                         decoration: InputDecoration(
                           labelText: 'PDF Password (e.g. RFC)',
                           filled: true,
-                          fillColor: Colors.white.withOpacity(0.05),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          fillColor: Colors.white.withValues(alpha: 0.05),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                           prefixIcon: const Icon(Icons.lock_outline),
                         ),
                       ),
@@ -413,7 +502,10 @@ class _ImportScreenState extends State<ImportScreen> {
                       onPressed: _isUploading ? null : _uploadFile,
                       child: _isUploading
                           ? const CircularProgressIndicator(color: Colors.black)
-                          : const Text('Process Statement', style: TextStyle(fontWeight: FontWeight.bold)),
+                          : const Text(
+                              'Process Statement',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
                     ),
                   ),
                 ],
@@ -423,21 +515,36 @@ class _ImportScreenState extends State<ImportScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: _message!.contains('failed') ? Colors.red.withOpacity(0.1) : (_requiresPassword ? Colors.amber.withOpacity(0.1) : Colors.green.withOpacity(0.1)),
+                  color: _message!.contains('failed')
+                      ? Colors.red.withValues(alpha: 0.1)
+                      : (_requiresPassword
+                            ? Colors.amber.withValues(alpha: 0.1)
+                            : Colors.green.withValues(alpha: 0.1)),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   children: [
-                    if (_requiresPassword) const Padding(padding: EdgeInsets.only(right: 12), child: Icon(Icons.warning_amber_rounded, color: Colors.amberAccent)),
+                    if (_requiresPassword)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 12),
+                        child: Icon(
+                          Icons.warning_amber_rounded,
+                          color: Colors.amberAccent,
+                        ),
+                      ),
                     Flexible(
                       child: Text(
-                        _message!, 
+                        _message!,
                         style: TextStyle(
-                          color: _message!.contains('failed') ? Colors.redAccent : (_requiresPassword ? Colors.amberAccent : Colors.greenAccent)
-                        )
-                      )
+                          color: _message!.contains('failed')
+                              ? Colors.redAccent
+                              : (_requiresPassword
+                                    ? Colors.amberAccent
+                                    : Colors.greenAccent),
+                        ),
+                      ),
                     ),
-                  ]
+                  ],
                 ),
               ),
             ],

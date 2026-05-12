@@ -8,14 +8,14 @@ class PortfolioCard extends StatefulWidget {
   final NumberFormat currencyFormat;
 
   const PortfolioCard({
-    Key? key,
+    super.key,
     required this.portfolioData,
     required this.conversionFactor,
     required this.currencyFormat,
-  }) : super(key: key);
+  });
 
   @override
-  _PortfolioCardState createState() => _PortfolioCardState();
+  State<PortfolioCard> createState() => _PortfolioCardState();
 }
 
 class _PortfolioCardState extends State<PortfolioCard> {
@@ -35,7 +35,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
   @override
   void didUpdateWidget(PortfolioCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.portfolioData != oldWidget.portfolioData || widget.conversionFactor != oldWidget.conversionFactor) {
+    if (widget.portfolioData != oldWidget.portfolioData ||
+        widget.conversionFactor != oldWidget.conversionFactor) {
       _holdings = List.from(widget.portfolioData['holdings'] ?? []);
       _sort(_sortColumnIndex ?? 3, _isAscending);
     }
@@ -89,9 +90,15 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
   @override
   Widget build(BuildContext context) {
-    final totalValue = ((widget.portfolioData['total_value'] as num?)?.toDouble() ?? 0.0) * widget.conversionFactor;
-    final totalGainLoss = ((widget.portfolioData['total_gain_loss'] as num?)?.toDouble() ?? 0.0) * widget.conversionFactor;
-    final totalGainLossPct = (widget.portfolioData['total_gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
+    final totalValue =
+        ((widget.portfolioData['total_value'] as num?)?.toDouble() ?? 0.0) *
+        widget.conversionFactor;
+    final totalGainLoss =
+        ((widget.portfolioData['total_gain_loss'] as num?)?.toDouble() ?? 0.0) *
+        widget.conversionFactor;
+    final totalGainLossPct =
+        (widget.portfolioData['total_gain_loss_pct'] as num?)?.toDouble() ??
+        0.0;
 
     final isPositive = totalGainLoss >= 0;
 
@@ -111,15 +118,30 @@ class _PortfolioCardState extends State<PortfolioCard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Investment Portfolio', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: -0.5)),
+                      const Text(
+                        'Investment Portfolio',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
                       const SizedBox(height: 32),
-                      const Text('Total Value', style: TextStyle(color: Colors.white60, fontSize: 14, fontWeight: FontWeight.w500, letterSpacing: 0.5)),
+                      const Text(
+                        'Total Value',
+                        style: TextStyle(
+                          color: Colors.white60,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
                       const SizedBox(height: 4),
                       Text(
                         widget.currencyFormat.format(totalValue),
                         style: const TextStyle(
-                          fontSize: 56, 
-                          fontWeight: FontWeight.w900, 
+                          fontSize: 56,
+                          fontWeight: FontWeight.w900,
                           letterSpacing: -1.5,
                           height: 1.1,
                           color: Colors.white,
@@ -129,24 +151,47 @@ class _PortfolioCardState extends State<PortfolioCard> {
                       Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
-                                colors: isPositive 
-                                  ? [const Color(0xFF00E676).withOpacity(0.2), const Color(0xFF00E676).withOpacity(0.05)]
-                                  : [Colors.redAccent.withOpacity(0.2), Colors.redAccent.withOpacity(0.05)],
+                                colors: isPositive
+                                    ? [
+                                        const Color(
+                                          0xFF00E676,
+                                        ).withValues(alpha: 0.2),
+                                        const Color(
+                                          0xFF00E676,
+                                        ).withValues(alpha: 0.05),
+                                      ]
+                                    : [
+                                        Colors.redAccent.withValues(alpha: 0.2),
+                                        Colors.redAccent.withValues(
+                                          alpha: 0.05,
+                                        ),
+                                      ],
                               ),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: isPositive ? const Color(0xFF00E676).withOpacity(0.3) : Colors.redAccent.withOpacity(0.3),
+                                color: isPositive
+                                    ? const Color(
+                                        0xFF00E676,
+                                      ).withValues(alpha: 0.3)
+                                    : Colors.redAccent.withValues(alpha: 0.3),
                                 width: 1,
                               ),
                             ),
                             child: Row(
                               children: [
                                 Icon(
-                                  isPositive ? Icons.arrow_upward : Icons.arrow_downward,
-                                  color: isPositive ? const Color(0xFF00E676) : Colors.redAccent,
+                                  isPositive
+                                      ? Icons.arrow_upward
+                                      : Icons.arrow_downward,
+                                  color: isPositive
+                                      ? const Color(0xFF00E676)
+                                      : Colors.redAccent,
                                   size: 16,
                                 ),
                                 const SizedBox(width: 6),
@@ -155,7 +200,9 @@ class _PortfolioCardState extends State<PortfolioCard> {
                                   style: TextStyle(
                                     fontSize: 15,
                                     fontWeight: FontWeight.w700,
-                                    color: isPositive ? const Color(0xFF00E676) : Colors.redAccent,
+                                    color: isPositive
+                                        ? const Color(0xFF00E676)
+                                        : Colors.redAccent,
                                   ),
                                 ),
                               ],
@@ -168,10 +215,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 ),
                 Expanded(
                   flex: 1,
-                  child: SizedBox(
-                    height: 240,
-                    child: _buildAllocationChart(),
-                  ),
+                  child: SizedBox(height: 240, child: _buildAllocationChart()),
                 ),
               ],
             ),
@@ -181,7 +225,9 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 cardTheme: CardThemeData(
                   color: const Color(0xFF1A1A24),
                   elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
                 dividerColor: Colors.white12,
                 // Attempt to fix pagination centering by making the table footer area more focused
@@ -202,35 +248,66 @@ class _PortfolioCardState extends State<PortfolioCard> {
     if (_holdings.isEmpty) {
       return const Padding(
         padding: EdgeInsets.all(32.0),
-        child: Center(child: Text('No investment holdings found.', style: TextStyle(color: Colors.grey))),
+        child: Center(
+          child: Text(
+            'No investment holdings found.',
+            style: TextStyle(color: Colors.grey),
+          ),
+        ),
       );
     }
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        return Container(
+        return SizedBox(
           width: constraints.maxWidth,
           child: PaginatedDataTable(
-            header: const Text('Asset Breakdown', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            header: const Text(
+              'Asset Breakdown',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
             rowsPerPage: 5,
             showFirstLastButtons: true,
             arrowHeadColor: const Color(0xFF00E676),
             sortColumnIndex: _sortColumnIndex,
             sortAscending: _isAscending,
             // Force the table to take up available width which pushes pagination "under" the data more naturally
-            columnSpacing: (constraints.maxWidth - 600) / 5 > 0 ? (constraints.maxWidth - 600) / 5 : 24,
+            columnSpacing: (constraints.maxWidth - 600) / 5 > 0
+                ? (constraints.maxWidth - 600) / 5
+                : 24,
             horizontalMargin: 24,
             columns: [
               DataColumn(label: const Text('Asset'), onSort: _sort),
-              DataColumn(label: const Text('Shares'), numeric: true, onSort: _sort),
-              DataColumn(label: const Text('Price'), numeric: true, onSort: _sort),
-              DataColumn(label: const Text('Total Value'), numeric: true, onSort: _sort),
-              DataColumn(label: const Text('All-Time Return'), numeric: true, onSort: _sort),
+              DataColumn(
+                label: const Text('Shares'),
+                numeric: true,
+                onSort: _sort,
+              ),
+              DataColumn(
+                label: const Text('Price'),
+                numeric: true,
+                onSort: _sort,
+              ),
+              DataColumn(
+                label: const Text('Total Value'),
+                numeric: true,
+                onSort: _sort,
+              ),
+              DataColumn(
+                label: const Text('All-Time Return'),
+                numeric: true,
+                onSort: _sort,
+              ),
             ],
-            source: _HoldingsDataSource(_holdings, widget.currencyFormat, widget.conversionFactor, context),
+            source: _HoldingsDataSource(
+              _holdings,
+              widget.currencyFormat,
+              widget.conversionFactor,
+              context,
+            ),
           ),
         );
-      }
+      },
     );
   }
 
@@ -245,7 +322,11 @@ class _PortfolioCardState extends State<PortfolioCard> {
       const Color(0xFF2979FF), // Vivid Blue
     ];
 
-    final sortedHoldings = List.from(_holdings)..sort((a, b) => ((b['value'] ?? 0) as num).compareTo((a['value'] ?? 0) as num));
+    final sortedHoldings = List.from(_holdings)
+      ..sort(
+        (a, b) =>
+            ((b['value'] ?? 0) as num).compareTo((a['value'] ?? 0) as num),
+      );
 
     List<PieChartSectionData> sections = [];
     List<Widget> legendItems = [];
@@ -263,25 +344,45 @@ class _PortfolioCardState extends State<PortfolioCard> {
       if (i < 4) {
         final color = colors[i % colors.length];
         sections.add(
-            PieChartSectionData(
-              color: color,
-              value: value,
-              title: isTouched ? '${(percentage * 100).toStringAsFixed(1)}%' : '',
-              radius: radius,
-              titleStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.white, shadows: [Shadow(color: Colors.black, blurRadius: 6)]),
-              badgeWidget: isTouched ? Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A24),
-                  shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: color.withOpacity(0.6), blurRadius: 10, spreadRadius: 2)],
-                ),
-                child: Icon(Icons.show_chart, color: color, size: 14),
-              ) : null,
-              badgePositionPercentageOffset: 1.15,
+          PieChartSectionData(
+            color: color,
+            value: value,
+            title: isTouched ? '${(percentage * 100).toStringAsFixed(1)}%' : '',
+            radius: radius,
+            titleStyle: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              shadows: [Shadow(color: Colors.black, blurRadius: 6)],
             ),
+            badgeWidget: isTouched
+                ? Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1A24),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: color.withValues(alpha: 0.6),
+                          blurRadius: 10,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    child: Icon(Icons.show_chart, color: color, size: 14),
+                  )
+                : null,
+            badgePositionPercentageOffset: 1.15,
+          ),
         );
-        legendItems.add(_buildLegendItem(color, h['name'] ?? h['symbol'] ?? '?', percentage, isTouched));
+        legendItems.add(
+          _buildLegendItem(
+            color,
+            h['name'] ?? h['symbol'] ?? '?',
+            percentage,
+            isTouched,
+          ),
+        );
       } else {
         otherValue += value;
       }
@@ -297,10 +398,16 @@ class _PortfolioCardState extends State<PortfolioCard> {
           value: otherValue,
           title: isTouched ? '${(percentage * 100).toStringAsFixed(1)}%' : '',
           radius: radius,
-          titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+          titleStyle: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
       );
-      legendItems.add(_buildLegendItem(Colors.grey.shade700, 'Other', percentage, isTouched));
+      legendItems.add(
+        _buildLegendItem(Colors.grey.shade700, 'Other', percentage, isTouched),
+      );
     }
 
     return Row(
@@ -318,7 +425,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
                       _touchedIndex = -1;
                       return;
                     }
-                    _touchedIndex = pieTouchResponse.touchedSection!.touchedSectionIndex;
+                    _touchedIndex =
+                        pieTouchResponse.touchedSection!.touchedSectionIndex;
                   });
                 },
               ),
@@ -341,12 +449,17 @@ class _PortfolioCardState extends State<PortfolioCard> {
     );
   }
 
-  Widget _buildLegendItem(Color color, String label, double percentage, bool isTouched) {
+  Widget _buildLegendItem(
+    Color color,
+    String label,
+    double percentage,
+    bool isTouched,
+  ) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
       decoration: BoxDecoration(
-        color: isTouched ? color.withOpacity(0.1) : Colors.transparent,
+        color: isTouched ? color.withValues(alpha: 0.1) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -357,12 +470,33 @@ class _PortfolioCardState extends State<PortfolioCard> {
             decoration: BoxDecoration(
               color: color,
               shape: BoxShape.circle,
-              boxShadow: isTouched ? [BoxShadow(color: color.withOpacity(0.5), blurRadius: 4)] : [],
+              boxShadow: isTouched
+                  ? [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.5),
+                        blurRadius: 4,
+                      ),
+                    ]
+                  : [],
             ),
           ),
           const SizedBox(width: 8),
-          Expanded(child: Text(label, style: TextStyle(fontWeight: isTouched ? FontWeight.bold : FontWeight.w600, color: isTouched ? color : Colors.white))),
-          Text('${(percentage * 100).toStringAsFixed(1)}%', style: TextStyle(color: isTouched ? color : Colors.grey, fontWeight: FontWeight.bold)),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: isTouched ? FontWeight.bold : FontWeight.w600,
+                color: isTouched ? color : Colors.white,
+              ),
+            ),
+          ),
+          Text(
+            '${(percentage * 100).toStringAsFixed(1)}%',
+            style: TextStyle(
+              color: isTouched ? color : Colors.grey,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );
@@ -375,7 +509,12 @@ class _HoldingsDataSource extends DataTableSource {
   final double conversionFactor;
   final BuildContext context;
 
-  _HoldingsDataSource(this.holdings, this.format, this.conversionFactor, this.context);
+  _HoldingsDataSource(
+    this.holdings,
+    this.format,
+    this.conversionFactor,
+    this.context,
+  );
 
   @override
   DataRow? getRow(int index) {
@@ -391,7 +530,7 @@ class _HoldingsDataSource extends DataTableSource {
     return DataRow(
       color: WidgetStateProperty.resolveWith<Color?>((states) {
         if (states.contains(WidgetState.hovered)) {
-          return Colors.white.withOpacity(0.05);
+          return Colors.white.withValues(alpha: 0.05);
         }
         return null; // Use default
       }),
@@ -404,7 +543,11 @@ class _HoldingsDataSource extends DataTableSource {
                 radius: 16,
                 child: Text(
                   (h['symbol'] ?? '?').toString().substring(0, 1).toUpperCase(),
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -412,14 +555,28 @@ class _HoldingsDataSource extends DataTableSource {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(h['symbol'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  Text(h['institution_name'] ?? '', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  Text(
+                    h['symbol'] ?? 'Unknown',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    h['institution_name'] ?? '',
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
                 ],
               ),
             ],
           ),
         ),
-        DataCell(Text(quantity.toStringAsFixed(4), style: const TextStyle(fontSize: 14))),
+        DataCell(
+          Text(
+            quantity.toStringAsFixed(4),
+            style: const TextStyle(fontSize: 14),
+          ),
+        ),
         DataCell(
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -439,7 +596,13 @@ class _HoldingsDataSource extends DataTableSource {
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(format.format(value), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              Text(
+                format.format(value),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
               if (h['currency'] != null)
                 Text(
                   '${NumberFormat.simpleCurrency(name: h['currency']).format(h['value'] as num)} ${h['currency']}',
@@ -452,12 +615,17 @@ class _HoldingsDataSource extends DataTableSource {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: (isGain ? const Color(0xFF00E676) : Colors.redAccent).withOpacity(0.1),
+              color: (isGain ? const Color(0xFF00E676) : Colors.redAccent)
+                  .withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
               '${isGain ? '+' : ''}${gainPct.toStringAsFixed(2)}%',
-              style: TextStyle(color: isGain ? const Color(0xFF00E676) : Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 13),
+              style: TextStyle(
+                color: isGain ? const Color(0xFF00E676) : Colors.redAccent,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
             ),
           ),
         ),

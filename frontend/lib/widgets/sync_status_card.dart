@@ -4,10 +4,7 @@ import 'package:intl/intl.dart';
 class SyncStatusCard extends StatelessWidget {
   final List<dynamic> syncData;
 
-  const SyncStatusCard({
-    Key? key,
-    required this.syncData,
-  }) : super(key: key);
+  const SyncStatusCard({super.key, required this.syncData});
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +24,7 @@ class SyncStatusCard extends StatelessWidget {
             if (syncData.isEmpty)
               const Center(child: Text('No institutions linked yet.'))
             else
-              ...syncData.map((inst) => _buildSyncRow(inst)).toList(),
+              ...syncData.map((inst) => _buildSyncRow(inst)),
           ],
         ),
       ),
@@ -36,10 +33,10 @@ class SyncStatusCard extends StatelessWidget {
 
   Widget _buildSyncRow(Map<String, dynamic> inst) {
     final status = inst['sync_status'] ?? 'unknown';
-    
+
     IconData statusIcon;
     Color statusColor;
-    
+
     switch (status) {
       case 'success':
         statusIcon = Icons.check_circle;

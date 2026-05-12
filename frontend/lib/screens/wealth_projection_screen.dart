@@ -9,19 +9,19 @@ class WealthProjectionScreen extends StatefulWidget {
   final NumberFormat currencyFormat;
 
   const WealthProjectionScreen({
-    Key? key,
+    super.key,
     required this.currentNetWorth,
     required this.conversionFactor,
     required this.currencyFormat,
-  }) : super(key: key);
+  });
 
   @override
-  _WealthProjectionScreenState createState() => _WealthProjectionScreenState();
+  State<WealthProjectionScreen> createState() => _WealthProjectionScreenState();
 }
 
 class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   final ApiService _apiService = ApiService();
-  
+
   // Projection Parameters
   late double _monthlyContribution;
   double _annualReturnRate = 0.07;
@@ -44,7 +44,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     setState(() => _isLoading = true);
     try {
       final data = await _apiService.getWealthProjection(
-        startBalance: widget.currentNetWorth / widget.conversionFactor, // Always send USD to backend
+        startBalance:
+            widget.currentNetWorth /
+            widget.conversionFactor, // Always send USD to backend
         monthlyContribution: _monthlyContribution,
         annualReturnRate: _annualReturnRate,
         annualExpenses: _annualExpenses,
@@ -56,7 +58,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      print("Error fetching projection: $e");
+      debugPrint("Error fetching projection: $e");
       setState(() => _isLoading = false);
     }
   }
@@ -73,10 +75,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Left side: Controls
-              SizedBox(
-                width: 320,
-                child: _buildControls(),
-              ),
+              SizedBox(width: 320, child: _buildControls()),
               const SizedBox(width: 24),
               // Right side: Chart and Milestones
               Expanded(
@@ -101,7 +100,11 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       children: [
         const Text(
           'Wealth Projection',
-          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
         const SizedBox(height: 8),
         Text(
@@ -142,7 +145,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 onChangeEnd: (_) => _fetchProjection(),
               ),
               const Divider(height: 32, color: Colors.white10),
-               _buildSliderControl(
+              _buildSliderControl(
                 label: 'Annual Expenses',
                 value: _annualExpenses,
                 min: 10000,
@@ -161,14 +164,15 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 onChanged: (val) => setState(() => _withdrawalRate = val),
                 onChangeEnd: (_) => _fetchProjection(),
               ),
-               const Divider(height: 32, color: Colors.white10),
+              const Divider(height: 32, color: Colors.white10),
               _buildSliderControl(
                 label: 'Projection Years',
                 value: _projectionYears.toDouble(),
                 min: 5,
                 max: 50,
                 divisions: 9,
-                onChanged: (val) => setState(() => _projectionYears = val.toInt()),
+                onChanged: (val) =>
+                    setState(() => _projectionYears = val.toInt()),
                 onChangeEnd: (_) => _fetchProjection(),
               ),
             ],
@@ -189,9 +193,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     required ValueChanged<double> onChanged,
     required ValueChanged<double> onChangeEnd,
   }) {
-    String displayValue = isPercent 
-      ? '${(value * 100).toStringAsFixed(1)}%' 
-      : '${prefix ?? ""}${value.toInt().toString()}';
+    String displayValue = isPercent
+        ? '${(value * 100).toStringAsFixed(1)}%'
+        : '${prefix ?? ""}${value.toInt().toString()}';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -199,8 +203,17 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-            Text(displayValue, style: const TextStyle(color: Color(0xFF00E676), fontWeight: FontWeight.bold)),
+            Text(
+              label,
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+            Text(
+              displayValue,
+              style: const TextStyle(
+                color: Color(0xFF00E676),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
         Slider(
@@ -223,28 +236,33 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(24.0),
-        child: _isLoading 
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Net Worth Projection', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 24),
-                Expanded(child: _buildChart()),
-              ],
-            ),
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Net Worth Projection',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 24),
+                  Expanded(child: _buildChart()),
+                ],
+              ),
       ),
     );
   }
 
   Widget _buildChart() {
     if (_projectionData == null) return Container();
-    
+
     final points = _projectionData!['points'] as List<dynamic>;
-    final fiNumber = (_projectionData!['fire_metrics']['fi_number'] as num).toDouble();
-    
+    final fiNumber = (_projectionData!['fire_metrics']['fi_number'] as num)
+        .toDouble();
+
     final spots = points.map((p) {
-      final x = (p['year'] as num).toDouble() + (p['month'] as num).toDouble() / 12.0;
+      final x =
+          (p['year'] as num).toDouble() + (p['month'] as num).toDouble() / 12.0;
       final y = (p['balance'] as num).toDouble() * widget.conversionFactor;
       return FlSpot(x, y);
     }).toList();
@@ -254,7 +272,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         gridData: FlGridData(
           show: true,
           drawVerticalLine: false,
-          getDrawingHorizontalLine: (value) => FlLine(color: Colors.white10, strokeWidth: 1),
+          getDrawingHorizontalLine: (value) =>
+              FlLine(color: Colors.white10, strokeWidth: 1),
         ),
         titlesData: FlTitlesData(
           rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -265,7 +284,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               interval: 5,
               getTitlesWidget: (value, meta) => Padding(
                 padding: const EdgeInsets.only(top: 8.0),
-                child: Text('Yr ${value.toInt()}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                child: Text(
+                  'Yr ${value.toInt()}',
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
               ),
             ),
           ),
@@ -296,8 +318,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               show: true,
               gradient: LinearGradient(
                 colors: [
-                  const Color(0xFF00E676).withOpacity(0.3),
-                  const Color(0xFF00E676).withOpacity(0.0),
+                  const Color(0xFF00E676).withValues(alpha: 0.3),
+                  const Color(0xFF00E676).withValues(alpha: 0.0),
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -306,9 +328,15 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           ),
           // FI Target Line
           LineChartBarData(
-            spots: [FlSpot(0, fiNumber * widget.conversionFactor), FlSpot(_projectionYears.toDouble(), fiNumber * widget.conversionFactor)],
+            spots: [
+              FlSpot(0, fiNumber * widget.conversionFactor),
+              FlSpot(
+                _projectionYears.toDouble(),
+                fiNumber * widget.conversionFactor,
+              ),
+            ],
             isCurved: false,
-            color: Colors.orangeAccent.withOpacity(0.5),
+            color: Colors.orangeAccent.withValues(alpha: 0.5),
             barWidth: 2,
             dashArray: [5, 5],
             dotData: FlDotData(show: false),
@@ -321,7 +349,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               return touchedSpots.map((spot) {
                 return LineTooltipItem(
                   'Year ${spot.x.toStringAsFixed(1)}\n${widget.currencyFormat.format(spot.y)}',
-                  const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
                 );
               }).toList();
             },
@@ -334,12 +365,14 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   Widget _buildMilestonesRow() {
     if (_projectionData == null) return Container();
     final metrics = _projectionData!['fire_metrics'];
-    
+
     return Row(
       children: [
         _buildMilestoneCard(
           title: 'FI Number',
-          value: widget.currencyFormat.format((metrics['fi_number'] as num).toDouble() * widget.conversionFactor),
+          value: widget.currencyFormat.format(
+            (metrics['fi_number'] as num).toDouble() * widget.conversionFactor,
+          ),
           subtitle: 'Target Net Worth',
           icon: Icons.flag_rounded,
           color: Colors.orangeAccent,
@@ -347,7 +380,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         const SizedBox(width: 16),
         _buildMilestoneCard(
           title: 'Progress',
-          value: '${(metrics['current_progress_pct'] as num).toStringAsFixed(1)}%',
+          value:
+              '${(metrics['current_progress_pct'] as num).toStringAsFixed(1)}%',
           subtitle: 'Towards FIRE',
           icon: Icons.trending_up_rounded,
           color: const Color(0xFF00E676),
@@ -355,9 +389,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         const SizedBox(width: 16),
         _buildMilestoneCard(
           title: 'Years to FI',
-          value: metrics['estimated_years_to_fi'] != null 
-            ? '${(metrics['estimated_years_to_fi'] as num).toStringAsFixed(1)}'
-            : '∞',
+          value: metrics['estimated_years_to_fi'] != null
+              ? (metrics['estimated_years_to_fi'] as num).toStringAsFixed(1)
+              : '∞',
           subtitle: 'Estimate',
           icon: Icons.speed_rounded,
           color: Colors.lightBlueAccent,
@@ -365,7 +399,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         const SizedBox(width: 16),
         _buildMilestoneCard(
           title: 'FI Income',
-          value: widget.currencyFormat.format((metrics['monthly_income_at_retirement'] as num).toDouble() * widget.conversionFactor),
+          value: widget.currencyFormat.format(
+            (metrics['monthly_income_at_retirement'] as num).toDouble() *
+                widget.conversionFactor,
+          ),
           subtitle: 'Monthly @ Withdrawal Rate',
           icon: Icons.account_balance_wallet_rounded,
           color: Colors.purpleAccent,
@@ -392,11 +429,25 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             children: [
               Icon(icon, color: color, size: 32),
               const SizedBox(height: 12),
-              Text(title, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              Text(
+                title,
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
               const SizedBox(height: 4),
-              Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
               const SizedBox(height: 4),
-              Text(subtitle, style: TextStyle(color: Colors.white38, fontSize: 10), textAlign: TextAlign.center),
+              Text(
+                subtitle,
+                style: TextStyle(color: Colors.white38, fontSize: 10),
+                textAlign: TextAlign.center,
+              ),
             ],
           ),
         ),

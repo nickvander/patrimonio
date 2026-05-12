@@ -21,10 +21,10 @@ import '../components/trends_chart.dart';
 import 'package:patrimonio/screens/tax_planning_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({Key? key}) : super(key: key);
+  const DashboardScreen({super.key});
 
   @override
-  _DashboardScreenState createState() => _DashboardScreenState();
+  State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
@@ -116,12 +116,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _syncData = results[4] as List<dynamic>;
         _fxRate = results[5] as Map<String, dynamic>;
         _transactions = results[6] as List<dynamic>;
-        
+
         _allocationData = allocationRaw.map((e) {
           final category = e['category'] as String;
           final subCategory = e['sub_category'] as String;
           final value = (e['value'] as num).toDouble();
-          
+
           return AllocationData(
             category,
             subCategory,
@@ -133,8 +133,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _trendData = trendsRaw.map((e) => e as Map<String, dynamic>).toList();
         _isLoading = false;
       });
-      
-      debugPrint("State updated with Phase 7 data: ${_allocationData?.length} categories, ${_trendData?.length} trend months");
+
+      debugPrint(
+        "State updated with Phase 7 data: ${_allocationData?.length} categories, ${_trendData?.length} trend months",
+      );
     } catch (e, stack) {
       debugPrint("Data load error: $e\n$stack");
       setState(() {
@@ -146,23 +148,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isCompact = MediaQuery.sizeOf(context).width < 720;
+
     return DefaultTabController(
       length: 6,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Patrimonio', style: TextStyle(fontWeight: FontWeight.bold)),
-          bottom: const TabBar(
-            isScrollable: false, // Changed from true to ensure all tabs are visible
-            indicatorColor: Color(0xFF00E676),
+          title: const Text(
+            'Patrimonio',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          bottom: TabBar(
+            isScrollable: isCompact,
+            tabAlignment: isCompact ? TabAlignment.start : TabAlignment.fill,
+            indicatorColor: const Color(0xFF00E676),
             labelColor: Color(0xFF00E676),
             unselectedLabelColor: Colors.grey,
             tabs: [
               Tab(text: 'Overview'),
               Tab(text: 'Portfolio'),
               Tab(text: 'Transactions'),
-              Tab(text: 'Projections'),
-              Tab(text: 'Tax Planning'),
-              Tab(text: 'Management'),
+              Tab(text: isCompact ? 'Proj.' : 'Projections'),
+              Tab(text: isCompact ? 'Tax' : 'Tax Planning'),
+              Tab(text: isCompact ? 'Manage' : 'Management'),
             ],
           ),
           actions: [
@@ -172,10 +180,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _targetCurrency = _targetCurrency == 'USD' ? 'MXN' : 'USD';
                 });
               },
-              icon: Icon(Icons.currency_exchange, color: _targetCurrency == 'MXN' ? const Color(0xFF00E676) : Colors.white70),
+              icon: Icon(
+                Icons.currency_exchange,
+                color: _targetCurrency == 'MXN'
+                    ? const Color(0xFF00E676)
+                    : Colors.white70,
+              ),
               label: Text(
                 '$_targetCurrency (${_fxRate != null ? (_fxRate!['rate'] as num).toStringAsFixed(2) : "..."})',
-                style: TextStyle(color: _targetCurrency == 'MXN' ? const Color(0xFF00E676) : Colors.white70, fontWeight: FontWeight.bold)
+                style: TextStyle(
+                  color: _targetCurrency == 'MXN'
+                      ? const Color(0xFF00E676)
+                      : Colors.white70,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -198,12 +216,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             const Icon(Icons.error_outline, size: 64, color: Colors.red),
             const SizedBox(height: 16),
-            Text('Error loading dashboard: $_error', textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _loadAllData,
-              child: const Text('Retry'),
+            Text(
+              'Error loading dashboard: $_error',
+              textAlign: TextAlign.center,
             ),
+            const SizedBox(height: 16),
+            ElevatedButton(onPressed: _loadAllData, child: const Text('Retry')),
           ],
         ),
       );
@@ -214,6 +232,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final currencyFormat = NumberFormat.simpleCurrency(name: _targetCurrency);
 
     Widget buildTabContainer(Widget child, {bool scrollable = true}) {
+      final padding = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
       final content = Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1600),
@@ -221,87 +240,134 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       );
 
-      return scrollable 
-        ? SingleChildScrollView(padding: const EdgeInsets.all(24.0), child: content)
-        : Padding(padding: const EdgeInsets.all(24.0), child: content);
+      return scrollable
+          ? SingleChildScrollView(
+              padding: EdgeInsets.all(padding),
+              child: content,
+            )
+          : Padding(padding: EdgeInsets.all(padding), child: content);
+    }
+
+    Widget buildAccountsColumn() {
+      return Column(
+        children: [
+          AccountsListWidget(
+            accounts: _overview?['accounts'] ?? [],
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
+            onBalanceUpdate: (id, bal) async {
+              try {
+                await _apiService.updateAccountBalance(id, bal);
+                _loadAllData();
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text('Update failed: $e')));
+              }
+            },
+          ),
+          const SizedBox(height: 24),
+          CreditUtilizationCard(
+            creditData: _creditData ?? [],
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
+          ),
+        ],
+      );
+    }
+
+    Widget buildNetWorthHeader() {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 520;
+          final title = const Text(
+            'Net Worth History',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          );
+          final selector = SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DateRangeSelector(
+              selectedRange: _selectedRange,
+              onRangeChanged: (range) {
+                setState(() => _selectedRange = range);
+                // In a real app, we'd refetch data for specific range here
+              },
+            ),
+          );
+
+          if (isNarrow) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 12),
+                title,
+                const SizedBox(height: 12),
+                selector,
+              ],
+            );
+          }
+
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [title, selector],
+          );
+        },
+      );
+    }
+
+    Widget buildChartsColumn(bool isNarrow) {
+      return Column(
+        children: [
+          buildNetWorthHeader(),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: isNarrow ? 380 : 440,
+            child: NetWorthCard(
+              netWorth:
+                  ((_overview?['net_worth'] as num?)?.toDouble() ?? 0.0) *
+                  conversionFactor,
+              history: _netWorthHistory ?? [],
+              conversionFactor: conversionFactor,
+              currencyFormat: currencyFormat,
+              selectedRange: _selectedRange,
+            ),
+          ),
+          const SizedBox(height: 24),
+          if (_trendData != null)
+            CashFlowTrendsChart(
+              trends: _trendData!,
+              conversionFactor: conversionFactor,
+              currencyFormat: currencyFormat,
+            ),
+        ],
+      );
     }
 
     final overviewTab = buildTabContainer(
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            flex: 1,
-            child: Column(
+      LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 900;
+          if (isNarrow) {
+            return Column(
               children: [
-                AccountsListWidget(
-                  accounts: _overview?['accounts'] ?? [],
-                  conversionFactor: conversionFactor,
-                  currencyFormat: currencyFormat,
-                  onBalanceUpdate: (id, bal) async {
-                    try {
-                      await _apiService.updateAccountBalance(id, bal);
-                      _loadAllData();
-                    } catch (e) {
-                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Update failed: $e')),
-                      );
-                    }
-                  },
-                ),
+                buildAccountsColumn(),
                 const SizedBox(height: 24),
-                CreditUtilizationCard(
-                  creditData: _creditData ?? [],
-                  conversionFactor: conversionFactor,
-                  currencyFormat: currencyFormat,
-                ),
+                buildChartsColumn(true),
               ],
-            ),
-          ),
-          const SizedBox(width: 24),
-          Expanded(
-            flex: 3,
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Net Worth History',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                    DateRangeSelector(
-                      selectedRange: _selectedRange,
-                      onRangeChanged: (range) {
-                        setState(() => _selectedRange = range);
-                        // In a real app, we'd refetch data for specific range here
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 440,
-                  child: NetWorthCard(
-                    netWorth: ((_overview?['net_worth'] as num?)?.toDouble() ?? 0.0) * conversionFactor,
-                    history: _netWorthHistory ?? [],
-                    conversionFactor: conversionFactor,
-                    currencyFormat: currencyFormat,
-                    selectedRange: _selectedRange,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                if (_trendData != null)
-                  CashFlowTrendsChart(
-                    trends: _trendData!,
-                    conversionFactor: conversionFactor,
-                    currencyFormat: currencyFormat,
-                  ),
-              ],
-            ),
-          ),
-        ],
-      )
+            );
+          }
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 1, child: buildAccountsColumn()),
+              const SizedBox(width: 24),
+              Expanded(flex: 3, child: buildChartsColumn(false)),
+            ],
+          );
+        },
+      ),
     );
 
     final portfolioTab = buildTabContainer(
@@ -347,8 +413,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final taxPlanningTab = buildTabContainer(
       TaxPlanningScreen(
-         conversionFactor: conversionFactor,
-         currencyFormat: currencyFormat,
+        conversionFactor: conversionFactor,
+        currencyFormat: currencyFormat,
       ),
       scrollable: false,
     );
@@ -357,7 +423,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Data Sources & Sync', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          const Text(
+            'Data Sources & Sync',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 16),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -368,7 +437,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 24),
-          const Text('Connect Standard Accounts', style: TextStyle(fontSize: 16, color: Colors.white70)),
+          const Text(
+            'Connect Standard Accounts',
+            style: TextStyle(fontSize: 16, color: Colors.white70),
+          ),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -378,8 +450,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   label: const Text('Sync All Accounts'),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 20),
-                    backgroundColor: Colors.blueAccent.withOpacity(0.2),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    backgroundColor: Colors.blueAccent.withValues(alpha: 0.2),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
                   onPressed: () async {
                     setState(() => _isLoading = true);
@@ -399,13 +473,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   label: const Text('Link Plaid (US Banks)'),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 20),
-                    backgroundColor: const Color(0xFF1DE9B6).withOpacity(0.2),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    backgroundColor: const Color(
+                      0xFF1DE9B6,
+                    ).withValues(alpha: 0.2),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => ConnectBankScreen()),
+                      MaterialPageRoute(
+                        builder: (context) => ConnectBankScreen(),
+                      ),
                     ).then((_) => _loadAllData());
                   },
                 ),
@@ -422,12 +502,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 20),
                     backgroundColor: Colors.white12,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const ImportScreen()),
+                      MaterialPageRoute(
+                        builder: (context) => const ImportScreen(),
+                      ),
                     ).then((_) => _loadAllData());
                   },
                 ),
@@ -440,12 +524,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 20),
                     backgroundColor: Colors.white12,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
                   onPressed: () {
                     showDialog(
                       context: context,
-                      builder: (context) => AddAccountDialog(onAccountCreated: _loadAllData),
+                      builder: (context) =>
+                          AddAccountDialog(onAccountCreated: _loadAllData),
                     );
                   },
                 ),
@@ -453,7 +540,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 32),
-          const Text('Connect Crypto Exchanges', style: TextStyle(fontSize: 16, color: Colors.white70)),
+          const Text(
+            'Connect Crypto Exchanges',
+            style: TextStyle(fontSize: 16, color: Colors.white70),
+          ),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -464,7 +554,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 20),
                     backgroundColor: const Color(0xFF0052FF),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
                   onPressed: () {
                     // Start OAuth flow by redirecting to backend
@@ -476,12 +568,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(width: 16),
               Expanded(
                 child: ElevatedButton.icon(
-                  icon: const Icon(Icons.currency_exchange, color: Color(0xFF00E676)),
+                  icon: const Icon(
+                    Icons.currency_exchange,
+                    color: Color(0xFF00E676),
+                  ),
                   label: const Text('Connect Bitso'),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 20),
-                    backgroundColor: const Color(0xFF00E676).withOpacity(0.1),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    backgroundColor: const Color(
+                      0xFF00E676,
+                    ).withValues(alpha: 0.1),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                   ),
                   onPressed: () {
                     showDialog(
@@ -497,7 +596,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
         ],
-      )
+      ),
     );
 
     return TabBarView(

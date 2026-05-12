@@ -8,7 +8,7 @@ class CashFlowTrendsChart extends StatelessWidget {
   final NumberFormat currencyFormat;
 
   const CashFlowTrendsChart({
-    super.key, 
+    super.key,
     required this.trends,
     required this.conversionFactor,
     required this.currencyFormat,
@@ -22,21 +22,48 @@ class CashFlowTrendsChart extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Cash Flow Trends',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                Row(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final legend = Wrap(
+                  spacing: 16,
+                  runSpacing: 8,
                   children: [
                     _buildLegendItem(const Color(0xFF1DE9B6), 'Income'),
-                    const SizedBox(width: 16),
                     _buildLegendItem(const Color(0xFFFF4081), 'Spending'),
                   ],
-                ),
-              ],
+                );
+
+                if (constraints.maxWidth < 520) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Cash Flow Trends',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      legend,
+                    ],
+                  );
+                }
+
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Cash Flow Trends',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    legend,
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 24),
             SizedBox(
@@ -62,12 +89,18 @@ class CashFlowTrendsChart extends StatelessWidget {
                       sideTitles: SideTitles(
                         showTitles: true,
                         getTitlesWidget: (value, meta) {
-                          if (value.toInt() >= 0 && value.toInt() < trends.length) {
-                            final monthStr = trends[value.toInt()]['month'] as String; // e.g. "2026-03"
+                          if (value.toInt() >= 0 &&
+                              value.toInt() < trends.length) {
+                            final monthStr =
+                                trends[value.toInt()]['month']
+                                    as String; // e.g. "2026-03"
                             final parts = monthStr.split('-');
                             String label;
                             try {
-                              final date = DateTime(int.parse(parts[0]), int.parse(parts[1]));
+                              final date = DateTime(
+                                int.parse(parts[0]),
+                                int.parse(parts[1]),
+                              );
                               // Show "Mar" for most, "Mar '26" for Jan or first/last entry
                               final isFirst = value.toInt() == 0;
                               final isLast = value.toInt() == trends.length - 1;
@@ -82,7 +115,10 @@ class CashFlowTrendsChart extends StatelessWidget {
                               meta: meta,
                               child: Text(
                                 label,
-                                style: const TextStyle(fontSize: 10, color: Colors.grey),
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey,
+                                ),
                               ),
                             );
                           }
@@ -99,16 +135,25 @@ class CashFlowTrendsChart extends StatelessWidget {
                           return SideTitleWidget(
                             meta: meta,
                             child: Text(
-                              currencyFormat.format(value * conversionFactor).split('.')[0], // No decimals for compactness
-                              style: const TextStyle(fontSize: 10, color: Colors.grey),
+                              currencyFormat
+                                  .format(value * conversionFactor)
+                                  .split('.')[0], // No decimals for compactness
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey,
+                              ),
                               maxLines: 1,
                             ),
                           );
                         },
                       ),
                     ),
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
                   ),
                   gridData: const FlGridData(show: false),
                   borderData: FlBorderData(show: false),
@@ -119,7 +164,10 @@ class CashFlowTrendsChart extends StatelessWidget {
                         BarChartRodData(
                           toY: e.value['income'],
                           gradient: const LinearGradient(
-                            colors: [Color(0xFF1DE9B6), Color(0xFF00BFA5)], // Neon Teal to Deep Teal
+                            colors: [
+                              Color(0xFF1DE9B6),
+                              Color(0xFF00BFA5),
+                            ], // Neon Teal to Deep Teal
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                           ),
@@ -128,13 +176,16 @@ class CashFlowTrendsChart extends StatelessWidget {
                           backDrawRodData: BackgroundBarChartRodData(
                             show: true,
                             toY: _getMaxValue(),
-                            color: Colors.white.withOpacity(0.05),
+                            color: Colors.white.withValues(alpha: 0.05),
                           ),
                         ),
                         BarChartRodData(
                           toY: e.value['spending'],
                           gradient: const LinearGradient(
-                            colors: [Color(0xFFFF4081), Color(0xFFD50000)], // Bright Pink to Deep Red
+                            colors: [
+                              Color(0xFFFF4081),
+                              Color(0xFFD50000),
+                            ], // Bright Pink to Deep Red
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                           ),
@@ -143,7 +194,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                           backDrawRodData: BackgroundBarChartRodData(
                             show: true,
                             toY: _getMaxValue(),
-                            color: Colors.white.withOpacity(0.05),
+                            color: Colors.white.withValues(alpha: 0.05),
                           ),
                         ),
                       ],
@@ -170,7 +221,14 @@ class CashFlowTrendsChart extends StatelessWidget {
   Widget _buildLegendItem(Color color, String label) {
     return Row(
       children: [
-        Container(width: 12, height: 12, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
         const SizedBox(width: 6),
         Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
       ],

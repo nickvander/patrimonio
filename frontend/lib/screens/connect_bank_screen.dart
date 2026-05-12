@@ -5,23 +5,28 @@ import 'dart:convert';
 import 'package:web/web.dart' as web;
 
 class ConnectBankScreen extends StatefulWidget {
+  const ConnectBankScreen({super.key});
+
   @override
-  _ConnectBankScreenState createState() => _ConnectBankScreenState();
+  State<ConnectBankScreen> createState() => _ConnectBankScreenState();
 }
 
 class _ConnectBankScreenState extends State<ConnectBankScreen> {
-  PlaidLink? _plaidLink;
   bool _isLoading = false;
 
   Future<void> _startPlaidLink() async {
     setState(() => _isLoading = true);
-    
+
     // Dynamically detect host to support VM/Docker test networks correctly
-    final host = web.window.location.hostname.isEmpty ? 'localhost' : web.window.location.hostname;
-    
+    final host = web.window.location.hostname.isEmpty
+        ? 'localhost'
+        : web.window.location.hostname;
+
     try {
-      final response = await http.post(Uri.parse('http://$host:8080/api/institutions/link-token'));
-      
+      final response = await http.post(
+        Uri.parse('http://$host:8080/api/institutions/link-token'),
+      );
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final linkToken = data['link_token'];
@@ -49,24 +54,30 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
     setState(() => _isLoading = true);
     try {
       final String publicToken = event.publicToken;
-      final String institutionName = event.metadata.institution?.name ?? 'Unknown Institution';
-      
-      final host = web.window.location.hostname.isEmpty ? 'localhost' : web.window.location.hostname;
-      
+      final String institutionName =
+          event.metadata.institution?.name ?? 'Unknown Institution';
+
+      final host = web.window.location.hostname.isEmpty
+          ? 'localhost'
+          : web.window.location.hostname;
+
       final response = await http.post(
         Uri.parse('http://$host:8080/api/institutions/exchange-token'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'public_token': publicToken,
           'institution_name': institutionName,
-          'institution_type': 'banking' // Generic fallback type for Phase 2
+          'institution_type': 'banking', // Generic fallback type for Phase 2
         }),
       );
 
       if (response.statusCode == 200) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Bank connected successfully!'), backgroundColor: Colors.green),
+            const SnackBar(
+              content: Text('Bank connected successfully!'),
+              backgroundColor: Colors.green,
+            ),
           );
           Navigator.pop(context);
         }
@@ -81,11 +92,11 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
   }
 
   void _onEvent(LinkEvent event) {
-    print("Plaid Event: ${event.name}");
+    debugPrint("Plaid Event: ${event.name}");
   }
 
   void _onExit(LinkExit event) {
-    print("Plaid Exit status: ${event.metadata.status}");
+    debugPrint("Plaid Exit status: ${event.metadata.status}");
     if (event.error != null) {
       _showError('Plaid Error: ${event.error?.message}');
     }
@@ -102,10 +113,7 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Connect Bank'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('Connect Bank'), centerTitle: true),
       body: Center(
         child: _isLoading
             ? const CircularProgressIndicator()
@@ -113,7 +121,10 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
                 icon: const Icon(Icons.account_balance),
                 label: const Text('Connect with Plaid'),
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
                   textStyle: const TextStyle(fontSize: 18),
                 ),
                 onPressed: _startPlaidLink,

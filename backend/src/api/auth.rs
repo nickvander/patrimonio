@@ -18,7 +18,7 @@ pub fn router() -> Router<AppState> {
 async fn coinbase_authorize(State(state): State<AppState>) -> impl IntoResponse {
     let client_id = match &state.config.coinbase_client_id {
         Some(id) => id,
-        None => return Redirect::to("http://localhost:3000/management?status=error&msg=Coinbase+Client+ID+missing").into_response(),
+        None => return frontend_redirect(&state, "error", Some("Coinbase Client ID missing")).into_response(),
     };
     
     let redirect_uri = &state.config.coinbase_redirect_uri;
@@ -35,7 +35,8 @@ async fn coinbase_authorize(State(state): State<AppState>) -> impl IntoResponse 
 
 #[derive(Deserialize)]
 struct CallbackQuery {
-    code: String,
+    code: Option<String>,
+    error: Option<String>,
 }
 
 /// Handle Coinbase OAuth callback
@@ -45,13 +46,32 @@ async fn coinbase_callback(
 ) -> impl IntoResponse {
     let client = reqwest::Client::new();
     let config = &state.config;
+    let code = match query.code {
+        Some(code) => code,
+        None => {
+            let detail = query.error.as_deref().unwrap_or("Coinbase authorization failed");
+            return frontend_redirect(&state, "error", Some(detail)).into_response();
+        }
+    };
+    let client_id = match config.coinbase_client_id.as_ref() {
+        Some(value) => value,
+        None => return frontend_redirect(&state, "error", Some("Coinbase Client ID missing")).into_response(),
+    };
+    let client_secret = match config.coinbase_client_secret.as_ref() {
+        Some(value) => value,
+        None => return frontend_redirect(&state, "error", Some("Coinbase Client Secret missing")).into_response(),
+    };
+    let enc_key = match config.encryption_key.as_ref() {
+        Some(value) => value,
+        None => return frontend_redirect(&state, "error", Some("Encryption key missing")).into_response(),
+    };
 
     let res = client.post("https://api.coinbase.com/oauth/token")
         .form(&[
             ("grant_type", "authorization_code"),
-            ("code", &query.code),
-            ("client_id", config.coinbase_client_id.as_ref().unwrap()),
-            ("client_secret", config.coinbase_client_secret.as_ref().unwrap()),
+            ("code", &code),
+            ("client_id", client_id),
+            ("client_secret", client_secret),
             ("redirect_uri", &config.coinbase_redirect_uri),
         ])
         .send()
@@ -59,29 +79,84 @@ async fn coinbase_callback(
 
     match res {
         Ok(response) => {
-            let tokens: serde_json::Value = response.json().await.unwrap();
-            let access_token = tokens["access_token"].as_str().unwrap();
-            let refresh_token = tokens["refresh_token"].as_str().unwrap();
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                tracing::error!("Coinbase OAuth returned {}: {}", status, body);
+                return frontend_redirect(&state, "error", Some("Coinbase token exchange failed")).into_response();
+            }
+
+            let tokens: serde_json::Value = match response.json().await {
+                Ok(tokens) => tokens,
+                Err(e) => {
+                    tracing::error!("Invalid Coinbase OAuth response: {}", e);
+                    return frontend_redirect(&state, "error", Some("Invalid Coinbase response")).into_response();
+                }
+            };
+            let access_token = match tokens["access_token"].as_str() {
+                Some(token) => token,
+                None => {
+                    tracing::error!("Coinbase OAuth response missing access_token: {:?}", tokens);
+                    return frontend_redirect(&state, "error", Some("Coinbase token missing")).into_response();
+                }
+            };
+            let refresh_token = match tokens["refresh_token"].as_str() {
+                Some(token) => token,
+                None => {
+                    tracing::error!("Coinbase OAuth response missing refresh_token: {:?}", tokens);
+                    return frontend_redirect(&state, "error", Some("Coinbase refresh token missing")).into_response();
+                }
+            };
 
             // Encrypt and store in institutions table
-            let enc_key = config.encryption_key.as_ref().expect("ENCRYPTION_KEY missing");
-            let acc_enc = encryption::encrypt(enc_key, access_token).unwrap();
-            let ref_enc = encryption::encrypt(enc_key, refresh_token).unwrap();
+            let acc_enc = match encryption::encrypt(enc_key, access_token) {
+                Ok(value) => value,
+                Err(e) => {
+                    tracing::error!("Failed to encrypt Coinbase access token: {}", e);
+                    return frontend_redirect(&state, "error", Some("Token encryption failed")).into_response();
+                }
+            };
+            let ref_enc = match encryption::encrypt(enc_key, refresh_token) {
+                Ok(value) => value,
+                Err(e) => {
+                    tracing::error!("Failed to encrypt Coinbase refresh token: {}", e);
+                    return frontend_redirect(&state, "error", Some("Token encryption failed")).into_response();
+                }
+            };
 
             // Create or update institution for Coinbase
-            let inst_id = uuid::Uuid::new_v4();
-            let _ = sqlx::query(
-                r#"
-                INSERT INTO institutions (id, name, institution_type, country, integration_type, api_key_enc, api_secret_enc)
-                VALUES ($1, 'Coinbase', 'crypto', 'Global', 'coinbase_oauth', $2, $3)
-                ON CONFLICT (name) DO UPDATE SET api_key_enc = $2, api_secret_enc = $3
-                "#
+            let update = sqlx::query(
+                "UPDATE institutions SET api_key_enc = $1, api_secret_enc = $2 WHERE name = 'Coinbase' AND integration_type = 'coinbase_oauth'"
             )
-            .bind(inst_id)
-            .bind(acc_enc)
-            .bind(ref_enc)
+            .bind(&acc_enc)
+            .bind(&ref_enc)
             .execute(&state.db)
             .await;
+
+            match update {
+                Ok(result) if result.rows_affected() > 0 => {}
+                Ok(_) => {
+                    if let Err(e) = sqlx::query(
+                        r#"
+                        INSERT INTO institutions (id, name, institution_type, country, integration_type, api_key_enc, api_secret_enc)
+                        VALUES ($1, 'Coinbase', 'crypto', 'Global', 'coinbase_oauth', $2, $3)
+                        "#
+                    )
+                    .bind(uuid::Uuid::new_v4())
+                    .bind(&acc_enc)
+                    .bind(&ref_enc)
+                    .execute(&state.db)
+                    .await
+                    {
+                        tracing::error!("Failed to save Coinbase OAuth institution: {}", e);
+                        return frontend_redirect(&state, "error", Some("Failed to save Coinbase account")).into_response();
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to update Coinbase OAuth institution: {}", e);
+                    return frontend_redirect(&state, "error", Some("Failed to save Coinbase account")).into_response();
+                }
+            }
 
             // Trigger immediate sync
             let db = state.db.clone();
@@ -91,11 +166,31 @@ async fn coinbase_callback(
             });
 
             // Redirect back to frontend
-            Redirect::to("http://localhost:3000/management?status=success").into_response()
+            frontend_redirect(&state, "success", None).into_response()
         }
         Err(e) => {
             tracing::error!("Coinbase OAuth Error: {}", e);
-            Redirect::to("http://localhost:3000/management?status=error").into_response()
+            frontend_redirect(&state, "error", Some("Coinbase token exchange failed")).into_response()
         }
     }
+}
+
+fn frontend_redirect(state: &AppState, status: &str, msg: Option<&str>) -> Redirect {
+    let mut url = format!("{}/?status={}", state.config.frontend_base_url.trim_end_matches('/'), status);
+    if let Some(msg) = msg {
+        url.push_str("&msg=");
+        url.push_str(&query_escape(msg));
+    }
+    Redirect::to(&url)
+}
+
+fn query_escape(value: &str) -> String {
+    value
+        .chars()
+        .flat_map(|ch| match ch {
+            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => vec![ch],
+            ' ' => vec!['+'],
+            _ => format!("%{:02X}", ch as u32).chars().collect(),
+        })
+        .collect()
 }

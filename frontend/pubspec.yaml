@@ -43,6 +43,7 @@ dependencies:
   syncfusion_flutter_treemap: ^28.1.33
   url_launcher: ^6.3.1
 
+  web: any
 dev_dependencies:
   flutter_test:
     sdk: flutter

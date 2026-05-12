@@ -7,11 +7,11 @@ class TransactionsTab extends StatefulWidget {
   final NumberFormat currencyFormat;
 
   const TransactionsTab({
-    Key? key,
+    super.key,
     required this.transactions,
     required this.conversionFactor,
     required this.currencyFormat,
-  }) : super(key: key);
+  });
 
   @override
   State<TransactionsTab> createState() => _TransactionsTabState();
@@ -40,9 +40,15 @@ class _TransactionsTabState extends State<TransactionsTab> {
           children: [
             Icon(Icons.receipt_long_outlined, size: 64, color: Colors.grey),
             SizedBox(height: 16),
-            Text('No transactions found.', style: TextStyle(color: Colors.grey, fontSize: 18)),
+            Text(
+              'No transactions found.',
+              style: TextStyle(color: Colors.grey, fontSize: 18),
+            ),
             SizedBox(height: 8),
-            Text('Link an institution or sync to see recent activity.', style: TextStyle(color: Colors.grey)),
+            Text(
+              'Link an institution or sync to see recent activity.',
+              style: TextStyle(color: Colors.grey),
+            ),
           ],
         ),
       );
@@ -72,11 +78,21 @@ class _TransactionsTabState extends State<TransactionsTab> {
                     onChanged: (v) => setState(() => _searchQuery = v),
                     decoration: InputDecoration(
                       hintText: 'Search transactions…',
-                      hintStyle: const TextStyle(color: Colors.white30, fontSize: 13),
-                      prefixIcon: const Icon(Icons.search, size: 18, color: Colors.white30),
+                      hintStyle: const TextStyle(
+                        color: Colors.white30,
+                        fontSize: 13,
+                      ),
+                      prefixIcon: const Icon(
+                        Icons.search,
+                        size: 18,
+                        color: Colors.white30,
+                      ),
                       filled: true,
-                      fillColor: Colors.white.withOpacity(0.05),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+                      fillColor: Colors.white.withValues(alpha: 0.05),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 0,
+                        horizontal: 12,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide.none,
@@ -97,25 +113,34 @@ class _TransactionsTabState extends State<TransactionsTab> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: filtered.length,
-              separatorBuilder: (context, index) => const Divider(height: 32, color: Colors.white10),
+              separatorBuilder: (context, index) =>
+                  const Divider(height: 32, color: Colors.white10),
               itemBuilder: (context, index) {
                 final tx = filtered[index];
                 final date = DateTime.parse(tx['date'] as String);
-                final amount = ((tx['amount'] as num?)?.toDouble() ?? 0.0) * widget.conversionFactor;
+                final amount =
+                    ((tx['amount'] as num?)?.toDouble() ?? 0.0) *
+                    widget.conversionFactor;
                 final isExpense = amount > 0;
-                
+
                 return Row(
                   children: [
                     Container(
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: _getCategoryColor(tx['category'], tx['description']).withOpacity(0.1),
+                        color: _getCategoryColor(
+                          tx['category'],
+                          tx['description'],
+                        ).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
                         _getCategoryIcon(tx['category'], tx['description']),
-                        color: _getCategoryColor(tx['category'], tx['description']),
+                        color: _getCategoryColor(
+                          tx['category'],
+                          tx['description'],
+                        ),
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -124,8 +149,13 @@ class _TransactionsTabState extends State<TransactionsTab> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            _titleCase(tx['description'] ?? 'Unknown Transaction'),
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            _titleCase(
+                              tx['description'] ?? 'Unknown Transaction',
+                            ),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -134,14 +164,26 @@ class _TransactionsTabState extends State<TransactionsTab> {
                             children: [
                               Text(
                                 tx['account_name'] ?? '',
-                                style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
                               ),
                               const SizedBox(width: 8),
-                              const Text('•', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                              const Text(
+                                '•',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
+                              ),
                               const SizedBox(width: 8),
                               Text(
                                 DateFormat('MMM d, y').format(date),
-                                style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
                               ),
                             ],
                           ),
@@ -156,18 +198,27 @@ class _TransactionsTabState extends State<TransactionsTab> {
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 18,
-                            color: isExpense ? Colors.white : const Color(0xFF00E676),
+                            color: isExpense
+                                ? Colors.white
+                                : const Color(0xFF00E676),
                           ),
                         ),
                         if (tx['currency'] != null)
                           Text(
                             '${NumberFormat.simpleCurrency(name: tx['currency']).format((tx['amount'] as num).abs())} ${tx['currency']}',
-                            style: const TextStyle(fontSize: 11, color: Colors.grey),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
                           ),
                         if (tx['pending'] == true)
                           const Text(
                             'Pending',
-                            style: TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              color: Colors.orange,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                       ],
                     ),
@@ -188,43 +239,115 @@ class _TransactionsTabState extends State<TransactionsTab> {
     // If already mostly lowercase or mixed, use as-is
     if (text != text.toUpperCase()) return text;
     // Convert ALL CAPS → Title Case
-    return text.split(' ').map((word) {
-      if (word.isEmpty) return word;
-      if (word.length <= 2) return word; // Keep short tokens like "CD", "ACH"
-      return '${word[0]}${word.substring(1).toLowerCase()}';
-    }).join(' ');
+    return text
+        .split(' ')
+        .map((word) {
+          if (word.isEmpty) return word;
+          if (word.length <= 2) {
+            return word; // Keep short tokens like "CD", "ACH"
+          }
+          return '${word[0]}${word.substring(1).toLowerCase()}';
+        })
+        .join(' ');
   }
 
   IconData _getCategoryIcon(String? category, String? description) {
     final cat = (category ?? '').toLowerCase();
     final desc = (description ?? '').toLowerCase();
     // Plaid-style categories
-    if (cat.contains('food') || cat.contains('dining') || desc.contains('starbucks') || desc.contains('mcdonald')) return Icons.restaurant;
-    if (cat.contains('travel') || desc.contains('airline') || desc.contains('united')) return Icons.flight;
-    if (cat.contains('shopping') || desc.contains('amazon')) return Icons.shopping_bag;
-    if (cat.contains('transfer') || desc.contains('ach') || desc.contains('wire')) return Icons.sync_alt;
-    if (cat.contains('payment') || desc.contains('payment') || desc.contains('credit card')) return Icons.payment;
-    if (cat.contains('entertainment') || desc.contains('netflix') || desc.contains('spotify')) return Icons.movie;
-    if (cat.contains('recreation') || desc.contains('climbing') || desc.contains('gym')) return Icons.fitness_center;
-    if (cat.contains('deposit') || desc.contains('deposit')) return Icons.account_balance;
-    if (cat.contains('uber') || desc.contains('uber') || desc.contains('lyft')) return Icons.directions_car;
-    if (cat.contains('personal') || cat.contains('service')) return Icons.person;
+    if (cat.contains('food') ||
+        cat.contains('dining') ||
+        desc.contains('starbucks') ||
+        desc.contains('mcdonald')) {
+      return Icons.restaurant;
+    }
+    if (cat.contains('travel') ||
+        desc.contains('airline') ||
+        desc.contains('united')) {
+      return Icons.flight;
+    }
+    if (cat.contains('shopping') || desc.contains('amazon')) {
+      return Icons.shopping_bag;
+    }
+    if (cat.contains('transfer') ||
+        desc.contains('ach') ||
+        desc.contains('wire')) {
+      return Icons.sync_alt;
+    }
+    if (cat.contains('payment') ||
+        desc.contains('payment') ||
+        desc.contains('credit card')) {
+      return Icons.payment;
+    }
+    if (cat.contains('entertainment') ||
+        desc.contains('netflix') ||
+        desc.contains('spotify')) {
+      return Icons.movie;
+    }
+    if (cat.contains('recreation') ||
+        desc.contains('climbing') ||
+        desc.contains('gym')) {
+      return Icons.fitness_center;
+    }
+    if (cat.contains('deposit') || desc.contains('deposit')) {
+      return Icons.account_balance;
+    }
+    if (cat.contains('uber') ||
+        desc.contains('uber') ||
+        desc.contains('lyft')) {
+      return Icons.directions_car;
+    }
+    if (cat.contains('personal') || cat.contains('service')) {
+      return Icons.person;
+    }
     return Icons.receipt;
   }
 
   Color _getCategoryColor(String? category, String? description) {
     final cat = (category ?? '').toLowerCase();
     final desc = (description ?? '').toLowerCase();
-    if (cat.contains('food') || cat.contains('dining') || desc.contains('starbucks') || desc.contains('mcdonald')) return Colors.orange;
-    if (cat.contains('travel') || desc.contains('airline') || desc.contains('united')) return Colors.blue;
-    if (cat.contains('shopping') || desc.contains('amazon')) return Colors.purple;
-    if (cat.contains('transfer') || desc.contains('ach') || desc.contains('wire')) return Colors.teal;
-    if (cat.contains('payment') || desc.contains('payment') || desc.contains('credit card')) return Colors.green;
-    if (cat.contains('entertainment') || desc.contains('netflix') || desc.contains('spotify')) return Colors.pink;
-    if (cat.contains('recreation') || desc.contains('climbing') || desc.contains('gym')) return const Color(0xFF1DE9B6);
-    if (cat.contains('deposit') || desc.contains('deposit')) return Colors.blueAccent;
-    if (cat.contains('uber') || desc.contains('uber') || desc.contains('lyft')) return Colors.indigo;
+    if (cat.contains('food') ||
+        cat.contains('dining') ||
+        desc.contains('starbucks') ||
+        desc.contains('mcdonald')) {
+      return Colors.orange;
+    }
+    if (cat.contains('travel') ||
+        desc.contains('airline') ||
+        desc.contains('united')) {
+      return Colors.blue;
+    }
+    if (cat.contains('shopping') || desc.contains('amazon')) {
+      return Colors.purple;
+    }
+    if (cat.contains('transfer') ||
+        desc.contains('ach') ||
+        desc.contains('wire')) {
+      return Colors.teal;
+    }
+    if (cat.contains('payment') ||
+        desc.contains('payment') ||
+        desc.contains('credit card')) {
+      return Colors.green;
+    }
+    if (cat.contains('entertainment') ||
+        desc.contains('netflix') ||
+        desc.contains('spotify')) {
+      return Colors.pink;
+    }
+    if (cat.contains('recreation') ||
+        desc.contains('climbing') ||
+        desc.contains('gym')) {
+      return const Color(0xFF1DE9B6);
+    }
+    if (cat.contains('deposit') || desc.contains('deposit')) {
+      return Colors.blueAccent;
+    }
+    if (cat.contains('uber') ||
+        desc.contains('uber') ||
+        desc.contains('lyft')) {
+      return Colors.indigo;
+    }
     return Colors.grey;
   }
 }
-

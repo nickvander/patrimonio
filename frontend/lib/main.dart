@@ -12,13 +12,17 @@ external void _splashDone();
 
 void _updateSplash(int percent, String message) {
   if (kIsWeb) {
-    try { _splashProgress(percent, message); } catch (_) {}
+    try {
+      _splashProgress(percent, message);
+    } catch (_) {}
   }
 }
 
 void _dismissSplash() {
   if (kIsWeb) {
-    try { _splashDone(); } catch (_) {}
+    try {
+      _splashDone();
+    } catch (_) {}
   }
 }
 
@@ -57,7 +61,6 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
           seedColor: const Color(0xFF00E676), // Emerald green accent
           brightness: Brightness.dark,
           surface: const Color(0xFF1A1A24), // Softer dark card background
-          background: const Color(0xFF101016), // Softer main background
         ),
         useMaterial3: true,
         textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
@@ -65,7 +68,9 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
           color: const Color(0xFF1A1A24),
           elevation: 4,
           shadowColor: Colors.black26,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
         ),
         appBarTheme: const AppBarTheme(
           backgroundColor: Color(0xFF101016),

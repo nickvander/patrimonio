@@ -39,12 +39,14 @@ impl CryptoService {
         // 2. If unauthorized, try to refresh token
         if res.status() == reqwest::StatusCode::UNAUTHORIZED {
             tracing::info!("Coinbase access token expired, attempting refresh for {}", name);
+            let client_id = config.coinbase_client_id.as_ref().ok_or_else(|| anyhow!("COINBASE_CLIENT_ID missing"))?;
+            let client_secret = config.coinbase_client_secret.as_ref().ok_or_else(|| anyhow!("COINBASE_CLIENT_SECRET missing"))?;
             let refresh_res = client.post("https://api.coinbase.com/oauth/token")
                 .form(&[
                     ("grant_type", "refresh_token"),
                     ("refresh_token", &refresh_token),
-                    ("client_id", config.coinbase_client_id.as_ref().unwrap()),
-                    ("client_secret", config.coinbase_client_secret.as_ref().unwrap()),
+                    ("client_id", client_id),
+                    ("client_secret", client_secret),
                 ])
                 .send().await?.json::<serde_json::Value>().await?;
 

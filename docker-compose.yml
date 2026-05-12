@@ -1,24 +1,43 @@
 services:
+  # Static Flutter web app. Run `flutter build web` in ./frontend before starting.
+  frontend:
+    image: nginx:1.27-alpine
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    volumes:
+      - ./frontend/build/web:/usr/share/nginx/html:ro
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+
   # Rust API server
   api:
     build:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      - "${API_PORT:-8080}:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
     environment:
-      DATABASE_URL: postgres://patrimonio:patrimonio@postgres:5432/patrimonio
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgres://patrimonio:patrimonio@host.docker.internal:${POSTGRES_PORT:-5433}/patrimonio
+      REDIS_URL: redis://host.docker.internal:${REDIS_PORT:-6380}
       PLAID_CLIENT_ID: ${PLAID_CLIENT_ID:-}
       PLAID_SECRET: ${PLAID_SECRET:-}
       PLAID_ENV: ${PLAID_ENV:-sandbox}
       EXCHANGE_RATE_API_KEY: ${EXCHANGE_RATE_API_KEY:-}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-dev-key-change-in-prod}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      COINBASE_CLIENT_ID: ${COINBASE_CLIENT_ID:-}
+      COINBASE_CLIENT_SECRET: ${COINBASE_CLIENT_SECRET:-}
+      COINBASE_REDIRECT_URI: ${COINBASE_REDIRECT_URI:-http://localhost:8080/api/auth/coinbase/callback}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       RUST_LOG: patrimonio=debug,tower_http=debug
     restart: unless-stopped
 
@@ -26,7 +45,7 @@ services:
   postgres:
     image: postgres:17-alpine
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     environment:
       POSTGRES_USER: patrimonio
       POSTGRES_PASSWORD: patrimonio
@@ -43,7 +62,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6380}:6379"
     volumes:
       - redisdata:/data
     command: redis-server --appendonly yes
