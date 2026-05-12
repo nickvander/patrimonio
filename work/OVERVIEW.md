@@ -1,13 +1,15 @@
-# Patrimonio — Project Overview
+# Patrimonio - Project Overview
 
-**A cross-platform personal finance tracker for US and Mexican accounts.**
+**A cross-platform personal finance tracker for US and Mexican accounts, investments, crypto, taxes, and USD/MXN reporting.**
 
 ## Vision
-One dashboard to see all finances across banking, credit cards, brokerages, retirement, and HSA — with real-time exchange rates between USD and MXN.
+
+One dashboard to see banking, credit cards, brokerages, retirement, HSA, crypto, and Mexican financial accounts with consistent currency conversion and historical context.
 
 ## Institutions Tracked
+
 | # | Institution | Type | Country | Integration |
-|---|------------|------|---------|-------------|
+|---|-------------|------|---------|-------------|
 | 1 | SoFi Bank | Banking | US | Plaid |
 | 2 | Chase | Credit Card | US | Plaid |
 | 3 | American Express | Credit Card | US | Plaid |
@@ -19,24 +21,40 @@ One dashboard to see all finances across banking, credit cards, brokerages, reti
 | 9 | Vanguard 401k | Retirement | US | Plaid |
 | 10 | HealthEquity HSA | HSA | US | Plaid |
 | 11 | Robinhood | Brokerage | US | Plaid |
-| 12 | Nu Bank Mexico | Banking | MX | CSV Upload |
-| 13 | Banamex | Banking | MX | CSV Upload |
-| 14 | Cetesdirecto | Government Securities | MX | CSV Upload |
+| 12 | Coinbase | Crypto | US | OAuth/API |
+| 13 | Bitso | Crypto | MX | Read-only API |
+| 14 | Nu Bank Mexico | Banking | MX | CSV/PDF upload |
+| 15 | Banamex | Banking | MX | CSV/PDF upload |
+| 16 | Cetesdirecto | Government securities | MX | CSV/PDF upload |
 
 ## Tech Stack
-- **Backend:** Rust + axum + PostgreSQL + Redis
-- **Frontend:** Flutter (web, desktop, mobile)
-- **Deployment:** Docker Compose (local), GCP Cloud Run (cloud)
-- **Data:** Plaid API (US), CSV/OFX upload (MX), ExchangeRate-API (FX)
+
+- **Backend:** Rust + axum + SQLx + PostgreSQL + Redis
+- **Frontend:** Flutter web, served by nginx in Docker
+- **Deployment:** Docker Compose locally; static frontend hosting plus API container for production
+- **Data:** Plaid, Coinbase, Bitso, CSV/PDF import, ExchangeRate-API
 
 ## Architecture
-```
-Flutter (Web/Desktop/Mobile) → Rust API (axum) → PostgreSQL + Redis
-                                    ↓
-                         Plaid / CSV / FX APIs
+
+```text
+Browser -> nginx/Flutter Web -> Rust API (axum) -> PostgreSQL + Redis
+                                      |
+                                      +-> Plaid / Coinbase / Bitso / CSV-PDF / FX APIs
 ```
 
+## Local Launch
+
+```bash
+docker compose up --build -d
+```
+
+- App: `http://127.0.0.1:3000`
+- API: `http://127.0.0.1:8080`
+- Postgres host port: `5433`
+- Redis host port: `6380`
+
 ## Cost
-- Plaid: ~$0-5/month (pay-as-you-go, `/accounts/get` is free)
-- Exchange Rate API: Free tier (1,500 calls/month)
-- Self-hosted: $0 | GCP free tier: $0
+
+- Plaid: ~$0-5/month for light personal usage
+- ExchangeRate-API: Free tier available
+- Local Docker hosting: $0

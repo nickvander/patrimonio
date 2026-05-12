@@ -1,61 +1,79 @@
 # System Architecture
 
-Patrimonio follows a modern client-server architecture with a heavy emphasis on data integrity and real-time exchange rate accuracy.
+Patrimonio uses a Flutter web client, a Rust/Axum API, PostgreSQL as the source of truth, and Redis for cached exchange-rate and short-lived integration data.
 
 ## High-Level Diagram
 
 ```mermaid
 graph TD
     User([User])
-    
-    subgraph Frontend [Frontend - Flutter]
-        UI[Dashboard UI]
-        State[State Management]
+
+    subgraph Frontend["Frontend"]
+        Nginx["nginx container"]
+        UI["Flutter web app"]
+        State["Screen state and API clients"]
     end
-    
-    subgraph Backend [Backend - Rust/Axum]
-        API[API Endpoints]
-        Service[Business Logic Services]
-        Parsers[CSV/PDF Parsers]
+
+    subgraph Backend["Backend - Rust/Axum"]
+        API["REST API"]
+        Services["Business services"]
+        Parsers["CSV/PDF parsers"]
+        Crypto["Crypto sync services"]
+        Tax["Tax estimator/exporter"]
     end
-    
-    subgraph Storage [Persistence & Cache]
+
+    subgraph Storage["Persistence and cache"]
         DB[(PostgreSQL)]
         Cache[(Redis)]
     end
-    
-    subgraph External [External Integrations]
-        Plaid[Plaid API]
-        FX[ExchangeRate-API]
+
+    subgraph External["External integrations"]
+        Plaid["Plaid API"]
+        Coinbase["Coinbase OAuth/API"]
+        Bitso["Bitso API"]
+        FX["ExchangeRate-API"]
     end
 
-    User <--> UI
+    User --> Nginx
+    Nginx --> UI
     UI <--> State
     State <--> API
-    API <--> Service
-    Service <--> DB
-    Service <--> Cache
-    Service --> Plaid
-    Service --> FX
-    Parsers --> Service
+    API --> Services
+    Services --> DB
+    Services --> Cache
+    Services --> Plaid
+    Services --> Coinbase
+    Services --> Bitso
+    Services --> FX
+    Parsers --> Services
+    Crypto --> Services
+    Tax --> Services
 ```
 
 ## Data Flow
 
-### 1. Account Synchronization (US)
-The backend service periodically calls the Plaid API to fetch updated balances and transactions. The raw data is normalized and stored in PostgreSQL.
+### Account Synchronization
 
-### 2. Manual Imports (Mexico)
-Users can upload statement files (PDF/CSV) via the frontend. The backend's parser service extracts transaction data, calculates balances, and updates the local records.
+Plaid sync routes fetch US account balances, transactions, and holdings. The backend normalizes provider payloads into local `accounts`, `transactions`, `holdings`, and `balance_snapshots` rows.
 
-### 3. Net Worth Calculation
-The system aggregates balances across all accounts. For multi-currency tracking, it fetches the latest FX rates (cached in Redis) and calculates the total in the user's preferred currency.
+### Crypto Synchronization
+
+Coinbase uses OAuth with refreshable encrypted tokens. Bitso uses read-only API keys with HMAC signing. Crypto balances are valued through ticker data and stored as holdings and account balances.
+
+### Manual Imports
+
+Nu Mexico, Banamex, and Cetesdirecto statements are uploaded through the app. Parser services extract transactions and balances from CSV/PDF files, then write normalized records to the same tables used by automated sync.
+
+### Net Worth and Tax Calculation
+
+Dashboard routes aggregate account balances, holdings, transaction history, and exchange rates. Tax routes estimate US federal and Mexico ISR exposure and export taxable activity as CSV/PDF reports.
 
 ## Component Overview
 
 | Component | Responsibility |
-| :--- | :--- |
-| **Rust API** | High-performance request handling, SQL query execution, and security. |
-| **Flutter App** | Cross-platform rendering with a focus on visual excellence and responsiveness. |
-| **PostgreSQL** | Primary source of truth for all financial records and snapshots. |
-| **Redis** | Fast caching for API tokens and real-time exchange rates. |
+|-----------|----------------|
+| Rust API | Request handling, validation, integrations, SQL queries, and exports. |
+| Flutter app | Dashboard, management workflows, tax views, imports, and responsive navigation. |
+| PostgreSQL | Source of truth for institutions, accounts, transactions, holdings, snapshots, rates, and sync cursors. |
+| Redis | Cache for FX data and short-lived service state. |
+| Docker Compose | Local orchestration for frontend, API, database, and cache. |

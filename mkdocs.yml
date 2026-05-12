@@ -1,6 +1,6 @@
 site_name: Patrimonio
-site_url: https://your-username.github.io/patrimonio/
-repo_url: https://github.com/your-username/patrimonio
+site_url: https://nickvander.github.io/patrimonio/
+repo_url: https://github.com/nickvander/patrimonio
 edit_uri: edit/main/docs/
 
 theme:

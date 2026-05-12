@@ -17,6 +17,18 @@ For seamless connection to US-based institutions (e.g., Chase, SoFi, Fidelity), 
 > [!NOTE]
 > Ensure your system administrator has configured the `PLAID_ENV`, `PLAID_CLIENT_ID`, and `PLAID_SECRET` environment variables properly in the backend configuration. Without these, Plaid integration will not work.
 
+### Production readiness checklist
+
+To let a real user connect Plaid and have accounts populate, verify:
+
+- The Plaid dashboard app is approved for the required products: Transactions and Investments.
+- `PLAID_ENV`, `PLAID_CLIENT_ID`, and `PLAID_SECRET` are set in the backend runtime.
+- `ENCRYPTION_KEY` is set before exchanging public tokens.
+- The frontend can reach the API host used by the browser.
+- Plaid redirect and webhook URLs match the deployed HTTPS API/frontend URLs, if enabled for the environment.
+- The immediate sync after token exchange succeeds, and the user can also trigger `/api/institutions/sync` later.
+- Empty, pending, item-error, and re-auth states are visible enough that a user knows whether data is still syncing or needs attention.
+
 ---
 
 ## 2. Connecting Cryptocurrency Exchanges
@@ -38,6 +50,9 @@ For users in Mexico or LATAM using Bitso, you need to provide API keys.
 
 > [!CAUTION]
 > Patrimonio stores api keys securely using AES-256-GCM encryption on the backend. Nevertheless, always strictly limit API key permissions to "read-only/View".
+
+> [!NOTE]
+> Crypto credentials require a configured `ENCRYPTION_KEY` in the backend environment. Without it, the API should reject credential storage rather than persisting secrets unsafely.
 
 ---
 

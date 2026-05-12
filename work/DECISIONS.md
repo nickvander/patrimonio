@@ -108,3 +108,22 @@ Tracking key architectural and design decisions with rationale.
 **Rationale:** These three changes have outsized UX impact relative to effort. Icon+color gives instant visual scanning. Title-casing eliminates the "raw data dump" feel. Search is essential once transaction count grows.
 **Trade-off:** Icon mapping is hardcoded to Plaid's category taxonomy; custom/manual transactions may fall through to a generic icon. Title-case can produce odd results for acronyms (e.g., "Ach" instead of "ACH").
 
+---
+
+## DEC-013: Docker Compose Owns the Full Local Stack
+**Date:** 2026-05-12
+**Status:** Accepted
+**Context:** The app previously required separate backend and Flutter launch paths, which made "does it start?" ambiguous and exposed local port conflicts with other services.
+**Decision:** Docker Compose now starts the frontend, API, PostgreSQL, and Redis together. The Flutter web build is served by nginx at port 3000, the API remains on 8080, and Postgres/Redis are mapped to 5433/6380 on the host.
+**Rationale:** One command should bring up the product the user can actually open in a browser. Non-default database/cache host ports reduce collisions on development machines.
+**Trade-off:** Frontend container rebuilds take longer than direct `flutter run`, so direct Flutter commands remain useful during UI-heavy development.
+
+---
+
+## DEC-014: Local Smoke Test Covers API and Browser Rendering
+**Date:** 2026-05-12
+**Status:** Accepted
+**Context:** Container health is not enough for a Flutter web app; nginx can serve files while the app still fails to render.
+**Decision:** Added `scripts/smoke.cjs` to check API health and verify the app renders in a real browser through Playwright.
+**Rationale:** This catches routing, asset, API reachability, and blank-screen failures before pushing launch changes.
+**Trade-off:** Browser validation depends on local Playwright availability. `SKIP_BROWSER=1` exists for API-only checks when browser dependencies are unavailable.
