@@ -13,6 +13,29 @@ class ConnectBankScreen extends StatefulWidget {
 
 class _ConnectBankScreenState extends State<ConnectBankScreen> {
   bool _isLoading = false;
+  Map<String, dynamic>? _setupStatus;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSetupStatus();
+  }
+
+  Future<void> _loadSetupStatus() async {
+    final host = web.window.location.hostname.isEmpty
+        ? 'localhost'
+        : web.window.location.hostname;
+    try {
+      final response = await http.get(
+        Uri.parse('http://$host:8080/api/setup/status'),
+      );
+      if (response.statusCode == 200 && mounted) {
+        setState(() => _setupStatus = json.decode(response.body));
+      }
+    } catch (_) {
+      // Link-token call still handles the actionable error.
+    }
+  }
 
   Future<void> _startPlaidLink() async {
     setState(() => _isLoading = true);
@@ -41,7 +64,7 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
         PlaidLink.create(configuration: linkTokenConfiguration);
         PlaidLink.open();
       } else {
-        _showError('Failed to retrieve link token: ${response.statusCode}');
+        _showError(_responseError(response, 'Failed to retrieve link token'));
       }
     } catch (e) {
       _showError('Error connecting to backend: $e');
@@ -75,20 +98,33 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Bank connected successfully!'),
+              content: Text('Bank connected. Initial sync has started.'),
               backgroundColor: Colors.green,
             ),
           );
           Navigator.pop(context);
         }
       } else {
-        _showError('Failed to exchange token: ${response.body}');
+        _showError(_responseError(response, 'Failed to exchange token'));
       }
     } catch (e) {
       _showError('Error communicating with backend: $e');
     } finally {
       setState(() => _isLoading = false);
     }
+  }
+
+  String _responseError(http.Response response, String fallback) {
+    try {
+      final data = json.decode(response.body);
+      final details = data['details'] ?? data['error'];
+      if (details != null) {
+        return '$fallback: $details';
+      }
+    } catch (_) {
+      // Keep fallback below.
+    }
+    return '$fallback: HTTP ${response.statusCode}';
   }
 
   void _onEvent(LinkEvent event) {
@@ -115,20 +151,53 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Connect Bank'), centerTitle: true),
       body: Center(
-        child: _isLoading
-            ? const CircularProgressIndicator()
-            : ElevatedButton.icon(
-                icon: const Icon(Icons.account_balance),
-                label: const Text('Connect with Plaid'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_setupStatus?['ready_for_plaid_linking'] == false) ...[
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    size: 42,
+                    color: Colors.orangeAccent,
                   ),
-                  textStyle: const TextStyle(fontSize: 18),
-                ),
-                onPressed: _startPlaidLink,
-              ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Plaid setup is incomplete.',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Set Plaid credentials and ENCRYPTION_KEY before linking real bank accounts.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+                _isLoading
+                    ? const CircularProgressIndicator()
+                    : ElevatedButton.icon(
+                        icon: const Icon(Icons.account_balance),
+                        label: const Text('Connect with Plaid'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                          textStyle: const TextStyle(fontSize: 18),
+                        ),
+                        onPressed:
+                            _setupStatus?['ready_for_plaid_linking'] == false
+                            ? null
+                            : _startPlaidLink,
+                      ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

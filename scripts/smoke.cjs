@@ -66,6 +66,7 @@ async function smokeApi() {
     '/dashboard/transactions',
     '/dashboard/allocation',
     '/dashboard/trends',
+    '/setup/status',
     '/fx/latest/USD/MXN',
     '/tax/summary',
   ]) {

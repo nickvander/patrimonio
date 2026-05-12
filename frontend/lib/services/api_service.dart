@@ -78,6 +78,14 @@ class ApiService {
     throw Exception('Failed to load sync status');
   }
 
+  Future<Map<String, dynamic>> getSetupStatus() async {
+    final response = await http.get(Uri.parse('$_baseUrl/setup/status'));
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Failed to load setup status');
+  }
+
   Future<Map<String, dynamic>> getExchangeRate(
     String base,
     String target,

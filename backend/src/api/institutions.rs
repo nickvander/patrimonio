@@ -259,8 +259,8 @@ async fn exchange_public_token(
 
     let row = match sqlx::query(
         r#"
-        INSERT INTO institutions (name, institution_type, country, integration_type, plaid_item_id, plaid_access_token_enc)
-        VALUES ($1, $2, 'US', 'plaid', $3, $4)
+        INSERT INTO institutions (name, institution_type, country, integration_type, plaid_item_id, plaid_access_token_enc, sync_status)
+        VALUES ($1, $2, 'US', 'plaid', $3, $4, 'syncing')
         RETURNING id, name, institution_type, country, integration_type,
                   last_synced_at, sync_status, created_at
         "#
@@ -422,6 +422,24 @@ async fn plaid_webhook(
     Json(req): Json<PlaidWebhook>,
 ) -> Json<serde_json::Value> {
     tracing::info!("Plaid Webhook: {} - {} for item {}", req.webhook_type, req.webhook_code, req.item_id);
+
+    let status = match req.webhook_code.as_str() {
+        "ERROR" | "ITEM_LOGIN_REQUIRED" | "PENDING_EXPIRATION" | "USER_PERMISSION_REVOKED" => {
+            Some("reconnect_required")
+        }
+        "SYNC_UPDATES_AVAILABLE" | "DEFAULT_UPDATE" | "HISTORICAL_UPDATE" | "INITIAL_UPDATE" => {
+            Some("syncing")
+        }
+        _ => None,
+    };
+
+    if let Some(status) = status {
+        let _ = sqlx::query("UPDATE institutions SET sync_status = $1 WHERE plaid_item_id = $2")
+            .bind(status)
+            .bind(&req.item_id)
+            .execute(&state.db)
+            .await;
+    }
 
     let config = state.config.clone();
     let db = state.db.clone();

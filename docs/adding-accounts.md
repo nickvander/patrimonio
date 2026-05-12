@@ -21,6 +21,7 @@ For seamless connection to US-based institutions (e.g., Chase, SoFi, Fidelity), 
 
 To let a real user connect Plaid and have accounts populate, verify:
 
+- The Management tab's **Launch Setup** panel shows Plaid and credential encryption as configured.
 - The Plaid dashboard app is approved for the required products: Transactions and Investments.
 - `PLAID_ENV`, `PLAID_CLIENT_ID`, and `PLAID_SECRET` are set in the backend runtime.
 - `ENCRYPTION_KEY` is set before exchanging public tokens.

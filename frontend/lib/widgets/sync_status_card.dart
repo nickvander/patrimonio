@@ -3,8 +3,9 @@ import 'package:intl/intl.dart';
 
 class SyncStatusCard extends StatelessWidget {
   final List<dynamic> syncData;
+  final VoidCallback? onRetrySync;
 
-  const SyncStatusCard({super.key, required this.syncData});
+  const SyncStatusCard({super.key, required this.syncData, this.onRetrySync});
 
   @override
   Widget build(BuildContext context) {
@@ -39,8 +40,21 @@ class SyncStatusCard extends StatelessWidget {
 
     switch (status) {
       case 'success':
+      case 'synced':
         statusIcon = Icons.check_circle;
         statusColor = Colors.green;
+        break;
+      case 'syncing':
+        statusIcon = Icons.sync;
+        statusColor = Colors.lightBlueAccent;
+        break;
+      case 'setup_required':
+        statusIcon = Icons.settings_suggest;
+        statusColor = Colors.orangeAccent;
+        break;
+      case 'reconnect_required':
+        statusIcon = Icons.link_off;
+        statusColor = Colors.deepOrangeAccent;
         break;
       case 'error':
       case 'failed':
@@ -50,6 +64,10 @@ class SyncStatusCard extends StatelessWidget {
       case 'pending':
         statusIcon = Icons.hourglass_empty;
         statusColor = Colors.orange;
+        break;
+      case 'manual':
+        statusIcon = Icons.edit_note;
+        statusColor = Colors.grey;
         break;
       default:
         statusIcon = Icons.help;
@@ -79,23 +97,48 @@ class SyncStatusCard extends StatelessWidget {
                     style: const TextStyle(fontWeight: FontWeight.w500),
                   ),
                   Text(
-                    'Via ${inst['integration_type']} • $lastSyncText',
+                    _statusDetail(inst, status, lastSyncText),
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
                   ),
                 ],
               ),
             ],
           ),
-          if (status == 'error')
+          if ([
+            'error',
+            'failed',
+            'setup_required',
+            'reconnect_required',
+          ].contains(status))
             IconButton(
               icon: const Icon(Icons.refresh, color: Colors.teal),
-              onPressed: () {
-                // TODO: Trigger manual sync
-              },
+              onPressed: onRetrySync,
               tooltip: 'Retry Sync',
             ),
         ],
       ),
     );
+  }
+
+  String _statusDetail(
+    Map<String, dynamic> inst,
+    String status,
+    String lastSyncText,
+  ) {
+    final source = 'Via ${inst['integration_type']}';
+    switch (status) {
+      case 'syncing':
+        return '$source • Syncing now';
+      case 'setup_required':
+        return '$source • Setup required before sync';
+      case 'reconnect_required':
+        return '$source • Reconnect required';
+      case 'pending':
+        return '$source • Waiting for first sync';
+      case 'manual':
+        return '$source • Manual/offline source';
+      default:
+        return '$source • $lastSyncText';
+    }
   }
 }

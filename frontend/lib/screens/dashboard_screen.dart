@@ -38,6 +38,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic>? _portfolioData;
   List<dynamic>? _creditData;
   List<dynamic>? _syncData;
+  Map<String, dynamic>? _setupStatus;
   Map<String, dynamic>? _fxRate;
   List<dynamic>? _transactions;
   List<AllocationData>? _allocationData;
@@ -48,8 +49,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _targetCurrency = _loadSavedCurrency();
     _loadAllData();
     _checkRedirectStatus();
+  }
+
+  String _loadSavedCurrency() {
+    try {
+      final saved = web.window.localStorage.getItem(
+        'patrimonio.reportingCurrency',
+      );
+      if (saved == 'USD' || saved == 'MXN') return saved!;
+    } catch (_) {
+      // Ignore storage failures; default currency still works.
+    }
+    return 'USD';
+  }
+
+  void _setTargetCurrency(String currency) {
+    setState(() => _targetCurrency = currency);
+    try {
+      web.window.localStorage.setItem('patrimonio.reportingCurrency', currency);
+    } catch (_) {
+      // Ignore storage failures; the in-memory selection still updates.
+    }
   }
 
   void _checkRedirectStatus() {
@@ -89,6 +112,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _apiService.getHoldings(),
         _apiService.getCreditUtilization(),
         _apiService.getSyncStatus(),
+        _apiService.getSetupStatus(),
         _apiService.getExchangeRate('USD', 'MXN'),
         _apiService.getTransactions(),
         _apiService.getAllocationData(),
@@ -97,8 +121,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       debugPrint("All data loaded successfully");
 
-      final allocationRaw = results[7] as List<dynamic>;
-      final trendsRaw = results[8] as List<dynamic>;
+      final allocationRaw = results[8] as List<dynamic>;
+      final trendsRaw = results[9] as List<dynamic>;
 
       final categoryColors = {
         'Cash': const Color(0xFF00B0FF), // Azure Blue
@@ -115,8 +139,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _portfolioData = results[2] as Map<String, dynamic>;
         _creditData = results[3] as List<dynamic>;
         _syncData = results[4] as List<dynamic>;
-        _fxRate = results[5] as Map<String, dynamic>;
-        _transactions = results[6] as List<dynamic>;
+        _setupStatus = results[5] as Map<String, dynamic>;
+        _fxRate = results[6] as Map<String, dynamic>;
+        _transactions = results[7] as List<dynamic>;
 
         _allocationData = allocationRaw.map((e) {
           final category = e['category'] as String;
@@ -180,9 +205,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 12),
               ),
               onPressed: () {
-                setState(() {
-                  _targetCurrency = _targetCurrency == 'USD' ? 'MXN' : 'USD';
-                });
+                _setTargetCurrency(_targetCurrency == 'USD' ? 'MXN' : 'USD');
               },
               icon: Icon(
                 Icons.currency_exchange,
@@ -375,6 +398,136 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
+    Future<void> runSync() async {
+      setState(() => _isLoading = true);
+      try {
+        await _apiService.syncInstitutions();
+      } catch (e) {
+        debugPrint("Sync error: $e");
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Sync failed: $e')));
+        }
+      }
+      _loadAllData();
+    }
+
+    bool plaidReady() {
+      return _setupStatus?['ready_for_plaid_linking'] == true;
+    }
+
+    Widget buildSetupStatusCard() {
+      final checks = (_setupStatus?['checks'] as List?) ?? [];
+      final blocking = checks
+          .where(
+            (check) =>
+                check is Map &&
+                check['configured'] != true &&
+                check['severity'] == 'required_for_linking',
+          )
+          .toList();
+      final recommended = checks
+          .where(
+            (check) =>
+                check is Map &&
+                check['configured'] != true &&
+                check['severity'] == 'recommended',
+          )
+          .toList();
+
+      return Card(
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    blocking.isEmpty
+                        ? Icons.verified_user_outlined
+                        : Icons.warning_amber_rounded,
+                    color: blocking.isEmpty
+                        ? const Color(0xFF00E676)
+                        : Colors.orangeAccent,
+                  ),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Launch Setup',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                blocking.isEmpty
+                    ? 'Plaid linking can start. Optional services may still improve data quality.'
+                    : 'Complete required setup before real users can link Plaid accounts.',
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              ...checks.map((raw) {
+                final check = raw as Map<String, dynamic>;
+                final configured = check['configured'] == true;
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        configured
+                            ? Icons.check_circle
+                            : check['severity'] == 'optional'
+                            ? Icons.radio_button_unchecked
+                            : Icons.error_outline,
+                        color: configured
+                            ? const Color(0xFF00E676)
+                            : check['severity'] == 'optional'
+                            ? Colors.white30
+                            : Colors.orangeAccent,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              check['label'] ?? '',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              check['detail'] ?? '',
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              if (recommended.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text(
+                  'Recommended before production: configure live exchange rates.',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
     Widget buildChartsColumn(bool isNarrow) {
       return Column(
         children: [
@@ -502,11 +655,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: SyncStatusCard(syncData: _syncData ?? [])),
+              Expanded(
+                child: SyncStatusCard(
+                  syncData: _syncData ?? [],
+                  onRetrySync: runSync,
+                ),
+              ),
               const SizedBox(width: 24),
               Expanded(child: FxWidget(latestRate: _fxRate ?? {})),
             ],
           ),
+          const SizedBox(height: 24),
+          buildSetupStatusCard(),
           const SizedBox(height: 24),
           const Text(
             'Connect Standard Accounts',
@@ -526,15 +686,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  onPressed: () async {
-                    setState(() => _isLoading = true);
-                    try {
-                      await _apiService.syncInstitutions();
-                    } catch (e) {
-                      debugPrint("Sync error: $e");
-                    }
-                    _loadAllData();
-                  },
+                  onPressed: runSync,
                 ),
               ),
               const SizedBox(width: 16),
@@ -551,14 +703,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ConnectBankScreen(),
-                      ),
-                    ).then((_) => _loadAllData());
-                  },
+                  onPressed: plaidReady()
+                      ? () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ConnectBankScreen(),
+                            ),
+                          ).then((_) => _loadAllData());
+                        }
+                      : null,
                 ),
               ),
             ],

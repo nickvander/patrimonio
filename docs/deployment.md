@@ -49,6 +49,10 @@ NODE_PATH=/path/to/node_modules ./scripts/smoke.cjs
 
 The smoke test checks API health and uses Playwright to confirm the Flutter app renders in a browser. Use `SKIP_BROWSER=1 ./scripts/smoke.cjs` when browser dependencies are unavailable and API-only validation is enough.
 
+### Setup Status
+
+The API exposes `GET /api/setup/status` for launch readiness checks. The Management tab uses it to show whether Plaid credentials and `ENCRYPTION_KEY` are configured before enabling real account linking.
+
 ## Production Shape
 
 A production deployment should keep the same service boundaries:
