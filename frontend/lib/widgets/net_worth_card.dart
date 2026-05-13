@@ -234,10 +234,18 @@ class NetWorthCard extends StatelessWidget {
       List<dynamic> data, List<MapEntry<String, Color>> institutions) {
     if (data.isEmpty) return const SizedBox.shrink();
 
-    List<FlSpot> spots = [];
-    final institutionSpots = <String, List<FlSpot>>{
-      for (final i in institutions) i.key: <FlSpot>[],
-    };
+    // For a true "where the total comes from" stacked-area visualisation we
+    // build a series of cumulative lines from the top down. Filling each
+    // line's BarArea down to the X axis layers the bands such that the
+    // strip between cumulative[i] and cumulative[i+1] gets institution i's
+    // colour. A trailing "Other" line catches whatever isn't in the top N.
+    List<FlSpot> totalSpots = [];
+    // cumulativeSpots[level] is the line at cumulativeFromTop level. Level 0
+    // is the total, level 1 is total minus inst[0]'s value, etc. The last
+    // level is the residual ("Other") which we fill in grey.
+    final levels = institutions.length;
+    final cumulativeSpots =
+        List<List<FlSpot>>.generate(levels + 1, (_) => <FlSpot>[]);
 
     double minY = double.infinity;
     double maxY = -double.infinity;
@@ -250,22 +258,30 @@ class NetWorthCard extends StatelessWidget {
 
     void processPoint(int i) {
       final point = data[i] as Map<String, dynamic>;
-      final val = (point['net_worth'] as num).toDouble() * conversionFactor;
+      final total = (point['net_worth'] as num).toDouble() * conversionFactor;
       final x = i.toDouble();
-      spots.add(FlSpot(x, val));
+      totalSpots.add(FlSpot(x, total));
 
       final byInst =
           (point['by_institution'] as Map?)?.cast<String, dynamic>() ?? {};
-      for (final inst in institutions) {
-        final raw = byInst[inst.key];
+
+      // Top of the stack is the total. Each lower level subtracts the next
+      // institution's value. The bottom level is "Other" — what's left.
+      double running = total;
+      cumulativeSpots[0].add(FlSpot(x, running));
+      for (int idx = 0; idx < levels; idx++) {
+        final raw = byInst[institutions[idx].key];
         final v = raw is num ? raw.toDouble() * conversionFactor : 0.0;
-        institutionSpots[inst.key]!.add(FlSpot(x, v));
-        if (v < minY) minY = v;
-        if (v > maxY) maxY = v;
+        running -= v;
+        cumulativeSpots[idx + 1].add(FlSpot(x, running));
       }
 
-      if (val < minY) minY = val;
-      if (val > maxY) maxY = val;
+      if (total < minY) minY = total;
+      if (total > maxY) maxY = total;
+      // Don't let the running residual push minY below 0 visually; some
+      // historical points may have negative residuals if liabilities exceed
+      // tracked assets.
+      if (running < minY) minY = running;
     }
 
     for (int i = 0; i < data.length; i += step) {
@@ -280,6 +296,7 @@ class NetWorthCard extends StatelessWidget {
     double padding = (maxY - minY) * 0.15;
     if (padding <= 0) padding = baseValue * 0.15 + 1000;
     minY -= padding;
+    if (minY > 0) minY = 0; // Stacked areas read best when grounded at 0
     maxY += padding;
 
     // Calculate a smart Y-axis interval to avoid duplicate labels
@@ -311,9 +328,11 @@ class NetWorthCard extends StatelessWidget {
                 const Color(0xFF1A1A24).withValues(alpha: 0.9),
             tooltipRoundedRadius: 12,
             getTooltipItems: (touchedSpots) {
-              // Only emit a tooltip body once — on the wealth line (the
-              // last bar) — and have it include every institution breakdown.
-              final wealthBarIndex = institutions.length;
+              // The wealth line is always the LAST bar in lineBarsData.
+              // Only emit a single tooltip body there, listing every
+              // institution's contribution for that date.
+              final wealthBarIndex =
+                  institutions.isEmpty ? 0 : institutions.length + 1;
               return touchedSpots.map((spot) {
                 if (spot.barIndex != wealthBarIndex) return null;
 
@@ -474,37 +493,52 @@ class NetWorthCard extends StatelessWidget {
         minY: minY,
         maxY: maxY,
         lineBarsData: [
-          // Per-institution contribution lines (drawn under the wealth line).
-          for (final inst in institutions)
+          // Stacked area: cumulative lines drawn top→down. Each level's
+          // belowBarData fill paints from that line down to 0, so each
+          // subsequent (lower) line covers the bottom of the prior one,
+          // leaving only the band between two consecutive cumulatives
+          // visible — which is the contribution of one institution.
+          for (int idx = 0; idx < levels; idx++)
             LineChartBarData(
-              spots: institutionSpots[inst.key]!,
+              spots: cumulativeSpots[idx],
               isCurved: true,
-              color: inst.value.withValues(alpha: 0.7),
-              barWidth: 2.5,
+              preventCurveOverShooting: true,
+              color: institutions[idx].value.withValues(alpha: 0.85),
+              barWidth: 1.5,
               isStrokeCapRound: true,
               dotData: const FlDotData(show: false),
+              belowBarData: BarAreaData(
+                show: true,
+                color: institutions[idx].value.withValues(alpha: 0.45),
+              ),
             ),
-          // Total net worth (drawn on top so it remains the focal line)
+          // Residual "Other" band — drawn last so its fill (grey) covers
+          // whatever's between cumulativeSpots[levels] and the X axis.
+          if (levels > 0)
+            LineChartBarData(
+              spots: cumulativeSpots[levels],
+              isCurved: true,
+              preventCurveOverShooting: true,
+              color: Colors.white24,
+              barWidth: 1,
+              isStrokeCapRound: true,
+              dotData: const FlDotData(show: false),
+              belowBarData: BarAreaData(
+                show: true,
+                color: Colors.white.withValues(alpha: 0.05),
+              ),
+            ),
+          // Total net worth line drawn on top so it remains the focal value.
           LineChartBarData(
-            spots: spots,
+            spots: totalSpots,
             isCurved: true,
+            preventCurveOverShooting: true,
             gradient: const LinearGradient(
               colors: [Color(0xFF00E676), Color(0xFF69F0AE)],
             ),
-            barWidth: 4,
+            barWidth: 3.5,
             isStrokeCapRound: true,
             dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(
-              show: true,
-              gradient: LinearGradient(
-                colors: [
-                  const Color(0xFF00E676).withValues(alpha: 0.2),
-                  const Color(0xFF00E676).withValues(alpha: 0),
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
           ),
         ],
       ),

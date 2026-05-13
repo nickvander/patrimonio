@@ -10,8 +10,12 @@ class FxWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final rate = latestRate['rate'] ?? 0.0;
     final source = (latestRate['source'] ?? '').toString();
-    final base = (latestRate['base_currency'] ?? 'USD').toString();
-    final target = (latestRate['target_currency'] ?? 'MXN').toString();
+    // API responds with `base`/`target`; older code used `_currency` suffix.
+    final base = (latestRate['base'] ?? latestRate['base_currency'] ?? 'USD')
+        .toString();
+    final target =
+        (latestRate['target'] ?? latestRate['target_currency'] ?? 'MXN')
+            .toString();
 
     return Card(
       elevation: 4,

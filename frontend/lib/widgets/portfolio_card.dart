@@ -560,40 +560,69 @@ class _HoldingsDataSource extends DataTableSource {
       }),
       cells: [
         DataCell(
-          Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: const Color(0xFF2A2A35),
-                radius: 16,
-                child: Text(
-                  (h['symbol'] ?? '?').toString().substring(0, 1).toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    h['symbol'] ?? 'Unknown',
+          Builder(builder: (context) {
+            final rawSymbol = (h['symbol'] ?? '').toString();
+            final rawName = (h['name'] ?? '').toString();
+            // Plaid emits opaque security_ids (e.g. "3mg4qV4JZycPL4qeZgB...")
+            // for un-tickered Vanguard mutual funds. Detect those: a real
+            // ticker is short (<=8 chars) and uppercase; a security_id is
+            // long and mixed-case.
+            final isOpaqueSecurityId = rawSymbol.length > 8 ||
+                (rawSymbol != rawSymbol.toUpperCase() &&
+                    rawSymbol.length > 4);
+            final displaySymbol = isOpaqueSecurityId
+                ? (rawName.isNotEmpty ? rawName : '—')
+                : (rawSymbol.isEmpty ? (rawName.isNotEmpty ? rawName : '?') : rawSymbol);
+            final secondaryLabel = (isOpaqueSecurityId || rawName.isEmpty)
+                ? (h['institution_name'] ?? '').toString()
+                : '$rawName · ${h['institution_name'] ?? ''}';
+            final avatarChar = displaySymbol.isEmpty
+                ? '?'
+                : displaySymbol.substring(0, 1).toUpperCase();
+            return Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: const Color(0xFF2A2A35),
+                  radius: 16,
+                  child: Text(
+                    avatarChar,
                     style: const TextStyle(
+                      color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                      fontSize: 12,
                     ),
                   ),
-                  Text(
-                    h['institution_name'] ?? '',
-                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        displaySymbol,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        secondaryLabel,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ],
-          ),
+                ),
+              ],
+            );
+          }),
         ),
         DataCell(
           Text(

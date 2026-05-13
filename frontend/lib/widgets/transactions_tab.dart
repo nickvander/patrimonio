@@ -244,13 +244,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
                             ),
                             if (sourceCurrency != widget.targetCurrency)
                               Text(
-                                formatCurrencyAmount(
-                                  sourceAmount.abs(),
-                                  sourceCurrency,
-                                ),
+                                'orig. ${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}',
                                 style: const TextStyle(
                                   fontSize: 11,
-                                  color: Colors.grey,
+                                  color: Colors.white38,
                                 ),
                               ),
                             if (tx['pending'] == true)
