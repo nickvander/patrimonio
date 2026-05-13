@@ -424,9 +424,17 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
         r#"
         SELECT category, sub_category, SUM(value_usd) as value
         FROM (
-            -- Holdings
-            SELECT COALESCE(holding_type, 'Stocks/ETFs') as category, 
-                   COALESCE(symbol, name) as sub_category,
+            -- Holdings: prefer security name when the symbol looks like
+            -- an opaque Plaid security_id (long, mixed-case — common for
+            -- un-tickered Vanguard funds). Real tickers (<=8 chars,
+            -- uppercase) keep displaying as the ticker.
+            SELECT COALESCE(holding_type, 'Stocks/ETFs') as category,
+                   CASE
+                       WHEN symbol IS NULL THEN name
+                       WHEN LENGTH(symbol) > 8 OR (symbol <> UPPER(symbol) AND LENGTH(symbol) > 4)
+                            THEN COALESCE(NULLIF(name, ''), symbol)
+                       ELSE symbol
+                   END as sub_category,
                    CASE
                        WHEN currency = 'MXN' THEN value / $1::numeric
                        ELSE value

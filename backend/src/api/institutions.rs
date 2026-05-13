@@ -217,10 +217,14 @@ async fn create_reconnect_token(
     let client = reqwest::Client::new();
     let url = format!("https://{}.plaid.com/link/token/create", state.config.plaid_env);
     
+    // Plaid /link/token/create in update mode still requires country_codes
+    // and language. Match the values used by the new-link flow above.
     let payload = serde_json::json!({
         "client_id": client_id,
         "secret": secret,
         "client_name": "Patrimonio",
+        "country_codes": ["US"],
+        "language": "en",
         "access_token": access_token,
         "user": {
             "client_user_id": "patrimonio-single-user"

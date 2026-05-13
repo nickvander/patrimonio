@@ -242,14 +242,34 @@ class _TransactionsTabState extends State<TransactionsTab> {
                                     : const Color(0xFF00E676),
                               ),
                             ),
-                            if (sourceCurrency != widget.targetCurrency)
-                              Text(
-                                'orig. ${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}',
+                            // Always show the "other" currency on a smaller
+                            // line so the row never looks like just one
+                            // currency. When source == target we synthesise
+                            // a USD↔MXN companion using the live FX rate.
+                            Builder(builder: (context) {
+                              final companionCurrency = sourceCurrency !=
+                                      widget.targetCurrency
+                                  ? sourceCurrency
+                                  : (widget.targetCurrency == 'USD'
+                                      ? 'MXN'
+                                      : 'USD');
+                              final companionAmount = convertCurrency(
+                                amount,
+                                from: widget.targetCurrency,
+                                to: companionCurrency,
+                                usdMxnRate: widget.usdMxnRate,
+                              );
+                              if (widget.usdMxnRate <= 0) {
+                                return const SizedBox.shrink();
+                              }
+                              return Text(
+                                '≈ ${formatCurrencyAmount(companionAmount.abs(), companionCurrency)}',
                                 style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.white38,
                                 ),
-                              ),
+                              );
+                            }),
                             if (tx['pending'] == true)
                               const Text(
                                 'Pending',

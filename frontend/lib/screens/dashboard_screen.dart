@@ -151,11 +151,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Future<void> _loadAllData() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+  Future<void> _refreshData() => _loadAllData(silent: true);
+
+  Future<void> _loadAllData({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    } else {
+      setState(() => _error = null);
+    }
 
     try {
       final results = await Future.wait([
@@ -468,18 +474,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     Future<void> runSync() async {
-      setState(() => _isLoading = true);
+      // Don't flip the page into the full-screen loading spinner — the user
+      // experiences that as a hard refresh. Show a transient SnackBar
+      // instead and silently refresh data when the call completes.
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor:
+                      AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 12),
+              Text('Syncing all institutions…'),
+            ],
+          ),
+          duration: Duration(seconds: 30),
+        ),
+      );
       try {
         await _apiService.syncInstitutions();
+        if (!mounted) return;
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Sync complete'),
+            duration: Duration(seconds: 2),
+          ),
+        );
       } catch (e) {
         debugPrint("Sync error: $e");
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Sync failed: $e')));
-        }
+        if (!mounted) return;
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          SnackBar(content: Text('Sync failed: $e')),
+        );
       }
-      _loadAllData();
+      // Reload without flipping _isLoading — just refresh the data fields.
+      await _refreshData();
     }
 
     Future<void> _handleReconnect(String institutionId) async {
