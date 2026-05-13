@@ -75,6 +75,109 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  /// Five-tile compact stat strip pinned to the top of the Overview tab.
+  /// All values are derived from the already-loaded /dashboard/overview
+  /// payload so no extra API call is needed.
+  Widget _buildStatStrip({
+    required NumberFormat currencyFormat,
+    required double conversionFactor,
+  }) {
+    final overview = _overview ?? const <String, dynamic>{};
+    final accounts = (overview['accounts'] as List?) ?? const [];
+    final typeBreakdown = (overview['type_breakdown'] as List?) ?? const [];
+
+    final netWorth =
+        ((overview['net_worth'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
+
+    // Walk accounts to compute liabilities (credit-type balances treated as
+    // positive owed amounts) and the cash / investment subtotals.
+    double liabilities = 0;
+    double cash = 0;
+    double investments = 0;
+    for (final raw in accounts) {
+      final acc = raw as Map<String, dynamic>;
+      final type = (acc['account_type'] ?? '').toString().toLowerCase();
+      final usdBal = ((acc['current_balance'] as num?)?.toDouble() ?? 0.0);
+      final reported = usdBal.abs() * conversionFactor;
+      if (['credit card', 'credit', 'mortgage', 'loan', 'student'].contains(type)) {
+        liabilities += reported;
+      } else if (['checking', 'savings', 'cd', 'money market', 'cash management'].contains(type)) {
+        cash += reported;
+      } else if (['ira', '401k', 'hsa', 'brokerage', 'investment', 'crypto'].contains(type)) {
+        investments += reported;
+      }
+    }
+
+    // If accounts list is empty (unlikely) fall back to type_breakdown totals.
+    if (accounts.isEmpty && typeBreakdown.isNotEmpty) {
+      for (final raw in typeBreakdown) {
+        final item = raw as Map<String, dynamic>;
+        final type = (item['account_type'] ?? '').toString().toLowerCase();
+        final v =
+            ((item['total_usd'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
+        if (['checking', 'savings'].contains(type)) {
+          cash += v.abs();
+        } else if (['investment', 'brokerage'].contains(type)) {
+          investments += v.abs();
+        } else if (['credit', 'credit card'].contains(type)) {
+          liabilities += v.abs();
+        }
+      }
+    }
+
+    final assets = netWorth + liabilities;
+
+    final tiles = <_StatTile>[
+      _StatTile(
+        label: 'Net worth',
+        value: currencyFormat.format(netWorth),
+        accent: const Color(0xFF00E676),
+        emphasized: true,
+      ),
+      _StatTile(
+        label: 'Assets',
+        value: currencyFormat.format(assets),
+        accent: Colors.white70,
+      ),
+      _StatTile(
+        label: 'Liabilities',
+        value: currencyFormat.format(liabilities),
+        accent: Colors.redAccent,
+      ),
+      _StatTile(
+        label: 'Cash',
+        value: currencyFormat.format(cash),
+        accent: const Color(0xFF00B0FF),
+      ),
+      _StatTile(
+        label: 'Investments',
+        value: currencyFormat.format(investments),
+        accent: const Color(0xFF1DE9B6),
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        // Tile widths derived from total available width minus 4×spacing.
+        // Below ~640 the tiles wrap to two rows automatically.
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: tiles
+              .map((t) => SizedBox(
+                    width: c.maxWidth >= 880
+                        ? (c.maxWidth - 4 * 12) / 5
+                        : c.maxWidth >= 560
+                            ? (c.maxWidth - 12) / 2 - 0.5
+                            : c.maxWidth,
+                    child: t,
+                  ))
+              .toList(),
+        );
+      },
+    );
+  }
+
   Widget _buildFxBadge() {
     final rate = (_fxRate?['rate'] as num?)?.toDouble();
     final recordedAtRaw = _fxRate?['recorded_at'] as String?;
@@ -651,22 +754,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
       LayoutBuilder(
         builder: (context, constraints) {
           final isNarrow = constraints.maxWidth < 900;
-          if (isNarrow) {
-            return Column(
-              children: [
-                buildAccountsColumn(),
-                const SizedBox(height: 24),
-                buildChartsColumn(true),
-              ],
-            );
-          }
+          final stats = _buildStatStrip(
+            currencyFormat: currencyFormat,
+            conversionFactor: conversionFactor,
+          );
 
-          return Row(
+          final body = isNarrow
+              ? Column(
+                  children: [
+                    buildAccountsColumn(),
+                    const SizedBox(height: 24),
+                    buildChartsColumn(true),
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 1, child: buildAccountsColumn()),
+                    const SizedBox(width: 24),
+                    Expanded(flex: 3, child: buildChartsColumn(false)),
+                  ],
+                );
+
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(flex: 1, child: buildAccountsColumn()),
-              const SizedBox(width: 24),
-              Expanded(flex: 3, child: buildChartsColumn(false)),
+              stats,
+              const SizedBox(height: 24),
+              body,
             ],
           );
         },
@@ -975,6 +1090,60 @@ class _DashboardScreenState extends State<DashboardScreen> {
         taxPlanningTab,
         managementTab,
       ],
+    );
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color accent;
+  final bool emphasized;
+
+  const _StatTile({
+    required this.label,
+    required this.value,
+    required this.accent,
+    this.emphasized = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: emphasized ? 0.06 : 0.03),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: accent.withValues(alpha: emphasized ? 0.4 : 0.18),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 10,
+              letterSpacing: 1.2,
+              fontWeight: FontWeight.w700,
+              color: accent.withValues(alpha: 0.9),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: emphasized ? 22 : 18,
+              fontWeight: emphasized ? FontWeight.w900 : FontWeight.w700,
+              color: Colors.white,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
     );
   }
 }

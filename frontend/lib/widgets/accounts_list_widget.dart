@@ -86,8 +86,13 @@ class AccountsListWidget extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Accounts',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              'ACCOUNTS',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.white54,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
+              ),
             ),
             const SizedBox(height: 16),
             ListView(
@@ -259,8 +264,117 @@ class AccountsListWidget extends StatelessWidget {
             },
           ),
           const Divider(color: Colors.white12, height: 1),
-          ...groupAccounts.map((acc) => _buildAccountRow(context, acc)),
+          ..._renderAccountsWithVaults(context, groupAccounts),
         ],
+      ),
+    );
+  }
+
+  /// Group accounts by (institution, account_type) within an already
+  /// type-filtered group. When a cluster has multiple accounts (e.g. SoFi
+  /// Savings + its vaults), pick the dominant one (largest balance) as the
+  /// "primary" and render the rest indented below it as sub-accounts.
+  /// This collapses SoFi vaults (Car, Cards, Emergency, Rent, Taxes, etc.)
+  /// under SoFi Savings without losing them.
+  List<Widget> _renderAccountsWithVaults(
+      BuildContext context, List<dynamic> groupAccounts) {
+    final clusters = <String, List<dynamic>>{};
+    final order = <String>[];
+    for (final acc in groupAccounts) {
+      final inst = (acc['institution_name'] ?? '').toString();
+      final type = (acc['account_type'] ?? '').toString().toLowerCase();
+      final key = '$inst|$type';
+      clusters.putIfAbsent(key, () {
+        order.add(key);
+        return <dynamic>[];
+      }).add(acc);
+    }
+
+    final widgets = <Widget>[];
+    for (final key in order) {
+      final cluster = clusters[key]!;
+      if (cluster.length == 1) {
+        widgets.add(_buildAccountRow(context, cluster.first));
+        continue;
+      }
+      // Pick the parent: largest absolute balance wins. Ties broken by the
+      // account whose name looks like a generic root (matches "Savings" or
+      // "Checking" or contains the institution name).
+      cluster.sort((a, b) {
+        final ba = ((a['current_balance'] ?? 0.0) as num).toDouble().abs();
+        final bb = ((b['current_balance'] ?? 0.0) as num).toDouble().abs();
+        return bb.compareTo(ba);
+      });
+      final parent = cluster.first;
+      final vaults = cluster.skip(1).toList();
+      widgets.add(_buildAccountRow(context, parent));
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(40, 0, 12, 8),
+          child: Column(
+            children: vaults
+                .map((v) => _buildVaultRow(context, v))
+                .toList(),
+          ),
+        ),
+      );
+    }
+    return widgets;
+  }
+
+  /// Compact sub-row for SoFi-style "vaults". Smaller type, no institution
+  /// label (it's implied from the parent above), no chevron, indented.
+  Widget _buildVaultRow(BuildContext context, dynamic acc) {
+    final balance =
+        ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
+    final sourceCurrency = (acc['currency'] ?? targetCurrency).toString();
+    final name = (acc['name'] ?? 'Vault').toString();
+
+    return InkWell(
+      onTap: () {
+        showAccountTransactionsPanel(
+          context,
+          account: acc,
+          conversionFactor: conversionFactor,
+          currencyFormat: currencyFormat,
+          targetCurrency: targetCurrency,
+          usdMxnRate: usdMxnRate,
+          onBalanceUpdate: onBalanceUpdate,
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            Container(
+              width: 14,
+              height: 1,
+              color: Colors.white12,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                name,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Colors.white70,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              formatCurrencyAmount(balance, sourceCurrency),
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.white70,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -273,31 +387,22 @@ class AccountsListWidget extends StatelessWidget {
     final balance =
         ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
     final sourceCurrency = (acc['currency'] ?? targetCurrency).toString();
-    final reportedBalance = convertCurrency(
+    final name = (acc['name'] ?? 'Unknown Account').toString();
+    final inst = (acc['institution_name'] ?? '').toString();
+    final hasCrypto =
+        acc['ticker_symbol'] != null && acc['crypto_amount'] != null;
+    final needsConversion =
+        usdMxnRate > 0 && sourceCurrency != targetCurrency;
+
+    // Native value — this is the "real" amount the bank reported.
+    final nativeText = formatCurrencyAmount(balance, sourceCurrency);
+    // Converted amount only matters when there's an FX conversion to do.
+    final convertedAmount = convertCurrency(
       balance,
       from: sourceCurrency,
       to: targetCurrency,
       usdMxnRate: usdMxnRate,
     );
-    final name = (acc['name'] ?? 'Unknown Account').toString();
-    final inst = (acc['institution_name'] ?? '').toString();
-    final hasCrypto =
-        acc['ticker_symbol'] != null && acc['crypto_amount'] != null;
-    final isForeignCurrency =
-        acc['currency'] != null && sourceCurrency != targetCurrency;
-
-    // Pick a companion currency that's always different from the reporting
-    // currency, so every row shows a second-currency reference value.
-    final companionCurrency = isForeignCurrency
-        ? sourceCurrency
-        : (targetCurrency == 'USD' ? 'MXN' : 'USD');
-    final companionAmount = convertCurrency(
-      reportedBalance,
-      from: targetCurrency,
-      to: companionCurrency,
-      usdMxnRate: usdMxnRate,
-    );
-    final showCompanion = usdMxnRate > 0 && !hasCrypto;
 
     Widget primaryName = Text(
       name,
@@ -326,8 +431,10 @@ class AccountsListWidget extends StatelessWidget {
             ),
           );
 
+    // Primary line is the NATIVE-currency value (what the bank actually
+    // reports). The estimated conversion only appears when needed.
     Widget balanceText = Text(
-      currencyFormat.format(reportedBalance),
+      nativeText,
       style: const TextStyle(
         fontSize: 16,
         fontWeight: FontWeight.w700,
@@ -350,12 +457,13 @@ class AccountsListWidget extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       );
-    } else if (showCompanion) {
+    } else if (needsConversion) {
       subBalance = Text(
-        '≈ ${formatCurrencyAmount(companionAmount, companionCurrency)}',
+        '≈ ${currencyFormat.format(convertedAmount)}',
         style: const TextStyle(
           fontSize: 11,
           color: Colors.white38,
+          fontStyle: FontStyle.italic,
           fontFeatures: [FontFeature.tabularFigures()],
         ),
         maxLines: 1,

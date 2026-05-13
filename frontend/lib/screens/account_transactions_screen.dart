@@ -123,12 +123,14 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         ((widget.account['current_balance'] ?? 0.0) as num).toDouble().abs();
     final sourceCurrency =
         (widget.account['currency'] ?? widget.targetCurrency).toString();
-    final reportedBalance = convertCurrency(
+    final convertedBalance = convertCurrency(
       balance,
       from: sourceCurrency,
       to: widget.targetCurrency,
       usdMxnRate: widget.usdMxnRate,
     );
+    final needsConversion = widget.usdMxnRate > 0 &&
+        sourceCurrency != widget.targetCurrency;
     final inst = (widget.account['institution_name'] ?? '').toString();
     final name = (widget.account['name'] ?? 'Account').toString();
 
@@ -186,7 +188,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             textBaseline: TextBaseline.alphabetic,
             children: [
               Text(
-                widget.currencyFormat.format(reportedBalance),
+                formatCurrencyAmount(balance, sourceCurrency),
                 style: const TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.w900,
@@ -194,13 +196,14 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                   fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
-              if (sourceCurrency != widget.targetCurrency) ...[
+              if (needsConversion) ...[
                 const SizedBox(width: 8),
                 Text(
-                  '≈ ${formatCurrencyAmount(balance, sourceCurrency)}',
+                  '≈ ${widget.currencyFormat.format(convertedBalance)}',
                   style: const TextStyle(
                     fontSize: 12,
                     color: Colors.white38,
+                    fontStyle: FontStyle.italic,
                     fontFeatures: [FontFeature.tabularFigures()],
                   ),
                 ),

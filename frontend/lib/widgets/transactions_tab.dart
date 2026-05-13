@@ -139,34 +139,27 @@ class _TransactionsTabState extends State<TransactionsTab> {
 
   /// One row in the transactions list. Layout: 48px category icon, then a
   /// description column (title + small meta), then a right-aligned amount
-  /// block with a companion currency line and a pending chip.
+  /// block. Real amount is shown in the transaction's native currency;
+  /// an estimated conversion to the reporting currency is appended below
+  /// only when the two currencies differ.
   Widget _buildTransactionRow(dynamic tx) {
     final date = DateTime.parse(tx['date'] as String);
     final sourceAmount = ((tx['amount'] as num?)?.toDouble() ?? 0.0);
     final sourceCurrency =
         (tx['currency'] ?? widget.targetCurrency).toString();
-    final amount = convertCurrency(
+    final converted = convertCurrency(
       sourceAmount,
       from: sourceCurrency,
       to: widget.targetCurrency,
       usdMxnRate: widget.usdMxnRate,
     );
-    final isExpense = amount > 0;
+    final isExpense = sourceAmount > 0;
     final category = tx['user_category'] ?? tx['category'];
     final notes = (tx['user_notes'] ?? '').toString();
     final color = _getCategoryColor(category, tx['description']);
 
-    final companionCurrency = sourceCurrency != widget.targetCurrency
-        ? sourceCurrency
-        : (widget.targetCurrency == 'USD' ? 'MXN' : 'USD');
-    final companionAmount = convertCurrency(
-      amount,
-      from: widget.targetCurrency,
-      to: companionCurrency,
-      usdMxnRate: widget.usdMxnRate,
-    );
-    final showCompanion =
-        widget.usdMxnRate > 0 && companionCurrency != widget.targetCurrency;
+    final needsConversion =
+        widget.usdMxnRate > 0 && sourceCurrency != widget.targetCurrency;
 
     return InkWell(
       onTap: () => _showTransactionDetails(tx),
@@ -217,14 +210,16 @@ class _TransactionsTabState extends State<TransactionsTab> {
               ),
             ),
             const SizedBox(width: 12),
-            // Fixed-width amount column so eyes can scan straight down
+            // Fixed-width amount column so eyes can scan straight down.
+            // Real amount = native currency (top, bold). Estimated
+            // conversion appears below only when there's a real FX leap.
             SizedBox(
               width: 132,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '${isExpense ? '−' : '+'}${widget.currencyFormat.format(amount.abs())}',
+                    '${isExpense ? '−' : '+'}${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}',
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 16,
@@ -234,12 +229,13 @@ class _TransactionsTabState extends State<TransactionsTab> {
                           : const Color(0xFF00E676),
                     ),
                   ),
-                  if (showCompanion)
+                  if (needsConversion)
                     Text(
-                      '≈ ${formatCurrencyAmount(companionAmount.abs(), companionCurrency)}',
+                      '≈ ${widget.currencyFormat.format(converted.abs())}',
                       style: const TextStyle(
                         fontSize: 11,
                         color: Colors.white38,
+                        fontStyle: FontStyle.italic,
                         fontFeatures: [FontFeature.tabularFigures()],
                       ),
                     ),
@@ -309,16 +305,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
       to: widget.targetCurrency,
       usdMxnRate: widget.usdMxnRate,
     );
-    final companionCurrency = sourceCurrency != widget.targetCurrency
-        ? sourceCurrency
-        : (widget.targetCurrency == 'USD' ? 'MXN' : 'USD');
-    final companionAmount = convertCurrency(
-      convertedAmount,
-      from: widget.targetCurrency,
-      to: companionCurrency,
-      usdMxnRate: widget.usdMxnRate,
-    );
-    final isExpense = convertedAmount > 0;
+    final needsConversion =
+        widget.usdMxnRate > 0 && sourceCurrency != widget.targetCurrency;
+    final isExpense = sourceAmount > 0;
     final source = (tx['source'] ?? 'plaid').toString();
     final originalCategory = (tx['category'] ?? '').toString();
     final merchant = (tx['merchant_name'] ?? '').toString();
@@ -472,8 +461,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
                           ),
                         ),
                         const SizedBox(height: 6),
+                        // Hero amount in the transaction's NATIVE currency
+                        // (this is the real, bank-reported value).
                         Text(
-                          '${isExpense ? '−' : '+'}${widget.currencyFormat.format(convertedAmount.abs())}',
+                          '${isExpense ? '−' : '+'}${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}',
                           style: TextStyle(
                             fontSize: 32,
                             fontWeight: FontWeight.w900,
@@ -482,25 +473,14 @@ class _TransactionsTabState extends State<TransactionsTab> {
                                 : const Color(0xFF00E676),
                           ),
                         ),
-                        if (widget.usdMxnRate > 0 &&
-                            companionCurrency != widget.targetCurrency) ...[
+                        if (needsConversion) ...[
                           const SizedBox(height: 4),
                           Text(
-                            '≈ ${formatCurrencyAmount(companionAmount.abs(), companionCurrency)}',
+                            '≈ ${widget.currencyFormat.format(convertedAmount.abs())} (estimated)',
                             style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.white60,
-                            ),
-                          ),
-                        ],
-                        if (sourceCurrency != widget.targetCurrency &&
-                            sourceCurrency != companionCurrency) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            'Original: ${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Colors.white38,
+                              fontSize: 12,
+                              color: Colors.white54,
+                              fontStyle: FontStyle.italic,
                             ),
                           ),
                         ],
@@ -732,13 +712,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
         ((other['amount'] as num?)?.toDouble() ?? 0.0);
     final otherSourceCurrency =
         (other['currency'] ?? widget.targetCurrency).toString();
-    final otherAmount = convertCurrency(
-      otherSourceAmount,
-      from: otherSourceCurrency,
-      to: widget.targetCurrency,
-      usdMxnRate: widget.usdMxnRate,
-    );
-    final otherIsExpense = otherAmount > 0;
+    final otherIsExpense = otherSourceAmount > 0;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -755,7 +729,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
             ),
           ),
           Text(
-            '${otherIsExpense ? '−' : '+'}${widget.currencyFormat.format(otherAmount.abs())}',
+            '${otherIsExpense ? '−' : '+'}${formatCurrencyAmount(otherSourceAmount.abs(), otherSourceCurrency)}',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,

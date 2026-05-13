@@ -53,8 +53,13 @@ class CreditUtilizationCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Credit Utilization',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  'CREDIT UTILIZATION',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.white54,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.2,
+                  ),
                 ),
                 Text(
                   '${totalUtilization.toStringAsFixed(1)}%',
