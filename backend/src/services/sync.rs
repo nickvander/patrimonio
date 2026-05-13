@@ -93,6 +93,26 @@ pub async fn sync_all_institutions(db: &PgPool, config: &AppConfig) -> Result<()
                             .bind(inst_id).bind(external_id).bind(name).bind(subtype).bind(current_bal).bind(available_bal)
                             .execute(db).await?;
                         }
+
+                        // Persist today's balance into balance_snapshots so
+                        // net_worth_history actually contains Plaid accounts.
+                        // Without this, the history endpoint only sees the
+                        // Manual institution and the chart's stacked area
+                        // looks like Manual is the only contributor.
+                        if let Some(bal) = current_bal {
+                            let _ = sqlx::query(
+                                r#"
+                                INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd)
+                                SELECT id, $1, CURRENT_DATE, 'USD', $1 FROM accounts WHERE external_id = $2
+                                ON CONFLICT (account_id, as_of_date)
+                                DO UPDATE SET balance = EXCLUDED.balance, balance_usd = EXCLUDED.balance_usd, created_at = NOW()
+                                "#
+                            )
+                            .bind(bal)
+                            .bind(external_id)
+                            .execute(db)
+                            .await;
+                        }
                     }
                 }
 

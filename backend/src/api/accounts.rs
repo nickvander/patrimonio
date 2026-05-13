@@ -18,7 +18,7 @@ pub fn router() -> Router<AppState> {
         .route("/{id}", delete(delete_account))
         .route("/{id}/balance", patch(update_account_balance))
         .route("/{id}/transactions", get(get_account_transactions))
-        .route("/transactions/{tx_id}", patch(update_transaction))
+        .route("/transactions/{tx_id}", patch(update_transaction).delete(delete_transaction))
 }
 
 #[derive(Deserialize)]
@@ -352,21 +352,37 @@ async fn get_account_transactions(
 struct UpdateTransactionRequest {
     user_category: Option<String>,
     user_notes: Option<String>,
+    /// Reassign the transaction to a different account. Used when a manual
+    /// import landed on the wrong account.
+    account_id: Option<uuid::Uuid>,
 }
 
-/// Update a transaction's user overrides (category, notes)
+/// Update a transaction's user overrides (category, notes, account).
+/// Only fields explicitly present in the payload are updated — None means
+/// "leave it alone" rather than "clear it".
 async fn update_transaction(
     State(state): State<AppState>,
     Path(tx_id): Path<uuid::Uuid>,
     Json(payload): Json<UpdateTransactionRequest>,
 ) -> impl IntoResponse {
-    info!("Updating transaction {}: cat={:?}, notes={:?}", tx_id, payload.user_category, payload.user_notes);
+    info!(
+        "Updating transaction {}: cat={:?}, notes={:?}, account_id={:?}",
+        tx_id, payload.user_category, payload.user_notes, payload.account_id
+    );
 
     let result = sqlx::query(
-        "UPDATE transactions SET user_category = $1, user_notes = $2, updated_at = NOW() WHERE id = $3"
+        r#"
+        UPDATE transactions
+        SET user_category = COALESCE($1, user_category),
+            user_notes    = COALESCE($2, user_notes),
+            account_id    = COALESCE($3, account_id),
+            updated_at    = NOW()
+        WHERE id = $4
+        "#,
     )
     .bind(payload.user_category)
     .bind(payload.user_notes)
+    .bind(payload.account_id)
     .bind(tx_id)
     .execute(&state.db)
     .await;
@@ -375,6 +391,25 @@ async fn update_transaction(
         Ok(_) => StatusCode::OK.into_response(),
         Err(e) => {
             error!("Failed to update transaction: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// Delete a single transaction.
+async fn delete_transaction(
+    State(state): State<AppState>,
+    Path(tx_id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    info!("Deleting transaction: {}", tx_id);
+    let result = sqlx::query("DELETE FROM transactions WHERE id = $1")
+        .bind(tx_id)
+        .execute(&state.db)
+        .await;
+    match result {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => {
+            error!("Failed to delete transaction: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }

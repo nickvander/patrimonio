@@ -4,20 +4,25 @@ import '../utils/currency.dart';
 
 class TransactionsTab extends StatefulWidget {
   final List<dynamic> transactions;
+  final List<dynamic> accounts;
   final double conversionFactor;
   final NumberFormat currencyFormat;
   final String targetCurrency;
   final double usdMxnRate;
-  final Function(String id, {String? userCategory, String? userNotes})? onUpdate;
+  final Function(String id,
+      {String? userCategory, String? userNotes, String? accountId})? onUpdate;
+  final Future<void> Function(String id)? onDelete;
 
   const TransactionsTab({
     super.key,
     required this.transactions,
+    this.accounts = const [],
     required this.conversionFactor,
     required this.currencyFormat,
     required this.targetCurrency,
     required this.usdMxnRate,
     this.onUpdate,
+    this.onDelete,
   });
 
   @override
@@ -543,10 +548,76 @@ class _TransactionsTabState extends State<TransactionsTab> {
                     const SizedBox(height: 6),
                     ...similar.map((other) => _similarRow(other)),
                   ],
+                  if (widget.accounts.isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    _sectionLabel('Move to a different account'),
+                    const SizedBox(height: 6),
+                    _AccountMover(
+                      accounts: widget.accounts,
+                      currentAccountId: tx['account_id']?.toString(),
+                      onMove: (newAccountId) async {
+                        Navigator.pop(context);
+                        try {
+                          await Future.value(widget.onUpdate?.call(
+                            tx['id'],
+                            accountId: newAccountId,
+                          ));
+                        } catch (e) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Move failed: $e')),
+                          );
+                        }
+                      },
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
+                      if (widget.onDelete != null)
+                        TextButton.icon(
+                          onPressed: () async {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Delete transaction?'),
+                                content: const Text(
+                                    'This permanently removes the transaction. To re-import from CSV/PDF you will need to upload the file again.'),
+                                actions: [
+                                  TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(ctx, false),
+                                      child: const Text('Cancel')),
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(ctx, true),
+                                    style: TextButton.styleFrom(
+                                        foregroundColor: Colors.redAccent),
+                                    child: const Text('Delete'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirm != true) return;
+                            if (!context.mounted) return;
+                            Navigator.pop(context);
+                            try {
+                              await widget.onDelete!(tx['id']);
+                            } catch (e) {
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                    content:
+                                        Text('Delete failed: $e')),
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.delete_outline,
+                              size: 16, color: Colors.redAccent),
+                          label: const Text('Delete',
+                              style: TextStyle(color: Colors.redAccent)),
+                        ),
+                      const Spacer(),
                       TextButton(
                         onPressed: () => Navigator.pop(context),
                         child: const Text('Close'),
@@ -780,5 +851,67 @@ class _TransactionsTabState extends State<TransactionsTab> {
       return Colors.indigo;
     }
     return Colors.grey;
+  }
+}
+
+/// Small inline picker: shows a dropdown of accounts and reassigns the
+/// transaction on selection. Filters out the current account.
+class _AccountMover extends StatefulWidget {
+  final List<dynamic> accounts;
+  final String? currentAccountId;
+  final Future<void> Function(String newAccountId) onMove;
+
+  const _AccountMover({
+    required this.accounts,
+    required this.currentAccountId,
+    required this.onMove,
+  });
+
+  @override
+  State<_AccountMover> createState() => _AccountMoverState();
+}
+
+class _AccountMoverState extends State<_AccountMover> {
+  String? _selectedId;
+
+  @override
+  Widget build(BuildContext context) {
+    final candidates = widget.accounts
+        .where((a) => a['id']?.toString() != widget.currentAccountId)
+        .toList();
+    return Row(
+      children: [
+        Expanded(
+          child: DropdownButtonFormField<String>(
+            initialValue: _selectedId,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Reassign to…',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: candidates.map<DropdownMenuItem<String>>((a) {
+              final id = a['id'].toString();
+              final name = (a['name'] ?? 'Account').toString();
+              final inst = (a['institution_name'] ?? '').toString();
+              return DropdownMenuItem<String>(
+                value: id,
+                child: Text(
+                  inst.isEmpty ? name : '$inst · $name',
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              );
+            }).toList(),
+            onChanged: (v) => setState(() => _selectedId = v),
+          ),
+        ),
+        const SizedBox(width: 8),
+        ElevatedButton(
+          onPressed: _selectedId == null ? null : () => widget.onMove(_selectedId!),
+          child: const Text('Move'),
+        ),
+      ],
+    );
   }
 }

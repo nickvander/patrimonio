@@ -221,17 +221,33 @@ class ApiService {
     }
   }
 
-  Future<void> updateTransaction(String txId, {String? userCategory, String? userNotes}) async {
+  Future<void> updateTransaction(
+    String txId, {
+    String? userCategory,
+    String? userNotes,
+    String? accountId,
+  }) async {
+    final body = <String, dynamic>{};
+    if (userCategory != null) body['user_category'] = userCategory;
+    if (userNotes != null) body['user_notes'] = userNotes;
+    if (accountId != null) body['account_id'] = accountId;
+
     final response = await http.patch(
       Uri.parse('$_baseUrl/accounts/transactions/$txId'),
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'user_category': userCategory,
-        'user_notes': userNotes,
-      }),
+      body: json.encode(body),
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to update transaction');
+    }
+  }
+
+  Future<void> deleteTransaction(String txId) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/accounts/transactions/$txId'),
+    );
+    if (response.statusCode != 204 && response.statusCode != 200) {
+      throw Exception('Failed to delete transaction (${response.statusCode})');
     }
   }
 

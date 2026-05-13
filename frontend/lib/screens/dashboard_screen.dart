@@ -758,21 +758,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final transactionsTab = buildTabContainer(
       TransactionsTab(
         transactions: _transactions ?? [],
+        accounts: (_overview?['accounts'] as List?) ?? const [],
         conversionFactor: conversionFactor,
         currencyFormat: currencyFormat,
         targetCurrency: _targetCurrency,
         usdMxnRate: fxRate,
-        onUpdate: (id, {userCategory, userNotes}) async {
+        onUpdate: (id, {userCategory, userNotes, accountId}) async {
           try {
-            await _apiService.updateTransaction(id,
-                userCategory: userCategory, userNotes: userNotes);
-            _loadAllData();
+            await _apiService.updateTransaction(
+              id,
+              userCategory: userCategory,
+              userNotes: userNotes,
+              accountId: accountId,
+            );
+            await _refreshData();
           } catch (e) {
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text('Failed to update transaction: $e')),
             );
           }
+        },
+        onDelete: (id) async {
+          await _apiService.deleteTransaction(id);
+          await _refreshData();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Transaction deleted')),
+          );
         },
       ),
     );
