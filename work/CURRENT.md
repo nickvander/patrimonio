@@ -49,12 +49,13 @@
 
 ## What Could Come Next
 
-1. **Real credential validation**: Test Plaid, Coinbase, Bitso, and FX keys outside sandbox/mock data.
-2. **Production deployment**: Host frontend, API, managed database, Redis, and secrets.
-3. **Backups and monitoring**: Add database backups, uptime checks, and error logging.
-4. **FBAR/FATCA reporting**: Detect foreign-account thresholds and export support data.
-5. **Real market benchmark data**: Replace static S&P assumptions with live market data.
-6. **Mobile QA**: Exercise and refine phone/tablet breakpoints.
+See [NEXT.md](NEXT.md) for the prioritized backlog.
+
+1. **Production Plaid readiness**: Real credential validation, reconnect flows, provider error states, and first-run real-vs-sandbox UX.
+2. **Deployment and operations**: Hosted frontend/API, managed database/cache, secret management, backups, and monitoring.
+3. **Data quality and reconciliation**: Duplicate prevention, import/source metadata, category review, stale data indicators.
+4. **Real market data**: Replace static benchmark assumptions with sourced historical market data.
+5. **Tax accuracy**: Deferred until account, transaction, holding, and source data are reliable.
 
 ## How to Continue Work
 
