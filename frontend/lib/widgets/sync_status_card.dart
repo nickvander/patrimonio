@@ -26,8 +26,13 @@ class SyncStatusCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Institution Sync Status',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              'INSTITUTIONS',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.white54,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
+              ),
             ),
             const SizedBox(height: 24),
             if (syncData.isEmpty)
@@ -151,12 +156,12 @@ class SyncStatusCard extends StatelessWidget {
                 IconButton(
                   icon: const Icon(Icons.refresh, color: Colors.teal),
                   onPressed: onRetrySync,
-                  tooltip: 'Retry Sync',
+                  tooltip: 'Retry sync',
                 ),
               IconButton(
                 icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
                 onPressed: () => onDelete?.call(inst['id']),
-                tooltip: 'Delete Institution',
+                tooltip: 'Delete institution',
               ),
             ],
           ),

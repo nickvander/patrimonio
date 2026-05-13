@@ -9,6 +9,7 @@ import '../widgets/transactions_tab.dart';
 /// of its own. On narrow viewports the panel collapses to a bottom sheet.
 class AccountTransactionsScreen extends StatefulWidget {
   final Map<String, dynamic> account;
+  final List<dynamic> allAccounts;
   final double conversionFactor;
   final NumberFormat currencyFormat;
   final String targetCurrency;
@@ -18,6 +19,7 @@ class AccountTransactionsScreen extends StatefulWidget {
   const AccountTransactionsScreen({
     super.key,
     required this.account,
+    this.allAccounts = const [],
     required this.conversionFactor,
     required this.currencyFormat,
     required this.targetCurrency,
@@ -68,6 +70,8 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     final controller = TextEditingController(
       text: widget.account['current_balance'].toString(),
     );
+    final currency =
+        (widget.account['currency'] ?? 'USD').toString().toUpperCase();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -75,11 +79,24 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         title: Text('Update ${widget.account['name']} balance'),
         content: TextField(
           controller: controller,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          keyboardType: const TextInputType.numberWithOptions(
+              decimal: true, signed: true),
           autofocus: true,
+          onSubmitted: (_) {
+            final newBalance = double.tryParse(controller.text);
+            if (newBalance != null) {
+              Navigator.pop(context);
+              widget.onBalanceUpdate
+                  ?.call(widget.account['id'], newBalance);
+              setState(() {
+                widget.account['current_balance'] = newBalance;
+              });
+            }
+          },
           decoration: InputDecoration(
-            labelText: 'Current balance (${widget.account['currency']})',
-            prefixText: '\$ ',
+            labelText: 'Current balance',
+            prefixText: r'$ ',
+            suffixText: currency,
           ),
         ),
         actions: [
@@ -267,6 +284,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       child: TransactionsTab(
         transactions: _transactions!,
+        accounts: widget.allAccounts,
         conversionFactor: widget.conversionFactor,
         currencyFormat: widget.currencyFormat,
         targetCurrency: widget.targetCurrency,
@@ -287,6 +305,10 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             );
           }
         },
+        onDelete: (id) async {
+          await _apiService.deleteTransaction(id);
+          _fetchTransactions();
+        },
       ),
     );
   }
@@ -297,6 +319,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
 Future<void> showAccountTransactionsPanel(
   BuildContext context, {
   required Map<String, dynamic> account,
+  List<dynamic> allAccounts = const [],
   required double conversionFactor,
   required NumberFormat currencyFormat,
   required String targetCurrency,
@@ -336,6 +359,7 @@ Future<void> showAccountTransactionsPanel(
             ),
             child: AccountTransactionsScreen(
               account: account,
+              allAccounts: allAccounts,
               conversionFactor: conversionFactor,
               currencyFormat: currencyFormat,
               targetCurrency: targetCurrency,

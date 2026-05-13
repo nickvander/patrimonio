@@ -26,15 +26,33 @@ class AccountsListWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (accounts.isEmpty) {
-      return const Card(
-        color: Color(0xFF1A1A24),
+      return Card(
+        color: const Color(0xFF1A1A24),
         child: Padding(
-          padding: EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(40.0),
           child: Center(
-            child: Text(
-              'No accounts linked yet. Use the Link button to add an institution.',
-              style: TextStyle(color: Colors.grey),
-              textAlign: TextAlign.center,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.account_balance_wallet_outlined,
+                    size: 56, color: Colors.grey.shade700),
+                const SizedBox(height: 14),
+                const Text(
+                  'No accounts yet',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Link a bank with Plaid, import a CSV, or add a manual\naccount from the Management tab to get started.',
+                  textAlign: TextAlign.center,
+                  style:
+                      TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                ),
+              ],
             ),
           ),
         ),
@@ -357,6 +375,7 @@ class AccountsListWidget extends StatelessWidget {
         showAccountTransactionsPanel(
           context,
           account: acc,
+          allAccounts: accounts,
           conversionFactor: conversionFactor,
           currencyFormat: currencyFormat,
           targetCurrency: targetCurrency,
@@ -426,15 +445,19 @@ class AccountsListWidget extends StatelessWidget {
       usdMxnRate: usdMxnRate,
     );
 
-    Widget primaryName = Text(
-      name,
-      style: const TextStyle(
-        fontSize: 15,
-        fontWeight: FontWeight.w600,
-        color: Colors.white,
+    Widget primaryName = Tooltip(
+      message: name,
+      waitDuration: const Duration(milliseconds: 600),
+      child: Text(
+        name,
+        style: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          color: Colors.white,
+        ),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
       ),
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
     );
 
     Widget secondaryMeta = inst.isEmpty
@@ -543,6 +566,7 @@ class AccountsListWidget extends StatelessWidget {
         showAccountTransactionsPanel(
           context,
           account: acc,
+          allAccounts: accounts,
           conversionFactor: conversionFactor,
           currencyFormat: currencyFormat,
           targetCurrency: targetCurrency,

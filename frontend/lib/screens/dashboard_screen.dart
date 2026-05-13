@@ -648,7 +648,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   const SizedBox(width: 10),
                   const Text(
-                    'Launch Setup',
+                    'Launch setup',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ],
@@ -877,7 +877,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Data Sources & Sync',
+            'Data sources & sync',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
@@ -893,7 +893,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     final confirm = await showDialog<bool>(
                       context: context,
                       builder: (context) => AlertDialog(
-                        title: const Text('Delete Institution'),
+                        title: const Text('Delete institution'),
                         content: const Text('Are you sure? This will remove ALL accounts and history for this institution.'),
                         actions: [
                           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
@@ -926,7 +926,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           buildSetupStatusCard(),
           const SizedBox(height: 24),
           const Text(
-            'Connect Standard Accounts',
+            'Connect standard accounts',
             style: TextStyle(fontSize: 16, color: Colors.white70),
           ),
           const SizedBox(height: 12),
@@ -935,7 +935,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Expanded(
                 child: ElevatedButton.icon(
                   icon: const Icon(Icons.sync),
-                  label: const Text('Sync All Accounts'),
+                  label: const Text('Sync all accounts'),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 20),
                     backgroundColor: Colors.blueAccent.withValues(alpha: 0.2),
@@ -1002,7 +1002,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Expanded(
                 child: ElevatedButton.icon(
                   icon: const Icon(Icons.add_circle_outline),
-                  label: const Text('Add Manual Account'),
+                  label: const Text('Add manual account'),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 20),
                     backgroundColor: Colors.white12,
@@ -1023,7 +1023,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 32),
           const Text(
-            'Connect Crypto Exchanges',
+            'Connect crypto exchanges',
             style: TextStyle(fontSize: 16, color: Colors.white70),
           ),
           const SizedBox(height: 12),

@@ -192,14 +192,14 @@ class _ImportScreenState extends State<ImportScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Import Statement')),
+      appBar: AppBar(title: const Text('Import statement')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Upload Account Statement',
+              'Upload account statement',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -260,7 +260,7 @@ class _ImportScreenState extends State<ImportScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Assign to Account',
+                    'Assign to account',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
@@ -481,7 +481,7 @@ class _ImportScreenState extends State<ImportScreen> {
                         controller: _passwordController,
                         obscureText: true,
                         decoration: InputDecoration(
-                          labelText: 'PDF Password (e.g. RFC)',
+                          labelText: 'PDF password (e.g. RFC)',
                           filled: true,
                           fillColor: Colors.white.withValues(alpha: 0.05),
                           border: OutlineInputBorder(

@@ -145,7 +145,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text(
-              'Tax Planning Center',
+              'Tax planning',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             Row(
@@ -226,7 +226,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Total Taxable Income',
+                        'Total taxable income',
                         style: TextStyle(color: Colors.white70),
                       ),
                       const SizedBox(height: 8),
@@ -271,7 +271,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'US Estimated Liability (IRS)',
+                        'US estimated liability (IRS)',
                         style: TextStyle(color: Colors.white70),
                       ),
                       const SizedBox(height: 8),
@@ -334,7 +334,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         ),
         const SizedBox(height: 24),
         const Text(
-          'Taxable Events',
+          'Taxable events',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 16),

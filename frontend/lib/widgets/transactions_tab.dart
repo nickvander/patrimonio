@@ -80,7 +80,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Recent Transactions',
+                  'Recent transactions',
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
                 SizedBox(

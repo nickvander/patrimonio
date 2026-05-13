@@ -41,7 +41,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
     return AlertDialog(
       backgroundColor: const Color(0xFF1A1A24),
       title: const Text(
-        'Add Manual Account',
+        'Add manual account',
         style: TextStyle(fontWeight: FontWeight.bold),
       ),
       content: SingleChildScrollView(
@@ -53,9 +53,10 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
               TextFormField(
                 controller: _nameController,
                 style: const TextStyle(color: Colors.white),
+                autofocus: true,
                 decoration: const InputDecoration(
-                  labelText: 'Account Name',
-                  hintText: 'e.g. My Savings, Rental Property',
+                  labelText: 'Account name',
+                  hintText: 'e.g. My savings, Rental property',
                 ),
                 validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
               ),
@@ -63,7 +64,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
               DropdownButtonFormField<String>(
                 initialValue: _type,
                 dropdownColor: const Color(0xFF1A1A24),
-                decoration: const InputDecoration(labelText: 'Account Type'),
+                decoration: const InputDecoration(labelText: 'Account type'),
                 items: _types
                     .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                     .toList(),
@@ -85,20 +86,21 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                 style: const TextStyle(color: Colors.white),
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
+                  signed: true,
                 ),
                 decoration: InputDecoration(
-                  labelText: 'Initial Balance',
-                  prefixText: '\$ ',
+                  labelText: 'Initial balance',
+                  // Currency-aware prefix: don't hardcode `$` regardless of
+                  // the selected currency.
+                  prefixText: _currency == 'MXN' ? r'$ ' : r'$ ',
+                  suffixText: _currency,
+                  helperText:
+                      'For credit cards / loans, enter the amount owed as a positive number.',
+                  helperMaxLines: 2,
                 ),
                 validator: (v) {
                   final val = double.tryParse(v ?? '');
-                  if (val == null) return 'Invalid balance';
-
-                  // For assets, balance should typically be positive.
-                  // For liabilities (Credit Card, Loan, Mortgage), it can be positive or negative
-                  // depending on how the user thinks about it, but we usually store them as negative
-                  // or handle them in the UI.
-                  // Let's just ensure it's a number for now, but maybe add a warning/check.
+                  if (val == null) return 'Enter a numeric amount';
                   return null;
                 },
               ),
@@ -119,7 +121,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Create Account'),
+              : const Text('Create account'),
         ),
       ],
     );
