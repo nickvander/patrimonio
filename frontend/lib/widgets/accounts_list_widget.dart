@@ -297,10 +297,32 @@ class AccountsListWidget extends StatelessWidget {
         widgets.add(_buildAccountRow(context, cluster.first));
         continue;
       }
-      // Pick the parent: largest absolute balance wins. Ties broken by the
-      // account whose name looks like a generic root (matches "Savings" or
-      // "Checking" or contains the institution name).
+      // Pick the parent. The vaults (e.g. SoFi "Emergency", "Car", "Rent")
+      // are nicknames the user attached to allocations inside their main
+      // account — the main account itself is named after the bank product
+      // ("SoFi Savings"). So we prefer:
+      //   1. account whose name contains the account_type token
+      //      (e.g. "Savings" in "SoFi Savings")
+      //   2. otherwise an account whose name contains the institution name
+      //   3. otherwise the largest-balance account
       cluster.sort((a, b) {
+        final aName = (a['name'] ?? '').toString().toLowerCase();
+        final bName = (b['name'] ?? '').toString().toLowerCase();
+        final typeToken =
+            (a['account_type'] ?? '').toString().toLowerCase();
+        final instToken =
+            (a['institution_name'] ?? '').toString().toLowerCase();
+
+        int rank(String name) {
+          if (typeToken.isNotEmpty && name.contains(typeToken)) return 0;
+          if (instToken.isNotEmpty && name.contains(instToken)) return 1;
+          return 2;
+        }
+
+        final ra = rank(aName);
+        final rb = rank(bName);
+        if (ra != rb) return ra.compareTo(rb);
+
         final ba = ((a['current_balance'] ?? 0.0) as num).toDouble().abs();
         final bb = ((b['current_balance'] ?? 0.0) as num).toDouble().abs();
         return bb.compareTo(ba);
