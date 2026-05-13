@@ -19,7 +19,6 @@ import 'wealth_projection_screen.dart';
 import '../components/date_range_selector.dart';
 import '../components/allocation_heatmap.dart';
 import '../components/trends_chart.dart';
-import '../utils/currency.dart';
 import 'package:patrimonio/screens/tax_planning_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -320,56 +319,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       name: _targetCurrency,
       symbol: '$_targetCurrency ',
     );
-    final rateLabel = _fxRate == null
-        ? 'FX loading'
-        : '1 USD = ${NumberFormat.decimalPattern().format(fxRate)} MXN';
-
-    Widget buildCurrencyContext() {
-      final sourceBreakdown =
-          (_overview?['currency_breakdown'] as List?)
-              ?.map((item) => item as Map<String, dynamic>)
-              .toList() ??
-          [];
-
-      return Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        ),
-        child: Wrap(
-          spacing: 14,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              'Reporting currency: $_targetCurrency',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
-              ),
-            ),
-            Text(
-              rateLabel,
-              style: const TextStyle(color: Colors.white60, fontSize: 12),
-            ),
-            if (sourceBreakdown.isNotEmpty)
-              Text(
-                'Sources: ${sourceBreakdown.map((item) {
-                  final currency = (item['currency'] ?? 'USD').toString();
-                  final net = ((item['net'] ?? 0.0) as num).toDouble();
-                  return formatCurrencyAmount(net, currency);
-                }).join(' · ')}',
-                style: const TextStyle(color: Colors.white60, fontSize: 12),
-              ),
-          ],
-        ),
-      );
-    }
-
     Widget buildTabContainer(Widget child, {bool scrollable = true}) {
       final padding = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
       final content = Center(
@@ -390,7 +339,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Widget buildAccountsColumn() {
       return Column(
         children: [
-          buildCurrencyContext(),
           AccountsListWidget(
             accounts: _overview?['accounts'] ?? [],
             conversionFactor: conversionFactor,

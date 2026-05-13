@@ -339,21 +339,48 @@ class _TransactionsTabState extends State<TransactionsTab> {
           rawDescription.trim().toLowerCase();
     }).take(3).toList();
 
-    showDialog(
+    // Slide-from-right side panel on wide screens, bottom-sheet on narrow.
+    // This is the Linear / Notion / Gmail pattern — keeps the underlying
+    // list visible (in spirit) instead of slamming a centered modal that
+    // reads as a full page.
+    final size = MediaQuery.sizeOf(context);
+    final isNarrow = size.width < 700;
+
+    showGeneralDialog(
       context: context,
-      builder: (context) => Dialog(
-        backgroundColor: const Color(0xFF1A1A24),
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      transitionDuration: const Duration(milliseconds: 220),
+      pageBuilder: (ctx, anim, secAnim) {
+        return Align(
+          alignment:
+              isNarrow ? Alignment.bottomCenter : Alignment.centerRight,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: isNarrow ? size.width : 480,
+              height: isNarrow ? size.height * 0.9 : size.height,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A24),
+                borderRadius: isNarrow
+                    ? const BorderRadius.vertical(top: Radius.circular(20))
+                    : const BorderRadius.horizontal(left: Radius.circular(20)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.4),
+                    blurRadius: 24,
+                    offset: const Offset(-4, 0),
+                  ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                   Align(
                     alignment: Alignment.centerRight,
                     child: IconButton(
@@ -642,6 +669,15 @@ class _TransactionsTabState extends State<TransactionsTab> {
           ),
         ),
       ),
+        );
+      },
+      transitionBuilder: (ctx, anim, secAnim, child) {
+        final tween = Tween<Offset>(
+          begin: isNarrow ? const Offset(0, 1) : const Offset(1, 0),
+          end: Offset.zero,
+        ).chain(CurveTween(curve: Curves.easeOutCubic));
+        return SlideTransition(position: anim.drive(tween), child: child);
+      },
     );
   }
 

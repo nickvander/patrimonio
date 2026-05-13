@@ -124,7 +124,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Investment Portfolio',
+                        'Investment portfolio',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
@@ -133,7 +133,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                       ),
                       const SizedBox(height: 32),
                       const Text(
-                        'Total Value',
+                        'Total value',
                         style: TextStyle(
                           color: Colors.white60,
                           fontSize: 14,
@@ -251,24 +251,50 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
   Widget _buildHoldingsTable() {
     if (_holdings.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(32.0),
+      return Padding(
+        padding: const EdgeInsets.all(48.0),
         child: Center(
-          child: Text(
-            'No investment holdings found.',
-            style: TextStyle(color: Colors.grey),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.show_chart, size: 56, color: Colors.grey.shade700),
+              const SizedBox(height: 16),
+              const Text(
+                'No holdings yet',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.white70,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Once you link a brokerage with Plaid (or import a CSV) your\npositions will appear here.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+              ),
+            ],
           ),
         ),
       );
     }
 
+    // Min width that fits all 5 columns + their content comfortably.
+    // Below this we horizontally scroll instead of squashing columns out
+    // of view (which is what PaginatedDataTable does by default).
+    const minTableWidth = 760.0;
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        return SizedBox(
-          width: constraints.maxWidth,
+        final available = constraints.maxWidth;
+        final needsScroll = available < minTableWidth;
+        final tableWidth = needsScroll ? minTableWidth : available;
+
+        final table = SizedBox(
+          width: tableWidth,
           child: PaginatedDataTable(
             header: const Text(
-              'Asset Breakdown',
+              'Holdings',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             rowsPerPage: 5,
@@ -276,9 +302,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
             arrowHeadColor: const Color(0xFF00E676),
             sortColumnIndex: _sortColumnIndex,
             sortAscending: _isAscending,
-            // Force the table to take up available width which pushes pagination "under" the data more naturally
-            columnSpacing: (constraints.maxWidth - 600) / 5 > 0
-                ? (constraints.maxWidth - 600) / 5
+            columnSpacing: (tableWidth - 600) / 5 > 0
+                ? (tableWidth - 600) / 5
                 : 24,
             horizontalMargin: 24,
             columns: [
@@ -294,12 +319,12 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 onSort: _sort,
               ),
               DataColumn(
-                label: const Text('Total Value'),
+                label: const Text('Value'),
                 numeric: true,
                 onSort: _sort,
               ),
               DataColumn(
-                label: const Text('All-Time Return'),
+                label: const Text('Return'),
                 numeric: true,
                 onSort: _sort,
               ),
@@ -314,6 +339,13 @@ class _PortfolioCardState extends State<PortfolioCard> {
             ),
           ),
         );
+
+        return needsScroll
+            ? SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: table,
+              )
+            : table;
       },
     );
   }
@@ -627,7 +659,10 @@ class _HoldingsDataSource extends DataTableSource {
         DataCell(
           Text(
             quantity.toStringAsFixed(4),
-            style: const TextStyle(fontSize: 14),
+            style: const TextStyle(
+              fontSize: 14,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
           ),
         ),
         DataCell(
@@ -635,11 +670,21 @@ class _HoldingsDataSource extends DataTableSource {
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(format.format(price), style: const TextStyle(fontSize: 14)),
+              Text(
+                format.format(price),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
               if (sourceCurrency != targetCurrency)
                 Text(
                   formatCurrencyAmount(sourcePrice, sourceCurrency),
-                  style: const TextStyle(fontSize: 10, color: Colors.grey),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Colors.white38,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
                 ),
             ],
           ),
@@ -652,14 +697,19 @@ class _HoldingsDataSource extends DataTableSource {
               Text(
                 format.format(value),
                 style: const TextStyle(
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w700,
                   fontSize: 14,
+                  fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
               if (sourceCurrency != targetCurrency)
                 Text(
                   formatCurrencyAmount(sourceValue, sourceCurrency),
-                  style: const TextStyle(fontSize: 10, color: Colors.grey),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Colors.white38,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
                 ),
             ],
           ),
