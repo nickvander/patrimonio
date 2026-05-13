@@ -26,14 +26,17 @@ class PortfolioCard extends StatefulWidget {
 class _PortfolioCardState extends State<PortfolioCard> {
   int? _sortColumnIndex = 3; // Default sort by Value
   bool _isAscending = false;
+  late List<dynamic> _allHoldings;
   late List<dynamic> _holdings;
   int _touchedIndex = -1;
+  String _searchQuery = '';
+  int _rowsPerPage = 15;
 
   @override
   void initState() {
     super.initState();
-    _holdings = List.from(widget.portfolioData['holdings'] ?? []);
-    // Initial sort
+    _allHoldings = List.from(widget.portfolioData['holdings'] ?? []);
+    _holdings = List.from(_allHoldings);
     _sort(3, false);
   }
 
@@ -42,8 +45,27 @@ class _PortfolioCardState extends State<PortfolioCard> {
     super.didUpdateWidget(oldWidget);
     if (widget.portfolioData != oldWidget.portfolioData ||
         widget.conversionFactor != oldWidget.conversionFactor) {
-      _holdings = List.from(widget.portfolioData['holdings'] ?? []);
+      _allHoldings = List.from(widget.portfolioData['holdings'] ?? []);
+      _applySearch();
       _sort(_sortColumnIndex ?? 3, _isAscending);
+    }
+  }
+
+  void _applySearch() {
+    final q = _searchQuery.toLowerCase().trim();
+    if (q.isEmpty) {
+      _holdings = List.from(_allHoldings);
+    } else {
+      _holdings = _allHoldings.where((h) {
+        final sym = (h['symbol'] ?? '').toString().toLowerCase();
+        final name = (h['name'] ?? '').toString().toLowerCase();
+        final inst = (h['institution_name'] ?? '').toString().toLowerCase();
+        final acct = (h['account_name'] ?? '').toString().toLowerCase();
+        return sym.contains(q) ||
+            name.contains(q) ||
+            inst.contains(q) ||
+            acct.contains(q);
+      }).toList();
     }
   }
 
@@ -284,11 +306,74 @@ class _PortfolioCardState extends State<PortfolioCard> {
     // of view (which is what PaginatedDataTable does by default).
     const minTableWidth = 760.0;
 
+    // Surface counts so users with lots of tickers know the scope before
+     // scrolling into the table.
+    final totalHoldings = _allHoldings.length;
+    final shownHoldings = _holdings.length;
+    final accountCount = _allHoldings
+        .map((h) => (h['account_name'] ?? '').toString())
+        .toSet()
+        .where((s) => s.isNotEmpty)
+        .length;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final available = constraints.maxWidth;
         final needsScroll = available < minTableWidth;
         final tableWidth = needsScroll ? minTableWidth : available;
+
+        final searchBar = Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 40,
+                  child: TextField(
+                    onChanged: (v) => setState(() {
+                      _searchQuery = v;
+                      _applySearch();
+                      _sort(_sortColumnIndex ?? 3, _isAscending);
+                    }),
+                    decoration: InputDecoration(
+                      hintText: 'Search ticker, name, account, or institution…',
+                      hintStyle: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 13,
+                      ),
+                      prefixIcon: const Icon(
+                        Icons.search,
+                        size: 18,
+                        color: Colors.white54,
+                      ),
+                      filled: true,
+                      fillColor: Colors.white.withValues(alpha: 0.05),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 0,
+                        horizontal: 12,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                _searchQuery.isEmpty
+                    ? '$totalHoldings ${totalHoldings == 1 ? "holding" : "holdings"} · $accountCount ${accountCount == 1 ? "account" : "accounts"}'
+                    : '$shownHoldings of $totalHoldings',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.white54,
+                ),
+              ),
+            ],
+          ),
+        );
 
         final table = SizedBox(
           width: tableWidth,
@@ -297,7 +382,11 @@ class _PortfolioCardState extends State<PortfolioCard> {
               'Holdings',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            rowsPerPage: 5,
+            rowsPerPage: _rowsPerPage,
+            availableRowsPerPage: const [10, 15, 25, 50],
+            onRowsPerPageChanged: (n) {
+              if (n != null) setState(() => _rowsPerPage = n);
+            },
             showFirstLastButtons: true,
             arrowHeadColor: const Color(0xFF00E676),
             sortColumnIndex: _sortColumnIndex,
@@ -340,12 +429,17 @@ class _PortfolioCardState extends State<PortfolioCard> {
           ),
         );
 
-        return needsScroll
+        final body = needsScroll
             ? SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: table,
               )
             : table;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [searchBar, body],
+        );
       },
     );
   }
@@ -542,6 +636,25 @@ class _PortfolioCardState extends State<PortfolioCard> {
   }
 }
 
+/// Trim trailing zeros and pick a sensible precision based on the
+/// magnitude of the share count: integers stay integer, normal lots
+/// show 2 decimals, fractional crypto-style holdings keep 4.
+String _formatQuantity(double q) {
+  if (q == q.roundToDouble() && q.abs() < 1e9) {
+    return q.toInt().toString();
+  }
+  if (q.abs() >= 1) {
+    return q
+        .toStringAsFixed(2)
+        .replaceAll(RegExp(r'0+$'), '')
+        .replaceAll(RegExp(r'\.$'), '');
+  }
+  return q
+      .toStringAsFixed(4)
+      .replaceAll(RegExp(r'0+$'), '')
+      .replaceAll(RegExp(r'\.$'), '');
+}
+
 class _HoldingsDataSource extends DataTableSource {
   final List<dynamic> holdings;
   final NumberFormat format;
@@ -657,12 +770,25 @@ class _HoldingsDataSource extends DataTableSource {
           }),
         ),
         DataCell(
-          Text(
-            quantity.toStringAsFixed(4),
-            style: const TextStyle(
-              fontSize: 14,
-              fontFeatures: [FontFeature.tabularFigures()],
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                _formatQuantity(quantity),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Text(
+                'sh',
+                style: TextStyle(fontSize: 11, color: Colors.white38),
+              ),
+            ],
           ),
         ),
         DataCell(

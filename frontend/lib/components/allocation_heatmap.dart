@@ -22,6 +22,32 @@ class AllocationHeatmap extends StatelessWidget {
     required this.currencyFormat,
   });
 
+  /// Render raw backend categories ("mutual fund", "fixed income") as
+  /// sentence-cased labels with common acronyms preserved (ETF, REIT).
+  static String _displayCategory(String raw) {
+    if (raw.isEmpty) return 'Other';
+    const acronyms = {'etf', 'reit', 'cd', 'ira'};
+    return raw
+        .split(' ')
+        .map((word) {
+          if (word.isEmpty) return word;
+          if (acronyms.contains(word.toLowerCase())) return word.toUpperCase();
+          if (word.contains('/')) {
+            // e.g. "stocks/etfs" → "Stocks/ETFs"
+            return word
+                .split('/')
+                .map((p) {
+                  if (p.isEmpty) return p;
+                  if (acronyms.contains(p.toLowerCase())) return p.toUpperCase();
+                  return p[0].toUpperCase() + p.substring(1).toLowerCase();
+                })
+                .join('/');
+          }
+          return word[0].toUpperCase() + word.substring(1).toLowerCase();
+        })
+        .join(' ');
+  }
+
   @override
   Widget build(BuildContext context) {
     if (data.isEmpty) return const SizedBox.shrink();
@@ -63,7 +89,7 @@ class AllocationHeatmap extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Asset Distribution',
+                  'Asset distribution',
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
@@ -115,11 +141,20 @@ class AllocationHeatmap extends StatelessWidget {
                             ),
                             const SizedBox(width: 12),
                             Text(
-                              cat,
+                              _displayCategory(cat),
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${items.length} ${items.length == 1 ? "holding" : "holdings"}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.white38,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
