@@ -25,6 +25,7 @@ pub struct AppConfig {
     pub coinbase_client_secret: Option<String>,
     pub coinbase_redirect_uri: String,
     pub frontend_base_url: String,
+    pub plaid_redirect_uri: Option<String>,
     pub allowed_origins: Vec<String>,
 }
 
@@ -70,6 +71,7 @@ impl AppConfig {
             coinbase_redirect_uri: std::env::var("COINBASE_REDIRECT_URI")
                 .unwrap_or_else(|_| "http://localhost:8080/api/auth/coinbase/callback".to_string()),
             frontend_base_url,
+            plaid_redirect_uri: env_non_empty("PLAID_REDIRECT_URI"),
             allowed_origins,
         })
     }

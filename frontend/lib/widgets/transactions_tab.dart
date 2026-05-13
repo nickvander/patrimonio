@@ -8,6 +8,7 @@ class TransactionsTab extends StatefulWidget {
   final NumberFormat currencyFormat;
   final String targetCurrency;
   final double usdMxnRate;
+  final Function(String id, {String? userCategory, String? userNotes})? onUpdate;
 
   const TransactionsTab({
     super.key,
@@ -16,6 +17,7 @@ class TransactionsTab extends StatefulWidget {
     required this.currencyFormat,
     required this.targetCurrency,
     required this.usdMxnRate,
+    this.onUpdate,
   });
 
   @override
@@ -134,6 +136,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
                   usdMxnRate: widget.usdMxnRate,
                 );
                 final isExpense = amount > 0;
+                final category = tx['user_category'] ?? tx['category'];
+                final notes = tx['user_notes'] ?? '';
+                final source = tx['source'] ?? 'plaid';
 
                 return Row(
                   children: [
@@ -142,15 +147,15 @@ class _TransactionsTabState extends State<TransactionsTab> {
                       height: 48,
                       decoration: BoxDecoration(
                         color: _getCategoryColor(
-                          tx['category'],
+                          category,
                           tx['description'],
                         ).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
-                        _getCategoryIcon(tx['category'], tx['description']),
+                        _getCategoryIcon(category, tx['description']),
                         color: _getCategoryColor(
-                          tx['category'],
+                          category,
                           tx['description'],
                         ),
                       ),
@@ -197,6 +202,24 @@ class _TransactionsTabState extends State<TransactionsTab> {
                                   fontSize: 12,
                                 ),
                               ),
+                              if (notes.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                const Text('•',
+                                    style: TextStyle(
+                                        color: Colors.grey, fontSize: 12)),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    notes,
+                                    style: const TextStyle(
+                                        color: Colors.white60,
+                                        fontSize: 12,
+                                        fontStyle: FontStyle.italic),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ],
@@ -235,6 +258,14 @@ class _TransactionsTabState extends State<TransactionsTab> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
+                        const SizedBox(height: 4),
+                        IconButton(
+                          icon: const Icon(Icons.edit_note, size: 18, color: Colors.white24),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => _showEditDialog(tx),
+                          tooltip: 'Edit Category/Notes',
+                        ),
                       ],
                     ),
                   ],
@@ -243,6 +274,53 @@ class _TransactionsTabState extends State<TransactionsTab> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showEditDialog(dynamic tx) {
+    final catController = TextEditingController(text: tx['user_category'] ?? tx['category'] ?? '');
+    final notesController = TextEditingController(text: tx['user_notes'] ?? '');
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A24),
+        title: const Text('Edit Transaction'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: catController,
+              decoration: const InputDecoration(labelText: 'Category'),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: notesController,
+              decoration: const InputDecoration(labelText: 'Notes'),
+              maxLines: 3,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Source: ${tx['source'] ?? 'plaid'}',
+              style: const TextStyle(fontSize: 10, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              widget.onUpdate?.call(
+                tx['id'],
+                userCategory: catController.text.trim(),
+                userNotes: notesController.text.trim(),
+              );
+            },
+            child: const Text('Save'),
+          ),
+        ],
       ),
     );
   }

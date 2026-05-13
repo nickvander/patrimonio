@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:plaid_flutter/plaid_flutter.dart';
 import 'package:web/web.dart' as web;
 import '../services/api_service.dart';
 import '../widgets/net_worth_card.dart';
@@ -348,6 +349,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ).showSnackBar(SnackBar(content: Text('Update failed: $e')));
               }
             },
+            onDeleteAccount: (id) async {
+              try {
+                await _apiService.deleteAccount(id);
+                _loadAllData();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Account deleted')),
+                );
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Delete failed: $e')),
+                );
+              }
+            },
           ),
           const SizedBox(height: 24),
           CreditUtilizationCard(
@@ -411,6 +427,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       }
       _loadAllData();
+    }
+
+    Future<void> _handleReconnect(String institutionId) async {
+      setState(() => _isLoading = true);
+      try {
+        final data = await _apiService.getReconnectToken(institutionId);
+        final linkToken = data['link_token'];
+
+        LinkTokenConfiguration linkTokenConfiguration = LinkTokenConfiguration(
+          token: linkToken,
+        );
+
+        PlaidLink.onSuccess.listen((event) {
+          debugPrint("Plaid Reconnect Success");
+          runSync();
+        });
+        PlaidLink.onExit.listen((event) {
+          debugPrint("Plaid Reconnect Exit");
+          _loadAllData();
+        });
+
+        PlaidLink.create(configuration: linkTokenConfiguration);
+        PlaidLink.open();
+      } catch (e) {
+        debugPrint("Reconnect error: $e");
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Reconnect failed: $e')));
+        }
+      } finally {
+        setState(() => _isLoading = false);
+      }
     }
 
     bool plaidReady() {
@@ -621,6 +670,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         currencyFormat: currencyFormat,
         targetCurrency: _targetCurrency,
         usdMxnRate: fxRate,
+        onUpdate: (id, {userCategory, userNotes}) async {
+          try {
+            await _apiService.updateTransaction(id,
+                userCategory: userCategory, userNotes: userNotes);
+            _loadAllData();
+          } catch (e) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to update transaction: $e')),
+            );
+          }
+        },
       ),
     );
 
@@ -659,6 +720,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: SyncStatusCard(
                   syncData: _syncData ?? [],
                   onRetrySync: runSync,
+                  onReconnect: _handleReconnect,
+                  onDelete: (id) async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Delete Institution'),
+                        content: const Text('Are you sure? This will remove ALL accounts and history for this institution.'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                            child: const Text('Delete Everything'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirm == true) {
+                      try {
+                        await _apiService.deleteInstitution(id);
+                        _loadAllData();
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+                      }
+                    }
+                  },
                 ),
               ),
               const SizedBox(width: 24),

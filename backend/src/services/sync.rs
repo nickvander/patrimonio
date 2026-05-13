@@ -20,19 +20,19 @@ pub async fn sync_all_institutions(db: &PgPool, config: &AppConfig) -> Result<()
         let inst_id: uuid::Uuid = row.get("id");
         let inst_name: String = row.get("name");
         let integration_type: String = row.get("integration_type");
-        update_sync_status(db, inst_id, "syncing").await;
+        update_sync_status(db, inst_id, "syncing", None).await;
         let mut sync_ok = true;
 
         match integration_type.as_str() {
             "plaid" => {
                 let enc_token: Option<Vec<u8>> = row.try_get("plaid_access_token_enc").unwrap_or(None);
                 if enc_token.is_none() {
-                    update_sync_status(db, inst_id, "pending").await;
+                    update_sync_status(db, inst_id, "pending", None).await;
                     continue;
                 }
 
                 let Some(enc_key) = config.encryption_key.as_ref() else {
-                    update_sync_status(db, inst_id, "setup_required").await;
+                    update_sync_status(db, inst_id, "setup_required", Some("Encryption key missing")).await;
                     tracing::error!("Cannot sync {}: ENCRYPTION_KEY required", inst_name);
                     continue;
                 };
@@ -40,12 +40,12 @@ pub async fn sync_all_institutions(db: &PgPool, config: &AppConfig) -> Result<()
                     Ok(t) => t,
                     Err(e) => {
                         tracing::error!("Failed to decrypt token for {}: {}", inst_name, e);
-                        update_sync_status(db, inst_id, "error").await;
+                        update_sync_status(db, inst_id, "error", Some(&e.to_string())).await;
                         continue;
                     }
                 };
                 let (Some(client_id), Some(secret)) = (&config.plaid_client_id, &config.plaid_secret) else {
-                    update_sync_status(db, inst_id, "setup_required").await;
+                    update_sync_status(db, inst_id, "setup_required", Some("Plaid credentials missing")).await;
                     tracing::error!("Cannot sync {}: Plaid credentials required", inst_name);
                     continue;
                 };
@@ -61,7 +61,8 @@ pub async fn sync_all_institutions(db: &PgPool, config: &AppConfig) -> Result<()
                     .send().await?.json::<serde_json::Value>().await?;
 
                 if let Some(status) = plaid_error_status(&res) {
-                    update_sync_status(db, inst_id, status).await;
+                    let error_msg = res["error_message"].as_str().unwrap_or("Unknown Plaid error");
+                    update_sync_status(db, inst_id, status, Some(error_msg)).await;
                     tracing::error!("Plaid balance sync failed for {}: {:?}", inst_name, res);
                     continue;
                 }
@@ -116,7 +117,8 @@ pub async fn sync_all_institutions(db: &PgPool, config: &AppConfig) -> Result<()
                         .await?;
 
                     if let Some(status) = plaid_error_status(&tx_val) {
-                        update_sync_status(db, inst_id, status).await;
+                        let error_msg = tx_val["error_message"].as_str().unwrap_or("Unknown Plaid error");
+                        update_sync_status(db, inst_id, status, Some(error_msg)).await;
                         tracing::error!("Plaid transaction sync failed for {}: {:?}", inst_name, tx_val);
                         sync_ok = false;
                         break;
@@ -170,7 +172,8 @@ pub async fn sync_all_institutions(db: &PgPool, config: &AppConfig) -> Result<()
                     .send().await {
                     if let Ok(hold_val) = hold_res.json::<serde_json::Value>().await {
                         if let Some(status) = plaid_error_status(&hold_val) {
-                            update_sync_status(db, inst_id, status).await;
+                            let error_msg = hold_val["error_message"].as_str().unwrap_or("Unknown Plaid error");
+                            update_sync_status(db, inst_id, status, Some(error_msg)).await;
                             tracing::error!("Plaid holdings sync failed for {}: {:?}", inst_name, hold_val);
                             sync_ok = false;
                         }
@@ -241,37 +244,37 @@ pub async fn sync_all_institutions(db: &PgPool, config: &AppConfig) -> Result<()
             "coinbase" => {
                 if let Err(e) = crate::services::crypto::CryptoService::sync_coinbase(db, config, inst_id).await {
                     tracing::error!("Failed to sync Coinbase for {}: {}", inst_name, e);
-                    update_sync_status(db, inst_id, "error").await;
+                    update_sync_status(db, inst_id, "error", Some(&e.to_string())).await;
                     sync_ok = false;
                 }
             },
             "coinbase_oauth" => {
                 if let Err(e) = crate::services::crypto::CryptoService::sync_coinbase_oauth(db, config, inst_id).await {
                     tracing::error!("Failed to sync Coinbase OAuth for {}: {}", inst_name, e);
-                    update_sync_status(db, inst_id, "error").await;
+                    update_sync_status(db, inst_id, "error", Some(&e.to_string())).await;
                     sync_ok = false;
                 }
             },
             "bitso" => {
                 if let Err(e) = crate::services::crypto::CryptoService::sync_bitso(db, config, inst_id).await {
                     tracing::error!("Failed to sync Bitso for {}: {}", inst_name, e);
-                    update_sync_status(db, inst_id, "error").await;
+                    update_sync_status(db, inst_id, "error", Some(&e.to_string())).await;
                     sync_ok = false;
                 }
             },
             "manual" | "csv" | "pdf" => {
-                update_sync_status(db, inst_id, "manual").await;
+                update_sync_status(db, inst_id, "manual", None).await;
                 continue;
             },
             _ => {
                 tracing::warn!("Unknown integration type: {} for {}", integration_type, inst_name);
-                update_sync_status(db, inst_id, "error").await;
+                update_sync_status(db, inst_id, "error", Some("Unknown integration type")).await;
                 sync_ok = false;
             },
         }
 
         if sync_ok {
-            let _ = sqlx::query("UPDATE institutions SET last_synced_at = NOW(), sync_status = 'synced' WHERE id = $1")
+            let _ = sqlx::query("UPDATE institutions SET last_synced_at = NOW(), sync_status = 'synced', last_sync_error = NULL WHERE id = $1")
                 .bind(inst_id)
                 .execute(db).await;
         }
@@ -281,9 +284,10 @@ pub async fn sync_all_institutions(db: &PgPool, config: &AppConfig) -> Result<()
     Ok(())
 }
 
-async fn update_sync_status(db: &PgPool, inst_id: uuid::Uuid, status: &str) {
-    let _ = sqlx::query("UPDATE institutions SET sync_status = $1 WHERE id = $2")
+async fn update_sync_status(db: &PgPool, inst_id: uuid::Uuid, status: &str, error: Option<&str>) {
+    let _ = sqlx::query("UPDATE institutions SET sync_status = $1, last_sync_error = $2 WHERE id = $3")
         .bind(status)
+        .bind(error)
         .bind(inst_id)
         .execute(db)
         .await;
@@ -332,8 +336,8 @@ async fn upsert_plaid_transaction(db: &PgPool, tx: &serde_json::Value) -> Result
         let acc_id: uuid::Uuid = acc_row.get("id");
         sqlx::query(
             r#"
-            INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, merchant_name, pending)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, merchant_name, pending, source)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'plaid')
             ON CONFLICT (account_id, external_id)
             DO UPDATE SET
                 date = EXCLUDED.date,

@@ -44,8 +44,8 @@ async fn confirm_handler(
         );
 
         let result = sqlx::query(
-            "INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
+            "INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, source, source_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'csv', $8)
              ON CONFLICT (account_id, external_id) DO NOTHING"
         )
         .bind(payload.account_id)
@@ -55,6 +55,7 @@ async fn confirm_handler(
         .bind(tx.amount)
         .bind(&tx.currency)
         .bind(tx.category)
+        .bind("csv_import") // TODO: pass original filename if available
         .execute(&state.db)
         .await;
 

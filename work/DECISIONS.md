@@ -127,3 +127,21 @@ Tracking key architectural and design decisions with rationale.
 **Decision:** Added `scripts/smoke.cjs` to check API health and verify the app renders in a real browser through Playwright.
 **Rationale:** This catches routing, asset, API reachability, and blank-screen failures before pushing launch changes.
 **Trade-off:** Browser validation depends on local Playwright availability. `SKIP_BROWSER=1` exists for API-only checks when browser dependencies are unavailable.
+
+---
+
+## DEC-015: Plaid Production & Institutional Management
+**Date:** 2026-05-12
+**Status:** Accepted
+**Context:** Migrated from Sandbox to Production environment for real-world usage. Required a way to manage/remove legacy sandbox data and handle OAuth update modes.
+**Decision:** (1) Implemented institution/account deletion endpoints with cascading SQL to ensure a clean dashboard. (2) Added OAuth "Update Mode" support via reconnect tokens to handle Plaid's mandatory bank-side credential refreshes.
+**Rationale:** Sandbox data (Tartan Bank, etc.) cluttered the real net worth once production data was linked. Deletion is essential for "clean" personal finance tracking. OAuth reconnect is a technical requirement for any Plaid app in production.
+
+---
+
+## DEC-016: Data Quality — User Overrides & Source Tracking
+**Date:** 2026-05-13
+**Status:** Accepted
+**Context:** Real data often has messy categorization or requires personal context (notes). Overlapping CSV imports could also lead to duplication.
+**Decision:** (1) Added `user_category` and `user_notes` fields to the transaction schema to support non-destructive overrides. (2) Implemented deterministic signature-based deduplication for CSV imports (hashing date+amount+desc). (3) Added `source` tracking (`plaid` vs `csv`) for auditability.
+**Rationale:** Users trust their own categorization more than a bank's ML model. Overrides allow "fixing" data without losing the original bank record. Signature-based deduplication is critical when users import the same statement file multiple times or have overlapping dates.

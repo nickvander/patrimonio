@@ -15,7 +15,11 @@ pub struct Transaction {
     pub amount: Decimal,
     pub currency: String,
     pub category: Option<String>,
+    pub user_category: Option<String>,
+    pub user_notes: Option<String>,
     pub merchant_name: Option<String>,
     pub pending: Option<bool>,
+    pub source: Option<String>,
+    pub source_id: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
 }

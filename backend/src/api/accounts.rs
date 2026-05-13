@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, patch},
+    routing::{get, patch, delete},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -15,8 +15,10 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_accounts).post(create_account))
         .route("/summary", get(accounts_summary))
+        .route("/{id}", delete(delete_account))
         .route("/{id}/balance", patch(update_account_balance))
         .route("/{id}/transactions", get(get_account_transactions))
+        .route("/transactions/{tx_id}", patch(update_transaction))
 }
 
 #[derive(Deserialize)]
@@ -297,6 +299,9 @@ pub struct TransactionResponse {
     pub amount: f64,
     pub currency: String,
     pub category: String,
+    pub user_category: Option<String>,
+    pub user_notes: Option<String>,
+    pub source: Option<String>,
     pub account_name: String,
     pub institution_name: String,
 }
@@ -309,6 +314,7 @@ async fn get_account_transactions(
     let rows = sqlx::query(
         r#"
         SELECT t.id, t.date, t.description, t.amount, t.currency, t.category,
+               t.user_category, t.user_notes, t.source,
                a.name as account_name, i.name as institution_name
         FROM transactions t
         JOIN accounts a ON t.account_id = a.id
@@ -332,9 +338,65 @@ async fn get_account_transactions(
             .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
         currency: row.try_get::<String, _>("currency").unwrap_or_else(|_| "USD".to_string()),
         category: row.try_get::<String, _>("category").unwrap_or_else(|_| "Uncategorized".to_string()),
+        user_category: row.try_get("user_category").ok(),
+        user_notes: row.try_get("user_notes").ok(),
+        source: row.try_get("source").ok(),
         account_name: row.get("account_name"),
         institution_name: row.get("institution_name"),
     }).collect();
 
     Json(txs)
+}
+
+#[derive(Deserialize)]
+struct UpdateTransactionRequest {
+    user_category: Option<String>,
+    user_notes: Option<String>,
+}
+
+/// Update a transaction's user overrides (category, notes)
+async fn update_transaction(
+    State(state): State<AppState>,
+    Path(tx_id): Path<uuid::Uuid>,
+    Json(payload): Json<UpdateTransactionRequest>,
+) -> impl IntoResponse {
+    info!("Updating transaction {}: cat={:?}, notes={:?}", tx_id, payload.user_category, payload.user_notes);
+
+    let result = sqlx::query(
+        "UPDATE transactions SET user_category = $1, user_notes = $2, updated_at = NOW() WHERE id = $3"
+    )
+    .bind(payload.user_category)
+    .bind(payload.user_notes)
+    .bind(tx_id)
+    .execute(&state.db)
+    .await;
+
+    match result {
+        Ok(_) => StatusCode::OK.into_response(),
+        Err(e) => {
+            error!("Failed to update transaction: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// Delete a single account
+async fn delete_account(
+    State(state): State<AppState>,
+    Path(id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    info!("Deleting account: {}", id);
+
+    let result = sqlx::query("DELETE FROM accounts WHERE id = $1")
+        .bind(id)
+        .execute(&state.db)
+        .await;
+
+    match result {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => {
+            error!("Failed to delete account: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }

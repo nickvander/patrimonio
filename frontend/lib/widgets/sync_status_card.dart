@@ -4,8 +4,16 @@ import 'package:intl/intl.dart';
 class SyncStatusCard extends StatelessWidget {
   final List<dynamic> syncData;
   final VoidCallback? onRetrySync;
+  final Function(String id)? onReconnect;
+  final Function(String id)? onDelete;
 
-  const SyncStatusCard({super.key, required this.syncData, this.onRetrySync});
+  const SyncStatusCard({
+    super.key,
+    required this.syncData,
+    this.onRetrySync,
+    this.onReconnect,
+    this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -85,36 +93,73 @@ class SyncStatusCard extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          Expanded(
+            child: Row(
+              children: [
+                Icon(statusIcon, color: statusColor, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        inst['name'] ?? 'Unknown',
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      Text(
+                        _statusDetail(inst, status, lastSyncText),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade400,
+                        ),
+                      ),
+                      if (inst['last_sync_error'] != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: Text(
+                            inst['last_sync_error'],
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.redAccent,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
           Row(
             children: [
-              Icon(statusIcon, color: statusColor, size: 20),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    inst['name'] ?? 'Unknown',
-                    style: const TextStyle(fontWeight: FontWeight.w500),
+              if (status == 'reconnect_required')
+                TextButton.icon(
+                  onPressed: () => onReconnect?.call(inst['id']),
+                  icon: const Icon(Icons.link, size: 16),
+                  label: const Text('Reconnect'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.deepOrangeAccent,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
                   ),
-                  Text(
-                    _statusDetail(inst, status, lastSyncText),
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                  ),
-                ],
+                ),
+              if ([
+                'error',
+                'failed',
+                'setup_required',
+              ].contains(status))
+                IconButton(
+                  icon: const Icon(Icons.refresh, color: Colors.teal),
+                  onPressed: onRetrySync,
+                  tooltip: 'Retry Sync',
+                ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                onPressed: () => onDelete?.call(inst['id']),
+                tooltip: 'Delete Institution',
               ),
             ],
           ),
-          if ([
-            'error',
-            'failed',
-            'setup_required',
-            'reconnect_required',
-          ].contains(status))
-            IconButton(
-              icon: const Icon(Icons.refresh, color: Colors.teal),
-              onPressed: onRetrySync,
-              tooltip: 'Retry Sync',
-            ),
         ],
       ),
     );
@@ -138,7 +183,12 @@ class SyncStatusCard extends StatelessWidget {
       case 'manual':
         return '$source • Manual/offline source';
       default:
-        return '$source • $lastSyncText';
+        bool isStale = false;
+        if (inst['last_synced_at'] != null) {
+          final dt = DateTime.parse(inst['last_synced_at']);
+          isStale = DateTime.now().difference(dt).inHours > 24;
+        }
+        return '$source • $lastSyncText${isStale ? " (Stale)" : ""}';
     }
   }
 }

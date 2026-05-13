@@ -10,6 +10,7 @@ class AccountsListWidget extends StatelessWidget {
   final String targetCurrency;
   final double usdMxnRate;
   final Function(String, double)? onBalanceUpdate;
+  final Function(String)? onDeleteAccount;
 
   const AccountsListWidget({
     super.key,
@@ -19,6 +20,7 @@ class AccountsListWidget extends StatelessWidget {
     required this.targetCurrency,
     required this.usdMxnRate,
     this.onBalanceUpdate,
+    this.onDeleteAccount,
   });
 
   @override
@@ -354,6 +356,51 @@ class AccountsListWidget extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
+                          PopupMenuButton<String>(
+                            icon: const Icon(
+                              Icons.more_vert,
+                              size: 16,
+                              color: Colors.white24,
+                            ),
+                            padding: EdgeInsets.zero,
+                            onSelected: (value) {
+                              if (value == 'delete') {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('Delete Account'),
+                                    content: Text('Are you sure you want to delete "$name"? This will remove all its history.'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          onDeleteAccount?.call(acc['id']);
+                                        },
+                                        style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                                        child: const Text('Delete'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                                    SizedBox(width: 8),
+                                    Text('Delete', style: TextStyle(color: Colors.redAccent)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                           const Icon(
                             Icons.chevron_right,
                             size: 14,

@@ -158,6 +158,10 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (_setupStatus != null) ...[
+                  _buildEnvBanner(_setupStatus!['plaid_environment']),
+                  const SizedBox(height: 24),
+                ],
                 if (_setupStatus?['ready_for_plaid_linking'] == false) ...[
                   const Icon(
                     Icons.warning_amber_rounded,
@@ -198,6 +202,58 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildEnvBanner(String env) {
+    Color color;
+    String text;
+    IconData icon;
+
+    switch (env) {
+      case 'sandbox':
+        color = Colors.blueGrey;
+        text = 'Plaid Sandbox Mode — Mock data only';
+        icon = Icons.science;
+        break;
+      case 'development':
+        color = Colors.indigo;
+        text = 'Plaid Development Mode — Real account data (test items)';
+        icon = Icons.developer_mode;
+        break;
+      case 'production':
+        color = Colors.teal;
+        text = 'Plaid Production Mode — Real account data';
+        icon = Icons.verified_user;
+        break;
+      default:
+        color = Colors.grey;
+        text = 'Plaid Environment: $env';
+        icon = Icons.info_outline;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.5)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: color.withOpacity(0.9),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

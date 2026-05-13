@@ -180,6 +180,18 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         currencyFormat: widget.currencyFormat,
         targetCurrency: widget.targetCurrency,
         usdMxnRate: widget.usdMxnRate,
+        onUpdate: (id, {userCategory, userNotes}) async {
+          try {
+            await _apiService.updateTransaction(id,
+                userCategory: userCategory, userNotes: userNotes);
+            _fetchTransactions();
+          } catch (e) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to update transaction: $e')),
+            );
+          }
+        },
       ),
     );
   }

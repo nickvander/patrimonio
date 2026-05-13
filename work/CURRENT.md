@@ -1,7 +1,7 @@
-# Current Phase: V1 Launch-Hardened
+# Current Phase: Phase 13: Data Quality and Reconciliation
 
-> **Last Updated:** 2026-05-12
-> **Status:** V1 feature set is implemented on `phase-8-crypto-integration`; local launch, frontend containerization, and smoke validation have been hardened.
+> **Last Updated:** 2026-05-13
+> **Status:** Plaid Production migration complete. Data Quality Phase (Phase 13) is underway with user overrides, notes, and hardened deduplication implemented.
 
 ## What's Done - Full Build Summary
 
@@ -11,6 +11,8 @@
 - Host ports chosen to avoid common local conflicts: app `3000`, API `8080`, Postgres `5433`, Redis `6380`
 - API health, dashboard, accounts, FX, imports, Plaid, Coinbase, Bitso, and tax route areas
 - Local smoke script for API and browser rendering validation
+- **Plaid Production Environment**: Fully migrated from Sandbox with real-world credential support
+- **OAuth Update Mode**: Support for reconnecting institutions when credentials expire or change
 
 ### Dashboard & Visualization
 - Flutter dashboard UI for net worth, accounts, breakdowns, portfolio, FX, utilization, sync status, and tax planning
@@ -19,10 +21,12 @@
 - S&P 500 performance benchmark context
 - Transaction search, title-cased descriptions, and category icons
 
-### Data & Imports
-- Plaid token exchange and sync engines for balances, transactions, and holdings
+### Data Quality & Reconciliation
+- **User Overrides**: Manual category corrections and transaction notes that persist across syncs
+- **Source Tracking**: Audit trail for every transaction (`plaid` vs `csv`)
+- **Deterministic Deduplication**: Signature-based hashing for CSV imports to prevent duplicate entries
+- **Account Management**: Support for deleting institutions and individual accounts
 - Manual CSV/PDF imports for Nu Mexico, Banamex, and Cetesdirecto
-- Manual account creation and balance updates
 - Global USD/MXN display support
 
 ### Crypto and Tax

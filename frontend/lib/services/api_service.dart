@@ -126,6 +126,25 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> getReconnectToken(String institutionId) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/institutions/reconnect-token/$institutionId'),
+    );
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Failed to retrieve reconnect token');
+  }
+
+  Future<void> deleteInstitution(String institutionId) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/institutions/$institutionId'),
+    );
+    if (response.statusCode != 204) {
+      throw Exception('Failed to delete institution');
+    }
+  }
+
   Future<Map<String, dynamic>> uploadStatement(
     String fileName,
     Uint8List bytes, {
@@ -192,6 +211,27 @@ class ApiService {
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to update balance');
+    }
+  }
+
+  Future<void> deleteAccount(String accountId) async {
+    final response = await http.delete(Uri.parse('$_baseUrl/accounts/$accountId'));
+    if (response.statusCode != 204) {
+      throw Exception('Failed to delete account');
+    }
+  }
+
+  Future<void> updateTransaction(String txId, {String? userCategory, String? userNotes}) async {
+    final response = await http.patch(
+      Uri.parse('$_baseUrl/accounts/transactions/$txId'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'user_category': userCategory,
+        'user_notes': userNotes,
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update transaction');
     }
   }
 

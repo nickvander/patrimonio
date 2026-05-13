@@ -44,6 +44,22 @@ class FxWidget extends StatelessWidget {
                         color: Colors.tealAccent,
                       ),
                     ),
+                    if (latestRate['recorded_at'] != null) ...[
+                      const SizedBox(height: 8),
+                      Builder(
+                        builder: (context) {
+                          final dt = DateTime.parse(latestRate['recorded_at']);
+                          final isStale = DateTime.now().difference(dt).inHours > 24;
+                          return Text(
+                            'Updated: ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}${isStale ? " (Stale)" : ""}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isStale ? Colors.orangeAccent : Colors.grey,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ],
                 ),
                 const Icon(

@@ -2,7 +2,7 @@ use axum::{
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{get, post, delete},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -10,12 +10,15 @@ use sqlx::Row;
 
 use crate::AppState;
 use crate::services::encryption;
+use tracing::{info, error};
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_institutions).post(create_institution))
         .route("/sync", post(trigger_sync))
         .route("/link-token", post(create_link_token))
+        .route("/reconnect-token/{id}", post(create_reconnect_token))
+        .route("/{id}", delete(delete_institution))
         .route("/exchange-token", post(exchange_public_token))
         .route("/crypto", post(link_crypto_institution))
         .route("/webhook", post(plaid_webhook))
@@ -40,7 +43,7 @@ async fn list_institutions(State(state): State<AppState>) -> Json<Vec<Institutio
     let rows = sqlx::query(
         r#"
         SELECT id, name, institution_type, country, integration_type,
-               last_synced_at, sync_status, created_at
+               last_synced_at, sync_status, last_sync_error, created_at
         FROM institutions
         ORDER BY name
         "#
@@ -60,6 +63,7 @@ async fn list_institutions(State(state): State<AppState>) -> Json<Vec<Institutio
                 .ok().map(|d| d.to_rfc3339()),
             sync_status: row.try_get::<String, _>("sync_status")
                 .unwrap_or_else(|_| "pending".to_string()),
+            last_sync_error: row.try_get("last_sync_error").ok(),
             created_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
                 .ok().map(|d| d.to_rfc3339()).unwrap_or_default(),
         }
@@ -105,6 +109,7 @@ async fn create_institution(
             .ok().map(|d| d.to_rfc3339()),
         sync_status: row.try_get::<String, _>("sync_status")
             .unwrap_or_else(|_| "pending".to_string()),
+        last_sync_error: None,
         created_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
             .ok().map(|d| d.to_rfc3339()).unwrap_or_default(),
     }).into_response()
@@ -142,7 +147,8 @@ async fn create_link_token(State(state): State<AppState>) -> Response {
         "user": {
             "client_user_id": "patrimonio-single-user"
         },
-        "products": ["transactions", "investments"]
+        "products": ["transactions", "investments"],
+        "redirect_uri": state.config.plaid_redirect_uri
     });
 
     let response = match client.post(&url)
@@ -171,6 +177,63 @@ async fn create_link_token(State(state): State<AppState>) -> Response {
         return (StatusCode::BAD_GATEWAY, Json(res)).into_response();
     }
 
+    Json(res).into_response()
+}
+
+/// Creates a Plaid Link token for update mode (reconnect)
+async fn create_reconnect_token(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
+) -> Response {
+    let (client_id, secret) = match (&state.config.plaid_client_id, &state.config.plaid_secret) {
+        (Some(client_id), Some(secret)) => (client_id, secret),
+        _ => return json_error(StatusCode::SERVICE_UNAVAILABLE, "Plaid is not configured", None),
+    };
+
+    let row = match sqlx::query("SELECT plaid_access_token_enc FROM institutions WHERE id = $1")
+        .bind(id)
+        .fetch_one(&state.db)
+        .await
+    {
+        Ok(row) => row,
+        Err(_) => return json_error(StatusCode::NOT_FOUND, "Institution not found", None),
+    };
+
+    let enc_token: Vec<u8> = match row.try_get("plaid_access_token_enc") {
+        Ok(t) => t,
+        Err(_) => return json_error(StatusCode::BAD_REQUEST, "Institution has no Plaid token", None),
+    };
+
+    let enc_key = match state.config.encryption_key.as_ref() {
+        Some(k) => k,
+        None => return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Encryption not configured", None),
+    };
+
+    let access_token = match encryption::decrypt(enc_key, &enc_token) {
+        Ok(t) => t,
+        Err(_) => return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to decrypt token", None),
+    };
+
+    let client = reqwest::Client::new();
+    let url = format!("https://{}.plaid.com/link/token/create", state.config.plaid_env);
+    
+    let payload = serde_json::json!({
+        "client_id": client_id,
+        "secret": secret,
+        "client_name": "Patrimonio",
+        "access_token": access_token,
+        "user": {
+            "client_user_id": "patrimonio-single-user"
+        },
+        "redirect_uri": state.config.plaid_redirect_uri
+    });
+
+    let response = match client.post(&url).json(&payload).send().await {
+        Ok(r) => r,
+        Err(e) => return json_error(StatusCode::BAD_GATEWAY, "Plaid request failed", Some(&e.to_string())),
+    };
+
+    let res: serde_json::Value = response.json().await.unwrap_or_default();
     Json(res).into_response()
 }
 
@@ -297,6 +360,7 @@ async fn exchange_public_token(
             .ok().map(|d| d.to_rfc3339()),
         sync_status: row.try_get::<String, _>("sync_status")
             .unwrap_or_else(|_| "pending".to_string()),
+        last_sync_error: None,
         created_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
             .ok().map(|d| d.to_rfc3339()).unwrap_or_default(),
     }).into_response()
@@ -384,6 +448,7 @@ async fn link_crypto_institution(
             .ok().map(|d| d.to_rfc3339()),
         sync_status: row.try_get::<String, _>("sync_status")
             .unwrap_or_else(|_| "pending".to_string()),
+        last_sync_error: None,
         created_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")
             .ok().map(|d| d.to_rfc3339()).unwrap_or_default(),
     }).into_response()
@@ -406,6 +471,7 @@ struct InstitutionResponse {
     integration_type: String,
     last_synced_at: Option<String>,
     sync_status: String,
+    last_sync_error: Option<String>,
     created_at: String,
 }
 
@@ -451,6 +517,30 @@ async fn plaid_webhook(
     });
 
     Json(serde_json::json!({"status": "received"}))
+}
+
+/// Delete an institution and all associated data
+async fn delete_institution(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    info!("Deleting institution: {}", id);
+
+    // SQLX automatically handles cascading if defined in the schema,
+    // but we'll be explicit about deleting dependent data if needed.
+    // Assuming schema has cascading deletes for accounts, transactions, etc.
+    let result = sqlx::query("DELETE FROM institutions WHERE id = $1")
+        .bind(id)
+        .execute(&state.db)
+        .await;
+
+    match result {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => {
+            error!("Failed to delete institution: {}", e);
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete institution", Some(&e.to_string()))
+        }
+    }
 }
 
 fn json_error(status: StatusCode, error: &str, details: Option<&str>) -> Response {
