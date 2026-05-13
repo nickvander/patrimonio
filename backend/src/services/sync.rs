@@ -296,9 +296,11 @@ async fn update_sync_status(db: &PgPool, inst_id: uuid::Uuid, status: &str, erro
 fn plaid_error_status(payload: &serde_json::Value) -> Option<&'static str> {
     let error_code = payload["error_code"].as_str()?;
     match error_code {
-        "ITEM_LOGIN_REQUIRED" | "ITEM_LOCKED" | "USER_PERMISSION_REVOKED" | "PENDING_EXPIRATION" => {
-            Some("reconnect_required")
-        }
+        // NO_ACCOUNTS surfaces when Plaid loses visibility on an Item's accounts
+        // (e.g. Vanguard MFA expiry). Surfacing it as reconnect_required gives
+        // the user a clear "Reconnect" action rather than a generic error.
+        "ITEM_LOGIN_REQUIRED" | "ITEM_LOCKED" | "USER_PERMISSION_REVOKED"
+        | "PENDING_EXPIRATION" | "NO_ACCOUNTS" => Some("reconnect_required"),
         "PRODUCT_NOT_READY" => Some("pending"),
         _ => Some("error"),
     }

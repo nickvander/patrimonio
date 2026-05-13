@@ -5,6 +5,7 @@ use axum::{
 };
 use serde::Serialize;
 use sqlx::Row;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::AppState;
 
@@ -183,42 +184,67 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
     })
 }
 
-/// Historical net worth data for charting (aggregated from balance_snapshots)
+/// Historical net worth data for charting (aggregated from balance_snapshots),
+/// broken down by institution so the frontend can render contribution lines.
 async fn net_worth_history(State(state): State<AppState>) -> Json<Vec<NetWorthPoint>> {
-    // We need to properly aggregate historical points in USD
-    // Since balance_snapshots table has balance_usd, we use that for a consistent base.
+    // Grouped per (date, institution) so each row carries that institution's
+    // assets and liabilities on that date. Empty institution slots simply
+    // don't appear and the chart treats them as zero/no-data.
     let rows = sqlx::query(
         r#"
         SELECT bs.as_of_date,
-               COALESCE(SUM(CASE WHEN a.account_type NOT IN ('credit') THEN bs.balance_usd ELSE 0 END), 0) as total_assets_usd,
-               COALESCE(SUM(CASE WHEN a.account_type = 'credit' THEN ABS(bs.balance_usd) ELSE 0 END), 0) as total_liabilities_usd
+               i.name as institution_name,
+               COALESCE(SUM(CASE WHEN a.account_type NOT IN ('credit') THEN bs.balance_usd ELSE 0 END), 0) as inst_assets_usd,
+               COALESCE(SUM(CASE WHEN a.account_type = 'credit' THEN ABS(bs.balance_usd) ELSE 0 END), 0) as inst_liabilities_usd
         FROM balance_snapshots bs
         JOIN accounts a ON bs.account_id = a.id
-        GROUP BY bs.as_of_date
-        ORDER BY bs.as_of_date ASC
+        JOIN institutions i ON a.institution_id = i.id
+        GROUP BY bs.as_of_date, i.name
+        ORDER BY bs.as_of_date ASC, i.name ASC
         "#
     )
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
 
-    Json(
-        rows.iter()
-            .map(|r| {
-                let assets: f64 = r.try_get::<rust_decimal::Decimal, _>("total_assets_usd")
-                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
-                let liabilities: f64 = r.try_get::<rust_decimal::Decimal, _>("total_liabilities_usd")
-                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
-                NetWorthPoint {
-                    date: r.try_get::<chrono::NaiveDate, _>("as_of_date")
-                        .ok().map(|d| d.to_string()).unwrap_or_default(),
-                    total_assets: assets,
-                    total_liabilities: liabilities,
-                    net_worth: assets - liabilities,
-                }
-            })
-            .collect(),
-    )
+    let mut points: BTreeMap<chrono::NaiveDate, NetWorthPoint> = BTreeMap::new();
+
+    for r in &rows {
+        let date = match r.try_get::<chrono::NaiveDate, _>("as_of_date") {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        let inst: String = r
+            .try_get::<String, _>("institution_name")
+            .unwrap_or_else(|_| "Unknown".to_string());
+        let assets: f64 = r
+            .try_get::<rust_decimal::Decimal, _>("inst_assets_usd")
+            .ok()
+            .map(|d| d.to_string().parse().unwrap_or(0.0))
+            .unwrap_or(0.0);
+        let liabilities: f64 = r
+            .try_get::<rust_decimal::Decimal, _>("inst_liabilities_usd")
+            .ok()
+            .map(|d| d.to_string().parse().unwrap_or(0.0))
+            .unwrap_or(0.0);
+        let inst_net = assets - liabilities;
+
+        let entry = points.entry(date).or_insert_with(|| NetWorthPoint {
+            date: date.to_string(),
+            total_assets: 0.0,
+            total_liabilities: 0.0,
+            net_worth: 0.0,
+            by_institution: HashMap::new(),
+        });
+        entry.total_assets += assets;
+        entry.total_liabilities += liabilities;
+        entry.net_worth = entry.total_assets - entry.total_liabilities;
+        // If an institution has multiple rows on the same date (e.g. ETL
+        // duplication), sum rather than overwrite.
+        *entry.by_institution.entry(inst).or_insert(0.0) += inst_net;
+    }
+
+    Json(points.into_values().collect())
 }
 
 /// All investment holdings across all accounts
@@ -315,7 +341,7 @@ async fn credit_utilization(State(state): State<AppState>) -> Json<Vec<CreditUti
 async fn sync_status(State(state): State<AppState>) -> Json<Vec<SyncStatusEntry>> {
     let rows = sqlx::query(
         r#"
-        SELECT name, integration_type, sync_status, last_synced_at, country
+        SELECT id, name, integration_type, sync_status, last_synced_at, country, last_sync_error
         FROM institutions
         ORDER BY name
         "#
@@ -327,6 +353,9 @@ async fn sync_status(State(state): State<AppState>) -> Json<Vec<SyncStatusEntry>
     Json(
         rows.iter()
             .map(|r| SyncStatusEntry {
+                id: r.try_get::<uuid::Uuid, _>("id")
+                    .map(|u| u.to_string())
+                    .unwrap_or_default(),
                 name: r.get("name"),
                 integration_type: r.get("integration_type"),
                 country: r.get("country"),
@@ -334,6 +363,8 @@ async fn sync_status(State(state): State<AppState>) -> Json<Vec<SyncStatusEntry>
                     .unwrap_or_else(|_| "unknown".to_string()),
                 last_synced_at: r.try_get::<chrono::DateTime<chrono::Utc>, _>("last_synced_at")
                     .ok().map(|d| d.to_rfc3339()),
+                last_sync_error: r.try_get::<Option<String>, _>("last_sync_error")
+                    .ok().flatten(),
             })
             .collect(),
     )
@@ -532,6 +563,8 @@ struct NetWorthPoint {
     total_assets: f64,
     total_liabilities: f64,
     net_worth: f64,
+    /// Per-institution net contribution (assets - liabilities) for this date.
+    by_institution: HashMap<String, f64>,
 }
 
 #[derive(Serialize)]
@@ -570,11 +603,13 @@ struct CreditUtilization {
 
 #[derive(Serialize)]
 struct SyncStatusEntry {
+    id: String,
     name: String,
     integration_type: String,
     country: String,
     sync_status: String,
     last_synced_at: Option<String>,
+    last_sync_error: Option<String>,
 }
 
 #[derive(Serialize)]

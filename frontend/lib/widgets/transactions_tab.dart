@@ -137,138 +137,136 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 );
                 final isExpense = amount > 0;
                 final category = tx['user_category'] ?? tx['category'];
-                final notes = tx['user_notes'] ?? '';
-                final source = tx['source'] ?? 'plaid';
+                final notes = (tx['user_notes'] ?? '').toString();
 
-                return Row(
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: _getCategoryColor(
-                          category,
-                          tx['description'],
-                        ).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        _getCategoryIcon(category, tx['description']),
-                        color: _getCategoryColor(
-                          category,
-                          tx['description'],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _titleCase(
-                              tx['description'] ?? 'Unknown Transaction',
-                            ),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                return InkWell(
+                  onTap: () => _showTransactionDetails(tx),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: _getCategoryColor(
+                              category,
+                              tx['description'],
+                            ).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          const SizedBox(height: 4),
-                          Row(
+                          child: Icon(
+                            _getCategoryIcon(category, tx['description']),
+                            color: _getCategoryColor(
+                              category,
+                              tx['description'],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                tx['account_name'] ?? '',
+                                _titleCase(
+                                  tx['description'] ?? 'Unknown Transaction',
+                                ),
                                 style: const TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              const SizedBox(width: 8),
-                              const Text(
-                                '•',
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                DateFormat('MMM d, y').format(date),
-                                style: const TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              if (notes.isNotEmpty) ...[
-                                const SizedBox(width: 8),
-                                const Text('•',
-                                    style: TextStyle(
-                                        color: Colors.grey, fontSize: 12)),
-                                const SizedBox(width: 8),
-                                Flexible(
-                                  child: Text(
-                                    notes,
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Text(
+                                    tx['account_name'] ?? '',
                                     style: const TextStyle(
-                                        color: Colors.white60,
-                                        fontSize: 12,
-                                        fontStyle: FontStyle.italic),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                      color: Colors.grey,
+                                      fontSize: 12,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    '•',
+                                    style: TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    DateFormat('MMM d, y').format(date),
+                                    style: const TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  if (notes.isNotEmpty) ...[
+                                    const SizedBox(width: 8),
+                                    const Text('•',
+                                        style: TextStyle(
+                                            color: Colors.grey, fontSize: 12)),
+                                    const SizedBox(width: 8),
+                                    Flexible(
+                                      child: Text(
+                                        notes,
+                                        style: const TextStyle(
+                                            color: Colors.white60,
+                                            fontSize: 12,
+                                            fontStyle: FontStyle.italic),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
                             ],
                           ),
-                        ],
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          currencyFormat.format(amount.abs()),
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                            color: isExpense
-                                ? Colors.white
-                                : const Color(0xFF00E676),
-                          ),
                         ),
-                        if (sourceCurrency != widget.targetCurrency)
-                          Text(
-                            formatCurrencyAmount(
-                              sourceAmount.abs(),
-                              sourceCurrency,
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              currencyFormat.format(amount.abs()),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                                color: isExpense
+                                    ? Colors.white
+                                    : const Color(0xFF00E676),
+                              ),
                             ),
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        if (tx['pending'] == true)
-                          const Text(
-                            'Pending',
-                            style: TextStyle(
-                              color: Colors.orange,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        const SizedBox(height: 4),
-                        IconButton(
-                          icon: const Icon(Icons.edit_note, size: 18, color: Colors.white24),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          onPressed: () => _showEditDialog(tx),
-                          tooltip: 'Edit Category/Notes',
+                            if (sourceCurrency != widget.targetCurrency)
+                              Text(
+                                formatCurrencyAmount(
+                                  sourceAmount.abs(),
+                                  sourceCurrency,
+                                ),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            if (tx['pending'] == true)
+                              const Text(
+                                'Pending',
+                                style: TextStyle(
+                                  color: Colors.orange,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 );
               },
             ),
@@ -278,47 +276,238 @@ class _TransactionsTabState extends State<TransactionsTab> {
     );
   }
 
-  void _showEditDialog(dynamic tx) {
-    final catController = TextEditingController(text: tx['user_category'] ?? tx['category'] ?? '');
-    final notesController = TextEditingController(text: tx['user_notes'] ?? '');
+  void _showTransactionDetails(dynamic tx) {
+    final catController = TextEditingController(
+      text: (tx['user_category'] ?? tx['category'] ?? '').toString(),
+    );
+    final notesController = TextEditingController(
+      text: (tx['user_notes'] ?? '').toString(),
+    );
+
+    final date = DateTime.parse(tx['date'] as String);
+    final sourceAmount = ((tx['amount'] as num?)?.toDouble() ?? 0.0);
+    final sourceCurrency =
+        (tx['currency'] ?? widget.targetCurrency).toString();
+    final convertedAmount = convertCurrency(
+      sourceAmount,
+      from: sourceCurrency,
+      to: widget.targetCurrency,
+      usdMxnRate: widget.usdMxnRate,
+    );
+    final isExpense = convertedAmount > 0;
+    final source = (tx['source'] ?? 'plaid').toString();
+    final originalCategory = (tx['category'] ?? '').toString();
+    final merchant = (tx['merchant_name'] ?? '').toString();
+    final pending = tx['pending'] == true;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => Dialog(
         backgroundColor: const Color(0xFF1A1A24),
-        title: const Text('Edit Transaction'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: catController,
-              decoration: const InputDecoration(labelText: 'Category'),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: _getCategoryColor(
+                            tx['user_category'] ?? tx['category'],
+                            tx['description'],
+                          ).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          _getCategoryIcon(
+                            tx['user_category'] ?? tx['category'],
+                            tx['description'],
+                          ),
+                          color: _getCategoryColor(
+                            tx['user_category'] ?? tx['category'],
+                            tx['description'],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _titleCase(
+                            tx['description'] ?? 'Unknown Transaction',
+                          ),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 20),
+                        onPressed: () => Navigator.pop(context),
+                        tooltip: 'Close',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.currencyFormat.format(convertedAmount.abs()),
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                            color: isExpense
+                                ? Colors.white
+                                : const Color(0xFF00E676),
+                          ),
+                        ),
+                        if (sourceCurrency != widget.targetCurrency) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Original: ${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.white54,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 4),
+                        Text(
+                          isExpense ? 'Outflow' : 'Inflow',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isExpense
+                                ? Colors.redAccent.shade100
+                                : const Color(0xFF1DE9B6),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  _detailRow('Date', DateFormat('MMMM d, y').format(date)),
+                  _detailRow('Account', (tx['account_name'] ?? '').toString()),
+                  if (merchant.isNotEmpty) _detailRow('Merchant', merchant),
+                  if (originalCategory.isNotEmpty)
+                    _detailRow('Original category', originalCategory),
+                  _detailRow('Source', source),
+                  if (pending)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'Pending',
+                          style: TextStyle(
+                            color: Colors.orange,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Your overrides',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white60,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: catController,
+                    decoration: const InputDecoration(
+                      labelText: 'Category',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: notesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Notes',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Close'),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          widget.onUpdate?.call(
+                            tx['id'],
+                            userCategory: catController.text.trim(),
+                            userNotes: notesController.text.trim(),
+                          );
+                        },
+                        child: const Text('Save'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: notesController,
-              decoration: const InputDecoration(labelText: 'Notes'),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Source: ${tx['source'] ?? 'plaid'}',
-              style: const TextStyle(fontSize: 10, color: Colors.grey),
-            ),
-          ],
+          ),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              widget.onUpdate?.call(
-                tx['id'],
-                userCategory: catController.text.trim(),
-                userNotes: notesController.text.trim(),
-              );
-            },
-            child: const Text('Save'),
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style:
+                  const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value.isEmpty ? '—' : value,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            ),
           ),
         ],
       ),

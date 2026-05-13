@@ -76,6 +76,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Widget _buildFxBadge() {
+    final rate = (_fxRate?['rate'] as num?)?.toDouble();
+    final recordedAtRaw = _fxRate?['recorded_at'] as String?;
+    final recordedLocal = recordedAtRaw == null
+        ? null
+        : DateTime.tryParse(recordedAtRaw)?.toLocal();
+    final isStale = recordedLocal != null &&
+        DateTime.now().difference(recordedLocal).inHours > 24;
+
+    final label = rate == null
+        ? '1 USD = — MXN'
+        : '1 USD = ${NumberFormat('0.00').format(rate)} MXN';
+    final accent =
+        isStale ? Colors.orangeAccent : const Color(0xFF1DE9B6);
+
+    final tooltip = rate == null
+        ? 'Exchange rate loading…'
+        : recordedLocal == null
+            ? 'Live USD/MXN exchange rate'
+            : '${isStale ? "Stale rate — " : "Updated "}'
+                '${DateFormat('MMM d, y · h:mm a').format(recordedLocal)} '
+                '${recordedLocal.timeZoneName}';
+
+    return Tooltip(
+      message: tooltip,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: accent.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.swap_horiz, size: 14, color: accent),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: accent,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _checkRedirectStatus() {
     final uri = Uri.parse(web.window.location.href);
     final status = uri.queryParameters['status'];
@@ -201,6 +252,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           actions: [
+            _buildFxBadge(),
+            const SizedBox(width: 8),
             TextButton.icon(
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 12),

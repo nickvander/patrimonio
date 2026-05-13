@@ -68,11 +68,13 @@ class CashFlowTrendsChart extends StatelessWidget {
             const SizedBox(height: 24),
             SizedBox(
               height: 250,
-              child: BarChart(
+              child: Builder(builder: (context) {
+                final maxY = _getMaxValue();
+                return BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.spaceEvenly,
                   groupsSpace: 16,
-                  maxY: _getMaxValue(),
+                  maxY: maxY,
                   barTouchData: BarTouchData(
                     touchTooltipData: BarTouchTooltipData(
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
@@ -129,15 +131,21 @@ class CashFlowTrendsChart extends StatelessWidget {
                     leftTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
-                        reservedSize: 60,
+                        reservedSize: 48,
                         getTitlesWidget: (value, meta) {
+                          // Skip zero (visual baseline) and any tick that
+                          // sits within 8% of maxY — those get squished
+                          // against the top of the chart frame.
                           if (value == 0) return const SizedBox();
+                          if (maxY > 0 && value >= maxY * 0.92) {
+                            return const SizedBox();
+                          }
                           return SideTitleWidget(
                             meta: meta,
                             child: Text(
-                              currencyFormat
-                                  .format(value * conversionFactor)
-                                  .split('.')[0], // No decimals for compactness
+                              NumberFormat.compactSimpleCurrency(
+                                name: currencyFormat.currencyName,
+                              ).format(value * conversionFactor),
                               style: const TextStyle(
                                 fontSize: 10,
                                 color: Colors.grey,
@@ -175,7 +183,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                           borderRadius: BorderRadius.circular(4),
                           backDrawRodData: BackgroundBarChartRodData(
                             show: true,
-                            toY: _getMaxValue(),
+                            toY: maxY,
                             color: Colors.white.withValues(alpha: 0.05),
                           ),
                         ),
@@ -193,7 +201,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                           borderRadius: BorderRadius.circular(4),
                           backDrawRodData: BackgroundBarChartRodData(
                             show: true,
-                            toY: _getMaxValue(),
+                            toY: maxY,
                             color: Colors.white.withValues(alpha: 0.05),
                           ),
                         ),
@@ -201,7 +209,8 @@ class CashFlowTrendsChart extends StatelessWidget {
                     );
                   }).toList(),
                 ),
-              ),
+              );
+              }),
             ),
           ],
         ),

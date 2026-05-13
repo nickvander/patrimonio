@@ -67,12 +67,14 @@ class NetWorthCard extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final isCompact = constraints.maxWidth < 640;
+            final filtered = _filterByRange(history);
+            final institutions = _topInstitutions(filtered);
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildHeader(isCompact),
+                _buildHeader(isCompact, institutions),
                 const SizedBox(height: 24),
-                Expanded(child: _buildChart()),
+                Expanded(child: _buildChart(filtered, institutions)),
               ],
             );
           },
@@ -81,7 +83,8 @@ class NetWorthCard extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader(bool isCompact) {
+  Widget _buildHeader(
+      bool isCompact, List<MapEntry<String, Color>> institutions) {
     final summary = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -123,13 +126,15 @@ class NetWorthCard extends StatelessWidget {
       ],
     );
 
+    final legend = _buildLegend(institutions);
+
     if (isCompact) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           summary,
           const SizedBox(height: 16),
-          _buildBenchmarkLegend(),
+          legend,
         ],
       );
     }
@@ -140,20 +145,53 @@ class NetWorthCard extends StatelessWidget {
       children: [
         Expanded(child: summary),
         const SizedBox(width: 16),
-        Flexible(child: _buildBenchmarkLegend()),
+        Flexible(child: legend),
       ],
     );
   }
 
-  Widget _buildBenchmarkLegend() {
+  /// Palette used to colour per-institution lines. Mirrors the brand
+  /// palette used elsewhere in the dashboard.
+  static const List<Color> _institutionPalette = [
+    Color(0xFF00B0FF), // Azure Blue
+    Color(0xFFAB47BC), // Purple
+    Color(0xFFFFB300), // Amber
+    Color(0xFFFF6E40), // Deep Orange
+    Color(0xFF26C6DA), // Cyan
+    Color(0xFFEC407A), // Pink
+  ];
+
+  /// Returns an ordered list of (institutionName, color) pairs for the
+  /// top contributors observed across the provided history.
+  List<MapEntry<String, Color>> _topInstitutions(List<dynamic> data,
+      {int max = 5}) {
+    final maxByInst = <String, double>{};
+    for (final raw in data) {
+      final map = raw as Map<String, dynamic>;
+      final byInst =
+          (map['by_institution'] as Map?)?.cast<String, dynamic>() ?? {};
+      for (final entry in byInst.entries) {
+        final value = (entry.value as num).toDouble().abs();
+        final prev = maxByInst[entry.key] ?? 0.0;
+        if (value > prev) maxByInst[entry.key] = value;
+      }
+    }
+    final sorted = maxByInst.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final top = sorted.take(max).toList();
+    return [
+      for (var i = 0; i < top.length; i++)
+        MapEntry(top[i].key, _institutionPalette[i % _institutionPalette.length]),
+    ];
+  }
+
+  Widget _buildLegend(List<MapEntry<String, Color>> institutions) {
     return Wrap(
       spacing: 12,
       runSpacing: 8,
       children: [
-        _legendItem('Your Wealth', const Color(0xFF00E676)),
-        _legendItem('S&P 500', Colors.blueAccent.withValues(alpha: 0.5)),
-        _legendItem('NASDAQ', Colors.purpleAccent.withValues(alpha: 0.5)),
-        _legendItem('BTC (Est)', Colors.orangeAccent.withValues(alpha: 0.5)),
+        _legendItem('Total net worth', const Color(0xFF00E676)),
+        ...institutions.map((e) => _legendItem(e.key, e.value)),
       ],
     );
   }
@@ -172,7 +210,8 @@ class NetWorthCard extends StatelessWidget {
     );
   }
 
-  Widget _buildChart() {
+  Widget _buildChart(
+      List<dynamic> filtered, List<MapEntry<String, Color>> institutions) {
     if (history.isEmpty) {
       // Mock historical data if empty - show a flat line for onboarding
       final now = DateTime.now();
@@ -182,22 +221,23 @@ class NetWorthCard extends StatelessWidget {
           'date': DateFormat('yyyy-MM-dd').format(date),
           'net_worth':
               netWorth / conversionFactor, // backend expects base units
+          'by_institution': const <String, dynamic>{},
         };
       });
-      return _renderLineChart(mockData);
+      return _renderLineChart(mockData, const []);
     }
 
-    final filtered = _filterByRange(history);
-    return _renderLineChart(filtered);
+    return _renderLineChart(filtered, institutions);
   }
 
-  Widget _renderLineChart(List<dynamic> data) {
+  Widget _renderLineChart(
+      List<dynamic> data, List<MapEntry<String, Color>> institutions) {
     if (data.isEmpty) return const SizedBox.shrink();
 
     List<FlSpot> spots = [];
-    List<FlSpot> sp500Spots = [];
-    List<FlSpot> nasdaqSpots = [];
-    List<FlSpot> btcSpots = [];
+    final institutionSpots = <String, List<FlSpot>>{
+      for (final i in institutions) i.key: <FlSpot>[],
+    };
 
     double minY = double.infinity;
     double maxY = -double.infinity;
@@ -209,27 +249,23 @@ class NetWorthCard extends StatelessWidget {
     final int step = data.length > 150 ? (data.length / 150).ceil() : 1;
 
     void processPoint(int i) {
-      final val = (data[i]['net_worth'] as num).toDouble() * conversionFactor;
+      final point = data[i] as Map<String, dynamic>;
+      final val = (point['net_worth'] as num).toDouble() * conversionFactor;
       final x = i.toDouble();
       spots.add(FlSpot(x, val));
 
-      // Benchmarks
-      final daysSinceStart = i.toDouble();
-      final sp500Val =
-          baseValue * (1.0 + (0.10 / 365 * daysSinceStart)); // 10% annual
-      final nasdaqVal =
-          baseValue * (1.0 + (0.14 / 365 * daysSinceStart)); // 14% annual
-      final btcVal =
-          baseValue * (1.0 + (0.40 / 365 * daysSinceStart)); // 40% annual
-
-      sp500Spots.add(FlSpot(x, sp500Val));
-      nasdaqSpots.add(FlSpot(x, nasdaqVal));
-      btcSpots.add(FlSpot(x, btcVal));
+      final byInst =
+          (point['by_institution'] as Map?)?.cast<String, dynamic>() ?? {};
+      for (final inst in institutions) {
+        final raw = byInst[inst.key];
+        final v = raw is num ? raw.toDouble() * conversionFactor : 0.0;
+        institutionSpots[inst.key]!.add(FlSpot(x, v));
+        if (v < minY) minY = v;
+        if (v > maxY) maxY = v;
+      }
 
       if (val < minY) minY = val;
       if (val > maxY) maxY = val;
-      if (btcVal < minY) minY = btcVal; // BTC is most volatile, covers ranges
-      if (btcVal > maxY) maxY = btcVal;
     }
 
     for (int i = 0; i < data.length; i += step) {
@@ -275,19 +311,23 @@ class NetWorthCard extends StatelessWidget {
                 const Color(0xFF1A1A24).withValues(alpha: 0.9),
             tooltipRoundedRadius: 12,
             getTooltipItems: (touchedSpots) {
+              // Only emit a tooltip body once — on the wealth line (the
+              // last bar) — and have it include every institution breakdown.
+              final wealthBarIndex = institutions.length;
               return touchedSpots.map((spot) {
-                if (spot.barIndex == 0) {
-                  return null; // Only show tooltip for main wealth line
-                }
+                if (spot.barIndex != wealthBarIndex) return null;
 
                 final idx = spot.x.toInt().clamp(0, data.length - 1);
-                final point = data[idx];
+                final point = data[idx] as Map<String, dynamic>;
                 final dateStr = point['date'].toString();
                 final date = DateTime.tryParse(dateStr) ?? DateTime.now();
 
                 final nw = point['net_worth'];
                 final ta = point['total_assets'];
                 final tl = point['total_liabilities'];
+                final byInst = (point['by_institution'] as Map?)
+                        ?.cast<String, dynamic>() ??
+                    {};
 
                 final children = <TextSpan>[
                   TextSpan(
@@ -326,7 +366,7 @@ class NetWorthCard extends StatelessWidget {
                     ),
                     TextSpan(
                       text:
-                          'Liabilities: ${currencyFormat.format((tl as num).toDouble() * conversionFactor)}',
+                          'Liabilities: ${currencyFormat.format((tl as num).toDouble() * conversionFactor)}\n',
                       style: const TextStyle(
                         color: Colors.redAccent,
                         fontSize: 12,
@@ -334,6 +374,27 @@ class NetWorthCard extends StatelessWidget {
                       ),
                     ),
                   ]);
+                }
+
+                if (institutions.isNotEmpty) {
+                  children.add(const TextSpan(
+                    text: '───────────────\n',
+                    style: TextStyle(color: Colors.white10),
+                  ));
+                  for (final inst in institutions) {
+                    final raw = byInst[inst.key];
+                    if (raw is! num) continue;
+                    final value = raw.toDouble() * conversionFactor;
+                    children.add(TextSpan(
+                      text:
+                          '${inst.key}: ${currencyFormat.format(value)}\n',
+                      style: TextStyle(
+                        color: inst.value,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ));
+                  }
                 }
 
                 return LineTooltipItem(
@@ -390,8 +451,14 @@ class NetWorthCard extends StatelessWidget {
               showTitles: true,
               interval: yInterval,
               getTitlesWidget: (value, meta) {
-                // Skip the very first/last to avoid clipping
-                if (value <= minY || value >= maxY) return const SizedBox();
+                // Skip ticks that fall within ~half an interval of either
+                // edge — fl_chart can otherwise crowd or clip labels at the
+                // very top/bottom of the axis.
+                final edgeBuffer = yInterval * 0.5;
+                if (value <= minY + edgeBuffer ||
+                    value >= maxY - edgeBuffer) {
+                  return const SizedBox();
+                }
                 return Text(
                   NumberFormat.compactSimpleCurrency(
                     name: currencyFormat.currencyName,
@@ -407,37 +474,17 @@ class NetWorthCard extends StatelessWidget {
         minY: minY,
         maxY: maxY,
         lineBarsData: [
-          // S&P 500 Benchmark Line (Dash-dot)
-          LineChartBarData(
-            spots: sp500Spots,
-            isCurved: true,
-            color: Colors.blueAccent.withValues(alpha: 0.3),
-            barWidth: 2,
-            isStrokeCapRound: true,
-            dotData: const FlDotData(show: false),
-            dashArray: [5, 5],
-          ),
-          // NASDAQ Benchmark Line
-          LineChartBarData(
-            spots: nasdaqSpots,
-            isCurved: true,
-            color: Colors.purpleAccent.withValues(alpha: 0.3),
-            barWidth: 2,
-            isStrokeCapRound: true,
-            dotData: const FlDotData(show: false),
-            dashArray: [3, 4],
-          ),
-          // BTC Benchmark Line
-          LineChartBarData(
-            spots: btcSpots,
-            isCurved: true,
-            color: Colors.orangeAccent.withValues(alpha: 0.3),
-            barWidth: 2,
-            isStrokeCapRound: true,
-            dotData: const FlDotData(show: false),
-            dashArray: [2, 6],
-          ),
-          // Your Wealth Line
+          // Per-institution contribution lines (drawn under the wealth line).
+          for (final inst in institutions)
+            LineChartBarData(
+              spots: institutionSpots[inst.key]!,
+              isCurved: true,
+              color: inst.value.withValues(alpha: 0.7),
+              barWidth: 2.5,
+              isStrokeCapRound: true,
+              dotData: const FlDotData(show: false),
+            ),
+          // Total net worth (drawn on top so it remains the focal line)
           LineChartBarData(
             spots: spots,
             isCurved: true,
