@@ -141,7 +141,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
       elevation: 6,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Padding(
-        padding: const EdgeInsets.all(32.0),
+        padding: const EdgeInsets.all(28.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -156,67 +156,48 @@ class _PortfolioCardState extends State<PortfolioCard> {
                       const Text(
                         'Investment portfolio',
                         style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: -0.5,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.3,
+                          color: Colors.white,
                         ),
                       ),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 20),
                       const Text(
                         'Total value',
                         style: TextStyle(
-                          color: Colors.white60,
-                          fontSize: 14,
+                          color: Colors.white54,
+                          fontSize: 12,
                           fontWeight: FontWeight.w500,
-                          letterSpacing: 0.5,
+                          letterSpacing: 0.4,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         widget.currencyFormat.format(totalValue),
                         style: const TextStyle(
-                          fontSize: 56,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -1.5,
+                          fontSize: 42,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -1.0,
                           height: 1.1,
                           color: Colors.white,
+                          fontFeatures: [FontFeature.tabularFigures()],
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       Row(
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 8,
+                              horizontal: 10,
+                              vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: isPositive
-                                    ? [
-                                        const Color(
-                                          0xFF00E676,
-                                        ).withValues(alpha: 0.2),
-                                        const Color(
-                                          0xFF00E676,
-                                        ).withValues(alpha: 0.05),
-                                      ]
-                                    : [
-                                        Colors.redAccent.withValues(alpha: 0.2),
-                                        Colors.redAccent.withValues(
-                                          alpha: 0.05,
-                                        ),
-                                      ],
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: isPositive
-                                    ? const Color(
-                                        0xFF00E676,
-                                      ).withValues(alpha: 0.3)
-                                    : Colors.redAccent.withValues(alpha: 0.3),
-                                width: 1,
-                              ),
+                              color: (isPositive
+                                      ? const Color(0xFF00E676)
+                                      : Colors.redAccent)
+                                  .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
                             ),
                             child: Row(
                               children: [
@@ -227,17 +208,20 @@ class _PortfolioCardState extends State<PortfolioCard> {
                                   color: isPositive
                                       ? const Color(0xFF00E676)
                                       : Colors.redAccent,
-                                  size: 16,
+                                  size: 14,
                                 ),
-                                const SizedBox(width: 6),
+                                const SizedBox(width: 4),
                                 Text(
                                   '${isPositive ? '+' : ''}${widget.currencyFormat.format(totalGainLoss.abs())} (${totalGainLossPct.toStringAsFixed(2)}%)',
                                   style: TextStyle(
-                                    fontSize: 15,
+                                    fontSize: 13,
                                     fontWeight: FontWeight.w700,
                                     color: isPositive
                                         ? const Color(0xFF00E676)
                                         : Colors.redAccent,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures()
+                                    ],
                                   ),
                                 ),
                               ],
@@ -250,13 +234,13 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 ),
                 Expanded(
                   flex: 1,
-                  child: SizedBox(height: 240, child: _buildAllocationChart()),
+                  child: SizedBox(height: 220, child: _buildAllocationChart()),
                 ),
               ],
             ),
-            const SizedBox(height: 32),
-            _buildKpiStrip(),
             const SizedBox(height: 24),
+            _buildKpiStrip(),
+            const SizedBox(height: 20),
             Theme(
               data: Theme.of(context).copyWith(
                 cardTheme: CardThemeData(
@@ -570,12 +554,12 @@ class _PortfolioCardState extends State<PortfolioCard> {
         .length;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
       child: Row(
         children: [
           Expanded(
             child: SizedBox(
-              height: 40,
+              height: 36,
               child: TextField(
                 onChanged: (v) => setState(() {
                   _searchQuery = v;
@@ -736,29 +720,6 @@ class _PortfolioCardState extends State<PortfolioCard> {
           children: [
             _buildSearchAndToolbar(),
             const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-              child: Row(
-                children: [
-                  const Text(
-                    'Holdings',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${_holdings.length} ${_holdings.length == 1 ? "row" : "rows"}',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: Colors.white38,
-                    ),
-                  ),
-                ],
-              ),
-            ),
             body,
           ],
         );
@@ -1350,33 +1311,50 @@ class _KpiTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = accent ?? Colors.white60;
+    final c = accent ?? Colors.white54;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: c.withValues(alpha: 0.2)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            label.toUpperCase(),
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: c.withValues(alpha: 0.9),
-              letterSpacing: 1.0,
-            ),
+          Row(
+            children: [
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: c,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white60,
+                    letterSpacing: 0.2,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
             value,
             style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
               color: Colors.white,
             ),
             maxLines: 1,
@@ -1388,7 +1366,7 @@ class _KpiTile extends StatelessWidget {
               sub!,
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.white.withValues(alpha: 0.6),
+                color: Colors.white.withValues(alpha: 0.55),
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
               maxLines: 1,
