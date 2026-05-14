@@ -576,7 +576,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       await _refreshData();
     }
 
-    Future<void> _handleReconnect(String institutionId) async {
+    Future<void> handleReconnect(String institutionId) async {
       setState(() => _isLoading = true);
       try {
         final data = await _apiService.getReconnectToken(institutionId);
@@ -892,7 +892,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: SyncStatusCard(
                   syncData: _syncData ?? [],
                   onRetrySync: runSync,
-                  onReconnect: _handleReconnect,
+                  onReconnect: handleReconnect,
                   onDelete: (id) async {
                     final confirm = await showDialog<bool>(
                       context: context,

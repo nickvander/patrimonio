@@ -236,9 +236,9 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
+        color: color.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.5)),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
       child: Row(
         children: [
@@ -248,7 +248,7 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
             child: Text(
               text,
               style: TextStyle(
-                color: color.withOpacity(0.9),
+                color: color.withValues(alpha: 0.9),
                 fontWeight: FontWeight.bold,
               ),
             ),

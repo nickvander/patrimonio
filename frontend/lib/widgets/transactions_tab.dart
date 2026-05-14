@@ -606,7 +606,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                               ),
                             );
                             if (confirm != true) return;
-                            if (!context.mounted) return;
+                            if (!mounted) return;
                             Navigator.pop(context);
                             try {
                               await widget.onDelete!(tx['id']);
