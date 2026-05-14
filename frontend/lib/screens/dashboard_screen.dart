@@ -115,9 +115,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final type = (item['account_type'] ?? '').toString().toLowerCase();
         final v =
             ((item['total_usd'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
-        if (['checking', 'savings'].contains(type)) {
+        if (['checking', 'savings', 'cd', 'money market', 'cash management']
+            .contains(type)) {
           cash += v.abs();
-        } else if (['investment', 'brokerage'].contains(type)) {
+        } else if (['investment', 'brokerage', 'ira', '401k', 'hsa']
+            .contains(type)) {
           investments += v.abs();
         } else if (['credit', 'credit card'].contains(type)) {
           liabilities += v.abs();

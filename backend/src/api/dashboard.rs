@@ -451,7 +451,7 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
                    END as value_usd,
                    0::numeric as qty
             FROM accounts
-            WHERE account_type IN ('checking', 'savings', 'cash')
+            WHERE account_type IN ('checking', 'savings', 'cash', 'cash management', 'cd', 'money market')
             UNION ALL
             -- Crypto accounts
             SELECT 'Crypto' as category,
