@@ -135,7 +135,7 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
     // Individual Accounts
     let accounts_rows = sqlx::query(
         r#"
-        SELECT a.id, a.name, a.account_type, a.current_balance, a.currency, 
+        SELECT a.id, a.name, a.nickname, a.account_type, a.current_balance, a.currency,
                i.name as institution_name, a.ticker_symbol, a.crypto_amount
         FROM accounts a
         JOIN institutions i ON a.institution_id = i.id
@@ -150,6 +150,7 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
         .map(|r| AccountDetail {
             id: r.get::<uuid::Uuid, _>("id").to_string(),
             name: r.get("name"),
+            nickname: r.try_get::<Option<String>, _>("nickname").ok().flatten(),
             institution_name: r.get("institution_name"),
             account_type: r.get("account_type"),
             current_balance: r.try_get::<rust_decimal::Decimal, _>("current_balance")
@@ -253,7 +254,8 @@ async fn holdings(State(state): State<AppState>) -> Json<HoldingsResponse> {
         r#"
         SELECT h.symbol, h.name, h.quantity, h.price, h.value,
                h.cost_basis, h.currency, h.holding_type,
-               a.name as account_name, i.name as institution_name
+               COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
+               i.name as institution_name
         FROM holdings h
         JOIN accounts a ON h.account_id = a.id
         JOIN institutions i ON a.institution_id = i.id
@@ -374,7 +376,9 @@ async fn sync_status(State(state): State<AppState>) -> Json<Vec<SyncStatusEntry>
 async fn recent_transactions(State(state): State<AppState>) -> Json<Vec<TransactionEntry>> {
     let rows = sqlx::query(
         r#"
-        SELECT t.id, t.account_id, a.name as account_name, t.amount, t.currency,
+        SELECT t.id, t.account_id,
+               COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
+               t.amount, t.currency,
                t.date, t.description, t.category, t.pending
         FROM transactions t
         JOIN accounts a ON t.account_id = a.id
@@ -541,6 +545,10 @@ struct DashboardOverview {
 struct AccountDetail {
     id: String,
     name: String,
+    /// User-defined nickname that overrides the bank-supplied `name`
+    /// in the UI. None when not set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    nickname: Option<String>,
     institution_name: String,
     account_type: String,
     current_balance: f64,

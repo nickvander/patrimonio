@@ -11,6 +11,7 @@ class AccountsListWidget extends StatelessWidget {
   final double usdMxnRate;
   final Function(String, double)? onBalanceUpdate;
   final Function(String)? onDeleteAccount;
+  final Function(String accountId, String nickname)? onRenameAccount;
 
   const AccountsListWidget({
     super.key,
@@ -21,6 +22,7 @@ class AccountsListWidget extends StatelessWidget {
     required this.usdMxnRate,
     this.onBalanceUpdate,
     this.onDeleteAccount,
+    this.onRenameAccount,
   });
 
   @override
@@ -47,10 +49,21 @@ class AccountsListWidget extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Link a bank with Plaid, import a CSV, or add a manual\naccount from the Management tab to get started.',
+                  'Link a bank, import a CSV, or add a manual account to\nget started.',
                   textAlign: TextAlign.center,
                   style:
                       TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                ),
+                const SizedBox(height: 18),
+                FilledButton.icon(
+                  onPressed: () =>
+                      DefaultTabController.maybeOf(context)?.animateTo(5),
+                  icon: const Icon(Icons.add_link, size: 18),
+                  label: const Text('Add an account'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF00E676),
+                    foregroundColor: Colors.black,
+                  ),
                 ),
               ],
             ),
@@ -428,7 +441,11 @@ class AccountsListWidget extends StatelessWidget {
     final balance =
         ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
     final sourceCurrency = (acc['currency'] ?? targetCurrency).toString();
-    final name = (acc['name'] ?? 'Unknown Account').toString();
+    // Prefer the user's nickname over the bank-supplied name so a Plaid
+    // default like "PLAID CHECKING 0001" can read as "Joint checking".
+    final nickname = (acc['nickname'] ?? '').toString().trim();
+    final rawName = (acc['name'] ?? 'Unknown Account').toString();
+    final name = nickname.isNotEmpty ? nickname : rawName;
     final inst = (acc['institution_name'] ?? '').toString();
     final hasCrypto =
         acc['ticker_symbol'] != null && acc['crypto_amount'] != null;
@@ -521,7 +538,9 @@ class AccountsListWidget extends StatelessWidget {
       padding: EdgeInsets.zero,
       tooltip: 'Account actions',
       onSelected: (value) {
-        if (value == 'delete') {
+        if (value == 'rename') {
+          _showRenameDialog(context, acc);
+        } else if (value == 'delete') {
           showDialog(
             context: context,
             builder: (context) => AlertDialog(
@@ -548,6 +567,18 @@ class AccountsListWidget extends StatelessWidget {
         }
       },
       itemBuilder: (context) => [
+        if (onRenameAccount != null)
+          const PopupMenuItem(
+            value: 'rename',
+            child: Row(
+              children: [
+                Icon(Icons.drive_file_rename_outline,
+                    size: 18, color: Colors.white70),
+                SizedBox(width: 8),
+                Text('Rename'),
+              ],
+            ),
+          ),
         const PopupMenuItem(
           value: 'delete',
           child: Row(
@@ -633,6 +664,64 @@ class AccountsListWidget extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+
+  /// Modal for setting a user-defined nickname on an account. Empty input
+  /// clears the nickname (display falls back to the bank-supplied name).
+  void _showRenameDialog(BuildContext context, dynamic acc) {
+    final currentNickname = (acc['nickname'] ?? '').toString();
+    final controller = TextEditingController(text: currentNickname);
+    final rawName = (acc['name'] ?? '').toString();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Rename account'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Original: $rawName',
+              style: const TextStyle(fontSize: 12, color: Colors.white54),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Nickname',
+                hintText: 'e.g. Joint checking',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              maxLength: 80,
+              textInputAction: TextInputAction.done,
+            ),
+            const Text(
+              'Leave blank to clear and use the bank name.',
+              style: TextStyle(fontSize: 11, color: Colors.white38),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              onRenameAccount?.call(
+                acc['id'].toString(),
+                controller.text.trim(),
+              );
+            },
+            child: const Text('Save'),
+          ),
+        ],
       ),
     );
   }

@@ -1,9 +1,9 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     routing::get,
     Json, Router,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::Row;
 
 use crate::AppState;
@@ -14,28 +14,42 @@ pub fn router() -> Router<AppState> {
         .route("/history/{base}/{target}", get(get_rate_history))
 }
 
+#[derive(Deserialize, Default)]
+struct LatestRateQuery {
+    /// When `force=true`, bypass the Redis cache and refetch from the
+    /// upstream FX provider. Used by the "Refresh now" button so users
+    /// can pull a live rate on demand instead of waiting for sync.
+    #[serde(default)]
+    force: bool,
+}
+
 /// Get the latest exchange rate between two currencies
 async fn get_latest_rate(
     State(state): State<AppState>,
     Path((base, target)): Path<(String, String)>,
+    Query(params): Query<LatestRateQuery>,
 ) -> Json<ExchangeRateResponse> {
     let cache_key = format!("fx:{}:{}", base.to_uppercase(), target.to_uppercase());
 
-    // 1. Check Redis Cache
-    if let Ok(mut conn) = state.redis.get_multiplexed_async_connection().await {
-        if let Ok(cached_rate) = redis::cmd("GET")
-            .arg(&cache_key)
-            .query_async(&mut conn)
-            .await
-        {
-            tracing::debug!("FX cache hit for {}", cache_key);
-            return Json(ExchangeRateResponse {
-                base: base.to_uppercase(),
-                target: target.to_uppercase(),
-                rate: cached_rate,
-                recorded_at: chrono::Utc::now().to_rfc3339(),
-            });
+    // 1. Check Redis Cache (skipped when force=true)
+    if !params.force {
+        if let Ok(mut conn) = state.redis.get_multiplexed_async_connection().await {
+            if let Ok(cached_rate) = redis::cmd("GET")
+                .arg(&cache_key)
+                .query_async(&mut conn)
+                .await
+            {
+                tracing::debug!("FX cache hit for {}", cache_key);
+                return Json(ExchangeRateResponse {
+                    base: base.to_uppercase(),
+                    target: target.to_uppercase(),
+                    rate: cached_rate,
+                    recorded_at: chrono::Utc::now().to_rfc3339(),
+                });
+            }
         }
+    } else {
+        tracing::info!("FX force refresh for {}", cache_key);
     }
 
     // 2. Not in Cache, Fetch from API

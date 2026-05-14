@@ -141,7 +141,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
       elevation: 6,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Padding(
-        padding: const EdgeInsets.all(28.0),
+        padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1096,6 +1096,8 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
 
     final rawSymbol = (h['symbol'] ?? '').toString();
     final rawName = (h['name'] ?? '').toString();
+    final acctName = (h['account_name'] ?? '').toString();
+    final instName = (h['institution_name'] ?? '').toString();
     // Plaid emits opaque security_ids (e.g. "3mg4qV4JZycPL4qeZgB...") for
     // un-tickered Vanguard mutual funds. Real tickers are short and upper-
     // case; security_ids are long and mixed-case.
@@ -1106,9 +1108,16 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
         : (rawSymbol.isEmpty
             ? (rawName.isNotEmpty ? rawName : '?')
             : rawSymbol);
-    final secondaryLabel = (isOpaqueSecurityId || rawName.isEmpty)
-        ? (h['institution_name'] ?? '').toString()
-        : '$rawName · ${h['institution_name'] ?? ''}';
+    // Secondary line: security name (when it isn't already the display
+    // symbol), institution, and account — joined with bullets. Surfacing
+    // `account_name` lets users with positions split across several
+    // brokerages tell them apart at a glance.
+    final secondaryParts = <String>[
+      if (!isOpaqueSecurityId && rawName.isNotEmpty) rawName,
+      if (instName.isNotEmpty) instName,
+      if (acctName.isNotEmpty && acctName != instName) acctName,
+    ];
+    final secondaryLabel = secondaryParts.join(' · ');
     final avatarChar = displaySymbol.isEmpty
         ? '?'
         : displaySymbol.substring(0, 1).toUpperCase();

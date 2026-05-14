@@ -478,6 +478,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 );
               }
             },
+            onRenameAccount: (id, nickname) async {
+              try {
+                await _apiService.renameAccount(id, nickname);
+                _loadAllData();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      nickname.isEmpty
+                          ? 'Nickname cleared'
+                          : 'Renamed to "$nickname"',
+                    ),
+                  ),
+                );
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Rename failed: $e')),
+                );
+              }
+            },
           ),
           const SizedBox(height: 24),
           CreditUtilizationCard(
@@ -923,7 +944,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               const SizedBox(width: 24),
-              Expanded(child: FxWidget(latestRate: _fxRate ?? {})),
+              Expanded(
+                child: FxWidget(
+                  latestRate: _fxRate ?? {},
+                  onRefresh: () async {
+                    try {
+                      final fresh = await _apiService.getExchangeRate(
+                        'USD',
+                        'MXN',
+                        force: true,
+                      );
+                      if (!mounted) return;
+                      setState(() => _fxRate = fresh);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('FX rate refreshed')),
+                      );
+                    } catch (e) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Refresh failed: $e')),
+                      );
+                    }
+                  },
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 24),

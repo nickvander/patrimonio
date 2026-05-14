@@ -31,6 +31,7 @@ class TransactionsTab extends StatefulWidget {
 
 class _TransactionsTabState extends State<TransactionsTab> {
   String _searchQuery = '';
+  bool _searchOpenOnNarrow = false;
 
   List<dynamic> get _filteredTransactions {
     if (_searchQuery.isEmpty) return widget.transactions;
@@ -46,20 +47,38 @@ class _TransactionsTabState extends State<TransactionsTab> {
   @override
   Widget build(BuildContext context) {
     if (widget.transactions.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.receipt_long_outlined, size: 64, color: Colors.grey),
-            SizedBox(height: 16),
-            Text(
-              'No transactions found.',
-              style: TextStyle(color: Colors.grey, fontSize: 18),
+            const Icon(Icons.receipt_long_outlined,
+                size: 64, color: Colors.grey),
+            const SizedBox(height: 16),
+            const Text(
+              'No transactions yet',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-            SizedBox(height: 8),
-            Text(
-              'Link an institution or sync to see recent activity.',
+            const SizedBox(height: 8),
+            const Text(
+              'Link a bank, import a statement, or add an account manually\n'
+              'to start seeing activity here.',
+              textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              onPressed: () =>
+                  DefaultTabController.maybeOf(context)?.animateTo(5),
+              icon: const Icon(Icons.add_link, size: 18),
+              label: const Text('Go to Management'),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF00E676),
+                foregroundColor: Colors.black,
+              ),
             ),
           ],
         ),
@@ -73,67 +92,99 @@ class _TransactionsTabState extends State<TransactionsTab> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Padding(
         padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Recent transactions',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                SizedBox(
-                  width: 280,
-                  height: 40,
-                  child: TextField(
-                    onChanged: (v) => setState(() => _searchQuery = v),
-                    decoration: InputDecoration(
-                      hintText: 'Search transactions…',
-                      hintStyle: const TextStyle(
-                        color: Colors.white30,
-                        fontSize: 13,
-                      ),
-                      prefixIcon: const Icon(
-                        Icons.search,
-                        size: 18,
-                        color: Colors.white30,
-                      ),
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.05),
-                      contentPadding: const EdgeInsets.symmetric(
-                        vertical: 0,
-                        horizontal: 12,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Showing ${filtered.length} of ${widget.transactions.length}',
-              style: const TextStyle(color: Colors.grey, fontSize: 12),
-            ),
-            const SizedBox(height: 16),
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: filtered.length,
-              separatorBuilder: (context, index) =>
-                  const Divider(height: 32, color: Colors.white10),
-              itemBuilder: (context, index) {
-                return _buildTransactionRow(filtered[index]);
-              },
-            ),
-          ],
+        child: LayoutBuilder(builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 560;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildToolbar(isNarrow),
+              const SizedBox(height: 8),
+              Text(
+                'Showing ${filtered.length} of ${widget.transactions.length}',
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              const SizedBox(height: 16),
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: filtered.length,
+                separatorBuilder: (context, index) =>
+                    const Divider(height: 32, color: Colors.white10),
+                itemBuilder: (context, index) {
+                  return _buildTransactionRow(filtered[index], isNarrow);
+                },
+              ),
+            ],
+          );
+        }),
+      ),
+    );
+  }
+
+  /// Header toolbar. On wide screens shows title + inline search. On narrow
+  /// screens the search collapses to an icon button that expands into a
+  /// full-width input, so the title doesn't fight a 280px search box for
+  /// horizontal space.
+  Widget _buildToolbar(bool isNarrow) {
+    if (isNarrow && _searchOpenOnNarrow) {
+      return Row(
+        children: [
+          Expanded(child: _searchField()),
+          const SizedBox(width: 8),
+          IconButton(
+            onPressed: () => setState(() {
+              _searchOpenOnNarrow = false;
+              _searchQuery = '';
+            }),
+            icon: const Icon(Icons.close, size: 20),
+            tooltip: 'Close search',
+          ),
+        ],
+      );
+    }
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        const Flexible(
+          child: Text(
+            'Recent transactions',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        if (isNarrow)
+          IconButton(
+            onPressed: () =>
+                setState(() => _searchOpenOnNarrow = true),
+            icon: const Icon(Icons.search, size: 20),
+            tooltip: 'Search transactions',
+          )
+        else
+          SizedBox(width: 280, height: 40, child: _searchField()),
+      ],
+    );
+  }
+
+  Widget _searchField() {
+    return TextField(
+      autofocus: _searchOpenOnNarrow,
+      onChanged: (v) => setState(() => _searchQuery = v),
+      decoration: InputDecoration(
+        hintText: 'Search transactions…',
+        hintStyle: const TextStyle(color: Colors.white30, fontSize: 13),
+        prefixIcon:
+            const Icon(Icons.search, size: 18, color: Colors.white30),
+        filled: true,
+        fillColor: Colors.white.withValues(alpha: 0.05),
+        contentPadding:
+            const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
         ),
       ),
+      style: const TextStyle(fontSize: 13),
     );
   }
 
@@ -141,8 +192,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
   /// description column (title + small meta), then a right-aligned amount
   /// block. Real amount is shown in the transaction's native currency;
   /// an estimated conversion to the reporting currency is appended below
-  /// only when the two currencies differ.
-  Widget _buildTransactionRow(dynamic tx) {
+  /// only when the two currencies differ. On narrow viewports the amount
+  /// column shrinks and the conversion subtitle drops, so a 375 px phone
+  /// still gets a readable description.
+  Widget _buildTransactionRow(dynamic tx, bool isNarrow) {
     final date = DateTime.parse(tx['date'] as String);
     final sourceAmount = ((tx['amount'] as num?)?.toDouble() ?? 0.0);
     final sourceCurrency =
@@ -213,8 +266,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
             // Fixed-width amount column so eyes can scan straight down.
             // Real amount = native currency (top, bold). Estimated
             // conversion appears below only when there's a real FX leap.
+            // On narrow viewports we shrink the column and drop the
+            // conversion subtitle to give the description room.
             SizedBox(
-              width: 132,
+              width: isNarrow ? 96 : 132,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -222,14 +277,16 @@ class _TransactionsTabState extends State<TransactionsTab> {
                     '${isExpense ? '−' : '+'}${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}',
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
-                      fontSize: 16,
+                      fontSize: isNarrow ? 14 : 16,
                       fontFeatures: const [FontFeature.tabularFigures()],
                       color: isExpense
                           ? Colors.white
                           : const Color(0xFF00E676),
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  if (needsConversion)
+                  if (needsConversion && !isNarrow)
                     Text(
                       '≈ ${widget.currencyFormat.format(converted.abs())}',
                       style: const TextStyle(
@@ -319,14 +376,35 @@ class _TransactionsTabState extends State<TransactionsTab> {
       rawDescription,
     );
 
-    // Find the 3 most recent transactions with the same raw description
-    // (excluding the current one). Lets users see merchant-level context
-    // without leaving the modal.
-    final similar = widget.transactions.where((other) {
+    // All transactions sharing this exact description (excluding the
+    // current one). We use the full set to compute lifetime spend at
+    // this merchant, then take(3) for the visible recent rows.
+    final merchantMatches = widget.transactions.where((other) {
       if (other['id'] == tx['id']) return false;
       return (other['description'] ?? '').toString().trim().toLowerCase() ==
           rawDescription.trim().toLowerCase();
-    }).take(3).toList();
+    }).toList();
+    final similar = merchantMatches.take(3).toList();
+    // Lifetime spend at this merchant (including the current tx),
+    // converted to the reporting currency. Use the absolute value
+    // since incoming/outgoing share a sign convention we don't need
+    // to disambiguate in a single rollup.
+    final merchantTotal = merchantMatches.fold<double>(
+      sourceAmount.abs(),
+      (sum, other) {
+        final amt = ((other['amount'] as num?)?.toDouble() ?? 0.0).abs();
+        final otherCcy = (other['currency'] ?? widget.targetCurrency)
+            .toString();
+        return sum +
+            convertCurrency(
+              amt,
+              from: otherCcy,
+              to: widget.targetCurrency,
+              usdMxnRate: widget.usdMxnRate,
+            );
+      },
+    );
+    final merchantCount = merchantMatches.length + 1;
 
     // Slide-from-right side panel on wide screens, bottom-sheet on narrow.
     // This is the Linear / Notion / Gmail pattern — keeps the underlying
@@ -553,6 +631,17 @@ class _TransactionsTabState extends State<TransactionsTab> {
                     const SizedBox(height: 20),
                     _sectionLabel('Recent at this merchant'),
                     const SizedBox(height: 6),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text(
+                        'Total: ${widget.currencyFormat.format(merchantTotal)} across $merchantCount transactions',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.white60,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ),
                     ...similar.map((other) => _similarRow(other)),
                   ],
                   if (widget.accounts.isNotEmpty) ...[

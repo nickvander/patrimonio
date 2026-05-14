@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-class CreditUtilizationCard extends StatelessWidget {
+class CreditUtilizationCard extends StatefulWidget {
   final List<dynamic> creditData;
   final double conversionFactor;
   final NumberFormat currencyFormat;
@@ -14,7 +14,17 @@ class CreditUtilizationCard extends StatelessWidget {
   });
 
   @override
+  State<CreditUtilizationCard> createState() => _CreditUtilizationCardState();
+}
+
+class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
+  static const int _collapsedLimit = 3;
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
+    // Read the props through `widget.` (StatefulWidget body).
+    final creditData = widget.creditData;
     if (creditData.isEmpty) {
       return const Card(
         child: Padding(
@@ -86,64 +96,113 @@ class CreditUtilizationCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            ...creditData.map((item) {
-              final balance = ((item['balance'] ?? 0.0) as num).toDouble();
-              final limit = ((item['credit_limit'] ?? 0.0) as num).toDouble();
-              final util = limit > 0 ? (balance / limit) * 100 : 0.0;
-
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 16.0),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item['name'] ?? 'Credit Account',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            Text(
-                              item['institution_name'] ?? '',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Text(
-                          '${currencyFormat.format(balance * conversionFactor)} / ${currencyFormat.format(limit * conversionFactor)}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: (util / 100).clamp(0.0, 1.0),
-                        backgroundColor: Colors.white10,
-                        color: util > 30
-                            ? Colors.orange.withValues(alpha: 0.7)
-                            : const Color(0xFF00E676).withValues(alpha: 0.7),
-                        minHeight: 4,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
+            ..._buildCreditRows(),
           ],
         ),
       ),
     );
+  }
+
+  /// Sort by utilization (highest first) and cap at `_collapsedLimit`
+  /// unless the user has expanded the list. Caps prevent a portfolio of
+  /// 10+ credit cards from dominating the Overview tab.
+  List<Widget> _buildCreditRows() {
+    final creditData = widget.creditData;
+    final conversionFactor = widget.conversionFactor;
+    final currencyFormat = widget.currencyFormat;
+
+    final sorted = [...creditData]..sort((a, b) {
+        double util(dynamic x) {
+          final balance = ((x['balance'] ?? 0.0) as num).toDouble();
+          final limit = ((x['credit_limit'] ?? 0.0) as num).toDouble();
+          return limit > 0 ? balance / limit : 0.0;
+        }
+        return util(b).compareTo(util(a));
+      });
+
+    final visible = _expanded || sorted.length <= _collapsedLimit
+        ? sorted
+        : sorted.take(_collapsedLimit).toList();
+
+    final rows = <Widget>[];
+    for (final item in visible) {
+      final balance = ((item['balance'] ?? 0.0) as num).toDouble();
+      final limit = ((item['credit_limit'] ?? 0.0) as num).toDouble();
+      final util = limit > 0 ? (balance / limit) * 100 : 0.0;
+      rows.add(Padding(
+        padding: const EdgeInsets.only(bottom: 16.0),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item['name'] ?? 'Credit Account',
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        item['institution_name'] ?? '',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  '${currencyFormat.format(balance * conversionFactor)} / ${currencyFormat.format(limit * conversionFactor)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: (util / 100).clamp(0.0, 1.0),
+                backgroundColor: Colors.white10,
+                color: util > 30
+                    ? Colors.orange.withValues(alpha: 0.7)
+                    : const Color(0xFF00E676).withValues(alpha: 0.7),
+                minHeight: 4,
+              ),
+            ),
+          ],
+        ),
+      ));
+    }
+
+    if (sorted.length > _collapsedLimit) {
+      final hidden = sorted.length - _collapsedLimit;
+      rows.add(Center(
+        child: TextButton.icon(
+          onPressed: () => setState(() => _expanded = !_expanded),
+          icon: Icon(
+            _expanded ? Icons.expand_less : Icons.expand_more,
+            size: 18,
+          ),
+          label: Text(_expanded
+              ? 'Show fewer'
+              : 'Show $hidden more ${hidden == 1 ? "card" : "cards"}'),
+          style: TextButton.styleFrom(foregroundColor: Colors.white70),
+        ),
+      ));
+    }
+
+    return rows;
   }
 }

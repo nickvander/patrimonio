@@ -65,33 +65,55 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildHeader(),
-        const SizedBox(height: 24),
-        Expanded(
-          child: Row(
+    return LayoutBuilder(builder: (context, constraints) {
+      // Below ~800px (tablet portrait and smaller) the 320px fixed sidebar
+      // squeezes the chart unreadably. Stack the controls on top instead so
+      // both panels get the full width on narrow viewports.
+      final isNarrow = constraints.maxWidth < 800;
+      if (isNarrow) {
+        // Page-level scroll handles overflow; controls shrink-wrap their
+        // intrinsic height (no inner SingleChildScrollView).
+        return SingleChildScrollView(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Left side: Controls
-              SizedBox(width: 320, child: _buildControls()),
-              const SizedBox(width: 24),
-              // Right side: Chart and Milestones
-              Expanded(
-                child: Column(
-                  children: [
-                    Expanded(flex: 3, child: _buildChartCard()),
-                    const SizedBox(height: 24),
-                    Expanded(flex: 1, child: _buildMilestonesRow()),
-                  ],
-                ),
-              ),
+              _buildHeader(),
+              const SizedBox(height: 24),
+              _buildControls(scrollable: false),
+              const SizedBox(height: 24),
+              SizedBox(height: 320, child: _buildChartCard()),
+              const SizedBox(height: 24),
+              SizedBox(height: 140, child: _buildMilestonesRow()),
             ],
           ),
-        ),
-      ],
-    );
+        );
+      }
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildHeader(),
+          const SizedBox(height: 24),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(width: 320, child: _buildControls()),
+                const SizedBox(width: 24),
+                Expanded(
+                  child: Column(
+                    children: [
+                      Expanded(flex: 3, child: _buildChartCard()),
+                      const SizedBox(height: 24),
+                      Expanded(flex: 1, child: _buildMilestonesRow()),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    });
   }
 
   Widget _buildHeader() {
@@ -115,14 +137,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     );
   }
 
-  Widget _buildControls() {
-    return Card(
-      color: const Color(0xFF1E1E1E),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: SingleChildScrollView(
-          child: Column(
+  Widget _buildControls({bool scrollable = true}) {
+    final body = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildSliderControl(
@@ -176,8 +192,13 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 onChangeEnd: (_) => _fetchProjection(),
               ),
             ],
-          ),
-        ),
+          );
+    return Card(
+      color: const Color(0xFF1E1E1E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: scrollable ? SingleChildScrollView(child: body) : body,
       ),
     );
   }

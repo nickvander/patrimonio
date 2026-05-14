@@ -1,13 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-class FxWidget extends StatelessWidget {
+class FxWidget extends StatefulWidget {
   final Map<String, dynamic> latestRate;
+  /// Async callback invoked when the user taps the "Refresh now" button.
+  /// Dashboard wires it to force-refresh the FX rate (bypassing cache)
+  /// and reload the dashboard so the new value flows through every card.
+  final Future<void> Function()? onRefresh;
 
-  const FxWidget({super.key, required this.latestRate});
+  const FxWidget({super.key, required this.latestRate, this.onRefresh});
+
+  @override
+  State<FxWidget> createState() => _FxWidgetState();
+}
+
+class _FxWidgetState extends State<FxWidget> {
+  bool _refreshing = false;
 
   @override
   Widget build(BuildContext context) {
+    final latestRate = widget.latestRate;
     final rate = latestRate['rate'] ?? 0.0;
     final source = (latestRate['source'] ?? '').toString();
     // API responds with `base`/`target`; older code used `_currency` suffix.
@@ -25,9 +37,42 @@ class FxWidget extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Exchange rate',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Exchange rate',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                if (widget.onRefresh != null)
+                  IconButton(
+                    onPressed: _refreshing
+                        ? null
+                        : () async {
+                            setState(() => _refreshing = true);
+                            try {
+                              await widget.onRefresh!();
+                            } finally {
+                              if (mounted) {
+                                setState(() => _refreshing = false);
+                              }
+                            }
+                          },
+                    icon: _refreshing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation(
+                                  Color(0xFF00E676)),
+                            ),
+                          )
+                        : const Icon(Icons.refresh, size: 20),
+                    tooltip: 'Refresh rate now',
+                    color: Colors.white70,
+                  ),
+              ],
             ),
             const SizedBox(height: 16),
             Row(

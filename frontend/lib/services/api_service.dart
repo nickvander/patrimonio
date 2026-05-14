@@ -88,10 +88,12 @@ class ApiService {
 
   Future<Map<String, dynamic>> getExchangeRate(
     String base,
-    String target,
-  ) async {
+    String target, {
+    bool force = false,
+  }) async {
+    final query = force ? '?force=true' : '';
     final response = await http.get(
-      Uri.parse('$_baseUrl/fx/latest/$base/$target'),
+      Uri.parse('$_baseUrl/fx/latest/$base/$target$query'),
     );
     if (response.statusCode == 200) {
       return json.decode(response.body);
@@ -218,6 +220,20 @@ class ApiService {
     final response = await http.delete(Uri.parse('$_baseUrl/accounts/$accountId'));
     if (response.statusCode != 204) {
       throw Exception('Failed to delete account');
+    }
+  }
+
+  /// Set or clear a user-defined nickname for an account. An empty
+  /// nickname clears the override so display falls back to the
+  /// bank-supplied name.
+  Future<void> renameAccount(String accountId, String nickname) async {
+    final response = await http.patch(
+      Uri.parse('$_baseUrl/accounts/$accountId/nickname'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'nickname': nickname}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to rename account');
     }
   }
 

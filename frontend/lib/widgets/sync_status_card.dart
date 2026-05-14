@@ -36,7 +36,35 @@ class SyncStatusCard extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             if (syncData.isEmpty)
-              const Center(child: Text('No institutions linked yet.'))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Column(
+                  children: [
+                    const Icon(Icons.account_balance_outlined,
+                        size: 32, color: Colors.white24),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'No institutions linked yet',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Use the buttons below to connect a bank, import a\nstatement, or add a manual account.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Icon(Icons.arrow_downward,
+                        size: 18, color: Colors.white24),
+                  ],
+                ),
+              )
             else
               ...syncData.map((inst) => _buildSyncRow(inst)),
           ],
@@ -124,6 +152,18 @@ class SyncStatusCard extends StatelessWidget {
                           child: Text(
                             inst['last_sync_error'],
                             style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.redAccent,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        )
+                      else if (status == 'error' || status == 'failed')
+                        const Padding(
+                          padding: EdgeInsets.only(top: 4.0),
+                          child: Text(
+                            'Sync failed. Reason unknown — try Retry or Reconnect.',
+                            style: TextStyle(
                               fontSize: 11,
                               color: Colors.redAccent,
                               fontStyle: FontStyle.italic,
