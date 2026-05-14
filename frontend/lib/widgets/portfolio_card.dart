@@ -30,7 +30,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
   late List<dynamic> _holdings;
   int _touchedIndex = -1;
   String _searchQuery = '';
-  int _rowsPerPage = 15;
+  int _rowsPerPage = 25;
   bool _groupByAccount = false;
 
   @override
@@ -676,16 +676,19 @@ class _PortfolioCardState extends State<PortfolioCard> {
       );
     }
 
-    // Min width that fits all 7 columns + their content comfortably.
-    // Below this we horizontally scroll instead of squashing columns out
-    // of view (which is what PaginatedDataTable does by default).
-    const minTableWidth = 1000.0;
+    // Natural intrinsic width for the table at typical column widths.
+    // We always wrap in a horizontal scroller so the table fits the column
+    // content rather than fighting the container — that way the rightmost
+    // columns (Cost basis / Gain / Return) never get pushed past the edge.
+    const tableNaturalWidth = 1080.0;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final available = constraints.maxWidth;
-        final needsScroll = available < minTableWidth;
-        final tableWidth = needsScroll ? minTableWidth : available;
+        // Use the larger of (natural width, available) so on wide screens
+        // we don't leave a giant gap on the right.
+        final tableWidth =
+            available > tableNaturalWidth ? available : tableNaturalWidth;
 
         final table = SizedBox(
           width: tableWidth,
@@ -695,7 +698,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             rowsPerPage: _rowsPerPage,
-            availableRowsPerPage: const [10, 15, 25, 50],
+            availableRowsPerPage: const [10, 25, 50, 100],
             onRowsPerPageChanged: (n) {
               if (n != null) setState(() => _rowsPerPage = n);
             },
@@ -703,10 +706,11 @@ class _PortfolioCardState extends State<PortfolioCard> {
             arrowHeadColor: const Color(0xFF00E676),
             sortColumnIndex: _sortColumnIndex,
             sortAscending: _isAscending,
-            columnSpacing: (tableWidth - 600) / 5 > 0
-                ? (tableWidth - 600) / 5
-                : 24,
-            horizontalMargin: 24,
+            // Fixed compact spacing — the dynamic formula previously
+            // computed huge spacings on wide screens which pushed the
+            // table past its container's right edge.
+            columnSpacing: 24,
+            horizontalMargin: 20,
             columns: [
               DataColumn(label: const Text('Asset'), onSort: _sort),
               DataColumn(
@@ -751,7 +755,10 @@ class _PortfolioCardState extends State<PortfolioCard> {
           ),
         );
 
-        final body = needsScroll
+        // Always scroll horizontally if the table is wider than the
+        // visible viewport. The SizedBox above guarantees the table can
+        // claim the larger of (natural width, available).
+        final body = available < tableNaturalWidth
             ? SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: table,
