@@ -30,7 +30,6 @@ class _PortfolioCardState extends State<PortfolioCard> {
   late List<dynamic> _holdings;
   int _touchedIndex = -1;
   String _searchQuery = '';
-  int _rowsPerPage = 25;
   bool _groupByAccount = false;
 
   @override
@@ -268,11 +267,6 @@ class _PortfolioCardState extends State<PortfolioCard> {
                   ),
                 ),
                 dividerColor: Colors.white12,
-                // Attempt to fix pagination centering by making the table footer area more focused
-                dataTableTheme: DataTableThemeData(
-                  horizontalMargin: 24,
-                  columnSpacing: 48,
-                ),
               ),
               child: _groupByAccount
                   ? _buildGroupedHoldings()
@@ -648,117 +642,89 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
   Widget _buildHoldingsTable() {
     if (_holdings.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(48.0),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.show_chart, size: 56, color: Colors.grey.shade700),
-              const SizedBox(height: 16),
-              const Text(
-                'No holdings yet',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.white70,
-                  fontWeight: FontWeight.w600,
-                ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildSearchAndToolbar(),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.all(48.0),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.show_chart, size: 56, color: Colors.grey.shade700),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No holdings yet',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Once you link a brokerage with Plaid (or import a CSV) your\npositions will appear here.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                  ),
+                ],
               ),
-              const SizedBox(height: 6),
-              Text(
-                'Once you link a brokerage with Plaid (or import a CSV) your\npositions will appear here.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-              ),
-            ],
+            ),
           ),
-        ),
+        ],
       );
     }
-
-    // Natural intrinsic width for the table at typical column widths.
-    // We always wrap in a horizontal scroller so the table fits the column
-    // content rather than fighting the container — that way the rightmost
-    // columns (Cost basis / Gain / Return) never get pushed past the edge.
-    const tableNaturalWidth = 1080.0;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final available = constraints.maxWidth;
         // Use the larger of (natural width, available) so on wide screens
         // we don't leave a giant gap on the right.
-        final tableWidth =
-            available > tableNaturalWidth ? available : tableNaturalWidth;
+        final tableWidth = available > _kTableNaturalWidth
+            ? available
+            : _kTableNaturalWidth;
+
+        // Cap the scrollable body so the inner viewport fits the page.
+        // Below the cap, we hug the data so short portfolios don't show
+        // a giant whitespace pad under the rows.
+        final bodyHeight = _holdings.length * _kRowHeight > _kMaxBodyHeight
+            ? _kMaxBodyHeight
+            : _holdings.length * _kRowHeight;
 
         final table = SizedBox(
           width: tableWidth,
-          child: PaginatedDataTable(
-            header: const Text(
-              'Holdings',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            rowsPerPage: _rowsPerPage,
-            availableRowsPerPage: const [10, 25, 50, 100],
-            onRowsPerPageChanged: (n) {
-              if (n != null) setState(() => _rowsPerPage = n);
-            },
-            showFirstLastButtons: true,
-            arrowHeadColor: const Color(0xFF00E676),
-            sortColumnIndex: _sortColumnIndex,
-            sortAscending: _isAscending,
-            // Fixed compact spacing — the dynamic formula previously
-            // computed huge spacings on wide screens which pushed the
-            // table past its container's right edge.
-            columnSpacing: 24,
-            horizontalMargin: 20,
-            columns: [
-              DataColumn(label: const Text('Asset'), onSort: _sort),
-              DataColumn(
-                label: const Text('Shares'),
-                numeric: true,
-                onSort: _sort,
-              ),
-              DataColumn(
-                label: const Text('Price'),
-                numeric: true,
-                onSort: _sort,
-              ),
-              DataColumn(
-                label: const Text('Value'),
-                numeric: true,
-                onSort: _sort,
-              ),
-              DataColumn(
-                label: const Text('Cost basis'),
-                numeric: true,
-                onSort: _sort,
-              ),
-              DataColumn(
-                label: const Text('Gain'),
-                numeric: true,
-                onSort: _sort,
-              ),
-              DataColumn(
-                label: const Text('Return'),
-                numeric: true,
-                onSort: _sort,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildTableHeader(),
+              const Divider(color: Colors.white12, height: 1, thickness: 1),
+              SizedBox(
+                height: bodyHeight,
+                child: Scrollbar(
+                  thumbVisibility: true,
+                  child: ListView.builder(
+                    itemCount: _holdings.length,
+                    itemExtent: _kRowHeight,
+                    itemBuilder: (ctx, i) => _HoldingRowTile(
+                      holding: _holdings[i],
+                      format: widget.currencyFormat,
+                      targetCurrency: widget.targetCurrency,
+                      usdMxnRate: widget.usdMxnRate,
+                    ),
+                  ),
+                ),
               ),
             ],
-            source: _HoldingsDataSource(
-              _holdings,
-              widget.currencyFormat,
-              widget.conversionFactor,
-              widget.targetCurrency,
-              widget.usdMxnRate,
-              context,
-            ),
           ),
         );
 
-        // Always scroll horizontally if the table is wider than the
-        // visible viewport. The SizedBox above guarantees the table can
-        // claim the larger of (natural width, available).
-        final body = available < tableNaturalWidth
+        // Horizontal scroll only when the viewport is narrower than the
+        // table's natural width. On wide screens the table fills the
+        // container and the asset column gets the extra space.
+        final body = available < _kTableNaturalWidth
             ? SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: table,
@@ -767,9 +733,91 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [_buildSearchAndToolbar(), body],
+          children: [
+            _buildSearchAndToolbar(),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: Row(
+                children: [
+                  const Text(
+                    'Holdings',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${_holdings.length} ${_holdings.length == 1 ? "row" : "rows"}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Colors.white38,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            body,
+          ],
         );
       },
+    );
+  }
+
+  /// Click-to-sort header row. First click on a new column sorts ascending,
+  /// subsequent clicks toggle direction. Matches PaginatedDataTable behavior.
+  Widget _buildTableHeader() {
+    Widget label(String text, int colIndex, {bool numeric = true}) {
+      final active = _sortColumnIndex == colIndex;
+      return InkWell(
+        onTap: () {
+          if (_sortColumnIndex == colIndex) {
+            _sort(colIndex, !_isAscending);
+          } else {
+            _sort(colIndex, true);
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+          child: Align(
+            alignment:
+                numeric ? Alignment.centerRight : Alignment.centerLeft,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  text,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: active ? Colors.white : Colors.white60,
+                  ),
+                ),
+                if (active) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    _isAscending ? Icons.arrow_upward : Icons.arrow_downward,
+                    size: 12,
+                    color: const Color(0xFF00E676),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return _tableRow(
+      asset: label('Asset', 0, numeric: false),
+      shares: label('Shares', 1),
+      price: label('Price', 2),
+      value: label('Value', 3),
+      costBasis: label('Cost basis', 4),
+      gain: label('Gain', 5),
+      returnPct: label('Return', 6),
     );
   }
 
@@ -984,272 +1032,307 @@ String _formatQuantity(double q) {
       .replaceAll(RegExp(r'\.$'), '');
 }
 
-class _HoldingsDataSource extends DataTableSource {
-  final List<dynamic> holdings;
+// Layout constants for the virtualized holdings table. Header and body
+// share the same column widths so they line up visually as the user
+// scrolls. The natural width sits around 1080; below that the table
+// scrolls horizontally instead of squeezing columns.
+const double _kRowHeight = 60.0;
+const double _kMaxBodyHeight = 600.0;
+const double _kTableNaturalWidth = 1080.0;
+const double _kHMargin = 20.0;
+const double _kColShares = 100.0;
+const double _kColPrice = 124.0;
+const double _kColValue = 152.0;
+const double _kColCost = 132.0;
+const double _kColGain = 140.0;
+const double _kColReturn = 108.0;
+
+/// Shared row layout used by the header and every body row. Asset takes
+/// the remaining space; numeric columns are fixed width so values line
+/// up vertically.
+Widget _tableRow({
+  required Widget asset,
+  required Widget shares,
+  required Widget price,
+  required Widget value,
+  required Widget costBasis,
+  required Widget gain,
+  required Widget returnPct,
+}) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(horizontal: _kHMargin),
+    child: Row(
+      children: [
+        Expanded(child: asset),
+        SizedBox(width: _kColShares, child: shares),
+        SizedBox(width: _kColPrice, child: price),
+        SizedBox(width: _kColValue, child: value),
+        SizedBox(width: _kColCost, child: costBasis),
+        SizedBox(width: _kColGain, child: gain),
+        SizedBox(width: _kColReturn, child: returnPct),
+      ],
+    ),
+  );
+}
+
+/// A single holding row used inside the virtualized ListView. Stateful
+/// so that hover-over highlight doesn't have to rebuild the whole table.
+class _HoldingRowTile extends StatefulWidget {
+  final dynamic holding;
   final NumberFormat format;
-  final double conversionFactor;
   final String targetCurrency;
   final double usdMxnRate;
-  final BuildContext context;
 
-  _HoldingsDataSource(
-    this.holdings,
-    this.format,
-    this.conversionFactor,
-    this.targetCurrency,
-    this.usdMxnRate,
-    this.context,
-  );
+  const _HoldingRowTile({
+    required this.holding,
+    required this.format,
+    required this.targetCurrency,
+    required this.usdMxnRate,
+  });
 
   @override
-  DataRow? getRow(int index) {
-    if (index >= holdings.length) return null;
-    final h = holdings[index];
+  State<_HoldingRowTile> createState() => _HoldingRowTileState();
+}
+
+class _HoldingRowTileState extends State<_HoldingRowTile> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final h = widget.holding;
     final gain = (h['gain_loss'] as num?)?.toDouble() ?? 0.0;
     final gainPct = (h['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
     final quantity = (h['quantity'] as num?)?.toDouble() ?? 0.0;
-    final sourceCurrency = (h['currency'] ?? targetCurrency).toString();
+    final sourceCurrency = (h['currency'] ?? widget.targetCurrency).toString();
     final sourcePrice = (h['price'] as num?)?.toDouble() ?? 0.0;
     final sourceValue = (h['value'] as num?)?.toDouble() ?? 0.0;
+    final costBasisSource = (h['cost_basis'] as num?)?.toDouble() ?? 0.0;
     final price = convertCurrency(
       sourcePrice,
       from: sourceCurrency,
-      to: targetCurrency,
-      usdMxnRate: usdMxnRate,
+      to: widget.targetCurrency,
+      usdMxnRate: widget.usdMxnRate,
     );
     final value = convertCurrency(
       sourceValue,
       from: sourceCurrency,
-      to: targetCurrency,
-      usdMxnRate: usdMxnRate,
+      to: widget.targetCurrency,
+      usdMxnRate: widget.usdMxnRate,
+    );
+    final costBasis = convertCurrency(
+      costBasisSource,
+      from: sourceCurrency,
+      to: widget.targetCurrency,
+      usdMxnRate: widget.usdMxnRate,
+    );
+    final gainConverted = convertCurrency(
+      gain,
+      from: sourceCurrency,
+      to: widget.targetCurrency,
+      usdMxnRate: widget.usdMxnRate,
     );
     final isGain = gain >= 0;
 
-    return DataRow(
-      color: WidgetStateProperty.resolveWith<Color?>((states) {
-        if (states.contains(WidgetState.hovered)) {
-          return Colors.white.withValues(alpha: 0.05);
-        }
-        return null; // Use default
-      }),
-      cells: [
-        DataCell(
-          Builder(builder: (context) {
-            final rawSymbol = (h['symbol'] ?? '').toString();
-            final rawName = (h['name'] ?? '').toString();
-            // Plaid emits opaque security_ids (e.g. "3mg4qV4JZycPL4qeZgB...")
-            // for un-tickered Vanguard mutual funds. Detect those: a real
-            // ticker is short (<=8 chars) and uppercase; a security_id is
-            // long and mixed-case.
-            final isOpaqueSecurityId = rawSymbol.length > 8 ||
-                (rawSymbol != rawSymbol.toUpperCase() &&
-                    rawSymbol.length > 4);
-            final displaySymbol = isOpaqueSecurityId
-                ? (rawName.isNotEmpty ? rawName : '—')
-                : (rawSymbol.isEmpty ? (rawName.isNotEmpty ? rawName : '?') : rawSymbol);
-            final secondaryLabel = (isOpaqueSecurityId || rawName.isEmpty)
-                ? (h['institution_name'] ?? '').toString()
-                : '$rawName · ${h['institution_name'] ?? ''}';
-            final avatarChar = displaySymbol.isEmpty
-                ? '?'
-                : displaySymbol.substring(0, 1).toUpperCase();
-            return Row(
+    final rawSymbol = (h['symbol'] ?? '').toString();
+    final rawName = (h['name'] ?? '').toString();
+    // Plaid emits opaque security_ids (e.g. "3mg4qV4JZycPL4qeZgB...") for
+    // un-tickered Vanguard mutual funds. Real tickers are short and upper-
+    // case; security_ids are long and mixed-case.
+    final isOpaqueSecurityId = rawSymbol.length > 8 ||
+        (rawSymbol != rawSymbol.toUpperCase() && rawSymbol.length > 4);
+    final displaySymbol = isOpaqueSecurityId
+        ? (rawName.isNotEmpty ? rawName : '—')
+        : (rawSymbol.isEmpty
+            ? (rawName.isNotEmpty ? rawName : '?')
+            : rawSymbol);
+    final secondaryLabel = (isOpaqueSecurityId || rawName.isEmpty)
+        ? (h['institution_name'] ?? '').toString()
+        : '$rawName · ${h['institution_name'] ?? ''}';
+    final avatarChar = displaySymbol.isEmpty
+        ? '?'
+        : displaySymbol.substring(0, 1).toUpperCase();
+
+    final asset = Padding(
+      padding: const EdgeInsets.only(right: 12),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: const Color(0xFF2A2A35),
+            radius: 16,
+            child: Text(
+              avatarChar,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                CircleAvatar(
-                  backgroundColor: const Color(0xFF2A2A35),
-                  radius: 16,
-                  child: Text(
-                    avatarChar,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
+                Text(
+                  displaySymbol,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        displaySymbol,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        secondaryLabel,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
+                Text(
+                  secondaryLabel,
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
-            );
-          }),
-        ),
-        DataCell(
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                _formatQuantity(quantity),
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontFeatures: [FontFeature.tabularFigures()],
-                ),
-              ),
-              const SizedBox(width: 4),
-              const Text(
-                'sh',
-                style: TextStyle(fontSize: 11, color: Colors.white38),
-              ),
-            ],
-          ),
-        ),
-        DataCell(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                format.format(price),
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontFeatures: [FontFeature.tabularFigures()],
-                ),
-              ),
-              if (sourceCurrency != targetCurrency)
-                Text(
-                  formatCurrencyAmount(sourcePrice, sourceCurrency),
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.white38,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
-                ),
-            ],
-          ),
-        ),
-        DataCell(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                format.format(value),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                  fontFeatures: [FontFeature.tabularFigures()],
-                ),
-              ),
-              if (sourceCurrency != targetCurrency)
-                Text(
-                  formatCurrencyAmount(sourceValue, sourceCurrency),
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.white38,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
-                ),
-            ],
-          ),
-        ),
-        DataCell(
-          Builder(builder: (_) {
-            final costBasisSource =
-                (h['cost_basis'] as num?)?.toDouble() ?? 0.0;
-            final costBasis = convertCurrency(
-              costBasisSource,
-              from: sourceCurrency,
-              to: targetCurrency,
-              usdMxnRate: usdMxnRate,
-            );
-            return Text(
-              costBasisSource == 0
-                  ? '—'
-                  : format.format(costBasis),
-              style: TextStyle(
-                fontSize: 14,
-                color: costBasisSource == 0
-                    ? Colors.white38
-                    : Colors.white70,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            );
-          }),
-        ),
-        DataCell(
-          Builder(builder: (_) {
-            final gainConverted = convertCurrency(
-              gain,
-              from: sourceCurrency,
-              to: targetCurrency,
-              usdMxnRate: usdMxnRate,
-            );
-            if (gain == 0) {
-              return const Text(
-                '—',
-                style: TextStyle(fontSize: 14, color: Colors.white38),
-              );
-            }
-            return Text(
-              '${isGain ? '+' : ''}${format.format(gainConverted)}',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: isGain
-                    ? const Color(0xFF00E676)
-                    : Colors.redAccent,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            );
-          }),
-        ),
-        DataCell(
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: (isGain ? const Color(0xFF00E676) : Colors.redAccent)
-                  .withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              '${isGain ? '+' : ''}${gainPct.toStringAsFixed(2)}%',
-              style: TextStyle(
-                color: isGain ? const Color(0xFF00E676) : Colors.redAccent,
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-              ),
             ),
           ),
+        ],
+      ),
+    );
+
+    final shares = Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Text(
+          _formatQuantity(quantity),
+          style: const TextStyle(
+            fontSize: 14,
+            fontFeatures: [FontFeature.tabularFigures()],
+          ),
+        ),
+        const SizedBox(width: 4),
+        const Text(
+          'sh',
+          style: TextStyle(fontSize: 11, color: Colors.white38),
         ),
       ],
     );
+
+    final priceCell = Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          widget.format.format(price),
+          style: const TextStyle(
+            fontSize: 14,
+            fontFeatures: [FontFeature.tabularFigures()],
+          ),
+        ),
+        if (sourceCurrency != widget.targetCurrency)
+          Text(
+            formatCurrencyAmount(sourcePrice, sourceCurrency),
+            style: const TextStyle(
+              fontSize: 10,
+              color: Colors.white38,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+      ],
+    );
+
+    final valueCell = Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          widget.format.format(value),
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 14,
+            fontFeatures: [FontFeature.tabularFigures()],
+          ),
+        ),
+        if (sourceCurrency != widget.targetCurrency)
+          Text(
+            formatCurrencyAmount(sourceValue, sourceCurrency),
+            style: const TextStyle(
+              fontSize: 10,
+              color: Colors.white38,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+      ],
+    );
+
+    final costBasisCell = Align(
+      alignment: Alignment.centerRight,
+      child: Text(
+        costBasisSource == 0 ? '—' : widget.format.format(costBasis),
+        style: TextStyle(
+          fontSize: 14,
+          color: costBasisSource == 0 ? Colors.white38 : Colors.white70,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
+    );
+
+    final gainCell = Align(
+      alignment: Alignment.centerRight,
+      child: gain == 0
+          ? const Text(
+              '—',
+              style: TextStyle(fontSize: 14, color: Colors.white38),
+            )
+          : Text(
+              '${isGain ? '+' : ''}${widget.format.format(gainConverted)}',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color:
+                    isGain ? const Color(0xFF00E676) : Colors.redAccent,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+    );
+
+    final returnCell = Align(
+      alignment: Alignment.centerRight,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: (isGain ? const Color(0xFF00E676) : Colors.redAccent)
+              .withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          '${isGain ? '+' : ''}${gainPct.toStringAsFixed(2)}%',
+          style: TextStyle(
+            color: isGain ? const Color(0xFF00E676) : Colors.redAccent,
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
+        ),
+      ),
+    );
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: Container(
+        color:
+            _hover ? Colors.white.withValues(alpha: 0.05) : Colors.transparent,
+        child: _tableRow(
+          asset: asset,
+          shares: shares,
+          price: priceCell,
+          value: valueCell,
+          costBasis: costBasisCell,
+          gain: gainCell,
+          returnPct: returnCell,
+        ),
+      ),
+    );
   }
-
-  @override
-  bool get isRowCountApproximate => false;
-
-  @override
-  int get rowCount => holdings.length;
-
-  @override
-  int get selectedRowCount => 0;
 }
 
 class _KpiTile extends StatelessWidget {
