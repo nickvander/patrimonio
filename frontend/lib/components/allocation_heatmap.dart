@@ -1,13 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+/// Trim trailing zeros and pick a sensible precision based on the
+/// magnitude of the share count (mirrors the formatter in portfolio_card).
+String _formatQty(double q) {
+  if (q == q.roundToDouble() && q.abs() < 1e9) {
+    return q.toInt().toString();
+  }
+  if (q.abs() >= 1) {
+    return q
+        .toStringAsFixed(2)
+        .replaceAll(RegExp(r'0+$'), '')
+        .replaceAll(RegExp(r'\.$'), '');
+  }
+  return q
+      .toStringAsFixed(4)
+      .replaceAll(RegExp(r'0+$'), '')
+      .replaceAll(RegExp(r'\.$'), '');
+}
+
 class AllocationData {
   final String category;
   final String subCategory;
   final double value;
   final Color color;
+  final double quantity;
 
-  AllocationData(this.category, this.subCategory, this.value, this.color);
+  AllocationData(
+    this.category,
+    this.subCategory,
+    this.value,
+    this.color, {
+    this.quantity = 0,
+  });
 }
 
 class AllocationHeatmap extends StatelessWidget {
@@ -224,19 +249,33 @@ class AllocationHeatmap extends StatelessWidget {
                               item.subCategory,
                               style: const TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey,
+                                color: Colors.white70,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
-                            const SizedBox(width: 4),
+                            if (item.quantity > 0) ...[
+                              const SizedBox(width: 4),
+                              Text(
+                                '· ${_formatQty(item.quantity)} sh',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.white38,
+                                  fontFeatures: [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            const SizedBox(width: 6),
                             Text(
                               currencyFormat.format(
                                 item.value * conversionFactor,
                               ),
                               style: const TextStyle(
                                 fontSize: 11,
-                                color: Colors.white70,
-                                fontWeight: FontWeight.w400,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontFeatures: [FontFeature.tabularFigures()],
                               ),
                             ),
                           ],

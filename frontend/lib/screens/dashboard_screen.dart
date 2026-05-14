@@ -307,12 +307,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final category = e['category'] as String;
           final subCategory = e['sub_category'] as String;
           final value = (e['value'] as num).toDouble();
+          final quantity = (e['quantity'] as num?)?.toDouble() ?? 0.0;
 
           return AllocationData(
             category,
             subCategory,
             value,
             categoryColors[category] ?? Colors.blueGrey,
+            quantity: quantity,
           );
         }).toList();
 

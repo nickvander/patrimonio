@@ -422,7 +422,7 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
 
     let rows = sqlx::query(
         r#"
-        SELECT category, sub_category, SUM(value_usd) as value
+        SELECT category, sub_category, SUM(value_usd) as value, SUM(qty) as quantity
         FROM (
             -- Holdings: prefer security name when the symbol looks like
             -- an opaque Plaid security_id (long, mixed-case — common for
@@ -438,7 +438,8 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
                    CASE
                        WHEN currency = 'MXN' THEN value / $1::numeric
                        ELSE value
-                   END as value_usd
+                   END as value_usd,
+                   COALESCE(quantity, 0)::numeric as qty
             FROM holdings
             UNION ALL
             -- Cash accounts
@@ -447,7 +448,8 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
                    CASE
                        WHEN currency = 'MXN' THEN current_balance / $1::numeric
                        ELSE current_balance
-                   END as value_usd
+                   END as value_usd,
+                   0::numeric as qty
             FROM accounts
             WHERE account_type IN ('checking', 'savings', 'cash')
             UNION ALL
@@ -457,7 +459,8 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
                    CASE
                        WHEN currency = 'MXN' THEN current_balance / $1::numeric
                        ELSE current_balance
-                   END as value_usd
+                   END as value_usd,
+                   COALESCE(crypto_amount, 0)::numeric as qty
             FROM accounts
             WHERE account_type IN ('crypto')
         ) sub
@@ -475,10 +478,16 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
             .map(|r| {
                 let value: f64 = r.try_get::<rust_decimal::Decimal, _>("value")
                     .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+                let quantity: f64 = r
+                    .try_get::<rust_decimal::Decimal, _>("quantity")
+                    .ok()
+                    .map(|d| d.to_string().parse().unwrap_or(0.0))
+                    .unwrap_or(0.0);
                 AllocationEntry {
                     category: r.try_get::<String, _>("category").unwrap_or_else(|_| "Other".to_string()),
                     sub_category: r.try_get::<String, _>("sub_category").unwrap_or_else(|_| "Unknown".to_string()),
                     value,
+                    quantity,
                 }
             })
             .collect(),
@@ -638,6 +647,8 @@ struct AllocationEntry {
     category: String,
     sub_category: String,
     value: f64,
+    /// Total share count for holdings (0 for cash and crypto-by-value rows).
+    quantity: f64,
 }
 
 #[derive(Serialize)]

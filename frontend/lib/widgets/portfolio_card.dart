@@ -31,6 +31,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
   int _touchedIndex = -1;
   String _searchQuery = '';
   int _rowsPerPage = 15;
+  bool _groupByAccount = false;
 
   @override
   void initState() {
@@ -96,6 +97,14 @@ class _PortfolioCardState extends State<PortfolioCard> {
             valB = (b['value'] as num?)?.toDouble() ?? 0.0;
             break;
           case 4:
+            valA = (a['cost_basis'] as num?)?.toDouble() ?? 0.0;
+            valB = (b['cost_basis'] as num?)?.toDouble() ?? 0.0;
+            break;
+          case 5:
+            valA = (a['gain_loss'] as num?)?.toDouble() ?? 0.0;
+            valB = (b['gain_loss'] as num?)?.toDouble() ?? 0.0;
+            break;
+          case 6:
             valA = (a['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
             valB = (b['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
             break;
@@ -246,7 +255,9 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 ),
               ],
             ),
-            const SizedBox(height: 48),
+            const SizedBox(height: 32),
+            _buildKpiStrip(),
+            const SizedBox(height: 24),
             Theme(
               data: Theme.of(context).copyWith(
                 cardTheme: CardThemeData(
@@ -263,10 +274,374 @@ class _PortfolioCardState extends State<PortfolioCard> {
                   columnSpacing: 48,
                 ),
               ),
-              child: _buildHoldingsTable(),
+              child: _groupByAccount
+                  ? _buildGroupedHoldings()
+                  : _buildHoldingsTable(),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Four-tile compact stat strip above the holdings table.
+  /// Surfaces at-a-glance facts about the portfolio so the user doesn't
+  /// have to mentally scan the whole table.
+  Widget _buildKpiStrip() {
+    if (_allHoldings.isEmpty) return const SizedBox.shrink();
+
+    final cf = widget.conversionFactor;
+    Map<String, dynamic>? top;
+    Map<String, dynamic>? gainer;
+    Map<String, dynamic>? loser;
+
+    for (final h in _allHoldings) {
+      final v = ((h['value'] as num?)?.toDouble() ?? 0.0);
+      if (top == null || v > ((top['value'] as num).toDouble())) top = h;
+      final pct = (h['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
+      if (gainer == null ||
+          pct > ((gainer['gain_loss_pct'] as num?)?.toDouble() ?? 0)) {
+        gainer = h;
+      }
+      if (loser == null ||
+          pct < ((loser['gain_loss_pct'] as num?)?.toDouble() ?? 0)) {
+        loser = h;
+      }
+    }
+
+    String displayTicker(Map<String, dynamic> h) {
+      final sym = (h['symbol'] ?? '').toString();
+      final name = (h['name'] ?? '').toString();
+      // Hide Plaid security_id hashes — fall back to security name.
+      if (sym.length > 8 ||
+          (sym != sym.toUpperCase() && sym.length > 4)) {
+        return name.isNotEmpty ? name : '—';
+      }
+      return sym.isEmpty ? (name.isNotEmpty ? name : '?') : sym;
+    }
+
+    final tiles = <_KpiTile>[
+      _KpiTile(
+        label: 'Holdings',
+        value: '${_allHoldings.length}',
+        sub:
+            '${_allHoldings.map((h) => (h['account_name'] ?? '').toString()).toSet().where((s) => s.isNotEmpty).length} accounts',
+      ),
+      if (top != null)
+        _KpiTile(
+          label: 'Top position',
+          value: displayTicker(top),
+          sub: widget.currencyFormat
+              .format(((top['value'] as num).toDouble()) * cf),
+          accent: const Color(0xFF1DE9B6),
+        ),
+      if (gainer != null &&
+          ((gainer['gain_loss_pct'] as num?)?.toDouble() ?? 0) > 0)
+        _KpiTile(
+          label: 'Biggest gainer',
+          value: displayTicker(gainer),
+          sub:
+              '+${((gainer['gain_loss_pct'] as num).toDouble()).toStringAsFixed(2)}%',
+          accent: const Color(0xFF00E676),
+        ),
+      if (loser != null &&
+          ((loser['gain_loss_pct'] as num?)?.toDouble() ?? 0) < 0)
+        _KpiTile(
+          label: 'Biggest loser',
+          value: displayTicker(loser),
+          sub:
+              '${((loser['gain_loss_pct'] as num).toDouble()).toStringAsFixed(2)}%',
+          accent: Colors.redAccent,
+        ),
+    ];
+
+    return LayoutBuilder(builder: (ctx, c) {
+      // 4-up at wide, 2-up at medium, stacked at narrow.
+      final width = c.maxWidth;
+      final perRow = width >= 880
+          ? 4
+          : width >= 520
+              ? 2
+              : 1;
+      final tileWidth = (width - 12 * (perRow - 1)) / perRow;
+      return Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: tiles
+            .map((t) => SizedBox(width: tileWidth, child: t))
+            .toList(),
+      );
+    });
+  }
+
+  /// Collapses the holdings list into one section per account, with a
+  /// per-account subtotal in the header. Sections are sorted by
+  /// account total (descending) so the largest account leads.
+  Widget _buildGroupedHoldings() {
+    if (_holdings.isEmpty) {
+      return _buildHoldingsTable(); // reuse empty state
+    }
+    final byAccount = <String, List<dynamic>>{};
+    for (final h in _holdings) {
+      final acct = (h['account_name'] ?? 'Unknown').toString();
+      byAccount.putIfAbsent(acct, () => []).add(h);
+    }
+    final entries = byAccount.entries.toList()
+      ..sort((a, b) {
+        final sa = a.value.fold<double>(
+            0,
+            (s, h) =>
+                s + ((h['value'] as num?)?.toDouble() ?? 0.0));
+        final sb = b.value.fold<double>(
+            0,
+            (s, h) =>
+                s + ((h['value'] as num?)?.toDouble() ?? 0.0));
+        return sb.compareTo(sa);
+      });
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildSearchAndToolbar(),
+        const SizedBox(height: 12),
+        ...entries.map((entry) {
+          final acct = entry.key;
+          final list = List.from(entry.value);
+          list.sort((a, b) {
+            final va = ((a['value'] as num?)?.toDouble() ?? 0.0);
+            final vb = ((b['value'] as num?)?.toDouble() ?? 0.0);
+            return vb.compareTo(va);
+          });
+          final subtotal = list.fold<double>(
+              0,
+              (s, h) =>
+                  s + ((h['value'] as num?)?.toDouble() ?? 0.0)) *
+              widget.conversionFactor;
+          final inst =
+              (list.first['institution_name'] ?? '').toString();
+          return Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.02),
+              borderRadius: BorderRadius.circular(12),
+              border:
+                  Border.all(color: Colors.white.withValues(alpha: 0.05)),
+            ),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              acct,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (inst.isNotEmpty)
+                              Text(
+                                '$inst · ${list.length} ${list.length == 1 ? "position" : "positions"}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.white54,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        widget.currencyFormat.format(subtotal),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(color: Colors.white12, height: 1),
+                ...list.map((h) => _buildCompactHoldingRow(h)),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  /// Compact row used by the grouped-by-account view. Single line, no
+  /// table chrome — just ticker, qty, value, return.
+  Widget _buildCompactHoldingRow(dynamic h) {
+    final cf = widget.conversionFactor;
+    final qty = (h['quantity'] as num?)?.toDouble() ?? 0.0;
+    final value = ((h['value'] as num?)?.toDouble() ?? 0.0) * cf;
+    final pct = (h['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
+    final isGain = pct >= 0;
+    final rawSym = (h['symbol'] ?? '').toString();
+    final rawName = (h['name'] ?? '').toString();
+    final opaque = rawSym.length > 8 ||
+        (rawSym != rawSym.toUpperCase() && rawSym.length > 4);
+    final displaySymbol = opaque
+        ? (rawName.isNotEmpty ? rawName : '—')
+        : (rawSym.isEmpty ? (rawName.isNotEmpty ? rawName : '?') : rawSym);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Tooltip(
+              message: rawName.isNotEmpty ? rawName : displaySymbol,
+              waitDuration: const Duration(milliseconds: 600),
+              child: Text(
+                displaySymbol,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              '${_formatQuantity(qty)} sh',
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Colors.white60,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(
+              widget.currencyFormat.format(value),
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 64,
+            child: Text(
+              '${isGain ? '+' : ''}${pct.toStringAsFixed(2)}%',
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color:
+                    isGain ? const Color(0xFF00E676) : Colors.redAccent,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Search field + group/flat toggle. Used by both renderers.
+  Widget _buildSearchAndToolbar() {
+    final totalHoldings = _allHoldings.length;
+    final shownHoldings = _holdings.length;
+    final accountCount = _allHoldings
+        .map((h) => (h['account_name'] ?? '').toString())
+        .toSet()
+        .where((s) => s.isNotEmpty)
+        .length;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: SizedBox(
+              height: 40,
+              child: TextField(
+                onChanged: (v) => setState(() {
+                  _searchQuery = v;
+                  _applySearch();
+                  _sort(_sortColumnIndex ?? 3, _isAscending);
+                }),
+                decoration: InputDecoration(
+                  hintText:
+                      'Search ticker, name, account, or institution…',
+                  hintStyle: const TextStyle(
+                      color: Colors.white54, fontSize: 13),
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    size: 18,
+                    color: Colors.white54,
+                  ),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.05),
+                  contentPadding: const EdgeInsets.symmetric(
+                      vertical: 0, horizontal: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            _searchQuery.isEmpty
+                ? '$totalHoldings ${totalHoldings == 1 ? "holding" : "holdings"} · $accountCount ${accountCount == 1 ? "account" : "accounts"}'
+                : '$shownHoldings of $totalHoldings',
+            style: const TextStyle(fontSize: 12, color: Colors.white54),
+          ),
+          const SizedBox(width: 12),
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(
+                value: false,
+                icon: Icon(Icons.list_alt, size: 14),
+                label: Text('Flat'),
+              ),
+              ButtonSegment(
+                value: true,
+                icon: Icon(Icons.account_tree_outlined, size: 14),
+                label: Text('By account'),
+              ),
+            ],
+            selected: {_groupByAccount},
+            onSelectionChanged: (s) =>
+                setState(() => _groupByAccount = s.first),
+            style: ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              textStyle: WidgetStateProperty.all(
+                  const TextStyle(fontSize: 12)),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -301,79 +676,16 @@ class _PortfolioCardState extends State<PortfolioCard> {
       );
     }
 
-    // Min width that fits all 5 columns + their content comfortably.
+    // Min width that fits all 7 columns + their content comfortably.
     // Below this we horizontally scroll instead of squashing columns out
     // of view (which is what PaginatedDataTable does by default).
-    const minTableWidth = 760.0;
-
-    // Surface counts so users with lots of tickers know the scope before
-     // scrolling into the table.
-    final totalHoldings = _allHoldings.length;
-    final shownHoldings = _holdings.length;
-    final accountCount = _allHoldings
-        .map((h) => (h['account_name'] ?? '').toString())
-        .toSet()
-        .where((s) => s.isNotEmpty)
-        .length;
+    const minTableWidth = 1000.0;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final available = constraints.maxWidth;
         final needsScroll = available < minTableWidth;
         final tableWidth = needsScroll ? minTableWidth : available;
-
-        final searchBar = Padding(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-          child: Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 40,
-                  child: TextField(
-                    onChanged: (v) => setState(() {
-                      _searchQuery = v;
-                      _applySearch();
-                      _sort(_sortColumnIndex ?? 3, _isAscending);
-                    }),
-                    decoration: InputDecoration(
-                      hintText: 'Search ticker, name, account, or institution…',
-                      hintStyle: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 13,
-                      ),
-                      prefixIcon: const Icon(
-                        Icons.search,
-                        size: 18,
-                        color: Colors.white54,
-                      ),
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.05),
-                      contentPadding: const EdgeInsets.symmetric(
-                        vertical: 0,
-                        horizontal: 12,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                _searchQuery.isEmpty
-                    ? '$totalHoldings ${totalHoldings == 1 ? "holding" : "holdings"} · $accountCount ${accountCount == 1 ? "account" : "accounts"}'
-                    : '$shownHoldings of $totalHoldings',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.white54,
-                ),
-              ),
-            ],
-          ),
-        );
 
         final table = SizedBox(
           width: tableWidth,
@@ -413,6 +725,16 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 onSort: _sort,
               ),
               DataColumn(
+                label: const Text('Cost basis'),
+                numeric: true,
+                onSort: _sort,
+              ),
+              DataColumn(
+                label: const Text('Gain'),
+                numeric: true,
+                onSort: _sort,
+              ),
+              DataColumn(
                 label: const Text('Return'),
                 numeric: true,
                 onSort: _sort,
@@ -438,7 +760,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [searchBar, body],
+          children: [_buildSearchAndToolbar(), body],
         );
       },
     );
@@ -841,6 +1163,57 @@ class _HoldingsDataSource extends DataTableSource {
           ),
         ),
         DataCell(
+          Builder(builder: (_) {
+            final costBasisSource =
+                (h['cost_basis'] as num?)?.toDouble() ?? 0.0;
+            final costBasis = convertCurrency(
+              costBasisSource,
+              from: sourceCurrency,
+              to: targetCurrency,
+              usdMxnRate: usdMxnRate,
+            );
+            return Text(
+              costBasisSource == 0
+                  ? '—'
+                  : format.format(costBasis),
+              style: TextStyle(
+                fontSize: 14,
+                color: costBasisSource == 0
+                    ? Colors.white38
+                    : Colors.white70,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            );
+          }),
+        ),
+        DataCell(
+          Builder(builder: (_) {
+            final gainConverted = convertCurrency(
+              gain,
+              from: sourceCurrency,
+              to: targetCurrency,
+              usdMxnRate: usdMxnRate,
+            );
+            if (gain == 0) {
+              return const Text(
+                '—',
+                style: TextStyle(fontSize: 14, color: Colors.white38),
+              );
+            }
+            return Text(
+              '${isGain ? '+' : ''}${format.format(gainConverted)}',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isGain
+                    ? const Color(0xFF00E676)
+                    : Colors.redAccent,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            );
+          }),
+        ),
+        DataCell(
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
@@ -870,4 +1243,70 @@ class _HoldingsDataSource extends DataTableSource {
 
   @override
   int get selectedRowCount => 0;
+}
+
+class _KpiTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final String? sub;
+  final Color? accent;
+
+  const _KpiTile({
+    required this.label,
+    required this.value,
+    this.sub,
+    this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = accent ?? Colors.white60;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: c.withValues(alpha: 0.9),
+              letterSpacing: 1.0,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (sub != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              sub!,
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.white.withValues(alpha: 0.6),
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
