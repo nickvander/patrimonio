@@ -115,6 +115,23 @@ class NetWorthCard extends StatelessWidget {
             maxLines: 1,
           ),
         ),
+        // Trend chip — "↑ +$X (+Y%) vs 30d ago" — gives a one-line read
+        // on whether net worth is moving up or down without making the
+        // user scrub the chart. Computed from history; hidden when we
+        // don't have a comparable point >= 7 days back.
+        Builder(builder: (context) {
+          final delta = _computeDelta(history);
+          if (delta == null) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: _DeltaChip(
+              amount: delta.amount * conversionFactor,
+              percentage: delta.percentage,
+              label: delta.windowLabel,
+              currencyFormat: currencyFormat,
+            ),
+          );
+        }),
         if (sourceBreakdown.isNotEmpty) ...[
           const SizedBox(height: 8),
           Wrap(
@@ -548,6 +565,132 @@ class NetWorthCard extends StatelessWidget {
             barWidth: 3.5,
             isStrokeCapRound: true,
             dotData: const FlDotData(show: false),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Delta from the latest snapshot back to a reference snapshot — used to
+/// drive the "↑ +$X vs 30d ago" chip below the hero number. Returns null
+/// when history is too short or contains no comparable point.
+_NetWorthDelta? _computeDelta(List<dynamic> history) {
+  if (history.length < 2) return null;
+  // Parse dates once. Skip points that don't parse or lack net_worth.
+  final points = <_DeltaPoint>[];
+  for (final raw in history) {
+    final m = raw as Map<String, dynamic>;
+    final ds = m['date']?.toString();
+    if (ds == null) continue;
+    final dt = DateTime.tryParse(ds);
+    if (dt == null) continue;
+    final nw = (m['net_worth'] as num?)?.toDouble();
+    if (nw == null) continue;
+    points.add(_DeltaPoint(date: dt, value: nw));
+  }
+  if (points.length < 2) return null;
+  points.sort((a, b) => a.date.compareTo(b.date));
+  final latest = points.last;
+
+  // Find the most recent snapshot within each window. Prefer 30d, fall
+  // back to 7d if we don't have ~a month of history yet. The window
+  // tolerance is +/- 5 days so a missing snapshot doesn't kill the chip.
+  _DeltaPoint? pick(int targetDaysAgo, int tolerance) {
+    final target = latest.date.subtract(Duration(days: targetDaysAgo));
+    _DeltaPoint? best;
+    int? bestDist;
+    for (final p in points) {
+      if (p == latest) continue;
+      final dist = (p.date.difference(target)).inDays.abs();
+      if (dist <= tolerance && (bestDist == null || dist < bestDist)) {
+        best = p;
+        bestDist = dist;
+      }
+    }
+    return best;
+  }
+
+  for (final (days, label) in const [
+    (30, '30d'),
+    (7, '7d'),
+  ]) {
+    final ref = pick(days, 5);
+    if (ref != null && ref.value != 0) {
+      final amount = latest.value - ref.value;
+      final pct = (amount / ref.value) * 100;
+      return _NetWorthDelta(
+        amount: amount,
+        percentage: pct,
+        windowLabel: label,
+      );
+    }
+  }
+  return null;
+}
+
+class _DeltaPoint {
+  final DateTime date;
+  final double value;
+  _DeltaPoint({required this.date, required this.value});
+}
+
+class _NetWorthDelta {
+  final double amount;
+  final double percentage;
+  final String windowLabel;
+  _NetWorthDelta({
+    required this.amount,
+    required this.percentage,
+    required this.windowLabel,
+  });
+}
+
+class _DeltaChip extends StatelessWidget {
+  final double amount;
+  final double percentage;
+  final String label;
+  final NumberFormat currencyFormat;
+
+  const _DeltaChip({
+    required this.amount,
+    required this.percentage,
+    required this.label,
+    required this.currencyFormat,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isUp = amount >= 0;
+    final color = isUp ? const Color(0xFF00E676) : Colors.redAccent;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isUp ? Icons.arrow_upward : Icons.arrow_downward,
+            color: color,
+            size: 14,
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              '${isUp ? '+' : '−'}${currencyFormat.format(amount.abs())} '
+              '(${isUp ? '+' : ''}${percentage.toStringAsFixed(2)}%) vs $label ago',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: color,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),

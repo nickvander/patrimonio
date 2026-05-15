@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:web/web.dart' as web;
+import '../services/api_service.dart';
 import '../utils/currency.dart';
+import 'add_transaction_dialog.dart';
 
 class TransactionsTab extends StatefulWidget {
   final List<dynamic> transactions;
@@ -12,6 +15,15 @@ class TransactionsTab extends StatefulWidget {
   final Function(String id,
       {String? userCategory, String? userNotes, String? accountId})? onUpdate;
   final Future<void> Function(String id)? onDelete;
+  /// Optional callback to jump to the Management tab (used by the empty
+  /// state's "Go to Management" button). Wired by the dashboard.
+  final VoidCallback? onGoToManagement;
+  /// ApiService for the "Add transaction" button + CSV export URL.
+  /// Optional so consumers that don't need those actions can omit it.
+  final ApiService? apiService;
+  /// Invoked after a manual transaction has been added so the parent
+  /// can refresh its transaction list.
+  final VoidCallback? onTransactionAdded;
 
   const TransactionsTab({
     super.key,
@@ -23,6 +35,9 @@ class TransactionsTab extends StatefulWidget {
     required this.usdMxnRate,
     this.onUpdate,
     this.onDelete,
+    this.onGoToManagement,
+    this.apiService,
+    this.onTransactionAdded,
   });
 
   @override
@@ -71,8 +86,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
             ),
             const SizedBox(height: 20),
             FilledButton.icon(
-              onPressed: () =>
-                  DefaultTabController.maybeOf(context)?.animateTo(5),
+              onPressed: widget.onGoToManagement,
               icon: const Icon(Icons.add_link, size: 18),
               label: const Text('Go to Management'),
               style: FilledButton.styleFrom(
@@ -153,17 +167,53 @@ class _TransactionsTabState extends State<TransactionsTab> {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        if (isNarrow)
-          IconButton(
-            onPressed: () =>
-                setState(() => _searchOpenOnNarrow = true),
-            icon: const Icon(Icons.search, size: 20),
-            tooltip: 'Search transactions',
-          )
-        else
-          SizedBox(width: 280, height: 40, child: _searchField()),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.apiService != null) ...[
+              IconButton(
+                onPressed: () => _openAddDialog(),
+                icon: const Icon(Icons.add, size: 22),
+                tooltip: 'Add transaction',
+              ),
+              IconButton(
+                onPressed: () => _downloadCsv(),
+                icon: const Icon(Icons.file_download_outlined, size: 22),
+                tooltip: 'Export CSV',
+              ),
+            ],
+            if (isNarrow)
+              IconButton(
+                onPressed: () =>
+                    setState(() => _searchOpenOnNarrow = true),
+                icon: const Icon(Icons.search, size: 20),
+                tooltip: 'Search transactions',
+              )
+            else
+              SizedBox(width: 280, height: 40, child: _searchField()),
+          ],
+        ),
       ],
     );
+  }
+
+  void _openAddDialog() {
+    if (widget.apiService == null) return;
+    showDialog(
+      context: context,
+      builder: (_) => AddTransactionDialog(
+        accounts: widget.accounts,
+        apiService: widget.apiService!,
+        onCreated: () => widget.onTransactionAdded?.call(),
+      ),
+    );
+  }
+
+  void _downloadCsv() {
+    if (widget.apiService == null) return;
+    // Hand off to the browser — the backend responds with
+    // Content-Disposition: attachment so the browser downloads directly.
+    web.window.open(widget.apiService!.exportTransactionsCsvUrl(), '_self');
   }
 
   Widget _searchField() {

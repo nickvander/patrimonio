@@ -12,6 +12,9 @@ class AccountsListWidget extends StatelessWidget {
   final Function(String, double)? onBalanceUpdate;
   final Function(String)? onDeleteAccount;
   final Function(String accountId, String nickname)? onRenameAccount;
+  /// Optional callback used by the empty state's "Add an account" button
+  /// to jump to the Management tab.
+  final VoidCallback? onGoToManagement;
 
   const AccountsListWidget({
     super.key,
@@ -23,6 +26,7 @@ class AccountsListWidget extends StatelessWidget {
     this.onBalanceUpdate,
     this.onDeleteAccount,
     this.onRenameAccount,
+    this.onGoToManagement,
   });
 
   @override
@@ -56,8 +60,7 @@ class AccountsListWidget extends StatelessWidget {
                 ),
                 const SizedBox(height: 18),
                 FilledButton.icon(
-                  onPressed: () =>
-                      DefaultTabController.maybeOf(context)?.animateTo(5),
+                  onPressed: onGoToManagement,
                   icon: const Icon(Icons.add_link, size: 18),
                   label: const Text('Add an account'),
                   style: FilledButton.styleFrom(

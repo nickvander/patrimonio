@@ -258,6 +258,47 @@ class ApiService {
     }
   }
 
+  /// URL of the CSV export endpoint. We hand this to the browser via an
+  /// anchor click rather than fetching + blobbing in Dart — the backend
+  /// returns Content-Disposition: attachment so the browser downloads
+  /// directly without using extra memory.
+  String exportTransactionsCsvUrl() => '$_baseUrl/dashboard/transactions/export';
+
+  /// Insert a manually-entered transaction. Positive amount = expense /
+  /// outflow, negative = income / inflow (same convention as Plaid).
+  Future<void> createManualTransaction({
+    required String accountId,
+    required DateTime date,
+    required String description,
+    required double amount,
+    required String currency,
+    String? category,
+    String? notes,
+  }) async {
+    final body = <String, dynamic>{
+      'account_id': accountId,
+      'date': '${date.year.toString().padLeft(4, '0')}-'
+          '${date.month.toString().padLeft(2, '0')}-'
+          '${date.day.toString().padLeft(2, '0')}',
+      'description': description,
+      'amount': amount,
+      'currency': currency,
+      if (category != null && category.isNotEmpty) 'category': category,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+    };
+    final response = await http.post(
+      Uri.parse('$_baseUrl/dashboard/transactions/manual'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode(body),
+    );
+    if (response.statusCode == 409) {
+      throw Exception('Already added — same date / amount / description.');
+    }
+    if (response.statusCode != 201) {
+      throw Exception('Failed to add transaction: ${response.body}');
+    }
+  }
+
   Future<void> deleteTransaction(String txId) async {
     final response = await http.delete(
       Uri.parse('$_baseUrl/accounts/transactions/$txId'),

@@ -1,11 +1,14 @@
 use axum::{
     extract::State,
+    http::{header, StatusCode},
+    response::{IntoResponse, Response},
     routing::get,
     Json, Router,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::collections::{BTreeMap, HashMap};
+use tracing::error;
 
 use crate::AppState;
 
@@ -19,6 +22,8 @@ pub fn router() -> Router<AppState> {
         .route("/credit-utilization", get(credit_utilization))
         .route("/sync-status", get(sync_status))
         .route("/transactions", get(recent_transactions))
+        .route("/transactions/export", get(export_transactions_csv))
+        .route("/transactions/manual", axum::routing::post(create_manual_transaction))
 }
 
 /// Dashboard overview: net worth, account breakdown, recent changes
@@ -409,6 +414,176 @@ async fn recent_transactions(State(state): State<AppState>) -> Json<Vec<Transact
             })
             .collect(),
     )
+}
+
+/// CSV export of every transaction across all accounts. Streams the
+/// whole table — useful for an annual tax-prep dump. We escape
+/// quotes/commas by wrapping every text field in double quotes and
+/// doubling any embedded double quote.
+async fn export_transactions_csv(
+    State(state): State<AppState>,
+) -> Response {
+    let rows = sqlx::query(
+        r#"
+        SELECT t.id, t.date, t.amount, t.currency, t.description,
+               COALESCE(t.category, '') as category,
+               COALESCE(t.merchant_name, '') as merchant_name,
+               COALESCE(t.source, '') as source,
+               t.pending,
+               COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
+               COALESCE(i.name, '') as institution_name
+        FROM transactions t
+        JOIN accounts a ON t.account_id = a.id
+        JOIN institutions i ON a.institution_id = i.id
+        ORDER BY t.date DESC, t.created_at DESC
+        "#
+    )
+    .fetch_all(&state.db)
+    .await;
+
+    let rows = match rows {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Failed to query transactions for export: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "export failed")
+                .into_response();
+        }
+    };
+
+    fn esc(s: &str) -> String {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    }
+
+    let mut body = String::with_capacity(rows.len() * 128 + 256);
+    body.push_str(
+        "id,date,account,institution,description,merchant,category,amount,currency,source,pending\n"
+    );
+    for r in rows {
+        let id: uuid::Uuid = r.get("id");
+        let date: chrono::NaiveDate = r.get("date");
+        let amount: rust_decimal::Decimal = r.get("amount");
+        let currency: String = r.get("currency");
+        let description: String = r.get("description");
+        let category: String = r.get("category");
+        let merchant: String = r.get("merchant_name");
+        let source: String = r.get("source");
+        let pending: bool = r.get("pending");
+        let account_name: String = r.get("account_name");
+        let institution_name: String = r.get("institution_name");
+        body.push_str(&format!(
+            "{},{},{},{},{},{},{},{},{},{},{}\n",
+            id,
+            date,
+            esc(&account_name),
+            esc(&institution_name),
+            esc(&description),
+            esc(&merchant),
+            esc(&category),
+            amount,
+            currency,
+            esc(&source),
+            pending,
+        ));
+    }
+
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let filename = format!("patrimonio-transactions-{}.csv", today);
+    (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{}\"", filename),
+            ),
+        ],
+        body,
+    )
+        .into_response()
+}
+
+#[derive(Deserialize)]
+struct CreateManualTransactionRequest {
+    account_id: uuid::Uuid,
+    date: chrono::NaiveDate,
+    description: String,
+    /// Positive numbers are outflows (expenses), negative are inflows.
+    /// Same sign convention the rest of the app already uses for
+    /// transactions, so the new row appears correctly in every view.
+    amount: rust_decimal::Decimal,
+    currency: String,
+    #[serde(default)]
+    category: Option<String>,
+    #[serde(default)]
+    notes: Option<String>,
+}
+
+/// Add a transaction the user typed in themselves (cash purchases,
+/// gifts, anything Plaid never sees). Reuses the same row shape as
+/// imported transactions; only the `source` field differentiates them.
+async fn create_manual_transaction(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateManualTransactionRequest>,
+) -> Response {
+    // Deterministic external_id so a duplicate manual entry (same date /
+    // amount / description on the same account) collapses to one row
+    // instead of stacking up if the user double-submits.
+    let signature = format!(
+        "manual:{}:{}:{}",
+        payload.date,
+        payload.amount,
+        payload
+            .description
+            .to_lowercase()
+            .chars()
+            .take(50)
+            .collect::<String>()
+    );
+    let result = sqlx::query(
+        r#"
+        INSERT INTO transactions
+            (account_id, external_id, date, description, amount, currency, category, source, source_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual', 'manual_add')
+        ON CONFLICT (account_id, external_id) DO NOTHING
+        RETURNING id
+        "#,
+    )
+    .bind(payload.account_id)
+    .bind(&signature)
+    .bind(payload.date)
+    .bind(&payload.description)
+    .bind(payload.amount)
+    .bind(&payload.currency)
+    .bind(&payload.category)
+    .fetch_optional(&state.db)
+    .await;
+    match result {
+        Ok(Some(row)) => {
+            let id: uuid::Uuid = row.get("id");
+            // If the user added notes, fold them through the same
+            // user-override path the inline editor uses.
+            if let Some(notes) = payload.notes.as_ref().filter(|n| !n.is_empty()) {
+                let _ = sqlx::query(
+                    "UPDATE transactions SET user_notes = $1 WHERE id = $2",
+                )
+                .bind(notes)
+                .bind(id)
+                .execute(&state.db)
+                .await;
+            }
+            (StatusCode::CREATED, Json(serde_json::json!({"id": id.to_string()})))
+                .into_response()
+        }
+        Ok(None) => {
+            // Duplicate (same signature already in the table). Treat as
+            // a no-op so the UI snackbar can say "already added".
+            (StatusCode::CONFLICT, "duplicate manual transaction").into_response()
+        }
+        Err(e) => {
+            error!("Failed to insert manual transaction: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "insert failed").into_response()
+        }
+    }
 }
 
 /// Asset allocation by category and sub-category (account/holding)

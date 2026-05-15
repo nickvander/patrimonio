@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import '../services/preferences.dart';
 import '../utils/currency.dart';
 
 class PortfolioCard extends StatefulWidget {
@@ -35,6 +36,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
   @override
   void initState() {
     super.initState();
+    _groupByAccount = Preferences.getGroupByAccount();
     _allHoldings = List.from(widget.portfolioData['holdings'] ?? []);
     _holdings = List.from(_allHoldings);
     _sort(3, false);
@@ -640,8 +642,10 @@ class _PortfolioCardState extends State<PortfolioCard> {
               ),
             ],
             selected: {_groupByAccount},
-            onSelectionChanged: (s) =>
-                setState(() => _groupByAccount = s.first),
+            onSelectionChanged: (s) {
+              setState(() => _groupByAccount = s.first);
+              Preferences.setGroupByAccount(s.first);
+            },
             style: ButtonStyle(
               visualDensity: VisualDensity.compact,
               textStyle: WidgetStateProperty.all(

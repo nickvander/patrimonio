@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:plaid_flutter/plaid_flutter.dart';
 import 'package:web/web.dart' as web;
 import '../services/api_service.dart';
+import '../services/preferences.dart';
 import '../widgets/net_worth_card.dart';
 import '../widgets/accounts_breakdown_card.dart';
 import '../widgets/portfolio_card.dart';
@@ -28,7 +29,8 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen>
+    with SingleTickerProviderStateMixin {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
   String? _error;
@@ -45,34 +47,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<Map<String, dynamic>>? _trendData;
   DateRange _selectedRange = DateRange.oneYear;
   String _targetCurrency = 'USD'; // Master currency state
+  TabController? _tabController;
 
   @override
   void initState() {
     super.initState();
+    // Restore previously selected reporting currency + tab + chart range
+    // from localStorage so a refresh doesn't reset the user's context.
     _targetCurrency = _loadSavedCurrency();
+    final savedRange = Preferences.getDateRange();
+    if (savedRange != null) {
+      for (final r in DateRange.values) {
+        if (r.name == savedRange) {
+          _selectedRange = r;
+          break;
+        }
+      }
+    }
+    final savedTab = Preferences.getLastTab().clamp(0, 5);
+    _tabController = TabController(
+      length: 6,
+      vsync: this,
+      initialIndex: savedTab,
+    );
+    _tabController!.addListener(() {
+      if (!_tabController!.indexIsChanging) {
+        Preferences.setLastTab(_tabController!.index);
+      }
+    });
     _loadAllData();
     _checkRedirectStatus();
   }
 
+  @override
+  void dispose() {
+    _tabController?.dispose();
+    super.dispose();
+  }
+
   String _loadSavedCurrency() {
-    try {
-      final saved = web.window.localStorage.getItem(
-        'patrimonio.reportingCurrency',
-      );
-      if (saved == 'USD' || saved == 'MXN') return saved!;
-    } catch (_) {
-      // Ignore storage failures; default currency still works.
-    }
-    return 'USD';
+    final saved = Preferences.getCurrency();
+    return (saved == 'USD' || saved == 'MXN') ? saved : 'USD';
   }
 
   void _setTargetCurrency(String currency) {
     setState(() => _targetCurrency = currency);
-    try {
-      web.window.localStorage.setItem('patrimonio.reportingCurrency', currency);
-    } catch (_) {
-      // Ignore storage failures; the in-memory selection still updates.
-    }
+    Preferences.setCurrency(currency);
   }
 
   /// Five-tile compact stat strip pinned to the top of the Overview tab.
@@ -344,15 +364,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final isCompact = MediaQuery.sizeOf(context).width < 720;
 
-    return DefaultTabController(
-      length: 6,
-      child: Scaffold(
+    return Scaffold(
         appBar: AppBar(
           title: const Text(
             'Patrimonio',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
           bottom: TabBar(
+            controller: _tabController,
             isScrollable: isCompact,
             tabAlignment: isCompact ? TabAlignment.start : TabAlignment.fill,
             indicatorColor: const Color(0xFF00E676),
@@ -413,8 +432,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         body: _buildBody(),
-      ),
-    );
+      );
   }
 
   Widget _buildBody() {
@@ -472,6 +490,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             currencyFormat: currencyFormat,
             targetCurrency: _targetCurrency,
             usdMxnRate: fxRate,
+            onGoToManagement: () => _tabController?.animateTo(5),
             onBalanceUpdate: (id, bal) async {
               try {
                 await _apiService.updateAccountBalance(id, bal);
@@ -544,7 +563,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               selectedRange: _selectedRange,
               onRangeChanged: (range) {
                 setState(() => _selectedRange = range);
-                // In a real app, we'd refetch data for specific range here
+                Preferences.setDateRange(range.name);
               },
             ),
           );
@@ -871,6 +890,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         currencyFormat: currencyFormat,
         targetCurrency: _targetCurrency,
         usdMxnRate: fxRate,
+        onGoToManagement: () => _tabController?.animateTo(5),
+        apiService: _apiService,
+        onTransactionAdded: () => _refreshData(),
         onUpdate: (id, {userCategory, userNotes, accountId}) async {
           try {
             await _apiService.updateTransaction(
@@ -1163,6 +1185,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
 
     return TabBarView(
+      controller: _tabController,
       children: [
         overviewTab,
         portfolioTab,
