@@ -90,12 +90,18 @@ class _FxWidgetState extends State<FxWidget> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        rate.toStringAsFixed(4),
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.tealAccent,
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          rate.toStringAsFixed(4),
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.tealAccent,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                          maxLines: 1,
                         ),
                       ),
                       if (latestRate['recorded_at'] != null) ...[
@@ -115,11 +121,18 @@ class _FxWidgetState extends State<FxWidget> {
                     ],
                   ),
                 ),
-                const Icon(
-                  Icons.currency_exchange,
-                  size: 48,
-                  color: Colors.teal,
-                ),
+                LayoutBuilder(builder: (ctx, c) {
+                  // Hide the decorative icon below ~340px so the rate column
+                  // doesn't fight a fixed 48px sibling on tiny phones.
+                  if (MediaQuery.sizeOf(ctx).width < 360) {
+                    return const SizedBox.shrink();
+                  }
+                  return const Icon(
+                    Icons.currency_exchange,
+                    size: 48,
+                    color: Colors.teal,
+                  );
+                }),
               ],
             ),
           ],
@@ -153,12 +166,16 @@ class _FxWidgetState extends State<FxWidget> {
               color: isStale ? Colors.orangeAccent : Colors.white54,
             ),
             const SizedBox(width: 4),
-            Text(
-              '$fullStamp $tz',
-              style: TextStyle(
-                fontSize: 11,
-                color: isStale ? Colors.orangeAccent : Colors.white70,
-                fontWeight: isStale ? FontWeight.w600 : FontWeight.normal,
+            Expanded(
+              child: Text(
+                '$fullStamp $tz',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isStale ? Colors.orangeAccent : Colors.white70,
+                  fontWeight: isStale ? FontWeight.w600 : FontWeight.normal,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -170,6 +187,8 @@ class _FxWidgetState extends State<FxWidget> {
             fontSize: 10,
             color: isStale ? Colors.orangeAccent.shade100 : Colors.white38,
           ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
       ],
     );

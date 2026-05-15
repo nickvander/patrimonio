@@ -98,15 +98,22 @@ class NetWorthCard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Text(
-          currencyFormat.format(netWorth),
-          style: TextStyle(
-            fontSize: isCompact ? 34 : 42,
-            fontWeight: FontWeight.w900,
-            color: Colors.white,
+        // FittedBox shrinks the hero number down rather than ellipsing
+        // when the card is narrow and the value is long. Avoids the
+        // "USD 9,876…" cliff on phones.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            currencyFormat.format(netWorth),
+            style: TextStyle(
+              fontSize: isCompact ? 32 : 42,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+            maxLines: 1,
           ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
         ),
         if (sourceBreakdown.isNotEmpty) ...[
           const SizedBox(height: 8),
@@ -119,6 +126,8 @@ class NetWorthCard extends StatelessWidget {
               return Text(
                 '${formatCurrencyAmount(net, currency)} source',
                 style: const TextStyle(color: Colors.white54, fontSize: 11),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               );
             }).toList(),
           ),

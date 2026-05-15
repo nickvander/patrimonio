@@ -180,7 +180,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildFxBadge() {
+  Widget _buildFxBadge({bool compact = false}) {
     final rate = (_fxRate?['rate'] as num?)?.toDouble();
     final recordedAtRaw = _fxRate?['recorded_at'] as String?;
     final recordedLocal = recordedAtRaw == null
@@ -189,9 +189,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final isStale = recordedLocal != null &&
         DateTime.now().difference(recordedLocal).inHours > 24;
 
+    // Compact mode drops the "1 USD = " / " MXN" framing so a phone-width
+    // AppBar can still show the live rate alongside the currency toggle.
     final label = rate == null
-        ? '1 USD = — MXN'
-        : '1 USD = ${NumberFormat('0.00').format(rate)} MXN';
+        ? (compact ? '— MXN' : '1 USD = — MXN')
+        : compact
+            ? NumberFormat('0.00').format(rate)
+            : '1 USD = ${NumberFormat('0.00').format(rate)} MXN';
     final accent =
         isStale ? Colors.orangeAccent : const Color(0xFF1DE9B6);
 
@@ -364,32 +368,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           actions: [
-            _buildFxBadge(),
-            const SizedBox(width: 8),
-            TextButton.icon(
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-              ),
-              onPressed: () {
-                _setTargetCurrency(_targetCurrency == 'USD' ? 'MXN' : 'USD');
-              },
-              icon: Icon(
-                Icons.currency_exchange,
-                color: _targetCurrency == 'MXN'
-                    ? const Color(0xFF00E676)
-                    : Colors.white70,
-              ),
-              label: Text(
-                'Report: $_targetCurrency',
-                style: TextStyle(
-                  color: _targetCurrency == 'MXN'
-                      ? const Color(0xFF00E676)
-                      : Colors.white70,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
+            _buildFxBadge(compact: isCompact),
+            const SizedBox(width: 4),
+            // On phones the labelled "Report: USD" button gets squeezed by
+            // the TabBar — collapse to an icon-only IconButton with a
+            // tooltip + active-state tint so the affordance is preserved.
+            isCompact
+                ? IconButton(
+                    onPressed: () => _setTargetCurrency(
+                        _targetCurrency == 'USD' ? 'MXN' : 'USD'),
+                    tooltip: 'Report in $_targetCurrency · tap to swap',
+                    icon: Icon(
+                      Icons.currency_exchange,
+                      color: _targetCurrency == 'MXN'
+                          ? const Color(0xFF00E676)
+                          : Colors.white70,
+                    ),
+                  )
+                : TextButton.icon(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                    ),
+                    onPressed: () {
+                      _setTargetCurrency(
+                          _targetCurrency == 'USD' ? 'MXN' : 'USD');
+                    },
+                    icon: Icon(
+                      Icons.currency_exchange,
+                      color: _targetCurrency == 'MXN'
+                          ? const Color(0xFF00E676)
+                          : Colors.white70,
+                    ),
+                    label: Text(
+                      'Report: $_targetCurrency',
+                      style: TextStyle(
+                        color: _targetCurrency == 'MXN'
+                            ? const Color(0xFF00E676)
+                            : Colors.white70,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+            const SizedBox(width: 4),
           ],
         ),
         body: _buildBody(),
@@ -906,70 +926,87 @@ class _DashboardScreenState extends State<DashboardScreen> {
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: SyncStatusCard(
-                  syncData: _syncData ?? [],
-                  onRetrySync: runSync,
-                  onReconnect: handleReconnect,
-                  onDelete: (id) async {
-                    final confirm = await showDialog<bool>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Delete institution'),
-                        content: const Text('Are you sure? This will remove ALL accounts and history for this institution.'),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-                            child: const Text('Delete Everything'),
-                          ),
-                        ],
+          LayoutBuilder(builder: (ctx, c) {
+            // Below ~720px the SyncStatusCard + FxWidget pair gets squeezed
+            // into unreadability when forced side-by-side. Stack them.
+            final isNarrow = c.maxWidth < 720;
+            final sync = SyncStatusCard(
+              syncData: _syncData ?? [],
+              onRetrySync: runSync,
+              onReconnect: handleReconnect,
+              onDelete: (id) async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Delete institution'),
+                    content: const Text(
+                        'Are you sure? This will remove ALL accounts and history for this institution.'),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel')),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: TextButton.styleFrom(
+                            foregroundColor: Colors.redAccent),
+                        child: const Text('Delete Everything'),
                       ),
-                    );
+                    ],
+                  ),
+                );
 
-                    if (confirm == true) {
-                      try {
-                        await _apiService.deleteInstitution(id);
-                        _loadAllData();
-                      } catch (e) {
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
-                      }
-                    }
-                  },
-                ),
-              ),
-              const SizedBox(width: 24),
-              Expanded(
-                child: FxWidget(
-                  latestRate: _fxRate ?? {},
-                  onRefresh: () async {
-                    try {
-                      final fresh = await _apiService.getExchangeRate(
-                        'USD',
-                        'MXN',
-                        force: true,
-                      );
-                      if (!mounted) return;
-                      setState(() => _fxRate = fresh);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('FX rate refreshed')),
-                      );
-                    } catch (e) {
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Refresh failed: $e')),
-                      );
-                    }
-                  },
-                ),
-              ),
-            ],
-          ),
+                if (confirm == true) {
+                  try {
+                    await _apiService.deleteInstitution(id);
+                    _loadAllData();
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Delete failed: $e')));
+                  }
+                }
+              },
+            );
+            final fx = FxWidget(
+              latestRate: _fxRate ?? {},
+              onRefresh: () async {
+                try {
+                  final fresh = await _apiService.getExchangeRate(
+                    'USD',
+                    'MXN',
+                    force: true,
+                  );
+                  if (!mounted) return;
+                  setState(() => _fxRate = fresh);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('FX rate refreshed')),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Refresh failed: $e')),
+                  );
+                }
+              },
+            );
+            if (isNarrow) {
+              return Column(
+                children: [
+                  sync,
+                  const SizedBox(height: 16),
+                  fx,
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: sync),
+                const SizedBox(width: 24),
+                Expanded(child: fx),
+              ],
+            );
+          }),
           const SizedBox(height: 24),
           buildSetupStatusCard(),
           const SizedBox(height: 24),
@@ -978,36 +1015,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
             style: TextStyle(fontSize: 16, color: Colors.white70),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
+          // Connect-bank buttons. LayoutBuilder + Wrap lets them sit 2-up
+          // when there's room, then reflow to full-width single-column on
+          // phones — without crushing the "Import Mexico (CSV/PDF)" label
+          // into ellipsis territory inside a forced 50% Expanded.
+          LayoutBuilder(builder: (ctx, c) {
+            final isNarrow = c.maxWidth < 560;
+            final tileWidth = isNarrow ? c.maxWidth : (c.maxWidth - 16) / 2;
+            Widget tile(IconData icon, String label,
+                {Color? bg, VoidCallback? onPressed}) {
+              return SizedBox(
+                width: tileWidth,
                 child: ElevatedButton.icon(
-                  icon: const Icon(Icons.sync),
-                  label: const Text('Sync all accounts'),
+                  icon: Icon(icon),
+                  label: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 20),
-                    backgroundColor: Colors.blueAccent.withValues(alpha: 0.2),
+                    backgroundColor:
+                        bg ?? Colors.blueAccent.withValues(alpha: 0.2),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  onPressed: runSync,
+                  onPressed: onPressed,
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.add_link),
-                  label: const Text('Link Plaid (US Banks)'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    backgroundColor: const Color(
-                      0xFF1DE9B6,
-                    ).withValues(alpha: 0.2),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
+              );
+            }
+            return Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              children: [
+                tile(Icons.sync, 'Sync all accounts',
+                    bg: Colors.blueAccent.withValues(alpha: 0.2),
+                    onPressed: runSync),
+                tile(
+                  Icons.add_link,
+                  'Link Plaid (US Banks)',
+                  bg: const Color(0xFF1DE9B6).withValues(alpha: 0.2),
                   onPressed: plaidReady()
                       ? () {
                           Navigator.push(
@@ -1019,112 +1067,97 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         }
                       : null,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.upload_file),
-                  label: const Text('Import Mexico (CSV/PDF)'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    backgroundColor: Colors.white12,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ImportScreen(),
-                      ),
-                    ).then((_) => _loadAllData());
-                  },
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.add_circle_outline),
-                  label: const Text('Add manual account'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    backgroundColor: Colors.white12,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) =>
-                          AddAccountDialog(onAccountCreated: _loadAllData),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
+                tile(Icons.upload_file, 'Import Mexico (CSV/PDF)',
+                    bg: Colors.white12,
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ImportScreen(),
+                        ),
+                      ).then((_) => _loadAllData());
+                    }),
+                tile(Icons.add_circle_outline, 'Add manual account',
+                    bg: Colors.white12,
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) =>
+                            AddAccountDialog(onAccountCreated: _loadAllData),
+                      );
+                    }),
+              ],
+            );
+          }),
           const SizedBox(height: 32),
           const Text(
             'Connect crypto exchanges',
             style: TextStyle(fontSize: 16, color: Colors.white70),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.login, color: Colors.white),
-                  label: const Text('Link Coinbase'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    backgroundColor: const Color(0xFF0052FF),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+          LayoutBuilder(builder: (ctx, c) {
+            final isNarrow = c.maxWidth < 560;
+            final tileWidth = isNarrow ? c.maxWidth : (c.maxWidth - 16) / 2;
+            return Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              children: [
+                SizedBox(
+                  width: tileWidth,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.login, color: Colors.white),
+                    label: const Text(
+                      'Link Coinbase',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  onPressed: () {
-                    // Start OAuth flow by redirecting to backend
-                    final baseUrl = _apiService.baseUrl;
-                    web.window.location.href = '$baseUrl/auth/coinbase';
-                  },
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: ElevatedButton.icon(
-                  icon: const Icon(
-                    Icons.currency_exchange,
-                    color: Color(0xFF00E676),
-                  ),
-                  label: const Text('Connect Bitso'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    backgroundColor: const Color(
-                      0xFF00E676,
-                    ).withValues(alpha: 0.1),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => AddCryptoDialog(
-                        exchange: 'bitso',
-                        onLinked: _loadAllData,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      backgroundColor: const Color(0xFF0052FF),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                    );
-                  },
+                    ),
+                    onPressed: () {
+                      final baseUrl = _apiService.baseUrl;
+                      web.window.location.href = '$baseUrl/auth/coinbase';
+                    },
+                  ),
                 ),
-              ),
-            ],
-          ),
+                SizedBox(
+                  width: tileWidth,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(
+                      Icons.currency_exchange,
+                      color: Color(0xFF00E676),
+                    ),
+                    label: const Text(
+                      'Connect Bitso',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      backgroundColor:
+                          const Color(0xFF00E676).withValues(alpha: 0.1),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => AddCryptoDialog(
+                          exchange: 'bitso',
+                          onLinked: _loadAllData,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          }),
         ],
       ),
     );

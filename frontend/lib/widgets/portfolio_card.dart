@@ -145,99 +145,128 @@ class _PortfolioCardState extends State<PortfolioCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  flex: 1,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Investment portfolio',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.3,
-                          color: Colors.white,
-                        ),
+            LayoutBuilder(builder: (context, c) {
+              // Below ~680px the hero (Expanded summary + Expanded chart)
+              // squeezes both panels. Stack instead, and shrink the big
+              // total-value number so a long "USD 1,234,567.89" still
+              // fits a phone-width card without wrapping or ellipsis.
+              final isNarrow = c.maxWidth < 680;
+              final heroFontSize = c.maxWidth < 400
+                  ? 30.0
+                  : c.maxWidth < 520
+                      ? 36.0
+                      : 42.0;
+              final summary = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Investment portfolio',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.3,
+                      color: Colors.white,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Total value',
+                    style: TextStyle(
+                      color: Colors.white54,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      widget.currencyFormat.format(totalValue),
+                      style: TextStyle(
+                        fontSize: heroFontSize,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -1.0,
+                        height: 1.1,
+                        color: Colors.white,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
-                      const SizedBox(height: 20),
-                      const Text(
-                        'Total value',
-                        style: TextStyle(
-                          color: Colors.white54,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: 0.4,
+                      maxLines: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: (isPositive
+                              ? const Color(0xFF00E676)
+                              : Colors.redAccent)
+                          .withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isPositive
+                              ? Icons.arrow_upward
+                              : Icons.arrow_downward,
+                          color: isPositive
+                              ? const Color(0xFF00E676)
+                              : Colors.redAccent,
+                          size: 14,
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        widget.currencyFormat.format(totalValue),
-                        style: const TextStyle(
-                          fontSize: 42,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -1.0,
-                          height: 1.1,
-                          color: Colors.white,
-                          fontFeatures: [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: (isPositive
-                                      ? const Color(0xFF00E676)
-                                      : Colors.redAccent)
-                                  .withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  isPositive
-                                      ? Icons.arrow_upward
-                                      : Icons.arrow_downward,
-                                  color: isPositive
-                                      ? const Color(0xFF00E676)
-                                      : Colors.redAccent,
-                                  size: 14,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${isPositive ? '+' : ''}${widget.currencyFormat.format(totalGainLoss.abs())} (${totalGainLossPct.toStringAsFixed(2)}%)',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: isPositive
-                                        ? const Color(0xFF00E676)
-                                        : Colors.redAccent,
-                                    fontFeatures: const [
-                                      FontFeature.tabularFigures()
-                                    ],
-                                  ),
-                                ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            '${isPositive ? '+' : ''}${widget.currencyFormat.format(totalGainLoss.abs())} (${totalGainLossPct.toStringAsFixed(2)}%)',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: isPositive
+                                  ? const Color(0xFF00E676)
+                                  : Colors.redAccent,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
                               ],
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                Expanded(
-                  flex: 1,
-                  child: SizedBox(height: 220, child: _buildAllocationChart()),
-                ),
-              ],
-            ),
+                ],
+              );
+              final chart = SizedBox(
+                height: isNarrow ? 200 : 220,
+                child: _buildAllocationChart(),
+              );
+              if (isNarrow) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    summary,
+                    const SizedBox(height: 24),
+                    chart,
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(child: summary),
+                  Expanded(child: chart),
+                ],
+              );
+            }),
             const SizedBox(height: 24),
             _buildKpiStrip(),
             const SizedBox(height: 20),

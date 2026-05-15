@@ -74,6 +74,13 @@ class SyncStatusCard extends StatelessWidget {
   }
 
   Widget _buildSyncRow(Map<String, dynamic> inst) {
+    return LayoutBuilder(builder: (ctx, c) {
+      final isNarrow = c.maxWidth < 420;
+      return _buildSyncRowBody(inst, isNarrow);
+    });
+  }
+
+  Widget _buildSyncRowBody(Map<String, dynamic> inst, bool isNarrow) {
     final status = inst['sync_status'] ?? 'unknown';
 
     IconData statusIcon;
@@ -177,31 +184,46 @@ class SyncStatusCard extends StatelessWidget {
             ),
           ),
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               if (status == 'reconnect_required')
-                TextButton.icon(
-                  onPressed: () => onReconnect?.call(inst['id']),
-                  icon: const Icon(Icons.link, size: 16),
-                  label: const Text('Reconnect'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.deepOrangeAccent,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                ),
+                isNarrow
+                    ? IconButton(
+                        onPressed: () => onReconnect?.call(inst['id']),
+                        icon: const Icon(Icons.link,
+                            color: Colors.deepOrangeAccent, size: 20),
+                        tooltip: 'Reconnect',
+                        padding: const EdgeInsets.all(6),
+                        constraints: const BoxConstraints(),
+                      )
+                    : TextButton.icon(
+                        onPressed: () => onReconnect?.call(inst['id']),
+                        icon: const Icon(Icons.link, size: 16),
+                        label: const Text('Reconnect'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.deepOrangeAccent,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                      ),
               if ([
                 'error',
                 'failed',
                 'setup_required',
               ].contains(status))
                 IconButton(
-                  icon: const Icon(Icons.refresh, color: Colors.teal),
+                  icon: const Icon(Icons.refresh, color: Colors.teal, size: 20),
                   onPressed: onRetrySync,
                   tooltip: 'Retry sync',
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
                 ),
               IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                icon: const Icon(Icons.delete_outline,
+                    color: Colors.redAccent, size: 20),
                 onPressed: () => onDelete?.call(inst['id']),
                 tooltip: 'Delete institution',
+                padding: const EdgeInsets.all(6),
+                constraints: const BoxConstraints(),
               ),
             ],
           ),
