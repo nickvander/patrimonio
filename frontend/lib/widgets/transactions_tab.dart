@@ -117,16 +117,14 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 'Showing ${filtered.length} of ${widget.transactions.length}',
                 style: const TextStyle(color: Colors.grey, fontSize: 12),
               ),
-              const SizedBox(height: 16),
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: filtered.length,
-                separatorBuilder: (context, index) =>
-                    const Divider(height: 32, color: Colors.white10),
-                itemBuilder: (context, index) {
-                  return _buildTransactionRow(filtered[index], isNarrow);
-                },
+              const SizedBox(height: 8),
+              // Flat list of rows with inline date-group headers
+              // (Today / Yesterday / weekday name / "Month d"). Avoids
+              // ListView.separated so we can interleave headers between
+              // groups without inserting a divider above each header.
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: _buildGroupedRows(filtered, isNarrow),
               ),
             ],
           );
@@ -238,15 +236,90 @@ class _TransactionsTabState extends State<TransactionsTab> {
     );
   }
 
-  /// One row in the transactions list. Layout: 48px category icon, then a
-  /// description column (title + small meta), then a right-aligned amount
-  /// block. Real amount is shown in the transaction's native currency;
-  /// an estimated conversion to the reporting currency is appended below
-  /// only when the two currencies differ. On narrow viewports the amount
-  /// column shrinks and the conversion subtitle drops, so a 375 px phone
-  /// still gets a readable description.
+  /// Group the filtered transactions into Today / Yesterday / weekday /
+  /// "Month d" sections so a long scroll is scannable. Hairline dividers
+  /// sit *between* rows within a group but not above the header — that's
+  /// why we hand-roll the list instead of using ListView.separated.
+  List<Widget> _buildGroupedRows(List<dynamic> txs, bool isNarrow) {
+    final out = <Widget>[];
+    String? lastGroup;
+    for (var i = 0; i < txs.length; i++) {
+      final tx = txs[i];
+      final dateStr = tx['date'] as String?;
+      if (dateStr == null) continue;
+      final date = DateTime.parse(dateStr);
+      final key = _dateGroupKey(date);
+      if (key != lastGroup) {
+        out.add(_dateGroupHeader(date, isFirst: lastGroup == null));
+        lastGroup = key;
+      } else {
+        out.add(const Divider(
+          height: 1,
+          thickness: 1,
+          color: Colors.white10,
+          indent: 44, // align with the description column, past the icon
+        ));
+      }
+      out.add(_buildTransactionRow(tx, isNarrow));
+    }
+    return out;
+  }
+
+  /// Stable key for grouping. "today" / "yesterday" / yyyy-mm-dd otherwise.
+  String _dateGroupKey(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final d = DateTime(date.year, date.month, date.day);
+    final diff = today.difference(d).inDays;
+    if (diff == 0) return 'today';
+    if (diff == 1) return 'yesterday';
+    return '${date.year}-${date.month}-${date.day}';
+  }
+
+  /// Section heading shown above each date group. Reads "Today" /
+  /// "Yesterday" / weekday for the past week, then "Month d" / "Month d,
+  /// yyyy" for older dates.
+  Widget _dateGroupHeader(DateTime date, {required bool isFirst}) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final d = DateTime(date.year, date.month, date.day);
+    final diff = today.difference(d).inDays;
+    String label;
+    if (diff == 0) {
+      label = 'Today';
+    } else if (diff == 1) {
+      label = 'Yesterday';
+    } else if (diff > 1 && diff < 7) {
+      label = DateFormat('EEEE').format(date);
+    } else if (date.year == now.year) {
+      label = DateFormat('MMM d').format(date);
+    } else {
+      label = DateFormat('MMM d, y').format(date);
+    }
+    return Padding(
+      padding: EdgeInsets.only(
+        top: isFirst ? 4 : 18,
+        bottom: 6,
+        left: 4,
+        right: 4,
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: Colors.white54,
+          letterSpacing: 0.6,
+        ),
+      ),
+    );
+  }
+
+  /// One row in the transactions list. Modern dense layout — 32px icon,
+  /// single-line description + meta, right-aligned native-currency amount.
+  /// Total row height is ~56px (was 92), so a wall of transactions
+  /// actually feels like a scannable list instead of an inbox of cards.
   Widget _buildTransactionRow(dynamic tx, bool isNarrow) {
-    final date = DateTime.parse(tx['date'] as String);
     final sourceAmount = ((tx['amount'] as num?)?.toDouble() ?? 0.0);
     final sourceCurrency =
         (tx['currency'] ?? widget.targetCurrency).toString();
@@ -266,45 +339,48 @@ class _TransactionsTabState extends State<TransactionsTab> {
 
     return InkWell(
       onTap: () => _showTransactionDetails(tx),
-      borderRadius: BorderRadius.circular(12),
+      hoverColor: Colors.white.withValues(alpha: 0.03),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Container(
-              width: 44,
-              height: 44,
+              width: 32,
+              height: 32,
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(
                 _getCategoryIcon(category, tx['description']),
                 color: color,
-                size: 22,
+                size: 16,
               ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    _titleCase(tx['description'] ?? 'Unknown Transaction'),
+                    _titleCase(tx['description'] ?? 'Unknown'),
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
-                      fontSize: 15,
+                      fontSize: 14,
+                      height: 1.2,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2),
                   Text(
-                    _metaLine(tx, date, notes),
+                    _metaLine(tx, notes),
                     style: const TextStyle(
                       color: Colors.white54,
-                      fontSize: 12,
+                      fontSize: 11,
+                      height: 1.3,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -313,21 +389,20 @@ class _TransactionsTabState extends State<TransactionsTab> {
               ),
             ),
             const SizedBox(width: 12),
-            // Fixed-width amount column so eyes can scan straight down.
-            // Real amount = native currency (top, bold). Estimated
-            // conversion appears below only when there's a real FX leap.
-            // On narrow viewports we shrink the column and drop the
-            // conversion subtitle to give the description room.
-            SizedBox(
-              width: isNarrow ? 96 : 132,
+            // Right-aligned amount. Bold native currency on top, optional
+            // converted estimate below (desktop only — narrow viewports
+            // hide it so the description column has breathing room).
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: isNarrow ? 100 : 140),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     '${isExpense ? '−' : '+'}${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}',
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
-                      fontSize: isNarrow ? 14 : 16,
+                      fontSize: 14,
                       fontFeatures: const [FontFeature.tabularFigures()],
                       color: isExpense
                           ? Colors.white
@@ -337,23 +412,27 @@ class _TransactionsTabState extends State<TransactionsTab> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   if (needsConversion && !isNarrow)
-                    Text(
-                      '≈ ${widget.currencyFormat.format(converted.abs())}',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Colors.white38,
-                        fontStyle: FontStyle.italic,
-                        fontFeatures: [FontFeature.tabularFigures()],
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        '≈ ${widget.currencyFormat.format(converted.abs())}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.white38,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   if (tx['pending'] == true)
                     Container(
-                      margin: const EdgeInsets.only(top: 4),
+                      margin: const EdgeInsets.only(top: 3),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
+                          horizontal: 5, vertical: 1),
                       decoration: BoxDecoration(
                         color: Colors.orange.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(3),
                       ),
                       child: const Text(
                         'Pending',
@@ -374,12 +453,15 @@ class _TransactionsTabState extends State<TransactionsTab> {
     );
   }
 
-  String _metaLine(dynamic tx, DateTime date, String notes) {
+  /// Compact secondary line. The date is now in the group header above,
+  /// so we drop it here and surface category instead — keeping the row
+  /// to one line of meta even when there's a user note attached.
+  String _metaLine(dynamic tx, String notes) {
     final account = (tx['account_name'] ?? '').toString();
-    final dateStr = DateFormat('MMM d').format(date);
+    final cat = (tx['user_category'] ?? tx['category'] ?? '').toString();
     final parts = <String>[
+      if (cat.isNotEmpty) cat,
       if (account.isNotEmpty) account,
-      dateStr,
       if (notes.isNotEmpty) notes,
     ];
     return parts.join(' · ');
