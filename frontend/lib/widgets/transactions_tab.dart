@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import '../utils/category.dart';
 import '../utils/currency.dart';
 import 'add_transaction_dialog.dart';
+import 'transaction_filters.dart';
 
 class TransactionsTab extends StatefulWidget {
   final List<dynamic> transactions;
@@ -48,16 +49,117 @@ class TransactionsTab extends StatefulWidget {
 class _TransactionsTabState extends State<TransactionsTab> {
   String _searchQuery = '';
   bool _searchOpenOnNarrow = false;
+  TxFilters _filters = TxFilters.empty;
 
   List<dynamic> get _filteredTransactions {
-    if (_searchQuery.isEmpty) return widget.transactions;
     final q = _searchQuery.toLowerCase();
+    final hasSearch = q.isNotEmpty;
+    final hasFilters = _filters.isActive;
+    if (!hasSearch && !hasFilters) return widget.transactions;
     return widget.transactions.where((tx) {
-      final desc = (tx['description'] ?? '').toString().toLowerCase();
-      final acct = (tx['account_name'] ?? '').toString().toLowerCase();
-      final cat = (tx['category'] ?? '').toString().toLowerCase();
-      return desc.contains(q) || acct.contains(q) || cat.contains(q);
+      if (hasSearch) {
+        final desc = (tx['description'] ?? '').toString().toLowerCase();
+        final acct = (tx['account_name'] ?? '').toString().toLowerCase();
+        final cat = (tx['category'] ?? '').toString().toLowerCase();
+        if (!desc.contains(q) && !acct.contains(q) && !cat.contains(q)) {
+          return false;
+        }
+      }
+      if (hasFilters && !_filters.matches(tx)) return false;
+      return true;
     }).toList();
+  }
+
+  Future<void> _openFilters() async {
+    final result = await showDialog<TxFilters>(
+      context: context,
+      builder: (_) => TxFiltersDialog(
+        initial: _filters,
+        transactions: widget.transactions,
+        accounts: widget.accounts,
+      ),
+    );
+    if (result != null && mounted) setState(() => _filters = result);
+  }
+
+  /// Removable chip strip below the toolbar showing every active filter
+  /// in a single horizontal scroll. Tapping the X on a chip clears just
+  /// that one; the strip hides entirely when nothing's active.
+  Widget _activeFilterChips() {
+    if (!_filters.isActive) return const SizedBox.shrink();
+    final chips = <Widget>[];
+    if (_filters.flow != TxFlow.all) {
+      chips.add(_filterChip(
+        _filters.flow == TxFlow.expense ? 'Expense' : 'Income',
+        () => setState(() => _filters = _filters.copyWith(flow: TxFlow.all)),
+      ));
+    }
+    if (_filters.status != TxStatus.all) {
+      chips.add(_filterChip(
+        _filters.status == TxStatus.pending ? 'Pending' : 'Settled',
+        () => setState(
+            () => _filters = _filters.copyWith(status: TxStatus.all)),
+      ));
+    }
+    if (_filters.accountIds.isNotEmpty) {
+      final byId = <String, String>{};
+      for (final a in widget.accounts) {
+        final id = a['id']?.toString();
+        if (id == null) continue;
+        final nick = (a['nickname'] ?? '').toString();
+        final name = (a['name'] ?? '').toString();
+        byId[id] = nick.isNotEmpty ? nick : name;
+      }
+      final names = _filters.accountIds.map((id) => byId[id] ?? id).toList();
+      final label = names.length == 1
+          ? names.first
+          : '${names.first} +${names.length - 1}';
+      chips.add(_filterChip(
+        label,
+        () => setState(() => _filters = _filters.copyWith(accountIds: {})),
+      ));
+    }
+    if (_filters.categories.isNotEmpty) {
+      final cats = _filters.categories.toList();
+      final label =
+          cats.length == 1 ? cats.first : '${cats.first} +${cats.length - 1}';
+      chips.add(_filterChip(
+        label,
+        () => setState(() => _filters = _filters.copyWith(categories: {})),
+      ));
+    }
+    chips.add(TextButton(
+      onPressed: () => setState(() => _filters = TxFilters.empty),
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        minimumSize: const Size(0, 28),
+      ),
+      child: const Text('Clear all'),
+    ));
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 4),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final c in chips) ...[
+              c,
+              const SizedBox(width: 6),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _filterChip(String label, VoidCallback onRemove) {
+    return InputChip(
+      label: Text(label),
+      onDeleted: onRemove,
+      visualDensity: VisualDensity.compact,
+      labelStyle: const TextStyle(fontSize: 12),
+      deleteIconColor: Colors.white60,
+    );
   }
 
   @override
@@ -113,6 +215,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildToolbar(isNarrow),
+              _activeFilterChips(),
               const SizedBox(height: 8),
               Text(
                 'Showing ${filtered.length} of ${widget.transactions.length}',
@@ -169,6 +272,31 @@ class _TransactionsTabState extends State<TransactionsTab> {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Filter button with a small dot badge when any filters are
+            // active. Always visible — independent of apiService.
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                IconButton(
+                  onPressed: _openFilters,
+                  icon: const Icon(Icons.filter_list, size: 22),
+                  tooltip: 'Filter transactions',
+                ),
+                if (_filters.isActive)
+                  Positioned(
+                    right: 6,
+                    top: 6,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF00E676),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
             if (widget.apiService != null) ...[
               IconButton(
                 onPressed: () => _openAddDialog(),
