@@ -384,7 +384,8 @@ async fn recent_transactions(State(state): State<AppState>) -> Json<Vec<Transact
         SELECT t.id, t.account_id,
                COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
                t.amount, t.currency,
-               t.date, t.description, t.category, t.pending
+               t.date, t.description, t.category, t.category_detailed,
+               t.payment_channel, t.merchant_name, t.pending
         FROM transactions t
         JOIN accounts a ON t.account_id = a.id
         ORDER BY t.date DESC, t.created_at DESC
@@ -409,6 +410,18 @@ async fn recent_transactions(State(state): State<AppState>) -> Json<Vec<Transact
                     date: r.get::<chrono::NaiveDate, _>("date").to_string(),
                     description: r.get("description"),
                     category: r.get("category"),
+                    category_detailed: r
+                        .try_get::<Option<String>, _>("category_detailed")
+                        .ok()
+                        .flatten(),
+                    payment_channel: r
+                        .try_get::<Option<String>, _>("payment_channel")
+                        .ok()
+                        .flatten(),
+                    merchant_name: r
+                        .try_get::<Option<String>, _>("merchant_name")
+                        .ok()
+                        .flatten(),
                     pending: r.get("pending"),
                 }
             })
@@ -427,6 +440,8 @@ async fn export_transactions_csv(
         r#"
         SELECT t.id, t.date, t.amount, t.currency, t.description,
                COALESCE(t.category, '') as category,
+               COALESCE(t.category_detailed, '') as category_detailed,
+               COALESCE(t.payment_channel, '') as payment_channel,
                COALESCE(t.merchant_name, '') as merchant_name,
                COALESCE(t.source, '') as source,
                t.pending,
@@ -456,7 +471,7 @@ async fn export_transactions_csv(
 
     let mut body = String::with_capacity(rows.len() * 128 + 256);
     body.push_str(
-        "id,date,account,institution,description,merchant,category,amount,currency,source,pending\n"
+        "id,date,account,institution,description,merchant,category,category_detailed,payment_channel,amount,currency,source,pending\n"
     );
     for r in rows {
         let id: uuid::Uuid = r.get("id");
@@ -465,13 +480,15 @@ async fn export_transactions_csv(
         let currency: String = r.get("currency");
         let description: String = r.get("description");
         let category: String = r.get("category");
+        let category_detailed: String = r.get("category_detailed");
+        let payment_channel: String = r.get("payment_channel");
         let merchant: String = r.get("merchant_name");
         let source: String = r.get("source");
         let pending: bool = r.get("pending");
         let account_name: String = r.get("account_name");
         let institution_name: String = r.get("institution_name");
         body.push_str(&format!(
-            "{},{},{},{},{},{},{},{},{},{},{}\n",
+            "{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
             id,
             date,
             esc(&account_name),
@@ -479,6 +496,8 @@ async fn export_transactions_csv(
             esc(&description),
             esc(&merchant),
             esc(&category),
+            esc(&category_detailed),
+            esc(&payment_channel),
             amount,
             currency,
             esc(&source),
@@ -822,6 +841,17 @@ struct TransactionEntry {
     date: String,
     description: String,
     category: Option<String>,
+    /// Plaid's `personal_finance_category.detailed` — much more specific
+    /// than `category` (e.g. "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT" vs
+    /// just "LOAN_PAYMENTS"). The frontend prefers this when set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    category_detailed: Option<String>,
+    /// "online" / "in_store" / "other" / "bank" — surfaced as a small
+    /// chip alongside the category in the detail panel.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    payment_channel: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    merchant_name: Option<String>,
     pending: bool,
 }
 

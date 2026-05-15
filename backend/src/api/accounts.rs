@@ -341,6 +341,12 @@ pub struct TransactionResponse {
     pub amount: f64,
     pub currency: String,
     pub category: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category_detailed: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payment_channel: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merchant_name: Option<String>,
     pub user_category: Option<String>,
     pub user_notes: Option<String>,
     pub source: Option<String>,
@@ -356,6 +362,7 @@ async fn get_account_transactions(
     let rows = sqlx::query(
         r#"
         SELECT t.id, t.date, t.description, t.amount, t.currency, t.category,
+               t.category_detailed, t.payment_channel, t.merchant_name,
                t.user_category, t.user_notes, t.source,
                COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
                i.name as institution_name
@@ -381,6 +388,9 @@ async fn get_account_transactions(
             .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
         currency: row.try_get::<String, _>("currency").unwrap_or_else(|_| "USD".to_string()),
         category: row.try_get::<String, _>("category").unwrap_or_else(|_| "Uncategorized".to_string()),
+        category_detailed: row.try_get::<Option<String>, _>("category_detailed").ok().flatten(),
+        payment_channel: row.try_get::<Option<String>, _>("payment_channel").ok().flatten(),
+        merchant_name: row.try_get::<Option<String>, _>("merchant_name").ok().flatten(),
         user_category: row.try_get("user_category").ok(),
         user_notes: row.try_get("user_notes").ok(),
         source: row.try_get("source").ok(),

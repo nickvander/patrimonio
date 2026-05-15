@@ -345,9 +345,17 @@ async fn upsert_plaid_transaction(db: &PgPool, tx: &serde_json::Value) -> Result
         .as_array()
         .and_then(|items| items.first())
         .and_then(|item| item.as_str());
+    // Plaid's Personal Finance Category taxonomy has two levels:
+    //   primary  — coarse bucket, e.g. "LOAN_PAYMENTS"
+    //   detailed — specific, e.g. "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT"
+    // The detailed enum is *much* more useful in the UI, so we store
+    // both. Legacy `category[0]` is kept as a fallback for older items
+    // that pre-date the PFC taxonomy.
     let category = tx["personal_finance_category"]["primary"]
         .as_str()
         .or(legacy_category);
+    let category_detailed = tx["personal_finance_category"]["detailed"].as_str();
+    let payment_channel = tx["payment_channel"].as_str();
 
     let internal_acc = sqlx::query("SELECT id FROM accounts WHERE external_id = $1")
         .bind(acc_ext_id)
@@ -358,8 +366,8 @@ async fn upsert_plaid_transaction(db: &PgPool, tx: &serde_json::Value) -> Result
         let acc_id: uuid::Uuid = acc_row.get("id");
         sqlx::query(
             r#"
-            INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, merchant_name, pending, source)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'plaid')
+            INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, category_detailed, payment_channel, merchant_name, pending, source)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'plaid')
             ON CONFLICT (account_id, external_id)
             DO UPDATE SET
                 date = EXCLUDED.date,
@@ -367,6 +375,8 @@ async fn upsert_plaid_transaction(db: &PgPool, tx: &serde_json::Value) -> Result
                 amount = EXCLUDED.amount,
                 currency = EXCLUDED.currency,
                 category = EXCLUDED.category,
+                category_detailed = EXCLUDED.category_detailed,
+                payment_channel = EXCLUDED.payment_channel,
                 merchant_name = EXCLUDED.merchant_name,
                 pending = EXCLUDED.pending
             "#
@@ -378,6 +388,8 @@ async fn upsert_plaid_transaction(db: &PgPool, tx: &serde_json::Value) -> Result
         .bind(amount)
         .bind(currency)
         .bind(category)
+        .bind(category_detailed)
+        .bind(payment_channel)
         .bind(merchant_name)
         .bind(pending)
         .execute(db)

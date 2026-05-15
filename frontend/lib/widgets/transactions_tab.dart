@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:web/web.dart' as web;
 import '../services/api_service.dart';
+import '../utils/category.dart';
 import '../utils/currency.dart';
 import 'add_transaction_dialog.dart';
 
@@ -455,12 +456,18 @@ class _TransactionsTabState extends State<TransactionsTab> {
 
   /// Compact secondary line. The date is now in the group header above,
   /// so we drop it here and surface category instead — keeping the row
-  /// to one line of meta even when there's a user note attached.
+  /// to one line of meta even when there's a user note attached. The
+  /// category is run through prettyCategory so Plaid's screaming
+  /// "LOAN_PAYMENTS" reads as "Loan payment" / "Credit card payment".
   String _metaLine(dynamic tx, String notes) {
     final account = (tx['account_name'] ?? '').toString();
-    final cat = (tx['user_category'] ?? tx['category'] ?? '').toString();
+    final cat = prettyCategory(
+      userCategory: tx['user_category']?.toString(),
+      detailed: tx['category_detailed']?.toString(),
+      primary: tx['category']?.toString(),
+    );
     final parts = <String>[
-      if (cat.isNotEmpty) cat,
+      if (cat.isNotEmpty && cat != 'Uncategorized') cat,
       if (account.isNotEmpty) account,
       if (notes.isNotEmpty) notes,
     ];
@@ -711,11 +718,41 @@ class _TransactionsTabState extends State<TransactionsTab> {
                         _metaChip(Icons.account_balance,
                             tx['account_name'].toString()),
                       _metaChip(Icons.cloud_download, _sourceLabel(source)),
-                      if (originalCategory.isNotEmpty &&
-                          originalCategory !=
-                              (tx['user_category'] ?? '').toString())
-                        _metaChip(Icons.label_outline,
-                            'Auto: $originalCategory'),
+                      // The auto-classified category, prettified from
+                      // Plaid's PFC enum codes. Only shown when the user
+                      // hasn't already overridden it with a hand-typed
+                      // category.
+                      if ((tx['user_category'] ?? '').toString().isEmpty &&
+                          (originalCategory.isNotEmpty ||
+                              (tx['category_detailed'] ?? '')
+                                  .toString()
+                                  .isNotEmpty))
+                        _metaChip(
+                          Icons.label_outline,
+                          prettyCategory(
+                            detailed: tx['category_detailed']?.toString(),
+                            primary: tx['category']?.toString(),
+                          ),
+                        ),
+                      // Hide the channel chip when Plaid only knows it's
+                      // "other" — that adds noise but no information.
+                      // Online / in-store are the useful signal.
+                      if (((tx['payment_channel'] ?? '').toString().isNotEmpty) &&
+                          (tx['payment_channel'] ?? '').toString() != 'other')
+                        _metaChip(
+                          _channelIcon(
+                              (tx['payment_channel'] ?? '').toString()),
+                          _sentence((tx['payment_channel'] ?? '')
+                              .toString()
+                              .replaceAll('_', ' ')),
+                        ),
+                      if ((tx['merchant_name'] ?? '')
+                              .toString()
+                              .isNotEmpty &&
+                          (tx['merchant_name'] ?? '').toString() !=
+                              titleDescription)
+                        _metaChip(Icons.storefront,
+                            (tx['merchant_name'] ?? '').toString()),
                       if (pending)
                         _metaChip(Icons.hourglass_empty, 'Pending',
                             accent: Colors.orange),
@@ -925,6 +962,26 @@ class _TransactionsTabState extends State<TransactionsTab> {
       default:
         return source.isEmpty ? 'Unknown source' : source;
     }
+  }
+
+  /// Icon for Plaid's payment_channel ("online" / "in_store" / "other").
+  IconData _channelIcon(String channel) {
+    switch (channel.toLowerCase()) {
+      case 'online':
+        return Icons.shopping_cart_outlined;
+      case 'in store':
+      case 'in_store':
+        return Icons.storefront_outlined;
+      case 'other':
+        return Icons.swap_horiz;
+      default:
+        return Icons.help_outline;
+    }
+  }
+
+  String _sentence(String s) {
+    if (s.isEmpty) return s;
+    return s[0].toUpperCase() + s.substring(1).toLowerCase();
   }
 
   Widget _similarRow(dynamic other) {
