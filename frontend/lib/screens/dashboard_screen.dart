@@ -1430,6 +1430,17 @@ class _DashboardScreenState extends State<DashboardScreen>
                   );
                 }
               },
+              onRetryBatch: (ids) async {
+                try {
+                  await _apiService.syncInstitutionsBatch(ids);
+                  await _refreshData();
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Retry failed: $e')),
+                  );
+                }
+              },
               onReconnect: handleReconnect,
               onDelete: (id) async {
                 final confirm = await showDialog<bool>(

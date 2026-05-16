@@ -18,31 +18,34 @@ pub async fn sync_one_institution(
     config: &AppConfig,
     id: uuid::Uuid,
 ) -> Result<()> {
-    sync_institutions(db, config, Some(id)).await
+    sync_institutions(db, config, Some(vec![id])).await
 }
 
-/// Internal sync loop. When `only_id` is `Some`, only that institution
-/// is selected; otherwise every linked institution gets synced.
+/// Internal sync loop. When `only_ids` is `Some`, only those institutions
+/// are selected; otherwise every linked institution gets synced.
 pub async fn sync_institutions(
     db: &PgPool,
     config: &AppConfig,
-    only_id: Option<uuid::Uuid>,
+    only_ids: Option<Vec<uuid::Uuid>>,
 ) -> Result<()> {
     tracing::info!(
         "Sync engine: starting sync for {}",
-        match only_id {
-            Some(id) => format!("institution {id}"),
+        match &only_ids {
+            Some(ids) => format!("{} institution(s)", ids.len()),
             None => "all institutions".to_string(),
         }
     );
     let client = Client::new();
 
-    let rows = if let Some(id) = only_id {
+    let rows = if let Some(ids) = only_ids {
+        // ANY($1) lets us pass the Uuid array as one bind param and
+        // returns rows in arbitrary order; per-id ordering doesn't
+        // matter since the sync engine treats each row independently.
         sqlx::query(
             "SELECT id, name, integration_type, plaid_access_token_enc, plaid_transactions_cursor \
-             FROM institutions WHERE id = $1"
+             FROM institutions WHERE id = ANY($1)"
         )
-        .bind(id)
+        .bind(&ids)
         .fetch_all(db)
         .await?
     } else {

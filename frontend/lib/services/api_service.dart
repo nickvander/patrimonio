@@ -428,6 +428,19 @@ class ApiService {
     }
   }
 
+  /// Sync an arbitrary set of institutions in one round-trip. Replaces
+  /// the client-side loop the "Retry N failed" shortcut used to do.
+  Future<void> syncInstitutionsBatch(List<String> institutionIds) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/institutions/sync'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'ids': institutionIds}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Batched sync failed: ${response.statusCode}');
+    }
+  }
+
   Future<dynamic> getSetting(String key) async {
     final response =
         await http.get(Uri.parse('$_baseUrl/settings/$key'));

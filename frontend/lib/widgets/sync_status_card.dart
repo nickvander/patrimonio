@@ -9,6 +9,9 @@ class SyncStatusCard extends StatelessWidget {
   /// shortcut loops this for each failed institution rather than calling
   /// the global onRetrySync (which syncs every institution).
   final Future<void> Function(String id)? onRetrySingle;
+  /// Optional batched-retry hook. Preferred over [onRetrySingle] when
+  /// provided — replaces N sequential HTTP calls with one round-trip.
+  final Future<void> Function(List<String> ids)? onRetryBatch;
   final Function(String id)? onReconnect;
   final Function(String id)? onDelete;
 
@@ -17,6 +20,7 @@ class SyncStatusCard extends StatelessWidget {
     required this.syncData,
     this.onRetrySync,
     this.onRetrySingle,
+    this.onRetryBatch,
     this.onReconnect,
     this.onDelete,
   });
@@ -69,19 +73,24 @@ class SyncStatusCard extends StatelessWidget {
                   ),
                 ),
                 if (failed > 0 &&
-                    (onRetrySingle != null || onRetrySync != null))
+                    (onRetryBatch != null ||
+                        onRetrySingle != null ||
+                        onRetrySync != null))
                   TextButton.icon(
                     onPressed: () async {
-                      // Prefer the per-institution path when wired so we
-                      // only re-attempt the broken ones; fall back to the
-                      // global sync if the parent didn't plumb it.
-                      if (onRetrySingle != null) {
-                        for (final id in _failedIds()) {
+                      final ids = _failedIds();
+                      // Preference: batched > per-institution loop >
+                      // global fallback. The batched path is one HTTP
+                      // round-trip server-side via ANY($1).
+                      if (onRetryBatch != null) {
+                        try {
+                          await onRetryBatch!(ids);
+                        } catch (_) {/* swallowed; UI re-renders */}
+                      } else if (onRetrySingle != null) {
+                        for (final id in ids) {
                           try {
                             await onRetrySingle!(id);
-                          } catch (_) {
-                            // Continue retrying the rest even on error.
-                          }
+                          } catch (_) {/* continue on individual errors */}
                         }
                       } else {
                         onRetrySync?.call();

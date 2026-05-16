@@ -25,11 +25,28 @@ pub fn router() -> Router<AppState> {
         .route("/webhook", post(plaid_webhook))
 }
 
-/// Manually trigger a sync for all institutions
-async fn trigger_sync(State(state): State<AppState>) -> axum::response::Response {
+/// Sync request body for the global `/sync` endpoint. Accepts an
+/// optional `ids` array; when present, only those institutions are
+/// touched, replacing what used to be a client-side loop of single
+/// `/institutions/{id}/sync` calls.
+#[derive(Deserialize, Default)]
+struct SyncRequest {
+    #[serde(default)]
+    ids: Option<Vec<uuid::Uuid>>,
+}
+
+/// Manually trigger a sync. With an empty body the engine runs against
+/// every institution; with `{"ids": [...]}` it runs against only those.
+async fn trigger_sync(
+    State(state): State<AppState>,
+    body: Option<Json<SyncRequest>>,
+) -> axum::response::Response {
     let config = state.config.clone();
     let db = state.db.clone();
-    if let Err(e) = crate::services::sync::sync_all_institutions(&db, &config).await {
+    let only_ids = body.and_then(|b| b.0.ids);
+    if let Err(e) =
+        crate::services::sync::sync_institutions(&db, &config, only_ids).await
+    {
         tracing::error!("Manual Plaid sync failed: {}", e);
         return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, axum::response::Json(serde_json::json!({
             "error": "Sync failed",
