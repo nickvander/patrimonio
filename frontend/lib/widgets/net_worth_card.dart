@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../components/date_range_selector.dart';
+import '../services/preferences.dart';
 import '../utils/currency.dart';
 
-class NetWorthCard extends StatelessWidget {
+class NetWorthCard extends StatefulWidget {
   final double netWorth;
   final List<dynamic> history;
   final double conversionFactor;
@@ -23,6 +24,27 @@ class NetWorthCard extends StatelessWidget {
     required this.sourceBreakdown,
     this.selectedRange = DateRange.all,
   });
+
+  @override
+  State<NetWorthCard> createState() => _NetWorthCardState();
+}
+
+class _NetWorthCardState extends State<NetWorthCard> {
+  // The default view is the single green-line "simple" mode — the stacked
+  // institution bands compete with the total line and get visually mushy
+  // past ~5 institutions. The toggle is persisted so power users who
+  // prefer the detailed view don't have to flip it every refresh.
+  late bool _detailed = Preferences.getNetWorthDetailed();
+
+  // The widget body below used to live on the StatelessWidget. To avoid
+  // touching every `xxx` → `widget.xxx` access, expose passthroughs.
+  double get netWorth => widget.netWorth;
+  List<dynamic> get history => widget.history;
+  double get conversionFactor => widget.conversionFactor;
+  NumberFormat get currencyFormat => widget.currencyFormat;
+  String get reportingCurrency => widget.reportingCurrency;
+  List<dynamic> get sourceBreakdown => widget.sourceBreakdown;
+  DateRange get selectedRange => widget.selectedRange;
 
   /// Filter history data based on the selected date range
   List<dynamic> _filterByRange(List<dynamic> data) {
@@ -68,7 +90,11 @@ class NetWorthCard extends StatelessWidget {
           builder: (context, constraints) {
             final isCompact = constraints.maxWidth < 640;
             final filtered = _filterByRange(history);
-            final institutions = _topInstitutions(filtered);
+            // Only compute the per-institution slices when the detailed
+            // view is actually being shown — saves a meaningful chunk of
+            // work on the simple path.
+            final institutions =
+                _detailed ? _topInstitutions(filtered) : const <MapEntry<String, Color>>[];
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -78,6 +104,65 @@ class NetWorthCard extends StatelessWidget {
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModeToggle() {
+    // Segmented "Simple / Detailed" pill. We keep it small so it sits next
+    // to the legend without dominating the header.
+    Widget seg(String label, bool active, VoidCallback onTap) {
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: active
+                ? const Color(0xFF00E676).withValues(alpha: 0.18)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: active ? const Color(0xFF00E676) : Colors.white60,
+              letterSpacing: 0.4,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Tooltip(
+      message: _detailed
+          ? 'Showing per-institution bands'
+          : 'Showing only the net worth line',
+      child: Container(
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            seg('Simple', !_detailed, () {
+              if (_detailed) {
+                setState(() => _detailed = false);
+                Preferences.setNetWorthDetailed(false);
+              }
+            }),
+            seg('Detailed', _detailed, () {
+              if (!_detailed) {
+                setState(() => _detailed = true);
+                Preferences.setNetWorthDetailed(true);
+              }
+            }),
+          ],
         ),
       ),
     );
@@ -153,6 +238,19 @@ class NetWorthCard extends StatelessWidget {
     );
 
     final legend = _buildLegend(institutions);
+    final modeToggle = _buildModeToggle();
+
+    // In simple mode the legend collapses to just the toggle. In detailed
+    // mode they sit side by side (toggle first, so it's reachable without
+    // tabbing past the legend chips).
+    final rightSide = _detailed
+        ? Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [modeToggle, legend],
+          )
+        : modeToggle;
 
     if (isCompact) {
       return Column(
@@ -160,7 +258,7 @@ class NetWorthCard extends StatelessWidget {
         children: [
           summary,
           const SizedBox(height: 16),
-          legend,
+          rightSide,
         ],
       );
     }
@@ -171,7 +269,7 @@ class NetWorthCard extends StatelessWidget {
       children: [
         Expanded(child: summary),
         const SizedBox(width: 16),
-        Flexible(child: legend),
+        Flexible(child: rightSide),
       ],
     );
   }

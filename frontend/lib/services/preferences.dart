@@ -52,4 +52,10 @@ class Preferences {
   static bool getGroupByAccount() => _read('groupByAccount') == 'true';
   static void setGroupByAccount(bool v) =>
       _write('groupByAccount', v.toString());
+
+  /// Whether the net-worth chart shows stacked-by-institution bands
+  /// (`true` = detailed). Default is the cleaner single-line view.
+  static bool getNetWorthDetailed() => _read('netWorthDetailed') == 'true';
+  static void setNetWorthDetailed(bool v) =>
+      _write('netWorthDetailed', v.toString());
 }
