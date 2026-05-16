@@ -18,6 +18,7 @@ import '../widgets/add_account_dialog.dart';
 import '../widgets/add_crypto_dialog.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/skeleton.dart';
+import '../widgets/sync_error_banner.dart';
 import 'connect_bank_screen.dart';
 import 'import_screen.dart';
 import 'wealth_projection_screen.dart';
@@ -750,7 +751,24 @@ class _DashboardScreenState extends State<DashboardScreen>
                   const SizedBox(width: 4),
                 ],
         ),
-              body: _buildBody(),
+              body: Column(
+                children: [
+                  if (!firstRun)
+                    SyncErrorBanner(
+                      syncData: _syncData ?? const [],
+                      onJumpToManagement: () =>
+                          _tabController?.animateTo(5),
+                      onReconnect: (id) async {
+                        // Defer to the existing handleReconnect routine
+                        // by hopping to Management and letting the user
+                        // hit the row's Reconnect — simpler than wiring
+                        // the Plaid flow up out of band here.
+                        _tabController?.animateTo(5);
+                      },
+                    ),
+                  Expanded(child: _buildBody()),
+                ],
+              ),
             ),
           ),
         ),
