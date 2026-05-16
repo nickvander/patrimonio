@@ -108,7 +108,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                               final isLast = value.toInt() == trends.length - 1;
                               final isJan = parts[1] == '01';
                               label = (isFirst || isLast || isJan)
-                                  ? DateFormat("MMM ''yy").format(date)
+                                  ? DateFormat('MMM y').format(date)
                                   : DateFormat('MMM').format(date);
                             } catch (_) {
                               label = parts.length > 1 ? parts[1] : monthStr;

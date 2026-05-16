@@ -474,7 +474,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
 
                 final children = <TextSpan>[
                   TextSpan(
-                    text: '${DateFormat('MMM d, yyyy').format(date)}\n',
+                    text: '${DateFormat('MMM d, y').format(date)}\n',
                     style: const TextStyle(
                       color: Colors.grey,
                       fontSize: 11,
@@ -578,7 +578,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                     // Adapt format based on range
                     final fmt = selectedRange == DateRange.oneMonth
                         ? DateFormat('MMM d')
-                        : DateFormat("MMM ''yy");
+                        : DateFormat('MMM y');
                     return Text(
                       fmt.format(date),
                       style: const TextStyle(color: Colors.grey, fontSize: 10),
