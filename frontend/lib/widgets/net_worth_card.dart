@@ -330,7 +330,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 4),
-        Text(label, style: TextStyle(fontSize: 10, color: Colors.grey)),
+        Text(label, style: TextStyle(fontSize: 10, color: context.textSubtle)),
       ],
     );
   }
@@ -449,8 +449,12 @@ class _NetWorthCardState extends State<NetWorthCard> {
       LineChartData(
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
+            // Theme.of(context).colorScheme.inverseSurface is the
+            // brightness-opposite of the active surface: dark popovers in
+            // light mode, light popovers in dark mode. Matches the
+            // Material 3 convention for tooltips / snackbars.
             getTooltipColor: (touchedSpot) =>
-                const Color(0xFF1A1A24).withValues(alpha: 0.9),
+                Theme.of(context).colorScheme.inverseSurface,
             tooltipRoundedRadius: 12,
             getTooltipItems: (touchedSpots) {
               // The wealth line is always the LAST bar in lineBarsData.
@@ -582,7 +586,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                         : DateFormat('MMM y');
                     return Text(
                       fmt.format(date),
-                      style: TextStyle(color: Colors.grey, fontSize: 10),
+                      style: TextStyle(color: context.textSubtle, fontSize: 10),
                     );
                   }
                 }
@@ -607,7 +611,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                   NumberFormat.compactSimpleCurrency(
                     name: currencyFormat.currencyName,
                   ).format(value),
-                  style: TextStyle(color: Colors.grey, fontSize: 10),
+                  style: TextStyle(color: context.textSubtle, fontSize: 10),
                 );
               },
               reservedSize: 50,

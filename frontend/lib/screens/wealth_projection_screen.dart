@@ -627,13 +627,17 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         ],
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (_) => const Color(0xFF2C2C2C),
+            // Inverse surface = dark popover in light mode, light popover
+            // in dark mode (Material 3 tooltip convention). The text uses
+            // onInverseSurface so contrast flips with the background.
+            getTooltipColor: (_) =>
+                Theme.of(context).colorScheme.inverseSurface,
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {
                 return LineTooltipItem(
                   'Year ${spot.x.toStringAsFixed(1)}\n${widget.currencyFormat.format(spot.y)}',
                   TextStyle(
-                    color: context.textPrimary,
+                    color: Theme.of(context).colorScheme.onInverseSurface,
                     fontWeight: FontWeight.bold,
                   ),
                 );

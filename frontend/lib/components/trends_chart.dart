@@ -38,8 +38,8 @@ class CashFlowTrendsChart extends StatelessWidget {
                   spacing: 16,
                   runSpacing: 8,
                   children: [
-                    _buildLegendItem(const Color(0xFF1DE9B6), 'Income'),
-                    _buildLegendItem(const Color(0xFFFF4081), 'Spending'),
+                    _buildLegendItem(context, const Color(0xFF1DE9B6), 'Income'),
+                    _buildLegendItem(context, const Color(0xFFFF4081), 'Spending'),
                   ],
                 );
 
@@ -129,7 +129,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                                 label,
                                 style: TextStyle(
                                   fontSize: 10,
-                                  color: Colors.grey,
+                                  color: context.textSubtle,
                                 ),
                               ),
                             );
@@ -158,7 +158,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                               ).format(value * conversionFactor),
                               style: TextStyle(
                                 fontSize: 10,
-                                color: Colors.grey,
+                                color: context.textSubtle,
                               ),
                               maxLines: 1,
                             ),
@@ -238,7 +238,7 @@ class CashFlowTrendsChart extends StatelessWidget {
     return max == 0 ? 100 : max * 1.2;
   }
 
-  Widget _buildLegendItem(Color color, String label) {
+  Widget _buildLegendItem(BuildContext context, Color color, String label) {
     return Row(
       children: [
         Container(
@@ -250,7 +250,7 @@ class CashFlowTrendsChart extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 6),
-        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(label, style: TextStyle(fontSize: 12, color: context.textSubtle)),
       ],
     );
   }
