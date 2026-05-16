@@ -146,7 +146,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 value: _monthlyContribution,
                 min: 0,
                 max: 10000,
-                prefix: widget.currencyFormat.currencySymbol,
+                isCurrency: true,
                 onChanged: (val) => setState(() => _monthlyContribution = val),
                 onChangeEnd: (_) => _fetchProjection(),
               ),
@@ -166,7 +166,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 value: _annualExpenses,
                 min: 10000,
                 max: 200000,
-                prefix: widget.currencyFormat.currencySymbol,
+                isCurrency: true,
                 onChanged: (val) => setState(() => _annualExpenses = val),
                 onChangeEnd: (_) => _fetchProjection(),
               ),
@@ -208,15 +208,25 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     required double value,
     required double min,
     required double max,
-    String? prefix,
+    bool isCurrency = false,
     bool isPercent = false,
     int? divisions,
     required ValueChanged<double> onChanged,
     required ValueChanged<double> onChangeEnd,
   }) {
-    String displayValue = isPercent
-        ? '${(value * 100).toStringAsFixed(1)}%'
-        : '${prefix ?? ""}${value.toInt().toString()}';
+    // Internal values are kept in USD because the backend expects USD.
+    // For display, we multiply by the active conversion factor and run
+    // the value through the locale-aware currency formatter so MXN users
+    // see "MXN 4,000,000" instead of the raw "USD 200000".
+    String displayValue;
+    if (isPercent) {
+      displayValue = '${(value * 100).toStringAsFixed(1)}%';
+    } else if (isCurrency) {
+      final reported = value * widget.conversionFactor;
+      displayValue = widget.currencyFormat.format(reported);
+    } else {
+      displayValue = value.toInt().toString();
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
