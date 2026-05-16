@@ -128,6 +128,26 @@ class _TransactionsTabState extends State<TransactionsTab> {
         () => setState(() => _filters = _filters.copyWith(categories: {})),
       ));
     }
+    if (_filters.dateRange != TxDateRange.all) {
+      // For the custom range, show the actual start–end dates so the chip
+      // is informative. For the preset windows, the enum's label suffices.
+      String label;
+      if (_filters.dateRange == TxDateRange.custom &&
+          _filters.customStart != null &&
+          _filters.customEnd != null) {
+        label =
+            '${DateFormat('MMM d').format(_filters.customStart!)}–${DateFormat('MMM d').format(_filters.customEnd!)}';
+      } else {
+        label = _filters.dateRange.label;
+      }
+      chips.add(_filterChip(
+        label,
+        () => setState(() => _filters = _filters.copyWith(
+              dateRange: TxDateRange.all,
+              clearCustomDates: true,
+            )),
+      ));
+    }
     chips.add(TextButton(
       onPressed: () => setState(() => _filters = TxFilters.empty),
       style: TextButton.styleFrom(

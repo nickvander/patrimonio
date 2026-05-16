@@ -1,9 +1,37 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../utils/category.dart';
 
 enum TxFlow { all, income, expense }
 
 enum TxStatus { all, pending, settled }
+
+/// Standard windows surfaced as one-tap chips in the filter dialog. The
+/// `custom` value lets the user pick an arbitrary `start`/`end` pair.
+enum TxDateRange { all, today, sevenDays, thirtyDays, ninetyDays, ytd, oneYear, custom }
+
+extension TxDateRangeLabel on TxDateRange {
+  String get label {
+    switch (this) {
+      case TxDateRange.all:
+        return 'All time';
+      case TxDateRange.today:
+        return 'Today';
+      case TxDateRange.sevenDays:
+        return 'Last 7 days';
+      case TxDateRange.thirtyDays:
+        return 'Last 30 days';
+      case TxDateRange.ninetyDays:
+        return 'Last 90 days';
+      case TxDateRange.ytd:
+        return 'Year to date';
+      case TxDateRange.oneYear:
+        return 'Last year';
+      case TxDateRange.custom:
+        return 'Custom range';
+    }
+  }
+}
 
 /// Immutable bundle of filter selections applied to the transactions
 /// list. Empty when every field is "all" — i.e. the list is unfiltered.
@@ -12,12 +40,18 @@ class TxFilters {
   final Set<String> categories; // prettified category labels
   final TxFlow flow;
   final TxStatus status;
+  final TxDateRange dateRange;
+  final DateTime? customStart;
+  final DateTime? customEnd;
 
   const TxFilters({
     this.accountIds = const {},
     this.categories = const {},
     this.flow = TxFlow.all,
     this.status = TxStatus.all,
+    this.dateRange = TxDateRange.all,
+    this.customStart,
+    this.customEnd,
   });
 
   static const empty = TxFilters();
@@ -26,7 +60,8 @@ class TxFilters {
       accountIds.isNotEmpty ||
       categories.isNotEmpty ||
       flow != TxFlow.all ||
-      status != TxStatus.all;
+      status != TxStatus.all ||
+      dateRange != TxDateRange.all;
 
   /// Count of active filters — drives the badge on the filter button.
   /// Treats account/category sets as a single bucket each (any value vs.
@@ -37,7 +72,33 @@ class TxFilters {
     if (categories.isNotEmpty) n++;
     if (flow != TxFlow.all) n++;
     if (status != TxStatus.all) n++;
+    if (dateRange != TxDateRange.all) n++;
     return n;
+  }
+
+  /// Resolve the active date window into an inclusive (start, end) pair
+  /// of day-precision dates. Returns null when the filter is "all".
+  ({DateTime start, DateTime end})? resolveDateWindow({DateTime? now}) {
+    final today = _stripTime(now ?? DateTime.now());
+    switch (dateRange) {
+      case TxDateRange.all:
+        return null;
+      case TxDateRange.today:
+        return (start: today, end: today);
+      case TxDateRange.sevenDays:
+        return (start: today.subtract(const Duration(days: 6)), end: today);
+      case TxDateRange.thirtyDays:
+        return (start: today.subtract(const Duration(days: 29)), end: today);
+      case TxDateRange.ninetyDays:
+        return (start: today.subtract(const Duration(days: 89)), end: today);
+      case TxDateRange.ytd:
+        return (start: DateTime(today.year), end: today);
+      case TxDateRange.oneYear:
+        return (start: today.subtract(const Duration(days: 365)), end: today);
+      case TxDateRange.custom:
+        if (customStart == null || customEnd == null) return null;
+        return (start: _stripTime(customStart!), end: _stripTime(customEnd!));
+    }
   }
 
   TxFilters copyWith({
@@ -45,12 +106,20 @@ class TxFilters {
     Set<String>? categories,
     TxFlow? flow,
     TxStatus? status,
+    TxDateRange? dateRange,
+    DateTime? customStart,
+    DateTime? customEnd,
+    bool clearCustomDates = false,
   }) {
     return TxFilters(
       accountIds: accountIds ?? this.accountIds,
       categories: categories ?? this.categories,
       flow: flow ?? this.flow,
       status: status ?? this.status,
+      dateRange: dateRange ?? this.dateRange,
+      customStart:
+          clearCustomDates ? null : (customStart ?? this.customStart),
+      customEnd: clearCustomDates ? null : (customEnd ?? this.customEnd),
     );
   }
 
@@ -74,9 +143,21 @@ class TxFilters {
     final pending = tx['pending'] == true;
     if (status == TxStatus.pending && !pending) return false;
     if (status == TxStatus.settled && pending) return false;
+
+    final window = resolveDateWindow();
+    if (window != null) {
+      final raw = tx['date']?.toString();
+      if (raw == null) return false;
+      final parsed = DateTime.tryParse(raw);
+      if (parsed == null) return false;
+      final day = _stripTime(parsed);
+      if (day.isBefore(window.start) || day.isAfter(window.end)) return false;
+    }
     return true;
   }
 }
+
+DateTime _stripTime(DateTime d) => DateTime(d.year, d.month, d.day);
 
 /// Filter editor — shown as a dialog on wide screens, bottom sheet on
 /// narrow. Lets the user multi-select accounts and categories and pick
@@ -175,6 +256,58 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              _sectionLabel('Date range'),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: TxDateRange.values.map((r) {
+                  final selected = _draft.dateRange == r;
+                  return FilterChip(
+                    label: Text(r.label),
+                    selected: selected,
+                    onSelected: (_) async {
+                      if (r == TxDateRange.custom) {
+                        final picked = await showDateRangePicker(
+                          context: context,
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime.now(),
+                          initialDateRange: (_draft.customStart != null &&
+                                  _draft.customEnd != null)
+                              ? DateTimeRange(
+                                  start: _draft.customStart!,
+                                  end: _draft.customEnd!,
+                                )
+                              : null,
+                        );
+                        if (picked != null) {
+                          setState(() => _draft = _draft.copyWith(
+                                dateRange: TxDateRange.custom,
+                                customStart: picked.start,
+                                customEnd: picked.end,
+                              ));
+                        }
+                      } else {
+                        setState(() => _draft = _draft.copyWith(
+                              dateRange: r,
+                              clearCustomDates: r == TxDateRange.all,
+                            ));
+                      }
+                    },
+                  );
+                }).toList(),
+              ),
+              if (_draft.dateRange == TxDateRange.custom &&
+                  _draft.customStart != null &&
+                  _draft.customEnd != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  '${DateFormat('MMM d, y').format(_draft.customStart!)} – '
+                  '${DateFormat('MMM d, y').format(_draft.customEnd!)}',
+                  style: const TextStyle(color: Colors.white60, fontSize: 12),
+                ),
+              ],
+              const SizedBox(height: 18),
               _sectionLabel('Flow'),
               const SizedBox(height: 6),
               SegmentedButton<TxFlow>(
