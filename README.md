@@ -52,15 +52,17 @@ Open the app at [http://127.0.0.1:3000](http://127.0.0.1:3000).
 `docker compose` only reads `.env` from its current directory, so a
 freshly-created worktree comes up without any of the Plaid /
 encryption secrets and every Plaid sync fails with
-"Encryption key missing". The helper below symlinks the repo-root
-`.env` into the worktree:
+"Encryption key missing". The wrapper below symlinks the repo-root
+`.env` first, then runs `docker compose up -d --build`:
 
 ```bash
-bash scripts/setup-env.sh
+bash scripts/dev-up.sh           # build + start everything
+bash scripts/dev-up.sh frontend api   # rebuild just these services
 ```
 
-It's idempotent — running it from a directory that already has an
-`.env` is a no-op.
+If you'd rather call `docker compose` directly, run
+`bash scripts/setup-env.sh` once after creating the worktree to
+plant the symlink.
 
 Service URLs:
 - Frontend: `http://127.0.0.1:3000`
