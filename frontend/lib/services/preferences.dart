@@ -91,4 +91,41 @@ class Preferences {
   /// the app's color palette was originally tuned for a dark surface.
   static String getThemeMode() => _read('themeMode') ?? 'dark';
   static void setThemeMode(String mode) => _write('themeMode', mode);
+
+  /// Per-category monthly budgets, stored as a JSON object on the wire:
+  /// {"Restaurants": 500.0, "Groceries": 800.0, ...}. Values are in USD
+  /// (the backend storage unit); the UI converts for display.
+  static Map<String, double> getBudgets() {
+    final raw = _read('budgets');
+    if (raw == null || raw.isEmpty) return const {};
+    try {
+      final decoded = raw.startsWith('{') ? raw : '{}';
+      // Lightweight parser — we control both ends. Avoids pulling in a
+      // dart:convert import just for this since the stored shape is flat.
+      final map = <String, double>{};
+      final inner = decoded.substring(1, decoded.length - 1);
+      if (inner.isEmpty) return const {};
+      for (final entry in inner.split(',')) {
+        final parts = entry.split(':');
+        if (parts.length != 2) continue;
+        final key = parts[0].trim().replaceAll('"', '');
+        final value = double.tryParse(parts[1].trim());
+        if (key.isNotEmpty && value != null) map[key] = value;
+      }
+      return map;
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  static void setBudgets(Map<String, double> budgets) {
+    if (budgets.isEmpty) {
+      _write('budgets', '{}');
+      return;
+    }
+    final parts = budgets.entries
+        .map((e) => '"${e.key.replaceAll('"', '')}": ${e.value}')
+        .join(', ');
+    _write('budgets', '{$parts}');
+  }
 }
