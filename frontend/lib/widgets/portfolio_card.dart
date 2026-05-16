@@ -10,6 +10,13 @@ class PortfolioCard extends StatefulWidget {
   final NumberFormat currencyFormat;
   final String targetCurrency;
   final double usdMxnRate;
+  /// Optional category filter pushed in from the AllocationHeatmap above.
+  /// When non-null, only holdings whose category (or sub-category) match
+  /// pass through into the table.
+  final String? categoryFilter;
+  /// Tap handler for clearing the active category filter via a chip on
+  /// top of the holdings table.
+  final VoidCallback? onClearCategoryFilter;
 
   const PortfolioCard({
     super.key,
@@ -18,6 +25,8 @@ class PortfolioCard extends StatefulWidget {
     required this.currencyFormat,
     required this.targetCurrency,
     required this.usdMxnRate,
+    this.categoryFilter,
+    this.onClearCategoryFilter,
   });
 
   @override
@@ -46,7 +55,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
   void didUpdateWidget(PortfolioCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.portfolioData != oldWidget.portfolioData ||
-        widget.conversionFactor != oldWidget.conversionFactor) {
+        widget.conversionFactor != oldWidget.conversionFactor ||
+        widget.categoryFilter != oldWidget.categoryFilter) {
       _allHoldings = List.from(widget.portfolioData['holdings'] ?? []);
       _applySearch();
       _sort(_sortColumnIndex ?? 3, _isAscending);
@@ -55,10 +65,21 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
   void _applySearch() {
     final q = _searchQuery.toLowerCase().trim();
+    final catFilter = widget.categoryFilter?.toLowerCase().trim() ?? '';
+    bool matchesCat(Map h) {
+      if (catFilter.isEmpty) return true;
+      // The heatmap groups by both 'category' and 'sub_category' so we
+      // accept a match on either to keep the filter intuitive.
+      final cat = (h['category'] ?? '').toString().toLowerCase();
+      final sub = (h['sub_category'] ?? '').toString().toLowerCase();
+      return cat == catFilter || sub == catFilter;
+    }
+
+    final base = _allHoldings.where((h) => matchesCat(h as Map)).toList();
     if (q.isEmpty) {
-      _holdings = List.from(_allHoldings);
+      _holdings = base;
     } else {
-      _holdings = _allHoldings.where((h) {
+      _holdings = base.where((h) {
         final sym = (h['symbol'] ?? '').toString().toLowerCase();
         final name = (h['name'] ?? '').toString().toLowerCase();
         final inst = (h['institution_name'] ?? '').toString().toLowerCase();
@@ -586,12 +607,31 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: SizedBox(
-              height: 36,
-              child: TextField(
+          if (widget.categoryFilter != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: InputChip(
+                  avatar: const Icon(Icons.filter_alt, size: 16),
+                  label: Text(
+                      'Category: ${widget.categoryFilter}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                  onDeleted: widget.onClearCategoryFilter,
+                  backgroundColor: Colors.white.withValues(alpha: 0.06),
+                ),
+              ),
+            ),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 36,
+                  child: TextField(
                 onChanged: (v) => setState(() {
                   _searchQuery = v;
                   _applySearch();
@@ -651,6 +691,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
               textStyle: WidgetStateProperty.all(
                   const TextStyle(fontSize: 12)),
             ),
+          ),
+            ],
           ),
         ],
       ),

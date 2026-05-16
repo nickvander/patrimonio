@@ -39,12 +39,21 @@ class AllocationHeatmap extends StatelessWidget {
   final List<AllocationData> data;
   final double conversionFactor;
   final NumberFormat currencyFormat;
+  /// Optional callback fired when the user taps a category band. Lets the
+  /// parent filter the holdings table below — wiring is opt-in so the
+  /// component remains usable in standalone contexts.
+  final ValueChanged<String>? onCategorySelected;
+  /// Highlighted category, drawn with a brighter ring so the user can see
+  /// which slice is currently driving the active filter.
+  final String? activeCategory;
 
   const AllocationHeatmap({
     super.key,
     required this.data,
     required this.conversionFactor,
     required this.currencyFormat,
+    this.onCategorySelected,
+    this.activeCategory,
   });
 
   /// Render raw backend categories ("mutual fund", "fixed income") as
@@ -149,8 +158,10 @@ class AllocationHeatmap extends StatelessWidget {
               final catTotal = items.fold<double>(0, (sum, i) => sum + i.value);
               final catPercentage = catTotal / totalValue;
               final color = categoryColors[cat]!;
+              final isActive = activeCategory == cat;
+              final canTap = onCategorySelected != null;
 
-              return Padding(
+              final inner = Padding(
                 padding: const EdgeInsets.only(bottom: 24.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -249,6 +260,18 @@ class AllocationHeatmap extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     // Sub-items (the "Tree" detail)
+                    if (isActive)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          'Filtering holdings to this category — tap again to clear',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: color,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
                     Wrap(
                       spacing: 16,
                       runSpacing: 8,
@@ -303,6 +326,26 @@ class AllocationHeatmap extends StatelessWidget {
                       }).toList(),
                     ),
                   ],
+                ),
+              );
+
+              if (!canTap) return inner;
+              // InkWell wraps each per-category block so the entire band
+              // (bar + label + sub-items) is tappable, not just the icon.
+              return InkWell(
+                onTap: () => onCategorySelected!(cat),
+                borderRadius: BorderRadius.circular(12),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  decoration: BoxDecoration(
+                    color: isActive
+                        ? color.withValues(alpha: 0.06)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
+                  child: inner,
                 ),
               );
             }),

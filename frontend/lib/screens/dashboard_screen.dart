@@ -51,6 +51,9 @@ class _DashboardScreenState extends State<DashboardScreen>
   DateRange _selectedRange = DateRange.oneYear;
   String _targetCurrency = 'USD'; // Master currency state
   TabController? _tabController;
+  // Category that the AllocationHeatmap is currently drilled into. When
+  // non-null, the PortfolioCard's holdings table filters to that category.
+  String? _portfolioCategoryFilter;
 
   @override
   void initState() {
@@ -1193,6 +1196,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                 data: _allocationData!,
                 conversionFactor: conversionFactor,
                 currencyFormat: currencyFormat,
+                activeCategory: _portfolioCategoryFilter,
+                onCategorySelected: (cat) => setState(() {
+                  // Tapping the active band clears the filter — saves a
+                  // round-trip through the chip's X button.
+                  _portfolioCategoryFilter =
+                      _portfolioCategoryFilter == cat ? null : cat;
+                }),
               ),
             ),
           PortfolioCard(
@@ -1201,6 +1211,9 @@ class _DashboardScreenState extends State<DashboardScreen>
             currencyFormat: currencyFormat,
             targetCurrency: _targetCurrency,
             usdMxnRate: fxRate,
+            categoryFilter: _portfolioCategoryFilter,
+            onClearCategoryFilter: () =>
+                setState(() => _portfolioCategoryFilter = null),
           ),
           const SizedBox(height: 24),
           AccountsBreakdownCard(
