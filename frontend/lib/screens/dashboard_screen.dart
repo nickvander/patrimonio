@@ -23,6 +23,7 @@ import '../widgets/command_palette.dart';
 import '../widgets/skeleton.dart';
 import '../widgets/sync_error_banner.dart';
 import '../widgets/notifications_panel.dart';
+import '../utils/account_category.dart';
 import '../utils/theme_colors.dart';
 import 'account_transactions_screen.dart';
 import 'connect_bank_screen.dart';
@@ -285,21 +286,30 @@ class _DashboardScreenState extends State<DashboardScreen>
         ((overview['net_worth'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
 
     // Walk accounts to compute liabilities (credit-type balances treated as
-    // positive owed amounts) and the cash / investment subtotals.
+    // positive owed amounts) and the cash / investment subtotals. Uses the
+    // shared categorizeAccount() so this stays in sync with the accounts
+    // column grouping below.
     double liabilities = 0;
     double cash = 0;
     double investments = 0;
     for (final raw in accounts) {
       final acc = raw as Map<String, dynamic>;
-      final type = (acc['account_type'] ?? '').toString().toLowerCase();
       final usdBal = ((acc['current_balance'] as num?)?.toDouble() ?? 0.0);
       final reported = usdBal.abs() * conversionFactor;
-      if (['credit card', 'credit', 'mortgage', 'loan', 'student'].contains(type)) {
-        liabilities += reported;
-      } else if (['checking', 'savings', 'cd', 'money market', 'cash management'].contains(type)) {
-        cash += reported;
-      } else if (['ira', '401k', 'hsa', 'brokerage', 'investment', 'crypto'].contains(type)) {
-        investments += reported;
+      switch (categorizeAccount(acc['account_type']?.toString())) {
+        case AccountCategory.credit:
+        case AccountCategory.loan:
+          liabilities += reported;
+        case AccountCategory.cash:
+          cash += reported;
+        case AccountCategory.investment:
+        case AccountCategory.crypto:
+          investments += reported;
+        case AccountCategory.other:
+          // Don't double-count unknowns into cash/investments; they're
+          // still in net_worth (computed server-side) so the totals
+          // remain consistent.
+          break;
       }
     }
 
@@ -307,17 +317,19 @@ class _DashboardScreenState extends State<DashboardScreen>
     if (accounts.isEmpty && typeBreakdown.isNotEmpty) {
       for (final raw in typeBreakdown) {
         final item = raw as Map<String, dynamic>;
-        final type = (item['account_type'] ?? '').toString().toLowerCase();
         final v =
             ((item['total_usd'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
-        if (['checking', 'savings', 'cd', 'money market', 'cash management']
-            .contains(type)) {
-          cash += v.abs();
-        } else if (['investment', 'brokerage', 'ira', '401k', 'hsa']
-            .contains(type)) {
-          investments += v.abs();
-        } else if (['credit', 'credit card'].contains(type)) {
-          liabilities += v.abs();
+        switch (categorizeAccount(item['account_type']?.toString())) {
+          case AccountCategory.cash:
+            cash += v.abs();
+          case AccountCategory.investment:
+          case AccountCategory.crypto:
+            investments += v.abs();
+          case AccountCategory.credit:
+          case AccountCategory.loan:
+            liabilities += v.abs();
+          case AccountCategory.other:
+            break;
         }
       }
     }

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 import '../screens/account_transactions_screen.dart';
+import '../utils/account_category.dart';
 import '../utils/currency.dart';
+import '../utils/theme_colors.dart';
 
 class AccountsListWidget extends StatelessWidget {
   final List<dynamic> accounts;
@@ -76,39 +77,30 @@ class AccountsListWidget extends StatelessWidget {
       );
     }
 
-    // Group accounts by main category
+    // Group accounts by main category via the shared classifier so the
+    // KPI strip and this widget stay in lockstep when new Plaid
+    // subtypes appear (stock plan, roth, 403b, etc.).
     final cashAccounts = <dynamic>[];
     final creditAccounts = <dynamic>[];
     final investmentAccounts = <dynamic>[];
     final cryptoAccounts = <dynamic>[];
     final loanAccounts = <dynamic>[];
+    final otherAccounts = <dynamic>[];
 
     for (var acc in accounts) {
-      final type = (acc['account_type'] ?? '').toString().toLowerCase();
-      if ([
-        'checking',
-        'savings',
-        'cd',
-        'money market',
-        'cash management',
-      ].contains(type)) {
-        cashAccounts.add(acc);
-      } else if (['credit card', 'credit'].contains(type)) {
-        creditAccounts.add(acc);
-      } else if ([
-        'ira',
-        '401k',
-        'hsa',
-        'brokerage',
-        'investment',
-      ].contains(type)) {
-        investmentAccounts.add(acc);
-      } else if (['crypto'].contains(type)) {
-        cryptoAccounts.add(acc);
-      } else if (['student', 'mortgage', 'loan'].contains(type)) {
-        loanAccounts.add(acc);
-      } else {
-        cashAccounts.add(acc); // fallback
+      switch (categorizeAccount(acc['account_type']?.toString())) {
+        case AccountCategory.cash:
+          cashAccounts.add(acc);
+        case AccountCategory.investment:
+          investmentAccounts.add(acc);
+        case AccountCategory.credit:
+          creditAccounts.add(acc);
+        case AccountCategory.crypto:
+          cryptoAccounts.add(acc);
+        case AccountCategory.loan:
+          loanAccounts.add(acc);
+        case AccountCategory.other:
+          otherAccounts.add(acc);
       }
     }
 
@@ -173,11 +165,20 @@ class AccountsListWidget extends StatelessWidget {
                 if (loanAccounts.isNotEmpty)
                   _buildAccountGroup(
                     context,
-                    'Loans & Mortgages',
+                    'Loans & mortgages',
                     loanAccounts,
                     Icons.home_rounded,
                     true,
                     const Color(0xFFFFD54F),
+                  ),
+                if (otherAccounts.isNotEmpty)
+                  _buildAccountGroup(
+                    context,
+                    'Other',
+                    otherAccounts,
+                    Icons.category_outlined,
+                    false,
+                    const Color(0xFF90A4AE),
                   ),
               ],
             ),
