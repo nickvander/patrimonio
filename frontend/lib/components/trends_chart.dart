@@ -18,9 +18,18 @@ class CashFlowTrendsChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
+        padding: const EdgeInsets.all(24.0),
+        child: LayoutBuilder(builder: (ctx, outer) {
+          // Below ~420 the bars themselves and the bottom-axis "Mar 'yy"
+          // labels eat into the chart canvas; trim the chart height and
+          // tighten the bar width so 3 month groups still read clearly.
+          final isPhone = outer.maxWidth < 420;
+          final chartHeight = isPhone ? 200.0 : 250.0;
+          final barWidth = isPhone ? 14.0 : 22.0;
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             LayoutBuilder(
@@ -68,7 +77,7 @@ class CashFlowTrendsChart extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             SizedBox(
-              height: 250,
+              height: chartHeight,
               child: Builder(builder: (context) {
                 final maxY = _getMaxValue();
                 return BarChart(
@@ -180,7 +189,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                           ),
-                          width: 22,
+                          width: barWidth,
                           borderRadius: BorderRadius.circular(4),
                           backDrawRodData: BackgroundBarChartRodData(
                             show: true,
@@ -198,7 +207,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                           ),
-                          width: 22,
+                          width: barWidth,
                           borderRadius: BorderRadius.circular(4),
                           backDrawRodData: BackgroundBarChartRodData(
                             show: true,
@@ -214,7 +223,8 @@ class CashFlowTrendsChart extends StatelessWidget {
               }),
             ),
           ],
-        ),
+        );
+        }),
       ),
     );
   }

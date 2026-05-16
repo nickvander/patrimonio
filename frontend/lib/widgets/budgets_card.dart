@@ -155,16 +155,26 @@ class _BudgetsCardState extends State<BudgetsCard> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          Text(
-                            '${widget.currencyFormat.format(spentUsd * widget.conversionFactor)} '
-                            '/ ${widget.currencyFormat.format(budgetUsd * widget.conversionFactor)}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: color,
-                              fontWeight: FontWeight.w700,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures(),
-                              ],
+                          const SizedBox(width: 8),
+                          // Spent/budget pair can be a 20+ char string at
+                          // long currency values; clamp + ellipsise so a
+                          // phone-width card doesn't crowd the category
+                          // out to a single character.
+                          Flexible(
+                            child: Text(
+                              '${widget.currencyFormat.format(spentUsd * widget.conversionFactor)} '
+                              '/ ${widget.currencyFormat.format(budgetUsd * widget.conversionFactor)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: color,
+                                fontWeight: FontWeight.w700,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.end,
                             ),
                           ),
                         ],
