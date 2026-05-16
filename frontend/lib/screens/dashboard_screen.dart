@@ -780,8 +780,11 @@ class _DashboardScreenState extends State<DashboardScreen>
           actions: firstRun
               ? const []
               : [
-                  _buildFxBadge(compact: isCompact),
-                  const SizedBox(width: 4),
+                  // Compact FX pill on wide; phones drop it entirely
+                  // because the Management tab still surfaces the rate
+                  // and the AppBar gets squeezed once tabs scroll.
+                  if (!isCompact) _buildFxBadge(compact: true),
+                  if (!isCompact) const SizedBox(width: 4),
                   NotificationsBell(
                     notifications: deriveNotifications(
                       syncData: _syncData ?? const [],
@@ -791,49 +794,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ),
                   ),
                   _ThemeCycleButton(),
-                  const SizedBox(width: 4),
-                  // On phones the labelled "Report: USD" button gets
-                  // squeezed by the TabBar — collapse to an icon-only
-                  // IconButton with a tooltip + active-state tint so the
-                  // affordance is preserved.
-                  isCompact
-                      ? IconButton(
-                          onPressed: () => _setTargetCurrency(
-                              _targetCurrency == 'USD' ? 'MXN' : 'USD'),
-                          tooltip:
-                              'Report in $_targetCurrency · tap to swap',
-                          icon: Icon(
-                            Icons.currency_exchange,
-                            color: _targetCurrency == 'MXN'
-                                ? const Color(0xFF00E676)
-                                : Colors.white70,
-                          ),
-                        )
-                      : TextButton.icon(
-                          style: TextButton.styleFrom(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 12),
-                          ),
-                          onPressed: () {
-                            _setTargetCurrency(
-                                _targetCurrency == 'USD' ? 'MXN' : 'USD');
-                          },
-                          icon: Icon(
-                            Icons.currency_exchange,
-                            color: _targetCurrency == 'MXN'
-                                ? const Color(0xFF00E676)
-                                : Colors.white70,
-                          ),
-                          label: Text(
-                            'Report: $_targetCurrency',
-                            style: TextStyle(
-                              color: _targetCurrency == 'MXN'
-                                  ? const Color(0xFF00E676)
-                                  : Colors.white70,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
+                  _CurrencyToggleButton(
+                    targetCurrency: _targetCurrency,
+                    onSwap: () => _setTargetCurrency(
+                        _targetCurrency == 'USD' ? 'MXN' : 'USD'),
+                  ),
                   const SizedBox(width: 4),
                 ],
         ),
@@ -1748,6 +1713,61 @@ class _StatTile extends StatelessWidget {
 /// Intent fired by Cmd-K / Ctrl-K to open the global command palette.
 class _OpenPaletteIntent extends Intent {
   const _OpenPaletteIntent();
+}
+
+/// Compact reporting-currency pill. Replaces the dual icon-only /
+/// labelled-button compound that lived inline in the AppBar — the
+/// pill is the same shape regardless of breakpoint so the chrome on
+/// the right side of the AppBar stays even.
+class _CurrencyToggleButton extends StatelessWidget {
+  final String targetCurrency;
+  final VoidCallback onSwap;
+
+  const _CurrencyToggleButton({
+    required this.targetCurrency,
+    required this.onSwap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final active = targetCurrency == 'MXN';
+    final accent =
+        active ? const Color(0xFF00E676) : Theme.of(context).colorScheme.onSurface;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Tooltip(
+        message: 'Reporting in $targetCurrency · tap to swap',
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onSwap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: accent.withValues(alpha: 0.35)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.currency_exchange, size: 14, color: accent),
+                const SizedBox(width: 6),
+                Text(
+                  targetCurrency,
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Single-tap theme picker. Tapping cycles system → light → dark →
