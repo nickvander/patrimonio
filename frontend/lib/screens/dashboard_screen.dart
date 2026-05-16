@@ -5,6 +5,7 @@ import 'package:web/web.dart' as web;
 import '../services/api_service.dart';
 import '../services/preferences.dart';
 import '../widgets/net_worth_card.dart';
+import '../widgets/monthly_cash_flow_card.dart';
 import '../widgets/accounts_breakdown_card.dart';
 import '../widgets/portfolio_card.dart';
 import '../widgets/fx_widget.dart';
@@ -1062,6 +1063,15 @@ class _DashboardScreenState extends State<DashboardScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               stats,
+              const SizedBox(height: 24),
+              // Monthly cash-flow card sits right under the KPI strip so the
+              // single most-asked question ("did I spend more than I made
+              // this month?") is answered before the user scrolls anywhere.
+              MonthlyCashFlowCard(
+                trends: _trendData ?? const [],
+                conversionFactor: conversionFactor,
+                currencyFormat: currencyFormat,
+              ),
               const SizedBox(height: 24),
               body,
             ],
