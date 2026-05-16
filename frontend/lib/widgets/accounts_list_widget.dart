@@ -87,6 +87,11 @@ class AccountsListWidget extends StatelessWidget {
     final loanAccounts = <dynamic>[];
     final otherAccounts = <dynamic>[];
 
+    // Track distinct unknown account_type tokens so we can both surface
+    // them in the UI (the user sees what fell through and reports it)
+    // and log them to the dev console (we catch them in telemetry).
+    final unknownTypes = <String>{};
+
     for (var acc in accounts) {
       switch (categorizeAccount(acc['account_type']?.toString())) {
         case AccountCategory.cash:
@@ -101,7 +106,20 @@ class AccountsListWidget extends StatelessWidget {
           loanAccounts.add(acc);
         case AccountCategory.other:
           otherAccounts.add(acc);
+          final raw = (acc['account_type'] ?? '').toString().trim();
+          if (raw.isNotEmpty) unknownTypes.add(raw);
       }
+    }
+
+    // Telemetry: this fires once per build of the accounts list whenever
+    // the classifier punts an account into Other. New Plaid subtypes
+    // (like "stock plan" once was) show up here before users complain.
+    if (unknownTypes.isNotEmpty) {
+      debugPrint(
+        'accounts_list_widget: ${unknownTypes.length} unknown '
+        'account_type(s) landed in Other → ${unknownTypes.join(", ")}. '
+        'Add to utils/account_category.dart if these belong elsewhere.',
+      );
     }
 
     return Card(
@@ -179,6 +197,13 @@ class AccountsListWidget extends StatelessWidget {
                     Icons.category_outlined,
                     false,
                     const Color(0xFF90A4AE),
+                    // Surface the raw subtypes that fell through so they
+                    // can't sit hidden in Other indefinitely — the UI now
+                    // self-reports its own classifier gaps.
+                    subtitle: unknownTypes.isEmpty
+                        ? null
+                        : 'Unknown subtype${unknownTypes.length == 1 ? "" : "s"}: '
+                            '${(unknownTypes.toList()..sort()).join(", ")}',
                   ),
               ],
             ),
@@ -194,8 +219,12 @@ class AccountsListWidget extends StatelessWidget {
     List<dynamic> groupAccounts,
     IconData icon,
     bool isLiability,
-    Color accentColor,
-  ) {
+    Color accentColor, {
+    /// Optional second line under the group title. Used by the Other
+    /// group to surface the raw `account_type` tokens that fell
+    /// through the classifier so the gap is visible at a glance.
+    String? subtitle,
+  }) {
     // Sort within group by balance descending
     groupAccounts.sort((a, b) {
       final balA = ((a['current_balance'] ?? 0.0) as num).toDouble().abs();
@@ -260,6 +289,22 @@ class AccountsListWidget extends StatelessWidget {
                 textAlign: TextAlign.right,
               );
 
+              final subtitleText = subtitle == null
+                  ? null
+                  : Padding(
+                      padding: const EdgeInsets.only(top: 4, left: 38),
+                      child: Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: context.textSubtle,
+                          fontStyle: FontStyle.italic,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    );
+
               if (isNarrow) {
                 // Stack the total below the title so a long number can't
                 // shove the title into ellipsis territory.
@@ -275,6 +320,7 @@ class AccountsListWidget extends StatelessWidget {
                           Expanded(child: titleText),
                         ],
                       ),
+                      ?subtitleText,
                       const SizedBox(height: 6),
                       Align(
                         alignment: Alignment.centerRight,
@@ -287,13 +333,19 @@ class AccountsListWidget extends StatelessWidget {
 
               return Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    headerIcon,
-                    const SizedBox(width: 12),
-                    Expanded(child: titleText),
-                    const SizedBox(width: 12),
-                    totalText,
+                    Row(
+                      children: [
+                        headerIcon,
+                        const SizedBox(width: 12),
+                        Expanded(child: titleText),
+                        const SizedBox(width: 12),
+                        totalText,
+                      ],
+                    ),
+                    ?subtitleText,
                   ],
                 ),
               );
