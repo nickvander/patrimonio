@@ -24,6 +24,7 @@ import '../widgets/skeleton.dart';
 import '../widgets/sync_error_banner.dart';
 import '../widgets/notifications_panel.dart';
 import '../utils/theme_colors.dart';
+import 'account_transactions_screen.dart';
 import 'connect_bank_screen.dart';
 import 'import_screen.dart';
 import 'wealth_projection_screen.dart';
@@ -61,6 +62,11 @@ class _DashboardScreenState extends State<DashboardScreen>
   // Category that the AllocationHeatmap is currently drilled into. When
   // non-null, the PortfolioCard's holdings table filters to that category.
   String? _portfolioCategoryFilter;
+  // Cmd-K deep-link search overrides — set by the palette callbacks so
+  // the target tab pre-filters to the picked row. They're cleared on
+  // any user-driven search change in the target widget.
+  String? _portfolioSearchOverride;
+  String? _transactionsSearchOverride;
   // Pagination — the API returns at most 50 transactions per call. We
   // track whether the latest page filled the limit (so there may be more)
   // and call _loadMoreTransactions() to append the next slice.
@@ -128,6 +134,15 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     void jumpTab(int i) => _tabController?.animateTo(i);
 
+    // Mirror the currency / FX setup _buildBody does so the account
+    // panel that opens from the palette uses the same reporting context.
+    final fxRate = (_fxRate?['rate'] as num?)?.toDouble() ?? 1.0;
+    final conversionFactor = _targetCurrency == 'MXN' ? fxRate : 1.0;
+    final currencyFormat = NumberFormat.currency(
+      name: _targetCurrency,
+      symbol: '$_targetCurrency ',
+    );
+
     const tabs = [
       ('Overview', 0, Icons.dashboard_outlined, Color(0xFF00E676)),
       ('Portfolio', 1, Icons.pie_chart_outline, Color(0xFF1DE9B6)),
@@ -147,7 +162,8 @@ class _DashboardScreenState extends State<DashboardScreen>
       ));
     }
 
-    for (final raw in (_overview?['accounts'] as List?) ?? const []) {
+    final allAccounts = (_overview?['accounts'] as List?) ?? const [];
+    for (final raw in allAccounts) {
       final a = raw as Map<String, dynamic>;
       final nick = (a['nickname'] ?? '').toString();
       final name = (a['name'] ?? '').toString();
@@ -157,7 +173,29 @@ class _DashboardScreenState extends State<DashboardScreen>
         subtitle: 'Account · $inst',
         icon: Icons.account_balance_wallet_outlined,
         accent: const Color(0xFF1DE9B6),
-        onSelected: () => jumpTab(0),
+        // Deep-link: open the account-detail side panel directly so the
+        // user doesn't have to scroll the accounts column to find it.
+        onSelected: () => showAccountTransactionsPanel(
+          context,
+          account: a,
+          allAccounts: allAccounts,
+          conversionFactor: conversionFactor,
+          currencyFormat: currencyFormat,
+          targetCurrency: _targetCurrency,
+          usdMxnRate: fxRate,
+          onBalanceUpdate: (id, bal) async {
+            try {
+              await _apiService.updateAccountBalance(id, bal);
+              _loadAllData();
+            } catch (_) {}
+          },
+          onRenameAccount: (id, nickname) async {
+            try {
+              await _apiService.renameAccount(id, nickname);
+              _loadAllData();
+            } catch (_) {}
+          },
+        ),
       ));
     }
 
@@ -165,12 +203,18 @@ class _DashboardScreenState extends State<DashboardScreen>
       final h = raw as Map<String, dynamic>;
       final ticker = (h['ticker_symbol'] ?? '').toString();
       final name = (h['name'] ?? '').toString();
+      // Pick the most specific token we have for the search seed so the
+      // holdings table filters to a single row.
+      final seed = ticker.isNotEmpty ? ticker : name;
       items.add(PaletteItem(
         label: ticker.isNotEmpty ? '$ticker — $name' : name,
         subtitle: 'Holding',
         icon: Icons.show_chart,
         accent: const Color(0xFF00B0FF),
-        onSelected: () => jumpTab(1),
+        onSelected: () {
+          setState(() => _portfolioSearchOverride = seed);
+          jumpTab(1);
+        },
       ));
     }
 
@@ -179,13 +223,17 @@ class _DashboardScreenState extends State<DashboardScreen>
     final txs = _transactions ?? const [];
     for (final raw in txs.take(200)) {
       final t = raw as Map<String, dynamic>;
+      final desc = (t['description'] ?? '').toString();
       items.add(PaletteItem(
-        label: (t['description'] ?? '').toString(),
+        label: desc,
         subtitle:
             'Transaction · ${t['account_name'] ?? ''} · ${t['date'] ?? ''}',
         icon: Icons.receipt_outlined,
         accent: const Color(0xFFFFB300),
-        onSelected: () => jumpTab(2),
+        onSelected: () {
+          setState(() => _transactionsSearchOverride = desc);
+          jumpTab(2);
+        },
       ));
     }
 
@@ -1307,6 +1355,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             categoryFilter: _portfolioCategoryFilter,
             onClearCategoryFilter: () =>
                 setState(() => _portfolioCategoryFilter = null),
+            searchOverride: _portfolioSearchOverride,
           ),
           const SizedBox(height: 24),
           AccountsBreakdownCard(
@@ -1332,6 +1381,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         onTransactionAdded: () => _refreshData(),
         onLoadMore: _loadMoreTransactions,
         hasMore: _transactionsHasMore,
+        searchOverride: _transactionsSearchOverride,
         onUpdate: (id, {userCategory, userNotes, accountId}) async {
           try {
             await _apiService.updateTransaction(

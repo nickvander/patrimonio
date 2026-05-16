@@ -17,6 +17,11 @@ class PortfolioCard extends StatefulWidget {
   /// Tap handler for clearing the active category filter via a chip on
   /// top of the holdings table.
   final VoidCallback? onClearCategoryFilter;
+  /// Externally-driven search override (Cmd-K deep-link). When this prop
+  /// changes to a non-empty value, the card's internal search query is
+  /// seeded to it so a single holding can be deep-linked from the
+  /// palette without user typing.
+  final String? searchOverride;
 
   const PortfolioCard({
     super.key,
@@ -27,6 +32,7 @@ class PortfolioCard extends StatefulWidget {
     required this.usdMxnRate,
     this.categoryFilter,
     this.onClearCategoryFilter,
+    this.searchOverride,
   });
 
   @override
@@ -42,6 +48,14 @@ class _PortfolioCardState extends State<PortfolioCard> {
   String _searchQuery = '';
   bool _groupByAccount = false;
 
+  // Mirror for the externally-pushed search query; we track it
+  // separately from `_searchQuery` so user typing still wins after a
+  // deep-link push and doesn't get re-applied on every rebuild.
+  String? _appliedOverride;
+
+  late final TextEditingController _searchController =
+      TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -49,6 +63,18 @@ class _PortfolioCardState extends State<PortfolioCard> {
     _allHoldings = List.from(widget.portfolioData['holdings'] ?? []);
     _holdings = List.from(_allHoldings);
     _sort(3, false);
+    if (widget.searchOverride != null && widget.searchOverride!.isNotEmpty) {
+      _searchQuery = widget.searchOverride!;
+      _searchController.text = widget.searchOverride!;
+      _appliedOverride = widget.searchOverride;
+      _applySearch();
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
@@ -58,6 +84,17 @@ class _PortfolioCardState extends State<PortfolioCard> {
         widget.conversionFactor != oldWidget.conversionFactor ||
         widget.categoryFilter != oldWidget.categoryFilter) {
       _allHoldings = List.from(widget.portfolioData['holdings'] ?? []);
+      _applySearch();
+      _sort(_sortColumnIndex ?? 3, _isAscending);
+    }
+    // A new override (different from the last one we applied) seeds the
+    // search field so the deep-link surfaces the row immediately.
+    if (widget.searchOverride != null &&
+        widget.searchOverride!.isNotEmpty &&
+        widget.searchOverride != _appliedOverride) {
+      _searchQuery = widget.searchOverride!;
+      _searchController.text = widget.searchOverride!;
+      _appliedOverride = widget.searchOverride;
       _applySearch();
       _sort(_sortColumnIndex ?? 3, _isAscending);
     }
@@ -632,6 +669,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 child: SizedBox(
                   height: 36,
                   child: TextField(
+                controller: _searchController,
                 onChanged: (v) => setState(() {
                   _searchQuery = v;
                   _applySearch();

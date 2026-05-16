@@ -33,6 +33,10 @@ class TransactionsTab extends StatefulWidget {
   /// Whether the parent thinks there are more transactions available.
   /// When false the "Load more" button is hidden.
   final bool hasMore;
+  /// Cmd-K deep-link seed. When this changes the tab's search query is
+  /// pre-populated so the row the user picked from the palette is
+  /// surfaced immediately.
+  final String? searchOverride;
 
   const TransactionsTab({
     super.key,
@@ -49,6 +53,7 @@ class TransactionsTab extends StatefulWidget {
     this.onTransactionAdded,
     this.onLoadMore,
     this.hasMore = false,
+    this.searchOverride,
   });
 
   @override
@@ -59,6 +64,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
   String _searchQuery = '';
   bool _searchOpenOnNarrow = false;
   TxFilters _filters = TxFilters.empty;
+  // Tracks the most recent searchOverride we applied so future rebuilds
+  // don't keep re-seeding the input over user edits.
+  String? _appliedOverride;
+  final TextEditingController _searchController = TextEditingController();
   // Bulk-edit selection state. When _selectionMode is on, rows render a
   // checkbox and tapping a row toggles selection instead of opening the
   // detail sheet. The action bar at the bottom of the list lets the user
@@ -68,6 +77,38 @@ class _TransactionsTabState extends State<TransactionsTab> {
   // Local spinner state while widget.onLoadMore is in-flight so the "Load
   // more" button itself shows feedback without a full-page reload.
   bool _loadingMore = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final seed = widget.searchOverride;
+    if (seed != null && seed.isNotEmpty) {
+      _searchQuery = seed;
+      _searchController.text = seed;
+      _appliedOverride = seed;
+      _searchOpenOnNarrow = true;
+    }
+  }
+
+  @override
+  void didUpdateWidget(TransactionsTab old) {
+    super.didUpdateWidget(old);
+    final seed = widget.searchOverride;
+    if (seed != null && seed.isNotEmpty && seed != _appliedOverride) {
+      setState(() {
+        _searchQuery = seed;
+        _searchController.text = seed;
+        _appliedOverride = seed;
+        _searchOpenOnNarrow = true;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   List<dynamic> get _filteredTransactions {
     final q = _searchQuery.toLowerCase();
@@ -618,6 +659,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
   Widget _searchField() {
     return TextField(
       autofocus: _searchOpenOnNarrow,
+      controller: _searchController,
       onChanged: (v) => setState(() => _searchQuery = v),
       decoration: InputDecoration(
         hintText: 'Search transactions…',
