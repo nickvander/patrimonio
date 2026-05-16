@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/preferences.dart';
+import '../utils/theme_colors.dart';
 
 /// Compact "where am I against my net-worth goal" tile shown on the
 /// Overview tab. Reads the same goal that drives the projections chart
@@ -72,7 +73,7 @@ class NetWorthGoalTile extends StatelessWidget {
             Text(
               'Hit ${currencyFormat.format(goalUsd * conversionFactor)} by $goalYear · '
               '${yearsRemaining <= 0 ? "due now" : "$yearsRemaining year${yearsRemaining == 1 ? "" : "s"} left"}',
-              style: const TextStyle(color: Colors.white60, fontSize: 12),
+              style: TextStyle(color: context.textMuted, fontSize: 12),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -81,7 +82,7 @@ class NetWorthGoalTile extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
               child: LinearProgressIndicator(
                 value: pct,
-                backgroundColor: Colors.white.withValues(alpha: 0.06),
+                backgroundColor: context.tileSurface,
                 color: color,
                 minHeight: 10,
               ),
@@ -89,10 +90,10 @@ class NetWorthGoalTile extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'Current: ${currencyFormat.format(netWorthUsd * conversionFactor)}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: Colors.white54,
-                fontFeatures: [FontFeature.tabularFigures()],
+                color: context.textSubtle,
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
           ],

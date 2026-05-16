@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import '../utils/theme_colors.dart';
 
 /// Compact "what hit my accounts this month" card pinned to the Overview.
 ///
@@ -23,7 +24,7 @@ class MonthlyCashFlowCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (trends.isEmpty) {
-      return _buildEmpty();
+      return _buildEmpty(context);
     }
 
     // The API returns months in chronological order; the *last* element is
@@ -69,21 +70,21 @@ class MonthlyCashFlowCard extends StatelessWidget {
                   color: Color(0xFF1DE9B6),
                 ),
                 const SizedBox(width: 8),
-                const Text(
+                Text(
                   'Cash flow this month',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: context.textPrimary,
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     monthLabel,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: Colors.white54,
+                      color: context.textSubtle,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -177,15 +178,15 @@ class MonthlyCashFlowCard extends StatelessWidget {
     );
   }
 
-  Widget _buildEmpty() {
+  Widget _buildEmpty(BuildContext context) {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: const Padding(
-        padding: EdgeInsets.all(24),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
         child: Text(
           'Cash flow will appear here once a few weeks of transactions are synced.',
-          style: TextStyle(color: Colors.white54, fontSize: 13),
+          style: TextStyle(color: context.textSubtle, fontSize: 13),
         ),
       ),
     );
@@ -276,7 +277,7 @@ class _StatBlock extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
+        color: context.tileSurface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: accent.withValues(alpha: 0.25)),
       ),
@@ -295,11 +296,11 @@ class _StatBlock extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
-              fontFeatures: [FontFeature.tabularFigures()],
+              color: context.textPrimary,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -323,7 +324,7 @@ class _NetSparkline extends StatelessWidget {
         child: Text(
           'Not enough history yet',
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.45),
+            color: context.textFaint,
             fontSize: 11,
           ),
         ),

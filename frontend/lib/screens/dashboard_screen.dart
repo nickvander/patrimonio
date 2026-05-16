@@ -23,6 +23,7 @@ import '../widgets/command_palette.dart';
 import '../widgets/skeleton.dart';
 import '../widgets/sync_error_banner.dart';
 import '../widgets/notifications_panel.dart';
+import '../utils/theme_colors.dart';
 import 'connect_bank_screen.dart';
 import 'import_screen.dart';
 import 'wealth_projection_screen.dart';
@@ -403,7 +404,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: enabled ? Colors.white : Colors.white54,
+                    color: enabled ? context.textPrimary : context.textSubtle,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -415,7 +416,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       : (disabledHint ?? subtitle),
                   style: TextStyle(
                     fontSize: 12,
-                    color: enabled ? Colors.white70 : Colors.white38,
+                    color: enabled ? context.textMuted : context.textFaint,
                     height: 1.4,
                   ),
                   maxLines: 3,
@@ -508,21 +509,21 @@ class _DashboardScreenState extends State<DashboardScreen>
                         color: Color(0xFF00E676),
                       ),
                       const SizedBox(height: 16),
-                      const Text(
+                      Text(
                         'Welcome to Patrimonio',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w800,
-                          color: Colors.white,
+                          color: context.textPrimary,
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         'Connect your first account to see your net worth, '
                         'transactions, and projections in one place.',
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.white70,
+                          color: context.textMuted,
                           height: 1.4,
                         ),
                       ),
@@ -539,7 +540,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                         'Already linked accounts elsewhere? They will appear here as soon as the first sync completes.',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.white.withValues(alpha: 0.45),
+                          color: context.textFaint,
                           fontStyle: FontStyle.italic,
                         ),
                       ),
@@ -1670,7 +1671,7 @@ class _StatTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: emphasized ? 0.06 : 0.03),
+        color: context.tileSurface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: accent.withValues(alpha: emphasized ? 0.4 : 0.18),
@@ -1694,7 +1695,7 @@ class _StatTile extends StatelessWidget {
             style: TextStyle(
               fontSize: emphasized ? 22 : 18,
               fontWeight: emphasized ? FontWeight.w900 : FontWeight.w700,
-              color: Colors.white,
+              color: context.textPrimary,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
             maxLines: 1,

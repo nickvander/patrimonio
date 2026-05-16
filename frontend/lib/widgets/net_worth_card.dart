@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../components/date_range_selector.dart';
 import '../services/preferences.dart';
 import '../utils/currency.dart';
+import '../utils/theme_colors.dart';
 
 class NetWorthCard extends StatefulWidget {
   final double netWorth;
@@ -128,7 +129,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: active ? const Color(0xFF00E676) : Colors.white60,
+              color: active ? const Color(0xFF00E676) : context.textMuted,
               letterSpacing: 0.4,
             ),
           ),
@@ -175,8 +176,8 @@ class _NetWorthCardState extends State<NetWorthCard> {
       children: [
         Text(
           'Total net worth ($reportingCurrency)',
-          style: const TextStyle(
-            color: Colors.white60,
+          style: TextStyle(
+            color: context.textMuted,
             fontSize: 14,
             fontWeight: FontWeight.w500,
             letterSpacing: 0.5,
@@ -194,7 +195,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
             style: TextStyle(
               fontSize: isCompact ? 32 : 42,
               fontWeight: FontWeight.w900,
-              color: Colors.white,
+              color: context.textPrimary,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
             maxLines: 1,
@@ -227,7 +228,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
               final net = ((item['net'] ?? 0.0) as num).toDouble();
               return Text(
                 '${formatCurrencyAmount(net, currency)} source',
-                style: const TextStyle(color: Colors.white54, fontSize: 11),
+                style: TextStyle(color: context.textSubtle, fontSize: 11),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               );

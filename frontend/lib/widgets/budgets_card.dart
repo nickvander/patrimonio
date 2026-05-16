@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/preferences.dart';
 import '../utils/category.dart';
+import '../utils/theme_colors.dart';
 
 /// "How much have I spent this month per budgeted category?" card.
 ///
@@ -87,9 +88,9 @@ class _BudgetsCardState extends State<BudgetsCard> {
             ),
             const SizedBox(height: 12),
             if (!hasBudgets)
-              const Text(
+              Text(
                 'Set a monthly budget for any category to track spending against it here.',
-                style: TextStyle(color: Colors.white60, fontSize: 13),
+                style: TextStyle(color: context.textMuted, fontSize: 13),
               )
             else
               ..._budgets.entries.map((e) {
@@ -140,8 +141,7 @@ class _BudgetsCardState extends State<BudgetsCard> {
                         borderRadius: BorderRadius.circular(6),
                         child: LinearProgressIndicator(
                           value: pct > 1.0 ? 1.0 : pct,
-                          backgroundColor:
-                              Colors.white.withValues(alpha: 0.06),
+                          backgroundColor: context.tileSurface,
                           color: color,
                           minHeight: 8,
                         ),
