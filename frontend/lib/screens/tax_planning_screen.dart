@@ -96,6 +96,115 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     }
   }
 
+  // Dense tax-event row that mirrors the transactions tab visual language:
+  // 32px tinted icon, two-line title/meta column, right-aligned amount with
+  // tabular figures. Replaces the loose ListTile rows that made the two
+  // surfaces look like different apps.
+  Widget _buildTaxRow(dynamic tx) {
+    final date = DateTime.parse(tx['date']);
+    final sourceAmount = ((tx['amount'] as num?)?.toDouble() ?? 0.0);
+    final sourceCurrency =
+        (tx['currency'] ?? widget.targetCurrency).toString();
+    final converted = convertCurrency(
+      sourceAmount,
+      from: sourceCurrency,
+      to: widget.targetCurrency,
+      usdMxnRate: widget.usdMxnRate,
+    );
+    final isCapGains = tx['category'] == 'Investment Sale';
+    final iconColor =
+        isCapGains ? Colors.purpleAccent : const Color(0xFF1DE9B6);
+    final needsConversion = sourceCurrency != widget.targetCurrency;
+
+    return InkWell(
+      onTap: null,
+      hoverColor: Colors.white.withValues(alpha: 0.03),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                isCapGains ? Icons.show_chart : Icons.work_outline,
+                color: iconColor,
+                size: 16,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    (tx['description'] ?? '').toString(),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      height: 1.2,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${DateFormat('MMM d, y').format(date)} · ${tx['category']}',
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 11,
+                      height: 1.3,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.currencyFormat.format(converted),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: Color(0xFF00E676),
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (needsConversion)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      formatCurrencyAmount(sourceAmount, sourceCurrency),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.white38,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -366,66 +475,21 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                   ),
                 )
               : Card(
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
                     itemCount: _taxTransactions!.length,
-                    separatorBuilder: (context, index) =>
-                        const Divider(height: 1),
+                    separatorBuilder: (context, index) => Divider(
+                      height: 1,
+                      color: Colors.white.withValues(alpha: 0.04),
+                      indent: 56,
+                    ),
                     itemBuilder: (context, index) {
                       final tx = _taxTransactions![index];
-                      final date = DateTime.parse(tx['date']);
-                      final sourceAmount =
-                          ((tx['amount'] as num?)?.toDouble() ?? 0.0);
-                      final sourceCurrency =
-                          (tx['currency'] ?? widget.targetCurrency).toString();
-                      final amount = convertCurrency(
-                        sourceAmount,
-                        from: sourceCurrency,
-                        to: widget.targetCurrency,
-                        usdMxnRate: widget.usdMxnRate,
-                      );
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: tx['category'] == 'Investment Sale'
-                              ? Colors.purple.withValues(alpha: 0.2)
-                              : Colors.blue.withValues(alpha: 0.2),
-                          child: Icon(
-                            tx['category'] == 'Investment Sale'
-                                ? Icons.show_chart
-                                : Icons.work,
-                            color: tx['category'] == 'Investment Sale'
-                                ? Colors.purpleAccent
-                                : Colors.blueAccent,
-                          ),
-                        ),
-                        title: Text(tx['description']),
-                        subtitle: Text(
-                          '${DateFormat('MMM dd, yyyy').format(date)} • ${tx['category']}',
-                        ),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              widget.currencyFormat.format(amount),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.greenAccent,
-                              ),
-                            ),
-                            if (sourceCurrency != widget.targetCurrency)
-                              Text(
-                                formatCurrencyAmount(
-                                  sourceAmount,
-                                  sourceCurrency,
-                                ),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                          ],
-                        ),
-                      );
+                      return _buildTaxRow(tx);
                     },
                   ),
                 ),
