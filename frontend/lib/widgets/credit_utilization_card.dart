@@ -141,7 +141,7 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        item['name'] ?? 'Credit Account',
+                        item['name'] ?? 'Credit account',
                         style: const TextStyle(fontWeight: FontWeight.w500),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

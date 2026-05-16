@@ -592,7 +592,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     Tab(text: 'Portfolio'),
                     Tab(text: 'Transactions'),
                     Tab(text: isCompact ? 'Proj.' : 'Projections'),
-                    Tab(text: isCompact ? 'Tax' : 'Tax Planning'),
+                    Tab(text: isCompact ? 'Tax' : 'Tax planning'),
                     Tab(text: isCompact ? 'Manage' : 'Management'),
                   ],
                 ),
@@ -773,7 +773,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         builder: (context, constraints) {
           final isNarrow = constraints.maxWidth < 520;
           final title = const Text(
-            'Net Worth History',
+            'Net worth history',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           );
           final selector = SingleChildScrollView(
@@ -1199,7 +1199,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                         onPressed: () => Navigator.pop(context, true),
                         style: TextButton.styleFrom(
                             foregroundColor: Colors.redAccent),
-                        child: const Text('Delete Everything'),
+                        child: const Text('Delete everything'),
                       ),
                     ],
                   ),

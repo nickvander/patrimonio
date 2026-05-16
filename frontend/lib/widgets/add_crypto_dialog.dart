@@ -163,7 +163,7 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
                     color: Colors.white,
                   ),
                 )
-              : const Text('Link Account'),
+              : const Text('Link account'),
         ),
       ],
     );

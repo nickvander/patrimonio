@@ -174,7 +174,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Total Net Worth ($reportingCurrency)',
+          'Total net worth ($reportingCurrency)',
           style: const TextStyle(
             color: Colors.white60,
             fontSize: 14,
@@ -483,7 +483,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                   ),
                   TextSpan(
                     text:
-                        'Net Worth: ${currencyFormat.format((nw as num).toDouble() * conversionFactor)}\n',
+                        'Net worth: ${currencyFormat.format((nw as num).toDouble() * conversionFactor)}\n',
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,

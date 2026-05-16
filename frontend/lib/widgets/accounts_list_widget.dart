@@ -163,7 +163,7 @@ class AccountsListWidget extends StatelessWidget {
                 if (creditAccounts.isNotEmpty)
                   _buildAccountGroup(
                     context,
-                    'Credit Cards',
+                    'Credit cards',
                     creditAccounts,
                     Icons.credit_card_rounded,
                     true,
@@ -447,7 +447,7 @@ class AccountsListWidget extends StatelessWidget {
     // Prefer the user's nickname over the bank-supplied name so a Plaid
     // default like "PLAID CHECKING 0001" can read as "Joint checking".
     final nickname = (acc['nickname'] ?? '').toString().trim();
-    final rawName = (acc['name'] ?? 'Unknown Account').toString();
+    final rawName = (acc['name'] ?? 'Unknown account').toString();
     final name = nickname.isNotEmpty ? nickname : rawName;
     final inst = (acc['institution_name'] ?? '').toString();
     final hasCrypto =

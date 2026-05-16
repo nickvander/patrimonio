@@ -249,7 +249,7 @@ class _ImportScreenState extends State<ImportScreen> {
                       const SizedBox(height: 24),
                       ElevatedButton(
                         onPressed: _isUploading ? null : _pickFile,
-                        child: const Text('Select File'),
+                        child: const Text('Select file'),
                       ),
                     ],
                   ),
@@ -316,7 +316,7 @@ class _ImportScreenState extends State<ImportScreen> {
                               });
                             },
                             child: const Text(
-                              'Select All',
+                              'Select all',
                               style: TextStyle(color: Color(0xFF00E676)),
                             ),
                           ),
@@ -328,7 +328,7 @@ class _ImportScreenState extends State<ImportScreen> {
                               });
                             },
                             child: const Text(
-                              'Deselect All',
+                              'Deselect all',
                               style: TextStyle(color: Colors.grey),
                             ),
                           ),
@@ -503,7 +503,7 @@ class _ImportScreenState extends State<ImportScreen> {
                       child: _isUploading
                           ? const CircularProgressIndicator(color: Colors.black)
                           : const Text(
-                              'Process Statement',
+                              'Process statement',
                               style: TextStyle(fontWeight: FontWeight.bold),
                             ),
                     ),

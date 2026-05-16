@@ -121,7 +121,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'Wealth Projection',
+          'Wealth projection',
           style: TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.bold,
@@ -142,7 +142,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildSliderControl(
-                label: 'Monthly Savings',
+                label: 'Monthly savings',
                 value: _monthlyContribution,
                 min: 0,
                 max: 10000,
@@ -152,7 +152,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               ),
               const Divider(height: 32, color: Colors.white10),
               _buildSliderControl(
-                label: 'Expected Return',
+                label: 'Expected return',
                 value: _annualReturnRate,
                 min: 0,
                 max: 0.15,
@@ -162,7 +162,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               ),
               const Divider(height: 32, color: Colors.white10),
               _buildSliderControl(
-                label: 'Annual Expenses',
+                label: 'Annual expenses',
                 value: _annualExpenses,
                 min: 10000,
                 max: 200000,
@@ -172,7 +172,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               ),
               const Divider(height: 32, color: Colors.white10),
               _buildSliderControl(
-                label: 'Safe Withdrawal Rate',
+                label: 'Safe withdrawal rate',
                 value: _withdrawalRate,
                 min: 0.02,
                 max: 0.06,
@@ -182,7 +182,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               ),
               const Divider(height: 32, color: Colors.white10),
               _buildSliderControl(
-                label: 'Projection Years',
+                label: 'Projection years',
                 value: _projectionYears.toDouble(),
                 min: 5,
                 max: 50,
@@ -263,7 +263,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Net Worth Projection',
+                    'Net worth projection',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 24),
@@ -390,11 +390,11 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     return Row(
       children: [
         _buildMilestoneCard(
-          title: 'FI Number',
+          title: 'FI number',
           value: widget.currencyFormat.format(
             (metrics['fi_number'] as num).toDouble() * widget.conversionFactor,
           ),
-          subtitle: 'Target Net Worth',
+          subtitle: 'Target net worth',
           icon: Icons.flag_rounded,
           color: Colors.orangeAccent,
         ),
@@ -403,7 +403,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           title: 'Progress',
           value:
               '${(metrics['current_progress_pct'] as num).toStringAsFixed(1)}%',
-          subtitle: 'Towards FIRE',
+          subtitle: 'Toward FIRE',
           icon: Icons.trending_up_rounded,
           color: const Color(0xFF00E676),
         ),
@@ -419,12 +419,12 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         ),
         const SizedBox(width: 16),
         _buildMilestoneCard(
-          title: 'FI Income',
+          title: 'FI income',
           value: widget.currencyFormat.format(
             (metrics['monthly_income_at_retirement'] as num).toDouble() *
                 widget.conversionFactor,
           ),
-          subtitle: 'Monthly @ Withdrawal Rate',
+          subtitle: 'Monthly @ withdrawal rate',
           icon: Icons.account_balance_wallet_rounded,
           color: Colors.purpleAccent,
         ),

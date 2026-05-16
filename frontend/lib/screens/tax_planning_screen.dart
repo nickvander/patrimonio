@@ -242,14 +242,14 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Ordinary Income: ${widget.currencyFormat.format(ordinaryIncome)}',
+                            'Ordinary income: ${widget.currencyFormat.format(ordinaryIncome)}',
                             style: const TextStyle(
                               fontSize: 12,
                               color: Colors.white54,
                             ),
                           ),
                           Text(
-                            'Capital Gains: ${widget.currencyFormat.format(capitalGains)}',
+                            'Capital gains: ${widget.currencyFormat.format(capitalGains)}',
                             style: const TextStyle(
                               fontSize: 12,
                               color: Colors.white54,
@@ -285,7 +285,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'Effective Rate: ${rateUs.toStringAsFixed(2)}%',
+                        'Effective rate: ${rateUs.toStringAsFixed(2)}%',
                         style: const TextStyle(
                           fontSize: 12,
                           color: Colors.white54,
@@ -305,7 +305,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'MX Estimated Liability (SAT)',
+                        'MX estimated liability (SAT)',
                         style: TextStyle(color: Colors.white70),
                       ),
                       const SizedBox(height: 8),
