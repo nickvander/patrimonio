@@ -279,7 +279,7 @@ class _StatBlock extends StatelessWidget {
       decoration: BoxDecoration(
         color: context.tileSurface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: accent.withValues(alpha: 0.25)),
+        border: Border.all(color: context.accentSoft(accent)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -421,7 +421,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         decoration: BoxDecoration(
           color: context.tint(0.06),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: accent.withValues(alpha: 0.35)),
+          border: Border.all(color: context.accentBorder(accent)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -468,7 +468,9 @@ class _DashboardScreenState extends State<DashboardScreen>
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: accent.withValues(alpha: enabled ? 0.4 : 0.15),
+                color: enabled
+                    ? context.accentBorder(accent)
+                    : context.accentSoft(accent),
               ),
             ),
             child: Column(
@@ -1718,7 +1720,9 @@ class _StatTile extends StatelessWidget {
         color: context.tileSurface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: accent.withValues(alpha: emphasized ? 0.4 : 0.18),
+          color: emphasized
+              ? context.accentBorder(accent)
+              : context.accentSoft(accent),
         ),
       ),
       child: Column(
@@ -1786,7 +1790,7 @@ class _CurrencyToggleButton extends StatelessWidget {
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: accent.withValues(alpha: 0.35)),
+              border: Border.all(color: context.accentBorder(accent)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,

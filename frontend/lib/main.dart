@@ -125,26 +125,32 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
     );
   }
 
-  // Companion light theme. Many in-app components still draw against the
-  // dark palette via hardcoded color constants — the light theme is a
-  // best-effort surface that gets the Material chrome (AppBar, Card,
-  // backgrounds) right; per-widget colors will be tuned in follow-ups.
+  // Companion light theme. Tuned against the same brand accents as the
+  // dark theme but with a slightly cooler surface palette (pure white
+  // cards against an off-white scaffold) and noticeably more elevation
+  // so cards read as discrete surfaces rather than blending into the
+  // background.
   ThemeData _buildLightTheme() {
     final scheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF00B864),
+      seedColor: const Color(0xFF00A352),
       brightness: Brightness.light,
-      surface: const Color(0xFFF8F9FB),
+      surface: Colors.white,
+      surfaceContainerHighest: const Color(0xFFEEF0F4),
     );
     return ThemeData(
       brightness: Brightness.light,
       colorScheme: scheme,
       useMaterial3: true,
-      scaffoldBackgroundColor: const Color(0xFFF1F2F6),
+      // Off-white scaffold gives the white cards somewhere to "sit"
+      // visually. Pure white-on-white merges them with the AppBar.
+      scaffoldBackgroundColor: const Color(0xFFEDEFF3),
       textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme),
       cardTheme: CardThemeData(
         color: Colors.white,
-        elevation: 1,
-        shadowColor: Colors.black12,
+        // elevation 2 + a slightly stronger shadow gives cards real
+        // separation; elevation 1 / black12 was too timid.
+        elevation: 2,
+        shadowColor: Colors.black26,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
         ),
@@ -154,6 +160,7 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
         foregroundColor: Color(0xFF101016),
         elevation: 0,
         centerTitle: false,
+        scrolledUnderElevation: 0,
       ),
       dataTableTheme: DataTableThemeData(
         headingRowColor: WidgetStateProperty.all(const Color(0xFFEEF0F4)),
