@@ -39,6 +39,11 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   double? _goalAmountUsd;
   int? _goalYear;
 
+  // Toggles the secondary "aggressive" / "conservative" projection lines
+  // around the base line. Variants are computed client-side from the
+  // same compound-growth formula the backend uses for the base line.
+  bool _showScenarios = false;
+
   @override
   void initState() {
     super.initState();
@@ -389,9 +394,28 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Net worth projection',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Net worth projection',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      FilterChip(
+                        label: const Text('Scenarios'),
+                        selected: _showScenarios,
+                        onSelected: (v) =>
+                            setState(() => _showScenarios = v),
+                        avatar: Icon(
+                          _showScenarios
+                              ? Icons.layers
+                              : Icons.layers_outlined,
+                          size: 16,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 24),
                   Expanded(child: _buildChart()),
@@ -399,6 +423,28 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               ),
       ),
     );
+  }
+
+  // Project compound growth for a scenario variant. Matches the backend's
+  // formula closely enough for visual comparison — small differences in
+  // contribution timing aren't visible at this chart resolution.
+  List<FlSpot> _projectVariant({
+    required double startBalanceUsd,
+    required double monthlyContribUsd,
+    required double annualReturn,
+    required int years,
+  }) {
+    final monthlyRate = annualReturn / 12.0;
+    var balance = startBalanceUsd;
+    final spots = <FlSpot>[FlSpot(0, balance * widget.conversionFactor)];
+    for (var month = 1; month <= years * 12; month++) {
+      balance = balance * (1 + monthlyRate) + monthlyContribUsd;
+      spots.add(FlSpot(
+        month / 12.0,
+        balance * widget.conversionFactor,
+      ));
+    }
+    return spots;
   }
 
   Widget _buildChart() {
@@ -414,6 +460,23 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       final y = (p['balance'] as num).toDouble() * widget.conversionFactor;
       return FlSpot(x, y);
     }).toList();
+
+    // Scenario variants are derived client-side from the same start
+    // balance + contribution. Aggressive bumps the annual return by 2pp
+    // and contributions by 20%; conservative does the opposite.
+    final startBalanceUsd = widget.currentNetWorth / widget.conversionFactor;
+    final aggressive = _projectVariant(
+      startBalanceUsd: startBalanceUsd,
+      monthlyContribUsd: _monthlyContribution * 1.2,
+      annualReturn: _annualReturnRate + 0.02,
+      years: _projectionYears,
+    );
+    final conservative = _projectVariant(
+      startBalanceUsd: startBalanceUsd,
+      monthlyContribUsd: _monthlyContribution * 0.8,
+      annualReturn: (_annualReturnRate - 0.02).clamp(0.0, 0.5),
+      years: _projectionYears,
+    );
 
     return LineChart(
       LineChartData(
@@ -455,6 +518,26 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         ),
         borderData: FlBorderData(show: false),
         lineBarsData: [
+          if (_showScenarios) ...[
+            LineChartBarData(
+              spots: aggressive,
+              isCurved: true,
+              color: const Color(0xFF1DE9B6).withValues(alpha: 0.8),
+              barWidth: 2,
+              dashArray: [4, 4],
+              isStrokeCapRound: true,
+              dotData: const FlDotData(show: false),
+            ),
+            LineChartBarData(
+              spots: conservative,
+              isCurved: true,
+              color: const Color(0xFFFF4081).withValues(alpha: 0.8),
+              barWidth: 2,
+              dashArray: [4, 4],
+              isStrokeCapRound: true,
+              dotData: const FlDotData(show: false),
+            ),
+          ],
           LineChartBarData(
             spots: spots,
             isCurved: true,
