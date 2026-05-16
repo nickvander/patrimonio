@@ -397,6 +397,9 @@ class AccountsListWidget extends StatelessWidget {
           targetCurrency: targetCurrency,
           usdMxnRate: usdMxnRate,
           onBalanceUpdate: onBalanceUpdate,
+          onRenameAccount: onRenameAccount == null
+              ? null
+              : (id, nickname) async => onRenameAccount!(id, nickname),
         );
       },
       child: Padding(
@@ -606,6 +609,9 @@ class AccountsListWidget extends StatelessWidget {
           targetCurrency: targetCurrency,
           usdMxnRate: usdMxnRate,
           onBalanceUpdate: onBalanceUpdate,
+          onRenameAccount: onRenameAccount == null
+              ? null
+              : (id, nickname) async => onRenameAccount!(id, nickname),
         );
       },
       child: LayoutBuilder(

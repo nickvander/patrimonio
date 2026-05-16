@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../utils/currency.dart';
@@ -15,6 +16,11 @@ class AccountTransactionsScreen extends StatefulWidget {
   final String targetCurrency;
   final double usdMxnRate;
   final Function(String, double)? onBalanceUpdate;
+  /// Optional inline rename action — when wired, the header surfaces a
+  /// "Rename" entry in the overflow menu that lets the user set a
+  /// nickname without leaving the panel.
+  final Future<void> Function(String accountId, String nickname)?
+      onRenameAccount;
 
   const AccountTransactionsScreen({
     super.key,
@@ -25,6 +31,7 @@ class AccountTransactionsScreen extends StatefulWidget {
     required this.targetCurrency,
     required this.usdMxnRate,
     this.onBalanceUpdate,
+    this.onRenameAccount,
   });
 
   @override
@@ -64,6 +71,127 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  void _showRenameDialog() {
+    final controller = TextEditingController(
+      text: (widget.account['nickname'] ?? '').toString(),
+    );
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A24),
+        title: const Text('Rename account'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: 'Nickname',
+            hintText: widget.account['name']?.toString() ?? 'Account',
+          ),
+          onSubmitted: (v) {
+            Navigator.pop(context);
+            widget.onRenameAccount
+                ?.call(widget.account['id'].toString(), v.trim());
+            setState(() => widget.account['nickname'] = v.trim());
+          },
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              final v = controller.text.trim();
+              Navigator.pop(context);
+              await widget.onRenameAccount
+                  ?.call(widget.account['id'].toString(), v);
+              if (mounted) setState(() => widget.account['nickname'] = v);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Derive a small balance-history sparkline from the loaded transactions
+  // by walking backward from the current balance. This avoids a new
+  // backend endpoint and is "good enough" for the recent 30-day shape.
+  Widget _buildBalanceSparkline() {
+    final txs = _transactions ?? const [];
+    final current =
+        ((widget.account['current_balance'] ?? 0.0) as num).toDouble();
+
+    // Walk transactions newest-first, treating amount > 0 as outflow:
+    // balance(date - 1) = balance(date) + amount.
+    final sorted = [...txs];
+    sorted.sort((a, b) {
+      final ad = DateTime.tryParse(a['date']?.toString() ?? '') ?? DateTime(2000);
+      final bd = DateTime.tryParse(b['date']?.toString() ?? '') ?? DateTime(2000);
+      return bd.compareTo(ad);
+    });
+
+    final today = DateTime.now();
+    final cutoff = today.subtract(const Duration(days: 30));
+    final dailyBalances = <DateTime, double>{today: current};
+    var running = current;
+    for (final tx in sorted) {
+      final d = DateTime.tryParse(tx['date']?.toString() ?? '');
+      if (d == null) continue;
+      if (d.isBefore(cutoff)) break;
+      final amt = ((tx['amount'] as num?)?.toDouble() ?? 0.0);
+      running += amt;
+      dailyBalances[DateTime(d.year, d.month, d.day)] = running;
+    }
+
+    if (dailyBalances.length < 2) return const SizedBox.shrink();
+
+    final orderedDays = dailyBalances.keys.toList()
+      ..sort((a, b) => a.compareTo(b));
+    final points = <FlSpot>[
+      for (var i = 0; i < orderedDays.length; i++)
+        FlSpot(i.toDouble(), dailyBalances[orderedDays[i]]!),
+    ];
+
+    final ys = points.map((p) => p.y).toList();
+    final minY = ys.reduce((a, b) => a < b ? a : b);
+    final maxY = ys.reduce((a, b) => a > b ? a : b);
+    final pad = (maxY - minY).abs() * 0.1 + 1;
+    final isUp = points.last.y >= points.first.y;
+    final color =
+        isUp ? const Color(0xFF00E676) : const Color(0xFFFF4081);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: SizedBox(
+        height: 48,
+        child: LineChart(
+          LineChartData(
+            minY: minY - pad,
+            maxY: maxY + pad,
+            gridData: const FlGridData(show: false),
+            titlesData: const FlTitlesData(show: false),
+            borderData: FlBorderData(show: false),
+            lineTouchData: const LineTouchData(enabled: false),
+            lineBarsData: [
+              LineChartBarData(
+                spots: points,
+                isCurved: true,
+                curveSmoothness: 0.25,
+                color: color,
+                barWidth: 2,
+                dotData: const FlDotData(show: false),
+                belowBarData: BarAreaData(
+                  show: true,
+                  color: color.withValues(alpha: 0.12),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showEditBalanceDialog() {
@@ -186,11 +314,36 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                   ],
                 ),
               ),
-              IconButton(
-                tooltip: 'Update balance',
-                icon: const Icon(Icons.edit_outlined,
-                    size: 18, color: Color(0xFF00E676)),
-                onPressed: _showEditBalanceDialog,
+              PopupMenuButton<String>(
+                tooltip: 'Account actions',
+                onSelected: (v) {
+                  switch (v) {
+                    case 'balance':
+                      _showEditBalanceDialog();
+                    case 'rename':
+                      _showRenameDialog();
+                  }
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: 'balance',
+                    child: ListTile(
+                      dense: true,
+                      leading: Icon(Icons.edit_outlined),
+                      title: Text('Update balance'),
+                    ),
+                  ),
+                  if (widget.onRenameAccount != null)
+                    const PopupMenuItem(
+                      value: 'rename',
+                      child: ListTile(
+                        dense: true,
+                        leading: Icon(Icons.drive_file_rename_outline),
+                        title: Text('Rename account'),
+                      ),
+                    ),
+                ],
+                icon: const Icon(Icons.more_vert, size: 20),
               ),
               IconButton(
                 tooltip: 'Close',
@@ -227,6 +380,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
               ],
             ],
           ),
+          _buildBalanceSparkline(),
         ],
       ),
     );
@@ -325,6 +479,7 @@ Future<void> showAccountTransactionsPanel(
   required String targetCurrency,
   required double usdMxnRate,
   Function(String, double)? onBalanceUpdate,
+  Future<void> Function(String, String)? onRenameAccount,
 }) {
   final size = MediaQuery.sizeOf(context);
   final isNarrow = size.width < 700;
@@ -365,6 +520,7 @@ Future<void> showAccountTransactionsPanel(
               targetCurrency: targetCurrency,
               usdMxnRate: usdMxnRate,
               onBalanceUpdate: onBalanceUpdate,
+              onRenameAccount: onRenameAccount,
             ),
           ),
         ),
