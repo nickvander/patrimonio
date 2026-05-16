@@ -15,8 +15,21 @@ class SyncStatusCard extends StatelessWidget {
     this.onDelete,
   });
 
+  /// Institutions that need a re-sync attempt — failed status, or stuck
+  /// in `reconnect_required`. The `error`/`failed` ones can be retried in
+  /// place; `reconnect_required` ones need the Plaid Link flow but show
+  /// up in the count so the user knows total attention required.
+  int get _failedCount {
+    return syncData.where((raw) {
+      if (raw is! Map) return false;
+      final s = raw['sync_status']?.toString();
+      return s == 'error' || s == 'failed' || s == 'reconnect_required';
+    }).length;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final failed = _failedCount;
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -25,14 +38,29 @@ class SyncStatusCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'INSTITUTIONS',
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.white54,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.2,
-              ),
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'INSTITUTIONS',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.white54,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+                if (failed > 0 && onRetrySync != null)
+                  TextButton.icon(
+                    onPressed: onRetrySync,
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: Text('Retry $failed failed'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.orangeAccent,
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 24),
             if (syncData.isEmpty)
