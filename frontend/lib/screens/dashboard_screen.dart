@@ -317,7 +317,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       _StatTile(
         label: 'Assets',
         value: currencyFormat.format(assets),
-        accent: Colors.white70,
+        accent: context.textMuted,
       ),
       _StatTile(
         label: 'Liabilities',
@@ -390,7 +390,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
+          color: context.tint(0.06),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: accent.withValues(alpha: 0.35)),
         ),
@@ -552,7 +552,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.savings_outlined,
                         size: 40,
                         color: Color(0xFF00E676),
@@ -753,7 +753,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           autofocus: true,
           child: Scaffold(
               appBar: AppBar(
-          title: const Text(
+          title: Text(
             'Patrimonio',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
@@ -839,14 +839,14 @@ class _DashboardScreenState extends State<DashboardScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            Icon(Icons.error_outline, size: 64, color: Colors.red),
             const SizedBox(height: 16),
             Text(
               'Error loading dashboard: $_error',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
-            ElevatedButton(onPressed: _loadAllData, child: const Text('Retry')),
+            ElevatedButton(onPressed: _loadAllData, child: Text('Retry')),
           ],
         ),
       );
@@ -951,7 +951,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       return LayoutBuilder(
         builder: (context, constraints) {
           final isNarrow = constraints.maxWidth < 520;
-          final title = const Text(
+          final title = Text(
             'Net worth history',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           );
@@ -1109,7 +1109,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                         : Colors.orangeAccent,
                   ),
                   const SizedBox(width: 10),
-                  const Text(
+                  Text(
                     'Launch setup',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
@@ -1120,7 +1120,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 blocking.isEmpty
                     ? 'Plaid linking can start. Optional services may still improve data quality.'
                     : 'Complete required setup before real users can link Plaid accounts.',
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
+                style: TextStyle(color: context.textMuted, fontSize: 13),
               ),
               const SizedBox(height: 12),
               ...checks.map((raw) {
@@ -1140,7 +1140,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                         color: configured
                             ? const Color(0xFF00E676)
                             : check['severity'] == 'optional'
-                            ? Colors.white30
+                            ? context.textFaint
                             : Colors.orangeAccent,
                         size: 18,
                       ),
@@ -1151,14 +1151,14 @@ class _DashboardScreenState extends State<DashboardScreen>
                           children: [
                             Text(
                               check['label'] ?? '',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                             Text(
                               check['detail'] ?? '',
-                              style: const TextStyle(
-                                color: Colors.white54,
+                              style: TextStyle(
+                                color: context.textSubtle,
                                 fontSize: 12,
                               ),
                             ),
@@ -1171,9 +1171,9 @@ class _DashboardScreenState extends State<DashboardScreen>
               }),
               if (recommended.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                const Text(
+                Text(
                   'Recommended before production: configure live exchange rates.',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                  style: TextStyle(color: context.textSubtle, fontSize: 12),
                 ),
               ],
             ],
@@ -1389,7 +1389,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Data sources & sync',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
@@ -1417,18 +1417,18 @@ class _DashboardScreenState extends State<DashboardScreen>
                 final confirm = await showDialog<bool>(
                   context: context,
                   builder: (context) => AlertDialog(
-                    title: const Text('Delete institution'),
-                    content: const Text(
+                    title: Text('Delete institution'),
+                    content: Text(
                         'Are you sure? This will remove ALL accounts and history for this institution.'),
                     actions: [
                       TextButton(
                           onPressed: () => Navigator.pop(context, false),
-                          child: const Text('Cancel')),
+                          child: Text('Cancel')),
                       TextButton(
                         onPressed: () => Navigator.pop(context, true),
                         style: TextButton.styleFrom(
                             foregroundColor: Colors.redAccent),
-                        child: const Text('Delete everything'),
+                        child: Text('Delete everything'),
                       ),
                     ],
                   ),
@@ -1489,9 +1489,9 @@ class _DashboardScreenState extends State<DashboardScreen>
           const SizedBox(height: 24),
           buildSetupStatusCard(),
           const SizedBox(height: 24),
-          const Text(
+          Text(
             'Connect standard accounts',
-            style: TextStyle(fontSize: 16, color: Colors.white70),
+            style: TextStyle(fontSize: 16, color: context.textMuted),
           ),
           const SizedBox(height: 12),
           // Connect-bank buttons. LayoutBuilder + Wrap lets them sit 2-up
@@ -1547,7 +1547,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       : null,
                 ),
                 tile(Icons.upload_file, 'Import Mexico (CSV/PDF)',
-                    bg: Colors.white12,
+                    bg: context.hairline,
                     onPressed: () {
                       Navigator.push(
                         context,
@@ -1557,7 +1557,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       ).then((_) => _loadAllData());
                     }),
                 tile(Icons.add_circle_outline, 'Add manual account',
-                    bg: Colors.white12,
+                    bg: context.hairline,
                     onPressed: () {
                       showDialog(
                         context: context,
@@ -1569,9 +1569,9 @@ class _DashboardScreenState extends State<DashboardScreen>
             );
           }),
           const SizedBox(height: 32),
-          const Text(
+          Text(
             'Connect crypto exchanges',
-            style: TextStyle(fontSize: 16, color: Colors.white70),
+            style: TextStyle(fontSize: 16, color: context.textMuted),
           ),
           const SizedBox(height: 12),
           LayoutBuilder(builder: (ctx, c) {
@@ -1584,8 +1584,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                 SizedBox(
                   width: tileWidth,
                   child: ElevatedButton.icon(
-                    icon: const Icon(Icons.login, color: Colors.white),
-                    label: const Text(
+                    icon: Icon(Icons.login, color: context.textPrimary),
+                    label: Text(
                       'Link Coinbase',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1606,11 +1606,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                 SizedBox(
                   width: tileWidth,
                   child: ElevatedButton.icon(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.currency_exchange,
                       color: Color(0xFF00E676),
                     ),
-                    label: const Text(
+                    label: Text(
                       'Connect Bitso',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

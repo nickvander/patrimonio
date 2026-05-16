@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
@@ -156,18 +157,18 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Wealth projection',
           style: TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.bold,
-            color: Colors.white,
+            color: context.textPrimary,
           ),
         ),
         const SizedBox(height: 8),
         Text(
           'Project your financial future based on current assets and savings strategy.',
-          style: TextStyle(fontSize: 16, color: Colors.white70),
+          style: TextStyle(fontSize: 16, color: context.textMuted),
         ),
       ],
     );
@@ -186,7 +187,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 onChanged: (val) => setState(() => _monthlyContribution = val),
                 onChangeEnd: (_) => _fetchProjection(),
               ),
-              const Divider(height: 32, color: Colors.white10),
+              Divider(height: 32, color: context.hairline),
               _buildSliderControl(
                 label: 'Expected return',
                 value: _annualReturnRate,
@@ -196,7 +197,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 onChanged: (val) => setState(() => _annualReturnRate = val),
                 onChangeEnd: (_) => _fetchProjection(),
               ),
-              const Divider(height: 32, color: Colors.white10),
+              Divider(height: 32, color: context.hairline),
               _buildSliderControl(
                 label: 'Annual expenses',
                 value: _annualExpenses,
@@ -206,7 +207,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 onChanged: (val) => setState(() => _annualExpenses = val),
                 onChangeEnd: (_) => _fetchProjection(),
               ),
-              const Divider(height: 32, color: Colors.white10),
+              Divider(height: 32, color: context.hairline),
               _buildSliderControl(
                 label: 'Safe withdrawal rate',
                 value: _withdrawalRate,
@@ -216,7 +217,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 onChanged: (val) => setState(() => _withdrawalRate = val),
                 onChangeEnd: (_) => _fetchProjection(),
               ),
-              const Divider(height: 32, color: Colors.white10),
+              Divider(height: 32, color: context.hairline),
               _buildSliderControl(
                 label: 'Projection years',
                 value: _projectionYears.toDouble(),
@@ -227,7 +228,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                     setState(() => _projectionYears = val.toInt()),
                 onChangeEnd: (_) => _fetchProjection(),
               ),
-              const Divider(height: 32, color: Colors.white10),
+              Divider(height: 32, color: context.hairline),
               _buildGoalEditor(),
             ],
           );
@@ -274,11 +275,11 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           children: [
             Text(
               label,
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
+              style: TextStyle(color: context.textMuted, fontSize: 14),
             ),
             Text(
               displayValue,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Color(0xFF00E676),
                 fontWeight: FontWeight.bold,
               ),
@@ -291,7 +292,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           max: max,
           divisions: divisions ?? 100,
           activeColor: const Color(0xFF00E676),
-          inactiveColor: Colors.white10,
+          inactiveColor: context.hairline,
           onChanged: onChanged,
           onChangeEnd: onChangeEnd,
         ),
@@ -309,13 +310,13 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       children: [
         Row(
           children: [
-            const Icon(Icons.flag_outlined,
+            Icon(Icons.flag_outlined,
                 color: Color(0xFFFFD600), size: 18),
             const SizedBox(width: 8),
-            const Text(
+            Text(
               'Goal',
               style: TextStyle(
-                color: Colors.white,
+                color: context.textPrimary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -333,14 +334,14 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                       .putSetting('net_worth_goal', null)
                       .catchError((_) {});
                 },
-                child: const Text('Clear'),
+                child: Text('Clear'),
               ),
           ],
         ),
         const SizedBox(height: 8),
         TextButton.icon(
           onPressed: _editGoal,
-          icon: const Icon(Icons.edit_outlined, size: 16),
+          icon: Icon(Icons.edit_outlined, size: 16),
           label: Text(
             hasGoal
                 ? 'Hit ${widget.currencyFormat.format(_goalAmountUsd! * widget.conversionFactor)} by $_goalYear'
@@ -364,7 +365,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Set a target'),
+        title: Text('Set a target'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -387,10 +388,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
+              child: Text('Cancel')),
           FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Save')),
+              child: Text('Save')),
         ],
       ),
     );
@@ -437,7 +438,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                         ),
                       ),
                       FilterChip(
-                        label: const Text('Scenarios'),
+                        label: Text('Scenarios'),
                         selected: _showScenarios,
                         onSelected: (v) =>
                             setState(() => _showScenarios = v),
@@ -517,7 +518,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           show: true,
           drawVerticalLine: false,
           getDrawingHorizontalLine: (value) =>
-              FlLine(color: Colors.white10, strokeWidth: 1),
+              FlLine(color: context.hairline, strokeWidth: 1),
         ),
         titlesData: FlTitlesData(
           rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -530,7 +531,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 padding: const EdgeInsets.only(top: 8.0),
                 child: Text(
                   'Yr ${value.toInt()}',
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  style: TextStyle(color: context.textSubtle, fontSize: 12),
                 ),
               ),
             ),
@@ -543,7 +544,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 if (value == 0) return Container();
                 return Text(
                   NumberFormat.compact().format(value),
-                  style: const TextStyle(color: Colors.white54, fontSize: 10),
+                  style: TextStyle(color: context.textSubtle, fontSize: 10),
                 );
               },
             ),
@@ -631,8 +632,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               return touchedSpots.map((spot) {
                 return LineTooltipItem(
                   'Year ${spot.x.toStringAsFixed(1)}\n${widget.currencyFormat.format(spot.y)}',
-                  const TextStyle(
-                    color: Colors.white,
+                  TextStyle(
+                    color: context.textPrimary,
                     fontWeight: FontWeight.bold,
                   ),
                 );
@@ -713,21 +714,21 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               const SizedBox(height: 12),
               Text(
                 title,
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                style: TextStyle(color: context.textMuted, fontSize: 12),
               ),
               const SizedBox(height: 4),
               Text(
                 value,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: context.textPrimary,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 subtitle,
-                style: TextStyle(color: Colors.white38, fontSize: 10),
+                style: TextStyle(color: context.textFaint, fontSize: 10),
                 textAlign: TextAlign.center,
               ),
             ],

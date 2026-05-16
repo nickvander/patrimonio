@@ -3,6 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../services/preferences.dart';
 import '../utils/currency.dart';
+import '../utils/theme_colors.dart';
 
 class PortfolioCard extends StatefulWidget {
   final Map<String, dynamic> portfolioData;
@@ -219,22 +220,22 @@ class _PortfolioCardState extends State<PortfolioCard> {
               final summary = Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Investment portfolio',
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w700,
                       letterSpacing: -0.3,
-                      color: Colors.white,
+                      color: context.textPrimary,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 20),
-                  const Text(
+                  Text(
                     'Total value',
                     style: TextStyle(
-                      color: Colors.white54,
+                      color: context.textSubtle,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                       letterSpacing: 0.4,
@@ -251,7 +252,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                         fontWeight: FontWeight.w800,
                         letterSpacing: -1.0,
                         height: 1.1,
-                        color: Colors.white,
+                        color: context.textPrimary,
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                       maxLines: 1,
@@ -339,7 +340,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                 ),
-                dividerColor: Colors.white12,
+                dividerColor: context.hairline,
               ),
               child: _groupByAccount
                   ? _buildGroupedHoldings()
@@ -489,10 +490,10 @@ class _PortfolioCardState extends State<PortfolioCard> {
           return Container(
             margin: const EdgeInsets.only(bottom: 16),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.02),
+              color: context.tint(0.02),
               borderRadius: BorderRadius.circular(12),
               border:
-                  Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                  Border.all(color: context.tint(0.05)),
             ),
             child: Column(
               children: [
@@ -506,10 +507,10 @@ class _PortfolioCardState extends State<PortfolioCard> {
                           children: [
                             Text(
                               acct,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
-                                color: Colors.white,
+                                color: context.textPrimary,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -517,9 +518,9 @@ class _PortfolioCardState extends State<PortfolioCard> {
                             if (inst.isNotEmpty)
                               Text(
                                 '$inst · ${list.length} ${list.length == 1 ? "position" : "positions"}',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
-                                  color: Colors.white54,
+                                  color: context.textSubtle,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -530,17 +531,17 @@ class _PortfolioCardState extends State<PortfolioCard> {
                       const SizedBox(width: 12),
                       Text(
                         widget.currencyFormat.format(subtotal),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w800,
-                          color: Colors.white,
+                          color: context.textPrimary,
                           fontFeatures: [FontFeature.tabularFigures()],
                         ),
                       ),
                     ],
                   ),
                 ),
-                const Divider(color: Colors.white12, height: 1),
+                Divider(color: context.hairline, height: 1),
                 ...list.map((h) => _buildCompactHoldingRow(h)),
               ],
             ),
@@ -577,10 +578,10 @@ class _PortfolioCardState extends State<PortfolioCard> {
               waitDuration: const Duration(milliseconds: 600),
               child: Text(
                 displaySymbol,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: Colors.white,
+                  color: context.textPrimary,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -592,9 +593,9 @@ class _PortfolioCardState extends State<PortfolioCard> {
             child: Text(
               '${_formatQuantity(qty)} sh',
               textAlign: TextAlign.right,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: Colors.white60,
+                color: context.textMuted,
                 fontFeatures: [FontFeature.tabularFigures()],
               ),
             ),
@@ -604,10 +605,10 @@ class _PortfolioCardState extends State<PortfolioCard> {
             child: Text(
               widget.currencyFormat.format(value),
               textAlign: TextAlign.right,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: Colors.white,
+                color: context.textPrimary,
                 fontFeatures: [FontFeature.tabularFigures()],
               ),
             ),
@@ -659,7 +660,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                   onDeleted: widget.onClearCategoryFilter,
-                  backgroundColor: Colors.white.withValues(alpha: 0.06),
+                  backgroundColor: context.tint(0.06),
                 ),
               ),
             ),
@@ -678,15 +679,15 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 decoration: InputDecoration(
                   hintText:
                       'Search ticker, name, account, or institution…',
-                  hintStyle: const TextStyle(
-                      color: Colors.white54, fontSize: 13),
-                  prefixIcon: const Icon(
+                  hintStyle: TextStyle(
+                      color: context.textSubtle, fontSize: 13),
+                  prefixIcon: Icon(
                     Icons.search,
                     size: 18,
-                    color: Colors.white54,
+                    color: context.textSubtle,
                   ),
                   filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.05),
+                  fillColor: context.tint(0.05),
                   contentPadding: const EdgeInsets.symmetric(
                       vertical: 0, horizontal: 12),
                   border: OutlineInputBorder(
@@ -694,7 +695,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                     borderSide: BorderSide.none,
                   ),
                 ),
-                style: const TextStyle(fontSize: 13),
+                style: TextStyle(fontSize: 13),
               ),
             ),
           ),
@@ -703,7 +704,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
             _searchQuery.isEmpty
                 ? '$totalHoldings ${totalHoldings == 1 ? "holding" : "holdings"} · $accountCount ${accountCount == 1 ? "account" : "accounts"}'
                 : '$shownHoldings of $totalHoldings',
-            style: const TextStyle(fontSize: 12, color: Colors.white54),
+            style: TextStyle(fontSize: 12, color: context.textSubtle),
           ),
           const SizedBox(width: 12),
           SegmentedButton<bool>(
@@ -727,7 +728,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
             style: ButtonStyle(
               visualDensity: VisualDensity.compact,
               textStyle: WidgetStateProperty.all(
-                  const TextStyle(fontSize: 12)),
+                  TextStyle(fontSize: 12)),
             ),
           ),
             ],
@@ -752,11 +753,11 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 children: [
                   Icon(Icons.show_chart, size: 56, color: Colors.grey.shade700),
                   const SizedBox(height: 16),
-                  const Text(
+                  Text(
                     'No holdings yet',
                     style: TextStyle(
                       fontSize: 16,
-                      color: Colors.white70,
+                      color: context.textMuted,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -797,7 +798,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildTableHeader(),
-              const Divider(color: Colors.white12, height: 1, thickness: 1),
+              Divider(color: context.hairline, height: 1, thickness: 1),
               SizedBox(
                 height: bodyHeight,
                 child: Scrollbar(
@@ -866,7 +867,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: active ? Colors.white : Colors.white60,
+                    color: active ? context.textPrimary : context.textMuted,
                   ),
                 ),
                 if (active) ...[
@@ -933,10 +934,10 @@ class _PortfolioCardState extends State<PortfolioCard> {
             value: value,
             title: isTouched ? '${(percentage * 100).toStringAsFixed(1)}%' : '',
             radius: radius,
-            titleStyle: const TextStyle(
+            titleStyle: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w900,
-              color: Colors.white,
+              color: context.textPrimary,
               shadows: [Shadow(color: Colors.black, blurRadius: 6)],
             ),
             badgeWidget: isTouched
@@ -982,10 +983,10 @@ class _PortfolioCardState extends State<PortfolioCard> {
           value: otherValue,
           title: isTouched ? '${(percentage * 100).toStringAsFixed(1)}%' : '',
           radius: radius,
-          titleStyle: const TextStyle(
+          titleStyle: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,
-            color: Colors.white,
+            color: context.textPrimary,
           ),
         ),
       );
@@ -1070,7 +1071,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
               label,
               style: TextStyle(
                 fontWeight: isTouched ? FontWeight.bold : FontWeight.w600,
-                color: isTouched ? color : Colors.white,
+                color: isTouched ? color : context.textPrimary,
               ),
             ),
           ),
@@ -1244,8 +1245,8 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
             radius: 16,
             child: Text(
               avatarChar,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: context.textPrimary,
                 fontWeight: FontWeight.bold,
                 fontSize: 12,
               ),
@@ -1259,7 +1260,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
               children: [
                 Text(
                   displaySymbol,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
                   ),
@@ -1268,7 +1269,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
                 ),
                 Text(
                   secondaryLabel,
-                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  style: TextStyle(fontSize: 11, color: Colors.grey),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1287,15 +1288,15 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
       children: [
         Text(
           _formatQuantity(quantity),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             fontFeatures: [FontFeature.tabularFigures()],
           ),
         ),
         const SizedBox(width: 4),
-        const Text(
+        Text(
           'sh',
-          style: TextStyle(fontSize: 11, color: Colors.white38),
+          style: TextStyle(fontSize: 11, color: context.textFaint),
         ),
       ],
     );
@@ -1306,7 +1307,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
       children: [
         Text(
           widget.format.format(price),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             fontFeatures: [FontFeature.tabularFigures()],
           ),
@@ -1314,9 +1315,9 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
         if (sourceCurrency != widget.targetCurrency)
           Text(
             formatCurrencyAmount(sourcePrice, sourceCurrency),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10,
-              color: Colors.white38,
+              color: context.textFaint,
               fontFeatures: [FontFeature.tabularFigures()],
             ),
           ),
@@ -1329,7 +1330,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
       children: [
         Text(
           widget.format.format(value),
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 14,
             fontFeatures: [FontFeature.tabularFigures()],
@@ -1338,9 +1339,9 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
         if (sourceCurrency != widget.targetCurrency)
           Text(
             formatCurrencyAmount(sourceValue, sourceCurrency),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10,
-              color: Colors.white38,
+              color: context.textFaint,
               fontFeatures: [FontFeature.tabularFigures()],
             ),
           ),
@@ -1353,7 +1354,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
         costBasisSource == 0 ? '—' : widget.format.format(costBasis),
         style: TextStyle(
           fontSize: 14,
-          color: costBasisSource == 0 ? Colors.white38 : Colors.white70,
+          color: costBasisSource == 0 ? context.textFaint : context.textMuted,
           fontFeatures: const [FontFeature.tabularFigures()],
         ),
       ),
@@ -1362,9 +1363,9 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
     final gainCell = Align(
       alignment: Alignment.centerRight,
       child: gain == 0
-          ? const Text(
+          ? Text(
               '—',
-              style: TextStyle(fontSize: 14, color: Colors.white38),
+              style: TextStyle(fontSize: 14, color: context.textFaint),
             )
           : Text(
               '${isGain ? '+' : ''}${widget.format.format(gainConverted)}',
@@ -1403,7 +1404,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
       onExit: (_) => setState(() => _hover = false),
       child: Container(
         color:
-            _hover ? Colors.white.withValues(alpha: 0.05) : Colors.transparent,
+            _hover ? context.tint(0.05) : Colors.transparent,
         child: _tableRow(
           asset: asset,
           shares: shares,
@@ -1433,13 +1434,13 @@ class _KpiTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = accent ?? Colors.white54;
+    final c = accent ?? context.textSubtle;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: context.tint(0.03),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        border: Border.all(color: context.tint(0.06)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1459,10 +1460,10 @@ class _KpiTile extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    color: Colors.white60,
+                    color: context.textMuted,
                     letterSpacing: 0.2,
                   ),
                   maxLines: 1,
@@ -1474,10 +1475,10 @@ class _KpiTile extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: context.textPrimary,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -1488,7 +1489,7 @@ class _KpiTile extends StatelessWidget {
               sub!,
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.white.withValues(alpha: 0.55),
+                color: context.tint(0.55),
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
               maxLines: 1,

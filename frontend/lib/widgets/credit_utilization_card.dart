@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 
 class CreditUtilizationCard extends StatefulWidget {
@@ -62,11 +63,11 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                Text(
                   'CREDIT UTILIZATION',
                   style: TextStyle(
                     fontSize: 11,
-                    color: Colors.white54,
+                    color: context.textSubtle,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1.2,
                   ),
@@ -88,7 +89,7 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
               borderRadius: BorderRadius.circular(10),
               child: LinearProgressIndicator(
                 value: (totalUtilization / 100).clamp(0.0, 1.0),
-                backgroundColor: Colors.white12,
+                backgroundColor: context.hairline,
                 color: totalUtilization > 30
                     ? Colors.orange
                     : const Color(0xFF00E676),
@@ -142,13 +143,13 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
                     children: [
                       Text(
                         item['name'] ?? 'Credit account',
-                        style: const TextStyle(fontWeight: FontWeight.w500),
+                        style: TextStyle(fontWeight: FontWeight.w500),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
                         item['institution_name'] ?? '',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey,
                         ),
@@ -161,7 +162,7 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
                 const SizedBox(width: 12),
                 Text(
                   '${currencyFormat.format(balance * conversionFactor)} / ${currencyFormat.format(limit * conversionFactor)}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     fontFeatures: [FontFeature.tabularFigures()],
@@ -174,7 +175,7 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
                 value: (util / 100).clamp(0.0, 1.0),
-                backgroundColor: Colors.white10,
+                backgroundColor: context.hairline,
                 color: util > 30
                     ? Colors.orange.withValues(alpha: 0.7)
                     : const Color(0xFF00E676).withValues(alpha: 0.7),
@@ -198,7 +199,7 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
           label: Text(_expanded
               ? 'Show fewer'
               : 'Show $hidden more ${hidden == 1 ? "card" : "cards"}'),
-          style: TextButton.styleFrom(foregroundColor: Colors.white70),
+          style: TextButton.styleFrom(foregroundColor: context.textMuted),
         ),
       ));
     }

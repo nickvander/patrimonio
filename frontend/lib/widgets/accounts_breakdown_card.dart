@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 
 class AccountsBreakdownCard extends StatelessWidget {
@@ -25,7 +26,7 @@ class AccountsBreakdownCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Asset breakdown',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
@@ -39,11 +40,11 @@ class AccountsBreakdownCard extends StatelessWidget {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _buildTypeSection(),
+                      _buildTypeSection(context),
                       const SizedBox(height: 24),
-                      const Divider(color: Colors.white12, height: 1),
+                      Divider(color: context.hairline, height: 1),
                       const SizedBox(height: 24),
-                      _buildInstitutionSection(),
+                      _buildInstitutionSection(context),
                     ],
                   );
                 }
@@ -51,9 +52,9 @@ class AccountsBreakdownCard extends StatelessWidget {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(child: _buildTypeSection()),
-                      const VerticalDivider(width: 32, color: Colors.white12),
-                      Expanded(child: _buildInstitutionSection()),
+                      Expanded(child: _buildTypeSection(context)),
+                      VerticalDivider(width: 32, color: context.hairline),
+                      Expanded(child: _buildInstitutionSection(context)),
                     ],
                   ),
                 );
@@ -81,19 +82,19 @@ class AccountsBreakdownCard extends StatelessWidget {
     }).join(' ');
   }
 
-  Widget _sectionLabel(String label) {
+  Widget _sectionLabel(BuildContext context, String label) {
     return Text(
       label.toUpperCase(),
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 11,
-        color: Colors.white54,
+        color: context.textSubtle,
         fontWeight: FontWeight.w700,
         letterSpacing: 1.0,
       ),
     );
   }
 
-  Widget _breakdownRow(String label, double valueInUsd) {
+  Widget _breakdownRow(BuildContext context, String label, double valueInUsd) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10.0),
       child: Row(
@@ -102,7 +103,7 @@ class AccountsBreakdownCard extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(fontSize: 14, color: Colors.white),
+              style: TextStyle(fontSize: 14, color: context.textPrimary),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -110,10 +111,10 @@ class AccountsBreakdownCard extends StatelessWidget {
           const SizedBox(width: 12),
           Text(
             currencyFormat.format(valueInUsd * conversionFactor),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: context.textPrimary,
               fontFeatures: [FontFeature.tabularFigures()],
             ),
           ),
@@ -122,33 +123,33 @@ class AccountsBreakdownCard extends StatelessWidget {
     );
   }
 
-  Widget _buildTypeSection() {
+  Widget _buildTypeSection(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionLabel('By type'),
+        _sectionLabel(context, 'By type'),
         const SizedBox(height: 16),
         ...typeBreakdown.map((item) {
           final total = ((item['total_usd'] ?? item['total'] ?? 0.0) as num)
               .toDouble();
           final type = (item['account_type'] ?? 'Other').toString();
-          return _breakdownRow(_prettyType(type), total);
+          return _breakdownRow(context, _prettyType(type), total);
         }),
       ],
     );
   }
 
-  Widget _buildInstitutionSection() {
+  Widget _buildInstitutionSection(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionLabel('By institution'),
+        _sectionLabel(context, 'By institution'),
         const SizedBox(height: 16),
         ...institutionBreakdown.map((item) {
           final total = ((item['total_usd'] ?? item['total'] ?? 0.0) as num)
               .toDouble();
           final name = (item['name'] ?? 'Bank').toString();
-          return _breakdownRow(name, total);
+          return _breakdownRow(context, name, total);
         }),
       ],
     );

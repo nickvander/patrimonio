@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
@@ -81,7 +82,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A24),
-        title: const Text('Rename account'),
+        title: Text('Rename account'),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -99,7 +100,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+              child: Text('Cancel')),
           FilledButton(
             onPressed: () async {
               final v = controller.text.trim();
@@ -108,7 +109,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                   ?.call(widget.account['id'].toString(), v);
               if (mounted) setState(() => widget.account['nickname'] = v);
             },
-            child: const Text('Save'),
+            child: Text('Save'),
           ),
         ],
       ),
@@ -230,7 +231,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -244,7 +245,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                 });
               }
             },
-            child: const Text('Save'),
+            child: Text('Save'),
           ),
         ],
       ),
@@ -257,7 +258,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildHeader(),
-        const Divider(height: 1, color: Colors.white12),
+        Divider(height: 1, color: context.hairline),
         Expanded(child: _buildBody()),
       ],
     );
@@ -293,9 +294,9 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                     if (inst.isNotEmpty)
                       Text(
                         inst.toUpperCase(),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
-                          color: Colors.white54,
+                          color: context.textSubtle,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1.0,
                         ),
@@ -303,10 +304,10 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                     const SizedBox(height: 4),
                     Text(
                       name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
-                        color: Colors.white,
+                        color: context.textPrimary,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -343,11 +344,11 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                       ),
                     ),
                 ],
-                icon: const Icon(Icons.more_vert, size: 20),
+                icon: Icon(Icons.more_vert, size: 20),
               ),
               IconButton(
                 tooltip: 'Close',
-                icon: const Icon(Icons.close, size: 20),
+                icon: Icon(Icons.close, size: 20),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ],
@@ -359,10 +360,10 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             children: [
               Text(
                 formatCurrencyAmount(balance, sourceCurrency),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.w900,
-                  color: Colors.white,
+                  color: context.textPrimary,
                   fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
@@ -370,9 +371,9 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                 const SizedBox(width: 8),
                 Text(
                   '≈ ${widget.currencyFormat.format(convertedBalance)}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: Colors.white38,
+                    color: context.textFaint,
                     fontStyle: FontStyle.italic,
                     fontFeatures: [FontFeature.tabularFigures()],
                   ),
@@ -396,7 +397,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            Icon(Icons.error_outline, size: 64, color: Colors.red),
             const SizedBox(height: 16),
             Text(
               'Error loading transactions: $_error',
@@ -405,7 +406,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _fetchTransactions,
-              child: const Text('Retry'),
+              child: Text('Retry'),
             ),
           ],
         ),
@@ -419,9 +420,9 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
           children: [
             Icon(Icons.receipt_long, size: 64, color: Colors.grey[800]),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'No transactions yet',
-              style: TextStyle(fontSize: 16, color: Colors.white54),
+              style: TextStyle(fontSize: 16, color: context.textSubtle),
             ),
             const SizedBox(height: 8),
             Text(

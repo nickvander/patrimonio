@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 import '../services/api_service.dart';
 
 class AddAccountDialog extends StatefulWidget {
@@ -40,7 +41,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: const Color(0xFF1A1A24),
-      title: const Text(
+      title: Text(
         'Add manual account',
         style: TextStyle(fontWeight: FontWeight.bold),
       ),
@@ -52,7 +53,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
             children: [
               TextFormField(
                 controller: _nameController,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: context.textPrimary),
                 autofocus: true,
                 decoration: const InputDecoration(
                   labelText: 'Account name',
@@ -83,7 +84,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _balanceController,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: context.textPrimary),
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                   signed: true,
@@ -111,7 +112,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
       actions: [
         TextButton(
           onPressed: _isSubmitting ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text('Cancel'),
         ),
         ElevatedButton(
           onPressed: _isSubmitting ? null : _submit,
@@ -121,7 +122,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Create account'),
+              : Text('Create account'),
         ),
       ],
     );

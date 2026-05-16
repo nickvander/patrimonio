@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 
 /// Sticky banner shown above the dashboard body whenever one or more
 /// institutions are in `error` or `reconnect_required` state. Toast
@@ -62,13 +63,13 @@ class SyncErrorBanner extends StatelessWidget {
               TextButton.icon(
                 onPressed: () =>
                     onReconnect!(reconnectOnly.first['id'].toString()),
-                icon: const Icon(Icons.link, size: 16),
-                label: const Text('Reconnect'),
+                icon: Icon(Icons.link, size: 16),
+                label: Text('Reconnect'),
               ),
             TextButton.icon(
               onPressed: onJumpToManagement,
-              icon: const Icon(Icons.settings, size: 16),
-              label: const Text('Open management'),
+              icon: Icon(Icons.settings, size: 16),
+              label: Text('Open management'),
             ),
           ],
         );
@@ -79,13 +80,13 @@ class SyncErrorBanner extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded,
+                  Icon(Icons.warning_amber_rounded,
                       color: Colors.orangeAccent, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       summary,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.orangeAccent,
                         fontWeight: FontWeight.w700,
                       ),
@@ -98,7 +99,7 @@ class SyncErrorBanner extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 detail,
-                style: const TextStyle(color: Colors.white60, fontSize: 12),
+                style: TextStyle(color: context.textMuted, fontSize: 12),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -108,12 +109,12 @@ class SyncErrorBanner extends StatelessWidget {
         }
         return Row(
           children: [
-            const Icon(Icons.warning_amber_rounded,
+            Icon(Icons.warning_amber_rounded,
                 color: Colors.orangeAccent, size: 18),
             const SizedBox(width: 8),
             Text(
               summary,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.orangeAccent,
                 fontWeight: FontWeight.w700,
               ),
@@ -122,7 +123,7 @@ class SyncErrorBanner extends StatelessWidget {
             Expanded(
               child: Text(
                 detail,
-                style: const TextStyle(color: Colors.white60, fontSize: 12),
+                style: TextStyle(color: context.textMuted, fontSize: 12),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),

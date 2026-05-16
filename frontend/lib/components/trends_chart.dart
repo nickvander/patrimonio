@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 
@@ -37,7 +38,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Cash flow trends',
                         style: TextStyle(
                           fontSize: 18,
@@ -53,7 +54,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                 return Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
+                    Text(
                       'Cash flow trends',
                       style: TextStyle(
                         fontSize: 18,
@@ -80,7 +81,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         return BarTooltipItem(
                           '${rodIndex == 0 ? "Income" : "Spending"}\n${currencyFormat.format(rod.toY * conversionFactor)}',
-                          const TextStyle(color: Colors.white),
+                          TextStyle(color: context.textPrimary),
                         );
                       },
                     ),
@@ -117,7 +118,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                               meta: meta,
                               child: Text(
                                 label,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 10,
                                   color: Colors.grey,
                                 ),
@@ -146,7 +147,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                               NumberFormat.compactSimpleCurrency(
                                 name: currencyFormat.currencyName,
                               ).format(value * conversionFactor),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 10,
                                 color: Colors.grey,
                               ),
@@ -184,7 +185,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                           backDrawRodData: BackgroundBarChartRodData(
                             show: true,
                             toY: maxY,
-                            color: Colors.white.withValues(alpha: 0.05),
+                            color: context.tint(0.05),
                           ),
                         ),
                         BarChartRodData(
@@ -202,7 +203,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                           backDrawRodData: BackgroundBarChartRodData(
                             show: true,
                             toY: maxY,
-                            color: Colors.white.withValues(alpha: 0.05),
+                            color: context.tint(0.05),
                           ),
                         ),
                       ],
@@ -239,7 +240,7 @@ class CashFlowTrendsChart extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 6),
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey)),
       ],
     );
   }

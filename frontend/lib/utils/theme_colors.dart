@@ -34,4 +34,9 @@ extension ThemeColorsExt on BuildContext {
   Color get tileSurface => _isDark
       ? _scheme.onSurface.withValues(alpha: 0.04)
       : _scheme.onSurface.withValues(alpha: 0.05);
+
+  /// Arbitrary-alpha onSurface tint. Use for backgrounds and overlays
+  /// that need a specific opacity (e.g. hover states, chart gridlines).
+  /// Replaces ad-hoc `Colors.white.withValues(alpha: X)`.
+  Color tint(double alpha) => _scheme.onSurface.withValues(alpha: alpha);
 }

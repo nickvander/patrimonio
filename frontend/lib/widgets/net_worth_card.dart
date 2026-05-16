@@ -144,9 +144,9 @@ class _NetWorthCardState extends State<NetWorthCard> {
       child: Container(
         padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.04),
+          color: context.tint(0.04),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white12),
+          border: Border.all(color: context.hairline),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -330,7 +330,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+        Text(label, style: TextStyle(fontSize: 10, color: Colors.grey)),
       ],
     );
   }
@@ -476,7 +476,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                 final children = <TextSpan>[
                   TextSpan(
                     text: '${DateFormat('MMM d, y').format(date)}\n',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Colors.grey,
                       fontSize: 11,
                       fontWeight: FontWeight.normal,
@@ -485,8 +485,8 @@ class _NetWorthCardState extends State<NetWorthCard> {
                   TextSpan(
                     text:
                         'Net worth: ${currencyFormat.format((nw as num).toDouble() * conversionFactor)}\n',
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: context.textPrimary,
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
                     ),
@@ -495,14 +495,14 @@ class _NetWorthCardState extends State<NetWorthCard> {
 
                 if (ta != null && tl != null) {
                   children.addAll([
-                    const TextSpan(
+                    TextSpan(
                       text: '───────────────\n',
-                      style: TextStyle(color: Colors.white10),
+                      style: TextStyle(color: context.hairline),
                     ),
                     TextSpan(
                       text:
                           'Assets: ${currencyFormat.format((ta as num).toDouble() * conversionFactor)}\n',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Color(0xFF00E676),
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -511,7 +511,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                     TextSpan(
                       text:
                           'Liabilities: ${currencyFormat.format((tl as num).toDouble() * conversionFactor)}\n',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.redAccent,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -521,9 +521,9 @@ class _NetWorthCardState extends State<NetWorthCard> {
                 }
 
                 if (institutions.isNotEmpty) {
-                  children.add(const TextSpan(
+                  children.add(TextSpan(
                     text: '───────────────\n',
-                    style: TextStyle(color: Colors.white10),
+                    style: TextStyle(color: context.hairline),
                   ));
                   for (final inst in institutions) {
                     final raw = byInst[inst.key];
@@ -543,7 +543,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
 
                 return LineTooltipItem(
                   '',
-                  const TextStyle(color: Colors.white),
+                  TextStyle(color: context.textPrimary),
                   children: children,
                 );
               }).toList();
@@ -555,7 +555,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
           drawVerticalLine: false,
           horizontalInterval: yInterval,
           getDrawingHorizontalLine: (value) =>
-              FlLine(color: Colors.white10, strokeWidth: 1),
+              FlLine(color: context.hairline, strokeWidth: 1),
         ),
         titlesData: FlTitlesData(
           show: true,
@@ -582,11 +582,11 @@ class _NetWorthCardState extends State<NetWorthCard> {
                         : DateFormat('MMM y');
                     return Text(
                       fmt.format(date),
-                      style: const TextStyle(color: Colors.grey, fontSize: 10),
+                      style: TextStyle(color: Colors.grey, fontSize: 10),
                     );
                   }
                 }
-                return const Text('');
+                return Text('');
               },
             ),
           ),
@@ -607,7 +607,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                   NumberFormat.compactSimpleCurrency(
                     name: currencyFormat.currencyName,
                   ).format(value),
-                  style: const TextStyle(color: Colors.grey, fontSize: 10),
+                  style: TextStyle(color: Colors.grey, fontSize: 10),
                 );
               },
               reservedSize: 50,
@@ -644,13 +644,13 @@ class _NetWorthCardState extends State<NetWorthCard> {
               spots: cumulativeSpots[levels],
               isCurved: true,
               preventCurveOverShooting: true,
-              color: Colors.white24,
+              color: context.textFaint,
               barWidth: 1,
               isStrokeCapRound: true,
               dotData: const FlDotData(show: false),
               belowBarData: BarAreaData(
                 show: true,
-                color: Colors.white.withValues(alpha: 0.05),
+                color: context.tint(0.05),
               ),
             ),
           // Total net worth line drawn on top so it remains the focal value.

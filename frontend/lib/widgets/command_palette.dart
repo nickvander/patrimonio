@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 import 'package:flutter/services.dart';
 
 /// One row in the command-palette results.
@@ -126,14 +127,14 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                   onSubmitted: (_) => _activateHighlight(),
                 ),
               ),
-              const Divider(height: 1, color: Colors.white12),
+              Divider(height: 1, color: context.hairline),
               Flexible(
                 child: visible.isEmpty
-                    ? const Padding(
-                        padding: EdgeInsets.all(24),
+                    ? Padding(
+                        padding: const EdgeInsets.all(24),
                         child: Text(
                           'No matches.',
-                          style: TextStyle(color: Colors.white54),
+                          style: TextStyle(color: context.textSubtle),
                         ),
                       )
                     : ListView.builder(
@@ -144,7 +145,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                           final isHi = i == _highlight;
                           return Container(
                             color: isHi
-                                ? Colors.white.withValues(alpha: 0.06)
+                                ? context.tint(0.06)
                                 : null,
                             child: ListTile(
                               dense: true,
@@ -160,7 +161,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                               ),
                               title: Text(
                                 it.label,
-                                style: const TextStyle(
+                                style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600),
                                 maxLines: 1,
@@ -170,9 +171,9 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                                   ? null
                                   : Text(
                                       it.subtitle!,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           fontSize: 11,
-                                          color: Colors.white54),
+                                          color: context.textSubtle),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -189,7 +190,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.03),
+                  color: context.tint(0.03),
                   borderRadius: const BorderRadius.only(
                     bottomLeft: Radius.circular(20),
                     bottomRight: Radius.circular(20),
@@ -225,22 +226,22 @@ class _Hint extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: Colors.white12,
+            color: context.hairline,
             borderRadius: BorderRadius.circular(4),
           ),
           child: Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w700,
-              color: Colors.white70,
+              color: context.textMuted,
             ),
           ),
         ),
         const SizedBox(width: 6),
         Text(
           text,
-          style: const TextStyle(fontSize: 11, color: Colors.white54),
+          style: TextStyle(fontSize: 11, color: context.textSubtle),
         ),
       ],
     );

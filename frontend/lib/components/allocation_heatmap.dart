@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 
 /// Trim trailing zeros and pick a sensible precision based on the
@@ -138,7 +139,7 @@ class AllocationHeatmap extends StatelessWidget {
                 Flexible(
                   child: Text(
                     'Total: ${currencyFormat.format(totalValue * conversionFactor)}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       color: Colors.grey,
                       fontWeight: FontWeight.w600,
@@ -191,10 +192,10 @@ class AllocationHeatmap extends StatelessWidget {
                               Flexible(
                                 child: Text(
                                   _displayCategory(cat),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.white,
+                                    color: context.textPrimary,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -203,9 +204,9 @@ class AllocationHeatmap extends StatelessWidget {
                               const SizedBox(width: 8),
                               Text(
                                 '${items.length} ${items.length == 1 ? "holding" : "holdings"}',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
-                                  color: Colors.white38,
+                                  color: context.textFaint,
                                   fontWeight: FontWeight.w500,
                                 ),
                                 maxLines: 1,
@@ -233,7 +234,7 @@ class AllocationHeatmap extends StatelessWidget {
                           height: 12,
                           width: double.infinity,
                           decoration: BoxDecoration(
-                            color: Colors.white12,
+                            color: context.hairline,
                             borderRadius: BorderRadius.circular(6),
                           ),
                         ),
@@ -290,9 +291,9 @@ class AllocationHeatmap extends StatelessWidget {
                             const SizedBox(width: 8),
                             Text(
                               item.subCategory,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.white70,
+                                color: context.textMuted,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -300,9 +301,9 @@ class AllocationHeatmap extends StatelessWidget {
                               const SizedBox(width: 4),
                               Text(
                                 '· ${_formatQty(item.quantity)} sh',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
-                                  color: Colors.white38,
+                                  color: context.textFaint,
                                   fontFeatures: [
                                     FontFeature.tabularFigures(),
                                   ],
@@ -314,9 +315,9 @@ class AllocationHeatmap extends StatelessWidget {
                               currencyFormat.format(
                                 item.value * conversionFactor,
                               ),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.white,
+                                color: context.textPrimary,
                                 fontWeight: FontWeight.w600,
                                 fontFeatures: [FontFeature.tabularFigures()],
                               ),

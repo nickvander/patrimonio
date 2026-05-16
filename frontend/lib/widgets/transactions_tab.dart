@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 import 'package:web/web.dart' as web;
 import '../services/api_service.dart';
@@ -213,7 +214,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
         padding: const EdgeInsets.symmetric(horizontal: 8),
         minimumSize: const Size(0, 28),
       ),
-      child: const Text('Clear all'),
+      child: Text('Clear all'),
     ));
     return Padding(
       padding: const EdgeInsets.only(top: 8, bottom: 4),
@@ -236,8 +237,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
       label: Text(label),
       onDeleted: onRemove,
       visualDensity: VisualDensity.compact,
-      labelStyle: const TextStyle(fontSize: 12),
-      deleteIconColor: Colors.white60,
+      labelStyle: TextStyle(fontSize: 12),
+      deleteIconColor: context.textMuted,
     );
   }
 
@@ -248,19 +249,19 @@ class _TransactionsTabState extends State<TransactionsTab> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.receipt_long_outlined,
+            Icon(Icons.receipt_long_outlined,
                 size: 64, color: Colors.grey),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'No transactions yet',
               style: TextStyle(
-                color: Colors.white70,
+                color: context.textMuted,
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Link a bank, import a statement, or add an account manually\n'
               'to start seeing activity here.',
               textAlign: TextAlign.center,
@@ -269,8 +270,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
             const SizedBox(height: 20),
             FilledButton.icon(
               onPressed: widget.onGoToManagement,
-              icon: const Icon(Icons.add_link, size: 18),
-              label: const Text('Go to Management'),
+              icon: Icon(Icons.add_link, size: 18),
+              label: Text('Go to Management'),
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF00E676),
                 foregroundColor: Colors.black,
@@ -298,7 +299,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               const SizedBox(height: 8),
               Text(
                 'Showing ${filtered.length} of ${widget.transactions.length}',
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
+                style: TextStyle(color: Colors.grey, fontSize: 12),
               ),
               const SizedBox(height: 8),
               if (_selectionMode) _buildBulkActionBar(filtered),
@@ -331,8 +332,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
                                 }
                               }
                             },
-                            icon: const Icon(Icons.expand_more, size: 18),
-                            label: const Text('Load more'),
+                            icon: Icon(Icons.expand_more, size: 18),
+                            label: Text('Load more'),
                           ),
                   ),
                 ),
@@ -389,15 +390,15 @@ class _TransactionsTabState extends State<TransactionsTab> {
         final categorize = FilledButton.tonalIcon(
           onPressed:
               selectedCount == 0 ? null : () => _bulkCategorize(),
-          icon: const Icon(Icons.label_outline, size: 18),
-          label: const Text('Set category'),
+          icon: Icon(Icons.label_outline, size: 18),
+          label: Text('Set category'),
         );
 
         final moveAccount = FilledButton.tonalIcon(
           onPressed:
               selectedCount == 0 ? null : () => _bulkMoveAccount(),
-          icon: const Icon(Icons.compare_arrows, size: 18),
-          label: const Text('Move account'),
+          icon: Icon(Icons.compare_arrows, size: 18),
+          label: Text('Move account'),
         );
 
         final clear = TextButton(
@@ -405,12 +406,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
             _selectionMode = false;
             _selectedIds.clear();
           }),
-          child: const Text('Clear'),
+          child: Text('Clear'),
         );
 
         final summary = Text(
           '$selectedCount selected',
-          style: const TextStyle(
+          style: TextStyle(
               fontWeight: FontWeight.w700, color: Color(0xFF00E676)),
         );
 
@@ -451,7 +452,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
     final cat = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Set category'),
+        title: Text('Set category'),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -463,11 +464,11 @@ class _TransactionsTabState extends State<TransactionsTab> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+              child: Text('Cancel')),
           FilledButton(
               onPressed: () =>
                   Navigator.pop(context, controller.text.trim()),
-              child: const Text('Apply')),
+              child: Text('Apply')),
         ],
       ),
     );
@@ -480,7 +481,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
       context: context,
       builder: (_) {
         return SimpleDialog(
-          title: const Text('Move to account'),
+          title: Text('Move to account'),
           children: [
             for (final a in widget.accounts)
               SimpleDialogOption(
@@ -552,7 +553,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               _searchOpenOnNarrow = false;
               _searchQuery = '';
             }),
-            icon: const Icon(Icons.close, size: 20),
+            icon: Icon(Icons.close, size: 20),
             tooltip: 'Close search',
           ),
         ],
@@ -579,7 +580,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               children: [
                 IconButton(
                   onPressed: _openFilters,
-                  icon: const Icon(Icons.filter_list, size: 22),
+                  icon: Icon(Icons.filter_list, size: 22),
                   tooltip: 'Filter transactions',
                 ),
                 if (_filters.isActive)
@@ -613,12 +614,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
             if (widget.apiService != null) ...[
               IconButton(
                 onPressed: () => _openAddDialog(),
-                icon: const Icon(Icons.add, size: 22),
+                icon: Icon(Icons.add, size: 22),
                 tooltip: 'Add transaction',
               ),
               IconButton(
                 onPressed: () => _downloadCsv(),
-                icon: const Icon(Icons.file_download_outlined, size: 22),
+                icon: Icon(Icons.file_download_outlined, size: 22),
                 tooltip: 'Export CSV',
               ),
             ],
@@ -626,7 +627,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               IconButton(
                 onPressed: () =>
                     setState(() => _searchOpenOnNarrow = true),
-                icon: const Icon(Icons.search, size: 20),
+                icon: Icon(Icons.search, size: 20),
                 tooltip: 'Search transactions',
               )
             else
@@ -663,11 +664,11 @@ class _TransactionsTabState extends State<TransactionsTab> {
       onChanged: (v) => setState(() => _searchQuery = v),
       decoration: InputDecoration(
         hintText: 'Search transactions…',
-        hintStyle: const TextStyle(color: Colors.white30, fontSize: 13),
+        hintStyle: TextStyle(color: context.textFaint, fontSize: 13),
         prefixIcon:
-            const Icon(Icons.search, size: 18, color: Colors.white30),
+            Icon(Icons.search, size: 18, color: context.textFaint),
         filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.05),
+        fillColor: context.tint(0.05),
         contentPadding:
             const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
         border: OutlineInputBorder(
@@ -675,7 +676,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
           borderSide: BorderSide.none,
         ),
       ),
-      style: const TextStyle(fontSize: 13),
+      style: TextStyle(fontSize: 13),
     );
   }
 
@@ -696,10 +697,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
         out.add(_dateGroupHeader(date, isFirst: lastGroup == null));
         lastGroup = key;
       } else {
-        out.add(const Divider(
+        out.add(Divider(
           height: 1,
           thickness: 1,
-          color: Colors.white10,
+          color: context.hairline,
           indent: 44, // align with the description column, past the icon
         ));
       }
@@ -748,10 +749,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
       ),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w700,
-          color: Colors.white54,
+          color: context.textSubtle,
           letterSpacing: 0.6,
         ),
       ),
@@ -805,7 +806,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
           });
         }
       },
-      hoverColor: Colors.white.withValues(alpha: 0.03),
+      hoverColor: context.tint(0.03),
       child: Container(
         // Subtle tint on selected rows so it's obvious which set the bulk
         // action bar will operate on.
@@ -855,7 +856,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 children: [
                   Text(
                     _titleCase(tx['description'] ?? 'Unknown'),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
                       height: 1.2,
@@ -866,8 +867,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
                   const SizedBox(height: 2),
                   Text(
                     _metaLine(tx, notes),
-                    style: const TextStyle(
-                      color: Colors.white54,
+                    style: TextStyle(
+                      color: context.textSubtle,
                       fontSize: 11,
                       height: 1.3,
                     ),
@@ -894,7 +895,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                       fontSize: 14,
                       fontFeatures: const [FontFeature.tabularFigures()],
                       color: isExpense
-                          ? Colors.white
+                          ? context.textPrimary
                           : const Color(0xFF00E676),
                     ),
                     maxLines: 1,
@@ -905,9 +906,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
                         '≈ ${widget.currencyFormat.format(converted.abs())}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 10,
-                          color: Colors.white38,
+                          color: context.textFaint,
                           fontFeatures: [FontFeature.tabularFigures()],
                         ),
                         maxLines: 1,
@@ -923,7 +924,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                         color: Colors.orange.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(3),
                       ),
-                      child: const Text(
+                      child: Text(
                         'Pending',
                         style: TextStyle(
                           color: Colors.orange,
@@ -1078,7 +1079,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: IconButton(
-                      icon: const Icon(Icons.close, size: 20),
+                      icon: Icon(Icons.close, size: 20),
                       onPressed: () => Navigator.pop(context),
                       tooltip: 'Close',
                       padding: EdgeInsets.zero,
@@ -1111,7 +1112,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                           children: [
                             Text(
                               titleDescription,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -1124,9 +1125,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
                               const SizedBox(height: 2),
                               Text(
                                 merchant,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
-                                  color: Colors.white54,
+                                  color: context.textSubtle,
                                 ),
                               ),
                             ],
@@ -1142,7 +1143,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 18, vertical: 16),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.04),
+                      color: context.tint(0.04),
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
                         color: (isExpense
@@ -1174,7 +1175,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                             fontSize: 32,
                             fontWeight: FontWeight.w900,
                             color: isExpense
-                                ? Colors.white
+                                ? context.textPrimary
                                 : const Color(0xFF00E676),
                           ),
                         ),
@@ -1182,9 +1183,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
                           const SizedBox(height: 4),
                           Text(
                             '≈ ${widget.currencyFormat.format(convertedAmount.abs())} (estimated)',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: Colors.white54,
+                              color: context.textSubtle,
                               fontStyle: FontStyle.italic,
                             ),
                           ),
@@ -1252,9 +1253,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
                     const SizedBox(height: 4),
                     SelectableText(
                       rawDescription,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Colors.white60,
+                        color: context.textMuted,
                         fontFamily: 'monospace',
                       ),
                     ),
@@ -1292,9 +1293,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
                       padding: const EdgeInsets.only(bottom: 6),
                       child: Text(
                         'Total: ${widget.currencyFormat.format(merchantTotal)} across $merchantCount transactions',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: Colors.white60,
+                          color: context.textMuted,
                           fontFeatures: [FontFeature.tabularFigures()],
                         ),
                       ),
@@ -1333,20 +1334,20 @@ class _TransactionsTabState extends State<TransactionsTab> {
                             final confirm = await showDialog<bool>(
                               context: context,
                               builder: (ctx) => AlertDialog(
-                                title: const Text('Delete transaction?'),
-                                content: const Text(
+                                title: Text('Delete transaction?'),
+                                content: Text(
                                     'This permanently removes the transaction. To re-import from CSV/PDF you will need to upload the file again.'),
                                 actions: [
                                   TextButton(
                                       onPressed: () =>
                                           Navigator.pop(ctx, false),
-                                      child: const Text('Cancel')),
+                                      child: Text('Cancel')),
                                   TextButton(
                                     onPressed: () =>
                                         Navigator.pop(ctx, true),
                                     style: TextButton.styleFrom(
                                         foregroundColor: Colors.redAccent),
-                                    child: const Text('Delete'),
+                                    child: Text('Delete'),
                                   ),
                                 ],
                               ),
@@ -1365,15 +1366,15 @@ class _TransactionsTabState extends State<TransactionsTab> {
                               );
                             }
                           },
-                          icon: const Icon(Icons.delete_outline,
+                          icon: Icon(Icons.delete_outline,
                               size: 16, color: Colors.redAccent),
-                          label: const Text('Delete',
+                          label: Text('Delete',
                               style: TextStyle(color: Colors.redAccent)),
                         ),
                       const Spacer(),
                       TextButton(
                         onPressed: () => Navigator.pop(context),
-                        child: const Text('Close'),
+                        child: Text('Close'),
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
@@ -1385,7 +1386,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                             userNotes: notesController.text.trim(),
                           );
                         },
-                        child: const Text('Save'),
+                        child: Text('Save'),
                       ),
                     ],
                   ),
@@ -1410,9 +1411,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
   Widget _sectionLabel(String label) {
     return Text(
       label.toUpperCase(),
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 11,
-        color: Colors.white54,
+        color: context.textSubtle,
         fontWeight: FontWeight.w700,
         letterSpacing: 1.0,
       ),
@@ -1420,7 +1421,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
   }
 
   Widget _metaChip(IconData icon, String label, {Color? accent}) {
-    final c = accent ?? Colors.white70;
+    final c = accent ?? context.textMuted;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -1484,12 +1485,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Icon(Icons.history, size: 14, color: Colors.white38),
+          Icon(Icons.history, size: 14, color: context.textFaint),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               '${DateFormat('MMM d').format(otherDate)} · ${other['account_name'] ?? ''}',
-              style: const TextStyle(fontSize: 12, color: Colors.white60),
+              style: TextStyle(fontSize: 12, color: context.textMuted),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -1500,7 +1501,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: otherIsExpense
-                  ? Colors.white
+                  ? context.textPrimary
                   : const Color(0xFF00E676),
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
@@ -1685,7 +1686,7 @@ class _AccountMoverState extends State<_AccountMover> {
         const SizedBox(width: 8),
         ElevatedButton(
           onPressed: _selectedId == null ? null : () => widget.onMove(_selectedId!),
-          child: const Text('Move'),
+          child: Text('Move'),
         ),
       ],
     );

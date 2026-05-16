@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/api_service.dart';
 
@@ -192,18 +193,18 @@ class _ImportScreenState extends State<ImportScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Import statement')),
+      appBar: AppBar(title: Text('Import statement')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Upload account statement',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Upload CSV or PDF statements from Nu Mexico, Banamex, or Cetesdirecto. We will automatically detect the format.',
               style: TextStyle(color: Colors.grey),
             ),
@@ -214,13 +215,13 @@ class _ImportScreenState extends State<ImportScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(48),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.05),
+                    color: context.tint(0.05),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white10, width: 2),
+                    border: Border.all(color: context.hairline, width: 2),
                   ),
                   child: Column(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.upload_file,
                         size: 64,
                         color: Color(0xFF00E676),
@@ -231,13 +232,13 @@ class _ImportScreenState extends State<ImportScreen> {
                           children: [
                             Text(
                               _selectedFile!.name,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             Text(
                               '${(_selectedFile!.size / 1024).toStringAsFixed(1)} KB',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: Colors.grey,
                                 fontSize: 12,
                               ),
@@ -245,11 +246,11 @@ class _ImportScreenState extends State<ImportScreen> {
                           ],
                         )
                       else
-                        const Text('No file selected'),
+                        Text('No file selected'),
                       const SizedBox(height: 24),
                       ElevatedButton(
                         onPressed: _isUploading ? null : _pickFile,
-                        child: const Text('Select file'),
+                        child: Text('Select file'),
                       ),
                     ],
                   ),
@@ -259,7 +260,7 @@ class _ImportScreenState extends State<ImportScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Assign to account',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
@@ -269,7 +270,7 @@ class _ImportScreenState extends State<ImportScreen> {
                       initialValue: _selectedAccountId,
                       decoration: InputDecoration(
                         filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.05),
+                        fillColor: context.tint(0.05),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -296,7 +297,7 @@ class _ImportScreenState extends State<ImportScreen> {
                       Flexible(
                         child: Text(
                           'Preview (${_selectedIndices.length}/${_previewTransactions!.length} selected)',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
@@ -315,7 +316,7 @@ class _ImportScreenState extends State<ImportScreen> {
                                 );
                               });
                             },
-                            child: const Text(
+                            child: Text(
                               'Select all',
                               style: TextStyle(color: Color(0xFF00E676)),
                             ),
@@ -327,7 +328,7 @@ class _ImportScreenState extends State<ImportScreen> {
                                 _selectedIndices = {};
                               });
                             },
-                            child: const Text(
+                            child: Text(
                               'Deselect all',
                               style: TextStyle(color: Colors.grey),
                             ),
@@ -353,7 +354,7 @@ class _ImportScreenState extends State<ImportScreen> {
 
                       return Card(
                         color: isSelected
-                            ? Colors.white.withValues(alpha: 0.05)
+                            ? context.tint(0.05)
                             : Colors.transparent,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
@@ -361,7 +362,7 @@ class _ImportScreenState extends State<ImportScreen> {
                           side: BorderSide(
                             color: isSelected
                                 ? const Color(0xFF00E676).withValues(alpha: 0.5)
-                                : Colors.white10,
+                                : context.hairline,
                             width: 1,
                           ),
                         ),
@@ -452,7 +453,7 @@ class _ImportScreenState extends State<ImportScreen> {
                       onPressed: _confirmImport,
                       child: Text(
                         'Import ${_selectedIndices.length} Transaction${_selectedIndices.length == 1 ? '' : 's'}',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
@@ -483,11 +484,11 @@ class _ImportScreenState extends State<ImportScreen> {
                         decoration: InputDecoration(
                           labelText: 'PDF password (e.g. RFC)',
                           filled: true,
-                          fillColor: Colors.white.withValues(alpha: 0.05),
+                          fillColor: context.tint(0.05),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          prefixIcon: const Icon(Icons.lock_outline),
+                          prefixIcon: Icon(Icons.lock_outline),
                         ),
                       ),
                     ),
@@ -502,7 +503,7 @@ class _ImportScreenState extends State<ImportScreen> {
                       onPressed: _isUploading ? null : _uploadFile,
                       child: _isUploading
                           ? const CircularProgressIndicator(color: Colors.black)
-                          : const Text(
+                          : Text(
                               'Process statement',
                               style: TextStyle(fontWeight: FontWeight.bold),
                             ),

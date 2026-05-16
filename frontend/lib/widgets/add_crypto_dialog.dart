@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 import '../services/api_service.dart';
 
 class AddCryptoDialog extends StatefulWidget {
@@ -92,9 +93,9 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Text(
                 'Generate a "Read-Only" API key in Bitso settings. We only use this to fetch balances and estimate their value.',
-                style: TextStyle(fontSize: 12, color: Colors.white70),
+                style: TextStyle(fontSize: 12, color: context.textMuted),
               ),
               const SizedBox(height: 8),
               InkWell(
@@ -102,7 +103,7 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
                   // In a real browser, this would open the link
                   // web.window.open('https://bitso.com/api_info', '_blank');
                 },
-                child: const Text(
+                child: Text(
                   'Where do I find my API keys? ↗',
                   style: TextStyle(
                     fontSize: 12,
@@ -146,21 +147,21 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
       actions: [
         TextButton(
           onPressed: _isLoading ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text('Cancel'),
         ),
         ElevatedButton(
           onPressed: _isLoading ? null : _submit,
           style: ElevatedButton.styleFrom(
             backgroundColor: accentColor,
-            foregroundColor: Colors.white,
+            foregroundColor: context.textPrimary,
           ),
           child: _isLoading
-              ? const SizedBox(
+              ? SizedBox(
                   width: 20,
                   height: 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: context.textPrimary,
                   ),
                 )
               : const Text('Link account'),

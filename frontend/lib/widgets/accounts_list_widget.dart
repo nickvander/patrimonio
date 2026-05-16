@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 import '../screens/account_transactions_screen.dart';
 import '../utils/currency.dart';
@@ -43,10 +44,10 @@ class AccountsListWidget extends StatelessWidget {
                 Icon(Icons.account_balance_wallet_outlined,
                     size: 56, color: Colors.grey.shade700),
                 const SizedBox(height: 14),
-                const Text(
+                Text(
                   'No accounts yet',
                   style: TextStyle(
-                    color: Colors.white70,
+                    color: context.textMuted,
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
@@ -61,8 +62,8 @@ class AccountsListWidget extends StatelessWidget {
                 const SizedBox(height: 18),
                 FilledButton.icon(
                   onPressed: onGoToManagement,
-                  icon: const Icon(Icons.add_link, size: 18),
-                  label: const Text('Add an account'),
+                  icon: Icon(Icons.add_link, size: 18),
+                  label: Text('Add an account'),
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF00E676),
                     foregroundColor: Colors.black,
@@ -119,11 +120,11 @@ class AccountsListWidget extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'ACCOUNTS',
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.white54,
+                color: context.textSubtle,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 1.2,
               ),
@@ -216,9 +217,9 @@ class AccountsListWidget extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 24.0),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.02),
+        color: context.tint(0.02),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: context.tint(0.05)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -236,10 +237,10 @@ class AccountsListWidget extends StatelessWidget {
               );
               final titleText = Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: Colors.white,
+                  color: context.textPrimary,
                   letterSpacing: 0.2,
                 ),
                 maxLines: 1,
@@ -297,7 +298,7 @@ class AccountsListWidget extends StatelessWidget {
               );
             },
           ),
-          const Divider(color: Colors.white12, height: 1),
+          Divider(color: context.hairline, height: 1),
           ..._renderAccountsWithVaults(context, groupAccounts),
         ],
       ),
@@ -409,15 +410,15 @@ class AccountsListWidget extends StatelessWidget {
             Container(
               width: 14,
               height: 1,
-              color: Colors.white12,
+              color: context.hairline,
             ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 name,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
-                  color: Colors.white70,
+                  color: context.textMuted,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -426,10 +427,10 @@ class AccountsListWidget extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               formatCurrencyAmount(balance, sourceCurrency),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Colors.white70,
+                color: context.textMuted,
                 fontFeatures: [FontFeature.tabularFigures()],
               ),
             ),
@@ -473,10 +474,10 @@ class AccountsListWidget extends StatelessWidget {
       waitDuration: const Duration(milliseconds: 600),
       child: Text(
         name,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w600,
-          color: Colors.white,
+          color: context.textPrimary,
         ),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
@@ -489,9 +490,9 @@ class AccountsListWidget extends StatelessWidget {
             padding: const EdgeInsets.only(top: 2),
             child: Text(
               inst,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
-                color: Colors.white54,
+                color: context.textSubtle,
                 letterSpacing: 0.2,
               ),
               maxLines: 1,
@@ -503,10 +504,10 @@ class AccountsListWidget extends StatelessWidget {
     // reports). The estimated conversion only appears when needed.
     Widget balanceText = Text(
       nativeText,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 16,
         fontWeight: FontWeight.w700,
-        color: Colors.white,
+        color: context.textPrimary,
         fontFeatures: [FontFeature.tabularFigures()],
       ),
       maxLines: 1,
@@ -517,7 +518,7 @@ class AccountsListWidget extends StatelessWidget {
     if (hasCrypto) {
       subBalance = Text(
         '${acc['crypto_amount']} ${acc['ticker_symbol']}',
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11,
           color: Color(0xFFAB8CFF),
           fontWeight: FontWeight.w600,
@@ -528,9 +529,9 @@ class AccountsListWidget extends StatelessWidget {
     } else if (needsConversion) {
       subBalance = Text(
         '≈ ${currencyFormat.format(convertedAmount)}',
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11,
-          color: Colors.white38,
+          color: context.textFaint,
           fontStyle: FontStyle.italic,
           fontFeatures: [FontFeature.tabularFigures()],
         ),
@@ -540,7 +541,7 @@ class AccountsListWidget extends StatelessWidget {
     }
 
     Widget menuButton = PopupMenuButton<String>(
-      icon: const Icon(Icons.more_vert, size: 18, color: Colors.white38),
+      icon: Icon(Icons.more_vert, size: 18, color: context.textFaint),
       padding: EdgeInsets.zero,
       tooltip: 'Account actions',
       onSelected: (value) {
@@ -550,13 +551,13 @@ class AccountsListWidget extends StatelessWidget {
           showDialog(
             context: context,
             builder: (context) => AlertDialog(
-              title: const Text('Delete account'),
+              title: Text('Delete account'),
               content: Text(
                   'Are you sure you want to delete "$name"? This will remove all its history.'),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
+                  child: Text('Cancel'),
                 ),
                 TextButton(
                   onPressed: () {
@@ -565,7 +566,7 @@ class AccountsListWidget extends StatelessWidget {
                   },
                   style: TextButton.styleFrom(
                       foregroundColor: Colors.redAccent),
-                  child: const Text('Delete'),
+                  child: Text('Delete'),
                 ),
               ],
             ),
@@ -574,14 +575,14 @@ class AccountsListWidget extends StatelessWidget {
       },
       itemBuilder: (context) => [
         if (onRenameAccount != null)
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'rename',
             child: Row(
               children: [
                 Icon(Icons.drive_file_rename_outline,
-                    size: 18, color: Colors.white70),
-                SizedBox(width: 8),
-                Text('Rename'),
+                    size: 18, color: context.textMuted),
+                const SizedBox(width: 8),
+                const Text('Rename'),
               ],
             ),
           ),
@@ -687,14 +688,14 @@ class AccountsListWidget extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Rename account'),
+        title: Text('Rename account'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Original: $rawName',
-              style: const TextStyle(fontSize: 12, color: Colors.white54),
+              style: TextStyle(fontSize: 12, color: context.textSubtle),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -709,16 +710,16 @@ class AccountsListWidget extends StatelessWidget {
               maxLength: 80,
               textInputAction: TextInputAction.done,
             ),
-            const Text(
+            Text(
               'Leave blank to clear and use the bank name.',
-              style: TextStyle(fontSize: 11, color: Colors.white38),
+              style: TextStyle(fontSize: 11, color: context.textFaint),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: Text('Cancel'),
           ),
           FilledButton(
             onPressed: () {
@@ -728,7 +729,7 @@ class AccountsListWidget extends StatelessWidget {
                 controller.text.trim(),
               );
             },
-            child: const Text('Save'),
+            child: Text('Save'),
           ),
         ],
       ),

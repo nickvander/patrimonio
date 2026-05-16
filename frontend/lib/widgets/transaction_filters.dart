@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 import '../utils/category.dart';
 
@@ -245,7 +246,7 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
           if (_draft.isActive)
             TextButton(
               onPressed: () => setState(() => _draft = TxFilters.empty),
-              child: const Text('Reset'),
+              child: Text('Reset'),
             ),
         ],
       ),
@@ -304,7 +305,7 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
                 Text(
                   '${DateFormat('MMM d, y').format(_draft.customStart!)} – '
                   '${DateFormat('MMM d, y').format(_draft.customEnd!)}',
-                  style: const TextStyle(color: Colors.white60, fontSize: 12),
+                  style: TextStyle(color: context.textMuted, fontSize: 12),
                 ),
               ],
               const SizedBox(height: 18),
@@ -396,11 +397,11 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop<TxFilters>(context),
-          child: const Text('Cancel'),
+          child: Text('Cancel'),
         ),
         FilledButton(
           onPressed: () => Navigator.pop<TxFilters>(context, _draft),
-          child: const Text('Apply'),
+          child: Text('Apply'),
         ),
       ],
     );
@@ -408,10 +409,10 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
 
   Widget _sectionLabel(String text) => Text(
         text.toUpperCase(),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w700,
-          color: Colors.white54,
+          color: context.textSubtle,
           letterSpacing: 0.8,
         ),
       );

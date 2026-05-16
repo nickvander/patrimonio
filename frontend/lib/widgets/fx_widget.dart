@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 
 class FxWidget extends StatefulWidget {
@@ -40,7 +41,7 @@ class _FxWidgetState extends State<FxWidget> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                Text(
                   'Exchange rate',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
@@ -68,9 +69,9 @@ class _FxWidgetState extends State<FxWidget> {
                                   Color(0xFF00E676)),
                             ),
                           )
-                        : const Icon(Icons.refresh, size: 20),
+                        : Icon(Icons.refresh, size: 20),
                     tooltip: 'Refresh rate now',
-                    color: Colors.white70,
+                    color: context.textMuted,
                   ),
               ],
             ),
@@ -95,7 +96,7 @@ class _FxWidgetState extends State<FxWidget> {
                         alignment: Alignment.centerLeft,
                         child: Text(
                           rate.toStringAsFixed(4),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 32,
                             fontWeight: FontWeight.bold,
                             color: Colors.tealAccent,
@@ -112,9 +113,9 @@ class _FxWidgetState extends State<FxWidget> {
                         const SizedBox(height: 8),
                         Text(
                           'Source: $source',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
-                            color: Colors.white38,
+                            color: context.textFaint,
                           ),
                         ),
                       ],
@@ -127,7 +128,7 @@ class _FxWidgetState extends State<FxWidget> {
                   if (MediaQuery.sizeOf(ctx).width < 360) {
                     return const SizedBox.shrink();
                   }
-                  return const Icon(
+                  return Icon(
                     Icons.currency_exchange,
                     size: 48,
                     color: Colors.teal,
@@ -144,7 +145,7 @@ class _FxWidgetState extends State<FxWidget> {
   Widget _buildTimestampBlock(dynamic recordedAt) {
     final parsed = DateTime.tryParse(recordedAt.toString());
     if (parsed == null) {
-      return const Text(
+      return Text(
         'Updated: unknown',
         style: TextStyle(fontSize: 11, color: Colors.grey),
       );
@@ -163,7 +164,7 @@ class _FxWidgetState extends State<FxWidget> {
             Icon(
               isStale ? Icons.warning_amber_rounded : Icons.schedule,
               size: 13,
-              color: isStale ? Colors.orangeAccent : Colors.white54,
+              color: isStale ? Colors.orangeAccent : context.textSubtle,
             ),
             const SizedBox(width: 4),
             Expanded(
@@ -171,7 +172,7 @@ class _FxWidgetState extends State<FxWidget> {
                 '$fullStamp $tz',
                 style: TextStyle(
                   fontSize: 11,
-                  color: isStale ? Colors.orangeAccent : Colors.white70,
+                  color: isStale ? Colors.orangeAccent : context.textMuted,
                   fontWeight: isStale ? FontWeight.w600 : FontWeight.normal,
                 ),
                 maxLines: 1,
@@ -185,7 +186,7 @@ class _FxWidgetState extends State<FxWidget> {
           isStale ? 'Stale · $age' : age,
           style: TextStyle(
             fontSize: 10,
-            color: isStale ? Colors.orangeAccent.shade100 : Colors.white38,
+            color: isStale ? Colors.orangeAccent.shade100 : context.textFaint,
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
