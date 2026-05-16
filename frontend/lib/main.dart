@@ -3,6 +3,25 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'screens/dashboard_screen.dart';
+import 'services/preferences.dart';
+
+/// Notifies the app when the user flips the theme. Held at module scope so
+/// the AppBar toggle can call `themeModeNotifier.value = ...` from
+/// anywhere without threading a callback through every screen.
+final ValueNotifier<ThemeMode> themeModeNotifier =
+    ValueNotifier(_loadInitialThemeMode());
+
+ThemeMode _loadInitialThemeMode() {
+  switch (Preferences.getThemeMode()) {
+    case 'light':
+      return ThemeMode.light;
+    case 'system':
+      return ThemeMode.system;
+    case 'dark':
+    default:
+      return ThemeMode.dark;
+  }
+}
 
 @JS('__splashProgress')
 external void _splashProgress(int percent, String message);
@@ -52,37 +71,88 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Patrimonio',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeModeNotifier,
+      builder: (ctx, mode, _) {
+        return MaterialApp(
+          title: 'Patrimonio',
+          debugShowCheckedModeBanner: false,
+          themeMode: mode,
+          theme: _buildLightTheme(),
+          darkTheme: _buildDarkTheme(),
+          home: const DashboardScreen(),
+        );
+      },
+    );
+  }
+
+  // The original dark theme — kept as-is. Most of the in-app components
+  // hardcode `Colors.white` so this ColorScheme is what they were tuned
+  // against; preserving it avoids visual regressions.
+  ThemeData _buildDarkTheme() {
+    return ThemeData(
+      brightness: Brightness.dark,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xFF00E676),
         brightness: Brightness.dark,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF00E676), // Emerald green accent
-          brightness: Brightness.dark,
-          surface: const Color(0xFF1A1A24), // Softer dark card background
-        ),
-        useMaterial3: true,
-        textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
-        cardTheme: CardThemeData(
-          color: const Color(0xFF1A1A24),
-          elevation: 4,
-          shadowColor: Colors.black26,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-        ),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF101016),
-          elevation: 0,
-          centerTitle: false,
-        ),
-        dataTableTheme: DataTableThemeData(
-          headingRowColor: WidgetStateProperty.all(Colors.black12),
-          dataRowColor: WidgetStateProperty.all(Colors.transparent),
+        surface: const Color(0xFF1A1A24),
+      ),
+      useMaterial3: true,
+      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
+      cardTheme: CardThemeData(
+        color: const Color(0xFF1A1A24),
+        elevation: 4,
+        shadowColor: Colors.black26,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
         ),
       ),
-      home: const DashboardScreen(),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Color(0xFF101016),
+        elevation: 0,
+        centerTitle: false,
+      ),
+      dataTableTheme: DataTableThemeData(
+        headingRowColor: WidgetStateProperty.all(Colors.black12),
+        dataRowColor: WidgetStateProperty.all(Colors.transparent),
+      ),
+    );
+  }
+
+  // Companion light theme. Many in-app components still draw against the
+  // dark palette via hardcoded color constants — the light theme is a
+  // best-effort surface that gets the Material chrome (AppBar, Card,
+  // backgrounds) right; per-widget colors will be tuned in follow-ups.
+  ThemeData _buildLightTheme() {
+    final scheme = ColorScheme.fromSeed(
+      seedColor: const Color(0xFF00B864),
+      brightness: Brightness.light,
+      surface: const Color(0xFFF8F9FB),
+    );
+    return ThemeData(
+      brightness: Brightness.light,
+      colorScheme: scheme,
+      useMaterial3: true,
+      scaffoldBackgroundColor: const Color(0xFFF1F2F6),
+      textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme),
+      cardTheme: CardThemeData(
+        color: Colors.white,
+        elevation: 1,
+        shadowColor: Colors.black12,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+      ),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Colors.white,
+        foregroundColor: Color(0xFF101016),
+        elevation: 0,
+        centerTitle: false,
+      ),
+      dataTableTheme: DataTableThemeData(
+        headingRowColor: WidgetStateProperty.all(const Color(0xFFEEF0F4)),
+        dataRowColor: WidgetStateProperty.all(Colors.transparent),
+      ),
     );
   }
 }

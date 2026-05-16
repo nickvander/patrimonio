@@ -86,4 +86,9 @@ class Preferences {
       _write('goalYear', v.toString());
     }
   }
+
+  /// Theme mode: 'system' / 'light' / 'dark'. Default is 'dark' because
+  /// the app's color palette was originally tuned for a dark surface.
+  static String getThemeMode() => _read('themeMode') ?? 'dark';
+  static void setThemeMode(String mode) => _write('themeMode', mode);
 }

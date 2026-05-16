@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:plaid_flutter/plaid_flutter.dart';
 import 'package:web/web.dart' as web;
 import '../services/api_service.dart';
+import '../main.dart' show themeModeNotifier;
 import '../services/preferences.dart';
 import '../widgets/net_worth_card.dart';
 import '../widgets/monthly_cash_flow_card.dart';
@@ -726,6 +727,46 @@ class _DashboardScreenState extends State<DashboardScreen>
               ? const []
               : [
                   _buildFxBadge(compact: isCompact),
+                  const SizedBox(width: 4),
+                  // Theme toggle — cycles system → light → dark.
+                  PopupMenuButton<ThemeMode>(
+                    tooltip: 'Theme',
+                    icon: const Icon(Icons.brightness_6_outlined),
+                    onSelected: (m) {
+                      themeModeNotifier.value = m;
+                      Preferences.setThemeMode(switch (m) {
+                        ThemeMode.system => 'system',
+                        ThemeMode.light => 'light',
+                        ThemeMode.dark => 'dark',
+                      });
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: ThemeMode.system,
+                        child: ListTile(
+                          dense: true,
+                          leading: Icon(Icons.brightness_auto),
+                          title: Text('System default'),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: ThemeMode.light,
+                        child: ListTile(
+                          dense: true,
+                          leading: Icon(Icons.light_mode_outlined),
+                          title: Text('Light'),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: ThemeMode.dark,
+                        child: ListTile(
+                          dense: true,
+                          leading: Icon(Icons.dark_mode_outlined),
+                          title: Text('Dark'),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(width: 4),
                   // On phones the labelled "Report: USD" button gets
                   // squeezed by the TabBar — collapse to an icon-only
