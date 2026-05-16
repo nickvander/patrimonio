@@ -7,14 +7,51 @@ use std::collections::HashMap;
 
 /// Sync engine — Expands Plaid data pulling for all linked institutions.
 pub async fn sync_all_institutions(db: &PgPool, config: &AppConfig) -> Result<()> {
-    tracing::info!("Sync engine: starting sync for all institutions");
+    sync_institutions(db, config, None).await
+}
+
+/// Sync engine variant that scopes the run to a single institution. Used
+/// by the "Retry N failed" UI action so we don't touch healthy
+/// institutions just to reattempt a couple of broken ones.
+pub async fn sync_one_institution(
+    db: &PgPool,
+    config: &AppConfig,
+    id: uuid::Uuid,
+) -> Result<()> {
+    sync_institutions(db, config, Some(id)).await
+}
+
+/// Internal sync loop. When `only_id` is `Some`, only that institution
+/// is selected; otherwise every linked institution gets synced.
+pub async fn sync_institutions(
+    db: &PgPool,
+    config: &AppConfig,
+    only_id: Option<uuid::Uuid>,
+) -> Result<()> {
+    tracing::info!(
+        "Sync engine: starting sync for {}",
+        match only_id {
+            Some(id) => format!("institution {id}"),
+            None => "all institutions".to_string(),
+        }
+    );
     let client = Client::new();
 
-    let rows = sqlx::query(
-        "SELECT id, name, integration_type, plaid_access_token_enc, plaid_transactions_cursor FROM institutions"
-    )
-    .fetch_all(db)
-    .await?;
+    let rows = if let Some(id) = only_id {
+        sqlx::query(
+            "SELECT id, name, integration_type, plaid_access_token_enc, plaid_transactions_cursor \
+             FROM institutions WHERE id = $1"
+        )
+        .bind(id)
+        .fetch_all(db)
+        .await?
+    } else {
+        sqlx::query(
+            "SELECT id, name, integration_type, plaid_access_token_enc, plaid_transactions_cursor FROM institutions"
+        )
+        .fetch_all(db)
+        .await?
+    };
 
     for row in rows {
         let inst_id: uuid::Uuid = row.get("id");

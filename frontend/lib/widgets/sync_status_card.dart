@@ -4,6 +4,10 @@ import 'package:intl/intl.dart';
 class SyncStatusCard extends StatelessWidget {
   final List<dynamic> syncData;
   final VoidCallback? onRetrySync;
+  /// Optional targeted-retry hook. When provided, the "Retry N failed"
+  /// shortcut loops this for each failed institution rather than calling
+  /// the global onRetrySync (which syncs every institution).
+  final Future<void> Function(String id)? onRetrySingle;
   final Function(String id)? onReconnect;
   final Function(String id)? onDelete;
 
@@ -11,9 +15,21 @@ class SyncStatusCard extends StatelessWidget {
     super.key,
     required this.syncData,
     this.onRetrySync,
+    this.onRetrySingle,
     this.onReconnect,
     this.onDelete,
   });
+
+  /// Ids of institutions stuck in error / failed state. We exclude
+  /// `reconnect_required` because retry won't help — those need the
+  /// Plaid Link reconnect flow, which is handled separately.
+  List<String> _failedIds() {
+    return syncData.where((raw) {
+      if (raw is! Map) return false;
+      final s = raw['sync_status']?.toString();
+      return s == 'error' || s == 'failed';
+    }).map((raw) => (raw as Map)['id'].toString()).toList();
+  }
 
   /// Institutions that need a re-sync attempt — failed status, or stuck
   /// in `reconnect_required`. The `error`/`failed` ones can be retried in
@@ -51,9 +67,25 @@ class SyncStatusCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (failed > 0 && onRetrySync != null)
+                if (failed > 0 &&
+                    (onRetrySingle != null || onRetrySync != null))
                   TextButton.icon(
-                    onPressed: onRetrySync,
+                    onPressed: () async {
+                      // Prefer the per-institution path when wired so we
+                      // only re-attempt the broken ones; fall back to the
+                      // global sync if the parent didn't plumb it.
+                      if (onRetrySingle != null) {
+                        for (final id in _failedIds()) {
+                          try {
+                            await onRetrySingle!(id);
+                          } catch (_) {
+                            // Continue retrying the rest even on error.
+                          }
+                        }
+                      } else {
+                        onRetrySync?.call();
+                      }
+                    },
                     icon: const Icon(Icons.refresh, size: 16),
                     label: Text('Retry $failed failed'),
                     style: TextButton.styleFrom(

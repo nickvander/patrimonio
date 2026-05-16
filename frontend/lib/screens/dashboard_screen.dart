@@ -1424,6 +1424,17 @@ class _DashboardScreenState extends State<DashboardScreen>
             final sync = SyncStatusCard(
               syncData: _syncData ?? [],
               onRetrySync: runSync,
+              onRetrySingle: (id) async {
+                try {
+                  await _apiService.syncInstitution(id);
+                  await _refreshData();
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Retry failed: $e')),
+                  );
+                }
+              },
               onReconnect: handleReconnect,
               onDelete: (id) async {
                 final confirm = await showDialog<bool>(

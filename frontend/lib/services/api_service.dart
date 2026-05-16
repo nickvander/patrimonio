@@ -417,6 +417,17 @@ class ApiService {
 
   /// Generic app-setting store. The backend returns JSON null when the
   /// key has never been written; callers should treat that as "absent".
+  /// Sync a single institution. Cheaper than the global sync when only
+  /// one or two institutions are stuck.
+  Future<void> syncInstitution(String institutionId) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/institutions/$institutionId/sync'),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Sync failed: ${response.statusCode}');
+    }
+  }
+
   Future<dynamic> getSetting(String key) async {
     final response =
         await http.get(Uri.parse('$_baseUrl/settings/$key'));

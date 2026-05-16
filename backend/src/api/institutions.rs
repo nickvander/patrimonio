@@ -16,6 +16,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_institutions).post(create_institution))
         .route("/sync", post(trigger_sync))
+        .route("/{id}/sync", post(trigger_sync_one))
         .route("/link-token", post(create_link_token))
         .route("/reconnect-token/{id}", post(create_reconnect_token))
         .route("/{id}", delete(delete_institution))
@@ -34,6 +35,31 @@ async fn trigger_sync(State(state): State<AppState>) -> axum::response::Response
             "error": "Sync failed",
             "details": e.to_string()
         }))).into_response();
+    }
+    Json(serde_json::json!({"status": "ok"})).into_response()
+}
+
+/// Sync a single institution by id — used by the per-institution
+/// retry shortcut on the dashboard so we don't touch healthy
+/// institutions on every retry tap.
+async fn trigger_sync_one(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
+) -> axum::response::Response {
+    let config = state.config.clone();
+    let db = state.db.clone();
+    if let Err(e) =
+        crate::services::sync::sync_one_institution(&db, &config, id).await
+    {
+        tracing::error!("Per-institution sync failed for {id}: {e}");
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            axum::response::Json(serde_json::json!({
+                "error": "Sync failed",
+                "details": e.to_string(),
+            })),
+        )
+            .into_response();
     }
     Json(serde_json::json!({"status": "ok"})).into_response()
 }
