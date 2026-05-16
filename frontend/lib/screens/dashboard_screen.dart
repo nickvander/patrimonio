@@ -17,6 +17,7 @@ import '../widgets/transactions_tab.dart';
 import '../widgets/add_account_dialog.dart';
 import '../widgets/add_crypto_dialog.dart';
 import '../widgets/command_palette.dart';
+import '../widgets/skeleton.dart';
 import 'connect_bank_screen.dart';
 import 'import_screen.dart';
 import 'wealth_projection_screen.dart';
@@ -758,7 +759,10 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      // Skeleton mirrors the Overview tab's actual KPI / cash-flow / body
+      // layout so the page doesn't reflow when data arrives. Other tabs
+      // are gated behind this load so a single overview skeleton suffices.
+      return const OverviewSkeleton();
     }
 
     if (_error != null) {
