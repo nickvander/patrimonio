@@ -9,6 +9,7 @@ import '../services/preferences.dart';
 import '../widgets/net_worth_card.dart';
 import '../widgets/monthly_cash_flow_card.dart';
 import '../widgets/budgets_card.dart';
+import '../widgets/net_worth_goal_tile.dart';
 import '../widgets/accounts_breakdown_card.dart';
 import '../widgets/portfolio_card.dart';
 import '../widgets/fx_widget.dart';
@@ -1269,6 +1270,13 @@ class _DashboardScreenState extends State<DashboardScreen>
               // this month?") is answered before the user scrolls anywhere.
               MonthlyCashFlowCard(
                 trends: _trendData ?? const [],
+                conversionFactor: conversionFactor,
+                currencyFormat: currencyFormat,
+              ),
+              const SizedBox(height: 24),
+              NetWorthGoalTile(
+                netWorthUsd:
+                    (_overview?['net_worth'] as num?)?.toDouble() ?? 0.0,
                 conversionFactor: conversionFactor,
                 currencyFormat: currencyFormat,
               ),
