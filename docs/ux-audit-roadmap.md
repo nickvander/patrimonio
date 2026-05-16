@@ -271,6 +271,21 @@ These shipped partially in the previous batch and need a second pass:
 26. **Per-institution sync endpoint + targeted retry.** `runSync()` currently syncs every institution, so "Retry N failed" is doing more work than asked. Add `POST /institutions/{id}/sync` and have the retry shortcut loop only the failed ones.
 27. **Deep-link Cmd-K navigation.** Selecting a holding / account / transaction in the palette currently only animates to the right tab. Wire it to scroll-to and highlight the specific row, or open the account-detail panel directly.
 
+### P2 — follow-up entries from #23–#27 work + UX walkthrough
+
+28. **Worktree `.env` discovery.** New worktrees come up without `.env`, so docker-compose resolves every Plaid secret to empty and `Encryption key missing` appears on every Plaid institution until someone manually symlinks the parent `.env`. Either have the worktree-spawn tooling mint the symlink, or change `docker-compose.yml` to resolve `.env` via a stable path.
+29. **Light-theme long tail.** Round one swept the Overview tab; Portfolio holdings, transactions rows, tax planning, chart tooltips/gridlines, AppBar action bubbles, and ~70 other `Colors.white*` call sites still need the same `ThemeColorsExt` treatment.
+30. **Settings store auth scoping.** `/api/settings/{key}` is single-user today with no auth. When multi-user lands the table needs a `user_id` column and per-row scoping; until then anyone with API access can read/write any key.
+31. **Cash-flow tab phone breakpoint.** The new tab is verified on desktop and tablet but its individual widgets stack top-to-bottom on <420px with padding inconsistencies worth a pass.
+32. **Cmd-K row highlighting.** The transaction deep-link uses the description as the search seed; identical descriptions ("STARBUCKS" ×4) all match. Track a transient `highlightedTxId` so the exact row pulses, regardless of search collisions.
+33. **Batched sync endpoint.** The "Retry N failed" UI loops the new per-institution endpoint client-side. A `POST /institutions/sync?ids=...` server-side batch would replace N HTTP round-trips with one.
+
+### P2 — UX walkthrough (May 2026, post #27)
+
+34. **AppBar action cluster is dense.** Top-right packs FX pill + notifications + theme + currency toggle into ~340px. The FX badge duplicates what the Management tab's FxWidget already shows and steals premium real estate; consider demoting it.
+35. **Theme picker as tap-cycle.** The dropdown is heavy for a control most users touch once. Single-tap should cycle system → light → dark with a per-mode icon; long-press can keep the explicit picker.
+36. **Smoother theme transitions.** Material animates `ThemeData` chrome over ~200ms but our widget-level `context.textPrimary` reads swap instantly. Lengthen `themeAnimationDuration` and cross-fade body content when the mode flips.
+
 ---
 
 ## 4. Paste-ready agent prompt
