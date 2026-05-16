@@ -67,6 +67,9 @@ class _DashboardScreenState extends State<DashboardScreen>
   // any user-driven search change in the target widget.
   String? _portfolioSearchOverride;
   String? _transactionsSearchOverride;
+  // Cmd-K row highlight target. Cleared automatically ~2s after being
+  // set so the pulse fades back to the normal row chrome.
+  String? _highlightedTxId;
   // Pagination — the API returns at most 50 transactions per call. We
   // track whether the latest page filled the limit (so there may be more)
   // and call _loadMoreTransactions() to append the next slice.
@@ -224,6 +227,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     for (final raw in txs.take(200)) {
       final t = raw as Map<String, dynamic>;
       final desc = (t['description'] ?? '').toString();
+      final id = t['id']?.toString();
       items.add(PaletteItem(
         label: desc,
         subtitle:
@@ -231,8 +235,21 @@ class _DashboardScreenState extends State<DashboardScreen>
         icon: Icons.receipt_outlined,
         accent: const Color(0xFFFFB300),
         onSelected: () {
-          setState(() => _transactionsSearchOverride = desc);
+          setState(() {
+            _transactionsSearchOverride = desc;
+            _highlightedTxId = id;
+          });
           jumpTab(2);
+          // Clear the pulse after ~2s so the row settles back to its
+          // normal chrome and a subsequent palette pick can pulse fresh.
+          if (id != null) {
+            Future.delayed(const Duration(seconds: 2), () {
+              if (!mounted) return;
+              if (_highlightedTxId == id) {
+                setState(() => _highlightedTxId = null);
+              }
+            });
+          }
         },
       ));
     }
@@ -1309,6 +1326,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         onLoadMore: _loadMoreTransactions,
         hasMore: _transactionsHasMore,
         searchOverride: _transactionsSearchOverride,
+        highlightedTxId: _highlightedTxId,
         onUpdate: (id, {userCategory, userNotes, accountId}) async {
           try {
             await _apiService.updateTransaction(

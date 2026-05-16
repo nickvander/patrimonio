@@ -38,6 +38,10 @@ class TransactionsTab extends StatefulWidget {
   /// pre-populated so the row the user picked from the palette is
   /// surfaced immediately.
   final String? searchOverride;
+  /// Cmd-K row-highlight target. When non-null the matching tx renders
+  /// with a transient accent fill so the exact row the user picked is
+  /// obvious even when other rows share the same description.
+  final String? highlightedTxId;
 
   const TransactionsTab({
     super.key,
@@ -55,6 +59,7 @@ class TransactionsTab extends StatefulWidget {
     this.onLoadMore,
     this.hasMore = false,
     this.searchOverride,
+    this.highlightedTxId,
   });
 
   @override
@@ -807,12 +812,16 @@ class _TransactionsTabState extends State<TransactionsTab> {
         }
       },
       hoverColor: context.tint(0.03),
-      child: Container(
-        // Subtle tint on selected rows so it's obvious which set the bulk
-        // action bar will operate on.
+      child: AnimatedContainer(
+        // Three overlapping signals share this background:
+        // selection mode (green), Cmd-K row highlight (blue pulse —
+        // fades in/out via this AnimatedContainer's duration), default.
+        duration: const Duration(milliseconds: 400),
         color: isSelected
             ? const Color(0xFF00E676).withValues(alpha: 0.08)
-            : null,
+            : (id != null && id == widget.highlightedTxId)
+                ? const Color(0xFF00B0FF).withValues(alpha: 0.15)
+                : null,
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
