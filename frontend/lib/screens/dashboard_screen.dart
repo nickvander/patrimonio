@@ -90,6 +90,17 @@ class _DashboardScreenState extends State<DashboardScreen>
     return (saved == 'USD' || saved == 'MXN') ? saved : 'USD';
   }
 
+  // First-run state: the dashboard has loaded successfully but the user has
+  // no accounts yet. We swap the entire body for an onboarding hero and hide
+  // the tab bar + currency chrome — every tab is empty in this state and
+  // would mislead a fresh user into thinking the app is broken.
+  bool get _hasAccounts {
+    final accounts = _overview?['accounts'] as List?;
+    return accounts != null && accounts.isNotEmpty;
+  }
+
+  bool get _isFirstRun => !_isLoading && _error == null && !_hasAccounts;
+
   void _setTargetCurrency(String currency) {
     setState(() => _targetCurrency = currency);
     Preferences.setCurrency(currency);
@@ -255,6 +266,197 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
+  // Full-page welcome shown when the user has not connected any accounts.
+  // Lives in the body slot so the AppBar's tab strip can be dropped — every
+  // tab is empty in this state and would mislead a fresh user.
+  Widget _buildOnboardingHero() {
+    final plaidReady = _setupStatus?['ready_for_plaid_linking'] == true;
+
+    Widget actionTile({
+      required IconData icon,
+      required String title,
+      required String subtitle,
+      required Color accent,
+      required VoidCallback? onPressed,
+      String? disabledHint,
+    }) {
+      final enabled = onPressed != null;
+      return Material(
+        color: Colors.white.withValues(alpha: enabled ? 0.05 : 0.02),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onPressed,
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: accent.withValues(alpha: enabled ? 0.4 : 0.15),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 28, color: accent),
+                const SizedBox(height: 12),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: enabled ? Colors.white : Colors.white54,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  enabled
+                      ? subtitle
+                      : (disabledHint ?? subtitle),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: enabled ? Colors.white70 : Colors.white38,
+                    height: 1.4,
+                  ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: LayoutBuilder(
+                builder: (ctx, c) {
+                  final stack = c.maxWidth < 560;
+                  final tiles = [
+                    actionTile(
+                      icon: Icons.account_balance,
+                      title: 'Link a US bank',
+                      subtitle:
+                          'Securely connect via Plaid — balances and transactions sync automatically.',
+                      accent: const Color(0xFF1DE9B6),
+                      onPressed: plaidReady
+                          ? () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ConnectBankScreen(),
+                                ),
+                              ).then((_) => _loadAllData());
+                            }
+                          : null,
+                      disabledHint:
+                          'Plaid credentials not configured yet — use CSV or manual for now.',
+                    ),
+                    actionTile(
+                      icon: Icons.upload_file,
+                      title: 'Import Mexico CSV or PDF',
+                      subtitle:
+                          'Drop a statement from Bancomer, Banamex, Santander or Banorte.',
+                      accent: const Color(0xFF00B0FF),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ImportScreen(),
+                          ),
+                        ).then((_) => _loadAllData());
+                      },
+                    ),
+                    actionTile(
+                      icon: Icons.add_circle_outline,
+                      title: 'Add a manual account',
+                      subtitle:
+                          'Track a cash balance, brokerage, or anything else by hand.',
+                      accent: const Color(0xFF00E676),
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (context) => AddAccountDialog(
+                            onAccountCreated: _loadAllData,
+                          ),
+                        );
+                      },
+                    ),
+                  ];
+
+                  final tileWidth = stack
+                      ? c.maxWidth - 48
+                      : (c.maxWidth - 48 - 2 * 16) / 3;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.savings_outlined,
+                        size: 40,
+                        color: Color(0xFF00E676),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Welcome to Patrimonio',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Connect your first account to see your net worth, '
+                        'transactions, and projections in one place.',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.white70,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Wrap(
+                        spacing: 16,
+                        runSpacing: 16,
+                        children: tiles
+                            .map((t) => SizedBox(width: tileWidth, child: t))
+                            .toList(),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Already linked accounts elsewhere? They will appear here as soon as the first sync completes.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: 0.45),
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _checkRedirectStatus() {
     final uri = Uri.parse(web.window.location.href);
     final status = uri.queryParameters['status'];
@@ -364,72 +566,84 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget build(BuildContext context) {
     final isCompact = MediaQuery.sizeOf(context).width < 720;
 
+    // During the first-run state we strip the chrome: tab bar (every tab
+    // would be empty) and currency / FX controls (no balances to convert).
+    final firstRun = _isFirstRun;
+
     return Scaffold(
         appBar: AppBar(
           title: const Text(
             'Patrimonio',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
-          bottom: TabBar(
-            controller: _tabController,
-            isScrollable: isCompact,
-            tabAlignment: isCompact ? TabAlignment.start : TabAlignment.fill,
-            indicatorColor: const Color(0xFF00E676),
-            labelColor: Color(0xFF00E676),
-            unselectedLabelColor: Colors.grey,
-            tabs: [
-              Tab(text: 'Overview'),
-              Tab(text: 'Portfolio'),
-              Tab(text: 'Transactions'),
-              Tab(text: isCompact ? 'Proj.' : 'Projections'),
-              Tab(text: isCompact ? 'Tax' : 'Tax Planning'),
-              Tab(text: isCompact ? 'Manage' : 'Management'),
-            ],
-          ),
-          actions: [
-            _buildFxBadge(compact: isCompact),
-            const SizedBox(width: 4),
-            // On phones the labelled "Report: USD" button gets squeezed by
-            // the TabBar — collapse to an icon-only IconButton with a
-            // tooltip + active-state tint so the affordance is preserved.
-            isCompact
-                ? IconButton(
-                    onPressed: () => _setTargetCurrency(
-                        _targetCurrency == 'USD' ? 'MXN' : 'USD'),
-                    tooltip: 'Report in $_targetCurrency · tap to swap',
-                    icon: Icon(
-                      Icons.currency_exchange,
-                      color: _targetCurrency == 'MXN'
-                          ? const Color(0xFF00E676)
-                          : Colors.white70,
-                    ),
-                  )
-                : TextButton.icon(
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                    ),
-                    onPressed: () {
-                      _setTargetCurrency(
-                          _targetCurrency == 'USD' ? 'MXN' : 'USD');
-                    },
-                    icon: Icon(
-                      Icons.currency_exchange,
-                      color: _targetCurrency == 'MXN'
-                          ? const Color(0xFF00E676)
-                          : Colors.white70,
-                    ),
-                    label: Text(
-                      'Report: $_targetCurrency',
-                      style: TextStyle(
-                        color: _targetCurrency == 'MXN'
-                            ? const Color(0xFF00E676)
-                            : Colors.white70,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-            const SizedBox(width: 4),
-          ],
+          bottom: firstRun
+              ? null
+              : TabBar(
+                  controller: _tabController,
+                  isScrollable: isCompact,
+                  tabAlignment:
+                      isCompact ? TabAlignment.start : TabAlignment.fill,
+                  indicatorColor: const Color(0xFF00E676),
+                  labelColor: Color(0xFF00E676),
+                  unselectedLabelColor: Colors.grey,
+                  tabs: [
+                    Tab(text: 'Overview'),
+                    Tab(text: 'Portfolio'),
+                    Tab(text: 'Transactions'),
+                    Tab(text: isCompact ? 'Proj.' : 'Projections'),
+                    Tab(text: isCompact ? 'Tax' : 'Tax Planning'),
+                    Tab(text: isCompact ? 'Manage' : 'Management'),
+                  ],
+                ),
+          actions: firstRun
+              ? const []
+              : [
+                  _buildFxBadge(compact: isCompact),
+                  const SizedBox(width: 4),
+                  // On phones the labelled "Report: USD" button gets
+                  // squeezed by the TabBar — collapse to an icon-only
+                  // IconButton with a tooltip + active-state tint so the
+                  // affordance is preserved.
+                  isCompact
+                      ? IconButton(
+                          onPressed: () => _setTargetCurrency(
+                              _targetCurrency == 'USD' ? 'MXN' : 'USD'),
+                          tooltip:
+                              'Report in $_targetCurrency · tap to swap',
+                          icon: Icon(
+                            Icons.currency_exchange,
+                            color: _targetCurrency == 'MXN'
+                                ? const Color(0xFF00E676)
+                                : Colors.white70,
+                          ),
+                        )
+                      : TextButton.icon(
+                          style: TextButton.styleFrom(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 12),
+                          ),
+                          onPressed: () {
+                            _setTargetCurrency(
+                                _targetCurrency == 'USD' ? 'MXN' : 'USD');
+                          },
+                          icon: Icon(
+                            Icons.currency_exchange,
+                            color: _targetCurrency == 'MXN'
+                                ? const Color(0xFF00E676)
+                                : Colors.white70,
+                          ),
+                          label: Text(
+                            'Report: $_targetCurrency',
+                            style: TextStyle(
+                              color: _targetCurrency == 'MXN'
+                                  ? const Color(0xFF00E676)
+                                  : Colors.white70,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                  const SizedBox(width: 4),
+                ],
         ),
         body: _buildBody(),
       );
@@ -456,6 +670,10 @@ class _DashboardScreenState extends State<DashboardScreen>
           ],
         ),
       );
+    }
+
+    if (_isFirstRun) {
+      return _buildOnboardingHero();
     }
 
     final fxRate = (_fxRate?['rate'] as num?)?.toDouble() ?? 1.0;
