@@ -20,6 +20,7 @@ import '../widgets/add_crypto_dialog.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/skeleton.dart';
 import '../widgets/sync_error_banner.dart';
+import '../widgets/notifications_panel.dart';
 import 'connect_bank_screen.dart';
 import 'import_screen.dart';
 import 'wealth_projection_screen.dart';
@@ -728,6 +729,14 @@ class _DashboardScreenState extends State<DashboardScreen>
               : [
                   _buildFxBadge(compact: isCompact),
                   const SizedBox(width: 4),
+                  NotificationsBell(
+                    notifications: deriveNotifications(
+                      syncData: _syncData ?? const [],
+                      netWorthHistory: _netWorthHistory ?? const [],
+                      onJumpToManagement: () =>
+                          _tabController?.animateTo(5),
+                    ),
+                  ),
                   // Theme toggle — cycles system → light → dark.
                   PopupMenuButton<ThemeMode>(
                     tooltip: 'Theme',
