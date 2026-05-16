@@ -7,3 +7,4 @@ pub mod projections;
 pub mod auth;
 pub mod tax;
 pub mod setup;
+pub mod settings;

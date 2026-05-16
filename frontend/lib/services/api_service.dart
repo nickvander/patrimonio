@@ -414,4 +414,27 @@ class ApiService {
     }
     throw Exception('Failed to load tax transactions');
   }
+
+  /// Generic app-setting store. The backend returns JSON null when the
+  /// key has never been written; callers should treat that as "absent".
+  Future<dynamic> getSetting(String key) async {
+    final response =
+        await http.get(Uri.parse('$_baseUrl/settings/$key'));
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Failed to load setting $key');
+  }
+
+  Future<void> putSetting(String key, dynamic value) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/settings/$key'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode(value),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Failed to save setting $key (${response.statusCode})');
+    }
+  }
 }

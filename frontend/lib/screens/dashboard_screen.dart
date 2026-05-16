@@ -1286,6 +1286,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 transactions: _transactions ?? const [],
                 conversionFactor: conversionFactor,
                 currencyFormat: currencyFormat,
+                apiService: _apiService,
               ),
               const SizedBox(height: 24),
               body,

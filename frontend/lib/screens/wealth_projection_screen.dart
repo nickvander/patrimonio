@@ -52,6 +52,28 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     _goalAmountUsd = Preferences.getGoalAmountUsd();
     _goalYear = Preferences.getGoalYear();
     _fetchProjection();
+    _hydrateGoalFromBackend();
+  }
+
+  Future<void> _hydrateGoalFromBackend() async {
+    try {
+      final raw = await _apiService.getSetting('net_worth_goal');
+      if (!mounted || raw is! Map) return;
+      final amt = raw['amount_usd'];
+      final yr = raw['year'];
+      final amtD =
+          amt is num ? amt.toDouble() : double.tryParse('$amt');
+      final yrI = yr is int ? yr : int.tryParse('$yr');
+      if (amtD == null || yrI == null) return;
+      setState(() {
+        _goalAmountUsd = amtD;
+        _goalYear = yrI;
+      });
+      Preferences.setGoalAmountUsd(amtD);
+      Preferences.setGoalYear(yrI);
+    } catch (_) {
+      // Silent fallback to the localStorage seed loaded in initState.
+    }
   }
 
   Future<void> _fetchProjection() async {
@@ -300,12 +322,17 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             const Spacer(),
             if (hasGoal)
               TextButton(
-                onPressed: () => setState(() {
-                  _goalAmountUsd = null;
-                  _goalYear = null;
+                onPressed: () {
+                  setState(() {
+                    _goalAmountUsd = null;
+                    _goalYear = null;
+                  });
                   Preferences.setGoalAmountUsd(null);
                   Preferences.setGoalYear(null);
-                }),
+                  _apiService
+                      .putSetting('net_worth_goal', null)
+                      .catchError((_) {});
+                },
                 child: const Text('Clear'),
               ),
           ],
@@ -381,6 +408,12 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     });
     Preferences.setGoalAmountUsd(usd);
     Preferences.setGoalYear(yr);
+    // Sync to backend so the goal survives a localStorage wipe and is
+    // visible to other devices once multi-device support lands.
+    _apiService.putSetting('net_worth_goal', {
+      'amount_usd': usd,
+      'year': yr,
+    }).catchError((_) {});
   }
 
   Widget _buildChartCard() {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../services/api_service.dart';
 import '../services/preferences.dart';
 import '../utils/category.dart';
 import '../utils/theme_colors.dart';
@@ -13,12 +14,16 @@ class BudgetsCard extends StatefulWidget {
   final List<dynamic> transactions;
   final double conversionFactor;
   final NumberFormat currencyFormat;
+  /// When provided, budgets sync with the backend `app_settings` row.
+  /// Without it the card falls back to localStorage-only.
+  final ApiService? apiService;
 
   const BudgetsCard({
     super.key,
     required this.transactions,
     required this.conversionFactor,
     required this.currencyFormat,
+    this.apiService,
   });
 
   @override
@@ -26,7 +31,35 @@ class BudgetsCard extends StatefulWidget {
 }
 
 class _BudgetsCardState extends State<BudgetsCard> {
+  // Seed from localStorage so first paint is instant. The backend value
+  // (canonical) overrides this once the GET resolves.
   late Map<String, double> _budgets = Preferences.getBudgets();
+
+  @override
+  void initState() {
+    super.initState();
+    _hydrateFromBackend();
+  }
+
+  Future<void> _hydrateFromBackend() async {
+    final api = widget.apiService;
+    if (api == null) return;
+    try {
+      final raw = await api.getSetting('budgets');
+      if (!mounted || raw is! Map) return;
+      final next = <String, double>{};
+      raw.forEach((k, v) {
+        final d = v is num ? v.toDouble() : double.tryParse('$v');
+        if (d != null && d > 0) next[k.toString()] = d;
+      });
+      // Backend wins. Persist to localStorage so the next cold start is
+      // still instant if the network is slow.
+      setState(() => _budgets = next);
+      Preferences.setBudgets(next);
+    } catch (_) {
+      // Network errors fall back silently to the localStorage seed.
+    }
+  }
 
   /// Sum positive-amount transactions in the current month by prettified
   /// category. Skips income (negative amounts) and pending rows.
@@ -238,5 +271,8 @@ class _BudgetsCardState extends State<BudgetsCard> {
     });
     setState(() => _budgets = next);
     Preferences.setBudgets(next);
+    // Fire-and-forget backend save; the localStorage write above is the
+    // authoritative cache if the network call fails.
+    widget.apiService?.putSetting('budgets', next).catchError((_) {});
   }
 }
