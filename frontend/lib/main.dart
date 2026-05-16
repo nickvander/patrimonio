@@ -80,6 +80,12 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
           themeMode: mode,
           theme: _buildLightTheme(),
           darkTheme: _buildDarkTheme(),
+          // Material animates ThemeData chrome over 200ms by default;
+          // 360ms with easeInOutCubic feels less jarring when the user
+          // flips brightness and gives non-themed widgets time to fade
+          // out (see _ThemeCrossFade in dashboard_screen.dart).
+          themeAnimationDuration: const Duration(milliseconds: 360),
+          themeAnimationCurve: Curves.easeInOutCubic,
           home: const DashboardScreen(),
         );
       },

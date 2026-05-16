@@ -790,45 +790,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                           _tabController?.animateTo(6),
                     ),
                   ),
-                  // Theme toggle — cycles system → light → dark.
-                  PopupMenuButton<ThemeMode>(
-                    tooltip: 'Theme',
-                    icon: const Icon(Icons.brightness_6_outlined),
-                    onSelected: (m) {
-                      themeModeNotifier.value = m;
-                      Preferences.setThemeMode(switch (m) {
-                        ThemeMode.system => 'system',
-                        ThemeMode.light => 'light',
-                        ThemeMode.dark => 'dark',
-                      });
-                    },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(
-                        value: ThemeMode.system,
-                        child: ListTile(
-                          dense: true,
-                          leading: Icon(Icons.brightness_auto),
-                          title: Text('System default'),
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: ThemeMode.light,
-                        child: ListTile(
-                          dense: true,
-                          leading: Icon(Icons.light_mode_outlined),
-                          title: Text('Light'),
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: ThemeMode.dark,
-                        child: ListTile(
-                          dense: true,
-                          leading: Icon(Icons.dark_mode_outlined),
-                          title: Text('Dark'),
-                        ),
-                      ),
-                    ],
-                  ),
+                  _ThemeCycleButton(),
                   const SizedBox(width: 4),
                   // On phones the labelled "Report: USD" button gets
                   // squeezed by the TabBar — collapse to an icon-only
@@ -1786,4 +1748,99 @@ class _StatTile extends StatelessWidget {
 /// Intent fired by Cmd-K / Ctrl-K to open the global command palette.
 class _OpenPaletteIntent extends Intent {
   const _OpenPaletteIntent();
+}
+
+/// Single-tap theme picker. Tapping cycles system → light → dark →
+/// system; long-press still surfaces the explicit picker for users who
+/// know exactly which mode they want without cycling.
+class _ThemeCycleButton extends StatelessWidget {
+  static const _order = [ThemeMode.system, ThemeMode.light, ThemeMode.dark];
+
+  IconData _iconFor(ThemeMode m) => switch (m) {
+        ThemeMode.system => Icons.brightness_auto,
+        ThemeMode.light => Icons.light_mode_outlined,
+        ThemeMode.dark => Icons.dark_mode_outlined,
+      };
+
+  String _labelFor(ThemeMode m) => switch (m) {
+        ThemeMode.system => 'System theme',
+        ThemeMode.light => 'Light theme',
+        ThemeMode.dark => 'Dark theme',
+      };
+
+  void _persist(ThemeMode m) => Preferences.setThemeMode(switch (m) {
+        ThemeMode.system => 'system',
+        ThemeMode.light => 'light',
+        ThemeMode.dark => 'dark',
+      });
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeModeNotifier,
+      builder: (ctx, mode, _) {
+        return GestureDetector(
+          onLongPress: () async {
+            final picked = await showMenu<ThemeMode>(
+              context: context,
+              position: const RelativeRect.fromLTRB(1000, 56, 0, 0),
+              items: const [
+                PopupMenuItem(
+                  value: ThemeMode.system,
+                  child: ListTile(
+                    dense: true,
+                    leading: Icon(Icons.brightness_auto),
+                    title: Text('System default'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: ThemeMode.light,
+                  child: ListTile(
+                    dense: true,
+                    leading: Icon(Icons.light_mode_outlined),
+                    title: Text('Light'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: ThemeMode.dark,
+                  child: ListTile(
+                    dense: true,
+                    leading: Icon(Icons.dark_mode_outlined),
+                    title: Text('Dark'),
+                  ),
+                ),
+              ],
+            );
+            if (picked != null) {
+              themeModeNotifier.value = picked;
+              _persist(picked);
+            }
+          },
+          child: IconButton(
+            tooltip:
+                '${_labelFor(mode)} · tap to cycle, long-press to pick',
+            // AnimatedSwitcher fades between the per-mode icons so the
+            // tap-cycle reads as a smooth icon swap rather than an
+            // instant glyph flip.
+            icon: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              transitionBuilder: (child, anim) => FadeTransition(
+                opacity: anim,
+                child: ScaleTransition(scale: anim, child: child),
+              ),
+              child: Icon(
+                _iconFor(mode),
+                key: ValueKey(mode),
+              ),
+            ),
+            onPressed: () {
+              final next = _order[(_order.indexOf(mode) + 1) % _order.length];
+              themeModeNotifier.value = next;
+              _persist(next);
+            },
+          ),
+        );
+      },
+    );
+  }
 }
