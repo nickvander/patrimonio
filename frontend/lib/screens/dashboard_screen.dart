@@ -241,10 +241,12 @@ class _DashboardScreenState extends State<DashboardScreen>
             _highlightedTxId = id;
           });
           jumpTab(2);
-          // Clear the pulse after ~2s so the row settles back to its
-          // normal chrome and a subsequent palette pick can pulse fresh.
+          // Clear the pulse after ~2.4s so the row holds for ~1.3s after
+          // the 550ms fade-in completes, then takes 550ms to fade back
+          // out. Subsequent palette picks can pulse fresh because we
+          // gate on the id being the one we just set.
           if (id != null) {
-            Future.delayed(const Duration(seconds: 2), () {
+            Future.delayed(const Duration(milliseconds: 2400), () {
               if (!mounted) return;
               if (_highlightedTxId == id) {
                 setState(() => _highlightedTxId = null);

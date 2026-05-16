@@ -814,14 +814,22 @@ class _TransactionsTabState extends State<TransactionsTab> {
       hoverColor: context.tint(0.03),
       child: AnimatedContainer(
         // Three overlapping signals share this background:
-        // selection mode (green), Cmd-K row highlight (blue pulse —
-        // fades in/out via this AnimatedContainer's duration), default.
-        duration: const Duration(milliseconds: 400),
+        // selection mode (green, instant flip), Cmd-K row highlight
+        // (blue pulse — fades in and out via this AnimatedContainer
+        // with an easeInOut curve so the entrance and exit feel
+        // symmetric rather than the default linear ColorTween), and
+        // the default unhighlighted state (transparent).
+        //
+        // Using Colors.transparent rather than `null` as the off state
+        // guarantees AnimatedContainer interpolates instead of snapping
+        // — a null → Color flip would be discontinuous to the lerp.
+        duration: const Duration(milliseconds: 550),
+        curve: Curves.easeInOut,
         color: isSelected
             ? const Color(0xFF00E676).withValues(alpha: 0.08)
             : (id != null && id == widget.highlightedTxId)
-                ? const Color(0xFF00B0FF).withValues(alpha: 0.15)
-                : null,
+                ? const Color(0xFF00B0FF).withValues(alpha: 0.18)
+                : Colors.transparent,
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
