@@ -58,4 +58,32 @@ class Preferences {
   static bool getNetWorthDetailed() => _read('netWorthDetailed') == 'true';
   static void setNetWorthDetailed(bool v) =>
       _write('netWorthDetailed', v.toString());
+
+  /// Optional FIRE / net-worth goal — target amount in USD (the backend
+  /// unit) and a target year. Returns null when the user hasn't set one.
+  static double? getGoalAmountUsd() {
+    final raw = _read('goalAmountUsd');
+    return raw == null ? null : double.tryParse(raw);
+  }
+
+  static void setGoalAmountUsd(double? v) {
+    if (v == null) {
+      _write('goalAmountUsd', '');
+    } else {
+      _write('goalAmountUsd', v.toString());
+    }
+  }
+
+  static int? getGoalYear() {
+    final raw = _read('goalYear');
+    return raw == null ? null : int.tryParse(raw);
+  }
+
+  static void setGoalYear(int? v) {
+    if (v == null) {
+      _write('goalYear', '');
+    } else {
+      _write('goalYear', v.toString());
+    }
+  }
 }

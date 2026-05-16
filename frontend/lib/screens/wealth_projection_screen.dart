@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
+import '../services/preferences.dart';
 
 class WealthProjectionScreen extends StatefulWidget {
   final double currentNetWorth;
@@ -32,11 +33,19 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   bool _isLoading = true;
   Map<String, dynamic>? _projectionData;
 
+  // Optional user-set goal: "Hit $X by year Y". Stored in USD because the
+  // chart and projection points are both USD-native; we convert for
+  // display only. null on either field means "no goal yet".
+  double? _goalAmountUsd;
+  int? _goalYear;
+
   @override
   void initState() {
     super.initState();
     // Default monthly contribution to something reasonable (e.g. 10% of start balance or $1000)
     _monthlyContribution = 1000.0;
+    _goalAmountUsd = Preferences.getGoalAmountUsd();
+    _goalYear = Preferences.getGoalYear();
     _fetchProjection();
   }
 
@@ -191,6 +200,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                     setState(() => _projectionYears = val.toInt()),
                 onChangeEnd: (_) => _fetchProjection(),
               ),
+              const Divider(height: 32, color: Colors.white10),
+              _buildGoalEditor(),
             ],
           );
     return Card(
@@ -259,6 +270,112 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         ),
       ],
     );
+  }
+
+  // Goal editor — "Hit $X by year Y" form. Edits are persisted via
+  // Preferences so the goal survives a refresh. Clears reset both
+  // fields and remove the chart overlay.
+  Widget _buildGoalEditor() {
+    final hasGoal = _goalAmountUsd != null && _goalYear != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.flag_outlined,
+                color: Color(0xFFFFD600), size: 18),
+            const SizedBox(width: 8),
+            const Text(
+              'Goal',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const Spacer(),
+            if (hasGoal)
+              TextButton(
+                onPressed: () => setState(() {
+                  _goalAmountUsd = null;
+                  _goalYear = null;
+                  Preferences.setGoalAmountUsd(null);
+                  Preferences.setGoalYear(null);
+                }),
+                child: const Text('Clear'),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: _editGoal,
+          icon: const Icon(Icons.edit_outlined, size: 16),
+          label: Text(
+            hasGoal
+                ? 'Hit ${widget.currencyFormat.format(_goalAmountUsd! * widget.conversionFactor)} by $_goalYear'
+                : 'Set a target — e.g. \$1M by 2030',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _editGoal() async {
+    final amountCtrl = TextEditingController(
+      text: _goalAmountUsd == null
+          ? ''
+          : (_goalAmountUsd! * widget.conversionFactor).toInt().toString(),
+    );
+    final nowYear = DateTime.now().year;
+    final yearCtrl = TextEditingController(
+      text: (_goalYear ?? nowYear + 10).toString(),
+    );
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Set a target'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: amountCtrl,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: 'Target net worth',
+                prefixText: widget.currencyFormat.currencySymbol,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: yearCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Target year'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Save')),
+        ],
+      ),
+    );
+    if (saved != true) return;
+    final reported = double.tryParse(amountCtrl.text);
+    final yr = int.tryParse(yearCtrl.text);
+    if (reported == null || yr == null) return;
+    // Convert reported-currency back to USD for storage.
+    final usd = widget.conversionFactor == 0
+        ? reported
+        : reported / widget.conversionFactor;
+    setState(() {
+      _goalAmountUsd = usd;
+      _goalYear = yr;
+    });
+    Preferences.setGoalAmountUsd(usd);
+    Preferences.setGoalYear(yr);
   }
 
   Widget _buildChartCard() {
@@ -372,6 +489,24 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             dashArray: [5, 5],
             dotData: FlDotData(show: false),
           ),
+          // User-set goal line — flat across the chart at the target
+          // amount. Drawn in goal yellow so it's distinct from the
+          // orange FI target line.
+          if (_goalAmountUsd != null)
+            LineChartBarData(
+              spots: [
+                FlSpot(0, _goalAmountUsd! * widget.conversionFactor),
+                FlSpot(
+                  _projectionYears.toDouble(),
+                  _goalAmountUsd! * widget.conversionFactor,
+                ),
+              ],
+              isCurved: false,
+              color: const Color(0xFFFFD600).withValues(alpha: 0.7),
+              barWidth: 2,
+              dashArray: [3, 6],
+              dotData: FlDotData(show: false),
+            ),
         ],
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
