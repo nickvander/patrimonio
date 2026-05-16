@@ -1,5 +1,5 @@
 use axum::{
-    extract::State,
+    extract::{Query, State},
     http::{header, StatusCode},
     response::{IntoResponse, Response},
     routing::get,
@@ -377,8 +377,21 @@ async fn sync_status(State(state): State<AppState>) -> Json<Vec<SyncStatusEntry>
     )
 }
 
-/// Recent transactions across all accounts
-async fn recent_transactions(State(state): State<AppState>) -> Json<Vec<TransactionEntry>> {
+/// Recent transactions across all accounts. `limit` defaults to 50 and is
+/// capped at 500 to keep one response cheap; `offset` lets the frontend
+/// page through the rest with a 'Load more' button.
+#[derive(Deserialize)]
+struct TransactionsQuery {
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
+async fn recent_transactions(
+    State(state): State<AppState>,
+    Query(q): Query<TransactionsQuery>,
+) -> Json<Vec<TransactionEntry>> {
+    let limit = q.limit.unwrap_or(50).clamp(1, 500);
+    let offset = q.offset.unwrap_or(0).max(0);
     let rows = sqlx::query(
         r#"
         SELECT t.id, t.account_id,
@@ -389,9 +402,11 @@ async fn recent_transactions(State(state): State<AppState>) -> Json<Vec<Transact
         FROM transactions t
         JOIN accounts a ON t.account_id = a.id
         ORDER BY t.date DESC, t.created_at DESC
-        LIMIT 50
+        LIMIT $1 OFFSET $2
         "#
     )
+    .bind(limit)
+    .bind(offset)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();

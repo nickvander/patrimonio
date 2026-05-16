@@ -101,9 +101,10 @@ class ApiService {
     throw Exception('Failed to load exchange rate');
   }
 
-  Future<List<dynamic>> getTransactions() async {
+  Future<List<dynamic>> getTransactions({int limit = 50, int offset = 0}) async {
     final response = await http.get(
-      Uri.parse('$_baseUrl/dashboard/transactions'),
+      Uri.parse(
+          '$_baseUrl/dashboard/transactions?limit=$limit&offset=$offset'),
     );
     if (response.statusCode == 200) {
       return json.decode(response.body);

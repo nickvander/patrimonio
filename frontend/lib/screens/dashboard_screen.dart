@@ -56,6 +56,11 @@ class _DashboardScreenState extends State<DashboardScreen>
   // Category that the AllocationHeatmap is currently drilled into. When
   // non-null, the PortfolioCard's holdings table filters to that category.
   String? _portfolioCategoryFilter;
+  // Pagination — the API returns at most 50 transactions per call. We
+  // track whether the latest page filled the limit (so there may be more)
+  // and call _loadMoreTransactions() to append the next slice.
+  static const int _txPageSize = 50;
+  bool _transactionsHasMore = true;
 
   @override
   void initState() {
@@ -571,6 +576,19 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Future<void> _refreshData() => _loadAllData(silent: true);
 
+  Future<void> _loadMoreTransactions() async {
+    final offset = _transactions?.length ?? 0;
+    final more =
+        await _apiService.getTransactions(limit: _txPageSize, offset: offset);
+    if (!mounted) return;
+    setState(() {
+      _transactions = [...(_transactions ?? const []), ...more];
+      // If the server returned fewer rows than we asked for, we hit the
+      // tail of the table — no point offering Load more again.
+      _transactionsHasMore = more.length >= _txPageSize;
+    });
+  }
+
   Future<void> _loadAllData({bool silent = false}) async {
     if (!silent) {
       setState(() {
@@ -590,7 +608,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         _apiService.getSyncStatus(),
         _apiService.getSetupStatus(),
         _apiService.getExchangeRate('USD', 'MXN'),
-        _apiService.getTransactions(),
+        _apiService.getTransactions(limit: _txPageSize),
         _apiService.getAllocationData(),
         _apiService.getTrendData(),
       ]);
@@ -618,6 +636,9 @@ class _DashboardScreenState extends State<DashboardScreen>
         _setupStatus = results[5] as Map<String, dynamic>;
         _fxRate = results[6] as Map<String, dynamic>;
         _transactions = results[7] as List<dynamic>;
+        // If the first page came back smaller than the page size, there
+        // can't be more pages. Saves us a wasted "Load more" tap.
+        _transactionsHasMore = _transactions!.length >= _txPageSize;
 
         _allocationData = allocationRaw.map((e) {
           final category = e['category'] as String;
@@ -1259,6 +1280,8 @@ class _DashboardScreenState extends State<DashboardScreen>
         onGoToManagement: () => _tabController?.animateTo(5),
         apiService: _apiService,
         onTransactionAdded: () => _refreshData(),
+        onLoadMore: _loadMoreTransactions,
+        hasMore: _transactionsHasMore,
         onUpdate: (id, {userCategory, userNotes, accountId}) async {
           try {
             await _apiService.updateTransaction(

@@ -26,6 +26,13 @@ class TransactionsTab extends StatefulWidget {
   /// Invoked after a manual transaction has been added so the parent
   /// can refresh its transaction list.
   final VoidCallback? onTransactionAdded;
+  /// Optional pagination hook. When provided, a "Load more" button shows
+  /// under the list and fires the callback. The parent is expected to
+  /// append the next page to [transactions] and rebuild.
+  final Future<void> Function()? onLoadMore;
+  /// Whether the parent thinks there are more transactions available.
+  /// When false the "Load more" button is hidden.
+  final bool hasMore;
 
   const TransactionsTab({
     super.key,
@@ -40,6 +47,8 @@ class TransactionsTab extends StatefulWidget {
     this.onGoToManagement,
     this.apiService,
     this.onTransactionAdded,
+    this.onLoadMore,
+    this.hasMore = false,
   });
 
   @override
@@ -56,6 +65,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
   // re-categorise, move accounts, or clear selection in one stroke.
   bool _selectionMode = false;
   final Set<String> _selectedIds = {};
+  // Local spinner state while widget.onLoadMore is in-flight so the "Load
+  // more" button itself shows feedback without a full-page reload.
+  bool _loadingMore = false;
 
   List<dynamic> get _filteredTransactions {
     final q = _searchQuery.toLowerCase();
@@ -257,6 +269,32 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: _buildGroupedRows(filtered, isNarrow),
               ),
+              if (widget.onLoadMore != null && widget.hasMore)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Center(
+                    child: _loadingMore
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : OutlinedButton.icon(
+                            onPressed: () async {
+                              setState(() => _loadingMore = true);
+                              try {
+                                await widget.onLoadMore!.call();
+                              } finally {
+                                if (mounted) {
+                                  setState(() => _loadingMore = false);
+                                }
+                              }
+                            },
+                            icon: const Icon(Icons.expand_more, size: 18),
+                            label: const Text('Load more'),
+                          ),
+                  ),
+                ),
             ],
           );
         }),
