@@ -50,6 +50,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
   String _searchQuery = '';
   bool _searchOpenOnNarrow = false;
   TxFilters _filters = TxFilters.empty;
+  // Bulk-edit selection state. When _selectionMode is on, rows render a
+  // checkbox and tapping a row toggles selection instead of opening the
+  // detail sheet. The action bar at the bottom of the list lets the user
+  // re-categorise, move accounts, or clear selection in one stroke.
+  bool _selectionMode = false;
+  final Set<String> _selectedIds = {};
 
   List<dynamic> get _filteredTransactions {
     final q = _searchQuery.toLowerCase();
@@ -242,6 +248,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 style: const TextStyle(color: Colors.grey, fontSize: 12),
               ),
               const SizedBox(height: 8),
+              if (_selectionMode) _buildBulkActionBar(filtered),
               // Flat list of rows with inline date-group headers
               // (Today / Yesterday / weekday name / "Month d"). Avoids
               // ListView.separated so we can interleave headers between
@@ -253,6 +260,200 @@ class _TransactionsTabState extends State<TransactionsTab> {
             ],
           );
         }),
+      ),
+    );
+  }
+
+  // Sticky-ish bulk-action bar that appears under the filter chip strip
+  // whenever the user is in selection mode. "Select all" toggles every
+  // currently-filtered row, the two action buttons run the multi-update,
+  // and "Clear" exits selection mode without doing anything.
+  Widget _buildBulkActionBar(List<dynamic> filtered) {
+    final filteredIds = <String>[
+      for (final t in filtered)
+        if (t['id'] != null) t['id'].toString(),
+    ];
+    final allSelected = filteredIds.isNotEmpty &&
+        filteredIds.every(_selectedIds.contains);
+    final selectedCount = _selectedIds.length;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF00E676).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+            color: const Color(0xFF00E676).withValues(alpha: 0.4)),
+      ),
+      child: LayoutBuilder(builder: (ctx, c) {
+        final isNarrow = c.maxWidth < 560;
+
+        final selectToggle = TextButton.icon(
+          onPressed: () => setState(() {
+            if (allSelected) {
+              _selectedIds.removeAll(filteredIds);
+            } else {
+              _selectedIds.addAll(filteredIds);
+            }
+          }),
+          icon: Icon(
+            allSelected
+                ? Icons.indeterminate_check_box_outlined
+                : Icons.select_all,
+            size: 18,
+          ),
+          label: Text(allSelected ? 'Deselect all' : 'Select all'),
+        );
+
+        final categorize = FilledButton.tonalIcon(
+          onPressed:
+              selectedCount == 0 ? null : () => _bulkCategorize(),
+          icon: const Icon(Icons.label_outline, size: 18),
+          label: const Text('Set category'),
+        );
+
+        final moveAccount = FilledButton.tonalIcon(
+          onPressed:
+              selectedCount == 0 ? null : () => _bulkMoveAccount(),
+          icon: const Icon(Icons.compare_arrows, size: 18),
+          label: const Text('Move account'),
+        );
+
+        final clear = TextButton(
+          onPressed: () => setState(() {
+            _selectionMode = false;
+            _selectedIds.clear();
+          }),
+          child: const Text('Clear'),
+        );
+
+        final summary = Text(
+          '$selectedCount selected',
+          style: const TextStyle(
+              fontWeight: FontWeight.w700, color: Color(0xFF00E676)),
+        );
+
+        if (isNarrow) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              summary,
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                selectToggle,
+                categorize,
+                moveAccount,
+                clear,
+              ]),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            summary,
+            const SizedBox(width: 16),
+            selectToggle,
+            const Spacer(),
+            categorize,
+            const SizedBox(width: 8),
+            moveAccount,
+            const SizedBox(width: 8),
+            clear,
+          ],
+        );
+      }),
+    );
+  }
+
+  Future<void> _bulkCategorize() async {
+    final controller = TextEditingController();
+    final cat = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Set category'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'e.g. Restaurants',
+          ),
+          onSubmitted: (v) => Navigator.pop(context, v.trim()),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () =>
+                  Navigator.pop(context, controller.text.trim()),
+              child: const Text('Apply')),
+        ],
+      ),
+    );
+    if (cat == null || cat.isEmpty) return;
+    await _applyBulkUpdate(userCategory: cat);
+  }
+
+  Future<void> _bulkMoveAccount() async {
+    final accId = await showDialog<String>(
+      context: context,
+      builder: (_) {
+        return SimpleDialog(
+          title: const Text('Move to account'),
+          children: [
+            for (final a in widget.accounts)
+              SimpleDialogOption(
+                onPressed: () =>
+                    Navigator.pop(context, a['id']?.toString()),
+                child: Text(
+                  ((a['nickname'] ?? '').toString().isNotEmpty
+                      ? a['nickname'].toString()
+                      : (a['name'] ?? '').toString()),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+    if (accId == null || accId.isEmpty) return;
+    await _applyBulkUpdate(accountId: accId);
+  }
+
+  // Per-tx PATCH is the only API we have, so we loop. With ~hundreds of
+  // selected rows this is still fast on a desktop network — keep simple.
+  Future<void> _applyBulkUpdate(
+      {String? userCategory, String? accountId}) async {
+    final onUpdate = widget.onUpdate;
+    if (onUpdate == null) return;
+    final ids = _selectedIds.toList();
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(content: Text('Updating ${ids.length} transactions…')),
+    );
+    var failed = 0;
+    for (final id in ids) {
+      try {
+        await onUpdate(id,
+            userCategory: userCategory, accountId: accountId);
+      } catch (_) {
+        failed++;
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _selectedIds.clear();
+      _selectionMode = false;
+    });
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          failed == 0
+              ? 'Updated ${ids.length} transactions'
+              : 'Updated ${ids.length - failed} · $failed failed',
+        ),
       ),
     );
   }
@@ -316,6 +517,19 @@ class _TransactionsTabState extends State<TransactionsTab> {
                     ),
                   ),
               ],
+            ),
+            IconButton(
+              onPressed: () => setState(() {
+                _selectionMode = !_selectionMode;
+                if (!_selectionMode) _selectedIds.clear();
+              }),
+              icon: Icon(
+                _selectionMode ? Icons.close : Icons.checklist,
+                size: 22,
+                color: _selectionMode ? const Color(0xFF00E676) : null,
+              ),
+              tooltip:
+                  _selectionMode ? 'Exit selection mode' : 'Select multiple',
             ),
             if (widget.apiService != null) ...[
               IconButton(
@@ -486,14 +700,60 @@ class _TransactionsTabState extends State<TransactionsTab> {
     final needsConversion =
         widget.usdMxnRate > 0 && sourceCurrency != widget.targetCurrency;
 
+    final id = tx['id']?.toString();
+    final isSelected = id != null && _selectedIds.contains(id);
+
     return InkWell(
-      onTap: () => _showTransactionDetails(tx),
+      onTap: () {
+        if (_selectionMode && id != null) {
+          setState(() {
+            if (isSelected) {
+              _selectedIds.remove(id);
+            } else {
+              _selectedIds.add(id);
+            }
+          });
+        } else {
+          _showTransactionDetails(tx);
+        }
+      },
+      onLongPress: () {
+        if (id != null) {
+          setState(() {
+            _selectionMode = true;
+            _selectedIds.add(id);
+          });
+        }
+      },
       hoverColor: Colors.white.withValues(alpha: 0.03),
-      child: Padding(
+      child: Container(
+        // Subtle tint on selected rows so it's obvious which set the bulk
+        // action bar will operate on.
+        color: isSelected
+            ? const Color(0xFF00E676).withValues(alpha: 0.08)
+            : null,
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            if (_selectionMode) ...[
+              SizedBox(
+                width: 32,
+                child: Checkbox(
+                  value: isSelected,
+                  onChanged: id == null
+                      ? null
+                      : (v) => setState(() {
+                            if (v == true) {
+                              _selectedIds.add(id);
+                            } else {
+                              _selectedIds.remove(id);
+                            }
+                          }),
+                ),
+              ),
+              const SizedBox(width: 4),
+            ],
             Container(
               width: 32,
               height: 32,
