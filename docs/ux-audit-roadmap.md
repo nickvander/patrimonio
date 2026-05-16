@@ -261,6 +261,16 @@ These show up everywhere and are worth a sweep, not a one-off fix:
 21. **Net-worth goals** with deadline + progress %.
 22. **Scenario comparison** in Projections (base / aggressive / conservative).
 
+### P2 — follow-up entries from the May 2026 sweep
+
+These shipped partially in the previous batch and need a second pass:
+
+23. **Light-theme widget audit.** The toggle works and chrome (AppBar/Card/Scaffold) reads correctly, but in-app widgets hardcode `Colors.white` and explicit hex colors at the call site, so body content still looks dark in light mode. Sweep widgets to use `Theme.of(context).colorScheme.onSurface` etc.
+24. **Budgets and goals → backend.** They currently ride on `Preferences` (localStorage) so clearing site data wipes them. Add `budgets` and `net_worth_goals` tables, plumb CRUD endpoints, keep localStorage as a fallback only for unauthenticated future state.
+25. **Cash-flow tab.** Promote the monthly cash-flow card, trend chart, and budgets card off the Overview into a dedicated 7th tab so the Overview stays focused on net-worth-at-a-glance.
+26. **Per-institution sync endpoint + targeted retry.** `runSync()` currently syncs every institution, so "Retry N failed" is doing more work than asked. Add `POST /institutions/{id}/sync` and have the retry shortcut loop only the failed ones.
+27. **Deep-link Cmd-K navigation.** Selecting a holding / account / transaction in the palette currently only animates to the right tab. Wire it to scroll-to and highlight the specific row, or open the account-detail panel directly.
+
 ---
 
 ## 4. Paste-ready agent prompt
