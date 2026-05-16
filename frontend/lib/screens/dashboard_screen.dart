@@ -82,9 +82,9 @@ class _DashboardScreenState extends State<DashboardScreen>
         }
       }
     }
-    final savedTab = Preferences.getLastTab().clamp(0, 5);
+    final savedTab = Preferences.getLastTab().clamp(0, 6);
     _tabController = TabController(
-      length: 6,
+      length: 7,
       vsync: this,
       initialIndex: savedTab,
     );
@@ -132,9 +132,10 @@ class _DashboardScreenState extends State<DashboardScreen>
       ('Overview', 0, Icons.dashboard_outlined, Color(0xFF00E676)),
       ('Portfolio', 1, Icons.pie_chart_outline, Color(0xFF1DE9B6)),
       ('Transactions', 2, Icons.receipt_long_outlined, Color(0xFF00B0FF)),
-      ('Projections', 3, Icons.trending_up_outlined, Color(0xFFFFB300)),
-      ('Tax planning', 4, Icons.account_balance_outlined, Color(0xFFAB47BC)),
-      ('Management', 5, Icons.settings_outlined, Color(0xFF90A4AE)),
+      ('Cash flow', 3, Icons.account_balance_wallet_outlined, Color(0xFF1DE9B6)),
+      ('Projections', 4, Icons.trending_up_outlined, Color(0xFFFFB300)),
+      ('Tax planning', 5, Icons.account_balance_outlined, Color(0xFFAB47BC)),
+      ('Management', 6, Icons.settings_outlined, Color(0xFF90A4AE)),
     ];
     for (final (label, idx, icon, color) in tabs) {
       items.add(PaletteItem(
@@ -722,6 +723,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     Tab(text: 'Overview'),
                     Tab(text: 'Portfolio'),
                     Tab(text: 'Transactions'),
+                    Tab(text: isCompact ? 'Cash' : 'Cash flow'),
                     Tab(text: isCompact ? 'Proj.' : 'Projections'),
                     Tab(text: isCompact ? 'Tax' : 'Tax planning'),
                     Tab(text: isCompact ? 'Manage' : 'Management'),
@@ -737,7 +739,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       syncData: _syncData ?? const [],
                       netWorthHistory: _netWorthHistory ?? const [],
                       onJumpToManagement: () =>
-                          _tabController?.animateTo(5),
+                          _tabController?.animateTo(6),
                     ),
                   ),
                   // Theme toggle — cycles system → light → dark.
@@ -831,13 +833,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                     SyncErrorBanner(
                       syncData: _syncData ?? const [],
                       onJumpToManagement: () =>
-                          _tabController?.animateTo(5),
+                          _tabController?.animateTo(6),
                       onReconnect: (id) async {
                         // Defer to the existing handleReconnect routine
                         // by hopping to Management and letting the user
                         // hit the row's Reconnect — simpler than wiring
                         // the Plaid flow up out of band here.
-                        _tabController?.animateTo(5);
+                        _tabController?.animateTo(6);
                       },
                     ),
                   Expanded(child: _buildBody()),
@@ -911,7 +913,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             currencyFormat: currencyFormat,
             targetCurrency: _targetCurrency,
             usdMxnRate: fxRate,
-            onGoToManagement: () => _tabController?.animateTo(5),
+            onGoToManagement: () => _tabController?.animateTo(6),
             onBalanceUpdate: (id, bal) async {
               try {
                 await _apiService.updateAccountBalance(id, bal);
@@ -1224,13 +1226,6 @@ class _DashboardScreenState extends State<DashboardScreen>
               selectedRange: _selectedRange,
             ),
           ),
-          const SizedBox(height: 24),
-          if (_trendData != null)
-            CashFlowTrendsChart(
-              trends: _trendData!,
-              conversionFactor: conversionFactor,
-              currencyFormat: currencyFormat,
-            ),
         ],
       );
     }
@@ -1266,27 +1261,15 @@ class _DashboardScreenState extends State<DashboardScreen>
             children: [
               stats,
               const SizedBox(height: 24),
-              // Monthly cash-flow card sits right under the KPI strip so the
-              // single most-asked question ("did I spend more than I made
-              // this month?") is answered before the user scrolls anywhere.
-              MonthlyCashFlowCard(
-                trends: _trendData ?? const [],
-                conversionFactor: conversionFactor,
-                currencyFormat: currencyFormat,
-              ),
-              const SizedBox(height: 24),
+              // Net-worth-focused widgets stay on Overview. Cash-flow
+              // widgets (monthly card, trends, budgets) moved to the
+              // dedicated 'Cash flow' tab so this view stays a
+              // net-worth-at-a-glance summary.
               NetWorthGoalTile(
                 netWorthUsd:
                     (_overview?['net_worth'] as num?)?.toDouble() ?? 0.0,
                 conversionFactor: conversionFactor,
                 currencyFormat: currencyFormat,
-              ),
-              const SizedBox(height: 24),
-              BudgetsCard(
-                transactions: _transactions ?? const [],
-                conversionFactor: conversionFactor,
-                currencyFormat: currencyFormat,
-                apiService: _apiService,
               ),
               const SizedBox(height: 24),
               body,
@@ -1344,7 +1327,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         currencyFormat: currencyFormat,
         targetCurrency: _targetCurrency,
         usdMxnRate: fxRate,
-        onGoToManagement: () => _tabController?.animateTo(5),
+        onGoToManagement: () => _tabController?.animateTo(6),
         apiService: _apiService,
         onTransactionAdded: () => _refreshData(),
         onLoadMore: _loadMoreTransactions,
@@ -1373,6 +1356,36 @@ class _DashboardScreenState extends State<DashboardScreen>
             const SnackBar(content: Text('Transaction deleted')),
           );
         },
+      ),
+    );
+
+    // Dedicated cash-flow page: monthly summary, the bar-chart of
+    // recent months, and per-category budgets. These used to crowd the
+    // Overview; pulling them out keeps Overview focused on net worth.
+    final cashFlowTab = buildTabContainer(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          MonthlyCashFlowCard(
+            trends: _trendData ?? const [],
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
+          ),
+          const SizedBox(height: 24),
+          if (_trendData != null)
+            CashFlowTrendsChart(
+              trends: _trendData!,
+              conversionFactor: conversionFactor,
+              currencyFormat: currencyFormat,
+            ),
+          const SizedBox(height: 24),
+          BudgetsCard(
+            transactions: _transactions ?? const [],
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
+            apiService: _apiService,
+          ),
+        ],
       ),
     );
 
@@ -1646,6 +1659,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         overviewTab,
         portfolioTab,
         transactionsTab,
+        cashFlowTab,
         projectionsTab,
         taxPlanningTab,
         managementTab,
