@@ -246,7 +246,7 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
           if (_draft.isActive)
             TextButton(
               onPressed: () => setState(() => _draft = TxFilters.empty),
-              child: Text('Reset'),
+              child: const Text('Reset'),
             ),
         ],
       ),
@@ -397,11 +397,11 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop<TxFilters>(context),
-          child: Text('Cancel'),
+          child: const Text('Cancel'),
         ),
         FilledButton(
           onPressed: () => Navigator.pop<TxFilters>(context, _draft),
-          child: Text('Apply'),
+          child: const Text('Apply'),
         ),
       ],
     );

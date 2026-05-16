@@ -41,7 +41,7 @@ class _FxWidgetState extends State<FxWidget> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
+                const Text(
                   'Exchange rate',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
@@ -69,7 +69,7 @@ class _FxWidgetState extends State<FxWidget> {
                                   Color(0xFF00E676)),
                             ),
                           )
-                        : Icon(Icons.refresh, size: 20),
+                        : const Icon(Icons.refresh, size: 20),
                     tooltip: 'Refresh rate now',
                     color: context.textMuted,
                   ),
@@ -96,7 +96,7 @@ class _FxWidgetState extends State<FxWidget> {
                         alignment: Alignment.centerLeft,
                         child: Text(
                           rate.toStringAsFixed(4),
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 32,
                             fontWeight: FontWeight.bold,
                             color: Colors.tealAccent,
@@ -128,7 +128,7 @@ class _FxWidgetState extends State<FxWidget> {
                   if (MediaQuery.sizeOf(ctx).width < 360) {
                     return const SizedBox.shrink();
                   }
-                  return Icon(
+                  return const Icon(
                     Icons.currency_exchange,
                     size: 48,
                     color: Colors.teal,
@@ -145,7 +145,7 @@ class _FxWidgetState extends State<FxWidget> {
   Widget _buildTimestampBlock(dynamic recordedAt) {
     final parsed = DateTime.tryParse(recordedAt.toString());
     if (parsed == null) {
-      return Text(
+      return const Text(
         'Updated: unknown',
         style: TextStyle(fontSize: 11, color: Colors.grey),
       );

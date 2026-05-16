@@ -535,7 +535,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                           fontSize: 15,
                           fontWeight: FontWeight.w800,
                           color: context.textPrimary,
-                          fontFeatures: [FontFeature.tabularFigures()],
+                          fontFeatures: [const FontFeature.tabularFigures()],
                         ),
                       ),
                     ],
@@ -596,7 +596,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
               style: TextStyle(
                 fontSize: 12,
                 color: context.textMuted,
-                fontFeatures: [FontFeature.tabularFigures()],
+                fontFeatures: [const FontFeature.tabularFigures()],
               ),
             ),
           ),
@@ -609,7 +609,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
                 color: context.textPrimary,
-                fontFeatures: [FontFeature.tabularFigures()],
+                fontFeatures: [const FontFeature.tabularFigures()],
               ),
             ),
           ),
@@ -695,7 +695,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                     borderSide: BorderSide.none,
                   ),
                 ),
-                style: TextStyle(fontSize: 13),
+                style: const TextStyle(fontSize: 13),
               ),
             ),
           ),
@@ -728,7 +728,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
             style: ButtonStyle(
               visualDensity: VisualDensity.compact,
               textStyle: WidgetStateProperty.all(
-                  TextStyle(fontSize: 12)),
+                  const TextStyle(fontSize: 12)),
             ),
           ),
             ],
@@ -938,7 +938,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
               fontSize: 14,
               fontWeight: FontWeight.w900,
               color: context.textPrimary,
-              shadows: [Shadow(color: Colors.black, blurRadius: 6)],
+              shadows: [const Shadow(color: Colors.black, blurRadius: 6)],
             ),
             badgeWidget: isTouched
                 ? Container(
@@ -1260,7 +1260,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
               children: [
                 Text(
                   displaySymbol,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
                   ),
@@ -1269,7 +1269,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
                 ),
                 Text(
                   secondaryLabel,
-                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1288,7 +1288,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
       children: [
         Text(
           _formatQuantity(quantity),
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 14,
             fontFeatures: [FontFeature.tabularFigures()],
           ),
@@ -1307,7 +1307,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
       children: [
         Text(
           widget.format.format(price),
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 14,
             fontFeatures: [FontFeature.tabularFigures()],
           ),
@@ -1318,7 +1318,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
             style: TextStyle(
               fontSize: 10,
               color: context.textFaint,
-              fontFeatures: [FontFeature.tabularFigures()],
+              fontFeatures: [const FontFeature.tabularFigures()],
             ),
           ),
       ],
@@ -1330,7 +1330,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
       children: [
         Text(
           widget.format.format(value),
-          style: TextStyle(
+          style: const TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 14,
             fontFeatures: [FontFeature.tabularFigures()],
@@ -1342,7 +1342,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
             style: TextStyle(
               fontSize: 10,
               color: context.textFaint,
-              fontFeatures: [FontFeature.tabularFigures()],
+              fontFeatures: [const FontFeature.tabularFigures()],
             ),
           ),
       ],

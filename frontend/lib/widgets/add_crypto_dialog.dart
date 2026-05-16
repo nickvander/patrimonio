@@ -103,7 +103,7 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
                   // In a real browser, this would open the link
                   // web.window.open('https://bitso.com/api_info', '_blank');
                 },
-                child: Text(
+                child: const Text(
                   'Where do I find my API keys? ↗',
                   style: TextStyle(
                     fontSize: 12,
@@ -147,7 +147,7 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
       actions: [
         TextButton(
           onPressed: _isLoading ? null : () => Navigator.pop(context),
-          child: Text('Cancel'),
+          child: const Text('Cancel'),
         ),
         ElevatedButton(
           onPressed: _isLoading ? null : _submit,

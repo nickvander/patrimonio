@@ -26,7 +26,7 @@ class AccountsBreakdownCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               'Asset breakdown',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
@@ -115,7 +115,7 @@ class AccountsBreakdownCard extends StatelessWidget {
               fontSize: 14,
               fontWeight: FontWeight.w700,
               color: context.textPrimary,
-              fontFeatures: [FontFeature.tabularFigures()],
+              fontFeatures: [const FontFeature.tabularFigures()],
             ),
           ),
         ],

@@ -63,13 +63,13 @@ class SyncErrorBanner extends StatelessWidget {
               TextButton.icon(
                 onPressed: () =>
                     onReconnect!(reconnectOnly.first['id'].toString()),
-                icon: Icon(Icons.link, size: 16),
-                label: Text('Reconnect'),
+                icon: const Icon(Icons.link, size: 16),
+                label: const Text('Reconnect'),
               ),
             TextButton.icon(
               onPressed: onJumpToManagement,
-              icon: Icon(Icons.settings, size: 16),
-              label: Text('Open management'),
+              icon: const Icon(Icons.settings, size: 16),
+              label: const Text('Open management'),
             ),
           ],
         );
@@ -80,13 +80,13 @@ class SyncErrorBanner extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded,
+                  const Icon(Icons.warning_amber_rounded,
                       color: Colors.orangeAccent, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       summary,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: Colors.orangeAccent,
                         fontWeight: FontWeight.w700,
                       ),
@@ -109,12 +109,12 @@ class SyncErrorBanner extends StatelessWidget {
         }
         return Row(
           children: [
-            Icon(Icons.warning_amber_rounded,
+            const Icon(Icons.warning_amber_rounded,
                 color: Colors.orangeAccent, size: 18),
             const SizedBox(width: 8),
             Text(
               summary,
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.orangeAccent,
                 fontWeight: FontWeight.w700,
               ),

@@ -41,7 +41,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: const Color(0xFF1A1A24),
-      title: Text(
+      title: const Text(
         'Add manual account',
         style: TextStyle(fontWeight: FontWeight.bold),
       ),
@@ -112,7 +112,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
       actions: [
         TextButton(
           onPressed: _isSubmitting ? null : () => Navigator.pop(context),
-          child: Text('Cancel'),
+          child: const Text('Cancel'),
         ),
         ElevatedButton(
           onPressed: _isSubmitting ? null : _submit,
@@ -122,7 +122,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : Text('Create account'),
+              : const Text('Create account'),
         ),
       ],
     );

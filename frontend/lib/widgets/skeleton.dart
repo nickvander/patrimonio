@@ -85,8 +85,8 @@ class OverviewSkeleton extends StatelessWidget {
               SizedBox(height: 24),
               SkeletonBox(height: 440),
             ] else
-              Row(
-                children: const [
+              const Row(
+                children: [
                   Expanded(flex: 1, child: SkeletonBox(height: 600)),
                   SizedBox(width: 24),
                   Expanded(flex: 3, child: SkeletonBox(height: 600)),

@@ -139,7 +139,7 @@ class AllocationHeatmap extends StatelessWidget {
                 Flexible(
                   child: Text(
                     'Total: ${currencyFormat.format(totalValue * conversionFactor)}',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 14,
                       color: Colors.grey,
                       fontWeight: FontWeight.w600,
@@ -305,7 +305,7 @@ class AllocationHeatmap extends StatelessWidget {
                                   fontSize: 11,
                                   color: context.textFaint,
                                   fontFeatures: [
-                                    FontFeature.tabularFigures(),
+                                    const FontFeature.tabularFigures(),
                                   ],
                                 ),
                               ),
@@ -319,7 +319,7 @@ class AllocationHeatmap extends StatelessWidget {
                                 fontSize: 11,
                                 color: context.textPrimary,
                                 fontWeight: FontWeight.w600,
-                                fontFeatures: [FontFeature.tabularFigures()],
+                                fontFeatures: [const FontFeature.tabularFigures()],
                               ),
                             ),
                           ],

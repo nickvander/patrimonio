@@ -63,8 +63,8 @@ class AccountsListWidget extends StatelessWidget {
                 const SizedBox(height: 18),
                 FilledButton.icon(
                   onPressed: onGoToManagement,
-                  icon: Icon(Icons.add_link, size: 18),
-                  label: Text('Add an account'),
+                  icon: const Icon(Icons.add_link, size: 18),
+                  label: const Text('Add an account'),
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF00E676),
                     foregroundColor: Colors.black,
@@ -432,7 +432,7 @@ class AccountsListWidget extends StatelessWidget {
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: context.textMuted,
-                fontFeatures: [FontFeature.tabularFigures()],
+                fontFeatures: [const FontFeature.tabularFigures()],
               ),
             ),
           ],
@@ -509,7 +509,7 @@ class AccountsListWidget extends StatelessWidget {
         fontSize: 16,
         fontWeight: FontWeight.w700,
         color: context.textPrimary,
-        fontFeatures: [FontFeature.tabularFigures()],
+        fontFeatures: [const FontFeature.tabularFigures()],
       ),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
@@ -519,7 +519,7 @@ class AccountsListWidget extends StatelessWidget {
     if (hasCrypto) {
       subBalance = Text(
         '${acc['crypto_amount']} ${acc['ticker_symbol']}',
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 11,
           color: Color(0xFFAB8CFF),
           fontWeight: FontWeight.w600,
@@ -534,7 +534,7 @@ class AccountsListWidget extends StatelessWidget {
           fontSize: 11,
           color: context.textFaint,
           fontStyle: FontStyle.italic,
-          fontFeatures: [FontFeature.tabularFigures()],
+          fontFeatures: [const FontFeature.tabularFigures()],
         ),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -552,13 +552,13 @@ class AccountsListWidget extends StatelessWidget {
           showDialog(
             context: context,
             builder: (context) => AlertDialog(
-              title: Text('Delete account'),
+              title: const Text('Delete account'),
               content: Text(
                   'Are you sure you want to delete "$name"? This will remove all its history.'),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: Text('Cancel'),
+                  child: const Text('Cancel'),
                 ),
                 TextButton(
                   onPressed: () {
@@ -567,7 +567,7 @@ class AccountsListWidget extends StatelessWidget {
                   },
                   style: TextButton.styleFrom(
                       foregroundColor: Colors.redAccent),
-                  child: Text('Delete'),
+                  child: const Text('Delete'),
                 ),
               ],
             ),
@@ -689,7 +689,7 @@ class AccountsListWidget extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Rename account'),
+        title: const Text('Rename account'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -720,7 +720,7 @@ class AccountsListWidget extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel'),
+            child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () {
@@ -730,7 +730,7 @@ class AccountsListWidget extends StatelessWidget {
                 controller.text.trim(),
               );
             },
-            child: Text('Save'),
+            child: const Text('Save'),
           ),
         ],
       ),

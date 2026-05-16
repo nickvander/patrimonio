@@ -47,7 +47,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      const Text(
                         'Cash flow trends',
                         style: TextStyle(
                           fontSize: 18,
@@ -63,7 +63,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                 return Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
+                    const Text(
                       'Cash flow trends',
                       style: TextStyle(
                         fontSize: 18,

@@ -219,7 +219,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
         padding: const EdgeInsets.symmetric(horizontal: 8),
         minimumSize: const Size(0, 28),
       ),
-      child: Text('Clear all'),
+      child: const Text('Clear all'),
     ));
     return Padding(
       padding: const EdgeInsets.only(top: 8, bottom: 4),
@@ -242,7 +242,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
       label: Text(label),
       onDeleted: onRemove,
       visualDensity: VisualDensity.compact,
-      labelStyle: TextStyle(fontSize: 12),
+      labelStyle: const TextStyle(fontSize: 12),
       deleteIconColor: context.textMuted,
     );
   }
@@ -254,7 +254,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.receipt_long_outlined,
+            const Icon(Icons.receipt_long_outlined,
                 size: 64, color: Colors.grey),
             const SizedBox(height: 16),
             Text(
@@ -266,7 +266,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
+            const Text(
               'Link a bank, import a statement, or add an account manually\n'
               'to start seeing activity here.',
               textAlign: TextAlign.center,
@@ -275,8 +275,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
             const SizedBox(height: 20),
             FilledButton.icon(
               onPressed: widget.onGoToManagement,
-              icon: Icon(Icons.add_link, size: 18),
-              label: Text('Go to Management'),
+              icon: const Icon(Icons.add_link, size: 18),
+              label: const Text('Go to Management'),
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF00E676),
                 foregroundColor: Colors.black,
@@ -304,7 +304,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               const SizedBox(height: 8),
               Text(
                 'Showing ${filtered.length} of ${widget.transactions.length}',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
               ),
               const SizedBox(height: 8),
               if (_selectionMode) _buildBulkActionBar(filtered),
@@ -337,8 +337,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
                                 }
                               }
                             },
-                            icon: Icon(Icons.expand_more, size: 18),
-                            label: Text('Load more'),
+                            icon: const Icon(Icons.expand_more, size: 18),
+                            label: const Text('Load more'),
                           ),
                   ),
                 ),
@@ -395,15 +395,15 @@ class _TransactionsTabState extends State<TransactionsTab> {
         final categorize = FilledButton.tonalIcon(
           onPressed:
               selectedCount == 0 ? null : () => _bulkCategorize(),
-          icon: Icon(Icons.label_outline, size: 18),
-          label: Text('Set category'),
+          icon: const Icon(Icons.label_outline, size: 18),
+          label: const Text('Set category'),
         );
 
         final moveAccount = FilledButton.tonalIcon(
           onPressed:
               selectedCount == 0 ? null : () => _bulkMoveAccount(),
-          icon: Icon(Icons.compare_arrows, size: 18),
-          label: Text('Move account'),
+          icon: const Icon(Icons.compare_arrows, size: 18),
+          label: const Text('Move account'),
         );
 
         final clear = TextButton(
@@ -411,12 +411,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
             _selectionMode = false;
             _selectedIds.clear();
           }),
-          child: Text('Clear'),
+          child: const Text('Clear'),
         );
 
         final summary = Text(
           '$selectedCount selected',
-          style: TextStyle(
+          style: const TextStyle(
               fontWeight: FontWeight.w700, color: Color(0xFF00E676)),
         );
 
@@ -457,7 +457,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
     final cat = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('Set category'),
+        title: const Text('Set category'),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -469,11 +469,11 @@ class _TransactionsTabState extends State<TransactionsTab> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('Cancel')),
+              child: const Text('Cancel')),
           FilledButton(
               onPressed: () =>
                   Navigator.pop(context, controller.text.trim()),
-              child: Text('Apply')),
+              child: const Text('Apply')),
         ],
       ),
     );
@@ -486,7 +486,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
       context: context,
       builder: (_) {
         return SimpleDialog(
-          title: Text('Move to account'),
+          title: const Text('Move to account'),
           children: [
             for (final a in widget.accounts)
               SimpleDialogOption(
@@ -558,7 +558,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               _searchOpenOnNarrow = false;
               _searchQuery = '';
             }),
-            icon: Icon(Icons.close, size: 20),
+            icon: const Icon(Icons.close, size: 20),
             tooltip: 'Close search',
           ),
         ],
@@ -585,7 +585,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               children: [
                 IconButton(
                   onPressed: _openFilters,
-                  icon: Icon(Icons.filter_list, size: 22),
+                  icon: const Icon(Icons.filter_list, size: 22),
                   tooltip: 'Filter transactions',
                 ),
                 if (_filters.isActive)
@@ -619,12 +619,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
             if (widget.apiService != null) ...[
               IconButton(
                 onPressed: () => _openAddDialog(),
-                icon: Icon(Icons.add, size: 22),
+                icon: const Icon(Icons.add, size: 22),
                 tooltip: 'Add transaction',
               ),
               IconButton(
                 onPressed: () => _downloadCsv(),
-                icon: Icon(Icons.file_download_outlined, size: 22),
+                icon: const Icon(Icons.file_download_outlined, size: 22),
                 tooltip: 'Export CSV',
               ),
             ],
@@ -632,7 +632,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               IconButton(
                 onPressed: () =>
                     setState(() => _searchOpenOnNarrow = true),
-                icon: Icon(Icons.search, size: 20),
+                icon: const Icon(Icons.search, size: 20),
                 tooltip: 'Search transactions',
               )
             else
@@ -681,7 +681,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
           borderSide: BorderSide.none,
         ),
       ),
-      style: TextStyle(fontSize: 13),
+      style: const TextStyle(fontSize: 13),
     );
   }
 
@@ -873,7 +873,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 children: [
                   Text(
                     _titleCase(tx['description'] ?? 'Unknown'),
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
                       height: 1.2,
@@ -926,7 +926,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                         style: TextStyle(
                           fontSize: 10,
                           color: context.textFaint,
-                          fontFeatures: [FontFeature.tabularFigures()],
+                          fontFeatures: [const FontFeature.tabularFigures()],
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -941,7 +941,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                         color: Colors.orange.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(3),
                       ),
-                      child: Text(
+                      child: const Text(
                         'Pending',
                         style: TextStyle(
                           color: Colors.orange,
@@ -1096,7 +1096,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: IconButton(
-                      icon: Icon(Icons.close, size: 20),
+                      icon: const Icon(Icons.close, size: 20),
                       onPressed: () => Navigator.pop(context),
                       tooltip: 'Close',
                       padding: EdgeInsets.zero,
@@ -1129,7 +1129,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                           children: [
                             Text(
                               titleDescription,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -1313,7 +1313,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                         style: TextStyle(
                           fontSize: 12,
                           color: context.textMuted,
-                          fontFeatures: [FontFeature.tabularFigures()],
+                          fontFeatures: [const FontFeature.tabularFigures()],
                         ),
                       ),
                     ),
@@ -1351,20 +1351,20 @@ class _TransactionsTabState extends State<TransactionsTab> {
                             final confirm = await showDialog<bool>(
                               context: context,
                               builder: (ctx) => AlertDialog(
-                                title: Text('Delete transaction?'),
-                                content: Text(
+                                title: const Text('Delete transaction?'),
+                                content: const Text(
                                     'This permanently removes the transaction. To re-import from CSV/PDF you will need to upload the file again.'),
                                 actions: [
                                   TextButton(
                                       onPressed: () =>
                                           Navigator.pop(ctx, false),
-                                      child: Text('Cancel')),
+                                      child: const Text('Cancel')),
                                   TextButton(
                                     onPressed: () =>
                                         Navigator.pop(ctx, true),
                                     style: TextButton.styleFrom(
                                         foregroundColor: Colors.redAccent),
-                                    child: Text('Delete'),
+                                    child: const Text('Delete'),
                                   ),
                                 ],
                               ),
@@ -1383,15 +1383,15 @@ class _TransactionsTabState extends State<TransactionsTab> {
                               );
                             }
                           },
-                          icon: Icon(Icons.delete_outline,
+                          icon: const Icon(Icons.delete_outline,
                               size: 16, color: Colors.redAccent),
-                          label: Text('Delete',
+                          label: const Text('Delete',
                               style: TextStyle(color: Colors.redAccent)),
                         ),
                       const Spacer(),
                       TextButton(
                         onPressed: () => Navigator.pop(context),
-                        child: Text('Close'),
+                        child: const Text('Close'),
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
@@ -1403,7 +1403,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                             userNotes: notesController.text.trim(),
                           );
                         },
-                        child: Text('Save'),
+                        child: const Text('Save'),
                       ),
                     ],
                   ),
@@ -1703,7 +1703,7 @@ class _AccountMoverState extends State<_AccountMover> {
         const SizedBox(width: 8),
         ElevatedButton(
           onPressed: _selectedId == null ? null : () => widget.onMove(_selectedId!),
-          child: Text('Move'),
+          child: const Text('Move'),
         ),
       ],
     );

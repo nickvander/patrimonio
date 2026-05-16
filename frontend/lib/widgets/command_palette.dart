@@ -161,7 +161,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                               ),
                               title: Text(
                                 it.label,
-                                style: TextStyle(
+                                style: const TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600),
                                 maxLines: 1,
@@ -196,8 +196,8 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                     bottomRight: Radius.circular(20),
                   ),
                 ),
-                child: Row(
-                  children: const [
+                child: const Row(
+                  children: [
                     _Hint(label: '↑↓', text: 'navigate'),
                     SizedBox(width: 12),
                     _Hint(label: '↵', text: 'select'),

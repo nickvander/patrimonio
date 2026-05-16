@@ -193,18 +193,18 @@ class _ImportScreenState extends State<ImportScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Import statement')),
+      appBar: AppBar(title: const Text('Import statement')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               'Upload account statement',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            Text(
+            const Text(
               'Upload CSV or PDF statements from Nu Mexico, Banamex, or Cetesdirecto. We will automatically detect the format.',
               style: TextStyle(color: Colors.grey),
             ),
@@ -221,7 +221,7 @@ class _ImportScreenState extends State<ImportScreen> {
                   ),
                   child: Column(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.upload_file,
                         size: 64,
                         color: Color(0xFF00E676),
@@ -232,13 +232,13 @@ class _ImportScreenState extends State<ImportScreen> {
                           children: [
                             Text(
                               _selectedFile!.name,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             Text(
                               '${(_selectedFile!.size / 1024).toStringAsFixed(1)} KB',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 color: Colors.grey,
                                 fontSize: 12,
                               ),
@@ -246,11 +246,11 @@ class _ImportScreenState extends State<ImportScreen> {
                           ],
                         )
                       else
-                        Text('No file selected'),
+                        const Text('No file selected'),
                       const SizedBox(height: 24),
                       ElevatedButton(
                         onPressed: _isUploading ? null : _pickFile,
-                        child: Text('Select file'),
+                        child: const Text('Select file'),
                       ),
                     ],
                   ),
@@ -260,7 +260,7 @@ class _ImportScreenState extends State<ImportScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'Assign to account',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
@@ -297,7 +297,7 @@ class _ImportScreenState extends State<ImportScreen> {
                       Flexible(
                         child: Text(
                           'Preview (${_selectedIndices.length}/${_previewTransactions!.length} selected)',
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
@@ -316,7 +316,7 @@ class _ImportScreenState extends State<ImportScreen> {
                                 );
                               });
                             },
-                            child: Text(
+                            child: const Text(
                               'Select all',
                               style: TextStyle(color: Color(0xFF00E676)),
                             ),
@@ -328,7 +328,7 @@ class _ImportScreenState extends State<ImportScreen> {
                                 _selectedIndices = {};
                               });
                             },
-                            child: Text(
+                            child: const Text(
                               'Deselect all',
                               style: TextStyle(color: Colors.grey),
                             ),
@@ -453,7 +453,7 @@ class _ImportScreenState extends State<ImportScreen> {
                       onPressed: _confirmImport,
                       child: Text(
                         'Import ${_selectedIndices.length} Transaction${_selectedIndices.length == 1 ? '' : 's'}',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
@@ -488,7 +488,7 @@ class _ImportScreenState extends State<ImportScreen> {
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          prefixIcon: Icon(Icons.lock_outline),
+                          prefixIcon: const Icon(Icons.lock_outline),
                         ),
                       ),
                     ),
@@ -503,7 +503,7 @@ class _ImportScreenState extends State<ImportScreen> {
                       onPressed: _isUploading ? null : _uploadFile,
                       child: _isUploading
                           ? const CircularProgressIndicator(color: Colors.black)
-                          : Text(
+                          : const Text(
                               'Process statement',
                               style: TextStyle(fontWeight: FontWeight.bold),
                             ),

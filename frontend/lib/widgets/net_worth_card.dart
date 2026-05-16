@@ -480,7 +480,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                 final children = <TextSpan>[
                   TextSpan(
                     text: '${DateFormat('MMM d, y').format(date)}\n',
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: Colors.grey,
                       fontSize: 11,
                       fontWeight: FontWeight.normal,
@@ -506,7 +506,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                     TextSpan(
                       text:
                           'Assets: ${currencyFormat.format((ta as num).toDouble() * conversionFactor)}\n',
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: Color(0xFF00E676),
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -515,7 +515,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                     TextSpan(
                       text:
                           'Liabilities: ${currencyFormat.format((tl as num).toDouble() * conversionFactor)}\n',
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: Colors.redAccent,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -590,7 +590,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                     );
                   }
                 }
-                return Text('');
+                return const Text('');
               },
             ),
           ),

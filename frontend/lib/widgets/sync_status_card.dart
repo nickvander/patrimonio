@@ -96,7 +96,7 @@ class SyncStatusCard extends StatelessWidget {
                         onRetrySync?.call();
                       }
                     },
-                    icon: Icon(Icons.refresh, size: 16),
+                    icon: const Icon(Icons.refresh, size: 16),
                     label: Text('Retry $failed failed'),
                     style: TextButton.styleFrom(
                       foregroundColor: Colors.orangeAccent,
@@ -214,7 +214,7 @@ class SyncStatusCard extends StatelessWidget {
                     children: [
                       Text(
                         inst['name'] ?? 'Unknown',
-                        style: TextStyle(fontWeight: FontWeight.w500),
+                        style: const TextStyle(fontWeight: FontWeight.w500),
                       ),
                       Text(
                         _statusDetail(inst, status, lastSyncText),
@@ -228,7 +228,7 @@ class SyncStatusCard extends StatelessWidget {
                           padding: const EdgeInsets.only(top: 4.0),
                           child: Text(
                             inst['last_sync_error'],
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 11,
                               color: Colors.redAccent,
                               fontStyle: FontStyle.italic,
@@ -260,7 +260,7 @@ class SyncStatusCard extends StatelessWidget {
                 isNarrow
                     ? IconButton(
                         onPressed: () => onReconnect?.call(inst['id']),
-                        icon: Icon(Icons.link,
+                        icon: const Icon(Icons.link,
                             color: Colors.deepOrangeAccent, size: 20),
                         tooltip: 'Reconnect',
                         padding: const EdgeInsets.all(6),
@@ -268,8 +268,8 @@ class SyncStatusCard extends StatelessWidget {
                       )
                     : TextButton.icon(
                         onPressed: () => onReconnect?.call(inst['id']),
-                        icon: Icon(Icons.link, size: 16),
-                        label: Text('Reconnect'),
+                        icon: const Icon(Icons.link, size: 16),
+                        label: const Text('Reconnect'),
                         style: TextButton.styleFrom(
                           foregroundColor: Colors.deepOrangeAccent,
                           padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -281,14 +281,14 @@ class SyncStatusCard extends StatelessWidget {
                 'setup_required',
               ].contains(status))
                 IconButton(
-                  icon: Icon(Icons.refresh, color: Colors.teal, size: 20),
+                  icon: const Icon(Icons.refresh, color: Colors.teal, size: 20),
                   onPressed: onRetrySync,
                   tooltip: 'Retry sync',
                   padding: const EdgeInsets.all(6),
                   constraints: const BoxConstraints(),
                 ),
               IconButton(
-                icon: Icon(Icons.delete_outline,
+                icon: const Icon(Icons.delete_outline,
                     color: Colors.redAccent, size: 20),
                 onPressed: () => onDelete?.call(inst['id']),
                 tooltip: 'Delete institution',

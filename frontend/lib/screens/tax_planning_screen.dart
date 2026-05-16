@@ -146,7 +146,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                 children: [
                   Text(
                     (tx['description'] ?? '').toString(),
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
                       height: 1.2,
@@ -175,7 +175,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
               children: [
                 Text(
                   widget.currencyFormat.format(converted),
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
                     color: Color(0xFF00E676),
@@ -192,7 +192,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                       style: TextStyle(
                         fontSize: 10,
                         color: context.textFaint,
-                        fontFeatures: [FontFeature.tabularFigures()],
+                        fontFeatures: [const FontFeature.tabularFigures()],
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -217,11 +217,11 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 60, color: Colors.redAccent),
+            const Icon(Icons.error_outline, size: 60, color: Colors.redAccent),
             const SizedBox(height: 16),
             Text(_error!),
             const SizedBox(height: 16),
-            ElevatedButton(onPressed: _loadTaxData, child: Text('Retry')),
+            ElevatedButton(onPressed: _loadTaxData, child: const Text('Retry')),
           ],
         ),
       );
@@ -254,7 +254,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
+            const Text(
               'Tax planning',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
@@ -304,8 +304,8 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                 const SizedBox(width: 16),
                 ElevatedButton.icon(
                   onPressed: _exportCsv,
-                  icon: Icon(Icons.download),
-                  label: Text('Export CSV'),
+                  icon: const Icon(Icons.download),
+                  label: const Text('Export CSV'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF00E676),
                     foregroundColor: Colors.black,
@@ -314,8 +314,8 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
                   onPressed: _exportPdf,
-                  icon: Icon(Icons.picture_as_pdf),
-                  label: Text('PDF'),
+                  icon: const Icon(Icons.picture_as_pdf),
+                  label: const Text('PDF'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blueAccent,
                     foregroundColor: context.textPrimary,
@@ -342,7 +342,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                       const SizedBox(height: 8),
                       Text(
                         widget.currencyFormat.format(totalTaxable),
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
                         ),
@@ -387,7 +387,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                       const SizedBox(height: 8),
                       Text(
                         widget.currencyFormat.format(liabUs),
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
                           color: Colors.blueAccent,
@@ -421,7 +421,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                       const SizedBox(height: 8),
                       Text(
                         widget.currencyFormat.format(liabMx),
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
                           color: Colors.greenAccent,
@@ -443,7 +443,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           ],
         ),
         const SizedBox(height: 24),
-        Text(
+        const Text(
           'Taxable events',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),

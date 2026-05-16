@@ -279,7 +279,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             ),
             Text(
               displayValue,
-              style: TextStyle(
+              style: const TextStyle(
                 color: Color(0xFF00E676),
                 fontWeight: FontWeight.bold,
               ),
@@ -310,7 +310,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       children: [
         Row(
           children: [
-            Icon(Icons.flag_outlined,
+            const Icon(Icons.flag_outlined,
                 color: Color(0xFFFFD600), size: 18),
             const SizedBox(width: 8),
             Text(
@@ -334,14 +334,14 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                       .putSetting('net_worth_goal', null)
                       .catchError((_) {});
                 },
-                child: Text('Clear'),
+                child: const Text('Clear'),
               ),
           ],
         ),
         const SizedBox(height: 8),
         TextButton.icon(
           onPressed: _editGoal,
-          icon: Icon(Icons.edit_outlined, size: 16),
+          icon: const Icon(Icons.edit_outlined, size: 16),
           label: Text(
             hasGoal
                 ? 'Hit ${widget.currencyFormat.format(_goalAmountUsd! * widget.conversionFactor)} by $_goalYear'
@@ -365,7 +365,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('Set a target'),
+        title: const Text('Set a target'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -388,10 +388,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: Text('Cancel')),
+              child: const Text('Cancel')),
           FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: Text('Save')),
+              child: const Text('Save')),
         ],
       ),
     );
@@ -438,7 +438,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                         ),
                       ),
                       FilterChip(
-                        label: Text('Scenarios'),
+                        label: const Text('Scenarios'),
                         selected: _showScenarios,
                         onSelected: (v) =>
                             setState(() => _showScenarios = v),
@@ -521,8 +521,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               FlLine(color: context.hairline, strokeWidth: 1),
         ),
         titlesData: FlTitlesData(
-          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -578,7 +578,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             color: const Color(0xFF00E676),
             barWidth: 4,
             isStrokeCapRound: true,
-            dotData: FlDotData(show: false),
+            dotData: const FlDotData(show: false),
             belowBarData: BarAreaData(
               show: true,
               gradient: LinearGradient(
@@ -604,7 +604,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             color: Colors.orangeAccent.withValues(alpha: 0.5),
             barWidth: 2,
             dashArray: [5, 5],
-            dotData: FlDotData(show: false),
+            dotData: const FlDotData(show: false),
           ),
           // User-set goal line — flat across the chart at the target
           // amount. Drawn in goal yellow so it's distinct from the
@@ -622,7 +622,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               color: const Color(0xFFFFD600).withValues(alpha: 0.7),
               barWidth: 2,
               dashArray: [3, 6],
-              dotData: FlDotData(show: false),
+              dotData: const FlDotData(show: false),
             ),
         ],
         lineTouchData: LineTouchData(

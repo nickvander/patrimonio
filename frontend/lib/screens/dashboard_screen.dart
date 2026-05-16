@@ -538,7 +538,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => ConnectBankScreen(),
+                                  builder: (context) => const ConnectBankScreen(),
                                 ),
                               ).then((_) => _loadAllData());
                             }
@@ -585,7 +585,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.savings_outlined,
                         size: 40,
                         color: Color(0xFF00E676),
@@ -786,7 +786,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           autofocus: true,
           child: Scaffold(
               appBar: AppBar(
-          title: Text(
+          title: const Text(
             'Patrimonio',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
@@ -798,12 +798,12 @@ class _DashboardScreenState extends State<DashboardScreen>
                   tabAlignment:
                       isCompact ? TabAlignment.start : TabAlignment.fill,
                   indicatorColor: const Color(0xFF00E676),
-                  labelColor: Color(0xFF00E676),
+                  labelColor: const Color(0xFF00E676),
                   unselectedLabelColor: Colors.grey,
                   tabs: [
-                    Tab(text: 'Overview'),
-                    Tab(text: 'Portfolio'),
-                    Tab(text: 'Transactions'),
+                    const Tab(text: 'Overview'),
+                    const Tab(text: 'Portfolio'),
+                    const Tab(text: 'Transactions'),
                     Tab(text: isCompact ? 'Cash' : 'Cash flow'),
                     Tab(text: isCompact ? 'Proj.' : 'Projections'),
                     Tab(text: isCompact ? 'Tax' : 'Tax planning'),
@@ -872,14 +872,14 @@ class _DashboardScreenState extends State<DashboardScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
             const SizedBox(height: 16),
             Text(
               'Error loading dashboard: $_error',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
-            ElevatedButton(onPressed: _loadAllData, child: Text('Retry')),
+            ElevatedButton(onPressed: _loadAllData, child: const Text('Retry')),
           ],
         ),
       );
@@ -984,7 +984,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       return LayoutBuilder(
         builder: (context, constraints) {
           final isNarrow = constraints.maxWidth < 520;
-          final title = Text(
+          final title = const Text(
             'Net worth history',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           );
@@ -1142,7 +1142,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                         : Colors.orangeAccent,
                   ),
                   const SizedBox(width: 10),
-                  Text(
+                  const Text(
                     'Launch setup',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
@@ -1184,7 +1184,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                           children: [
                             Text(
                               check['label'] ?? '',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -1423,7 +1423,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          const Text(
             'Data sources & sync',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
@@ -1462,18 +1462,18 @@ class _DashboardScreenState extends State<DashboardScreen>
                 final confirm = await showDialog<bool>(
                   context: context,
                   builder: (context) => AlertDialog(
-                    title: Text('Delete institution'),
-                    content: Text(
+                    title: const Text('Delete institution'),
+                    content: const Text(
                         'Are you sure? This will remove ALL accounts and history for this institution.'),
                     actions: [
                       TextButton(
                           onPressed: () => Navigator.pop(context, false),
-                          child: Text('Cancel')),
+                          child: const Text('Cancel')),
                       TextButton(
                         onPressed: () => Navigator.pop(context, true),
                         style: TextButton.styleFrom(
                             foregroundColor: Colors.redAccent),
-                        child: Text('Delete everything'),
+                        child: const Text('Delete everything'),
                       ),
                     ],
                   ),
@@ -1585,7 +1585,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => ConnectBankScreen(),
+                              builder: (context) => const ConnectBankScreen(),
                             ),
                           ).then((_) => _loadAllData());
                         }
@@ -1630,7 +1630,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   width: tileWidth,
                   child: ElevatedButton.icon(
                     icon: Icon(Icons.login, color: context.textPrimary),
-                    label: Text(
+                    label: const Text(
                       'Link Coinbase',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1651,11 +1651,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                 SizedBox(
                   width: tileWidth,
                   child: ElevatedButton.icon(
-                    icon: Icon(
+                    icon: const Icon(
                       Icons.currency_exchange,
                       color: Color(0xFF00E676),
                     ),
-                    label: Text(
+                    label: const Text(
                       'Connect Bitso',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

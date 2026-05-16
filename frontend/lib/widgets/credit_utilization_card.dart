@@ -143,13 +143,13 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
                     children: [
                       Text(
                         item['name'] ?? 'Credit account',
-                        style: TextStyle(fontWeight: FontWeight.w500),
+                        style: const TextStyle(fontWeight: FontWeight.w500),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
                         item['institution_name'] ?? '',
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 12,
                           color: Colors.grey,
                         ),
@@ -162,7 +162,7 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
                 const SizedBox(width: 12),
                 Text(
                   '${currencyFormat.format(balance * conversionFactor)} / ${currencyFormat.format(limit * conversionFactor)}',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     fontFeatures: [FontFeature.tabularFigures()],

@@ -82,7 +82,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A24),
-        title: Text('Rename account'),
+        title: const Text('Rename account'),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -100,7 +100,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('Cancel')),
+              child: const Text('Cancel')),
           FilledButton(
             onPressed: () async {
               final v = controller.text.trim();
@@ -109,7 +109,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                   ?.call(widget.account['id'].toString(), v);
               if (mounted) setState(() => widget.account['nickname'] = v);
             },
-            child: Text('Save'),
+            child: const Text('Save'),
           ),
         ],
       ),
@@ -231,7 +231,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
+            child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -245,7 +245,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                 });
               }
             },
-            child: Text('Save'),
+            child: const Text('Save'),
           ),
         ],
       ),
@@ -344,11 +344,11 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                       ),
                     ),
                 ],
-                icon: Icon(Icons.more_vert, size: 20),
+                icon: const Icon(Icons.more_vert, size: 20),
               ),
               IconButton(
                 tooltip: 'Close',
-                icon: Icon(Icons.close, size: 20),
+                icon: const Icon(Icons.close, size: 20),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ],
@@ -364,7 +364,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                   fontSize: 28,
                   fontWeight: FontWeight.w900,
                   color: context.textPrimary,
-                  fontFeatures: [FontFeature.tabularFigures()],
+                  fontFeatures: [const FontFeature.tabularFigures()],
                 ),
               ),
               if (needsConversion) ...[
@@ -375,7 +375,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                     fontSize: 12,
                     color: context.textFaint,
                     fontStyle: FontStyle.italic,
-                    fontFeatures: [FontFeature.tabularFigures()],
+                    fontFeatures: [const FontFeature.tabularFigures()],
                   ),
                 ),
               ],
@@ -397,7 +397,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
             const SizedBox(height: 16),
             Text(
               'Error loading transactions: $_error',
@@ -406,7 +406,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _fetchTransactions,
-              child: Text('Retry'),
+              child: const Text('Retry'),
             ),
           ],
         ),
