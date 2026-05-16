@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:plaid_flutter/plaid_flutter.dart';
 import 'package:web/web.dart' as web;
@@ -15,6 +16,7 @@ import '../widgets/accounts_list_widget.dart';
 import '../widgets/transactions_tab.dart';
 import '../widgets/add_account_dialog.dart';
 import '../widgets/add_crypto_dialog.dart';
+import '../widgets/command_palette.dart';
 import 'connect_bank_screen.dart';
 import 'import_screen.dart';
 import 'wealth_projection_screen.dart';
@@ -101,6 +103,86 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   bool get _isFirstRun => !_isLoading && _error == null && !_hasAccounts;
+
+  // Build the searchable index used by the Cmd-K palette. We do it on
+  // demand so the list always reflects the most recent _loadAllData()
+  // payload. Each item carries a callback that navigates to the right
+  // tab so the palette doesn't have to know the dashboard's layout.
+  List<PaletteItem> _buildPaletteItems() {
+    final items = <PaletteItem>[];
+
+    void jumpTab(int i) => _tabController?.animateTo(i);
+
+    const tabs = [
+      ('Overview', 0, Icons.dashboard_outlined, Color(0xFF00E676)),
+      ('Portfolio', 1, Icons.pie_chart_outline, Color(0xFF1DE9B6)),
+      ('Transactions', 2, Icons.receipt_long_outlined, Color(0xFF00B0FF)),
+      ('Projections', 3, Icons.trending_up_outlined, Color(0xFFFFB300)),
+      ('Tax planning', 4, Icons.account_balance_outlined, Color(0xFFAB47BC)),
+      ('Management', 5, Icons.settings_outlined, Color(0xFF90A4AE)),
+    ];
+    for (final (label, idx, icon, color) in tabs) {
+      items.add(PaletteItem(
+        label: 'Jump to $label',
+        subtitle: 'Tab',
+        icon: icon,
+        accent: color,
+        onSelected: () => jumpTab(idx),
+      ));
+    }
+
+    for (final raw in (_overview?['accounts'] as List?) ?? const []) {
+      final a = raw as Map<String, dynamic>;
+      final nick = (a['nickname'] ?? '').toString();
+      final name = (a['name'] ?? '').toString();
+      final inst = (a['institution_name'] ?? '').toString();
+      items.add(PaletteItem(
+        label: nick.isNotEmpty ? '$nick (${a['account_type'] ?? ''})' : name,
+        subtitle: 'Account · $inst',
+        icon: Icons.account_balance_wallet_outlined,
+        accent: const Color(0xFF1DE9B6),
+        onSelected: () => jumpTab(0),
+      ));
+    }
+
+    for (final raw in ((_portfolioData?['holdings'] as List?) ?? const [])) {
+      final h = raw as Map<String, dynamic>;
+      final ticker = (h['ticker_symbol'] ?? '').toString();
+      final name = (h['name'] ?? '').toString();
+      items.add(PaletteItem(
+        label: ticker.isNotEmpty ? '$ticker — $name' : name,
+        subtitle: 'Holding',
+        icon: Icons.show_chart,
+        accent: const Color(0xFF00B0FF),
+        onSelected: () => jumpTab(1),
+      ));
+    }
+
+    // Cap transactions to a recent window so the palette stays snappy
+    // even with thousands of rows.
+    final txs = _transactions ?? const [];
+    for (final raw in txs.take(200)) {
+      final t = raw as Map<String, dynamic>;
+      items.add(PaletteItem(
+        label: (t['description'] ?? '').toString(),
+        subtitle:
+            'Transaction · ${t['account_name'] ?? ''} · ${t['date'] ?? ''}',
+        icon: Icons.receipt_outlined,
+        accent: const Color(0xFFFFB300),
+        onSelected: () => jumpTab(2),
+      ));
+    }
+
+    return items;
+  }
+
+  void _openPalette() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (_) => CommandPaletteDialog(items: _buildPaletteItems()),
+    );
+  }
 
   void _setTargetCurrency(String currency) {
     setState(() => _targetCurrency = currency);
@@ -571,8 +653,26 @@ class _DashboardScreenState extends State<DashboardScreen>
     // would be empty) and currency / FX controls (no balances to convert).
     final firstRun = _isFirstRun;
 
-    return Scaffold(
-        appBar: AppBar(
+    return Shortcuts(
+      shortcuts: <LogicalKeySet, Intent>{
+        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyK):
+            const _OpenPaletteIntent(),
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyK):
+            const _OpenPaletteIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _OpenPaletteIntent: CallbackAction<_OpenPaletteIntent>(
+            onInvoke: (_) {
+              if (!firstRun) _openPalette();
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+              appBar: AppBar(
           title: const Text(
             'Patrimonio',
             style: TextStyle(fontWeight: FontWeight.bold),
@@ -646,7 +746,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                   const SizedBox(width: 4),
                 ],
         ),
-        body: _buildBody(),
+              body: _buildBody(),
+            ),
+          ),
+        ),
       );
   }
 
@@ -1478,4 +1581,9 @@ class _StatTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Intent fired by Cmd-K / Ctrl-K to open the global command palette.
+class _OpenPaletteIntent extends Intent {
+  const _OpenPaletteIntent();
 }
