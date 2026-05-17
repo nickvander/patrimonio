@@ -13,7 +13,7 @@ use sqlx::PgPool;
 use time::Duration as CookieDuration;
 use uuid::Uuid;
 
-use crate::services::{password, sessions};
+use crate::services::{password, recovery, sessions, totp};
 use crate::AppState;
 
 /// Failed login back-off window and per-key threshold. Conservative
@@ -21,22 +21,31 @@ use crate::AppState;
 const FAILED_ATTEMPT_WINDOW_SECONDS: i64 = 60;
 const FAILED_ATTEMPT_THRESHOLD: i64 = 5;
 
-/// Endpoints reachable without a session cookie. The login screen
-/// needs these to render before the user has authenticated.
+/// Endpoints reachable without a full session cookie. The login
+/// screen needs these to render before the user has authenticated.
+/// `/totp/verify` also lives here — it reads its own pending-TOTP
+/// cookie rather than relying on the require_auth middleware.
 pub fn public_router() -> Router<AppState> {
     Router::new()
         .route("/login", post(login))
         .route("/bootstrap", post(bootstrap))
         .route("/status", get(status))
+        .route("/recover", post(recover))
+        .route("/totp/verify", post(totp_verify))
 }
 
-/// Endpoints that require a valid session cookie. Mount these under
-/// the auth middleware so `AuthContext` is populated.
+/// Endpoints that require a valid (non-pending) session cookie.
+/// Mount these under the auth middleware so `AuthContext` is populated.
 pub fn protected_router() -> Router<AppState> {
     Router::new()
         .route("/logout", post(logout))
         .route("/me", get(me))
         .route("/change-password", post(change_password))
+        .route("/recovery-codes/regenerate", post(regenerate_recovery_codes))
+        .route("/recovery-codes/count", get(recovery_codes_count))
+        .route("/totp/enroll", post(totp_enroll))
+        .route("/totp/confirm", post(totp_confirm))
+        .route("/totp/disable", post(totp_disable))
 }
 
 // ----- request / response types -----
@@ -61,6 +70,11 @@ pub struct UserView {
 pub struct StatusResponse {
     pub needs_bootstrap: bool,
     pub authenticated: bool,
+    /// True when the cookie resolves to a pending-TOTP session — i.e.
+    /// the user has typed their password and now needs to enter their
+    /// TOTP code. The client should route to the TOTP challenge
+    /// screen instead of the login screen.
+    pub requires_totp: bool,
     pub user: Option<UserView>,
 }
 
@@ -77,6 +91,59 @@ pub struct ChangePasswordRequest {
     pub new_password: String,
 }
 
+#[derive(Deserialize)]
+pub struct RecoverRequest {
+    pub username: String,
+    pub code: String,
+    pub new_password: String,
+}
+
+/// Returned by the bootstrap endpoint and by recovery-codes/regenerate.
+/// `codes` are plaintext — this is the only time they're ever returned.
+#[derive(Serialize)]
+pub struct RecoveryCodesView {
+    pub codes: Vec<String>,
+}
+
+/// Bootstrap response carries both the new user and their first batch
+/// of recovery codes — the client must display these once and warn the
+/// user that they will never be shown again.
+#[derive(Serialize)]
+pub struct BootstrapResponse {
+    pub user: UserView,
+    pub recovery_codes: Vec<String>,
+}
+
+#[derive(Serialize)]
+pub struct RecoveryCodesCount {
+    pub unused: i64,
+}
+
+/// Either we hand back a full UserView (no TOTP, login complete) or
+/// we tell the client to walk the user through the second step.
+#[derive(Serialize)]
+#[serde(untagged)]
+pub enum LoginResponse {
+    Done(UserView),
+    NeedsTotp { requires_totp: bool },
+}
+
+#[derive(Deserialize)]
+pub struct TotpVerifyRequest {
+    pub code: String,
+}
+
+#[derive(Deserialize)]
+pub struct TotpDisableRequest {
+    pub current_password: String,
+}
+
+#[derive(Serialize)]
+pub struct TotpEnrollment {
+    pub secret_base32: String,
+    pub provisioning_uri: String,
+}
+
 // ----- handlers -----
 
 async fn status(State(state): State<AppState>, jar: CookieJar) -> Json<StatusResponse> {
@@ -85,21 +152,24 @@ async fn status(State(state): State<AppState>, jar: CookieJar) -> Json<StatusRes
         return Json(StatusResponse {
             needs_bootstrap: true,
             authenticated: false,
+            requires_totp: false,
             user: None,
         });
     }
 
-    let user = match jar.get(sessions::COOKIE_NAME) {
+    let (user, requires_totp) = match jar.get(sessions::COOKIE_NAME) {
         Some(cookie) => match sessions::validate_and_touch(&state.db, cookie.value()).await {
-            Ok(Some(s)) => load_user_view(&state.db, s.user_id).await.ok(),
-            _ => None,
+            Ok(Some(s)) if s.pending_totp => (None, true),
+            Ok(Some(s)) => (load_user_view(&state.db, s.user_id).await.ok(), false),
+            _ => (None, false),
         },
-        None => None,
+        None => (None, false),
     };
 
     Json(StatusResponse {
         needs_bootstrap: false,
         authenticated: user.is_some(),
+        requires_totp,
         user,
     })
 }
@@ -109,7 +179,7 @@ async fn bootstrap(
     jar: CookieJar,
     headers: HeaderMap,
     Json(body): Json<BootstrapRequest>,
-) -> Result<(CookieJar, Json<UserView>), ApiError> {
+) -> Result<(CookieJar, Json<BootstrapResponse>), ApiError> {
     let existing = user_count(&state.db).await.map_err(internal)?;
     if existing > 0 {
         return Err(ApiError::new(
@@ -168,9 +238,22 @@ async fn bootstrap(
         .await
         .map_err(internal)?;
 
+    // Generate the first batch of recovery codes — returned ONCE in
+    // this response. The frontend must display + warn the user that
+    // they will never be shown again.
+    let recovery_codes = recovery::regenerate(&state.db, user_id)
+        .await
+        .map_err(internal)?;
+
     let jar = jar.add(build_session_cookie(&state, session.token, session.expires_at));
     let user = load_user_view(&state.db, user_id).await.map_err(internal)?;
-    Ok((jar, Json(user)))
+    Ok((
+        jar,
+        Json(BootstrapResponse {
+            user,
+            recovery_codes,
+        }),
+    ))
 }
 
 async fn login(
@@ -178,7 +261,7 @@ async fn login(
     jar: CookieJar,
     headers: HeaderMap,
     Json(body): Json<LoginRequest>,
-) -> Result<(CookieJar, Json<UserView>), ApiError> {
+) -> Result<(CookieJar, Json<LoginResponse>), ApiError> {
     let username = body.username.trim().to_string();
     let ua = user_agent(&headers);
     let ip = client_ip(&headers);
@@ -208,15 +291,15 @@ async fn login(
         ));
     }
 
-    let row: Option<(Uuid, String, bool)> = sqlx::query_as(
-        "SELECT id, password_hash, is_active FROM users WHERE LOWER(username) = LOWER($1)",
+    let row: Option<(Uuid, String, bool, bool)> = sqlx::query_as(
+        "SELECT id, password_hash, is_active, totp_enabled FROM users WHERE LOWER(username) = LOWER($1)",
     )
     .bind(&username)
     .fetch_optional(&state.db)
     .await
     .map_err(internal)?;
 
-    let Some((user_id, hash, is_active)) = row else {
+    let Some((user_id, hash, is_active, totp_enabled)) = row else {
         record_audit(
             &state.db,
             "login",
@@ -266,6 +349,36 @@ async fn login(
         let _ = sessions::revoke_by_token(&state.db, existing.value()).await;
     }
 
+    // If the user has TOTP enabled, the password step issues a
+    // short-lived pending session. The client is expected to follow up
+    // with POST /api/auth/totp/verify before it can hit any data
+    // route. require_auth rejects pending sessions everywhere else.
+    if totp_enabled {
+        let pending = sessions::create_pending_totp_session(
+            &state.db,
+            user_id,
+            ua.as_deref(),
+            ip.as_deref(),
+        )
+        .await
+        .map_err(internal)?;
+
+        record_audit(
+            &state.db,
+            "login_partial",
+            Some(&username),
+            Some(user_id),
+            ip.as_deref(),
+            ua.as_deref(),
+            true,
+            Some("awaiting_totp"),
+        )
+        .await;
+
+        let jar = jar.add(build_session_cookie(&state, pending.token, pending.expires_at));
+        return Ok((jar, Json(LoginResponse::NeedsTotp { requires_totp: true })));
+    }
+
     let session = sessions::create_session(&state.db, user_id, ua.as_deref(), ip.as_deref())
         .await
         .map_err(internal)?;
@@ -289,7 +402,7 @@ async fn login(
 
     let jar = jar.add(build_session_cookie(&state, session.token, session.expires_at));
     let user = load_user_view(&state.db, user_id).await.map_err(internal)?;
-    Ok((jar, Json(user)))
+    Ok((jar, Json(LoginResponse::Done(user))))
 }
 
 async fn logout(
@@ -365,6 +478,279 @@ async fn change_password(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Redeem a recovery code to reset the password. Public endpoint, so
+/// rate-limited by the existing /login limiter (same username and IP
+/// keys) — we don't want it to be the easy path around the limiter.
+async fn recover(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<RecoverRequest>,
+) -> Result<StatusCode, ApiError> {
+    let username = body.username.trim().to_string();
+    let ua = user_agent(&headers);
+    let ip = client_ip(&headers);
+
+    password::validate_password_policy(&body.new_password)
+        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, &e.to_string()))?;
+
+    if rate_limited(&state.db, &username, ip.as_deref()).await {
+        record_audit(&state.db, "recover", Some(&username), None, ip.as_deref(), ua.as_deref(), false, Some("rate_limited")).await;
+        return Err(ApiError::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "Too many recent attempts. Try again shortly.",
+        ));
+    }
+
+    // Look up the user and the code's owner in two read-only queries
+    // BEFORE consuming the code. Otherwise an attacker who knew a
+    // code but not the username could lock the user out by burning
+    // every code through bogus-username attempts.
+    let user_row: Option<(Uuid,)> =
+        sqlx::query_as("SELECT id FROM users WHERE LOWER(username) = LOWER($1)")
+            .bind(&username)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(internal)?;
+
+    let code_owner = recovery::lookup_owner(&state.db, &body.code)
+        .await
+        .map_err(internal)?;
+
+    let target_user = match (user_row, code_owner) {
+        (Some((user_id,)), Some(owner_uid)) if user_id == owner_uid => user_id,
+        _ => {
+            // Log under the `login` event so the rate limiter sees it
+            // and exponential lockout applies to recovery attempts too.
+            record_audit(&state.db, "login", Some(&username), None, ip.as_deref(), ua.as_deref(), false, Some("recover_invalid")).await;
+            return Err(ApiError::new(
+                StatusCode::UNAUTHORIZED,
+                "Invalid username or recovery code.",
+            ));
+        }
+    };
+
+    // Now race-safely consume the code. If a concurrent caller beat
+    // us to it (e.g. browser retry), the UPDATE affects 0 rows and we
+    // treat it as already-used.
+    let burned = recovery::consume(&state.db, &body.code, ip.as_deref())
+        .await
+        .map_err(internal)?;
+    if !burned {
+        record_audit(&state.db, "login", Some(&username), Some(target_user), ip.as_deref(), ua.as_deref(), false, Some("recover_race")).await;
+        return Err(ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "Recovery code is no longer valid.",
+        ));
+    }
+
+    let new_hash = password::hash_password(&body.new_password).map_err(internal)?;
+    sqlx::query("UPDATE users SET password_hash = $1 WHERE id = $2")
+        .bind(&new_hash)
+        .bind(target_user)
+        .execute(&state.db)
+        .await
+        .map_err(internal)?;
+
+    // Anyone with a live session before this point should be kicked
+    // out — they may be the attacker.
+    let _ = sessions::revoke_all_for_user(&state.db, target_user).await;
+
+    record_audit(&state.db, "recover", Some(&username), Some(target_user), ip.as_deref(), ua.as_deref(), true, None).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn regenerate_recovery_codes(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    headers: HeaderMap,
+) -> Result<Json<RecoveryCodesView>, ApiError> {
+    let codes = recovery::regenerate(&state.db, ctx.user_id)
+        .await
+        .map_err(internal)?;
+    let ua = user_agent(&headers);
+    let ip = client_ip(&headers);
+    record_audit(
+        &state.db,
+        "regenerate_recovery_codes",
+        None,
+        Some(ctx.user_id),
+        ip.as_deref(),
+        ua.as_deref(),
+        true,
+        None,
+    )
+    .await;
+    Ok(Json(RecoveryCodesView { codes }))
+}
+
+async fn recovery_codes_count(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Result<Json<RecoveryCodesCount>, ApiError> {
+    let unused = recovery::unused_count(&state.db, ctx.user_id)
+        .await
+        .map_err(internal)?;
+    Ok(Json(RecoveryCodesCount { unused }))
+}
+
+// ----- TOTP -----
+
+async fn totp_enroll(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Result<Json<TotpEnrollment>, ApiError> {
+    let enc_key = state
+        .config
+        .encryption_key
+        .as_ref()
+        .ok_or_else(|| ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "ENCRYPTION_KEY is not configured; TOTP cannot be enabled.",
+        ))?;
+
+    let username: String = sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
+        .bind(ctx.user_id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(internal)?;
+
+    let challenge = totp::begin_enrollment(&state.db, enc_key, ctx.user_id, &username)
+        .await
+        .map_err(internal)?;
+
+    Ok(Json(TotpEnrollment {
+        secret_base32: challenge.secret_base32,
+        provisioning_uri: challenge.provisioning_uri,
+    }))
+}
+
+async fn totp_confirm(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    headers: HeaderMap,
+    Json(body): Json<TotpVerifyRequest>,
+) -> Result<StatusCode, ApiError> {
+    let enc_key = state
+        .config
+        .encryption_key
+        .as_ref()
+        .ok_or_else(|| ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "ENCRYPTION_KEY is not configured.",
+        ))?;
+
+    let ok = totp::verify(&state.db, enc_key, ctx.user_id, &body.code)
+        .await
+        .map_err(internal)?;
+    if !ok {
+        return Err(ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "Invalid TOTP code. Check your authenticator app and try again.",
+        ));
+    }
+    let flipped = totp::mark_enabled(&state.db, ctx.user_id).await.map_err(internal)?;
+    if !flipped {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "Begin enrollment first via /api/auth/totp/enroll.",
+        ));
+    }
+
+    let ua = user_agent(&headers);
+    let ip = client_ip(&headers);
+    record_audit(&state.db, "totp_enabled", None, Some(ctx.user_id), ip.as_deref(), ua.as_deref(), true, None).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn totp_disable(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    headers: HeaderMap,
+    Json(body): Json<TotpDisableRequest>,
+) -> Result<StatusCode, ApiError> {
+    // Re-authenticate with the password before disabling — losing
+    // TOTP is a major reduction in account security.
+    let stored: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = $1")
+        .bind(ctx.user_id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(internal)?;
+    let ok = password::verify_password(&body.current_password, &stored).map_err(internal)?;
+    if !ok {
+        return Err(invalid_credentials());
+    }
+
+    totp::disable(&state.db, ctx.user_id).await.map_err(internal)?;
+
+    let ua = user_agent(&headers);
+    let ip = client_ip(&headers);
+    record_audit(&state.db, "totp_disabled", None, Some(ctx.user_id), ip.as_deref(), ua.as_deref(), true, None).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Second step of the two-step login: the client holds a pending
+/// session cookie from POST /login, posts the TOTP code here, and we
+/// rotate to a full session.
+async fn totp_verify(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    headers: HeaderMap,
+    Json(body): Json<TotpVerifyRequest>,
+) -> Result<(CookieJar, Json<UserView>), ApiError> {
+    let token = jar
+        .get(sessions::COOKIE_NAME)
+        .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "No pending session."))?
+        .value()
+        .to_string();
+
+    let validated = sessions::validate_and_touch(&state.db, &token)
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "Pending session expired."))?;
+
+    if !validated.pending_totp {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "Session is not awaiting TOTP verification.",
+        ));
+    }
+
+    let enc_key = state.config.encryption_key.as_ref().ok_or_else(|| {
+        ApiError::new(StatusCode::SERVICE_UNAVAILABLE, "ENCRYPTION_KEY is not configured.")
+    })?;
+
+    let ok = totp::verify(&state.db, enc_key, validated.user_id, &body.code)
+        .await
+        .map_err(internal)?;
+
+    let ua = user_agent(&headers);
+    let ip = client_ip(&headers);
+
+    if !ok {
+        record_audit(&state.db, "totp_verify", None, Some(validated.user_id), ip.as_deref(), ua.as_deref(), false, Some("bad_code")).await;
+        return Err(ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "Invalid TOTP code.",
+        ));
+    }
+
+    // Promote: drop the pending session, mint a full one.
+    let _ = sessions::revoke_by_token(&state.db, &token).await;
+    let full = sessions::create_session(&state.db, validated.user_id, ua.as_deref(), ip.as_deref())
+        .await
+        .map_err(internal)?;
+    let _ = sqlx::query("UPDATE users SET last_login_at = NOW() WHERE id = $1")
+        .bind(validated.user_id)
+        .execute(&state.db)
+        .await;
+
+    record_audit(&state.db, "login", None, Some(validated.user_id), ip.as_deref(), ua.as_deref(), true, Some("totp_ok")).await;
+
+    let jar = jar.add(build_session_cookie(&state, full.token, full.expires_at));
+    let user = load_user_view(&state.db, validated.user_id).await.map_err(internal)?;
+    Ok((jar, Json(user)))
+}
+
 // ----- middleware -----
 
 #[derive(Clone, Copy)]
@@ -385,6 +771,14 @@ pub async fn require_auth(
     };
     match sessions::validate_and_touch(&state.db, &token).await {
         Ok(Some(s)) => {
+            // Pending-TOTP sessions can only be used by /totp/verify,
+            // which lives in the public router and reads the cookie
+            // directly. Anything else they hit must 401 so the client
+            // knows to walk through the second factor first.
+            if s.pending_totp {
+                return ApiError::new(StatusCode::UNAUTHORIZED, "TOTP verification required")
+                    .into_response();
+            }
             req.extensions_mut().insert(AuthContext {
                 user_id: s.user_id,
                 session_id: s.session_id,

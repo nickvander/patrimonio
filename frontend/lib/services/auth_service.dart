@@ -29,7 +29,7 @@ class AuthUser {
       );
 }
 
-enum AuthPhase { unknown, needsBootstrap, signedOut, signedIn }
+enum AuthPhase { unknown, needsBootstrap, signedOut, awaitingTotp, signedIn }
 
 class AuthState {
   final AuthPhase phase;
@@ -67,6 +67,12 @@ class AuthService {
           AuthPhase.signedIn,
           AuthUser.fromJson(res['user'] as Map<String, dynamic>),
         ));
+      } else if (res['requires_totp'] == true) {
+        // A page refresh during the two-step login flow lands here:
+        // the server resolved the cookie to a pending-TOTP session.
+        // Route to the challenge screen instead of dropping back to
+        // login.
+        _emit(const AuthState(AuthPhase.awaitingTotp));
       } else {
         _emit(const AuthState(AuthPhase.signedOut));
       }
@@ -76,22 +82,52 @@ class AuthService {
     return _current;
   }
 
-  Future<void> login(String username, String password) async {
-    final user = await _api.login(username, password);
+  /// Login result. `null` user means the server is asking us to walk
+  /// the user through the TOTP step before promoting to signed-in.
+  Future<LoginOutcome> login(String username, String password) async {
+    final outcome = await _api.login(username, password);
+    if (outcome.user != null) {
+      _emit(AuthState(AuthPhase.signedIn, outcome.user));
+    } else if (outcome.requiresTotp) {
+      _emit(const AuthState(AuthPhase.awaitingTotp));
+    }
+    return outcome;
+  }
+
+  Future<void> verifyTotp(String code) async {
+    final user = await _api.verifyTotp(code);
     _emit(AuthState(AuthPhase.signedIn, user));
   }
 
-  Future<void> bootstrap({
+  /// Result of bootstrap — user plus the one-time recovery codes that
+  /// the UI must display once and then never again.
+  Future<BootstrapOutcome> bootstrap({
     required String username,
     String? email,
     required String password,
   }) async {
-    final user = await _api.bootstrap(
+    final out = await _api.bootstrap(
       username: username,
       email: email,
       password: password,
     );
-    _emit(AuthState(AuthPhase.signedIn, user));
+    _emit(AuthState(AuthPhase.signedIn, out.user));
+    return out;
+  }
+
+  Future<void> recover({
+    required String username,
+    required String code,
+    required String newPassword,
+  }) async {
+    await _api.recover(
+      username: username,
+      code: code,
+      newPassword: newPassword,
+    );
+    // Recovery does NOT sign the user in — they have to log in fresh
+    // with the new password (forces a password recall + audit row).
+    _emit(const AuthState(AuthPhase.signedOut));
   }
 
   Future<void> logout() async {
@@ -119,3 +155,23 @@ class AuthService {
 /// auth screens; kept here so all auth-related parsing lives together.
 Map<String, dynamic> decodeJson(String body) =>
     json.decode(body) as Map<String, dynamic>;
+
+/// Returned from /api/auth/bootstrap — the user has been created AND
+/// signed in, and the server has handed us a one-time-display batch
+/// of recovery codes.
+class BootstrapOutcome {
+  final AuthUser user;
+  final List<String> recoveryCodes;
+  const BootstrapOutcome(this.user, this.recoveryCodes);
+}
+
+/// Returned from /api/auth/login. Either the user is fully signed in
+/// (`user` non-null) or they need to walk through the TOTP step.
+class LoginOutcome {
+  final AuthUser? user;
+  final bool requiresTotp;
+  const LoginOutcome.complete(AuthUser this.user) : requiresTotp = false;
+  const LoginOutcome.needsTotp()
+      : user = null,
+        requiresTotp = true;
+}

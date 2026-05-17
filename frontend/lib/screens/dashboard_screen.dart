@@ -34,6 +34,7 @@ import '../components/allocation_heatmap.dart';
 import '../components/trends_chart.dart';
 import 'package:patrimonio/screens/tax_planning_screen.dart';
 import '../services/auth_service.dart';
+import 'security_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -842,6 +843,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                 onSwap: () => _setTargetCurrency(
                     _targetCurrency == 'USD' ? 'MXN' : 'USD'),
               ),
+            IconButton(
+              tooltip: 'Security',
+              icon: const Icon(Icons.shield_outlined),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SecurityScreen()),
+              ),
+            ),
             IconButton(
               tooltip: 'Sign out',
               icon: const Icon(Icons.logout),

@@ -3,6 +3,7 @@ import '../services/auth_service.dart';
 import 'bootstrap_screen.dart';
 import 'dashboard_screen.dart';
 import 'login_screen.dart';
+import 'totp_challenge_screen.dart';
 
 /// Single owner of the top-level routing decision: which screen to
 /// show given the current auth state. Listens to AuthService so a
@@ -38,6 +39,8 @@ class _AuthGateState extends State<AuthGate> {
         return const BootstrapScreen();
       case AuthPhase.signedOut:
         return const LoginScreen();
+      case AuthPhase.awaitingTotp:
+        return const TotpChallengeScreen();
       case AuthPhase.signedIn:
         return const DashboardScreen();
     }

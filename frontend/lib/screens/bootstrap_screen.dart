@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../widgets/recovery_codes_dialog.dart';
 
 /// First-run screen: create the single owner account. Shown only when
 /// the server reports `needs_bootstrap: true`. After success the user
@@ -36,11 +37,21 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
       _error = null;
     });
     try {
-      await AuthService.instance.bootstrap(
+      final outcome = await AuthService.instance.bootstrap(
         username: _username.text.trim(),
         email: _email.text.trim().isEmpty ? null : _email.text.trim(),
         password: _password.text,
       );
+      // Show the recovery codes BEFORE the dashboard renders. The
+      // dialog is blocking — the user must explicitly acknowledge
+      // saving the codes before they can proceed.
+      if (mounted) {
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => RecoveryCodesDialog(codes: outcome.recoveryCodes),
+        );
+      }
     } catch (e) {
       setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {

@@ -30,12 +30,12 @@ fn test_detect_and_parse_routing() {
     let data = "Fecha,Concepto,Monto\n15/03/2024,Test,10.0".as_bytes();
     
     // Should route to Banamex
-    let result = detect_and_parse("banamex_statement.csv", data).unwrap();
+    let result = detect_and_parse("banamex_statement.csv", data, None).unwrap();
     assert_eq!(result.len(), 1);
     
     // Should route to Nu
     let nu_data = "Fecha,Descripción,Monto\n2024-03-15,Test,-10.0".as_bytes();
-    let result = detect_and_parse("nu_mexico.csv", nu_data).unwrap();
+    let result = detect_and_parse("nu_mexico.csv", nu_data, None).unwrap();
     assert_eq!(result.len(), 1);
 }
 
@@ -149,7 +149,7 @@ fn test_parse_banamex_pdf_whole_numbers() {
 #[test]
 fn test_detect_and_parse_filename_fallback() {
     // If data is empty and couldn't be parsed, it should still identify via filename as last resort
-    let empty_data = vec![0, 0, 0]; 
+    let _empty_data = vec![0, 0, 0];
     // This will fail loading PDF (Document::load_mem) and bypass content scan
     // But the routing should still catch the filename keyword if we called it with a specific flow
     // Actually, detect_and_parse will fail at Document::load_mem.
@@ -160,11 +160,11 @@ fn test_detect_and_parse_filename_fallback() {
 fn test_detect_and_parse_content() {
     // Test detection based on CSV headers instead of filename
     let nu_data = "Fecha,Descripción,Monto\n2024-03-15,Test,-10.0".as_bytes();
-    let result = detect_and_parse("random_name.csv", nu_data).unwrap();
+    let result = detect_and_parse("random_name.csv", nu_data, None).unwrap();
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].currency, "MXN");
     
     let banamex_data = "Fecha,Concepto,Monto\n15/03/2024,Test,10.0".as_bytes();
-    let result = detect_and_parse("statement.csv", banamex_data).unwrap();
+    let result = detect_and_parse("statement.csv", banamex_data, None).unwrap();
     assert_eq!(result.len(), 1);
 }

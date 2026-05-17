@@ -55,6 +55,11 @@ argon2 = "0.5"
 base64 = "0.22"
 time = "0.3"
 
+# TOTP (RFC 6238) for opt-in 2FA. The `otpauth` feature gives us
+# TOTP::new with issuer + account_name and the get_url() method that
+# emits the otpauth:// URI for QR code rendering.
+totp-rs = { version = "5.6", features = ["otpauth"] }
+
 # Scheduling
 tokio-cron-scheduler = "0.13"
 csv = "1.3"

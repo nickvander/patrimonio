@@ -11,3 +11,5 @@ pub mod crypto_price;
 pub mod tax;
 pub mod password;
 pub mod sessions;
+pub mod recovery;
+pub mod totp;

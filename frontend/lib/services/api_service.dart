@@ -76,19 +76,35 @@ class ApiService {
     throw Exception('Failed to load auth status (${res.statusCode})');
   }
 
-  Future<AuthUser> login(String username, String password) async {
+  Future<LoginOutcome> login(String username, String password) async {
     final res = await _client.post(
       Uri.parse('$_baseUrl/auth/login'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({'username': username, 'password': password}),
     );
     if (res.statusCode == 200) {
-      return AuthUser.fromJson(json.decode(res.body) as Map<String, dynamic>);
+      final body = json.decode(res.body) as Map<String, dynamic>;
+      if (body['requires_totp'] == true) {
+        return const LoginOutcome.needsTotp();
+      }
+      return LoginOutcome.complete(AuthUser.fromJson(body));
     }
     throw _errorFromBody(res, fallback: 'Login failed');
   }
 
-  Future<AuthUser> bootstrap({
+  Future<AuthUser> verifyTotp(String code) async {
+    final res = await _client.post(
+      Uri.parse('$_baseUrl/auth/totp/verify'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'code': code}),
+    );
+    if (res.statusCode == 200) {
+      return AuthUser.fromJson(json.decode(res.body) as Map<String, dynamic>);
+    }
+    throw _errorFromBody(res, fallback: 'TOTP verification failed');
+  }
+
+  Future<BootstrapOutcome> bootstrap({
     required String username,
     String? email,
     required String password,
@@ -103,9 +119,92 @@ class ApiService {
       }),
     );
     if (res.statusCode == 200) {
-      return AuthUser.fromJson(json.decode(res.body) as Map<String, dynamic>);
+      final body = json.decode(res.body) as Map<String, dynamic>;
+      final codes = ((body['recovery_codes'] as List?) ?? const [])
+          .cast<String>();
+      return BootstrapOutcome(
+        AuthUser.fromJson(body['user'] as Map<String, dynamic>),
+        codes,
+      );
     }
     throw _errorFromBody(res, fallback: 'Bootstrap failed');
+  }
+
+  Future<void> recover({
+    required String username,
+    required String code,
+    required String newPassword,
+  }) async {
+    final res = await _client.post(
+      Uri.parse('$_baseUrl/auth/recover'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'username': username,
+        'code': code,
+        'new_password': newPassword,
+      }),
+    );
+    if (res.statusCode != 204) {
+      throw _errorFromBody(res, fallback: 'Password reset failed');
+    }
+  }
+
+  Future<List<String>> regenerateRecoveryCodes() async {
+    final res = await _client.post(
+      Uri.parse('$_baseUrl/auth/recovery-codes/regenerate'),
+    );
+    if (res.statusCode == 200) {
+      final body = json.decode(res.body) as Map<String, dynamic>;
+      return ((body['codes'] as List?) ?? const []).cast<String>();
+    }
+    _maybeUnauthorized(res);
+    throw _errorFromBody(res, fallback: 'Regenerate failed');
+  }
+
+  Future<int> recoveryCodesCount() async {
+    final res = await _get(Uri.parse('$_baseUrl/auth/recovery-codes/count'));
+    if (res.statusCode == 200) {
+      final body = json.decode(res.body) as Map<String, dynamic>;
+      return (body['unused'] as num).toInt();
+    }
+    throw _errorFromBody(res, fallback: 'Count failed');
+  }
+
+  Future<({String secretBase32, String provisioningUri})> beginTotpEnroll() async {
+    final res = await _client.post(Uri.parse('$_baseUrl/auth/totp/enroll'));
+    if (res.statusCode == 200) {
+      final body = json.decode(res.body) as Map<String, dynamic>;
+      return (
+        secretBase32: body['secret_base32'] as String,
+        provisioningUri: body['provisioning_uri'] as String,
+      );
+    }
+    _maybeUnauthorized(res);
+    throw _errorFromBody(res, fallback: 'TOTP enroll failed');
+  }
+
+  Future<void> confirmTotpEnroll(String code) async {
+    final res = await _client.post(
+      Uri.parse('$_baseUrl/auth/totp/confirm'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'code': code}),
+    );
+    if (res.statusCode != 204) {
+      _maybeUnauthorized(res);
+      throw _errorFromBody(res, fallback: 'TOTP confirm failed');
+    }
+  }
+
+  Future<void> disableTotp(String currentPassword) async {
+    final res = await _client.post(
+      Uri.parse('$_baseUrl/auth/totp/disable'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'current_password': currentPassword}),
+    );
+    if (res.statusCode != 204) {
+      _maybeUnauthorized(res);
+      throw _errorFromBody(res, fallback: 'Disable TOTP failed');
+    }
   }
 
   Future<void> logout() async {
