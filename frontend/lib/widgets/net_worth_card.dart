@@ -448,6 +448,39 @@ class _NetWorthCardState extends State<NetWorthCard> {
     return LineChart(
       LineChartData(
         lineTouchData: LineTouchData(
+          // The default touchSpotThreshold (10px) makes hovers feel
+          // mechanical — you have to land almost directly on a sample
+          // point. Bumping it to 24 widens the catch area so any
+          // hover within the column registers.
+          touchSpotThreshold: 24,
+          handleBuiltInTouches: true,
+          getTouchedSpotIndicator: (barData, spotIndexes) {
+            // Paint a vertical guide line and a ring-bordered dot at
+            // each touched spot. Without this the chart had no hover
+            // feedback at all unless the cursor landed exactly on a
+            // sample, which felt mechanical.
+            return spotIndexes.map((idx) {
+              return TouchedSpotIndicatorData(
+                FlLine(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.35),
+                  strokeWidth: 1,
+                ),
+                FlDotData(
+                  show: true,
+                  getDotPainter: (spot, percent, bar, i) =>
+                      FlDotCirclePainter(
+                    radius: 5,
+                    color: barData.color ?? const Color(0xFF00E676),
+                    strokeWidth: 3,
+                    strokeColor: Theme.of(context).colorScheme.surface,
+                  ),
+                ),
+              );
+            }).toList();
+          },
           touchTooltipData: LineTouchTooltipData(
             // Theme.of(context).colorScheme.inverseSurface is the
             // brightness-opposite of the active surface: dark popovers in
