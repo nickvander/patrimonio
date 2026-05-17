@@ -98,7 +98,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A24),
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: const Text('Rename account'),
         content: TextField(
           controller: controller,
@@ -177,8 +177,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     final maxY = ys.reduce((a, b) => a > b ? a : b);
     final pad = (maxY - minY).abs() * 0.1 + 1;
     final isUp = points.last.y >= points.first.y;
-    final color =
-        isUp ? const Color(0xFF00E676) : const Color(0xFFFF4081);
+    final color = isUp ? context.positive : context.pinkAccent;
 
     return Padding(
       padding: const EdgeInsets.only(top: 8),
@@ -219,7 +218,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A24),
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: Text('Update ${widget.account['name']} balance'),
         content: TextField(
           controller: controller,

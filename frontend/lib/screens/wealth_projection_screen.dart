@@ -233,7 +233,6 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             ],
           );
     return Card(
-      color: const Color(0xFF1E1E1E),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(20.0),
@@ -279,8 +278,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             ),
             Text(
               displayValue,
-              style: const TextStyle(
-                color: Color(0xFF00E676),
+              style: TextStyle(
+                color: context.positive,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -291,7 +290,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           min: min,
           max: max,
           divisions: divisions ?? 100,
-          activeColor: const Color(0xFF00E676),
+          activeColor: context.positive,
           inactiveColor: context.hairline,
           onChanged: onChanged,
           onChangeEnd: onChangeEnd,
@@ -310,8 +309,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       children: [
         Row(
           children: [
-            const Icon(Icons.flag_outlined,
-                color: Color(0xFFFFD600), size: 18),
+            Icon(Icons.flag_outlined, color: context.yellowAccent, size: 18),
             const SizedBox(width: 8),
             Text(
               'Goal',
@@ -419,7 +417,6 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
 
   Widget _buildChartCard() {
     return Card(
-      color: const Color(0xFF1E1E1E),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(24.0),
@@ -562,7 +559,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             LineChartBarData(
               spots: aggressive,
               isCurved: true,
-              color: const Color(0xFF1DE9B6).withValues(alpha: 0.8),
+              color: context.tealAccent.withValues(alpha: 0.8),
               barWidth: 2,
               dashArray: [4, 4],
               isStrokeCapRound: true,
@@ -571,7 +568,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             LineChartBarData(
               spots: conservative,
               isCurved: true,
-              color: const Color(0xFFFF4081).withValues(alpha: 0.8),
+              color: context.pinkAccent.withValues(alpha: 0.8),
               barWidth: 2,
               dashArray: [4, 4],
               isStrokeCapRound: true,
@@ -581,7 +578,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           LineChartBarData(
             spots: spots,
             isCurved: true,
-            color: const Color(0xFF00E676),
+            color: context.positive,
             barWidth: 4,
             isStrokeCapRound: true,
             dotData: const FlDotData(show: false),
@@ -589,8 +586,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               show: true,
               gradient: LinearGradient(
                 colors: [
-                  const Color(0xFF00E676).withValues(alpha: 0.3),
-                  const Color(0xFF00E676).withValues(alpha: 0.0),
+                  context.positive.withValues(alpha: 0.3),
+                  context.positive.withValues(alpha: 0.0),
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -607,14 +604,14 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               ),
             ],
             isCurved: false,
-            color: Colors.orangeAccent.withValues(alpha: 0.5),
+            color: context.warning.withValues(alpha: 0.6),
             barWidth: 2,
             dashArray: [5, 5],
             dotData: const FlDotData(show: false),
           ),
           // User-set goal line — flat across the chart at the target
           // amount. Drawn in goal yellow so it's distinct from the
-          // orange FI target line.
+          // warning-amber FI target line.
           if (_goalAmountUsd != null)
             LineChartBarData(
               spots: [
@@ -625,25 +622,42 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 ),
               ],
               isCurved: false,
-              color: const Color(0xFFFFD600).withValues(alpha: 0.7),
+              color: context.yellowAccent.withValues(alpha: 0.75),
               barWidth: 2,
               dashArray: [3, 6],
               dotData: const FlDotData(show: false),
             ),
         ],
         lineTouchData: LineTouchData(
+          // Match the net-worth chart's tactile hover: vertical guide line
+          // and a highlighted dot wherever the cursor lands along the X
+          // axis, not just within 10px of a sample.
+          touchSpotThreshold: 24,
+          handleBuiltInTouches: true,
+          getTouchedSpotIndicator: (barData, spotIndexes) {
+            return spotIndexes.map((idx) {
+              return TouchedSpotIndicatorData(
+                FlLine(color: context.tint(0.35), strokeWidth: 1),
+                FlDotData(
+                  show: true,
+                  getDotPainter: (spot, percent, bar, i) => FlDotCirclePainter(
+                    radius: 5,
+                    color: barData.color ?? context.positive,
+                    strokeWidth: 3,
+                    strokeColor: Theme.of(context).colorScheme.surface,
+                  ),
+                ),
+              );
+            }).toList();
+          },
           touchTooltipData: LineTouchTooltipData(
-            // Inverse surface = dark popover in light mode, light popover
-            // in dark mode (Material 3 tooltip convention). The text uses
-            // onInverseSurface so contrast flips with the background.
-            getTooltipColor: (_) =>
-                Theme.of(context).colorScheme.inverseSurface,
+            getTooltipColor: (_) => context.tooltipSurface,
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {
                 return LineTooltipItem(
                   'Year ${spot.x.toStringAsFixed(1)}\n${widget.currencyFormat.format(spot.y)}',
                   TextStyle(
-                    color: Theme.of(context).colorScheme.onInverseSurface,
+                    color: context.tooltipOnSurface,
                     fontWeight: FontWeight.bold,
                   ),
                 );
@@ -668,7 +682,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           ),
           subtitle: 'Target net worth',
           icon: Icons.flag_rounded,
-          color: Colors.orangeAccent,
+          color: context.warning,
         ),
         const SizedBox(width: 16),
         _buildMilestoneCard(
@@ -677,7 +691,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               '${(metrics['current_progress_pct'] as num).toStringAsFixed(1)}%',
           subtitle: 'Toward FIRE',
           icon: Icons.trending_up_rounded,
-          color: const Color(0xFF00E676),
+          color: context.positive,
         ),
         const SizedBox(width: 16),
         _buildMilestoneCard(
@@ -687,7 +701,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               : '∞',
           subtitle: 'Estimate',
           icon: Icons.speed_rounded,
-          color: Colors.lightBlueAccent,
+          color: context.info,
         ),
         const SizedBox(width: 16),
         _buildMilestoneCard(
@@ -698,7 +712,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           ),
           subtitle: 'Monthly @ withdrawal rate',
           icon: Icons.account_balance_wallet_rounded,
-          color: Colors.purpleAccent,
+          color: context.purpleAccent,
         ),
       ],
     );
@@ -713,7 +727,6 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   }) {
     return Expanded(
       child: Card(
-        color: const Color(0xFF1E1E1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.all(20.0),

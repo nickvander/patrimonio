@@ -40,7 +40,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: const Color(0xFF1A1A24),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       title: const Text(
         'Add manual account',
         style: TextStyle(fontWeight: FontWeight.bold),
@@ -64,7 +64,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: _type,
-                dropdownColor: const Color(0xFF1A1A24),
+                dropdownColor: Theme.of(context).colorScheme.surface,
                 decoration: const InputDecoration(labelText: 'Account type'),
                 items: _types
                     .map((t) => DropdownMenuItem(value: t, child: Text(t)))
@@ -74,7 +74,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: _currency,
-                dropdownColor: const Color(0xFF1A1A24),
+                dropdownColor: Theme.of(context).colorScheme.surface,
                 decoration: const InputDecoration(labelText: 'Currency'),
                 items: ['USD', 'MXN']
                     .map((c) => DropdownMenuItem(value: c, child: Text(c)))

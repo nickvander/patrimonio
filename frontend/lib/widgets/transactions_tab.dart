@@ -279,7 +279,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               icon: const Icon(Icons.add_link, size: 18),
               label: const Text('Go to Management'),
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF00E676),
+                backgroundColor: context.positive,
                 foregroundColor: Colors.black,
               ),
             ),
@@ -368,10 +368,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
       padding:
           const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF00E676).withValues(alpha: 0.08),
+        color: context.positive.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: const Color(0xFF00E676).withValues(alpha: 0.4)),
+        border: Border.all(color: context.accentBorder(context.positive)),
       ),
       child: LayoutBuilder(builder: (ctx, c) {
         final isNarrow = c.maxWidth < 560;
@@ -417,8 +416,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
 
         final summary = Text(
           '$selectedCount selected',
-          style: const TextStyle(
-              fontWeight: FontWeight.w700, color: Color(0xFF00E676)),
+          style: TextStyle(
+              fontWeight: FontWeight.w700, color: context.positive),
         );
 
         if (isNarrow) {
@@ -596,8 +595,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
                     child: Container(
                       width: 8,
                       height: 8,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF00E676),
+                      decoration: BoxDecoration(
+                        color: context.positive,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -612,7 +611,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               icon: Icon(
                 _selectionMode ? Icons.close : Icons.checklist,
                 size: 22,
-                color: _selectionMode ? const Color(0xFF00E676) : null,
+                color: _selectionMode ? context.positive : null,
               ),
               tooltip:
                   _selectionMode ? 'Exit selection mode' : 'Select multiple',
@@ -827,9 +826,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
         duration: const Duration(milliseconds: 550),
         curve: Curves.easeInOut,
         color: isSelected
-            ? const Color(0xFF00E676).withValues(alpha: 0.08)
+            ? context.positive.withValues(alpha: 0.1)
             : (id != null && id == widget.highlightedTxId)
-                ? const Color(0xFF00B0FF).withValues(alpha: 0.18)
+                ? context.info.withValues(alpha: 0.2)
                 : Colors.transparent,
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
         child: Row(
@@ -914,9 +913,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
                       fontFeatures: const [FontFeature.tabularFigures()],
-                      color: isExpense
-                          ? context.textPrimary
-                          : const Color(0xFF00E676),
+                      color: isExpense ? context.textPrimary : context.positive,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1077,7 +1074,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               width: isNarrow ? size.width : 480,
               height: isNarrow ? size.height * 0.9 : size.height,
               decoration: BoxDecoration(
-                color: const Color(0xFF1A1A24),
+                color: Theme.of(ctx).colorScheme.surface,
                 borderRadius: isNarrow
                     ? const BorderRadius.vertical(top: Radius.circular(20))
                     : const BorderRadius.horizontal(left: Radius.circular(20)),
@@ -1166,10 +1163,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
                       color: context.tint(0.04),
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: (isExpense
-                                ? Colors.redAccent
-                                : const Color(0xFF1DE9B6))
-                            .withValues(alpha: 0.25),
+                        color: (isExpense ? context.negative : context.tealAccent)
+                            .withValues(alpha: 0.3),
                       ),
                     ),
                     child: Column(
@@ -1181,8 +1176,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
                             fontSize: 10,
                             letterSpacing: 1.2,
                             color: isExpense
-                                ? Colors.redAccent.shade100
-                                : const Color(0xFF1DE9B6),
+                                ? context.pinkAccent
+                                : context.tealAccent,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -1196,7 +1191,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                             fontWeight: FontWeight.w900,
                             color: isExpense
                                 ? context.textPrimary
-                                : const Color(0xFF00E676),
+                                : context.positive,
                           ),
                         ),
                         if (needsConversion) ...[
@@ -1520,9 +1515,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: otherIsExpense
-                  ? context.textPrimary
-                  : const Color(0xFF00E676),
+              color: otherIsExpense ? context.textPrimary : context.positive,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
@@ -1620,7 +1613,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
     if (cat.contains('recreation') ||
         desc.contains('climbing') ||
         desc.contains('gym')) {
-      return const Color(0xFF1DE9B6);
+      return Colors.teal;
     }
     if (cat.contains('deposit') || desc.contains('deposit')) {
       return Colors.blueAccent;

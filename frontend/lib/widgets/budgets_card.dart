@@ -100,8 +100,7 @@ class _BudgetsCardState extends State<BudgetsCard> {
           children: [
             Row(
               children: [
-                const Icon(Icons.donut_small,
-                    color: Color(0xFF1DE9B6), size: 18),
+                Icon(Icons.donut_small, color: context.tealAccent, size: 18),
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
@@ -134,10 +133,10 @@ class _BudgetsCardState extends State<BudgetsCard> {
                     budgetUsd <= 0 ? 0.0 : (spentUsd / budgetUsd).clamp(0.0, 1.5);
                 final over = spentUsd > budgetUsd;
                 final color = over
-                    ? const Color(0xFFFF4081)
+                    ? context.pinkAccent
                     : pct > 0.85
-                        ? const Color(0xFFFFB300)
-                        : const Color(0xFF00E676);
+                        ? context.warning
+                        : context.positive;
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Column(

@@ -265,10 +265,9 @@ class _PortfolioCardState extends State<PortfolioCard> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: (isPositive
-                              ? const Color(0xFF00E676)
-                              : Colors.redAccent)
-                          .withValues(alpha: 0.12),
+                      color:
+                          (isPositive ? context.positive : context.negative)
+                              .withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -278,9 +277,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                           isPositive
                               ? Icons.arrow_upward
                               : Icons.arrow_downward,
-                          color: isPositive
-                              ? const Color(0xFF00E676)
-                              : Colors.redAccent,
+                          color: isPositive ? context.positive : context.negative,
                           size: 14,
                         ),
                         const SizedBox(width: 4),
@@ -290,9 +287,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
-                              color: isPositive
-                                  ? const Color(0xFF00E676)
-                                  : Colors.redAccent,
+                              color:
+                                  isPositive ? context.positive : context.negative,
                               fontFeatures: const [
                                 FontFeature.tabularFigures()
                               ],
@@ -334,7 +330,6 @@ class _PortfolioCardState extends State<PortfolioCard> {
             Theme(
               data: Theme.of(context).copyWith(
                 cardTheme: CardThemeData(
-                  color: const Color(0xFF1A1A24),
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
@@ -401,7 +396,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
           value: displayTicker(top),
           sub: widget.currencyFormat
               .format(((top['value'] as num).toDouble()) * cf),
-          accent: const Color(0xFF1DE9B6),
+          accent: context.tealAccent,
         ),
       if (gainer != null &&
           ((gainer['gain_loss_pct'] as num?)?.toDouble() ?? 0) > 0)
@@ -410,7 +405,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
           value: displayTicker(gainer),
           sub:
               '+${((gainer['gain_loss_pct'] as num).toDouble()).toStringAsFixed(2)}%',
-          accent: const Color(0xFF00E676),
+          accent: context.positive,
         ),
       if (loser != null &&
           ((loser['gain_loss_pct'] as num?)?.toDouble() ?? 0) < 0)
@@ -419,7 +414,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
           value: displayTicker(loser),
           sub:
               '${((loser['gain_loss_pct'] as num).toDouble()).toStringAsFixed(2)}%',
-          accent: Colors.redAccent,
+          accent: context.negative,
         ),
     ];
 
@@ -622,8 +617,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color:
-                    isGain ? const Color(0xFF00E676) : Colors.redAccent,
+                color: isGain ? context.positive : context.negative,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
@@ -875,7 +869,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                   Icon(
                     _isAscending ? Icons.arrow_upward : Icons.arrow_downward,
                     size: 12,
-                    color: const Color(0xFF00E676),
+                    color: context.positive,
                   ),
                 ],
               ],
@@ -899,12 +893,14 @@ class _PortfolioCardState extends State<PortfolioCard> {
   Widget _buildAllocationChart() {
     if (_holdings.isEmpty) return const SizedBox.shrink();
 
+    // Allocation slice colours route through the brand chart-series
+    // helper so the pie reads against a white card in light mode.
     final colors = [
-      const Color(0xFF1DE9B6), // Neon Teal
-      const Color(0xFF7C4DFF), // Deep Violet
-      const Color(0xFFFF4081), // Pink Accent
-      const Color(0xFFFFD740), // Bright Gold
-      const Color(0xFF2979FF), // Vivid Blue
+      context.tealAccent,
+      context.purpleAccent,
+      context.pinkAccent,
+      context.yellowAccent,
+      context.info,
     ];
 
     final sortedHoldings = List.from(_holdings)
@@ -944,7 +940,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 ? Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1A1A24),
+                      color: Theme.of(context).colorScheme.surface,
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
@@ -1241,7 +1237,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor: const Color(0xFF2A2A35),
+            backgroundColor: context.tileSurface,
             radius: 16,
             child: Text(
               avatarChar,
@@ -1372,8 +1368,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color:
-                    isGain ? const Color(0xFF00E676) : Colors.redAccent,
+                color: isGain ? context.positive : context.negative,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
@@ -1384,14 +1379,14 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: (isGain ? const Color(0xFF00E676) : Colors.redAccent)
-              .withValues(alpha: 0.1),
+          color: (isGain ? context.positive : context.negative)
+              .withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Text(
           '${isGain ? '+' : ''}${gainPct.toStringAsFixed(2)}%',
           style: TextStyle(
-            color: isGain ? const Color(0xFF00E676) : Colors.redAccent,
+            color: isGain ? context.positive : context.negative,
             fontWeight: FontWeight.bold,
             fontSize: 13,
           ),

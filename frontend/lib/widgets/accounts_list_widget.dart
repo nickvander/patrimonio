@@ -35,7 +35,6 @@ class AccountsListWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     if (accounts.isEmpty) {
       return Card(
-        color: const Color(0xFF1A1A24),
         child: Padding(
           padding: const EdgeInsets.all(40.0),
           child: Center(
@@ -66,7 +65,7 @@ class AccountsListWidget extends StatelessWidget {
                   icon: const Icon(Icons.add_link, size: 18),
                   label: const Text('Add an account'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF00E676),
+                    backgroundColor: context.positive,
                     foregroundColor: Colors.black,
                   ),
                 ),
@@ -151,7 +150,7 @@ class AccountsListWidget extends StatelessWidget {
                     cashAccounts,
                     Icons.wallet_rounded,
                     false,
-                    const Color(0xFF00B0FF),
+                    context.info,
                   ),
                 if (investmentAccounts.isNotEmpty)
                   _buildAccountGroup(
@@ -160,7 +159,7 @@ class AccountsListWidget extends StatelessWidget {
                     investmentAccounts,
                     Icons.show_chart_rounded,
                     false,
-                    const Color(0xFF1DE9B6),
+                    context.tealAccent,
                   ),
                 if (cryptoAccounts.isNotEmpty)
                   _buildAccountGroup(
@@ -169,7 +168,7 @@ class AccountsListWidget extends StatelessWidget {
                     cryptoAccounts,
                     Icons.currency_bitcoin_rounded,
                     false,
-                    const Color(0xFF651FFF),
+                    context.purpleAccent,
                   ),
                 if (creditAccounts.isNotEmpty)
                   _buildAccountGroup(
@@ -178,7 +177,7 @@ class AccountsListWidget extends StatelessWidget {
                     creditAccounts,
                     Icons.credit_card_rounded,
                     true,
-                    const Color(0xFFFF5252),
+                    context.negative,
                   ),
                 if (loanAccounts.isNotEmpty)
                   _buildAccountGroup(
@@ -187,7 +186,7 @@ class AccountsListWidget extends StatelessWidget {
                     loanAccounts,
                     Icons.home_rounded,
                     true,
-                    const Color(0xFFFFD54F),
+                    context.yellowAccent,
                   ),
                 if (otherAccounts.isNotEmpty)
                   _buildAccountGroup(
@@ -196,7 +195,7 @@ class AccountsListWidget extends StatelessWidget {
                     otherAccounts,
                     Icons.category_outlined,
                     false,
-                    const Color(0xFF90A4AE),
+                    context.neutralAccent,
                     // Surface the raw subtypes that fell through so they
                     // can't sit hidden in Other indefinitely — the UI now
                     // self-reports its own classifier gaps.
@@ -571,9 +570,9 @@ class AccountsListWidget extends StatelessWidget {
     if (hasCrypto) {
       subBalance = Text(
         '${acc['crypto_amount']} ${acc['ticker_symbol']}',
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11,
-          color: Color(0xFFAB8CFF),
+          color: context.purpleAccent,
           fontWeight: FontWeight.w600,
         ),
         maxLines: 1,

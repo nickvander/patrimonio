@@ -112,3 +112,88 @@ Some directions worth trying (not prescriptive):
 ### Rollback
 
 The migration is staged so each step has its own commit. The riskiest one is step 4 (tooltip surgery on charts) — if it goes wrong the chart still renders but tooltip text might be invisible. Easy to spot and revert.
+
+---
+
+## Biometric / passkey sign-in (FIDO2 / WebAuthn)
+
+**Status:** Open. User-requested in the May 17 2026 palette session: "is it also possible to allow biometrics login from the phone?" Yes — and the right primitive is passkeys, not platform-specific biometrics, because Patrimonio is a Flutter *web* app served over a real origin. A passkey registered on the user's phone with Face ID / Touch ID / Android biometric can sign them into the web app from that phone (and, if the user opts into cloud sync via iCloud Keychain / Google Password Manager / Microsoft, from their desktop browser too) without ever installing a native app.
+
+**Tracking:** This file.
+
+### Why passkeys, not platform biometrics
+
+A few options exist for "biometric login":
+
+| Option | Works on | Reality for Patrimonio |
+|---|---|---|
+| `local_auth` (Flutter plugin) | iOS, Android, macOS, Windows only | We're served as a web app via nginx — `local_auth` doesn't run in the browser. Would force a separate native build path. |
+| Native iOS / Android wrappers | Requires App Store / Play Store distribution | Out of scope for a single-user self-hosted app. |
+| **WebAuthn / passkeys (FIDO2)** | Every modern browser on every modern OS — iOS 16+, Android, Windows Hello, macOS, Linux Chromium | One implementation, works for the user's phone *and* their desktop. The biometric prompt is shown by the platform (Face ID / Touch ID / Windows Hello) and the key never leaves the device. |
+
+Passkeys are the standard answer here. Apple, Google, and Microsoft all sync them between the user's devices via their respective password managers, so a passkey registered on the phone "just works" on the desktop afterwards.
+
+### Scope of the work
+
+This is a real feature, not a small change. Three-side implementation:
+
+**Backend (Rust / axum, ~1 day):**
+
+- Add the `webauthn-rs` crate (mature Rust FIDO2 implementation by the WebAuthn working group).
+- Schema: new `passkey_credentials` table, one row per registered device per user.
+  ```sql
+  CREATE TABLE passkey_credentials (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    credential_id BYTEA NOT NULL UNIQUE,        -- WebAuthn cred id (raw)
+    public_key BYTEA NOT NULL,                  -- COSE-encoded public key
+    sign_count BIGINT NOT NULL DEFAULT 0,       -- replay-attack counter
+    transports TEXT[],                          -- "internal", "hybrid", "usb"…
+    nickname TEXT,                              -- "iPhone 15", "Yubikey 5C"
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_used_at TIMESTAMPTZ
+  );
+  ```
+- Four endpoints, all CSRF-protected and behind the existing session middleware where appropriate:
+  - `POST /api/auth/passkeys/register/start` — authenticated; returns a `PublicKeyCredentialCreationOptions` challenge.
+  - `POST /api/auth/passkeys/register/finish` — authenticated; verifies the attestation, stores the new credential.
+  - `POST /api/auth/passkeys/login/start` — unauthenticated; takes a username, returns the `PublicKeyCredentialRequestOptions` challenge (or a discoverable-credential flow with no username).
+  - `POST /api/auth/passkeys/login/finish` — unauthenticated; verifies the assertion, issues the same session cookie the password login does today.
+- A short-lived per-challenge state store (5 min TTL) in Redis to keep challenges out of cookies.
+
+**Frontend (Flutter web, ~0.5 day):**
+
+- The `webauthn` Dart package is thin or non-existent for web targets — most teams call `navigator.credentials.create()` / `.get()` directly via `package:web` (which is already in `pubspec.yaml`). The dance is:
+  1. Fetch `/register/start`, base64url-decode the `challenge` and `user.id` fields into Uint8Array.
+  2. Call `navigator.credentials.create({ publicKey: options })` — this is what triggers the platform's Face ID / Touch ID / Windows Hello prompt.
+  3. Base64url-encode the response and POST it to `/register/finish`.
+  4. Login uses `navigator.credentials.get()` — same encoding dance.
+- A "Register this device" button in `security_screen.dart` (already exists) and a "Sign in with passkey" button on `auth_gate.dart`.
+- Show a list of registered passkeys in security settings with the device nickname + last-used timestamp + a "Remove" button.
+
+**Schema-only migration risk:** None — additive table, doesn't touch the password auth path. Passkeys are *in addition to* the password sign-in, not a replacement.
+
+### Open design questions to settle when picked up
+
+1. **Username-first vs discoverable credentials.** Discoverable (resident) credentials let the user sign in without typing a username — the platform UI just lists the available passkeys for `auth.patrimonio.app`. This is the nicer UX but uses slightly more space on the authenticator. Default to discoverable; it's what every modern site uses.
+2. **Origin / RP ID.** Production `rp_id` must match the actual host. For local dev (`127.0.0.1:3000`) WebAuthn requires either `localhost` or HTTPS — needs a small dev-mode `rp_id = "localhost"` toggle. Worth verifying in a throwaway test before committing.
+3. **Account recovery.** If a user loses all their passkeys (lost phone, no cloud sync), they fall back to their existing password + 2FA (Patrimonio already has TOTP wired up — see `c0f4909`). No new recovery flow needed initially.
+4. **Cross-device flow.** The "use your phone to sign in on a desktop browser" flow is QR-code-mediated and handled entirely by the browser/OS — no extra backend work, just verify the `transports: ["hybrid"]` advertisement is preserved.
+
+### Why this is worth doing
+
+- The user explicitly asked for it.
+- Removes the only remaining password-based step in the daily flow once registered. Password + TOTP becomes a fallback only.
+- Modern phones make biometric unlock dramatically faster than typing a 12+ char password on a touch keyboard.
+- Patrimonio holds financial data — a phishing-resistant credential (which is what passkeys are; the private key never leaves the device) is meaningfully more secure than a password.
+
+### Out of scope for this work item
+
+- Any native iOS/Android build path. Stay web-only.
+- Replacing the password login. Passkeys augment it; they don't replace it.
+- A "magic link" email login, even though it might come up as a parallel suggestion — it's a separate flow with different threat model and we're not going to chase both.
+
+### Rollback
+
+Each side reverts cleanly: drop the `passkey_credentials` table (migration is idempotent on the DROP side), revert the Rust endpoint module, remove the frontend buttons + JS interop. No data migration needed because passkeys are additive — password sign-in keeps working untouched.
+
