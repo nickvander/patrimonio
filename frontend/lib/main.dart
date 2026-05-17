@@ -113,10 +113,19 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
           borderRadius: BorderRadius.circular(20),
         ),
       ),
+      // AppBar foreground is set explicitly so icon buttons in the
+      // actions slot are guaranteed-visible. Without `foregroundColor`,
+      // `iconTheme` and `actionsIconTheme`, M3 falls back to
+      // colorScheme-derived values that — with a heavily-seeded brand
+      // palette on top of the custom dark surface — were rendering the
+      // Security and Sign-out icons close to the AppBar background.
       appBarTheme: const AppBarTheme(
         backgroundColor: Color(0xFF101016),
+        foregroundColor: Color(0xFFEDEFF3),
         elevation: 0,
         centerTitle: false,
+        iconTheme: IconThemeData(color: Color(0xFFEDEFF3)),
+        actionsIconTheme: IconThemeData(color: Color(0xFFEDEFF3)),
       ),
       dataTableTheme: DataTableThemeData(
         headingRowColor: WidgetStateProperty.all(Colors.black12),
@@ -155,12 +164,18 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
           borderRadius: BorderRadius.circular(20),
         ),
       ),
+      // Match the dark theme's explicit icon-theme treatment so the
+      // Security and Sign-out actions stay readable in both modes —
+      // `foregroundColor` alone doesn't always propagate to the
+      // IconButtons sitting in the actions slot under M3.
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.white,
         foregroundColor: Color(0xFF101016),
         elevation: 0,
         centerTitle: false,
         scrolledUnderElevation: 0,
+        iconTheme: IconThemeData(color: Color(0xFF101016)),
+        actionsIconTheme: IconThemeData(color: Color(0xFF101016)),
       ),
       dataTableTheme: DataTableThemeData(
         headingRowColor: WidgetStateProperty.all(const Color(0xFFEEF0F4)),

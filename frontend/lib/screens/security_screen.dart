@@ -217,6 +217,38 @@ class _SecurityScreenState extends State<SecurityScreen> {
     }
   }
 
+  /// Sign out the device the user is currently on. Equivalent to the
+  /// dashboard AppBar's Sign-out icon — surfaced inside the Security
+  /// screen because that's where users go looking for it ("manage
+  /// sessions" naturally implies "I can end the current one").
+  Future<void> _signOutThisDevice() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Sign out of this device?'),
+        content: const Text(
+          'You will need to enter your password again (and TOTP, if '
+          'enabled) to sign back in.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await AuthService.instance.logout();
+    // AuthService emits signedOut → the AuthGate listener in main.dart
+    // unmounts the dashboard tree and brings up the login screen; no
+    // explicit Navigator pop is needed here.
+  }
+
   Future<void> _revokeOtherSessions() async {
     final others = (_sessions ?? const <ActiveSession>[])
         .where((s) => !s.isCurrent)
@@ -599,8 +631,17 @@ class _SecurityScreenState extends State<SecurityScreen> {
                       ],
                     ),
                     subtitle: Text(_formatLastSeen(sessions[i].lastSeenAt)),
+                    // For the current device the per-session "revoke
+                    // this session" pathway would race against the
+                    // cookie still being on this device. Send a real
+                    // logout instead, which clears server-side cookie
+                    // + Redis session + local AuthService state.
                     trailing: sessions[i].isCurrent
-                        ? null
+                        ? TextButton.icon(
+                            onPressed: _signOutThisDevice,
+                            icon: const Icon(Icons.logout, size: 16),
+                            label: const Text('Sign out'),
+                          )
                         : IconButton(
                             tooltip: 'Sign out this session',
                             icon: const Icon(Icons.close),
