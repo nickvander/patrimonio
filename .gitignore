@@ -36,3 +36,6 @@ redisdata/
 # Temporary files
 /tmp/
 .tmp/
+
+# Claude Code harness state
+.claude/
