@@ -6,6 +6,7 @@ import '../services/api_service.dart';
 import '../utils/category.dart';
 import '../utils/currency.dart';
 import '../utils/transaction_description.dart';
+import '../utils/transaction_display.dart';
 import 'add_transaction_dialog.dart';
 import 'transaction_filters.dart';
 
@@ -872,9 +873,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    cleanTransactionDescription(
-                      tx['description']?.toString() ?? 'Unknown',
-                    ),
+                    displayLabel(tx),
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
@@ -1015,7 +1014,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
     final merchant = (tx['merchant_name'] ?? '').toString();
     final pending = tx['pending'] == true;
     final rawDescription = (tx['description'] ?? '').toString();
-    final titleDescription = cleanTransactionDescription(rawDescription);
+    final titleDescription = displayLabel(tx);
+    final logoUrl = counterpartyLogo(tx);
+    final originalDescription = (tx['original_description'] ?? '').toString();
     final color = _getCategoryColor(
       tx['user_category'] ?? tx['category'],
       rawDescription,
@@ -1109,18 +1110,35 @@ class _TransactionsTabState extends State<TransactionsTab> {
                       Container(
                         width: 52,
                         height: 52,
+                        clipBehavior: Clip.antiAlias,
                         decoration: BoxDecoration(
                           color: color.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(14),
                         ),
-                        child: Icon(
-                          _getCategoryIcon(
-                            tx['user_category'] ?? tx['category'],
-                            rawDescription,
-                          ),
-                          color: color,
-                          size: 28,
-                        ),
+                        // Counterparty logo when Plaid sent one, else the
+                        // category icon. Logo failures (network drop,
+                        // 404, CSP block) silently fall back to the icon.
+                        child: logoUrl != null
+                            ? Image.network(
+                                logoUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Icon(
+                                  _getCategoryIcon(
+                                    tx['user_category'] ?? tx['category'],
+                                    rawDescription,
+                                  ),
+                                  color: color,
+                                  size: 28,
+                                ),
+                              )
+                            : Icon(
+                                _getCategoryIcon(
+                                  tx['user_category'] ?? tx['category'],
+                                  rawDescription,
+                                ),
+                                color: color,
+                                size: 28,
+                              ),
                       ),
                       const SizedBox(width: 14),
                       Expanded(

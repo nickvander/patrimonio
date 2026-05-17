@@ -347,6 +347,18 @@ pub struct TransactionResponse {
     pub payment_channel: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub merchant_name: Option<String>,
+    /// Plaid `original_description` — the raw bank line. Surfaced as a
+    /// fallback when `description` (Plaid `name`) is too generic.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_description: Option<String>,
+    /// Best counterparty name from Plaid `counterparties[]` (highest-
+    /// confidence merchant). Preferred over `merchant_name` for display.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub counterparty_name: Option<String>,
+    /// Counterparty logo URL (Plaid-hosted). Shown next to the merchant
+    /// name in the transaction detail panel when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub counterparty_logo_url: Option<String>,
     pub user_category: Option<String>,
     pub user_notes: Option<String>,
     pub source: Option<String>,
@@ -368,6 +380,7 @@ async fn get_account_transactions(
         r#"
         SELECT t.id, t.date, t.description, t.amount, t.currency, t.category,
                t.category_detailed, t.payment_channel, t.merchant_name,
+               t.original_description, t.counterparty_name, t.counterparty_logo_url,
                t.user_category, t.user_notes, t.source,
                COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
                i.name as institution_name
@@ -398,6 +411,9 @@ async fn get_account_transactions(
         category_detailed: row.try_get::<Option<String>, _>("category_detailed").ok().flatten(),
         payment_channel: row.try_get::<Option<String>, _>("payment_channel").ok().flatten(),
         merchant_name: row.try_get::<Option<String>, _>("merchant_name").ok().flatten(),
+        original_description: row.try_get::<Option<String>, _>("original_description").ok().flatten(),
+        counterparty_name: row.try_get::<Option<String>, _>("counterparty_name").ok().flatten(),
+        counterparty_logo_url: row.try_get::<Option<String>, _>("counterparty_logo_url").ok().flatten(),
         user_category: row.try_get("user_category").ok(),
         user_notes: row.try_get("user_notes").ok(),
         source: row.try_get("source").ok(),

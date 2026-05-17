@@ -396,6 +396,13 @@ async fn upsert_plaid_transaction(db: &PgPool, tx: &serde_json::Value) -> Result
         .or(legacy_category);
     let category_detailed = tx["personal_finance_category"]["detailed"].as_str();
     let payment_channel = tx["payment_channel"].as_str();
+    // Plaid Production enrichment that prior schema ignored. `original_description`
+    // is the raw bank line — keeps the specifics when Plaid's cleaned `name` is
+    // a generic fallback ("Miscellaneous Debit"). `counterparties[]` is Plaid's
+    // enriched merchant-entity list; pick the highest-confidence entry so the
+    // UI gets a real merchant + logo when `merchant_name` is null.
+    let original_description = tx["original_description"].as_str();
+    let (counterparty_name, counterparty_logo_url) = best_counterparty(&tx["counterparties"]);
 
     let internal_acc = sqlx::query("SELECT id FROM accounts WHERE external_id = $1")
         .bind(acc_ext_id)
@@ -406,8 +413,16 @@ async fn upsert_plaid_transaction(db: &PgPool, tx: &serde_json::Value) -> Result
         let acc_id: uuid::Uuid = acc_row.get("id");
         sqlx::query(
             r#"
-            INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, category_detailed, payment_channel, merchant_name, pending, source)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'plaid')
+            INSERT INTO transactions (
+                account_id, external_id, date, description, amount, currency,
+                category, category_detailed, payment_channel, merchant_name,
+                pending, source, original_description, counterparty_name,
+                counterparty_logo_url
+            )
+            VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'plaid',
+                $12, $13, $14
+            )
             ON CONFLICT (account_id, external_id)
             DO UPDATE SET
                 date = EXCLUDED.date,
@@ -418,7 +433,10 @@ async fn upsert_plaid_transaction(db: &PgPool, tx: &serde_json::Value) -> Result
                 category_detailed = EXCLUDED.category_detailed,
                 payment_channel = EXCLUDED.payment_channel,
                 merchant_name = EXCLUDED.merchant_name,
-                pending = EXCLUDED.pending
+                pending = EXCLUDED.pending,
+                original_description = EXCLUDED.original_description,
+                counterparty_name = EXCLUDED.counterparty_name,
+                counterparty_logo_url = EXCLUDED.counterparty_logo_url
             "#
         )
         .bind(acc_id)
@@ -432,11 +450,100 @@ async fn upsert_plaid_transaction(db: &PgPool, tx: &serde_json::Value) -> Result
         .bind(payment_channel)
         .bind(merchant_name)
         .bind(pending)
+        .bind(original_description)
+        .bind(counterparty_name.as_deref())
+        .bind(counterparty_logo_url.as_deref())
         .execute(db)
         .await?;
     }
 
     Ok(())
+}
+
+/// Pick the most authoritative counterparty from Plaid's `counterparties[]`
+/// array. Prefer VERY_HIGH/HIGH confidence and the MERCHANT type (over
+/// FINANCIAL_INSTITUTION, PAYMENT_APP, MARKETPLACE, etc., which are
+/// usually middlemen rather than the entity the user recognises).
+/// Returns (name, logo_url) — either can be None even when a counterparty
+/// exists, since Plaid doesn't always include a logo.
+fn best_counterparty(arr: &serde_json::Value) -> (Option<String>, Option<String>) {
+    let Some(items) = arr.as_array() else {
+        return (None, None);
+    };
+    if items.is_empty() {
+        return (None, None);
+    }
+    fn score(cp: &serde_json::Value) -> i32 {
+        let conf = cp["confidence_level"].as_str().unwrap_or("");
+        let kind = cp["type"].as_str().unwrap_or("");
+        let conf_score = match conf {
+            "VERY_HIGH" => 30,
+            "HIGH" => 20,
+            "MEDIUM" => 10,
+            _ => 0,
+        };
+        let type_score = match kind {
+            "merchant" | "MERCHANT" => 5,
+            "marketplace" | "MARKETPLACE" => 3,
+            _ => 0,
+        };
+        conf_score + type_score
+    }
+    let best = items
+        .iter()
+        .filter(|cp| cp["name"].as_str().is_some_and(|n| !n.trim().is_empty()))
+        .max_by_key(|cp| score(cp));
+    let Some(best) = best else {
+        return (None, None);
+    };
+    let name = best["name"].as_str().map(|s| s.trim().to_string());
+    let logo = best["logo_url"]
+        .as_str()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    (name, logo)
+}
+
+#[cfg(test)]
+mod counterparty_tests {
+    use super::best_counterparty;
+    use serde_json::json;
+
+    #[test]
+    fn empty_array_returns_none() {
+        assert_eq!(best_counterparty(&json!([])), (None, None));
+        assert_eq!(best_counterparty(&serde_json::Value::Null), (None, None));
+    }
+
+    #[test]
+    fn picks_very_high_over_low_confidence() {
+        let arr = json!([
+            {"name": "Stripe", "type": "payment_app", "confidence_level": "LOW"},
+            {"name": "Patagonia", "type": "merchant", "confidence_level": "VERY_HIGH",
+             "logo_url": "https://cdn.example/patagonia.png"},
+            {"name": "Visa", "type": "financial_institution", "confidence_level": "MEDIUM"},
+        ]);
+        let (name, logo) = best_counterparty(&arr);
+        assert_eq!(name.as_deref(), Some("Patagonia"));
+        assert_eq!(logo.as_deref(), Some("https://cdn.example/patagonia.png"));
+    }
+
+    #[test]
+    fn skips_empty_name_entries() {
+        let arr = json!([
+            {"name": "", "confidence_level": "VERY_HIGH"},
+            {"name": "Trader Joe's", "confidence_level": "HIGH"},
+        ]);
+        assert_eq!(best_counterparty(&arr).0.as_deref(), Some("Trader Joe's"));
+    }
+
+    #[test]
+    fn missing_logo_is_none() {
+        let arr = json!([{"name": "Local Cafe", "confidence_level": "HIGH"}]);
+        let (name, logo) = best_counterparty(&arr);
+        assert_eq!(name.as_deref(), Some("Local Cafe"));
+        assert_eq!(logo, None);
+    }
 }
 
 #[derive(Debug)]

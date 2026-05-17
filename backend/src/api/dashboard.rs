@@ -395,7 +395,9 @@ async fn recent_transactions(
                COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
                t.amount, t.currency,
                t.date, t.description, t.category, t.category_detailed,
-               t.payment_channel, t.merchant_name, t.pending
+               t.payment_channel, t.merchant_name,
+               t.original_description, t.counterparty_name, t.counterparty_logo_url,
+               t.pending
         FROM transactions t
         JOIN accounts a ON t.account_id = a.id
         ORDER BY t.date DESC, t.created_at DESC
@@ -432,6 +434,18 @@ async fn recent_transactions(
                         .flatten(),
                     merchant_name: r
                         .try_get::<Option<String>, _>("merchant_name")
+                        .ok()
+                        .flatten(),
+                    original_description: r
+                        .try_get::<Option<String>, _>("original_description")
+                        .ok()
+                        .flatten(),
+                    counterparty_name: r
+                        .try_get::<Option<String>, _>("counterparty_name")
+                        .ok()
+                        .flatten(),
+                    counterparty_logo_url: r
+                        .try_get::<Option<String>, _>("counterparty_logo_url")
                         .ok()
                         .flatten(),
                     pending: r.get("pending"),
@@ -864,6 +878,16 @@ struct TransactionEntry {
     payment_channel: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     merchant_name: Option<String>,
+    /// Raw bank line — survives when Plaid's cleaned `description`
+    /// falls back to "Miscellaneous Debit" or similar generic label.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    original_description: Option<String>,
+    /// Best counterparty from Plaid's enriched `counterparties[]` array.
+    /// Preferred over `merchant_name` and `description` for display.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    counterparty_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    counterparty_logo_url: Option<String>,
     pending: bool,
 }
 
