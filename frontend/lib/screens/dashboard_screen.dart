@@ -97,6 +97,10 @@ class _DashboardScreenState extends State<DashboardScreen>
       length: 7,
       vsync: this,
       initialIndex: savedTab,
+      // 300ms (the Material default) makes the transition feel sluggish on a
+      // dense desktop dashboard; 180ms is short enough to feel near-instant
+      // while still smoothing the slide.
+      animationDuration: const Duration(milliseconds: 180),
     );
     _tabController!.addListener(() {
       if (!_tabController!.indexIsChanging) {
@@ -1689,15 +1693,39 @@ class _DashboardScreenState extends State<DashboardScreen>
     return TabBarView(
       controller: _tabController,
       children: [
-        overviewTab,
-        portfolioTab,
-        transactionsTab,
-        cashFlowTab,
-        projectionsTab,
-        taxPlanningTab,
-        managementTab,
+        _KeepAliveTab(child: overviewTab),
+        _KeepAliveTab(child: portfolioTab),
+        _KeepAliveTab(child: transactionsTab),
+        _KeepAliveTab(child: cashFlowTab),
+        _KeepAliveTab(child: projectionsTab),
+        _KeepAliveTab(child: taxPlanningTab),
+        _KeepAliveTab(child: managementTab),
       ],
     );
+  }
+}
+
+/// Keeps a TabBarView child alive across tab switches so its State (and any
+/// initState API calls — projections, tax planning, etc.) only fires once.
+/// Without this, every click of Projections or Tax planning re-fetched its
+/// data, which the user perceives as a sluggish tab switch.
+class _KeepAliveTab extends StatefulWidget {
+  final Widget child;
+  const _KeepAliveTab({required this.child});
+
+  @override
+  State<_KeepAliveTab> createState() => _KeepAliveTabState();
+}
+
+class _KeepAliveTabState extends State<_KeepAliveTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }
 
