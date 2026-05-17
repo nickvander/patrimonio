@@ -136,11 +136,20 @@ pub async fn validate_and_touch(db: &PgPool, raw_token: &str) -> Result<Option<V
         return Ok(None);
     }
 
-    sqlx::query("UPDATE user_sessions SET last_seen_at = NOW() WHERE id = $1")
-        .bind(session_id)
-        .execute(db)
-        .await
-        .map_err(|e| anyhow!("validate_and_touch touch: {}", e))?;
+    // Throttle the write to once per minute. Every authenticated
+    // request validates the session, so without the predicate we'd
+    // emit one UPDATE per request — write amplification that
+    // serializes on the row under load.
+    sqlx::query(
+        "UPDATE user_sessions
+            SET last_seen_at = NOW()
+          WHERE id = $1
+            AND last_seen_at < NOW() - INTERVAL '1 minute'",
+    )
+    .bind(session_id)
+    .execute(db)
+    .await
+    .map_err(|e| anyhow!("validate_and_touch touch: {}", e))?;
 
     Ok(Some(ValidatedSession {
         session_id,

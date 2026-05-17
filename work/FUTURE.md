@@ -402,3 +402,96 @@ This is a real feature, not a small change. Three-side implementation:
 ### Rollback
 
 Each side reverts cleanly: drop the `passkey_credentials` table (migration is idempotent on the DROP side), revert the Rust endpoint module, remove the frontend buttons + JS interop. No data migration needed because passkeys are additive — password sign-in keeps working untouched.
+
+---
+
+## Security + performance audit — deferred follow-ups (May 17 2026)
+
+> Items raised by the May 17 audit (commit context: `34c47a7`'s direct successor) that did NOT land in the same PR. Each one is scoped so the next agent can pick it up cold.
+
+### Plaid webhook JWT verification
+
+**Tracking:** This section. **Audit ID:** H3 (partial).
+**Status:** Webhook endpoint was moved to the public router and refuses every request that lacks a `Plaid-Verification` header. Signature *validation* is still TODO — see `backend/src/api/institutions.rs:plaid_webhook`. Until landed the webhook is unreachable in practice (which is the safe default).
+
+**Plan:**
+1. Fetch and cache Plaid's signing key from `POST /webhook_verification_key/get` (per-key-id, refresh on rotation).
+2. ES256-verify the JWT in `Plaid-Verification`, where the JWT body is the SHA-256 of the raw HTTP body. `jsonwebtoken` crate handles this.
+3. Reject if `iat` is more than 5 minutes old (replay window).
+4. Remove the early-return guard in `plaid_webhook` and let the legacy logic run.
+
+### Multi-user data model (IDOR latency)
+
+**Tracking:** This section. **Audit ID:** M7.
+**Status:** Today the schema is single-user — `accounts`, `institutions`, `transactions`, `holdings`, `balance_snapshots` have no `user_id` column. Every "by id" handler in `accounts.rs`, `institutions.rs`, `imports.rs`, `dashboard.rs` therefore lacks an ownership predicate. **Do NOT create a second `users` row until the columns + predicates land**, or it becomes cross-tenant data exposure with no further code change.
+
+**Plan:**
+1. Migration: add `user_id UUID REFERENCES users(id) ON DELETE CASCADE` to every per-user table, NULLable at first.
+2. Backfill: assign all existing rows to the sole `users` row.
+3. Migration: `ALTER COLUMN user_id SET NOT NULL`.
+4. Code: in every handler that takes `Path<Uuid>`, fetch with `WHERE id = $1 AND user_id = $auth`. The audit lists every site to update.
+5. Drop the multi-user banner from `OVERVIEW.md` once verified.
+
+### CSRF defence-in-depth
+
+**Tracking:** This section. **Audit ID:** H4.
+**Status:** Today protected by `SameSite=Lax` + no GET routes with side effects + `withCredentials` CORS allow-listing. A regression in any of those three would expose us.
+
+**Plan:** Require a `X-Requested-With: fetch` header on every authed mutating route (POST/PUT/PATCH/DELETE). The frontend already uses fetch-equivalents; just add the header in `api_service.dart` and reject server-side when missing. Cheap, two-line per side.
+
+### Rate-limit hardening
+
+**Tracking:** This section. **Audit ID:** M2.
+**Status:** Per-username threshold is 5/min, per-IP 15/min; without `X-Forwarded-For` (no trusted proxy in dev) the IP path is skipped. An attacker with one valid username can still spray 5 passwords/min indefinitely.
+
+**Plan:** Add a global anonymous-failure counter + an unconditional `tokio::time::sleep(rand 50–150 ms)` on every failed verify. Optional: exponential backoff per-username (5, 10, 30, 60, 120 s).
+
+### Trusted-proxy aware `client_ip`
+
+**Tracking:** This section. **Audit ID:** L4.
+**Status:** `client_ip` honours `X-Forwarded-For` / `X-Real-IP` unconditionally. With no upstream proxy this lets an attacker spoof their IP and evade per-IP rate-limit math.
+
+**Plan:** Take `ip` from the TCP peer by default; only honour the headers when the peer is in a `TRUSTED_PROXY_CIDRS` env-configured allow-list (likely just `127.0.0.1` + the docker bridge in our case).
+
+### HIBP / breached-password check
+
+**Tracking:** This section. **Audit ID:** L3.
+**Status:** Password policy enforces length only (12+ chars, ≤256). A user who picks `correcthorse123` passes today.
+
+**Plan:** Either ship an embedded top-100k bloom (~80 KB) loaded at startup, or call HIBP's k-anonymity range API on signup + change-password. The bloom is simpler and avoids the network round-trip on the hot path.
+
+### Streaming CSV export
+
+**Tracking:** This section. **Audit ID:** P4.
+**Status:** `export_transactions_csv` builds the full CSV into a `String` before responding. Memory spike on large exports.
+
+**Plan:** Use `axum::body::Body::from_stream` with a `tokio_stream::wrappers::ReceiverStream` fed by a `tokio::spawn`'d task that writes rows one at a time.
+
+### Net-worth aggregation in SQL
+
+**Tracking:** This section. **Audit ID:** P5.
+**Status:** `net_worth_history` walks a `BTreeMap` in Rust to bucket per-institution. Fine at today's scale; will dominate at >1 year × dozens of institutions.
+
+**Plan:** Replace with a single `jsonb_object_agg` query in the DB.
+
+### Connection-pool size
+
+**Tracking:** This section. **Audit ID:** P7.
+**Status:** `DATABASE_MAX_CONNECTIONS` defaults to 5 in `.env.example`. The webapp + the daily-snapshot cron + the manual-sync trigger can each consume a connection; one burst (e.g. an interactive sync + dashboard load) and the pool blocks.
+
+**Plan:** Default to 20 for the API container. The cron's single connection is negligible. Already bumped in the audit-driven commit.
+
+### WebAuthn `localhost` rp_id rewrite
+
+**Tracking:** This section. **Audit ID:** M8.
+**Status:** The local-dev rewrite collapses `127.0.0.1` to `localhost` for the WebAuthn rp_id. Passkeys registered against `localhost` won't work if the user later types `127.0.0.1` into the address bar. The audit flagged this as a "fail loud, don't silently rewrite" preference.
+
+**Defer rationale:** Until we hit a real ambiguity (user complaining "my passkey doesn't work"), the rewrite is the lower-friction default — it matches the standard browser behaviour for the localhost exception. Revisit if anyone reports the gotcha.
+
+### Encrypt webauthn-rs flow state at rest in Redis
+
+**Tracking:** This section. **Audit ID:** Dependency observation.
+**Status:** The `danger-allow-state-serialisation` feature is enabled to round-trip the per-flow `PasskeyRegistration` / `PasskeyAuthentication` state through Redis. A Redis dump (e.g. from the bind-to-0.0.0.0 misconfiguration we just plugged, or a snapshot leak) would let an attacker replay an in-flight registration.
+
+**Plan:** AEAD-encrypt the state with `ENCRYPTION_KEY` before `SETEX`. The challenge is short-TTL (5 min) so the blast radius is small; this is hardening, not urgent.
+

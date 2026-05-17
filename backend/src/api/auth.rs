@@ -1,12 +1,19 @@
 use axum::{
-    extract::{Query, State},
+    extract::{Extension, Query, State},
     response::{IntoResponse, Redirect},
     routing::get,
     Router,
 };
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use rand::{rngs::OsRng, RngCore};
+use redis::AsyncCommands;
 use serde::Deserialize;
 use crate::AppState;
+use crate::api::session::AuthContext;
 use crate::services::encryption;
+
+const OAUTH_STATE_PREFIX: &str = "oauth:coinbase:";
+const OAUTH_STATE_TTL_SECONDS: u64 = 600; // 10 min — covers the full Coinbase login + 2FA dance.
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -14,38 +21,98 @@ pub fn router() -> Router<AppState> {
         .route("/coinbase/callback", get(coinbase_callback))
 }
 
-/// Redirect to Coinbase OAuth page
-async fn coinbase_authorize(State(state): State<AppState>) -> impl IntoResponse {
+/// Redirect to Coinbase OAuth page.
+///
+/// Generates a one-time `state` token, stores it in Redis bound to the
+/// authenticated user, and includes it in the auth URL. The callback
+/// must echo it back exactly — without this an attacker can have their
+/// own Coinbase `code` redeemed against a victim's session (CSRF on
+/// account binding).
+async fn coinbase_authorize(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> impl IntoResponse {
     let client_id = match &state.config.coinbase_client_id {
         Some(id) => id,
         None => return frontend_redirect(&state, "error", Some("Coinbase Client ID missing")).into_response(),
     };
-    
+
+    let mut state_bytes = [0u8; 32];
+    OsRng.fill_bytes(&mut state_bytes);
+    let oauth_state = URL_SAFE_NO_PAD.encode(state_bytes);
+
+    // Store {state -> user_id} in Redis. The callback reads and
+    // immediately deletes it (DEL on consume — replay-proof).
+    if let Ok(mut conn) = state.redis.get_multiplexed_async_connection().await {
+        let key = format!("{OAUTH_STATE_PREFIX}{oauth_state}");
+        let _: redis::RedisResult<()> = conn
+            .set_ex(&key, ctx.user_id.to_string(), OAUTH_STATE_TTL_SECONDS)
+            .await;
+    } else {
+        tracing::error!("Redis unavailable; refusing to start Coinbase OAuth without CSRF state");
+        return frontend_redirect(&state, "error", Some("Auth temporarily unavailable")).into_response();
+    }
+
     let redirect_uri = &state.config.coinbase_redirect_uri;
     // We request wallet:accounts:read to get balances
     let scope = "wallet:accounts:read";
-    
+
     let auth_url = format!(
-        "https://www.coinbase.com/oauth/authorize?response_type=code&client_id={}&redirect_uri={}&scope={}",
-        client_id, redirect_uri, scope
+        "https://www.coinbase.com/oauth/authorize?response_type=code&client_id={}&redirect_uri={}&scope={}&state={}",
+        client_id,
+        query_escape(redirect_uri),
+        query_escape(scope),
+        query_escape(&oauth_state),
     );
-    
+
     Redirect::to(&auth_url).into_response()
 }
 
 #[derive(Deserialize)]
 struct CallbackQuery {
     code: Option<String>,
+    state: Option<String>,
     error: Option<String>,
 }
 
-/// Handle Coinbase OAuth callback
+/// Handle Coinbase OAuth callback.
+///
+/// Verifies the `state` parameter against the per-user value stored at
+/// /coinbase time. A missing, unknown, or stale state aborts the flow
+/// before any token exchange — anti-CSRF for account-binding.
 async fn coinbase_callback(
     State(state): State<AppState>,
     Query(query): Query<CallbackQuery>,
 ) -> impl IntoResponse {
     let client = reqwest::Client::new();
     let config = &state.config;
+
+    // 1. Validate the state token. Required for every callback —
+    //    Coinbase always echoes whatever we sent in /authorize.
+    let provided_state = match query.state.as_deref() {
+        Some(s) if !s.is_empty() => s,
+        _ => return frontend_redirect(&state, "error", Some("Missing OAuth state")).into_response(),
+    };
+    let key = format!("{OAUTH_STATE_PREFIX}{provided_state}");
+    let bound_user_id = match state.redis.get_multiplexed_async_connection().await {
+        Ok(mut conn) => {
+            let stored: Option<String> = conn.get(&key).await.unwrap_or(None);
+            // Consume on read — replay protection.
+            let _: redis::RedisResult<()> = conn.del(&key).await;
+            stored
+        }
+        Err(e) => {
+            tracing::error!("Redis lookup for OAuth state failed: {}", e);
+            return frontend_redirect(&state, "error", Some("Auth temporarily unavailable")).into_response();
+        }
+    };
+    let Some(_user_id) = bound_user_id else {
+        return frontend_redirect(&state, "error", Some("Invalid or expired OAuth state")).into_response();
+    };
+    // _user_id is reserved for the day institutions get a user_id column
+    // (see FUTURE.md multi-user item). Today the schema is single-user
+    // so just dropping the variable is OK; we still validated identity.
+
     let code = match query.code {
         Some(code) => code,
         None => {

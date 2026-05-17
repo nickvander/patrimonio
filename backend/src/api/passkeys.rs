@@ -123,6 +123,10 @@ pub struct RegisterFinishRequest {
     /// Optional human-readable label the user picked ("iPhone 15",
     /// "Yubikey 5C"). Cleaned + length-checked on the server.
     pub nickname: Option<String>,
+    /// Browser-reported authenticator class: "platform" (Face ID /
+    /// Touch ID / Windows Hello) or "cross-platform" (USB / NFC
+    /// hardware key). Display hint only — server never branches on it.
+    pub authenticator_attachment: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -131,6 +135,10 @@ pub struct PasskeySummary {
     pub nickname: Option<String>,
     pub created_at: DateTime<Utc>,
     pub last_used_at: Option<DateTime<Utc>>,
+    /// "platform" / "cross-platform" / null. Drives the row icon
+    /// (phone biometric vs hardware security key) on the Security
+    /// screen.
+    pub authenticator_attachment: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -229,14 +237,26 @@ async fn register_finish(
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .map(|s| s.chars().take(64).collect::<String>());
+    // Whitelist to known spec values so a malicious client can't seed
+    // arbitrary strings into the column the UI renders.
+    let attachment = body
+        .authenticator_attachment
+        .as_deref()
+        .and_then(|s| match s {
+            "platform" | "cross-platform" => Some(s.to_string()),
+            _ => None,
+        });
 
     let id: Uuid = sqlx::query_scalar(
         r#"
-        INSERT INTO passkey_credentials (user_id, credential_id, passkey_json, nickname)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO passkey_credentials
+            (user_id, credential_id, passkey_json, nickname, authenticator_attachment)
+        VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (credential_id) DO UPDATE
-            SET passkey_json = EXCLUDED.passkey_json,
-                nickname     = COALESCE(EXCLUDED.nickname, passkey_credentials.nickname)
+            SET passkey_json             = EXCLUDED.passkey_json,
+                nickname                 = COALESCE(EXCLUDED.nickname, passkey_credentials.nickname),
+                authenticator_attachment = COALESCE(EXCLUDED.authenticator_attachment,
+                                                    passkey_credentials.authenticator_attachment)
         RETURNING id
         "#,
     )
@@ -244,6 +264,7 @@ async fn register_finish(
     .bind(&credential_id)
     .bind(&passkey_json)
     .bind(&nickname)
+    .bind(&attachment)
     .fetch_one(&state.db)
     .await
     .map_err(internal)?;
@@ -260,6 +281,7 @@ async fn register_finish(
         nickname,
         created_at,
         last_used_at: None,
+        authenticator_attachment: attachment,
     }))
 }
 
@@ -461,9 +483,15 @@ async fn list_passkeys(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Result<Json<Vec<PasskeySummary>>, ApiError> {
-    let rows: Vec<(Uuid, Option<String>, DateTime<Utc>, Option<DateTime<Utc>>)> = sqlx::query_as(
+    let rows: Vec<(
+        Uuid,
+        Option<String>,
+        DateTime<Utc>,
+        Option<DateTime<Utc>>,
+        Option<String>,
+    )> = sqlx::query_as(
         r#"
-        SELECT id, nickname, created_at, last_used_at
+        SELECT id, nickname, created_at, last_used_at, authenticator_attachment
         FROM passkey_credentials
         WHERE user_id = $1
         ORDER BY created_at DESC
@@ -476,12 +504,17 @@ async fn list_passkeys(
 
     Ok(Json(
         rows.into_iter()
-            .map(|(id, nickname, created_at, last_used_at)| PasskeySummary {
-                id,
-                nickname,
-                created_at,
-                last_used_at,
-            })
+            .map(
+                |(id, nickname, created_at, last_used_at, authenticator_attachment)| {
+                    PasskeySummary {
+                        id,
+                        nickname,
+                        created_at,
+                        last_used_at,
+                        authenticator_attachment,
+                    }
+                },
+            )
             .collect(),
     ))
 }

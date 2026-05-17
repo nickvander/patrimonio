@@ -227,7 +227,20 @@ async fn upload_handler(
             file_name,
             file_data.len()
         );
-        match parser::detect_and_parse(&file_name, &file_data, password.as_deref()) {
+        // detect_and_parse runs qpdf + lopdf synchronously, both of
+        // which are CPU- and disk-bound and would block the tokio
+        // worker for the duration of the parse. spawn_blocking moves
+        // it to the dedicated blocking pool so other requests keep
+        // making progress.
+        let file_name_clone = file_name.clone();
+        let pwd_owned = password.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            parser::detect_and_parse(&file_name_clone, &file_data, pwd_owned.as_deref())
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("parse task join: {}", e))
+        .and_then(|r| r);
+        match result {
             Ok(mut txs) => {
                 success_files.push(file_name);
                 all_transactions.append(&mut txs);

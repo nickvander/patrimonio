@@ -26,7 +26,7 @@ services:
       redis:
         condition: service_started
     environment:
-      DATABASE_URL: postgres://patrimonio:patrimonio@host.docker.internal:${POSTGRES_PORT:-5433}/patrimonio
+      DATABASE_URL: postgres://patrimonio:${POSTGRES_PASSWORD:-patrimonio}@host.docker.internal:${POSTGRES_PORT:-5433}/patrimonio
       REDIS_URL: redis://host.docker.internal:${REDIS_PORT:-6380}
       PLAID_CLIENT_ID: ${PLAID_CLIENT_ID:-}
       PLAID_SECRET: ${PLAID_SECRET:-}
@@ -38,17 +38,36 @@ services:
       COINBASE_REDIRECT_URI: ${COINBASE_REDIRECT_URI:-http://localhost:8080/api/auth/coinbase/callback}
       FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
-      RUST_LOG: patrimonio=debug,tower_http=debug
+      # Local dev uses plain http://localhost where Secure cookies
+      # would be silently rejected. Prod sets COOKIE_SECURE=true (also
+      # auto-on when FRONTEND_BASE_URL is https). Production
+      # docker-compose overrides should drop this override.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # Default info; flip to debug only for active debugging — debug
+      # can write request/response metadata that includes auth headers
+      # or other sensitive context into stdout.
+      RUST_LOG: ${RUST_LOG:-patrimonio=info,tower_http=info}
     restart: unless-stopped
 
   # PostgreSQL database
   postgres:
     image: postgres:17-alpine
     ports:
-      - "${POSTGRES_PORT:-5433}:5432"
+      # Default 0.0.0.0 because the api container reaches postgres via
+      # host.docker.internal:5433, which only resolves when the port is
+      # bound on the host's externally-visible interface. If you run
+      # the api outside docker (cargo run on the host), 127.0.0.1 is
+      # safer — set POSTGRES_BIND=127.0.0.1 in .env. In prod, ALWAYS
+      # set POSTGRES_BIND=127.0.0.1 (or remove the host port entirely
+      # and let the api join the docker network).
+      - "${POSTGRES_BIND:-0.0.0.0}:${POSTGRES_PORT:-5433}:5432"
     environment:
       POSTGRES_USER: patrimonio
-      POSTGRES_PASSWORD: patrimonio
+      # Default is "patrimonio" to keep local dev one-command-up; the
+      # api binary logs a loud warning at boot if the live password
+      # equals the default, so a prod deploy that forgot to override
+      # gets caught on the first log scrape. See .env.example.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-patrimonio}
       POSTGRES_DB: patrimonio
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -62,7 +81,9 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "${REDIS_PORT:-6380}:6379"
+      # Same caveat as Postgres above. Default 0.0.0.0 so the api
+      # container reaches redis via host.docker.internal.
+      - "${REDIS_BIND:-0.0.0.0}:${REDIS_PORT:-6380}:6379"
     volumes:
       - redisdata:/data
     command: redis-server --appendonly yes

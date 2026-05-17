@@ -354,11 +354,16 @@ pub struct TransactionResponse {
     pub institution_name: String,
 }
 
-/// Get all historical transactions for a specific account
+/// Get historical transactions for a specific account. Capped at
+/// `MAX_ACCOUNT_TRANSACTIONS` rows so a long-lived account doesn't
+/// return tens of thousands and OOM the renderer. The frontend's
+/// account view shows recent history; a future pagination follow-up
+/// will let the user page beyond this cap.
 async fn get_account_transactions(
     State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
 ) -> Json<Vec<TransactionResponse>> {
+    const MAX_ACCOUNT_TRANSACTIONS: i64 = 1000;
     let rows = sqlx::query(
         r#"
         SELECT t.id, t.date, t.description, t.amount, t.currency, t.category,
@@ -371,9 +376,11 @@ async fn get_account_transactions(
         JOIN institutions i ON a.institution_id = i.id
         WHERE t.account_id = $1
         ORDER BY t.date DESC, t.created_at DESC
+        LIMIT $2
         "#
     )
     .bind(id)
+    .bind(MAX_ACCOUNT_TRANSACTIONS)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();

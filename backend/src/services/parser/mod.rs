@@ -12,29 +12,50 @@ use crate::models::import::ParsedTransaction;
 use anyhow::{Result, anyhow};
 use lopdf::Document;
 use tracing::{debug, info};
-use std::process::Command;
-use std::fs;
 use std::io::Write;
+use std::process::{Command, Stdio};
+use std::fs;
 
+/// Decrypt a password-protected PDF using qpdf.
+///
+/// The password is piped to qpdf via stdin (`--password-file=-`)
+/// rather than passed on argv — argv is world-readable via
+/// `/proc/$pid/cmdline` on Linux, which would let any other process on
+/// the host read the user's PDF password while qpdf runs.
 fn try_decrypt_with_qpdf(data: &[u8], password: &str) -> Result<Vec<u8>> {
     let temp_dir = std::env::temp_dir();
     let in_path = temp_dir.join(format!("in_{}.pdf", uuid::Uuid::new_v4()));
     let out_path = temp_dir.join(format!("out_{}.pdf", uuid::Uuid::new_v4()));
 
-    let mut file = fs::File::create(&in_path)?;
-    file.write_all(data)?;
+    {
+        let mut file = fs::File::create(&in_path)?;
+        file.write_all(data)?;
+    }
 
-    let status = Command::new("qpdf")
-        .arg(format!("--password={}", password))
+    let mut child = Command::new("qpdf")
+        .arg("--password-file=-")
         .arg("--decrypt")
         .arg(&in_path)
         .arg(&out_path)
-        .status()
-        .map_err(|e| anyhow!("Failed to run qpdf command: {}", e))?;
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| anyhow!("Failed to spawn qpdf: {}", e))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        // Best effort: a write failure here usually means qpdf already
+        // exited (e.g. binary missing). We propagate via .wait() below.
+        let _ = stdin.write_all(password.as_bytes());
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| anyhow!("Failed to wait on qpdf: {}", e))?;
 
     let _ = fs::remove_file(&in_path);
 
-    if !status.success() {
+    if !output.status.success() {
         let _ = fs::remove_file(&out_path);
         return Err(anyhow!("INCORRECT_PASSWORD"));
     }

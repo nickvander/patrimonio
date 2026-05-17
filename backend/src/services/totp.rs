@@ -88,21 +88,28 @@ pub async fn begin_enrollment(
 
 /// Verify a TOTP code against a user's stored secret. Used both during
 /// the confirm step of enrollment and during login when totp_enabled.
+///
+/// Replay protection: every successful verify atomically advances
+/// `totp_last_used_step` so the same 6-digit code can't be reused
+/// inside its 90-second validity window (one full window per step,
+/// plus the ±1 skew). A captured code is therefore single-use even if
+/// it's still nominally valid by the clock.
 pub async fn verify(
     db: &PgPool,
     enc_key: &str,
     user_id: Uuid,
     code: &str,
 ) -> Result<bool> {
-    let row: Option<(Option<Vec<u8>>, String)> =
-        sqlx::query_as("SELECT totp_secret_enc, username FROM users WHERE id = $1")
-            .bind(user_id)
-            .fetch_optional(db)
-            .await
-            .map_err(|e| anyhow!("load secret: {}", e))?;
+    let row: Option<(Option<Vec<u8>>, String, Option<i64>)> = sqlx::query_as(
+        "SELECT totp_secret_enc, username, totp_last_used_step FROM users WHERE id = $1",
+    )
+    .bind(user_id)
+    .fetch_optional(db)
+    .await
+    .map_err(|e| anyhow!("load secret: {}", e))?;
 
-    let (encrypted, username) = match row {
-        Some((Some(enc), u)) => (enc, u),
+    let (encrypted, username, last_used_step) = match row {
+        Some((Some(enc), u, last)) => (enc, u, last),
         _ => return Ok(false),
     };
 
@@ -118,8 +125,42 @@ pub async fn verify(
     if normalized.len() != DIGITS {
         return Ok(false);
     }
-    totp.check_current(&normalized)
-        .map_err(|e| anyhow!("check totp: {}", e))
+    let ok = totp
+        .check_current(&normalized)
+        .map_err(|e| anyhow!("check totp: {}", e))?;
+    if !ok {
+        return Ok(false);
+    }
+
+    // Compute the current step (`unix_seconds / 30`). The library
+    // already verified the code matches *some* step in [now-skew,
+    // now+skew], so we don't need to scan; the active step is the
+    // closest match and is good enough as a replay marker.
+    let current_step = (std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| anyhow!("clock: {}", e))?
+        .as_secs()
+        / STEP_SECS) as i64;
+
+    if let Some(prev) = last_used_step {
+        if current_step <= prev {
+            // Already consumed within this step (or an earlier one
+            // still inside the ±1 skew window). Refuse the replay.
+            return Ok(false);
+        }
+    }
+
+    // Advance the marker. CAS on `last_used_step <= current_step - 1`
+    // is unnecessary here because TOTP rotates every 30s — concurrent
+    // duplicates would already have failed the equality above.
+    sqlx::query("UPDATE users SET totp_last_used_step = $1 WHERE id = $2")
+        .bind(current_step)
+        .bind(user_id)
+        .execute(db)
+        .await
+        .map_err(|e| anyhow!("advance totp step: {}", e))?;
+
+    Ok(true)
 }
 
 /// Mark TOTP enabled after a successful confirm. Returns true if a

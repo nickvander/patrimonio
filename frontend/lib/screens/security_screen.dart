@@ -430,8 +430,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
               leading: Icon(Icons.fingerprint),
               title: Text('No passkeys registered'),
               subtitle: Text(
-                'Register your phone or laptop so you can sign in with Face '
-                'ID, Touch ID, or Windows Hello instead of a password.',
+                'Add this device, your phone, or a hardware security key '
+                '(YubiKey, Titan, etc.) so you can sign in with biometrics '
+                'or a tap instead of a password.',
               ),
             ),
           )
@@ -988,13 +989,19 @@ class _PasskeyRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = passkey.nickname?.trim().isNotEmpty == true
         ? passkey.nickname!.trim()
-        : 'Unnamed passkey';
+        : (passkey.isHardwareKey ? 'Hardware security key' : 'Device passkey');
+    // Icon mirrors the authenticator class so the user can tell a phone
+    // biometric ("This iPhone") apart from a roaming key ("YubiKey on
+    // keychain") at a glance.
+    final icon = passkey.isHardwareKey ? Icons.key : Icons.fingerprint;
+    final kind = passkey.isHardwareKey ? 'Hardware key' : 'Platform biometric';
     final subtitleParts = <String>[
+      kind,
       _registered(passkey.createdAt),
       if (_lastUsed(passkey.lastUsedAt) != null) _lastUsed(passkey.lastUsedAt)!,
     ];
     return ListTile(
-      leading: const Icon(Icons.fingerprint),
+      leading: Icon(icon),
       title: Text(title),
       subtitle: Text(subtitleParts.join(' · ')),
       trailing: IconButton(
@@ -1025,14 +1032,14 @@ class _NicknamePromptDialogState extends State<_NicknamePromptDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Name this device'),
+      title: const Text('Name this passkey'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            'Optional label so you can tell this passkey apart from others '
-            'later. Examples: "iPhone 15", "Work laptop".',
+            'Optional label so you can tell this passkey apart later. '
+            'Examples: "iPhone 15", "Work MacBook", "YubiKey on keychain".',
           ),
           const SizedBox(height: 12),
           TextField(
