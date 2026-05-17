@@ -112,3 +112,209 @@ Some directions worth trying (not prescriptive):
 ### Rollback
 
 The migration is staged so each step has its own commit. The riskiest one is step 4 (tooltip surgery on charts) — if it goes wrong the chart still renders but tooltip text might be invisible. Easy to spot and revert.
+
+---
+
+# Backlog handoff — May 2026
+
+> Added by the auth/sessions session that landed `6772561`. The items below are pickup-ready for a fresh agent — each is scoped, has acceptance criteria, and points at the right files. Ordered by impact-per-effort, not by hard dependency. `work/NEXT.md` is stale (dated 2026-05-12, predates everything since auth shipped); refresh it once the next 1–2 of these land.
+
+---
+
+## 1. Better Plaid transaction descriptions
+
+**Status:** Open. **Effort:** ~half day backend + ~2hr frontend. **Impact:** high — affects every transaction row the user sees.
+
+### The problem
+
+Many transaction rows in the dashboard render with vague labels: `Robinhood`, `DISCOVER`, `Miscellaneous Debit`, `Miscellaneous Credit`. Some of this is bank-quality (the user's bank reported the transaction to Plaid with that exact `name`, so there's no enrichment to do), but the sync code is also leaving Plaid enrichment data on the table.
+
+Check the live data first:
+
+```bash
+docker exec patrimonio-postgres-1 psql -U patrimonio -d patrimonio -c "
+  SELECT description, merchant_name, category_detailed, COUNT(*) AS n
+  FROM transactions
+  WHERE merchant_name IS NULL
+     OR description ILIKE '%miscellaneous%'
+  GROUP BY description, merchant_name, category_detailed
+  ORDER BY n DESC LIMIT 30;
+"
+```
+
+### What Plaid actually offers that we're not using
+
+`backend/src/services/sync.rs:368-433` (`insert_or_update_transaction`) currently reads:
+- `tx["name"]` → stored as `description`
+- `tx["merchant_name"]` → stored as `merchant_name` (often null)
+- `tx["personal_finance_category"]["primary"]` and `.detailed`
+
+What's also in the Plaid payload but we ignore:
+- **`original_description`** — the raw bank line, useful as a fallback when `name` is generic. We don't store it at all.
+- **`counterparties[]`** — array of enriched counterparty entities, each with `name`, `type`, `logo_url`, `website`, `confidence_level`. The "right" merchant lives here for many transactions where `merchant_name` is null. Docs: https://plaid.com/docs/api/products/transactions/#transactions-sync-response-added-counterparties
+- **`payment_meta.{ppd_id, reference_number, payer, payee}`** — useful for ACH/wire transactions where the description otherwise reads "ACH DEBIT".
+
+### Plan
+
+1. **Migration:** add `original_description TEXT`, `counterparty_name TEXT`, `counterparty_logo_url TEXT` to `transactions`. New file: `backend/migrations/2026MMDD01_plaid_enrichment.sql`. Backfill not needed — next sync repopulates.
+2. **Backend sync.rs change** (single function, ~30 lines): pull `original_description`, pick the highest-confidence counterparty from `counterparties[]` (filter `confidence_level == "VERY_HIGH"` or `"HIGH"`, take first), and write all three new columns alongside the existing inserts. Keep `description` writing `tx["name"]` for backwards compatibility — the UI will pick the best of the three.
+3. **Frontend display helper:** new `frontend/lib/utils/transaction_display.dart` with `String displayLabel(tx)` that picks `counterparty_name` ?? `merchant_name` ?? (if `description.length < 15 && original_description != null`) `original_description` ?? `description`. Call it from `_buildTransactionRow` in `frontend/lib/widgets/transactions_tab.dart` and from `_showTransactionDetails`. Show the counterparty logo when available.
+4. **UI affordance for the truly-generic cases:** in the transaction detail modal, surface a "Rename" action that writes to a new `user_description` column (parallel to existing `user_category` / `user_notes` — same pattern). For "Miscellaneous Debit" rows there's nothing Plaid can do; let the user override locally.
+
+### Acceptance
+
+- A fresh Plaid sync of a typical dev account stores `counterparty_name` for at least 60% of rows that previously had `merchant_name IS NULL`.
+- The dashboard transaction list visibly improves: rows that used to say "Robinhood" / "Miscellaneous Debit" either show a better label or carry a user-applied override.
+- Existing tests still pass; add at least one integration test that reads a canned Plaid JSON fixture and asserts the enriched fields land in the DB.
+
+---
+
+## 2. FX-aware cost basis & lots
+
+**Status:** Open. **Effort:** 1–2 days. **Impact:** high — bi-national P&L is wrong without it. The deferred Tax Accuracy item from `work/NEXT.md`.
+
+### Why
+
+A US/Mexico investor who bought VTI at $200 (USD 1 ↔ MXN 17.5) and looks at it today at $220 (USD 1 ↔ MXN 19.0) has different P&L expressed in USD vs MXN. The current `holdings` table stores only a flat `cost_basis` in a single currency — that lets the user see USD P&L but understates or overstates the MXN view by 10–20%.
+
+### Plan
+
+1. New table `holding_lots(id, holding_id, acquired_at, qty, cost_per_unit, currency, fx_rate_at_acquisition_to_usd)`. Migration in `backend/migrations/`.
+2. Backend ingestion: Plaid investments returns transactions of type `buy` / `sell` — append a new lot on `buy`, FIFO-deplete on `sell`. New service `services/lots.rs`. Extend `services/sync.rs` to call it from the investments path.
+3. Currency-aware P&L computation in `services/sync.rs` or a new view: for each lot, compute (current_value * current_fx) − (cost_basis * fx_at_acquisition) in both USD and MXN, sum across lots per holding.
+4. Frontend: extend `portfolio_card.dart` to add a "Cost basis (USD)" and "Cost basis (MXN)" pair of columns next to the existing Value column. Show unrealized gain in both currencies.
+
+### Acceptance
+
+- Manual round-trip: synthesize a holding with two lots at different historical FX rates, verify the displayed P&L in MXN ≠ converted-from-USD P&L (because the cost basis was held at a different rate).
+- Existing PortfolioCard tests still pass; add one new test exercising the lot aggregation.
+
+### Note
+
+`work/NEXT.md` defers this until "real transaction and holding data is reliable" (Phase 13). That gate is now met — Phase 13's data-quality work is in `main`.
+
+---
+
+## 3. "What changed since last login" diff banner
+
+**Status:** Open. **Effort:** half day total. **Impact:** medium — high return-visit value.
+
+### Why
+
+`users.last_login_at` already exists. `balance_snapshots` already exists. With those two we can answer "what changed since you were last here" cheaply.
+
+### Plan
+
+Backend: new endpoint `GET /api/dashboard/since-last-login` that returns:
+- New transactions count since `users.last_login_at`
+- Largest absolute balance move (USD), with the account name
+- Any new `sync_status = 'error'` rows
+- Format: `{ new_transactions: 12, largest_move: {account, delta_usd}, sync_errors: [...] }`
+
+Frontend: dismissible banner above NetWorthCard on the Overview tab that surfaces this on first render after login. State managed in `Preferences` so it stays dismissed for that login.
+
+### Acceptance
+
+- Bootstrap a user → make a transaction via the manual entry API → sign out / sign in → banner appears with "1 new transaction".
+- Banner is dismissible and stays dismissed within the same session.
+
+---
+
+## 4. Real-estate and other manual assets
+
+**Status:** Open. **Effort:** half day. **Impact:** medium — affluent users always have these.
+
+### Plan
+
+The `accounts` table already accepts arbitrary `account_type`. Two new types: `real_estate` and `private_equity`. The challenge is value updates — these don't sync automatically. Add a simple UI:
+
+- In Management tab, "Add manual asset" dialog (extending `add_account_dialog.dart`) with `account_type` selector + optional `last_valued_at` + `valuation_notes` text field.
+- Periodic revaluation: a "Revalue" button next to each manual asset that bumps `current_balance` and writes a new `balance_snapshots` row.
+- Surface in NetWorthCard's existing aggregation (already category-aware) — should "just work" once the rows exist.
+
+### Acceptance
+
+- Add a `$500k home` real-estate asset, revalue to $550k a month later, NetWorthCard reflects both points in the history chart.
+
+---
+
+## 5. Multi-user support
+
+**Status:** Deliberately deferred — opens the door to advisor / partner access. ~1–2 days, mostly schema. Owner of the upgrade has to be willing to touch every table.
+
+### Why this is a bigger lift than it looks
+
+Every financial data table currently assumes one user owns everything: `institutions`, `accounts`, `transactions`, `holdings`, `balance_snapshots`, `exchange_rates` (FX is global so this one stays). The `users` / `user_sessions` / `recovery_codes` / `auth_audit` tables are already user-scoped — they were designed for it.
+
+### Plan
+
+1. **Migration**: add `owner_user_id UUID REFERENCES users(id)` to every data table. Backfill to the existing bootstrap user. Add NOT NULL after backfill.
+2. **Every query in `backend/src/api/` and `backend/src/services/`** gains a `WHERE owner_user_id = $N` clause. There are ~60 such queries; this is the bulk of the work.
+3. **Bootstrap stops being one-shot**: change `/api/auth/bootstrap` to allow N users only if invited. Add `invite_tokens` table + `/api/auth/invite` endpoint that emits a one-time signup token. README updates to reflect.
+4. **Roles**: at minimum `owner` vs `read-only`. Plaid linking + account management requires `owner`; an advisor `read-only` user can see net worth and projections but can't edit.
+
+### Acceptance
+
+- A second user can bootstrap with an invite token, see ONLY accounts they own, cannot read another user's transactions.
+- Integration test: create two users, populate distinct accounts, assert `/api/dashboard/overview` returns disjoint data for each.
+
+---
+
+## 6. Production Plaid readiness
+
+**Status:** From `work/NEXT.md` (2026-05-12); still relevant.
+
+### What's actually needed beyond what's done
+
+- Real Plaid `development` or `production` credentials in `.env` (currently `sandbox` works fine).
+- Webhook receiver for `DEFAULT_UPDATE` / `INITIAL_UPDATE` / `TRANSACTIONS_REMOVED` / `ITEM_LOGIN_REQUIRED` — the app polls today, which is fine for sandbox but burns Plaid quota in prod.
+- Reconnect UX when `ITEM_LOGIN_REQUIRED` fires: the existing `getReconnectToken` API call works, but Management tab doesn't surface it prominently enough — currently buried.
+- "Sandbox vs prod" indicator chip in the AppBar so the user knows which environment they're in.
+
+### Acceptance
+
+A real bank account links end-to-end against `production` Plaid, syncs transactions on schedule via webhook (not poll), and survives a forced `ITEM_LOGIN_REQUIRED` test (Plaid sandbox provides this) by surfacing a reconnect CTA.
+
+---
+
+## 7. Backups + deployment runbook
+
+**Status:** From `work/NEXT.md`; still the biggest operational risk. The app is holding real bank credentials in encrypted form, but only on the local Docker volume.
+
+### Minimum viable
+
+- A `scripts/backup.sh` that runs `pg_dump | gpg --encrypt` to a target directory, plus `scripts/restore.sh` that goes the other way. Cron daily.
+- Runbook in `docs/operations.md`: how to restore, how to verify the encryption key is recoverable, how to rotate `ENCRYPTION_KEY` (involves re-encrypting every `api_key_enc` / `api_secret_enc` / `plaid_access_token_enc` / `totp_secret_enc` column).
+- A documented restore drill: build a fresh stack from the backup, verify Plaid tokens still decrypt, verify a login works.
+
+### Acceptance
+
+`./scripts/restore.sh <encrypted-dump>` produces a working dev stack from a backup taken a day prior. Plaid sync still works against the restored data.
+
+---
+
+## 8. Smaller polish wins
+
+Each <1hr, pick up whenever the file is open for another reason:
+
+- **Recovery-codes count warning.** Security screen shows `_unusedRecoveryCodes` count but no warning when low. Add a banner / yellow tile when count drops below 3.
+- **`/api/auth/sessions` show "new since last visit" badge.** Use `users.last_login_at` to flag sessions created since.
+- **Update `work/NEXT.md`.** Stale by ~weeks. Move Phase 11 (Plaid prod) to in-progress status, mark Phase 13 (data quality) done.
+- **`README.md` auth section.** Document TOTP enrollment + recovery codes flow. Currently only bootstrap is documented.
+- **CORS audit.** `ALLOWED_ORIGINS` warning fires if empty but isn't surfaced in `/api/setup/status` — would help during deployment debugging.
+
+---
+
+## What's done already (for context for the new agent)
+
+Don't re-do these — all on `main` as of `6772561`:
+- Full auth: bootstrap, login, logout, change password, recovery codes, TOTP 2FA, audit log, rate limiting.
+- Active sessions UI (list, per-session revoke, sign-out-everywhere).
+- Multi-file statement import (backend + frontend).
+- Assets-vs-liabilities ratio bar on the Overview tab.
+- Parser test rescue: `cargo test --lib` is green (was 14/20 passing, now 20/20).
+
+Test infra ready to lean on:
+- `backend/tests/auth_endpoints.rs` and `backend/tests/auth_recovery_totp.rs` (integration, need `PATRIMONIO_TEST_DATABASE_URL` env var to run).
+- `scripts/smoke.cjs` (API + Playwright walk; covers the bootstrap → dashboard golden path).
+- `/tmp/ui-auth-test.cjs`, `/tmp/ui-recovery-totp-test.cjs`, `/tmp/ui-sessions-test.cjs` — one-off Playwright tests; worth moving into `frontend/test/` if a similar UI flow comes up.
