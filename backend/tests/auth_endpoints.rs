@@ -346,6 +346,199 @@ async fn full_auth_lifecycle() {
 }
 
 #[tokio::test]
+async fn session_management_endpoints() {
+    let Some((app, _pool)) = skip_if_no_db(try_setup().await) else { return };
+
+    // Bootstrap to create the first session.
+    let res = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/auth/bootstrap",
+            &serde_json::json!({
+                "username": "owner",
+                "password": "correcthorsebatterystaple"
+            }),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let token_a = set_cookie_value(res.headers()).expect("bootstrap cookie");
+
+    // Log in twice more from different "browsers" — same user, two
+    // additional sessions. Each login revokes the previous cookie if
+    // the same cookie is presented, so we deliberately don't re-send
+    // token_a here.
+    let res = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/auth/login",
+            &serde_json::json!({"username": "owner", "password": "correcthorsebatterystaple"}),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let token_b = set_cookie_value(res.headers()).expect("login B cookie");
+
+    let res = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/auth/login",
+            &serde_json::json!({"username": "owner", "password": "correcthorsebatterystaple"}),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let token_c = set_cookie_value(res.headers()).expect("login C cookie");
+
+    // GET /api/auth/sessions from token_b — should return all three
+    // sessions, with exactly one flagged as is_current.
+    let res = app
+        .clone()
+        .oneshot(get_request("/api/auth/sessions", Some(&token_b)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    let arr = body.as_array().expect("array");
+    assert_eq!(arr.len(), 3, "expected 3 active sessions, got {}", arr.len());
+    let current_count = arr
+        .iter()
+        .filter(|s| s["is_current"].as_bool() == Some(true))
+        .count();
+    assert_eq!(current_count, 1, "exactly one session must be is_current");
+    // Confirm shape: each row has id, created_at, last_seen_at,
+    // expires_at, is_current.
+    for s in arr {
+        assert!(s["id"].is_string());
+        assert!(s["created_at"].is_string());
+        assert!(s["last_seen_at"].is_string());
+        assert!(s["expires_at"].is_string());
+        assert!(s["is_current"].is_boolean());
+    }
+
+    // Find the session ID owned by token_a (NOT the current one for
+    // token_b's view). We can identify it as the only non-current
+    // session whose ID is in the list — pick the first non-current.
+    let target_session_id = arr
+        .iter()
+        .find(|s| s["is_current"].as_bool() == Some(false))
+        .and_then(|s| s["id"].as_str())
+        .expect("at least one non-current session")
+        .to_string();
+
+    // Revoke that single session via DELETE /api/auth/sessions/{id}.
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::DELETE)
+                .uri(format!("/api/auth/sessions/{target_session_id}"))
+                .header(header::COOKIE, cookie_header(&token_b))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+
+    // The session list now has 2 rows; the revoked id is gone.
+    let res = app
+        .clone()
+        .oneshot(get_request("/api/auth/sessions", Some(&token_b)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    let arr = body.as_array().expect("array");
+    assert_eq!(arr.len(), 2);
+    assert!(arr.iter().all(|s| s["id"].as_str() != Some(&target_session_id)));
+
+    // Refusing to revoke the current session — even via DELETE — is a
+    // 400 so the user has to use /logout instead. (Identify the
+    // current session from the list.)
+    let res = app
+        .clone()
+        .oneshot(get_request("/api/auth/sessions", Some(&token_b)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    let current_id = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["is_current"].as_bool() == Some(true))
+        .and_then(|s| s["id"].as_str())
+        .expect("current session in list")
+        .to_string();
+
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::DELETE)
+                .uri(format!("/api/auth/sessions/{current_id}"))
+                .header(header::COOKIE, cookie_header(&token_b))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::BAD_REQUEST,
+        "revoking your own session must require POST /logout"
+    );
+
+    // POST /api/auth/sessions/revoke-others from token_b: should
+    // revoke token_c, leave token_b alive, and return revoked=1.
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/auth/sessions/revoke-others")
+                .header(header::COOKIE, cookie_header(&token_b))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["revoked"], 1);
+
+    // token_b still works
+    let res = app
+        .clone()
+        .oneshot(get_request("/api/auth/me", Some(&token_b)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // token_c no longer works
+    let res = app
+        .clone()
+        .oneshot(get_request("/api/auth/me", Some(&token_c)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+    // Sessions list now reports exactly 1 entry (the current one).
+    let res = app
+        .clone()
+        .oneshot(get_request("/api/auth/sessions", Some(&token_b)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body.as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
 async fn rate_limit_kicks_in_after_repeated_failures() {
     let Some((app, _pool)) = skip_if_no_db(try_setup().await) else { return };
 

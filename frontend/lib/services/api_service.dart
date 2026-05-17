@@ -208,6 +208,40 @@ class ApiService {
     }
   }
 
+  /// One row of the Active Sessions list. Mirrors the
+  /// ActiveSessionView Rust struct.
+  Future<List<ActiveSession>> listSessions() async {
+    final res = await _get(Uri.parse('$_baseUrl/auth/sessions'));
+    if (res.statusCode == 200) {
+      final body = json.decode(res.body) as List<dynamic>;
+      return body
+          .map((e) => ActiveSession.fromJson(e as Map<String, dynamic>))
+          .toList();
+    }
+    throw _errorFromBody(res, fallback: 'Failed to load sessions');
+  }
+
+  Future<void> revokeSession(String sessionId) async {
+    final res = await _delete(
+      Uri.parse('$_baseUrl/auth/sessions/$sessionId'),
+    );
+    if (res.statusCode != 204) {
+      _maybeUnauthorized(res);
+      throw _errorFromBody(res, fallback: 'Failed to revoke session');
+    }
+  }
+
+  /// Returns the number of OTHER sessions that were revoked. The
+  /// current cookie stays alive so the page keeps working.
+  Future<int> revokeOtherSessions() async {
+    final res = await _post(Uri.parse('$_baseUrl/auth/sessions/revoke-others'));
+    if (res.statusCode == 200) {
+      final body = json.decode(res.body) as Map<String, dynamic>;
+      return (body['revoked'] as num).toInt();
+    }
+    throw _errorFromBody(res, fallback: 'Failed to revoke other sessions');
+  }
+
   Future<void> logout() async {
     final res = await _client.post(Uri.parse('$_baseUrl/auth/logout'));
     if (res.statusCode != 204 && res.statusCode != 200) {

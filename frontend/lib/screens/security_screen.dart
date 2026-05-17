@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/recovery_codes_dialog.dart';
@@ -19,6 +20,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
   bool _loading = true;
   AuthUser? _user;
   int? _unusedRecoveryCodes;
+  List<ActiveSession>? _sessions;
   String? _error;
 
   @override
@@ -38,10 +40,12 @@ class _SecurityScreenState extends State<SecurityScreen> {
       await AuthService.instance.refreshStatus();
       final user = AuthService.instance.current.user;
       final count = await _api.recoveryCodesCount();
+      final sessions = await _api.listSessions();
       if (!mounted) return;
       setState(() {
         _user = user;
         _unusedRecoveryCodes = count;
+        _sessions = sessions;
       });
     } catch (e) {
       if (mounted) {
@@ -161,6 +165,144 @@ class _SecurityScreenState extends State<SecurityScreen> {
     }
   }
 
+  Future<void> _revokeSession(ActiveSession session) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Sign out this session?'),
+        content: Text(
+          'This will sign out the device "${_describeSession(session)}" '
+          'immediately. They will have to enter the password (and TOTP) '
+          'to sign in again.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await _api.revokeSession(session.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Session signed out.')),
+        );
+        await _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: ${e.toString().replaceFirst('Exception: ', '')}')),
+        );
+      }
+    }
+  }
+
+  Future<void> _revokeOtherSessions() async {
+    final others = (_sessions ?? const <ActiveSession>[])
+        .where((s) => !s.isCurrent)
+        .length;
+    if (others == 0) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Sign out everywhere else?'),
+        content: Text(
+          'This will end $others other session${others == 1 ? '' : 's'} '
+          'immediately. This device will stay signed in.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Sign out others'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final n = await _api.revokeOtherSessions();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              n == 1
+                  ? '1 other session signed out.'
+                  : '$n other sessions signed out.',
+            ),
+          ),
+        );
+        await _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed: ${e.toString().replaceFirst('Exception: ', '')}')),
+        );
+      }
+    }
+  }
+
+  /// One-line label for a session row. We don't ship a full
+  /// user-agent parser — most users see strings like "Chrome on
+  /// macOS / 73.42.0.1", which is good enough to recognize an
+  /// unfamiliar device.
+  String _describeSession(ActiveSession s) {
+    final ua = (s.userAgent ?? '').trim();
+    final browser = _browserName(ua);
+    final os = _osName(ua);
+    final parts = <String>[];
+    if (browser.isNotEmpty) parts.add(browser);
+    if (os.isNotEmpty) parts.add('on $os');
+    if (parts.isEmpty) parts.add(ua.isEmpty ? 'Unknown device' : ua.substring(0, ua.length > 40 ? 40 : ua.length));
+    if (s.ipAddress != null && s.ipAddress!.isNotEmpty) {
+      parts.add('· ${s.ipAddress}');
+    }
+    return parts.join(' ');
+  }
+
+  String _browserName(String ua) {
+    final lower = ua.toLowerCase();
+    if (lower.contains('edg/')) return 'Edge';
+    if (lower.contains('chrome/') && !lower.contains('chromium/')) return 'Chrome';
+    if (lower.contains('firefox/')) return 'Firefox';
+    if (lower.contains('safari/') && !lower.contains('chrome/')) return 'Safari';
+    if (lower.contains('curl/')) return 'curl';
+    if (lower.contains('playwright')) return 'Playwright';
+    return '';
+  }
+
+  String _osName(String ua) {
+    final lower = ua.toLowerCase();
+    if (lower.contains('iphone') || lower.contains('ipad')) return 'iOS';
+    if (lower.contains('android')) return 'Android';
+    if (lower.contains('mac os') || lower.contains('macintosh')) return 'macOS';
+    if (lower.contains('windows')) return 'Windows';
+    if (lower.contains('linux')) return 'Linux';
+    return '';
+  }
+
+  String _formatLastSeen(DateTime t) {
+    final now = DateTime.now();
+    final diff = now.difference(t);
+    if (diff.inMinutes < 1) return 'Active just now';
+    if (diff.inMinutes < 60) return 'Active ${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return 'Active ${diff.inHours}h ago';
+    if (diff.inDays < 30) return 'Active ${diff.inDays}d ago';
+    return 'Active on ${DateFormat.yMMMd().format(t.toLocal())}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -231,9 +373,113 @@ class _SecurityScreenState extends State<SecurityScreen> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 16),
+                    _buildSessionsSection(),
                   ],
                 ),
     );
+  }
+
+  Widget _buildSessionsSection() {
+    final sessions = _sessions ?? const <ActiveSession>[];
+    final otherCount = sessions.where((s) => !s.isCurrent).length;
+    final scheme = Theme.of(context).colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _section('Active sessions'),
+            if (otherCount > 0)
+              TextButton.icon(
+                onPressed: _revokeOtherSessions,
+                icon: const Icon(Icons.logout, size: 16),
+                label: Text(
+                  otherCount == 1
+                      ? 'Sign out 1 other'
+                      : 'Sign out $otherCount others',
+                ),
+              ),
+          ],
+        ),
+        if (sessions.isEmpty)
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.devices_other),
+              title: Text('No active sessions'),
+              subtitle: Text(
+                'You should at least see this device. Refresh to retry.',
+              ),
+            ),
+          )
+        else
+          Card(
+            child: Column(
+              children: [
+                for (var i = 0; i < sessions.length; i++) ...[
+                  if (i > 0) const Divider(height: 1),
+                  ListTile(
+                    leading: Icon(
+                      _iconForUserAgent(sessions[i].userAgent),
+                      color: sessions[i].isCurrent ? scheme.primary : null,
+                    ),
+                    title: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _describeSession(sessions[i]),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (sessions[i].isCurrent)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: scheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              'This device',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: scheme.onPrimaryContainer,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    subtitle: Text(_formatLastSeen(sessions[i].lastSeenAt)),
+                    trailing: sessions[i].isCurrent
+                        ? null
+                        : IconButton(
+                            tooltip: 'Sign out this session',
+                            icon: const Icon(Icons.close),
+                            onPressed: () => _revokeSession(sessions[i]),
+                          ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  IconData _iconForUserAgent(String? ua) {
+    final lower = (ua ?? '').toLowerCase();
+    if (lower.contains('iphone') || lower.contains('android')) {
+      return Icons.smartphone;
+    }
+    if (lower.contains('ipad')) return Icons.tablet;
+    if (lower.contains('mac') || lower.contains('windows') || lower.contains('linux')) {
+      return Icons.computer;
+    }
+    return Icons.devices_other;
   }
 
   Widget _section(String label) => Padding(

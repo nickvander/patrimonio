@@ -68,23 +68,41 @@ fn test_parse_cetes_pdf_text() {
     assert_eq!(result[1].amount, Decimal::from_str("5500.25").unwrap());
 }
 
+// The banamex_pdf::parse_text tests below feed the parser the same
+// line-separated layout that lopdf actually produces when it extracts
+// text from a Banamex PDF — each field on its own line:
+//
+//   25
+//   ENE
+//   PAGO RECIBIDO DE BBVA BANCOMER
+//   ...
+//   1,234.56
+//
+// The earlier all-on-one-line inputs reflected a different (older)
+// parser shape and stopped matching after the lopdf-shaped rewrite,
+// silently producing 0 transactions. Keeping the assertions intact;
+// only the input scaffolding changes.
+
 #[test]
 fn test_parse_banamex_pdf_text() {
-    let text = "15 MAR COMPRA OXXO $ 50.00\n16 MAR DEPOSITO $ 1,200.50";
+    let text = "DETALLE DE MOVIMIENTOS\n\
+                15\nMAR\nCOMPRA OXXO\n$ 50.00\n\
+                16\nMAR\nDEPOSITO\n$ 1,200.50";
     let result = banamex_pdf::parse_text(text).unwrap();
-    
+
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].description, "COMPRA OXXO");
-    // New logic: COMPRA triggers negative amount
     assert_eq!(result[0].amount, Decimal::from_str("-50.00").unwrap());
     assert_eq!(result[1].amount, Decimal::from_str("1200.50").unwrap());
 }
 
 #[test]
 fn test_parse_banamex_pdf_full_months() {
-    let text = "25 ABRIL COMPRA AMAZON $ 1,500.00\n24 MAYO ABONO NOMINA $ 12,000.00";
+    let text = "DETALLE DE MOVIMIENTOS\n\
+                25\nABRIL\nCOMPRA AMAZON\n$ 1,500.00\n\
+                24\nMAYO\nABONO NOMINA\n$ 12,000.00";
     let result = banamex_pdf::parse_text(text).unwrap();
-    
+
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].description, "COMPRA AMAZON");
     assert_eq!(result[0].amount, Decimal::from_str("-1500.00").unwrap());
@@ -96,9 +114,14 @@ fn test_parse_banamex_pdf_full_months() {
 
 #[test]
 fn test_parse_banamex_pdf_de_dates() {
-    let text = "23 DE ENERO COMPRA AMAZON $ 500.00\n24 DE FEBRERO DEPOSITO $ 1,000.00";
+    // "DE" is the Spanish connector — "23 de enero". lopdf splits it
+    // onto its own line. The parser filters bare "DE" lines so
+    // record detection still sees day → month.
+    let text = "DETALLE DE MOVIMIENTOS\n\
+                23\nDE\nENERO\nCOMPRA AMAZON\n$ 500.00\n\
+                24\nDE\nFEBRERO\nDEPOSITO\n$ 1,000.00";
     let result = banamex_pdf::parse_text(text).unwrap();
-    
+
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].description, "COMPRA AMAZON");
     assert_eq!(result[0].amount, Decimal::from_str("-500.00").unwrap());
@@ -108,18 +131,18 @@ fn test_parse_banamex_pdf_de_dates() {
 
 #[test]
 fn test_parse_banamex_pdf_summary_filtering() {
+    // The parser is supposed to skip everything before
+    // "DETALLE DE MOVIMIENTOS" — the resumen / saldo-anterior block
+    // mixes in numbers that look like transactions but aren't.
     let text = "RESUMEN DE CUENTA\n\
-                25 ABR SALDO ANTERIOR $ 10,000.00\n\
-                25 ABR INTERESES $ 5.50\n\
+                25\nABR\nSALDO ANTERIOR\n$ 10,000.00\n\
+                25\nABR\nINTERESES (RESUMEN)\n$ 5.50\n\
                 DETALLE DE MOVIMIENTOS\n\
-                26 ABR COMPRA OXXO $ 150.00\n\
-                27 ABR DEPOSITO $ 2,000.00";
-                
+                26\nABR\nCOMPRA OXXO\n$ 150.00\n\
+                27\nABR\nDEPOSITO\n$ 2,000.00";
+
     let result = banamex_pdf::parse_text(text).unwrap();
-    
-    // Should NOT include Saldo Anterior. 
-    // It SHOULD include Intereses if it matches, but typically we want to skip the summary table entirely.
-    // Given my implementation, it only starts AFTER "DETALLE DE MOVIMIENTOS".
+
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].description, "COMPRA OXXO");
     assert_eq!(result[0].amount, Decimal::from_str("-150.00").unwrap());
@@ -128,9 +151,13 @@ fn test_parse_banamex_pdf_summary_filtering() {
 
 #[test]
 fn test_parse_banamex_pdf_normalization() {
+    // The pathological-but-real lopdf output: amount and currency
+    // marker on separate lines, COMPRA and the merchant on separate
+    // lines too. Verifies the parser stitches them back together
+    // and skips the lone "$" line cleanly.
     let text = "DETALLE DE MOVIMIENTOS\n26\nABRIL\nCOMPRA\nOXXO\n$\n1,500";
     let result = banamex_pdf::parse_text(text).unwrap();
-    
+
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].description, "COMPRA OXXO");
     assert_eq!(result[0].amount, Decimal::from_str("-1500.00").unwrap());
@@ -138,9 +165,12 @@ fn test_parse_banamex_pdf_normalization() {
 
 #[test]
 fn test_parse_banamex_pdf_whole_numbers() {
-    let text = "DETALLE DE MOVIMIENTOS\n26 ABR COMPRA $ 4,000\n27 ABR DEPOSITO $ 56,500";
+    // Round-peso amounts arrive without the ".00" suffix.
+    let text = "DETALLE DE MOVIMIENTOS\n\
+                26\nABR\nCOMPRA\n$ 4,000\n\
+                27\nABR\nDEPOSITO\n$ 56,500";
     let result = banamex_pdf::parse_text(text).unwrap();
-    
+
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].amount, Decimal::from_str("-4000.00").unwrap());
     assert_eq!(result[1].amount, Decimal::from_str("56500.00").unwrap());

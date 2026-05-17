@@ -165,6 +165,38 @@ class BootstrapOutcome {
   const BootstrapOutcome(this.user, this.recoveryCodes);
 }
 
+/// One row from /api/auth/sessions — used by the Security screen's
+/// "Active sessions" list.
+class ActiveSession {
+  final String id;
+  final DateTime createdAt;
+  final DateTime lastSeenAt;
+  final DateTime expiresAt;
+  final String? userAgent;
+  final String? ipAddress;
+  final bool isCurrent;
+
+  ActiveSession({
+    required this.id,
+    required this.createdAt,
+    required this.lastSeenAt,
+    required this.expiresAt,
+    this.userAgent,
+    this.ipAddress,
+    required this.isCurrent,
+  });
+
+  factory ActiveSession.fromJson(Map<String, dynamic> json) => ActiveSession(
+        id: json['id'] as String,
+        createdAt: DateTime.parse(json['created_at'] as String),
+        lastSeenAt: DateTime.parse(json['last_seen_at'] as String),
+        expiresAt: DateTime.parse(json['expires_at'] as String),
+        userAgent: json['user_agent'] as String?,
+        ipAddress: json['ip_address'] as String?,
+        isCurrent: json['is_current'] as bool? ?? false,
+      );
+}
+
 /// Returned from /api/auth/login. Either the user is fully signed in
 /// (`user` non-null) or they need to walk through the TOTP step.
 class LoginOutcome {

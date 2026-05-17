@@ -171,3 +171,103 @@ pub async fn revoke_all_for_user(db: &PgPool, user_id: Uuid) -> Result<()> {
     .map_err(|e| anyhow!("revoke_all_for_user: {}", e))?;
     Ok(())
 }
+
+/// One row of the "Active sessions" list shown on the Security page.
+/// `is_current` is decided by the caller — the session table doesn't
+/// know which session ID the requester is presenting.
+#[derive(Debug)]
+pub struct ActiveSessionRow {
+    pub id: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub last_seen_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub user_agent: Option<String>,
+    pub ip_address: Option<String>,
+}
+
+/// Return every live (unrevoked, unexpired, non-pending) session for a
+/// user, newest-active first. Pending-TOTP sessions are excluded —
+/// they're throwaway and would clutter the list during a login flow.
+pub async fn list_active(db: &PgPool, user_id: Uuid) -> Result<Vec<ActiveSessionRow>> {
+    let rows: Vec<(
+        Uuid,
+        DateTime<Utc>,
+        DateTime<Utc>,
+        DateTime<Utc>,
+        Option<String>,
+        Option<String>,
+    )> = sqlx::query_as(
+        r#"
+        SELECT id, created_at, last_seen_at, expires_at, user_agent, ip_address
+        FROM user_sessions
+        WHERE user_id = $1
+          AND revoked_at IS NULL
+          AND expires_at > NOW()
+          AND pending_totp = false
+        ORDER BY last_seen_at DESC
+        "#,
+    )
+    .bind(user_id)
+    .fetch_all(db)
+    .await
+    .map_err(|e| anyhow!("list_active: {}", e))?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(id, created_at, last_seen_at, expires_at, user_agent, ip_address)| {
+            ActiveSessionRow {
+                id,
+                created_at,
+                last_seen_at,
+                expires_at,
+                user_agent,
+                ip_address,
+            }
+        })
+        .collect())
+}
+
+/// Revoke a single session by its DB id, but only if it belongs to
+/// the supplied user. Returns true if a row was actually flipped — the
+/// caller can use that to distinguish "not found / not yours" from
+/// "already revoked".
+pub async fn revoke_by_id_for_user(
+    db: &PgPool,
+    session_id: Uuid,
+    user_id: Uuid,
+) -> Result<bool> {
+    let result = sqlx::query(
+        "UPDATE user_sessions
+            SET revoked_at = NOW()
+          WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL",
+    )
+    .bind(session_id)
+    .bind(user_id)
+    .execute(db)
+    .await
+    .map_err(|e| anyhow!("revoke_by_id_for_user: {}", e))?;
+    Ok(result.rows_affected() > 0)
+}
+
+/// Revoke every live session for the user EXCEPT the one identified
+/// by `keep_session_id`. Returns the number of sessions revoked so
+/// the UI can report "Signed out of N other devices".
+pub async fn revoke_all_except(
+    db: &PgPool,
+    user_id: Uuid,
+    keep_session_id: Uuid,
+) -> Result<u64> {
+    let result = sqlx::query(
+        "UPDATE user_sessions
+            SET revoked_at = NOW()
+          WHERE user_id = $1
+            AND id <> $2
+            AND revoked_at IS NULL",
+    )
+    .bind(user_id)
+    .bind(keep_session_id)
+    .execute(db)
+    .await
+    .map_err(|e| anyhow!("revoke_all_except: {}", e))?;
+    Ok(result.rows_affected())
+}

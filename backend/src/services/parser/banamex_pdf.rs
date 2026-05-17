@@ -81,9 +81,23 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
     // A new record starts when we see a line that's just 1-2 digits (the day)
     // AND the next line is a valid month name.
     
-    let lines: Vec<&str> = target_text.lines().map(|l| l.trim()).collect();
+    // Filter out the Spanish "DE" connector that some Banamex
+    // statements use between day and month ("23 DE ENERO"). When
+    // lopdf splits fields onto their own lines this appears as a
+    // standalone line between "23" and "ENERO" and breaks our
+    // day-then-month record detection. Stripping it is safe — "DE"
+    // never appears as a real transaction description on its own.
+    let lines: Vec<&str> = target_text
+        .lines()
+        .map(|l| l.trim())
+        .filter(|l| !l.eq_ignore_ascii_case("DE"))
+        .collect();
     let day_re = Regex::new(r"^\d{1,2}$")?;
-    let amount_re = Regex::new(r"^[\$]?\s*(\d{1,3}(?:,\d{3})*\.\d{2})$")?;
+    // The `.NN` cents block is optional — real Banamex statements
+    // routinely omit decimals for round amounts ($4,000 instead of
+    // $4,000.00). The parser still normalizes both into the same
+    // Decimal downstream.
+    let amount_re = Regex::new(r"^[\$]?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)$")?;
     
     // First pass: identify record boundaries (indices where a new record starts)
     let mut record_starts: Vec<(usize, u32, u32)> = Vec::new(); // (line_idx, day, month)
@@ -137,8 +151,12 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
         
         for &line in record_lines {
             if line.is_empty() { continue; }
-            
+
             let cleaned = line.replace("$", "").trim().to_string();
+            // A line that was just "$" (the lopdf extractor often
+            // emits the currency marker alone) collapses to empty
+            // here and would otherwise pollute the description.
+            if cleaned.is_empty() { continue; }
             if let Some(cap) = amount_re.captures(&format!("${}", cleaned)) {
                 let amount_str = cap[1].replace(",", "");
                 if let Ok(amt) = Decimal::from_str(&amount_str) {
@@ -146,7 +164,7 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
                     continue;
                 }
             }
-            let plain_amount_re = Regex::new(r"^(\d{1,3}(?:,\d{3})*\.\d{2})$").unwrap();
+            let plain_amount_re = Regex::new(r"^(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)$").unwrap();
             if let Some(cap) = plain_amount_re.captures(&cleaned) {
                 let amount_str = cap[1].replace(",", "");
                 if let Ok(amt) = Decimal::from_str(&amount_str) {

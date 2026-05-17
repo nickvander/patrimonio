@@ -1,9 +1,9 @@
 use axum::{
-    extract::{Extension, State},
+    extract::{Extension, Path, State},
     http::{HeaderMap, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
@@ -46,6 +46,9 @@ pub fn protected_router() -> Router<AppState> {
         .route("/totp/enroll", post(totp_enroll))
         .route("/totp/confirm", post(totp_confirm))
         .route("/totp/disable", post(totp_disable))
+        .route("/sessions", get(list_sessions))
+        .route("/sessions/{id}", delete(revoke_session))
+        .route("/sessions/revoke-others", post(revoke_other_sessions))
 }
 
 // ----- request / response types -----
@@ -142,6 +145,26 @@ pub struct TotpDisableRequest {
 pub struct TotpEnrollment {
     pub secret_base32: String,
     pub provisioning_uri: String,
+}
+
+#[derive(Serialize)]
+pub struct ActiveSessionView {
+    pub id: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub last_seen_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub user_agent: Option<String>,
+    pub ip_address: Option<String>,
+    /// True when this row is the session of the requesting cookie —
+    /// the UI surfaces it as "this device" and disables the revoke
+    /// button so the user doesn't accidentally log themselves out
+    /// from this very page.
+    pub is_current: bool,
+}
+
+#[derive(Serialize)]
+pub struct RevokeOthersResponse {
+    pub revoked: u64,
 }
 
 // ----- handlers -----
@@ -749,6 +772,102 @@ async fn totp_verify(
     let jar = jar.add(build_session_cookie(&state, full.token, full.expires_at));
     let user = load_user_view(&state.db, validated.user_id).await.map_err(internal)?;
     Ok((jar, Json(user)))
+}
+
+// ----- session management -----
+
+/// Return the list of live sessions for the current user, with one
+/// row flagged as `is_current` so the UI can show "this device" and
+/// guard against accidentally revoking the active cookie.
+async fn list_sessions(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Result<Json<Vec<ActiveSessionView>>, ApiError> {
+    let rows = sessions::list_active(&state.db, ctx.user_id)
+        .await
+        .map_err(internal)?;
+    let view: Vec<ActiveSessionView> = rows
+        .into_iter()
+        .map(|r| ActiveSessionView {
+            id: r.id,
+            created_at: r.created_at,
+            last_seen_at: r.last_seen_at,
+            expires_at: r.expires_at,
+            user_agent: r.user_agent,
+            ip_address: r.ip_address,
+            is_current: r.id == ctx.session_id,
+        })
+        .collect();
+    Ok(Json(view))
+}
+
+/// Revoke a single session by id. Refuses to revoke the requester's
+/// own session — they should use POST /logout for that, which also
+/// emits the Set-Cookie removal directive. This is intentionally a
+/// no-op rather than an error if the id doesn't exist or doesn't
+/// belong to the user, to avoid leaking a session-id-enumeration
+/// oracle.
+async fn revoke_session(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    headers: HeaderMap,
+    Path(target_id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    if target_id == ctx.session_id {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "Use POST /api/auth/logout to sign out of the current session.",
+        ));
+    }
+
+    let _flipped = sessions::revoke_by_id_for_user(&state.db, target_id, ctx.user_id)
+        .await
+        .map_err(internal)?;
+
+    let ua = user_agent(&headers);
+    let ip = client_ip(&headers);
+    record_audit(
+        &state.db,
+        "revoke_session",
+        None,
+        Some(ctx.user_id),
+        ip.as_deref(),
+        ua.as_deref(),
+        true,
+        Some(&target_id.to_string()),
+    )
+    .await;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// "Sign out everywhere else" — revoke every other live session for
+/// this user but keep the current cookie alive so the user stays
+/// signed in on the page that issued the request.
+async fn revoke_other_sessions(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    headers: HeaderMap,
+) -> Result<Json<RevokeOthersResponse>, ApiError> {
+    let revoked = sessions::revoke_all_except(&state.db, ctx.user_id, ctx.session_id)
+        .await
+        .map_err(internal)?;
+
+    let ua = user_agent(&headers);
+    let ip = client_ip(&headers);
+    record_audit(
+        &state.db,
+        "revoke_other_sessions",
+        None,
+        Some(ctx.user_id),
+        ip.as_deref(),
+        ua.as_deref(),
+        true,
+        Some(&format!("revoked={}", revoked)),
+    )
+    .await;
+
+    Ok(Json(RevokeOthersResponse { revoked }))
 }
 
 // ----- middleware -----
