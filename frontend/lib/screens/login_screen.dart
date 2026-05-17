@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/passkeys.dart';
 import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -34,6 +35,39 @@ class _LoginScreenState extends State<LoginScreen> {
         _username.text.trim(),
         _password.text,
       );
+    } catch (e) {
+      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _signInWithPasskey() async {
+    final username = _username.text.trim();
+    if (username.isEmpty) {
+      setState(() => _error = 'Enter your username first.');
+      return;
+    }
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      final user =
+          await PasskeyService.instance.signInWithPasskey(username: username);
+      // The cookie has been set; tell AuthService the user is in.
+      // refreshStatus() re-validates against the server and emits the
+      // signed-in state for the AuthGate to pick up.
+      await AuthService.instance.refreshStatus();
+      // Belt-and-braces: if refreshStatus didn't flip to signedIn
+      // (e.g. some flake), still surface a meaningful error rather
+      // than silently sitting on the login screen.
+      if (AuthService.instance.current.phase != AuthPhase.signedIn) {
+        setState(() => _error =
+            'Signed in as ${user.username} but session refresh failed.');
+      }
+    } on PasskeyException catch (e) {
+      setState(() => _error = e.message);
     } catch (e) {
       setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
@@ -111,6 +145,21 @@ class _LoginScreenState extends State<LoginScreen> {
                           )
                         : const Text('Sign in'),
                   ),
+                  if (PasskeyService.instance.isAvailable) ...[
+                    const SizedBox(height: 8),
+                    // Passkey sign-in still needs the username field
+                    // because we use the username-first flow (the
+                    // server seeds the assertion challenge with that
+                    // user's registered credentials). The button is
+                    // disabled until something is typed so the user
+                    // doesn't get an immediate "Username required"
+                    // bounce.
+                    OutlinedButton.icon(
+                      onPressed: _submitting ? null : _signInWithPasskey,
+                      icon: const Icon(Icons.fingerprint, size: 18),
+                      label: const Text('Sign in with passkey'),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   TextButton(
                     onPressed: _submitting

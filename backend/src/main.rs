@@ -51,11 +51,18 @@ async fn main() -> Result<()> {
     // Connect to Redis
     let redis_client = redis::Client::open(config.redis_url.clone())?;
 
+    // Build the WebAuthn relying-party config from the frontend base
+    // URL. We refuse to come up without it — a misconfigured rp_id
+    // silently breaks every passkey enrolment, and we'd rather fail
+    // fast at boot.
+    let webauthn = patrimonio::api::passkeys::build_webauthn(&config.frontend_base_url)?;
+
     // Build shared state
     let state = AppState {
         db: db.clone(),
         redis: redis_client,
         config: Arc::new(config.clone()),
+        webauthn: Arc::new(webauthn),
     };
     let cors = build_cors_layer(&config.allowed_origins);
 
@@ -102,7 +109,11 @@ async fn main() -> Result<()> {
         .route("/api/health", get(health))
         .route("/api/version", get(version))
         .nest("/api/setup", patrimonio::api::setup::router())
-        .nest("/api/auth", patrimonio::api::session::public_router());
+        .nest("/api/auth", patrimonio::api::session::public_router())
+        // Passkey login (discoverable; no session needed to start the
+        // ceremony). Register endpoints are mounted under the
+        // protected router below.
+        .nest("/api/auth/passkeys", patrimonio::api::passkeys::public_router());
 
     let protected = Router::new()
         .nest("/api/accounts", patrimonio::api::accounts::router())
@@ -116,6 +127,11 @@ async fn main() -> Result<()> {
         // /api/auth/me, /logout, /change-password live here so that
         // require_auth populates AuthContext for the handlers.
         .nest("/api/auth", patrimonio::api::session::protected_router())
+        // Passkey register/manage endpoints — authenticated.
+        .nest(
+            "/api/auth/passkeys",
+            patrimonio::api::passkeys::protected_router(),
+        )
         // Coinbase OAuth lives under /api/auth/coinbase historically.
         // Keep the existing URLs (registered with Coinbase) but require
         // an authenticated session.
