@@ -60,13 +60,13 @@ class _FxWidgetState extends State<FxWidget> {
                             }
                           },
                     icon: _refreshing
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation(
-                                  Color(0xFF00E676)),
+                              valueColor:
+                                  AlwaysStoppedAnimation(context.positive),
                             ),
                           )
                         : const Icon(Icons.refresh, size: 20),
@@ -96,11 +96,11 @@ class _FxWidgetState extends State<FxWidget> {
                         alignment: Alignment.centerLeft,
                         child: Text(
                           rate.toStringAsFixed(4),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 32,
                             fontWeight: FontWeight.bold,
-                            color: Colors.tealAccent,
-                            fontFeatures: [FontFeature.tabularFigures()],
+                            color: context.tealAccent,
+                            fontFeatures: const [FontFeature.tabularFigures()],
                           ),
                           maxLines: 1,
                         ),
@@ -128,10 +128,10 @@ class _FxWidgetState extends State<FxWidget> {
                   if (MediaQuery.sizeOf(ctx).width < 360) {
                     return const SizedBox.shrink();
                   }
-                  return const Icon(
+                  return Icon(
                     Icons.currency_exchange,
                     size: 48,
-                    color: Colors.teal,
+                    color: context.tealAccent,
                   );
                 }),
               ],
@@ -164,7 +164,7 @@ class _FxWidgetState extends State<FxWidget> {
             Icon(
               isStale ? Icons.warning_amber_rounded : Icons.schedule,
               size: 13,
-              color: isStale ? Colors.orangeAccent : context.textSubtle,
+              color: isStale ? context.warning : context.textSubtle,
             ),
             const SizedBox(width: 4),
             Expanded(
@@ -172,7 +172,7 @@ class _FxWidgetState extends State<FxWidget> {
                 '$fullStamp $tz',
                 style: TextStyle(
                   fontSize: 11,
-                  color: isStale ? Colors.orangeAccent : context.textMuted,
+                  color: isStale ? context.warning : context.textMuted,
                   fontWeight: isStale ? FontWeight.w600 : FontWeight.normal,
                 ),
                 maxLines: 1,
@@ -186,7 +186,7 @@ class _FxWidgetState extends State<FxWidget> {
           isStale ? 'Stale · $age' : age,
           style: TextStyle(
             fontSize: 10,
-            color: isStale ? Colors.orangeAccent.shade100 : context.textFaint,
+            color: isStale ? context.warning : context.textFaint,
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,

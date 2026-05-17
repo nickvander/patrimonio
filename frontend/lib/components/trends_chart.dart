@@ -38,8 +38,8 @@ class CashFlowTrendsChart extends StatelessWidget {
                   spacing: 16,
                   runSpacing: 8,
                   children: [
-                    _buildLegendItem(context, const Color(0xFF1DE9B6), 'Income'),
-                    _buildLegendItem(context, const Color(0xFFFF4081), 'Spending'),
+                    _buildLegendItem(context, context.tealAccent, 'Income'),
+                    _buildLegendItem(context, context.pinkAccent, 'Spending'),
                   ],
                 );
 
@@ -87,10 +87,11 @@ class CashFlowTrendsChart extends StatelessWidget {
                   maxY: maxY,
                   barTouchData: BarTouchData(
                     touchTooltipData: BarTouchTooltipData(
+                      getTooltipColor: (_) => context.tooltipSurface,
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         return BarTooltipItem(
                           '${rodIndex == 0 ? "Income" : "Spending"}\n${currencyFormat.format(rod.toY * conversionFactor)}',
-                          TextStyle(color: context.textPrimary),
+                          TextStyle(color: context.tooltipOnSurface),
                         );
                       },
                     ),
@@ -181,11 +182,15 @@ class CashFlowTrendsChart extends StatelessWidget {
                       barRods: [
                         BarChartRodData(
                           toY: e.value['income'],
-                          gradient: const LinearGradient(
+                          // Teal gradient → darker variant at the top so the
+                          // bar gives the eye somewhere to land. Reads
+                          // correctly on white in light mode because
+                          // tealAccent already shifts to its darker shade.
+                          gradient: LinearGradient(
                             colors: [
-                              Color(0xFF1DE9B6),
-                              Color(0xFF00BFA5),
-                            ], // Neon Teal to Deep Teal
+                              context.tealAccent,
+                              context.tealAccent.withValues(alpha: 0.6),
+                            ],
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                           ),
@@ -199,11 +204,11 @@ class CashFlowTrendsChart extends StatelessWidget {
                         ),
                         BarChartRodData(
                           toY: e.value['spending'],
-                          gradient: const LinearGradient(
+                          gradient: LinearGradient(
                             colors: [
-                              Color(0xFFFF4081),
-                              Color(0xFFD50000),
-                            ], // Bright Pink to Deep Red
+                              context.pinkAccent,
+                              context.negative.withValues(alpha: 0.85),
+                            ],
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                           ),

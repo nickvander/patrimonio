@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:web/web.dart' as web;
 
+import '../utils/theme_colors.dart';
+
 class ConnectBankScreen extends StatefulWidget {
   const ConnectBankScreen({super.key});
 
@@ -174,10 +176,10 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'Set Plaid credentials and ENCRYPTION_KEY before linking real bank accounts.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70),
+                    style: TextStyle(color: context.textMuted),
                   ),
                   const SizedBox(height: 24),
                 ],

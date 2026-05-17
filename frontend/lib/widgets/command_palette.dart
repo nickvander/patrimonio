@@ -97,7 +97,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
     final visible = _visible;
 
     return Dialog(
-      backgroundColor: const Color(0xFF1A1A24),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 640, maxHeight: 520),

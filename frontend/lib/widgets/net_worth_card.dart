@@ -94,8 +94,9 @@ class _NetWorthCardState extends State<NetWorthCard> {
             // Only compute the per-institution slices when the detailed
             // view is actually being shown — saves a meaningful chunk of
             // work on the simple path.
-            final institutions =
-                _detailed ? _topInstitutions(filtered) : const <MapEntry<String, Color>>[];
+            final institutions = _detailed
+                ? _topInstitutions(context, filtered)
+                : const <MapEntry<String, Color>>[];
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -120,7 +121,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
             color: active
-                ? const Color(0xFF00E676).withValues(alpha: 0.18)
+                ? context.accentSoft(context.positive)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(20),
           ),
@@ -129,7 +130,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: active ? const Color(0xFF00E676) : context.textMuted,
+              color: active ? context.positive : context.textMuted,
               letterSpacing: 0.4,
             ),
           ),
@@ -275,20 +276,12 @@ class _NetWorthCardState extends State<NetWorthCard> {
     );
   }
 
-  /// Palette used to colour per-institution lines. Mirrors the brand
-  /// palette used elsewhere in the dashboard.
-  static const List<Color> _institutionPalette = [
-    Color(0xFF00B0FF), // Azure Blue
-    Color(0xFFAB47BC), // Purple
-    Color(0xFFFFB300), // Amber
-    Color(0xFFFF6E40), // Deep Orange
-    Color(0xFF26C6DA), // Cyan
-    Color(0xFFEC407A), // Pink
-  ];
-
   /// Returns an ordered list of (institutionName, color) pairs for the
-  /// top contributors observed across the provided history.
-  List<MapEntry<String, Color>> _topInstitutions(List<dynamic> data,
+  /// top contributors observed across the provided history. Colours come
+  /// from `context.chartSeries` so they shift to AA-readable shades on
+  /// a white card in light mode while keeping the neon palette in dark.
+  List<MapEntry<String, Color>> _topInstitutions(
+      BuildContext context, List<dynamic> data,
       {int max = 5}) {
     final maxByInst = <String, double>{};
     for (final raw in data) {
@@ -306,7 +299,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
     final top = sorted.take(max).toList();
     return [
       for (var i = 0; i < top.length; i++)
-        MapEntry(top[i].key, _institutionPalette[i % _institutionPalette.length]),
+        MapEntry(top[i].key, context.chartSeries(i)),
     ];
   }
 
@@ -315,7 +308,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
       spacing: 12,
       runSpacing: 8,
       children: [
-        _legendItem('Total net worth', const Color(0xFF00E676)),
+        _legendItem('Total net worth', context.positive),
         ...institutions.map((e) => _legendItem(e.key, e.value)),
       ],
     );
@@ -473,7 +466,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                   getDotPainter: (spot, percent, bar, i) =>
                       FlDotCirclePainter(
                     radius: 5,
-                    color: barData.color ?? const Color(0xFF00E676),
+                    color: barData.color ?? context.positive,
                     strokeWidth: 3,
                     strokeColor: Theme.of(context).colorScheme.surface,
                   ),
@@ -486,8 +479,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
             // brightness-opposite of the active surface: dark popovers in
             // light mode, light popovers in dark mode. Matches the
             // Material 3 convention for tooltips / snackbars.
-            getTooltipColor: (touchedSpot) =>
-                Theme.of(context).colorScheme.inverseSurface,
+            getTooltipColor: (touchedSpot) => context.tooltipSurface,
             tooltipRoundedRadius: 12,
             getTooltipItems: (touchedSpots) {
               // The wealth line is always the LAST bar in lineBarsData.
@@ -510,11 +502,16 @@ class _NetWorthCardState extends State<NetWorthCard> {
                         ?.cast<String, dynamic>() ??
                     {};
 
+                // Tooltip background is inverseSurface (dark popover in
+                // light mode, light popover in dark mode). All text
+                // colours must use onInverseSurface family — using
+                // `context.textPrimary` here was the original "light text
+                // on light tooltip in dark mode" bug.
                 final children = <TextSpan>[
                   TextSpan(
                     text: '${DateFormat('MMM d, y').format(date)}\n',
-                    style: const TextStyle(
-                      color: Colors.grey,
+                    style: TextStyle(
+                      color: context.tooltipOnSurfaceMuted,
                       fontSize: 11,
                       fontWeight: FontWeight.normal,
                     ),
@@ -523,7 +520,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                     text:
                         'Net worth: ${currencyFormat.format((nw as num).toDouble() * conversionFactor)}\n',
                     style: TextStyle(
-                      color: context.textPrimary,
+                      color: context.tooltipOnSurface,
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
                     ),
@@ -534,13 +531,17 @@ class _NetWorthCardState extends State<NetWorthCard> {
                   children.addAll([
                     TextSpan(
                       text: '───────────────\n',
-                      style: TextStyle(color: context.hairline),
+                      style: TextStyle(color: context.tooltipOnSurfaceMuted),
                     ),
+                    // Assets/Liabilities labels keep the brand positive/
+                    // negative hues but at the brightness-opposite shade
+                    // so they contrast with the inverseSurface tooltip
+                    // background. See ThemeColorsExt.tooltipPositive.
                     TextSpan(
                       text:
                           'Assets: ${currencyFormat.format((ta as num).toDouble() * conversionFactor)}\n',
-                      style: const TextStyle(
-                        color: Color(0xFF00E676),
+                      style: TextStyle(
+                        color: context.tooltipPositive,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -548,8 +549,8 @@ class _NetWorthCardState extends State<NetWorthCard> {
                     TextSpan(
                       text:
                           'Liabilities: ${currencyFormat.format((tl as num).toDouble() * conversionFactor)}\n',
-                      style: const TextStyle(
-                        color: Colors.redAccent,
+                      style: TextStyle(
+                        color: context.tooltipNegative,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -560,7 +561,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                 if (institutions.isNotEmpty) {
                   children.add(TextSpan(
                     text: '───────────────\n',
-                    style: TextStyle(color: context.hairline),
+                    style: TextStyle(color: context.tooltipOnSurfaceMuted),
                   ));
                   for (final inst in institutions) {
                     final raw = byInst[inst.key];
@@ -580,7 +581,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
 
                 return LineTooltipItem(
                   '',
-                  TextStyle(color: context.textPrimary),
+                  TextStyle(color: context.tooltipOnSurface),
                   children: children,
                 );
               }).toList();
@@ -695,8 +696,13 @@ class _NetWorthCardState extends State<NetWorthCard> {
             spots: totalSpots,
             isCurved: true,
             preventCurveOverShooting: true,
-            gradient: const LinearGradient(
-              colors: [Color(0xFF00E676), Color(0xFF69F0AE)],
+            // Brand emerald gradient — colour shifts darker in light mode
+            // (via context.positive) so the line passes AA on a white card.
+            gradient: LinearGradient(
+              colors: [
+                context.positive,
+                context.positive.withValues(alpha: 0.55),
+              ],
             ),
             barWidth: 3.5,
             isStrokeCapRound: true,
@@ -798,7 +804,7 @@ class _DeltaChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUp = amount >= 0;
-    final color = isUp ? const Color(0xFF00E676) : Colors.redAccent;
+    final color = isUp ? context.positive : context.negative;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(

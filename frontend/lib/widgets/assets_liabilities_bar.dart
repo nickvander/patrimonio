@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../utils/theme_colors.dart';
+
 /// Thin horizontal split-bar showing the ratio of assets to liabilities
 /// across the user's accounts. Visualizes the same totals the
 /// NetWorthCard chart sums, but in a glanceable form that doesn't
@@ -18,12 +20,12 @@ class AssetsLiabilitiesBar extends StatelessWidget {
     this.conversionFactor = 1.0,
   });
 
-  static const _assetColor = Color(0xFF00E676);
-  static const _liabilityColor = Color(0xFFFF5252);
-
   @override
   Widget build(BuildContext context) {
     if (typeBreakdown.isEmpty) return const SizedBox.shrink();
+
+    final assetColor = context.positive;
+    final liabilityColor = context.negative;
 
     double totalAssets = 0;
     double totalLiabilities = 0;
@@ -63,9 +65,12 @@ class AssetsLiabilitiesBar extends StatelessWidget {
                   Expanded(
                     flex: (assetPct * 1000).round(),
                     child: Container(
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [_assetColor, Color(0xFF69F0AE)],
+                          colors: [
+                            assetColor,
+                            assetColor.withValues(alpha: 0.55),
+                          ],
                         ),
                       ),
                     ),
@@ -74,9 +79,12 @@ class AssetsLiabilitiesBar extends StatelessWidget {
                   Expanded(
                     flex: (liabilityPct * 1000).round(),
                     child: Container(
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [_liabilityColor, Color(0xFFFF8A80)],
+                          colors: [
+                            liabilityColor,
+                            liabilityColor.withValues(alpha: 0.55),
+                          ],
                         ),
                       ),
                     ),
@@ -90,13 +98,13 @@ class AssetsLiabilitiesBar extends StatelessWidget {
           children: [
             _LegendDot(
               label: 'Assets',
-              color: _assetColor,
+              color: assetColor,
               pct: assetPct,
             ),
             const SizedBox(width: 16),
             _LegendDot(
               label: 'Liabilities',
-              color: _liabilityColor,
+              color: liabilityColor,
               pct: liabilityPct,
             ),
           ],

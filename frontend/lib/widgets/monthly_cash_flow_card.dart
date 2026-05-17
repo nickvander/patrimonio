@@ -64,10 +64,10 @@ class MonthlyCashFlowCard extends StatelessWidget {
             final isNarrow = c.maxWidth < 560;
             final header = Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.account_balance_wallet_outlined,
                   size: 18,
-                  color: Color(0xFF1DE9B6),
+                  color: context.tealAccent,
                 ),
                 const SizedBox(width: 8),
                 Text(
@@ -105,7 +105,7 @@ class MonthlyCashFlowCard extends StatelessWidget {
                   child: _StatBlock(
                     label: 'Income',
                     value: currencyFormat.format(income),
-                    accent: const Color(0xFF1DE9B6),
+                    accent: context.tealAccent,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -113,7 +113,7 @@ class MonthlyCashFlowCard extends StatelessWidget {
                   child: _StatBlock(
                     label: 'Expense',
                     value: currencyFormat.format(spending),
-                    accent: const Color(0xFFFF4081),
+                    accent: context.pinkAccent,
                   ),
                 ),
               ],
@@ -219,8 +219,7 @@ class _NetLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final positive = net >= 0;
-    final color =
-        positive ? const Color(0xFF00E676) : const Color(0xFFFF4081);
+    final color = positive ? context.positive : context.pinkAccent;
     final delta = priorNet == null ? null : net - priorNet!;
 
     return Row(
@@ -245,9 +244,7 @@ class _NetLine extends StatelessWidget {
               '${delta >= 0 ? '↑' : '↓'} ${currencyFormat.format(delta.abs())} vs last month',
               style: TextStyle(
                 fontSize: 11,
-                color: delta >= 0
-                    ? const Color(0xFF00E676)
-                    : const Color(0xFFFF4081),
+                color: delta >= 0 ? context.positive : context.pinkAccent,
                 fontWeight: FontWeight.w600,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
@@ -335,8 +332,7 @@ class _NetSparkline extends StatelessWidget {
     final maxV = points.reduce((a, b) => a > b ? a : b);
     final pad = (maxV - minV).abs() * 0.15 + 1;
 
-    final color =
-        positive ? const Color(0xFF00E676) : const Color(0xFFFF4081);
+    final color = positive ? context.positive : context.pinkAccent;
 
     return LineChart(
       LineChartData(

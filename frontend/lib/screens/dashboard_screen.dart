@@ -24,6 +24,7 @@ import '../widgets/command_palette.dart';
 import '../widgets/skeleton.dart';
 import '../widgets/sync_error_banner.dart';
 import '../widgets/notifications_panel.dart';
+import '../theme/palette.dart';
 import '../utils/account_category.dart';
 import '../utils/theme_colors.dart';
 import 'account_transactions_screen.dart';
@@ -412,8 +413,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         : compact
             ? NumberFormat('0.00').format(rate)
             : '1 USD = ${NumberFormat('0.00').format(rate)} MXN';
-    final accent =
-        isStale ? Colors.orangeAccent : const Color(0xFF1DE9B6);
+    final accent = isStale ? context.warning : context.tealAccent;
 
     final tooltip = rate == null
         ? 'Exchange rate loading…'
@@ -592,10 +592,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.savings_outlined,
                         size: 40,
-                        color: Color(0xFF00E676),
+                        color: context.positive,
                       ),
                       const SizedBox(height: 16),
                       Text(
@@ -650,18 +650,18 @@ class _DashboardScreenState extends State<DashboardScreen>
     if (status == 'success') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Account linked successfully!'),
-            backgroundColor: Color(0xFF00E676),
+          SnackBar(
+            content: const Text('Account linked successfully!'),
+            backgroundColor: context.positive,
           ),
         );
       });
     } else if (status == 'error') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to link account. Please try again.'),
-            backgroundColor: Colors.redAccent,
+          SnackBar(
+            content: const Text('Failed to link account. Please try again.'),
+            backgroundColor: context.negative,
           ),
         );
       });
@@ -693,6 +693,13 @@ class _DashboardScreenState extends State<DashboardScreen>
       setState(() => _error = null);
     }
 
+    // Snapshot the current brightness BEFORE we await — using the
+    // BuildContext after an async gap trips
+    // `use_build_context_synchronously`. The categoryColors map only
+    // needs to know which side of the theme to pull from, not the live
+    // context.
+    final brightness = Theme.of(context).brightness;
+
     try {
       final results = await Future.wait([
         _apiService.getDashboardOverview(),
@@ -712,13 +719,17 @@ class _DashboardScreenState extends State<DashboardScreen>
       final allocationRaw = results[8] as List<dynamic>;
       final trendsRaw = results[9] as List<dynamic>;
 
+      // Allocation slice colours. Pulled through brand tokens so the
+      // pie reads against a white card in light mode without each slice
+      // having to be hand-tuned. The 6 categories map 1:1 to the
+      // semantic accents already exposed by BrandPalette.
       final categoryColors = {
-        'Cash': const Color(0xFF00B0FF), // Azure Blue
-        'Stocks/ETFs': const Color(0xFF1DE9B6), // Teal
-        'Investment': const Color(0xFF00E676), // Emerald Green
-        'Crypto': const Color(0xFF651FFF), // Deep Purple
-        'Fixed Income': const Color(0xFFFFD600), // Yellow
-        'Other': const Color(0xFFFF3D00), // Deep Orange
+        'Cash': BrandPalette.info(brightness),
+        'Stocks/ETFs': BrandPalette.teal(brightness),
+        'Investment': BrandPalette.positive(brightness),
+        'Crypto': BrandPalette.purple(brightness),
+        'Fixed Income': BrandPalette.yellow(brightness),
+        'Other': BrandPalette.negative(brightness),
       };
 
       setState(() {
@@ -804,9 +815,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                   isScrollable: isCompact,
                   tabAlignment:
                       isCompact ? TabAlignment.start : TabAlignment.fill,
-                  indicatorColor: const Color(0xFF00E676),
-                  labelColor: const Color(0xFF00E676),
-                  unselectedLabelColor: Colors.grey,
+                  indicatorColor: context.positive,
+                  labelColor: context.positive,
+                  unselectedLabelColor: context.textMuted,
                   tabs: [
                     const Tab(text: 'Overview'),
                     const Tab(text: 'Portfolio'),
@@ -1163,9 +1174,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     blocking.isEmpty
                         ? Icons.verified_user_outlined
                         : Icons.warning_amber_rounded,
-                    color: blocking.isEmpty
-                        ? const Color(0xFF00E676)
-                        : Colors.orangeAccent,
+                    color: blocking.isEmpty ? context.positive : context.warning,
                   ),
                   const SizedBox(width: 10),
                   const Text(
@@ -1197,10 +1206,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                             ? Icons.radio_button_unchecked
                             : Icons.error_outline,
                         color: configured
-                            ? const Color(0xFF00E676)
+                            ? context.positive
                             : check['severity'] == 'optional'
                             ? context.textFaint
-                            : Colors.orangeAccent,
+                            : context.warning,
                         size: 18,
                       ),
                       const SizedBox(width: 8),
@@ -1511,7 +1520,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       TextButton(
                         onPressed: () => Navigator.pop(context, true),
                         style: TextButton.styleFrom(
-                            foregroundColor: Colors.redAccent),
+                            foregroundColor: context.negative),
                         child: const Text('Delete everything'),
                       ),
                     ],
@@ -1598,8 +1607,12 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 20),
-                    backgroundColor:
-                        bg ?? Colors.blueAccent.withValues(alpha: 0.2),
+                    backgroundColor: bg ?? context.accentSoft(context.info),
+                    // ElevatedButton's default foreground in light mode is
+                    // a tonal mid-grey that fades into the tinted bg. Pin
+                    // it to textPrimary so the label and icon stay legible
+                    // on every tinted tile.
+                    foregroundColor: context.textPrimary,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -1613,12 +1626,11 @@ class _DashboardScreenState extends State<DashboardScreen>
               runSpacing: 16,
               children: [
                 tile(Icons.sync, 'Sync all accounts',
-                    bg: Colors.blueAccent.withValues(alpha: 0.2),
-                    onPressed: runSync),
+                    bg: context.accentSoft(context.info), onPressed: runSync),
                 tile(
                   Icons.add_link,
                   'Link Plaid (US Banks)',
-                  bg: const Color(0xFF1DE9B6).withValues(alpha: 0.2),
+                  bg: context.accentSoft(context.tealAccent),
                   onPressed: plaidReady()
                       ? () {
                           Navigator.push(
@@ -1668,7 +1680,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                 SizedBox(
                   width: tileWidth,
                   child: ElevatedButton.icon(
-                    icon: Icon(Icons.login, color: context.textPrimary),
+                    // Coinbase brand blue (#0052FF) is the official
+                    // background — text/icon must be white regardless of
+                    // the active theme brightness so the brand reads
+                    // correctly in light mode too.
+                    icon: const Icon(Icons.login, color: Colors.white),
                     label: const Text(
                       'Link Coinbase',
                       maxLines: 1,
@@ -1677,6 +1693,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 20),
                       backgroundColor: const Color(0xFF0052FF),
+                      foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
@@ -1690,9 +1707,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                 SizedBox(
                   width: tileWidth,
                   child: ElevatedButton.icon(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.currency_exchange,
-                      color: Color(0xFF00E676),
+                      color: context.positive,
                     ),
                     label: const Text(
                       'Connect Bitso',
@@ -1701,8 +1718,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 20),
-                      backgroundColor:
-                          const Color(0xFF00E676).withValues(alpha: 0.1),
+                      backgroundColor: context.positive.withValues(alpha: 0.12),
+                      foregroundColor: context.textPrimary,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
@@ -1841,8 +1858,7 @@ class _CurrencyToggleButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = targetCurrency == 'MXN';
-    final accent =
-        active ? const Color(0xFF00E676) : Theme.of(context).colorScheme.onSurface;
+    final accent = active ? context.positive : context.textPrimary;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Tooltip(
