@@ -926,7 +926,7 @@ async fn user_count(db: &PgPool) -> anyhow::Result<i64> {
     Ok(n)
 }
 
-async fn load_user_view(db: &PgPool, user_id: Uuid) -> anyhow::Result<UserView> {
+pub(crate) async fn load_user_view(db: &PgPool, user_id: Uuid) -> anyhow::Result<UserView> {
     let row: (
         Uuid,
         String,
@@ -1025,14 +1025,14 @@ async fn record_audit(
     }
 }
 
-fn user_agent(headers: &HeaderMap) -> Option<String> {
+pub(crate) fn user_agent(headers: &HeaderMap) -> Option<String> {
     headers
         .get(axum::http::header::USER_AGENT)
         .and_then(|v| v.to_str().ok())
         .map(|s| s.chars().take(512).collect())
 }
 
-fn client_ip(headers: &HeaderMap) -> Option<String> {
+pub(crate) fn client_ip(headers: &HeaderMap) -> Option<String> {
     if let Some(fwd) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
         if let Some(first) = fwd.split(',').next() {
             let trimmed = first.trim();
@@ -1050,7 +1050,7 @@ fn client_ip(headers: &HeaderMap) -> Option<String> {
     None
 }
 
-fn build_session_cookie(
+pub(crate) fn build_session_cookie(
     state: &AppState,
     token: String,
     expires_at: DateTime<Utc>,
@@ -1073,7 +1073,7 @@ fn invalid_credentials() -> ApiError {
     ApiError::new(StatusCode::UNAUTHORIZED, "Invalid username or password.")
 }
 
-fn internal<E: std::fmt::Display>(e: E) -> ApiError {
+pub(crate) fn internal<E: std::fmt::Display>(e: E) -> ApiError {
     tracing::error!("auth internal error: {}", e);
     ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error")
 }

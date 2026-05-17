@@ -60,6 +60,15 @@ time = "0.3"
 # emits the otpauth:// URI for QR code rendering.
 totp-rs = { version = "5.6", features = ["otpauth"] }
 
+# WebAuthn / FIDO2 for passkey login. Maintained by the WebAuthn working
+# group. We use the high-level Passkey API rather than the lower-level
+# raw protocol surface. The `danger-allow-state-serialisation` feature
+# is required to serialise the per-flow PasskeyRegistration /
+# PasskeyAuthentication state into Redis between the start and finish
+# halves of each ceremony.
+webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation"] }
+url = "2"
+
 # Scheduling
 tokio-cron-scheduler = "0.13"
 csv = "1.3"

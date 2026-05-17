@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import '../services/passkeys.dart';
 import '../widgets/recovery_codes_dialog.dart';
 
 /// Account security: change password, manage 2FA, regenerate recovery
@@ -21,6 +22,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
   AuthUser? _user;
   int? _unusedRecoveryCodes;
   List<ActiveSession>? _sessions;
+  List<PasskeySummary>? _passkeys;
   String? _error;
 
   @override
@@ -41,11 +43,21 @@ class _SecurityScreenState extends State<SecurityScreen> {
       final user = AuthService.instance.current.user;
       final count = await _api.recoveryCodesCount();
       final sessions = await _api.listSessions();
+      // Passkeys are best-effort — older backends that haven't shipped
+      // the feature yet would 404 here. Surface the failure quietly
+      // (empty list) rather than block the whole screen on it.
+      List<PasskeySummary>? passkeys;
+      try {
+        passkeys = await PasskeyService.instance.list();
+      } catch (_) {
+        passkeys = const [];
+      }
       if (!mounted) return;
       setState(() {
         _user = user;
         _unusedRecoveryCodes = count;
         _sessions = sessions;
+        _passkeys = passkeys;
       });
     } catch (e) {
       if (mounted) {
@@ -374,10 +386,142 @@ class _SecurityScreenState extends State<SecurityScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    _buildPasskeysSection(),
+                    const SizedBox(height: 16),
                     _buildSessionsSection(),
                   ],
                 ),
     );
+  }
+
+  Widget _buildPasskeysSection() {
+    final passkeys = _passkeys ?? const <PasskeySummary>[];
+    final supported = PasskeyService.instance.isAvailable;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _section('Passkeys'),
+            if (supported)
+              TextButton.icon(
+                onPressed: _registerPasskey,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Add device'),
+              ),
+          ],
+        ),
+        if (!supported)
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.fingerprint),
+              title: Text('Passkeys not available'),
+              subtitle: Text(
+                'This browser does not expose the WebAuthn API. Try Chrome, '
+                'Safari, or Edge on a recent OS to register a passkey.',
+              ),
+            ),
+          )
+        else if (passkeys.isEmpty)
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.fingerprint),
+              title: Text('No passkeys registered'),
+              subtitle: Text(
+                'Register your phone or laptop so you can sign in with Face '
+                'ID, Touch ID, or Windows Hello instead of a password.',
+              ),
+            ),
+          )
+        else
+          Card(
+            child: Column(
+              children: [
+                for (var i = 0; i < passkeys.length; i++) ...[
+                  if (i > 0) const Divider(height: 1),
+                  _PasskeyRow(
+                    passkey: passkeys[i],
+                    onRemove: () => _removePasskey(passkeys[i]),
+                  ),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _registerPasskey() async {
+    final nickname = await showDialog<String?>(
+      context: context,
+      builder: (ctx) => const _NicknamePromptDialog(),
+    );
+    // null = the user cancelled. An empty string means they hit Save
+    // without typing anything — still intentional intent to register,
+    // the row just shows up unlabelled.
+    if (nickname == null) return;
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Confirm with your device biometric…'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+    try {
+      await PasskeyService.instance.registerNewPasskey(nickname: nickname);
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Passkey added.')),
+      );
+    } on PasskeyException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
+  Future<void> _removePasskey(PasskeySummary pk) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove this passkey?'),
+        content: Text(
+          'You will no longer be able to sign in with '
+          '"${pk.nickname ?? 'this device'}". This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await PasskeyService.instance.remove(pk.id);
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Passkey removed.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.toString())));
+    }
   }
 
   Widget _buildSessionsSection() {
@@ -815,6 +959,104 @@ class _PromptPasswordDialogState extends State<_PromptPasswordDialog> {
         FilledButton(
           onPressed: () => Navigator.of(context).pop(_pw.text),
           child: const Text('Confirm'),
+        ),
+      ],
+    );
+  }
+}
+
+class _PasskeyRow extends StatelessWidget {
+  final PasskeySummary passkey;
+  final VoidCallback onRemove;
+  const _PasskeyRow({required this.passkey, required this.onRemove});
+
+  String _registered(DateTime t) {
+    return 'Registered ${DateFormat.yMMMd().format(t.toLocal())}';
+  }
+
+  String? _lastUsed(DateTime? t) {
+    if (t == null) return null;
+    final diff = DateTime.now().difference(t.toLocal());
+    if (diff.inMinutes < 1) return 'Last used just now';
+    if (diff.inMinutes < 60) return 'Last used ${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return 'Last used ${diff.inHours}h ago';
+    if (diff.inDays < 30) return 'Last used ${diff.inDays}d ago';
+    return 'Last used ${DateFormat.yMMMd().format(t.toLocal())}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = passkey.nickname?.trim().isNotEmpty == true
+        ? passkey.nickname!.trim()
+        : 'Unnamed passkey';
+    final subtitleParts = <String>[
+      _registered(passkey.createdAt),
+      if (_lastUsed(passkey.lastUsedAt) != null) _lastUsed(passkey.lastUsedAt)!,
+    ];
+    return ListTile(
+      leading: const Icon(Icons.fingerprint),
+      title: Text(title),
+      subtitle: Text(subtitleParts.join(' · ')),
+      trailing: IconButton(
+        icon: const Icon(Icons.delete_outline),
+        tooltip: 'Remove passkey',
+        onPressed: onRemove,
+      ),
+    );
+  }
+}
+
+class _NicknamePromptDialog extends StatefulWidget {
+  const _NicknamePromptDialog();
+
+  @override
+  State<_NicknamePromptDialog> createState() => _NicknamePromptDialogState();
+}
+
+class _NicknamePromptDialogState extends State<_NicknamePromptDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Name this device'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Optional label so you can tell this passkey apart from others '
+            'later. Examples: "iPhone 15", "Work laptop".',
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Device name',
+              hintText: 'e.g. iPhone 15',
+              border: OutlineInputBorder(),
+            ),
+            maxLength: 64,
+            onSubmitted: (v) =>
+                Navigator.pop(context, _controller.text.trim()),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _controller.text.trim()),
+          child: const Text('Continue'),
         ),
       ],
     );
