@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/browser_client.dart';
 import 'package:web/web.dart' as web;
@@ -369,6 +370,50 @@ class ApiService {
     );
     if (response.statusCode != 204) {
       throw Exception('Failed to delete institution');
+    }
+  }
+
+  /// Multi-file batch wrapper around the same /imports/upload
+  /// endpoint. The server accepts any number of `file` parts in a
+  /// single multipart and parses each independently — much faster
+  /// than 12 round-trips for a year of monthly statements, and lets
+  /// the user confirm everything in one preview.
+  Future<Map<String, dynamic>> uploadStatements(
+    List<PlatformFile> files, {
+    String? password,
+  }) async {
+    if (files.isEmpty) {
+      throw Exception('No files to upload');
+    }
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$_baseUrl/imports/upload'),
+    );
+    for (final f in files) {
+      if (f.bytes == null) continue;
+      request.files.add(
+        http.MultipartFile.fromBytes('file', f.bytes!, filename: f.name),
+      );
+    }
+    if (password != null && password.isNotEmpty) {
+      request.fields['password'] = password;
+    }
+
+    try {
+      final streamedResponse = await _client.send(request).timeout(
+        const Duration(seconds: 60),
+      );
+      final response = await http.Response.fromStream(streamedResponse);
+      _maybeUnauthorized(response);
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+      throw Exception('Server returned ${response.statusCode}: ${response.body}');
+    } on http.ClientException catch (e) {
+      throw Exception(
+        'Network error during upload. Please check your connection and try again. ($e)',
+      );
     }
   }
 

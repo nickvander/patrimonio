@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import '../main.dart' show themeModeNotifier;
 import '../services/preferences.dart';
 import '../widgets/net_worth_card.dart';
+import '../widgets/assets_liabilities_bar.dart';
 import '../widgets/monthly_cash_flow_card.dart';
 import '../widgets/budgets_card.dart';
 import '../widgets/net_worth_goal_tile.dart';
@@ -1259,6 +1260,19 @@ class _DashboardScreenState extends State<DashboardScreen>
               selectedRange: _selectedRange,
             ),
           ),
+          // Glanceable assets-vs-liabilities split. Skipped during
+          // first-run when typeBreakdown is empty (the widget renders
+          // a SizedBox.shrink in that case anyway).
+          if ((_overview?['type_breakdown'] as List?)?.isNotEmpty ?? false) ...[
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: AssetsLiabilitiesBar(
+                typeBreakdown: (_overview?['type_breakdown'] as List?) ?? const [],
+                conversionFactor: conversionFactor,
+              ),
+            ),
+          ],
         ],
       );
     }

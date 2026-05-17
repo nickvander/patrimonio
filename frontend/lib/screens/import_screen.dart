@@ -13,7 +13,11 @@ class ImportScreen extends StatefulWidget {
 class _ImportScreenState extends State<ImportScreen> {
   final ApiService _apiService = ApiService();
   bool _isUploading = false;
-  PlatformFile? _selectedFile;
+  // Multi-file support: a single upload can include many statements
+  // (e.g. all 12 monthly Banamex PDFs at once). Parsed transactions
+  // from every file get concatenated into _previewTransactions for
+  // the same downstream review-and-confirm flow.
+  List<PlatformFile> _selectedFiles = [];
   List<dynamic>? _previewTransactions;
   Set<int> _selectedIndices = {};
   List<dynamic>? _accounts;
@@ -54,11 +58,12 @@ class _ImportScreenState extends State<ImportScreen> {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['csv', 'pdf'],
+      allowMultiple: true,
     );
 
-    if (result != null) {
+    if (result != null && result.files.isNotEmpty) {
       setState(() {
-        _selectedFile = result.files.first;
+        _selectedFiles = result.files;
         _previewTransactions = null;
         _selectedIndices = {};
         _message = null;
@@ -66,6 +71,12 @@ class _ImportScreenState extends State<ImportScreen> {
         _passwordController.clear();
       });
     }
+  }
+
+  void _removeFileAt(int index) {
+    setState(() {
+      _selectedFiles = List<PlatformFile>.from(_selectedFiles)..removeAt(index);
+    });
   }
 
   /// Initialize selection: select all except auto-deselect patterns
@@ -84,7 +95,7 @@ class _ImportScreenState extends State<ImportScreen> {
   }
 
   Future<void> _uploadFile() async {
-    if (_selectedFile == null) return;
+    if (_selectedFiles.isEmpty) return;
 
     setState(() {
       _isUploading = true;
@@ -92,9 +103,8 @@ class _ImportScreenState extends State<ImportScreen> {
     });
 
     try {
-      final response = await _apiService.uploadStatement(
-        _selectedFile!.name,
-        _selectedFile!.bytes!,
+      final response = await _apiService.uploadStatements(
+        _selectedFiles,
         password: _passwordController.text.trim().isEmpty
             ? null
             : _passwordController.text.trim(),
@@ -227,30 +237,70 @@ class _ImportScreenState extends State<ImportScreen> {
                         color: Color(0xFF00E676),
                       ),
                       const SizedBox(height: 16),
-                      if (_selectedFile != null)
+                      if (_selectedFiles.isNotEmpty)
                         Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              _selectedFile!.name,
+                              '${_selectedFiles.length} file${_selectedFiles.length == 1 ? '' : 's'} selected',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            Text(
-                              '${(_selectedFile!.size / 1024).toStringAsFixed(1)} KB',
-                              style: const TextStyle(
-                                color: Colors.grey,
-                                fontSize: 12,
+                            const SizedBox(height: 8),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxHeight: 200),
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  children: [
+                                    for (var i = 0; i < _selectedFiles.length; i++)
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 2),
+                                        child: Row(
+                                          children: [
+                                            const Icon(Icons.insert_drive_file_outlined, size: 16),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                _selectedFiles[i].name,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(fontSize: 13),
+                                              ),
+                                            ),
+                                            Text(
+                                              '${(_selectedFiles[i].size / 1024).toStringAsFixed(1)} KB',
+                                              style: const TextStyle(
+                                                color: Colors.grey,
+                                                fontSize: 11,
+                                              ),
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(Icons.close, size: 16),
+                                              tooltip: 'Remove',
+                                              visualDensity: VisualDensity.compact,
+                                              onPressed: _isUploading
+                                                  ? null
+                                                  : () => _removeFileAt(i),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ),
                             ),
                           ],
                         )
                       else
-                        const Text('No file selected'),
+                        const Text('No files selected'),
                       const SizedBox(height: 24),
                       ElevatedButton(
                         onPressed: _isUploading ? null : _pickFile,
-                        child: const Text('Select file'),
+                        child: Text(
+                          _selectedFiles.isEmpty
+                              ? 'Select file(s)'
+                              : 'Add more files',
+                        ),
                       ),
                     ],
                   ),
@@ -471,7 +521,7 @@ class _ImportScreenState extends State<ImportScreen> {
                 ],
               ),
             const SizedBox(height: 32),
-            if (_selectedFile != null && _previewTransactions == null)
+            if (_selectedFiles.isNotEmpty && _previewTransactions == null)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
