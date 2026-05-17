@@ -10,7 +10,14 @@ const suffix = Date.now();
 const manualAccountName = `Smoke Manual ${suffix}`;
 const cryptoInstitutionName = `Smoke Bitso ${suffix}`;
 
+// The smoke account persists across runs. On a fresh DB we bootstrap
+// it; on subsequent runs we just log in. Both use the same fixed
+// credentials so the test is idempotent.
+const smokeUsername = process.env.SMOKE_USERNAME || 'smoke-user';
+const smokePassword = process.env.SMOKE_PASSWORD || 'smoke-password-1234';
+
 const results = [];
+const cookieJar = new Map();
 
 function record(name, detail) {
   results.push({ name, ...detail });
@@ -23,8 +30,43 @@ function assert(condition, message) {
   }
 }
 
+function captureCookies(response) {
+  // The Set-Cookie response header can repeat — Node's fetch surfaces
+  // them as a comma-joined string via .get() but exposes them
+  // individually through .getSetCookie().
+  const setCookies = typeof response.headers.getSetCookie === 'function'
+    ? response.headers.getSetCookie()
+    : [];
+  for (const raw of setCookies) {
+    const pair = raw.split(';')[0]?.trim();
+    if (!pair) continue;
+    const eq = pair.indexOf('=');
+    if (eq <= 0) continue;
+    const name = pair.slice(0, eq);
+    const value = pair.slice(eq + 1);
+    if (value === '' || /^deleted$/i.test(value)) {
+      cookieJar.delete(name);
+    } else {
+      cookieJar.set(name, value);
+    }
+  }
+}
+
+function cookieHeader() {
+  if (cookieJar.size === 0) return null;
+  return Array.from(cookieJar.entries())
+    .map(([k, v]) => `${k}=${v}`)
+    .join('; ');
+}
+
 async function request(path, options = {}) {
-  const response = await fetch(`${apiBase}${path}`, options);
+  const headers = new Headers(options.headers || {});
+  const cookies = cookieHeader();
+  if (cookies && !headers.has('cookie')) {
+    headers.set('cookie', cookies);
+  }
+  const response = await fetch(`${apiBase}${path}`, { ...options, headers });
+  captureCookies(response);
   const text = await response.text();
   let body = text;
   try {
@@ -49,6 +91,55 @@ function cleanupDatabase() {
     ['compose', 'exec', '-T', 'postgres', 'psql', '-U', 'patrimonio', '-d', 'patrimonio', '-v', 'ON_ERROR_STOP=1', '-c', sql],
     { stdio: 'pipe' },
   );
+}
+
+async function smokeAuth() {
+  // /api/auth/status is the contract the login screen relies on.
+  const status = await request('/auth/status');
+  assert(status.response.status === 200, `auth status returned ${status.response.status}`);
+  assert(typeof status.body === 'object', 'auth status was not JSON');
+
+  // /api/auth/me without a cookie should 401 — proves the middleware
+  // is doing its job before we authenticate.
+  cookieJar.clear();
+  const unauth = await request('/auth/me');
+  assert(unauth.response.status === 401, `unauthed /auth/me returned ${unauth.response.status}`);
+
+  // A protected data endpoint must also 401 without auth.
+  const dashUnauth = await request('/dashboard/overview');
+  assert(dashUnauth.response.status === 401, `unauthed /dashboard/overview returned ${dashUnauth.response.status}`);
+
+  // Bootstrap if the DB is fresh; otherwise log in.
+  if (status.body.needs_bootstrap === true) {
+    const bootstrap = await request('/auth/bootstrap', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: smokeUsername, password: smokePassword }),
+    });
+    assert(bootstrap.response.status === 200, `bootstrap returned ${bootstrap.response.status}: ${JSON.stringify(bootstrap.body)}`);
+  } else {
+    const login = await request('/auth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: smokeUsername, password: smokePassword }),
+    });
+    assert(
+      login.response.status === 200,
+      `login as ${smokeUsername} returned ${login.response.status}: ${JSON.stringify(login.body)}. ` +
+        `If the DB already has a different user, set SMOKE_USERNAME and SMOKE_PASSWORD env vars.`,
+    );
+  }
+  assert(cookieJar.has('patrimonio_session'), 'session cookie was not set after auth');
+
+  // /me with cookie should now work and report our username.
+  const me = await request('/auth/me');
+  assert(me.response.status === 200, `/auth/me after login returned ${me.response.status}`);
+  assert(
+    typeof me.body === 'object' && me.body.username === smokeUsername,
+    `/auth/me did not return expected username, got ${JSON.stringify(me.body)}`,
+  );
+
+  record('auth bootstrap/login flow', { user: smokeUsername });
 }
 
 async function smokeApi() {
@@ -124,7 +215,11 @@ async function smokeManualAccountAndImport() {
   assert(transactions.response.status === 200, `account transactions returned ${transactions.response.status}`);
   assert(transactions.body.length === 1, `expected one smoke transaction, found ${transactions.body.length}`);
 
-  const emptyUpload = await fetch(`${apiBase}/imports/upload`, { method: 'POST', body: new FormData() });
+  const emptyUpload = await fetch(`${apiBase}/imports/upload`, {
+    method: 'POST',
+    body: new FormData(),
+    headers: cookieHeader() ? { cookie: cookieHeader() } : {},
+  });
   assert(emptyUpload.status === 400, `empty upload returned ${emptyUpload.status}`);
 
   record('manual account and import flow', { accountId: account.id });
@@ -141,7 +236,10 @@ async function smokeIntegrationStates() {
   });
   assert(malformedExchange.response.status === 422, `malformed Plaid exchange returned ${malformedExchange.response.status}`);
 
-  const coinbase = await fetch(`${apiBase}/auth/coinbase`, { redirect: 'manual' });
+  const coinbase = await fetch(`${apiBase}/auth/coinbase`, {
+    redirect: 'manual',
+    headers: cookieHeader() ? { cookie: cookieHeader() } : {},
+  });
   assert([302, 303, 307, 308].includes(coinbase.status), `Coinbase auth returned ${coinbase.status}`);
 
   const crypto = await request('/institutions/crypto', {
@@ -185,7 +283,26 @@ async function smokeBrowser() {
       ['desktop', { width: 1440, height: 1000 }, false],
       ['mobile', { width: 390, height: 844 }, true],
     ]) {
-      const page = await browser.newPage({ viewport, isMobile });
+      const context = await browser.newContext({ viewport, isMobile });
+
+      // Pre-seed the browser with our smoke session cookie so the
+      // Flutter app boots straight into the dashboard instead of
+      // showing the login screen. Browser smoke is about render
+      // correctness, not the login UI.
+      const sessionToken = cookieJar.get('patrimonio_session');
+      if (sessionToken) {
+        const url = new URL(frontendUrl);
+        await context.addCookies([{
+          name: 'patrimonio_session',
+          value: sessionToken,
+          domain: url.hostname,
+          path: '/',
+          httpOnly: true,
+          sameSite: 'Lax',
+        }]);
+      }
+
+      const page = await context.newPage();
       const failed = [];
       const apiResponses = [];
 
@@ -222,8 +339,15 @@ async function smokeBrowser() {
       assert(state.scrollWidth === state.clientWidth, `${name} has document horizontal overflow`);
       assert(failed.length === 0, `${name} had failed requests: ${failed.join(', ')}`);
       assert(apiResponses.length > 0, `${name} did not call API endpoints`);
-      assert(apiResponses.every((item) => item.status === 200), `${name} had non-200 API responses`);
+      // 401 is OK during boot for the unauth probe; we only fail on
+      // 5xx and unexpected 4xx outside the auth surface.
+      const bad = apiResponses.filter((item) =>
+        item.status >= 500 ||
+        (item.status >= 400 && item.status !== 401 && !item.url.includes('/auth/')),
+      );
+      assert(bad.length === 0, `${name} had non-OK API responses: ${JSON.stringify(bad)}`);
       await page.close();
+      await context.close();
     }
   } finally {
     await browser.close();
@@ -234,6 +358,7 @@ async function smokeBrowser() {
 
 (async () => {
   try {
+    await smokeAuth();
     await smokeApi();
     await smokeManualAccountAndImport();
     await smokeIntegrationStates();

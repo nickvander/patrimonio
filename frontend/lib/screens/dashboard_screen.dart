@@ -21,6 +21,7 @@ import '../components/allocation_heatmap.dart';
 import '../components/trends_chart.dart';
 import '../utils/currency.dart';
 import 'package:patrimonio/screens/tax_planning_screen.dart';
+import '../services/auth_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -225,6 +226,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             const SizedBox(width: 8),
+            IconButton(
+              tooltip: 'Sign out',
+              icon: const Icon(Icons.logout, color: Colors.white70),
+              onPressed: () async {
+                await AuthService.instance.logout();
+              },
+            ),
+            const SizedBox(width: 4),
           ],
         ),
         body: _buildBody(),

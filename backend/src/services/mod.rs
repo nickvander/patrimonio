@@ -9,3 +9,5 @@ pub mod projections;
 pub mod crypto;
 pub mod crypto_price;
 pub mod tax;
+pub mod password;
+pub mod sessions;

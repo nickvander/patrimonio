@@ -55,6 +55,32 @@ Service URLs:
 - Postgres host port: `5433`
 - Redis host port: `6380`
 
+### First-run sign-in
+
+**There is no default username or password.** On first launch the app
+shows a one-time bootstrap screen and asks you to create the owner
+account directly. This is a deliberate choice — shipped defaults on
+self-hosted financial software get scanned for and exploited.
+
+1. Open `http://127.0.0.1:3000` after `docker compose up`.
+2. Pick a username and a password of **at least 12 characters**. An
+   email is optional and used only for future password reset.
+3. The bootstrap endpoint refuses to run a second time, so the account
+   you create here is the only one until multi-user support lands.
+
+If you forget the password, drop the `users` row in Postgres and the
+bootstrap screen reappears:
+
+```bash
+docker exec -it patrimonio-postgres-1 \
+  psql -U patrimonio -d patrimonio -c "DELETE FROM users;"
+```
+
+In any deployment served over HTTPS, set `COOKIE_SECURE=true` in
+`.env` so the session cookie is only sent over TLS. The cookie is also
+marked Secure automatically when `FRONTEND_BASE_URL` starts with
+`https://`.
+
 ### Smoke Test
 ```bash
 NODE_PATH=/path/to/node_modules ./scripts/smoke.cjs
@@ -76,21 +102,31 @@ flutter run -d chrome
 
 ## API Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/health` | Health check plus DB status |
-| GET | `/api/version` | App version |
-| GET | `/api/accounts` | List all accounts |
-| GET | `/api/accounts/summary` | Net worth summary |
-| GET | `/api/institutions` | List linked institutions |
-| POST | `/api/institutions` | Add an institution |
-| GET | `/api/fx/latest/:base/:target` | Latest exchange rate |
-| GET | `/api/fx/history/:base/:target` | Exchange rate history |
-| GET | `/api/dashboard/overview` | Dashboard aggregations |
-| POST | `/api/plaid/*` | Plaid link and sync routes |
-| POST | `/api/auth/coinbase/*` | Coinbase OAuth routes |
-| POST | `/api/imports/*` | CSV/PDF import routes |
-| GET | `/api/tax/*` | Tax estimates and exports |
+All data routes require a session cookie. Public endpoints are health,
+version, setup status, and `/api/auth/{status,login,bootstrap}`.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/health` | public | Health check plus DB status |
+| GET | `/api/version` | public | App version |
+| GET | `/api/setup/status` | public | Integration config readiness |
+| GET | `/api/auth/status` | public | `needs_bootstrap`, `authenticated`, current user |
+| POST | `/api/auth/bootstrap` | public, one-shot | Create the owner account on first run |
+| POST | `/api/auth/login` | public | Sign in, sets session cookie |
+| POST | `/api/auth/logout` | session | Revoke the current session |
+| GET | `/api/auth/me` | session | Current user profile |
+| POST | `/api/auth/change-password` | session | Rotate password, revokes other sessions |
+| GET | `/api/auth/coinbase/*` | session | Coinbase OAuth link flow |
+| GET | `/api/accounts` | session | List all accounts |
+| GET | `/api/accounts/summary` | session | Net worth summary |
+| GET | `/api/institutions` | session | List linked institutions |
+| POST | `/api/institutions` | session | Add an institution |
+| GET | `/api/fx/latest/:base/:target` | session | Latest exchange rate |
+| GET | `/api/fx/history/:base/:target` | session | Exchange rate history |
+| GET | `/api/dashboard/overview` | session | Dashboard aggregations |
+| POST | `/api/plaid/*` | session | Plaid link and sync routes |
+| POST | `/api/imports/*` | session | CSV/PDF import routes |
+| GET | `/api/tax/*` | session | Tax estimates and exports |
 
 ## Project Structure
 

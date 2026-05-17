@@ -2,7 +2,7 @@ import 'dart:js_interop';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'screens/dashboard_screen.dart';
+import 'screens/auth_gate.dart';
 
 @JS('__splashProgress')
 external void _splashProgress(int percent, String message);
@@ -82,7 +82,7 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
           dataRowColor: WidgetStateProperty.all(Colors.transparent),
         ),
       ),
-      home: const DashboardScreen(),
+      home: const AuthGate(),
     );
   }
 }

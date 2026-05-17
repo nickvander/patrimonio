@@ -1,11 +1,21 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'package:http/browser_client.dart';
 import 'package:web/web.dart' as web;
+import 'auth_service.dart';
+
+/// Thrown when the server returns 401. The auth gate listens for this
+/// indirectly via AuthService.handleUnauthorized().
+class UnauthorizedException implements Exception {
+  final String message;
+  UnauthorizedException([this.message = 'Authentication required']);
+  @override
+  String toString() => message;
+}
 
 class ApiService {
   String get _baseUrl {
-    // Dynamically detect host to support VM/Docker test networks correctly
     final host = web.window.location.hostname.isEmpty
         ? 'localhost'
         : web.window.location.hostname;
@@ -14,8 +24,120 @@ class ApiService {
 
   String get baseUrl => _baseUrl;
 
+  /// Shared credentialed HTTP client. `withCredentials` is required for
+  /// the browser to send (and accept) the session cookie on cross-origin
+  /// XHRs in development, and is harmless in same-origin production.
+  static final BrowserClient _client = BrowserClient()..withCredentials = true;
+
+  Future<http.Response> _get(Uri uri) async {
+    final res = await _client.get(uri);
+    _maybeUnauthorized(res);
+    return res;
+  }
+
+  Future<http.Response> _post(Uri uri, {Object? body, Map<String, String>? headers}) async {
+    final res = await _client.post(uri, body: body, headers: headers);
+    _maybeUnauthorized(res);
+    return res;
+  }
+
+  Future<http.Response> _patch(Uri uri, {Object? body, Map<String, String>? headers}) async {
+    final res = await _client.patch(uri, body: body, headers: headers);
+    _maybeUnauthorized(res);
+    return res;
+  }
+
+  Future<http.Response> _delete(Uri uri) async {
+    final res = await _client.delete(uri);
+    _maybeUnauthorized(res);
+    return res;
+  }
+
+  void _maybeUnauthorized(http.Response res) {
+    if (res.statusCode == 401) {
+      AuthService.instance.handleUnauthorized();
+      throw UnauthorizedException();
+    }
+  }
+
+  // ----- auth -----
+
+  Future<Map<String, dynamic>> authStatus() async {
+    final res = await _client.get(Uri.parse('$_baseUrl/auth/status'));
+    if (res.statusCode == 200) {
+      return json.decode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to load auth status (${res.statusCode})');
+  }
+
+  Future<AuthUser> login(String username, String password) async {
+    final res = await _client.post(
+      Uri.parse('$_baseUrl/auth/login'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'username': username, 'password': password}),
+    );
+    if (res.statusCode == 200) {
+      return AuthUser.fromJson(json.decode(res.body) as Map<String, dynamic>);
+    }
+    throw _errorFromBody(res, fallback: 'Login failed');
+  }
+
+  Future<AuthUser> bootstrap({
+    required String username,
+    String? email,
+    required String password,
+  }) async {
+    final res = await _client.post(
+      Uri.parse('$_baseUrl/auth/bootstrap'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'username': username,
+        'email': email,
+        'password': password,
+      }),
+    );
+    if (res.statusCode == 200) {
+      return AuthUser.fromJson(json.decode(res.body) as Map<String, dynamic>);
+    }
+    throw _errorFromBody(res, fallback: 'Bootstrap failed');
+  }
+
+  Future<void> logout() async {
+    final res = await _client.post(Uri.parse('$_baseUrl/auth/logout'));
+    if (res.statusCode != 204 && res.statusCode != 200) {
+      throw _errorFromBody(res, fallback: 'Logout failed');
+    }
+  }
+
+  Future<void> changePassword(String currentPassword, String newPassword) async {
+    final res = await _client.post(
+      Uri.parse('$_baseUrl/auth/change-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'current_password': currentPassword,
+        'new_password': newPassword,
+      }),
+    );
+    if (res.statusCode != 204) {
+      _maybeUnauthorized(res);
+      throw _errorFromBody(res, fallback: 'Password change failed');
+    }
+  }
+
+  Exception _errorFromBody(http.Response res, {required String fallback}) {
+    try {
+      final body = json.decode(res.body);
+      if (body is Map && body['error'] is String) {
+        return Exception(body['error'] as String);
+      }
+    } catch (_) {}
+    return Exception('$fallback (${res.statusCode})');
+  }
+
+  // ----- existing endpoints (now credentialed) -----
+
   Future<Map<String, dynamic>> getDashboardOverview() async {
-    final response = await http.get(Uri.parse('$_baseUrl/dashboard/overview'));
+    final response = await _get(Uri.parse('$_baseUrl/dashboard/overview'));
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
@@ -23,7 +145,7 @@ class ApiService {
   }
 
   Future<List<dynamic>> getNetWorthHistory() async {
-    final response = await http.get(
+    final response = await _get(
       Uri.parse('$_baseUrl/dashboard/net-worth-history'),
     );
     if (response.statusCode == 200) {
@@ -33,9 +155,7 @@ class ApiService {
   }
 
   Future<List<dynamic>> getAllocationData() async {
-    final response = await http.get(
-      Uri.parse('$_baseUrl/dashboard/allocation'),
-    );
+    final response = await _get(Uri.parse('$_baseUrl/dashboard/allocation'));
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
@@ -43,7 +163,7 @@ class ApiService {
   }
 
   Future<List<dynamic>> getTrendData() async {
-    final response = await http.get(Uri.parse('$_baseUrl/dashboard/trends'));
+    final response = await _get(Uri.parse('$_baseUrl/dashboard/trends'));
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
@@ -51,7 +171,7 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getHoldings() async {
-    final response = await http.get(Uri.parse('$_baseUrl/dashboard/holdings'));
+    final response = await _get(Uri.parse('$_baseUrl/dashboard/holdings'));
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
@@ -59,7 +179,7 @@ class ApiService {
   }
 
   Future<List<dynamic>> getCreditUtilization() async {
-    final response = await http.get(
+    final response = await _get(
       Uri.parse('$_baseUrl/dashboard/credit-utilization'),
     );
     if (response.statusCode == 200) {
@@ -69,9 +189,7 @@ class ApiService {
   }
 
   Future<List<dynamic>> getSyncStatus() async {
-    final response = await http.get(
-      Uri.parse('$_baseUrl/dashboard/sync-status'),
-    );
+    final response = await _get(Uri.parse('$_baseUrl/dashboard/sync-status'));
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
@@ -79,7 +197,9 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getSetupStatus() async {
-    final response = await http.get(Uri.parse('$_baseUrl/setup/status'));
+    // Setup status is a public endpoint — used by the login screen — so
+    // we still send credentials but the server does not require them.
+    final response = await _client.get(Uri.parse('$_baseUrl/setup/status'));
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
@@ -90,9 +210,7 @@ class ApiService {
     String base,
     String target,
   ) async {
-    final response = await http.get(
-      Uri.parse('$_baseUrl/fx/latest/$base/$target'),
-    );
+    final response = await _get(Uri.parse('$_baseUrl/fx/latest/$base/$target'));
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
@@ -100,9 +218,7 @@ class ApiService {
   }
 
   Future<List<dynamic>> getTransactions() async {
-    final response = await http.get(
-      Uri.parse('$_baseUrl/dashboard/transactions'),
-    );
+    final response = await _get(Uri.parse('$_baseUrl/dashboard/transactions'));
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
@@ -110,7 +226,7 @@ class ApiService {
   }
 
   Future<List<dynamic>> getAccountTransactions(String accountId) async {
-    final response = await http.get(
+    final response = await _get(
       Uri.parse('$_baseUrl/accounts/$accountId/transactions'),
     );
     if (response.statusCode == 200) {
@@ -120,14 +236,14 @@ class ApiService {
   }
 
   Future<void> syncInstitutions() async {
-    final response = await http.post(Uri.parse('$_baseUrl/institutions/sync'));
+    final response = await _post(Uri.parse('$_baseUrl/institutions/sync'));
     if (response.statusCode != 200) {
       throw Exception('Failed to sync institutions');
     }
   }
 
   Future<Map<String, dynamic>> getReconnectToken(String institutionId) async {
-    final response = await http.post(
+    final response = await _post(
       Uri.parse('$_baseUrl/institutions/reconnect-token/$institutionId'),
     );
     if (response.statusCode == 200) {
@@ -137,7 +253,7 @@ class ApiService {
   }
 
   Future<void> deleteInstitution(String institutionId) async {
-    final response = await http.delete(
+    final response = await _delete(
       Uri.parse('$_baseUrl/institutions/$institutionId'),
     );
     if (response.statusCode != 204) {
@@ -162,10 +278,11 @@ class ApiService {
     }
 
     try {
-      final streamedResponse = await request.send().timeout(
+      final streamedResponse = await _client.send(request).timeout(
         const Duration(seconds: 30),
       );
       final response = await http.Response.fromStream(streamedResponse);
+      _maybeUnauthorized(response);
 
       if (response.statusCode == 200) {
         return json.decode(response.body) as Map<String, dynamic>;
@@ -187,7 +304,7 @@ class ApiService {
     String accountId,
     List<dynamic> transactions,
   ) async {
-    final response = await http.post(
+    final response = await _post(
       Uri.parse('$_baseUrl/imports/confirm'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({
@@ -204,7 +321,7 @@ class ApiService {
   }
 
   Future<void> updateAccountBalance(String accountId, double balance) async {
-    final response = await http.patch(
+    final response = await _patch(
       Uri.parse('$_baseUrl/accounts/$accountId/balance'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({'current_balance': balance}),
@@ -215,14 +332,18 @@ class ApiService {
   }
 
   Future<void> deleteAccount(String accountId) async {
-    final response = await http.delete(Uri.parse('$_baseUrl/accounts/$accountId'));
+    final response = await _delete(Uri.parse('$_baseUrl/accounts/$accountId'));
     if (response.statusCode != 204) {
       throw Exception('Failed to delete account');
     }
   }
 
-  Future<void> updateTransaction(String txId, {String? userCategory, String? userNotes}) async {
-    final response = await http.patch(
+  Future<void> updateTransaction(
+    String txId, {
+    String? userCategory,
+    String? userNotes,
+  }) async {
+    final response = await _patch(
       Uri.parse('$_baseUrl/accounts/transactions/$txId'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({
@@ -241,7 +362,7 @@ class ApiService {
     required String currency,
     required double initialBalance,
   }) async {
-    final response = await http.post(
+    final response = await _post(
       Uri.parse('$_baseUrl/accounts'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({
@@ -276,7 +397,7 @@ class ApiService {
     final uri = Uri.parse(
       '$_baseUrl/projections/calculate',
     ).replace(queryParameters: queryParams);
-    final response = await http.get(uri);
+    final response = await _get(uri);
 
     if (response.statusCode == 200) {
       return json.decode(response.body);
@@ -291,7 +412,7 @@ class ApiService {
     required String apiSecret,
     String? apiPass,
   }) async {
-    final response = await http.post(
+    final response = await _post(
       Uri.parse('$_baseUrl/institutions/crypto'),
       headers: {'Content-Type': 'application/json'},
       body: json.encode({
@@ -318,7 +439,7 @@ class ApiService {
     final uri = Uri.parse(
       '$_baseUrl/tax/summary',
     ).replace(queryParameters: queryParams);
-    final response = await http.get(uri);
+    final response = await _get(uri);
 
     if (response.statusCode == 200) {
       return json.decode(response.body);
@@ -333,7 +454,7 @@ class ApiService {
     final uri = Uri.parse(
       '$_baseUrl/tax/transactions',
     ).replace(queryParameters: queryParams);
-    final response = await http.get(uri);
+    final response = await _get(uri);
 
     if (response.statusCode == 200) {
       return json.decode(response.body);

@@ -3,9 +3,10 @@ use tokio_cron_scheduler::{Job, JobScheduler};
 use axum::{
     extract::State,
     http::{
-        header::{AUTHORIZATION, CONTENT_TYPE},
+        header::{AUTHORIZATION, CONTENT_TYPE, COOKIE, SET_COOKIE},
         HeaderValue, Method,
     },
+    middleware::from_fn_with_state,
     response::Json,
     routing::get,
     Router,
@@ -61,7 +62,7 @@ async fn main() -> Result<()> {
     // Initialize Cron Scheduler for daily balance snapshots
     let sched = JobScheduler::new().await.expect("Failed to create cron scheduler");
     let cron_db = db.clone();
-    
+
     sched.add(
         Job::new_async("0 0 0 * * *", move |_uuid, mut _l| {
             let db = cron_db.clone();
@@ -81,22 +82,50 @@ async fn main() -> Result<()> {
             })
         }).expect("Failed to add cron job")
     ).await.expect("Failed to register job");
-    
+
     sched.start().await.expect("Failed to start scheduler");
 
-    // Build the router
-    let app = Router::new()
+    // ---- routing ----
+    //
+    // Public routes are open to the world:
+    //   - liveness/version probes
+    //   - the bootstrap/login/status endpoints that the unauthenticated
+    //     UI needs to render its login screen
+    //   - the setup config status (used by the same screen)
+    //
+    // Everything else is gated by `session::require_auth`, including
+    // the existing Coinbase OAuth handlers — initiating an OAuth link
+    // is a sensitive, account-binding operation and must be done by a
+    // logged-in user.
+
+    let public = Router::new()
         .route("/api/health", get(health))
         .route("/api/version", get(version))
+        .nest("/api/setup", patrimonio::api::setup::router())
+        .nest("/api/auth", patrimonio::api::session::public_router());
+
+    let protected = Router::new()
         .nest("/api/accounts", patrimonio::api::accounts::router())
         .nest("/api/institutions", patrimonio::api::institutions::router())
         .nest("/api/fx", patrimonio::api::exchange_rates::router())
         .nest("/api/dashboard", patrimonio::api::dashboard::router())
         .nest("/api/imports", patrimonio::api::imports::router())
         .nest("/api/projections", patrimonio::api::projections::router())
-        .nest("/api/auth", patrimonio::api::auth::router())
         .nest("/api/tax", patrimonio::api::tax::router())
-        .nest("/api/setup", patrimonio::api::setup::router())
+        // /api/auth/me, /logout, /change-password live here so that
+        // require_auth populates AuthContext for the handlers.
+        .nest("/api/auth", patrimonio::api::session::protected_router())
+        // Coinbase OAuth lives under /api/auth/coinbase historically.
+        // Keep the existing URLs (registered with Coinbase) but require
+        // an authenticated session.
+        .nest("/api/auth", patrimonio::api::auth::router())
+        .layer(from_fn_with_state(
+            state.clone(),
+            patrimonio::api::session::require_auth,
+        ));
+
+    let app = public
+        .merge(protected)
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);
@@ -111,19 +140,33 @@ async fn main() -> Result<()> {
 }
 
 fn build_cors_layer(allowed_origins: &[String]) -> CorsLayer {
-    if allowed_origins.iter().any(|origin| origin == "*") {
-        return CorsLayer::permissive();
-    }
-
+    // Credentialed cookies require an explicit (non-wildcard) origin
+    // and `Access-Control-Allow-Credentials: true`. We refuse `*` here
+    // — if you want true wildcard, you have to disable auth too.
     let origins: Vec<HeaderValue> = allowed_origins
         .iter()
+        .filter(|origin| *origin != "*")
         .filter_map(|origin| origin.parse::<HeaderValue>().ok())
         .collect();
 
+    if origins.is_empty() {
+        tracing::warn!(
+            "ALLOWED_ORIGINS produced no usable values; CORS will reject all browser origins. \
+             Set ALLOWED_ORIGINS to your frontend URL(s)."
+        );
+    }
+
     CorsLayer::new()
         .allow_origin(AllowOrigin::list(origins))
-        .allow_methods([Method::GET, Method::POST, Method::PATCH])
-        .allow_headers([CONTENT_TYPE, AUTHORIZATION])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PATCH,
+            Method::DELETE,
+        ])
+        .allow_headers([CONTENT_TYPE, AUTHORIZATION, COOKIE])
+        .expose_headers([SET_COOKIE])
+        .allow_credentials(true)
 }
 
 /// Health check endpoint

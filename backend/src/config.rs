@@ -27,6 +27,10 @@ pub struct AppConfig {
     pub frontend_base_url: String,
     pub plaid_redirect_uri: Option<String>,
     pub allowed_origins: Vec<String>,
+    /// Force the session cookie's `Secure` flag on. Default false; the
+    /// cookie is also marked Secure automatically when
+    /// `frontend_base_url` is https.
+    pub cookie_secure: bool,
 }
 
 impl AppConfig {
@@ -73,6 +77,9 @@ impl AppConfig {
             frontend_base_url,
             plaid_redirect_uri: env_non_empty("PLAID_REDIRECT_URI"),
             allowed_origins,
+            cookie_secure: std::env::var("COOKIE_SECURE")
+                .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+                .unwrap_or(false),
         })
     }
 }
