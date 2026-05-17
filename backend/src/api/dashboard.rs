@@ -28,19 +28,35 @@ pub fn router() -> Router<AppState> {
 
 /// Dashboard overview: net worth, account breakdown, recent changes
 async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOverview> {
-    // Net worth by currency
-    let currency_rows = sqlx::query(
-        r#"
-        SELECT currency,
-               COALESCE(SUM(CASE WHEN account_type NOT IN ('credit') THEN current_balance ELSE 0 END), 0) as assets,
-               COALESCE(SUM(CASE WHEN account_type = 'credit' THEN ABS(current_balance) ELSE 0 END), 0) as liabilities
-        FROM accounts
-        GROUP BY currency
-        "#
-    )
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+    // Phase 1: three independent queries — currency totals, FX rate,
+    // and per-account detail — go in parallel. Originally these were
+    // four sequential awaits; the dashboard is the hottest read path
+    // so the round-trip win is meaningful.
+    let (currency_rows, fx_row, accounts_rows) = tokio::join!(
+        sqlx::query(
+            r#"
+            SELECT currency,
+                   COALESCE(SUM(CASE WHEN account_type NOT IN ('credit') THEN current_balance ELSE 0 END), 0) as assets,
+                   COALESCE(SUM(CASE WHEN account_type = 'credit' THEN ABS(current_balance) ELSE 0 END), 0) as liabilities
+            FROM accounts
+            GROUP BY currency
+            "#
+        ).fetch_all(&state.db),
+        sqlx::query(
+            "SELECT rate FROM exchange_rates WHERE base_currency = 'USD' AND target_currency = 'MXN' ORDER BY recorded_at DESC LIMIT 1"
+        ).fetch_optional(&state.db),
+        sqlx::query(
+            r#"
+            SELECT a.id, a.name, a.nickname, a.account_type, a.current_balance, a.currency,
+                   i.name as institution_name, a.ticker_symbol, a.crypto_amount
+            FROM accounts a
+            JOIN institutions i ON a.institution_id = i.id
+            ORDER BY a.account_type, a.name
+            "#
+        ).fetch_all(&state.db),
+    );
+    let currency_rows = currency_rows.unwrap_or_default();
+    let accounts_rows = accounts_rows.unwrap_or_default();
 
     let currency_breakdown: Vec<CurrencyBreakdown> = currency_rows.iter()
         .map(|r| {
@@ -57,39 +73,57 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
         })
         .collect();
 
-    // Get latest USD/MXN rate for conversion. Dashboard aggregate totals use USD
-    // as their base so the frontend can report them in either USD or MXN.
-    let fx_rate = sqlx::query(
-        "SELECT rate FROM exchange_rates WHERE base_currency = 'USD' AND target_currency = 'MXN' ORDER BY recorded_at DESC LIMIT 1"
-    )
-    .fetch_optional(&state.db)
-    .await
-    .ok()
-    .flatten()
-    .map(|r| r.get::<rust_decimal::Decimal, _>("rate"))
-    .and_then(|d| d.to_string().parse::<f64>().ok())
-    .unwrap_or(20.0);
+    // FX rate is needed by both per-type and per-institution queries
+    // below; pin its numeric value before phase 2.
+    let fx_rate = fx_row
+        .ok()
+        .flatten()
+        .map(|r| r.get::<rust_decimal::Decimal, _>("rate"))
+        .and_then(|d| d.to_string().parse::<f64>().ok())
+        .unwrap_or(20.0);
 
-    // Account type breakdown
-    let type_rows = sqlx::query(
-        r#"
-        SELECT account_type,
-               COUNT(*) as count,
-               COALESCE(SUM(current_balance), 0) as total,
-               COALESCE(SUM(
-                   CASE
-                       WHEN currency = 'MXN' THEN current_balance / $1::numeric
-                       ELSE current_balance
-                   END
-               ), 0) as total_usd
-        FROM accounts
-        GROUP BY account_type
-        "#
-    )
-    .bind(fx_rate)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+    // Phase 2: the two remaining aggregates depend on fx_rate but not
+    // on each other — run them concurrently as well.
+    let (type_rows, institution_rows) = tokio::join!(
+        sqlx::query(
+            r#"
+            SELECT account_type,
+                   COUNT(*) as count,
+                   COALESCE(SUM(current_balance), 0) as total,
+                   COALESCE(SUM(
+                       CASE
+                           WHEN currency = 'MXN' THEN current_balance / $1::numeric
+                           ELSE current_balance
+                       END
+                   ), 0) as total_usd
+            FROM accounts
+            GROUP BY account_type
+            "#
+        )
+        .bind(fx_rate)
+        .fetch_all(&state.db),
+        sqlx::query(
+            r#"
+            SELECT i.name as institution_name, i.country,
+                   COUNT(*) as account_count,
+                   COALESCE(SUM(a.current_balance), 0) as total,
+                   COALESCE(SUM(
+                       CASE
+                           WHEN a.currency = 'MXN' THEN a.current_balance / $1::numeric
+                           ELSE a.current_balance
+                       END
+                   ), 0) as total_usd
+            FROM accounts a
+            JOIN institutions i ON a.institution_id = i.id
+            GROUP BY i.name, i.country
+            ORDER BY total DESC
+            "#
+        )
+        .bind(fx_rate)
+        .fetch_all(&state.db),
+    );
+    let type_rows = type_rows.unwrap_or_default();
+    let institution_rows = institution_rows.unwrap_or_default();
 
     let type_breakdown: Vec<TypeBreakdown> = type_rows.iter()
         .map(|r| TypeBreakdown {
@@ -102,29 +136,6 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
         })
         .collect();
 
-    // Institution breakdown
-    let institution_rows = sqlx::query(
-        r#"
-        SELECT i.name as institution_name, i.country,
-               COUNT(*) as account_count,
-               COALESCE(SUM(a.current_balance), 0) as total,
-               COALESCE(SUM(
-                   CASE
-                       WHEN a.currency = 'MXN' THEN a.current_balance / $1::numeric
-                       ELSE a.current_balance
-                   END
-               ), 0) as total_usd
-        FROM accounts a
-        JOIN institutions i ON a.institution_id = i.id
-        GROUP BY i.name, i.country
-        ORDER BY total DESC
-        "#
-    )
-    .bind(fx_rate)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
-
     let institution_breakdown: Vec<InstitutionBreakdown> = institution_rows.iter()
         .map(|r| InstitutionBreakdown {
             name: r.get("institution_name"),
@@ -136,20 +147,6 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
                 .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
         })
         .collect();
-
-    // Individual Accounts
-    let accounts_rows = sqlx::query(
-        r#"
-        SELECT a.id, a.name, a.nickname, a.account_type, a.current_balance, a.currency,
-               i.name as institution_name, a.ticker_symbol, a.crypto_amount
-        FROM accounts a
-        JOIN institutions i ON a.institution_id = i.id
-        ORDER BY a.account_type, a.name
-        "#
-    )
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
 
     let accounts: Vec<AccountDetail> = accounts_rows.iter()
         .map(|r| AccountDetail {

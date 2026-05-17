@@ -323,6 +323,12 @@ async fn login(
     .map_err(internal)?;
 
     let Some((user_id, hash, is_active, totp_enabled)) = row else {
+        // Close the timing oracle: run a real Argon2 verify against a
+        // fixed dummy hash so the unknown-username path takes the same
+        // wall-clock time as the bad-password path. Without this a
+        // remote attacker can enumerate valid usernames by clocking
+        // /login responses.
+        password::dummy_verify();
         record_audit(
             &state.db,
             "login",

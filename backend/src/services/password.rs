@@ -34,6 +34,22 @@ pub fn verify_password(password: &str, stored_hash: &str) -> Result<bool> {
     }
 }
 
+/// Run a real Argon2 verify against a fixed dummy hash, then discard
+/// the result. Used by /login when the user row was not found, so the
+/// "unknown user" path takes the same wall-clock time as the
+/// "bad password" path — closes the timing-oracle username enumeration
+/// gap. The dummy hash is for the literal password "not-a-real-password"
+/// generated at the same Argon2 params we hash with.
+pub fn dummy_verify() {
+    const DUMMY_HASH: &str =
+        "$argon2id$v=19$m=65536,t=3,p=1$YWFhYWFhYWFhYWFhYWFhYQ$AbHfdxZmFw84/oOzg2tBJN1mzGZyVqfb3CFEKCJrSeQ";
+    // Best effort: a parse failure (which would only happen if someone
+    // edits DUMMY_HASH wrong) silently degrades to "no work performed"
+    // — which IS observable, but never on a live build because the
+    // string is a literal we control.
+    let _ = verify_password("dummy", DUMMY_HASH);
+}
+
 /// Cheap structural password policy. We deliberately stay loose on
 /// composition rules (NIST SP 800-63B discourages them) and lean on
 /// minimum length.

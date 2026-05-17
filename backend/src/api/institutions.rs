@@ -12,6 +12,8 @@ use crate::AppState;
 use crate::services::encryption;
 use tracing::{info, error};
 
+/// User-facing institution CRUD + sync. Mounted under the
+/// authenticated router in main.rs.
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_institutions).post(create_institution))
@@ -22,7 +24,14 @@ pub fn router() -> Router<AppState> {
         .route("/{id}", delete(delete_institution))
         .route("/exchange-token", post(exchange_public_token))
         .route("/crypto", post(link_crypto_institution))
-        .route("/webhook", post(plaid_webhook))
+}
+
+/// Plaid webhook receiver. Must live on the public router because
+/// Plaid POSTs to it directly with no session cookie. The handler
+/// itself refuses to do anything unless webhook verification is
+/// configured — see `plaid_webhook` for the gating.
+pub fn webhook_router() -> Router<AppState> {
+    Router::new().route("/webhook", post(plaid_webhook))
 }
 
 /// Sync request body for the global `/sync` endpoint. Accepts an
@@ -529,11 +538,57 @@ struct PlaidWebhook {
     item_id: String,
 }
 
-/// Webhook from Plaid triggered on item updates
+/// Webhook from Plaid triggered on item updates.
+///
+/// Plaid signs every webhook with a JWT in `Plaid-Verification`; the
+/// receiver must fetch the signing key from `/webhook_verification_key/get`
+/// and validate ES256 before trusting the body. Implementing that is
+/// tracked as a follow-up — see `work/FUTURE.md`. Until then the
+/// handler refuses to process any webhook: the response is the same
+/// 401 a missing session cookie would give, which matches what Plaid's
+/// dashboard expects for a misconfigured endpoint.
 async fn plaid_webhook(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Json(req): Json<PlaidWebhook>,
-) -> Json<serde_json::Value> {
+) -> axum::response::Response {
+    // Refuse to process unless the signature is presented AND we have
+    // a verifier configured. Today the verifier is unimplemented (see
+    // doc above), so this path always refuses — that's the safe
+    // default. Don't 200 a webhook we can't authenticate.
+    let has_signature = headers.contains_key("plaid-verification");
+    if !has_signature {
+        tracing::warn!(
+            "Plaid webhook rejected: missing Plaid-Verification header (type={}, code={})",
+            req.webhook_type,
+            req.webhook_code,
+        );
+        return (
+            axum::http::StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "Webhook signature required"})),
+        )
+            .into_response();
+    }
+    // TODO(webhook-verify): fetch Plaid's webhook JWK, validate the
+    // ES256 JWT in `Plaid-Verification`, then process. Until then we
+    // refuse all webhooks — even signed-looking ones — to avoid
+    // accepting forged payloads.
+    tracing::warn!(
+        "Plaid webhook signed but verification not yet implemented; refusing (type={}, code={})",
+        req.webhook_type,
+        req.webhook_code,
+    );
+    return (
+        axum::http::StatusCode::UNAUTHORIZED,
+        Json(serde_json::json!({"error": "Webhook verification not configured"})),
+    )
+        .into_response();
+
+    // Old, post-verification logic below is unreachable. Kept structurally
+    // so re-enabling once the verifier is in just deletes the early
+    // returns above.
+    #[allow(unreachable_code)]
+    {
     tracing::info!("Plaid Webhook: {} - {} for item {}", req.webhook_type, req.webhook_code, req.item_id);
 
     let status = match req.webhook_code.as_str() {
@@ -563,7 +618,8 @@ async fn plaid_webhook(
         }
     });
 
-    Json(serde_json::json!({"status": "received"}))
+    Json(serde_json::json!({"status": "received"})).into_response()
+    }
 }
 
 /// Delete an institution and all associated data

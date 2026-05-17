@@ -4,7 +4,7 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
-import 'package:http/http.dart' as http;
+import 'package:http/browser_client.dart';
 
 import 'api_service.dart';
 import 'auth_service.dart';
@@ -15,12 +15,16 @@ class PasskeySummary {
   final String? nickname;
   final DateTime createdAt;
   final DateTime? lastUsedAt;
+  /// "platform" (phone / laptop biometric) or "cross-platform" (USB /
+  /// NFC hardware key). Null if the browser declined to say.
+  final String? authenticatorAttachment;
 
   PasskeySummary({
     required this.id,
     this.nickname,
     required this.createdAt,
     this.lastUsedAt,
+    this.authenticatorAttachment,
   });
 
   factory PasskeySummary.fromJson(Map<String, dynamic> json) => PasskeySummary(
@@ -30,7 +34,13 @@ class PasskeySummary {
         lastUsedAt: json['last_used_at'] == null
             ? null
             : DateTime.parse(json['last_used_at'] as String),
+        authenticatorAttachment: json['authenticator_attachment'] as String?,
       );
+
+  /// True when this passkey lives on a roaming authenticator (a USB /
+  /// NFC security key plugged into whichever machine the user is on),
+  /// rather than on the device itself.
+  bool get isHardwareKey => authenticatorAttachment == 'cross-platform';
 }
 
 /// Thrown when the browser doesn't expose `navigator.credentials` or
@@ -54,13 +64,12 @@ class PasskeyService {
   static final PasskeyService instance = PasskeyService._();
 
   final ApiService _api = ApiService();
-  static final _client = _credentialedClient();
-
-  static http.Client _credentialedClient() {
-    // Late import so non-web builds (if any) don't try to use it.
-    final c = http.Client();
-    return c;
-  }
+  // BrowserClient with withCredentials=true is required so the session
+  // cookie is sent on cross-origin XHRs during local dev (frontend on
+  // :3000, API on :8080). Identical in same-origin prod; harmless. The
+  // password login path uses the same shape — match it so a passkey
+  // user gets the same Set-Cookie handling.
+  static final BrowserClient _client = BrowserClient()..withCredentials = true;
 
   String get _baseUrl => '${_api.baseUrl}/auth/passkeys';
 
@@ -112,7 +121,10 @@ class PasskeyService {
     final cred = await _callCredentialsCreate(publicKey);
     final credJson = _encodeAttestationCredential(cred);
 
-    // 3. Send the result + the nickname back to the server.
+    // 3. Send the result + the nickname + attachment hint back to the
+    //    server. The attachment lives inside credJson but webauthn-rs
+    //    deserialises only spec-defined fields, so we mirror it at the
+    //    outer level too — that's what the DB row reads.
     final finishRes = await _client.post(
       Uri.parse('$_baseUrl/register/finish'),
       headers: {'Content-Type': 'application/json'},
@@ -121,6 +133,8 @@ class PasskeyService {
         'credential': credJson,
         if (nickname != null && nickname.trim().isNotEmpty)
           'nickname': nickname.trim(),
+        if (credJson['authenticatorAttachment'] != null)
+          'authenticator_attachment': credJson['authenticatorAttachment'],
       }),
     );
     if (finishRes.statusCode != 200) {

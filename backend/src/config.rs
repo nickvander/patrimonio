@@ -56,8 +56,14 @@ impl AppConfig {
         Ok(Self {
             database_url: std::env::var("DATABASE_URL")
                 .unwrap_or_else(|_| "postgres://patrimonio:patrimonio@localhost:5432/patrimonio".to_string()),
+            // Default of 5 was too tight — the webapp + daily-snapshot
+            // cron + manual sync each consume connections, and one
+            // interactive sync alongside a dashboard load can already
+            // block the pool. 20 leaves plenty of headroom on a single-
+            // instance deployment and stays well under typical Postgres
+            // max_connections defaults.
             database_max_connections: std::env::var("DATABASE_MAX_CONNECTIONS")
-                .unwrap_or_else(|_| "5".to_string())
+                .unwrap_or_else(|_| "20".to_string())
                 .parse()?,
             redis_url: std::env::var("REDIS_URL")
                 .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
@@ -77,9 +83,14 @@ impl AppConfig {
             frontend_base_url,
             plaid_redirect_uri: env_non_empty("PLAID_REDIRECT_URI"),
             allowed_origins,
+            // Default to true (secure-by-default). Local dev over
+            // plain http://localhost must explicitly opt out with
+            // COOKIE_SECURE=false. session::cookie_secure also flips
+            // this on whenever FRONTEND_BASE_URL starts with https://
+            // so a typical prod config doesn't need to touch this.
             cookie_secure: std::env::var("COOKIE_SECURE")
                 .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes" | "on"))
-                .unwrap_or(false),
+                .unwrap_or(true),
         })
     }
 }

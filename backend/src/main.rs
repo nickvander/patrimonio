@@ -35,6 +35,26 @@ async fn main() -> Result<()> {
 
     tracing::info!("Starting Patrimonio API server");
 
+    // Loud warning for the dev-default DB password. Local-dev compose
+    // ships with POSTGRES_PASSWORD=patrimonio so the stack comes up
+    // one-command; a production deploy that forgot to override gets
+    // caught here on the first log scrape.
+    if config.database_url.contains(":patrimonio@") {
+        tracing::warn!(
+            "POSTGRES_PASSWORD is set to the local-dev default. \
+             OVERRIDE THIS in any non-dev deployment — set POSTGRES_PASSWORD \
+             in your .env and rebuild the postgres volume."
+        );
+    }
+    if !config.cookie_secure && !config.frontend_base_url.starts_with("http://localhost")
+        && !config.frontend_base_url.starts_with("http://127.0.0.1") {
+        tracing::warn!(
+            "COOKIE_SECURE is false but FRONTEND_BASE_URL ({}) is not localhost — \
+             session cookies will travel unencrypted. Set COOKIE_SECURE=true.",
+            config.frontend_base_url
+        );
+    }
+
     // Connect to PostgreSQL
     let db = PgPoolOptions::new()
         .max_connections(config.database_max_connections)
@@ -113,7 +133,12 @@ async fn main() -> Result<()> {
         // Passkey login (discoverable; no session needed to start the
         // ceremony). Register endpoints are mounted under the
         // protected router below.
-        .nest("/api/auth/passkeys", patrimonio::api::passkeys::public_router());
+        .nest("/api/auth/passkeys", patrimonio::api::passkeys::public_router())
+        // Plaid webhooks. Public because Plaid POSTs with no session
+        // cookie. The handler itself refuses to do anything unless a
+        // signed `Plaid-Verification` header is present — see
+        // institutions::plaid_webhook for the full guard.
+        .nest("/api/institutions", patrimonio::api::institutions::webhook_router());
 
     let protected = Router::new()
         .nest("/api/accounts", patrimonio::api::accounts::router())
