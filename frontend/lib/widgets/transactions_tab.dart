@@ -5,6 +5,7 @@ import 'package:web/web.dart' as web;
 import '../services/api_service.dart';
 import '../utils/category.dart';
 import '../utils/currency.dart';
+import '../utils/transaction_description.dart';
 import 'add_transaction_dialog.dart';
 import 'transaction_filters.dart';
 
@@ -872,7 +873,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    _titleCase(tx['description'] ?? 'Unknown'),
+                    cleanTransactionDescription(
+                      tx['description']?.toString() ?? 'Unknown',
+                    ),
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
@@ -1015,7 +1018,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
     final merchant = (tx['merchant_name'] ?? '').toString();
     final pending = tx['pending'] == true;
     final rawDescription = (tx['description'] ?? '').toString();
-    final titleDescription = _titleCase(rawDescription);
+    final titleDescription = cleanTransactionDescription(rawDescription);
     final color = _getCategoryColor(
       tx['user_category'] ?? tx['category'],
       rawDescription,
@@ -1529,23 +1532,6 @@ class _TransactionsTabState extends State<TransactionsTab> {
   }
 
   NumberFormat get currencyFormat => widget.currencyFormat;
-
-  /// Title-case raw bank descriptions for cleaner display
-  String _titleCase(String text) {
-    // If already mostly lowercase or mixed, use as-is
-    if (text != text.toUpperCase()) return text;
-    // Convert ALL CAPS → Title Case
-    return text
-        .split(' ')
-        .map((word) {
-          if (word.isEmpty) return word;
-          if (word.length <= 2) {
-            return word; // Keep short tokens like "CD", "ACH"
-          }
-          return '${word[0]}${word.substring(1).toLowerCase()}';
-        })
-        .join(' ');
-  }
 
   IconData _getCategoryIcon(String? category, String? description) {
     final cat = (category ?? '').toLowerCase();
