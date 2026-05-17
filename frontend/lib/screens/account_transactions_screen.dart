@@ -46,10 +46,29 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   String? _error;
   List<dynamic>? _transactions;
 
+  /// Locally-tracked balance and nickname so this screen can reflect an edit
+  /// immediately without writing back into the parent's shared map. The
+  /// parent will pick up the real values on its next data refresh.
+  late double _currentBalance;
+  late String _nickname;
+
   @override
   void initState() {
     super.initState();
+    _currentBalance =
+        ((widget.account['current_balance'] as num?)?.toDouble()) ?? 0.0;
+    _nickname = (widget.account['nickname'] ?? '').toString();
     _fetchTransactions();
+  }
+
+  @override
+  void didUpdateWidget(covariant AccountTransactionsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.account != oldWidget.account) {
+      _currentBalance =
+          ((widget.account['current_balance'] as num?)?.toDouble()) ?? 0.0;
+      _nickname = (widget.account['nickname'] ?? '').toString();
+    }
   }
 
   Future<void> _fetchTransactions() async {
@@ -75,9 +94,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   }
 
   void _showRenameDialog() {
-    final controller = TextEditingController(
-      text: (widget.account['nickname'] ?? '').toString(),
-    );
+    final controller = TextEditingController(text: _nickname);
     showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
@@ -92,9 +109,10 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
           ),
           onSubmitted: (v) {
             Navigator.pop(context);
+            final next = v.trim();
+            setState(() => _nickname = next);
             widget.onRenameAccount
-                ?.call(widget.account['id'].toString(), v.trim());
-            setState(() => widget.account['nickname'] = v.trim());
+                ?.call(widget.account['id'].toString(), next);
           },
         ),
         actions: [
@@ -105,9 +123,9 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             onPressed: () async {
               final v = controller.text.trim();
               Navigator.pop(context);
+              if (mounted) setState(() => _nickname = v);
               await widget.onRenameAccount
                   ?.call(widget.account['id'].toString(), v);
-              if (mounted) setState(() => widget.account['nickname'] = v);
             },
             child: const Text('Save'),
           ),
@@ -121,8 +139,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   // backend endpoint and is "good enough" for the recent 30-day shape.
   Widget _buildBalanceSparkline() {
     final txs = _transactions ?? const [];
-    final current =
-        ((widget.account['current_balance'] ?? 0.0) as num).toDouble();
+    final current = _currentBalance;
 
     // Walk transactions newest-first, treating amount > 0 as outflow:
     // balance(date - 1) = balance(date) + amount.
@@ -196,9 +213,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   }
 
   void _showEditBalanceDialog() {
-    final controller = TextEditingController(
-      text: widget.account['current_balance'].toString(),
-    );
+    final controller = TextEditingController(text: _currentBalance.toString());
     final currency =
         (widget.account['currency'] ?? 'USD').toString().toUpperCase();
     showDialog(
@@ -213,14 +228,10 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
           autofocus: true,
           onSubmitted: (_) {
             final newBalance = double.tryParse(controller.text);
-            if (newBalance != null) {
-              Navigator.pop(context);
-              widget.onBalanceUpdate
-                  ?.call(widget.account['id'], newBalance);
-              setState(() {
-                widget.account['current_balance'] = newBalance;
-              });
-            }
+            if (newBalance == null) return;
+            Navigator.pop(context);
+            setState(() => _currentBalance = newBalance);
+            widget.onBalanceUpdate?.call(widget.account['id'], newBalance);
           },
           decoration: InputDecoration(
             labelText: 'Current balance',
@@ -234,16 +245,12 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () async {
+            onPressed: () {
               final newBalance = double.tryParse(controller.text);
-              if (newBalance != null) {
-                Navigator.pop(context);
-                widget.onBalanceUpdate
-                    ?.call(widget.account['id'], newBalance);
-                setState(() {
-                  widget.account['current_balance'] = newBalance;
-                });
-              }
+              if (newBalance == null) return;
+              Navigator.pop(context);
+              setState(() => _currentBalance = newBalance);
+              widget.onBalanceUpdate?.call(widget.account['id'], newBalance);
             },
             child: const Text('Save'),
           ),
@@ -265,8 +272,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   }
 
   Widget _buildHeader() {
-    final balance =
-        ((widget.account['current_balance'] ?? 0.0) as num).toDouble().abs();
+    final balance = _currentBalance.abs();
     final sourceCurrency =
         (widget.account['currency'] ?? widget.targetCurrency).toString();
     final convertedBalance = convertCurrency(
