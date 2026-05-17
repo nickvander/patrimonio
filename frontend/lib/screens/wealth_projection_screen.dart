@@ -542,6 +542,12 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               reservedSize: 60,
               getTitlesWidget: (value, meta) {
                 if (value == 0) return Container();
+                // Drop the edge ticks; fl_chart emits one at the very top
+                // that visually stacks against the auto label one notch
+                // down (e.g. 12M / 12.1M).
+                if (value <= meta.min || value >= meta.max) {
+                  return const SizedBox.shrink();
+                }
                 return Text(
                   NumberFormat.compact().format(value),
                   style: TextStyle(color: context.textSubtle, fontSize: 10),
