@@ -219,7 +219,9 @@ async fn full_auth_lifecycle() {
     assert_eq!(me["username"], "owner");
     assert_eq!(me["totp_enabled"], false);
 
-    // Logout revokes the cookie.
+    // Logout revokes the cookie and emits a Set-Cookie that the
+    // browser will actually honor (must repeat Path=/ from the live
+    // cookie, otherwise the browser keeps the old one).
     let res = app
         .clone()
         .oneshot(
@@ -233,6 +235,17 @@ async fn full_auth_lifecycle() {
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    let removal = res
+        .headers()
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .filter_map(|h| h.to_str().ok())
+        .find(|s| s.starts_with(&format!("{SESSION_COOKIE}=")))
+        .expect("logout must emit a Set-Cookie for the session");
+    assert!(
+        removal.contains("Path=/"),
+        "removal Set-Cookie missing Path=/, got: {removal}"
+    );
 
     let res = app
         .clone()

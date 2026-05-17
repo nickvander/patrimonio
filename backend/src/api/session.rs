@@ -299,7 +299,13 @@ async fn logout(
     if let Some(cookie) = jar.get(sessions::COOKIE_NAME) {
         let _ = sessions::revoke_by_token(&state.db, cookie.value()).await;
     }
-    let jar = jar.remove(Cookie::from(sessions::COOKIE_NAME.to_string()));
+    // The removal cookie's path must match the live cookie's path
+    // exactly, or the browser keeps the old one. Without this the
+    // server-side session is revoked (so further requests fail auth)
+    // but the dead cookie stays in the browser store.
+    let mut removal = Cookie::from(sessions::COOKIE_NAME);
+    removal.set_path("/");
+    let jar = jar.remove(removal);
     Ok((jar, StatusCode::NO_CONTENT))
 }
 

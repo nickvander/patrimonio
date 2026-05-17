@@ -815,37 +815,42 @@ class _DashboardScreenState extends State<DashboardScreen>
                     Tab(text: isCompact ? 'Manage' : 'Management'),
                   ],
                 ),
-          actions: firstRun
-              ? const []
-              : [
-                  // Compact FX pill on wide; phones drop it entirely
-                  // because the Management tab still surfaces the rate
-                  // and the AppBar gets squeezed once tabs scroll.
-                  if (!isCompact) _buildFxBadge(compact: true),
-                  if (!isCompact) const SizedBox(width: 4),
-                  NotificationsBell(
-                    notifications: deriveNotifications(
-                      syncData: _syncData ?? const [],
-                      netWorthHistory: _netWorthHistory ?? const [],
-                      onJumpToManagement: () =>
-                          _tabController?.animateTo(6),
-                    ),
-                  ),
-                  _ThemeCycleButton(),
-                  _CurrencyToggleButton(
-                    targetCurrency: _targetCurrency,
-                    onSwap: () => _setTargetCurrency(
-                        _targetCurrency == 'USD' ? 'MXN' : 'USD'),
-                  ),
-                  IconButton(
-                    tooltip: 'Sign out',
-                    icon: const Icon(Icons.logout),
-                    onPressed: () async {
-                      await AuthService.instance.logout();
-                    },
-                  ),
-                  const SizedBox(width: 4),
-                ],
+          actions: [
+            // First-run hides the dashboard chrome (FX, notifications,
+            // currency toggle) because none of it has data yet. Sign
+            // out and theme cycle stay so the user can always escape
+            // or change brightness.
+            if (!firstRun) ...[
+              // Compact FX pill on wide; phones drop it entirely
+              // because the Management tab still surfaces the rate
+              // and the AppBar gets squeezed once tabs scroll.
+              if (!isCompact) _buildFxBadge(compact: true),
+              if (!isCompact) const SizedBox(width: 4),
+              NotificationsBell(
+                notifications: deriveNotifications(
+                  syncData: _syncData ?? const [],
+                  netWorthHistory: _netWorthHistory ?? const [],
+                  onJumpToManagement: () =>
+                      _tabController?.animateTo(6),
+                ),
+              ),
+            ],
+            _ThemeCycleButton(),
+            if (!firstRun)
+              _CurrencyToggleButton(
+                targetCurrency: _targetCurrency,
+                onSwap: () => _setTargetCurrency(
+                    _targetCurrency == 'USD' ? 'MXN' : 'USD'),
+              ),
+            IconButton(
+              tooltip: 'Sign out',
+              icon: const Icon(Icons.logout),
+              onPressed: () async {
+                await AuthService.instance.logout();
+              },
+            ),
+            const SizedBox(width: 4),
+          ],
         ),
               body: Column(
                 children: [
