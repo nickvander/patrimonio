@@ -29,9 +29,55 @@ pub fn router() -> Router<AppState> {
 async fn confirm_handler(
     State(state): State<AppState>,
     Json(payload): Json<ConfirmImportRequest>,
-) -> impl IntoResponse {
+) -> axum::response::Response {
     let mut imported_count = 0;
     let mut duplicate_count = 0;
+
+    // Guard against the "Banamex PDF imported into a Vanguard 401(k)" case
+    // (which has actually happened). If every parsed transaction shares a
+    // currency that doesn't match the target account's currency, refuse the
+    // import and tell the user — there is no plausible reason to import
+    // MXN bank statements into a USD brokerage.
+    let target_currency: Option<String> = match sqlx::query_scalar::<_, String>(
+        "SELECT currency FROM accounts WHERE id = $1",
+    )
+    .bind(payload.account_id)
+    .fetch_optional(&state.db)
+    .await
+    {
+        Ok(c) => c,
+        Err(e) => {
+            error!("Failed to look up target account currency: {}", e);
+            None
+        }
+    };
+
+    if let Some(target_cur) = target_currency.as_deref() {
+        let tx_currencies: std::collections::HashSet<String> = payload
+            .transactions
+            .iter()
+            .map(|t| t.currency.to_uppercase())
+            .collect();
+        // Only block when transactions are uniformly one currency that
+        // disagrees with the account. Mixed-currency imports stay allowed
+        // (the user is presumably consolidating an irregular file).
+        if tx_currencies.len() == 1
+            && !tx_currencies.contains(&target_cur.to_uppercase())
+        {
+            let tx_cur = tx_currencies.into_iter().next().unwrap();
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "status": "error",
+                    "message": format!(
+                        "All {} transactions are in {} but the selected account is in {}. Pick a {} account, or convert your statement.",
+                        payload.transactions.len(), tx_cur, target_cur, tx_cur
+                    ),
+                })),
+            )
+                .into_response();
+        }
+    }
 
     for tx in payload.transactions {
         // Generate a deterministic signature for the external_id
@@ -83,6 +129,7 @@ async fn confirm_handler(
         "new_transactions": imported_count,
         "duplicates": duplicate_count,
     })))
+        .into_response()
 }
 
 async fn upload_handler(

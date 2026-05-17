@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 
@@ -17,9 +18,18 @@ class CashFlowTrendsChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
+        padding: const EdgeInsets.all(24.0),
+        child: LayoutBuilder(builder: (ctx, outer) {
+          // Below ~420 the bars themselves and the bottom-axis "Mar 'yy"
+          // labels eat into the chart canvas; trim the chart height and
+          // tighten the bar width so 3 month groups still read clearly.
+          final isPhone = outer.maxWidth < 420;
+          final chartHeight = isPhone ? 200.0 : 250.0;
+          final barWidth = isPhone ? 14.0 : 22.0;
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             LayoutBuilder(
@@ -28,8 +38,8 @@ class CashFlowTrendsChart extends StatelessWidget {
                   spacing: 16,
                   runSpacing: 8,
                   children: [
-                    _buildLegendItem(const Color(0xFF1DE9B6), 'Income'),
-                    _buildLegendItem(const Color(0xFFFF4081), 'Spending'),
+                    _buildLegendItem(context, const Color(0xFF1DE9B6), 'Income'),
+                    _buildLegendItem(context, const Color(0xFFFF4081), 'Spending'),
                   ],
                 );
 
@@ -38,7 +48,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Cash Flow Trends',
+                        'Cash flow trends',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -54,7 +64,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      'Cash Flow Trends',
+                      'Cash flow trends',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -67,18 +77,20 @@ class CashFlowTrendsChart extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             SizedBox(
-              height: 250,
-              child: BarChart(
+              height: chartHeight,
+              child: Builder(builder: (context) {
+                final maxY = _getMaxValue();
+                return BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.spaceEvenly,
                   groupsSpace: 16,
-                  maxY: _getMaxValue(),
+                  maxY: maxY,
                   barTouchData: BarTouchData(
                     touchTooltipData: BarTouchTooltipData(
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         return BarTooltipItem(
                           '${rodIndex == 0 ? "Income" : "Spending"}\n${currencyFormat.format(rod.toY * conversionFactor)}',
-                          const TextStyle(color: Colors.white),
+                          TextStyle(color: context.textPrimary),
                         );
                       },
                     ),
@@ -106,7 +118,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                               final isLast = value.toInt() == trends.length - 1;
                               final isJan = parts[1] == '01';
                               label = (isFirst || isLast || isJan)
-                                  ? DateFormat("MMM ''yy").format(date)
+                                  ? DateFormat('MMM y').format(date)
                                   : DateFormat('MMM').format(date);
                             } catch (_) {
                               label = parts.length > 1 ? parts[1] : monthStr;
@@ -115,9 +127,9 @@ class CashFlowTrendsChart extends StatelessWidget {
                               meta: meta,
                               child: Text(
                                 label,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 10,
-                                  color: Colors.grey,
+                                  color: context.textSubtle,
                                 ),
                               ),
                             );
@@ -129,18 +141,24 @@ class CashFlowTrendsChart extends StatelessWidget {
                     leftTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
-                        reservedSize: 60,
+                        reservedSize: 48,
                         getTitlesWidget: (value, meta) {
+                          // Skip zero (visual baseline) and any tick that
+                          // sits within 8% of maxY — those get squished
+                          // against the top of the chart frame.
                           if (value == 0) return const SizedBox();
+                          if (maxY > 0 && value >= maxY * 0.92) {
+                            return const SizedBox();
+                          }
                           return SideTitleWidget(
                             meta: meta,
                             child: Text(
-                              currencyFormat
-                                  .format(value * conversionFactor)
-                                  .split('.')[0], // No decimals for compactness
-                              style: const TextStyle(
+                              NumberFormat.compactSimpleCurrency(
+                                name: currencyFormat.currencyName,
+                              ).format(value * conversionFactor),
+                              style: TextStyle(
                                 fontSize: 10,
-                                color: Colors.grey,
+                                color: context.textSubtle,
                               ),
                               maxLines: 1,
                             ),
@@ -171,12 +189,12 @@ class CashFlowTrendsChart extends StatelessWidget {
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                           ),
-                          width: 22,
+                          width: barWidth,
                           borderRadius: BorderRadius.circular(4),
                           backDrawRodData: BackgroundBarChartRodData(
                             show: true,
-                            toY: _getMaxValue(),
-                            color: Colors.white.withValues(alpha: 0.05),
+                            toY: maxY,
+                            color: context.tint(0.05),
                           ),
                         ),
                         BarChartRodData(
@@ -189,22 +207,24 @@ class CashFlowTrendsChart extends StatelessWidget {
                             begin: Alignment.bottomCenter,
                             end: Alignment.topCenter,
                           ),
-                          width: 22,
+                          width: barWidth,
                           borderRadius: BorderRadius.circular(4),
                           backDrawRodData: BackgroundBarChartRodData(
                             show: true,
-                            toY: _getMaxValue(),
-                            color: Colors.white.withValues(alpha: 0.05),
+                            toY: maxY,
+                            color: context.tint(0.05),
                           ),
                         ),
                       ],
                     );
                   }).toList(),
                 ),
-              ),
+              );
+              }),
             ),
           ],
-        ),
+        );
+        }),
       ),
     );
   }
@@ -218,7 +238,7 @@ class CashFlowTrendsChart extends StatelessWidget {
     return max == 0 ? 100 : max * 1.2;
   }
 
-  Widget _buildLegendItem(Color color, String label) {
+  Widget _buildLegendItem(BuildContext context, Color color, String label) {
     return Row(
       children: [
         Container(
@@ -230,7 +250,7 @@ class CashFlowTrendsChart extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 6),
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(label, style: TextStyle(fontSize: 12, color: context.textSubtle)),
       ],
     );
   }

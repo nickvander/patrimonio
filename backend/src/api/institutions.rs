@@ -16,6 +16,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_institutions).post(create_institution))
         .route("/sync", post(trigger_sync))
+        .route("/{id}/sync", post(trigger_sync_one))
         .route("/link-token", post(create_link_token))
         .route("/reconnect-token/{id}", post(create_reconnect_token))
         .route("/{id}", delete(delete_institution))
@@ -24,16 +25,58 @@ pub fn router() -> Router<AppState> {
         .route("/webhook", post(plaid_webhook))
 }
 
-/// Manually trigger a sync for all institutions
-async fn trigger_sync(State(state): State<AppState>) -> axum::response::Response {
+/// Sync request body for the global `/sync` endpoint. Accepts an
+/// optional `ids` array; when present, only those institutions are
+/// touched, replacing what used to be a client-side loop of single
+/// `/institutions/{id}/sync` calls.
+#[derive(Deserialize, Default)]
+struct SyncRequest {
+    #[serde(default)]
+    ids: Option<Vec<uuid::Uuid>>,
+}
+
+/// Manually trigger a sync. With an empty body the engine runs against
+/// every institution; with `{"ids": [...]}` it runs against only those.
+async fn trigger_sync(
+    State(state): State<AppState>,
+    body: Option<Json<SyncRequest>>,
+) -> axum::response::Response {
     let config = state.config.clone();
     let db = state.db.clone();
-    if let Err(e) = crate::services::sync::sync_all_institutions(&db, &config).await {
+    let only_ids = body.and_then(|b| b.0.ids);
+    if let Err(e) =
+        crate::services::sync::sync_institutions(&db, &config, only_ids).await
+    {
         tracing::error!("Manual Plaid sync failed: {}", e);
         return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, axum::response::Json(serde_json::json!({
             "error": "Sync failed",
             "details": e.to_string()
         }))).into_response();
+    }
+    Json(serde_json::json!({"status": "ok"})).into_response()
+}
+
+/// Sync a single institution by id — used by the per-institution
+/// retry shortcut on the dashboard so we don't touch healthy
+/// institutions on every retry tap.
+async fn trigger_sync_one(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
+) -> axum::response::Response {
+    let config = state.config.clone();
+    let db = state.db.clone();
+    if let Err(e) =
+        crate::services::sync::sync_one_institution(&db, &config, id).await
+    {
+        tracing::error!("Per-institution sync failed for {id}: {e}");
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            axum::response::Json(serde_json::json!({
+                "error": "Sync failed",
+                "details": e.to_string(),
+            })),
+        )
+            .into_response();
     }
     Json(serde_json::json!({"status": "ok"})).into_response()
 }
@@ -217,10 +260,14 @@ async fn create_reconnect_token(
     let client = reqwest::Client::new();
     let url = format!("https://{}.plaid.com/link/token/create", state.config.plaid_env);
     
+    // Plaid /link/token/create in update mode still requires country_codes
+    // and language. Match the values used by the new-link flow above.
     let payload = serde_json::json!({
         "client_id": client_id,
         "secret": secret,
         "client_name": "Patrimonio",
+        "country_codes": ["US"],
+        "language": "en",
         "access_token": access_token,
         "user": {
             "client_user_id": "patrimonio-single-user"

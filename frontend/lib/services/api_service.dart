@@ -47,6 +47,12 @@ class ApiService {
     return res;
   }
 
+  Future<http.Response> _put(Uri uri, {Object? body, Map<String, String>? headers}) async {
+    final res = await _client.put(uri, body: body, headers: headers);
+    _maybeUnauthorized(res);
+    return res;
+  }
+
   Future<http.Response> _delete(Uri uri) async {
     final res = await _client.delete(uri);
     _maybeUnauthorized(res);
@@ -208,17 +214,23 @@ class ApiService {
 
   Future<Map<String, dynamic>> getExchangeRate(
     String base,
-    String target,
-  ) async {
-    final response = await _get(Uri.parse('$_baseUrl/fx/latest/$base/$target'));
+    String target, {
+    bool force = false,
+  }) async {
+    final query = force ? '?force=true' : '';
+    final response = await _get(
+      Uri.parse('$_baseUrl/fx/latest/$base/$target$query'),
+    );
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
     throw Exception('Failed to load exchange rate');
   }
 
-  Future<List<dynamic>> getTransactions() async {
-    final response = await _get(Uri.parse('$_baseUrl/dashboard/transactions'));
+  Future<List<dynamic>> getTransactions({int limit = 50, int offset = 0}) async {
+    final response = await _get(
+      Uri.parse('$_baseUrl/dashboard/transactions?limit=$limit&offset=$offset'),
+    );
     if (response.statusCode == 200) {
       return json.decode(response.body);
     }
@@ -338,21 +350,88 @@ class ApiService {
     }
   }
 
+  /// Set or clear a user-defined nickname for an account. An empty
+  /// nickname clears the override so display falls back to the
+  /// bank-supplied name.
+  Future<void> renameAccount(String accountId, String nickname) async {
+    final response = await _patch(
+      Uri.parse('$_baseUrl/accounts/$accountId/nickname'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'nickname': nickname}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to rename account');
+    }
+  }
+
   Future<void> updateTransaction(
     String txId, {
     String? userCategory,
     String? userNotes,
+    String? accountId,
   }) async {
+    final body = <String, dynamic>{};
+    if (userCategory != null) body['user_category'] = userCategory;
+    if (userNotes != null) body['user_notes'] = userNotes;
+    if (accountId != null) body['account_id'] = accountId;
+
     final response = await _patch(
       Uri.parse('$_baseUrl/accounts/transactions/$txId'),
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'user_category': userCategory,
-        'user_notes': userNotes,
-      }),
+      body: json.encode(body),
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to update transaction');
+    }
+  }
+
+  /// URL of the CSV export endpoint. We hand this to the browser via an
+  /// anchor click rather than fetching + blobbing in Dart — the backend
+  /// returns Content-Disposition: attachment so the browser downloads
+  /// directly without using extra memory.
+  String exportTransactionsCsvUrl() => '$_baseUrl/dashboard/transactions/export';
+
+  /// Insert a manually-entered transaction. Positive amount = expense /
+  /// outflow, negative = income / inflow (same convention as Plaid).
+  Future<void> createManualTransaction({
+    required String accountId,
+    required DateTime date,
+    required String description,
+    required double amount,
+    required String currency,
+    String? category,
+    String? notes,
+  }) async {
+    final body = <String, dynamic>{
+      'account_id': accountId,
+      'date': '${date.year.toString().padLeft(4, '0')}-'
+          '${date.month.toString().padLeft(2, '0')}-'
+          '${date.day.toString().padLeft(2, '0')}',
+      'description': description,
+      'amount': amount,
+      'currency': currency,
+      if (category != null && category.isNotEmpty) 'category': category,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+    };
+    final response = await _post(
+      Uri.parse('$_baseUrl/dashboard/transactions/manual'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode(body),
+    );
+    if (response.statusCode == 409) {
+      throw Exception('Already added — same date / amount / description.');
+    }
+    if (response.statusCode != 201) {
+      throw Exception('Failed to add transaction: ${response.body}');
+    }
+  }
+
+  Future<void> deleteTransaction(String txId) async {
+    final response = await _delete(
+      Uri.parse('$_baseUrl/accounts/transactions/$txId'),
+    );
+    if (response.statusCode != 204 && response.statusCode != 200) {
+      throw Exception('Failed to delete transaction (${response.statusCode})');
     }
   }
 
@@ -460,5 +539,51 @@ class ApiService {
       return json.decode(response.body);
     }
     throw Exception('Failed to load tax transactions');
+  }
+
+  /// Sync a single institution. Cheaper than the global sync when only
+  /// one or two institutions are stuck.
+  Future<void> syncInstitution(String institutionId) async {
+    final response = await _post(
+      Uri.parse('$_baseUrl/institutions/$institutionId/sync'),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Sync failed: ${response.statusCode}');
+    }
+  }
+
+  /// Sync an arbitrary set of institutions in one round-trip. Replaces
+  /// the client-side loop the "Retry N failed" shortcut used to do.
+  Future<void> syncInstitutionsBatch(List<String> institutionIds) async {
+    final response = await _post(
+      Uri.parse('$_baseUrl/institutions/sync'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'ids': institutionIds}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Batched sync failed: ${response.statusCode}');
+    }
+  }
+
+  /// Generic app-setting store. The backend returns JSON null when the
+  /// key has never been written; callers should treat that as "absent".
+  Future<dynamic> getSetting(String key) async {
+    final response = await _get(Uri.parse('$_baseUrl/settings/$key'));
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Failed to load setting $key');
+  }
+
+  Future<void> putSetting(String key, dynamic value) async {
+    final response = await _put(
+      Uri.parse('$_baseUrl/settings/$key'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode(value),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Failed to save setting $key (${response.statusCode})');
+    }
   }
 }

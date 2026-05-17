@@ -17,8 +17,45 @@ pub fn router() -> Router<AppState> {
         .route("/summary", get(accounts_summary))
         .route("/{id}", delete(delete_account))
         .route("/{id}/balance", patch(update_account_balance))
+        .route("/{id}/nickname", patch(update_account_nickname))
         .route("/{id}/transactions", get(get_account_transactions))
-        .route("/transactions/{tx_id}", patch(update_transaction))
+        .route("/transactions/{tx_id}", patch(update_transaction).delete(delete_transaction))
+}
+
+#[derive(Deserialize)]
+struct UpdateNicknameRequest {
+    nickname: String,
+}
+
+/// Set or clear a user-defined nickname on an account. An empty string
+/// clears the override so the UI falls back to the bank-supplied name.
+/// Plaid sync never touches this column, so the rename survives re-sync.
+async fn update_account_nickname(
+    State(state): State<AppState>,
+    Path(id): Path<uuid::Uuid>,
+    Json(payload): Json<UpdateNicknameRequest>,
+) -> impl IntoResponse {
+    let trimmed = payload.nickname.trim();
+    let value: Option<&str> = if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    };
+    let result = sqlx::query(
+        "UPDATE accounts SET nickname = $1, updated_at = NOW() WHERE id = $2",
+    )
+    .bind(value)
+    .bind(id)
+    .execute(&state.db)
+    .await;
+    match result {
+        Ok(r) if r.rows_affected() == 1 => StatusCode::OK.into_response(),
+        Ok(_) => StatusCode::NOT_FOUND.into_response(),
+        Err(e) => {
+            error!("Failed to update account nickname: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -100,7 +137,7 @@ async fn update_account_balance(
 async fn list_accounts(State(state): State<AppState>) -> Json<Vec<AccountResponse>> {
     let rows = sqlx::query(
         r#"
-        SELECT a.id, a.name, a.account_type, a.currency,
+        SELECT a.id, a.name, a.nickname, a.account_type, a.currency,
                a.current_balance, a.available_balance, a.credit_limit,
                i.name as institution_name, i.country, a.updated_at
         FROM accounts a
@@ -116,6 +153,7 @@ async fn list_accounts(State(state): State<AppState>) -> Json<Vec<AccountRespons
         AccountResponse {
             id: row.get::<uuid::Uuid, _>("id").to_string(),
             name: row.get("name"),
+            nickname: row.try_get::<Option<String>, _>("nickname").ok().flatten(),
             account_type: row.get("account_type"),
             currency: row.get("currency"),
             current_balance: row.try_get::<rust_decimal::Decimal, _>("current_balance")
@@ -273,6 +311,10 @@ async fn create_account(
 struct AccountResponse {
     id: String,
     name: String,
+    /// User-defined nickname that overrides the bank-supplied `name` in
+    /// the UI. None when not set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    nickname: Option<String>,
     account_type: String,
     currency: String,
     current_balance: Option<f64>,
@@ -299,6 +341,12 @@ pub struct TransactionResponse {
     pub amount: f64,
     pub currency: String,
     pub category: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category_detailed: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payment_channel: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merchant_name: Option<String>,
     pub user_category: Option<String>,
     pub user_notes: Option<String>,
     pub source: Option<String>,
@@ -314,8 +362,10 @@ async fn get_account_transactions(
     let rows = sqlx::query(
         r#"
         SELECT t.id, t.date, t.description, t.amount, t.currency, t.category,
+               t.category_detailed, t.payment_channel, t.merchant_name,
                t.user_category, t.user_notes, t.source,
-               a.name as account_name, i.name as institution_name
+               COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
+               i.name as institution_name
         FROM transactions t
         JOIN accounts a ON t.account_id = a.id
         JOIN institutions i ON a.institution_id = i.id
@@ -338,6 +388,9 @@ async fn get_account_transactions(
             .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
         currency: row.try_get::<String, _>("currency").unwrap_or_else(|_| "USD".to_string()),
         category: row.try_get::<String, _>("category").unwrap_or_else(|_| "Uncategorized".to_string()),
+        category_detailed: row.try_get::<Option<String>, _>("category_detailed").ok().flatten(),
+        payment_channel: row.try_get::<Option<String>, _>("payment_channel").ok().flatten(),
+        merchant_name: row.try_get::<Option<String>, _>("merchant_name").ok().flatten(),
         user_category: row.try_get("user_category").ok(),
         user_notes: row.try_get("user_notes").ok(),
         source: row.try_get("source").ok(),
@@ -352,21 +405,37 @@ async fn get_account_transactions(
 struct UpdateTransactionRequest {
     user_category: Option<String>,
     user_notes: Option<String>,
+    /// Reassign the transaction to a different account. Used when a manual
+    /// import landed on the wrong account.
+    account_id: Option<uuid::Uuid>,
 }
 
-/// Update a transaction's user overrides (category, notes)
+/// Update a transaction's user overrides (category, notes, account).
+/// Only fields explicitly present in the payload are updated — None means
+/// "leave it alone" rather than "clear it".
 async fn update_transaction(
     State(state): State<AppState>,
     Path(tx_id): Path<uuid::Uuid>,
     Json(payload): Json<UpdateTransactionRequest>,
 ) -> impl IntoResponse {
-    info!("Updating transaction {}: cat={:?}, notes={:?}", tx_id, payload.user_category, payload.user_notes);
+    info!(
+        "Updating transaction {}: cat={:?}, notes={:?}, account_id={:?}",
+        tx_id, payload.user_category, payload.user_notes, payload.account_id
+    );
 
     let result = sqlx::query(
-        "UPDATE transactions SET user_category = $1, user_notes = $2, updated_at = NOW() WHERE id = $3"
+        r#"
+        UPDATE transactions
+        SET user_category = COALESCE($1, user_category),
+            user_notes    = COALESCE($2, user_notes),
+            account_id    = COALESCE($3, account_id),
+            updated_at    = NOW()
+        WHERE id = $4
+        "#,
     )
     .bind(payload.user_category)
     .bind(payload.user_notes)
+    .bind(payload.account_id)
     .bind(tx_id)
     .execute(&state.db)
     .await;
@@ -375,6 +444,25 @@ async fn update_transaction(
         Ok(_) => StatusCode::OK.into_response(),
         Err(e) => {
             error!("Failed to update transaction: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// Delete a single transaction.
+async fn delete_transaction(
+    State(state): State<AppState>,
+    Path(tx_id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    info!("Deleting transaction: {}", tx_id);
+    let result = sqlx::query("DELETE FROM transactions WHERE id = $1")
+        .bind(tx_id)
+        .execute(&state.db)
+        .await;
+    match result {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => {
+            error!("Failed to delete transaction: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }

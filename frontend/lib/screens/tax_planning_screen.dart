@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
@@ -96,6 +97,115 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     }
   }
 
+  // Dense tax-event row that mirrors the transactions tab visual language:
+  // 32px tinted icon, two-line title/meta column, right-aligned amount with
+  // tabular figures. Replaces the loose ListTile rows that made the two
+  // surfaces look like different apps.
+  Widget _buildTaxRow(dynamic tx) {
+    final date = DateTime.parse(tx['date']);
+    final sourceAmount = ((tx['amount'] as num?)?.toDouble() ?? 0.0);
+    final sourceCurrency =
+        (tx['currency'] ?? widget.targetCurrency).toString();
+    final converted = convertCurrency(
+      sourceAmount,
+      from: sourceCurrency,
+      to: widget.targetCurrency,
+      usdMxnRate: widget.usdMxnRate,
+    );
+    final isCapGains = tx['category'] == 'Investment Sale';
+    final iconColor =
+        isCapGains ? Colors.purpleAccent : const Color(0xFF1DE9B6);
+    final needsConversion = sourceCurrency != widget.targetCurrency;
+
+    return InkWell(
+      onTap: null,
+      hoverColor: context.tint(0.03),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                isCapGains ? Icons.show_chart : Icons.work_outline,
+                color: iconColor,
+                size: 16,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    (tx['description'] ?? '').toString(),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      height: 1.2,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${DateFormat('MMM d, y').format(date)} · ${tx['category']}',
+                    style: TextStyle(
+                      color: context.textSubtle,
+                      fontSize: 11,
+                      height: 1.3,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.currencyFormat.format(converted),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: Color(0xFF00E676),
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (needsConversion)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      formatCurrencyAmount(sourceAmount, sourceCurrency),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: context.textFaint,
+                        fontFeatures: [const FontFeature.tabularFigures()],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -145,7 +255,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text(
-              'Tax Planning Center',
+              'Tax planning',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             Row(
@@ -208,7 +318,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                   label: const Text('PDF'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blueAccent,
-                    foregroundColor: Colors.white,
+                    foregroundColor: context.textPrimary,
                   ),
                 ),
               ],
@@ -225,9 +335,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Total Taxable Income',
-                        style: TextStyle(color: Colors.white70),
+                      Text(
+                        'Total taxable income',
+                        style: TextStyle(color: context.textMuted),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -242,17 +352,17 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Ordinary Income: ${widget.currencyFormat.format(ordinaryIncome)}',
-                            style: const TextStyle(
+                            'Ordinary income: ${widget.currencyFormat.format(ordinaryIncome)}',
+                            style: TextStyle(
                               fontSize: 12,
-                              color: Colors.white54,
+                              color: context.textSubtle,
                             ),
                           ),
                           Text(
-                            'Capital Gains: ${widget.currencyFormat.format(capitalGains)}',
-                            style: const TextStyle(
+                            'Capital gains: ${widget.currencyFormat.format(capitalGains)}',
+                            style: TextStyle(
                               fontSize: 12,
-                              color: Colors.white54,
+                              color: context.textSubtle,
                             ),
                           ),
                         ],
@@ -270,9 +380,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'US Estimated Liability (IRS)',
-                        style: TextStyle(color: Colors.white70),
+                      Text(
+                        'US estimated liability (IRS)',
+                        style: TextStyle(color: context.textMuted),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -285,10 +395,10 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'Effective Rate: ${rateUs.toStringAsFixed(2)}%',
-                        style: const TextStyle(
+                        'Effective rate: ${rateUs.toStringAsFixed(2)}%',
+                        style: TextStyle(
                           fontSize: 12,
-                          color: Colors.white54,
+                          color: context.textSubtle,
                         ),
                       ),
                     ],
@@ -304,9 +414,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'MX Estimated Liability (SAT)',
-                        style: TextStyle(color: Colors.white70),
+                      Text(
+                        'MX estimated liability (SAT)',
+                        style: TextStyle(color: context.textMuted),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -320,9 +430,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                       const SizedBox(height: 16),
                       Text(
                         'Effective Rate: ${rateMx.toStringAsFixed(2)}%',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: Colors.white54,
+                          color: context.textSubtle,
                         ),
                       ),
                     ],
@@ -334,7 +444,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         ),
         const SizedBox(height: 24),
         const Text(
-          'Taxable Events',
+          'Taxable events',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 16),
@@ -348,17 +458,17 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                         Icon(
                           Icons.receipt_long_outlined,
                           size: 56,
-                          color: Colors.white.withValues(alpha: 0.15),
+                          color: context.tint(0.15),
                         ),
                         const SizedBox(height: 16),
-                        const Text(
+                        Text(
                           'No taxable events found for this year.',
-                          style: TextStyle(color: Colors.white54, fontSize: 16),
+                          style: TextStyle(color: context.textSubtle, fontSize: 16),
                         ),
                         const SizedBox(height: 8),
-                        const Text(
+                        Text(
                           'Income, salary, interest, and investment sale transactions will appear here.',
-                          style: TextStyle(color: Colors.white30, fontSize: 12),
+                          style: TextStyle(color: context.textFaint, fontSize: 12),
                           textAlign: TextAlign.center,
                         ),
                       ],
@@ -366,75 +476,30 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                   ),
                 )
               : Card(
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
                     itemCount: _taxTransactions!.length,
-                    separatorBuilder: (context, index) =>
-                        const Divider(height: 1),
+                    separatorBuilder: (context, index) => Divider(
+                      height: 1,
+                      color: context.tint(0.04),
+                      indent: 56,
+                    ),
                     itemBuilder: (context, index) {
                       final tx = _taxTransactions![index];
-                      final date = DateTime.parse(tx['date']);
-                      final sourceAmount =
-                          ((tx['amount'] as num?)?.toDouble() ?? 0.0);
-                      final sourceCurrency =
-                          (tx['currency'] ?? widget.targetCurrency).toString();
-                      final amount = convertCurrency(
-                        sourceAmount,
-                        from: sourceCurrency,
-                        to: widget.targetCurrency,
-                        usdMxnRate: widget.usdMxnRate,
-                      );
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: tx['category'] == 'Investment Sale'
-                              ? Colors.purple.withValues(alpha: 0.2)
-                              : Colors.blue.withValues(alpha: 0.2),
-                          child: Icon(
-                            tx['category'] == 'Investment Sale'
-                                ? Icons.show_chart
-                                : Icons.work,
-                            color: tx['category'] == 'Investment Sale'
-                                ? Colors.purpleAccent
-                                : Colors.blueAccent,
-                          ),
-                        ),
-                        title: Text(tx['description']),
-                        subtitle: Text(
-                          '${DateFormat('MMM dd, yyyy').format(date)} • ${tx['category']}',
-                        ),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              widget.currencyFormat.format(amount),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.greenAccent,
-                              ),
-                            ),
-                            if (sourceCurrency != widget.targetCurrency)
-                              Text(
-                                formatCurrencyAmount(
-                                  sourceAmount,
-                                  sourceCurrency,
-                                ),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                          ],
-                        ),
-                      );
+                      return _buildTaxRow(tx);
                     },
                   ),
                 ),
         ),
         const SizedBox(height: 12),
-        const Text(
+        Text(
           'Disclaimer: Tax estimates are approximations using 2026 IRS/SAT brackets. Consult a qualified tax professional for filing.',
           style: TextStyle(
-            color: Colors.white24,
+            color: context.textFaint,
             fontSize: 10,
             fontStyle: FontStyle.italic,
           ),

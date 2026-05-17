@@ -112,6 +112,7 @@ async fn main() -> Result<()> {
         .nest("/api/imports", patrimonio::api::imports::router())
         .nest("/api/projections", patrimonio::api::projections::router())
         .nest("/api/tax", patrimonio::api::tax::router())
+        .nest("/api/settings", patrimonio::api::settings::router())
         // /api/auth/me, /logout, /change-password live here so that
         // require_auth populates AuthContext for the handlers.
         .nest("/api/auth", patrimonio::api::session::protected_router())
@@ -161,6 +162,7 @@ fn build_cors_layer(allowed_origins: &[String]) -> CorsLayer {
         .allow_methods([
             Method::GET,
             Method::POST,
+            Method::PUT,
             Method::PATCH,
             Method::DELETE,
         ])

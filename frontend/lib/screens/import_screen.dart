@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/api_service.dart';
 
@@ -192,14 +193,14 @@ class _ImportScreenState extends State<ImportScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Import Statement')),
+      appBar: AppBar(title: const Text('Import statement')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Upload Account Statement',
+              'Upload account statement',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -214,9 +215,9 @@ class _ImportScreenState extends State<ImportScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(48),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.05),
+                    color: context.tint(0.05),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white10, width: 2),
+                    border: Border.all(color: context.hairline, width: 2),
                   ),
                   child: Column(
                     children: [
@@ -249,7 +250,7 @@ class _ImportScreenState extends State<ImportScreen> {
                       const SizedBox(height: 24),
                       ElevatedButton(
                         onPressed: _isUploading ? null : _pickFile,
-                        child: const Text('Select File'),
+                        child: const Text('Select file'),
                       ),
                     ],
                   ),
@@ -260,7 +261,7 @@ class _ImportScreenState extends State<ImportScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Assign to Account',
+                    'Assign to account',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
@@ -269,7 +270,7 @@ class _ImportScreenState extends State<ImportScreen> {
                       initialValue: _selectedAccountId,
                       decoration: InputDecoration(
                         filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.05),
+                        fillColor: context.tint(0.05),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -316,7 +317,7 @@ class _ImportScreenState extends State<ImportScreen> {
                               });
                             },
                             child: const Text(
-                              'Select All',
+                              'Select all',
                               style: TextStyle(color: Color(0xFF00E676)),
                             ),
                           ),
@@ -328,7 +329,7 @@ class _ImportScreenState extends State<ImportScreen> {
                               });
                             },
                             child: const Text(
-                              'Deselect All',
+                              'Deselect all',
                               style: TextStyle(color: Colors.grey),
                             ),
                           ),
@@ -353,7 +354,7 @@ class _ImportScreenState extends State<ImportScreen> {
 
                       return Card(
                         color: isSelected
-                            ? Colors.white.withValues(alpha: 0.05)
+                            ? context.tint(0.05)
                             : Colors.transparent,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
@@ -361,7 +362,7 @@ class _ImportScreenState extends State<ImportScreen> {
                           side: BorderSide(
                             color: isSelected
                                 ? const Color(0xFF00E676).withValues(alpha: 0.5)
-                                : Colors.white10,
+                                : context.hairline,
                             width: 1,
                           ),
                         ),
@@ -481,9 +482,9 @@ class _ImportScreenState extends State<ImportScreen> {
                         controller: _passwordController,
                         obscureText: true,
                         decoration: InputDecoration(
-                          labelText: 'PDF Password (e.g. RFC)',
+                          labelText: 'PDF password (e.g. RFC)',
                           filled: true,
-                          fillColor: Colors.white.withValues(alpha: 0.05),
+                          fillColor: context.tint(0.05),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -503,7 +504,7 @@ class _ImportScreenState extends State<ImportScreen> {
                       child: _isUploading
                           ? const CircularProgressIndicator(color: Colors.black)
                           : const Text(
-                              'Process Statement',
+                              'Process statement',
                               style: TextStyle(fontWeight: FontWeight.bold),
                             ),
                     ),

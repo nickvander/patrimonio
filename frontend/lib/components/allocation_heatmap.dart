@@ -1,26 +1,87 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
+
+/// Trim trailing zeros and pick a sensible precision based on the
+/// magnitude of the share count (mirrors the formatter in portfolio_card).
+String _formatQty(double q) {
+  if (q == q.roundToDouble() && q.abs() < 1e9) {
+    return q.toInt().toString();
+  }
+  if (q.abs() >= 1) {
+    return q
+        .toStringAsFixed(2)
+        .replaceAll(RegExp(r'0+$'), '')
+        .replaceAll(RegExp(r'\.$'), '');
+  }
+  return q
+      .toStringAsFixed(4)
+      .replaceAll(RegExp(r'0+$'), '')
+      .replaceAll(RegExp(r'\.$'), '');
+}
 
 class AllocationData {
   final String category;
   final String subCategory;
   final double value;
   final Color color;
+  final double quantity;
 
-  AllocationData(this.category, this.subCategory, this.value, this.color);
+  AllocationData(
+    this.category,
+    this.subCategory,
+    this.value,
+    this.color, {
+    this.quantity = 0,
+  });
 }
 
 class AllocationHeatmap extends StatelessWidget {
   final List<AllocationData> data;
   final double conversionFactor;
   final NumberFormat currencyFormat;
+  /// Optional callback fired when the user taps a category band. Lets the
+  /// parent filter the holdings table below — wiring is opt-in so the
+  /// component remains usable in standalone contexts.
+  final ValueChanged<String>? onCategorySelected;
+  /// Highlighted category, drawn with a brighter ring so the user can see
+  /// which slice is currently driving the active filter.
+  final String? activeCategory;
 
   const AllocationHeatmap({
     super.key,
     required this.data,
     required this.conversionFactor,
     required this.currencyFormat,
+    this.onCategorySelected,
+    this.activeCategory,
   });
+
+  /// Render raw backend categories ("mutual fund", "fixed income") as
+  /// sentence-cased labels with common acronyms preserved (ETF, REIT).
+  static String _displayCategory(String raw) {
+    if (raw.isEmpty) return 'Other';
+    const acronyms = {'etf', 'reit', 'cd', 'ira'};
+    return raw
+        .split(' ')
+        .map((word) {
+          if (word.isEmpty) return word;
+          if (acronyms.contains(word.toLowerCase())) return word.toUpperCase();
+          if (word.contains('/')) {
+            // e.g. "stocks/etfs" → "Stocks/ETFs"
+            return word
+                .split('/')
+                .map((p) {
+                  if (p.isEmpty) return p;
+                  if (acronyms.contains(p.toLowerCase())) return p.toUpperCase();
+                  return p[0].toUpperCase() + p.substring(1).toLowerCase();
+                })
+                .join('/');
+          }
+          return word[0].toUpperCase() + word.substring(1).toLowerCase();
+        })
+        .join(' ');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,20 +123,31 @@ class AllocationHeatmap extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Asset Distribution',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.5,
+                const Flexible(
+                  child: Text(
+                    'Asset distribution',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                Text(
-                  'Total: ${currencyFormat.format(totalValue * conversionFactor)}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey,
-                    fontWeight: FontWeight.w600,
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Text(
+                    'Total: ${currencyFormat.format(totalValue * conversionFactor)}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w600,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                    textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -87,8 +159,10 @@ class AllocationHeatmap extends StatelessWidget {
               final catTotal = items.fold<double>(0, (sum, i) => sum + i.value);
               final catPercentage = catTotal / totalValue;
               final color = categoryColors[cat]!;
+              final isActive = activeCategory == cat;
+              final canTap = onCategorySelected != null;
 
-              return Padding(
+              final inner = Padding(
                 padding: const EdgeInsets.only(bottom: 24.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -96,34 +170,52 @@ class AllocationHeatmap extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 12,
-                              height: 12,
-                              decoration: BoxDecoration(
-                                color: color,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: color.withValues(alpha: 0.4),
-                                    blurRadius: 8,
-                                    spreadRadius: 1,
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 12,
+                                height: 12,
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: color.withValues(alpha: 0.4),
+                                      blurRadius: 8,
+                                      spreadRadius: 1,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Flexible(
+                                child: Text(
+                                  _displayCategory(cat),
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: context.textPrimary,
                                   ),
-                                ],
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              cat,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                              const SizedBox(width: 8),
+                              Text(
+                                '${items.length} ${items.length == 1 ? "holding" : "holdings"}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: context.textFaint,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
+                        const SizedBox(width: 8),
                         Text(
                           '${(catPercentage * 100).toStringAsFixed(1)}%',
                           style: TextStyle(
@@ -142,7 +234,7 @@ class AllocationHeatmap extends StatelessWidget {
                           height: 12,
                           width: double.infinity,
                           decoration: BoxDecoration(
-                            color: Colors.white12,
+                            color: context.hairline,
                             borderRadius: BorderRadius.circular(6),
                           ),
                         ),
@@ -169,6 +261,18 @@ class AllocationHeatmap extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     // Sub-items (the "Tree" detail)
+                    if (isActive)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          'Filtering holdings to this category — tap again to clear',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: color,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
                     Wrap(
                       spacing: 16,
                       runSpacing: 8,
@@ -187,21 +291,35 @@ class AllocationHeatmap extends StatelessWidget {
                             const SizedBox(width: 8),
                             Text(
                               item.subCategory,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey,
+                                color: context.textMuted,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
-                            const SizedBox(width: 4),
+                            if (item.quantity > 0) ...[
+                              const SizedBox(width: 4),
+                              Text(
+                                '· ${_formatQty(item.quantity)} sh',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: context.textFaint,
+                                  fontFeatures: [
+                                    const FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            const SizedBox(width: 6),
                             Text(
                               currencyFormat.format(
                                 item.value * conversionFactor,
                               ),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.white70,
-                                fontWeight: FontWeight.w400,
+                                color: context.textPrimary,
+                                fontWeight: FontWeight.w600,
+                                fontFeatures: [const FontFeature.tabularFigures()],
                               ),
                             ),
                           ],
@@ -209,6 +327,26 @@ class AllocationHeatmap extends StatelessWidget {
                       }).toList(),
                     ),
                   ],
+                ),
+              );
+
+              if (!canTap) return inner;
+              // InkWell wraps each per-category block so the entire band
+              // (bar + label + sub-items) is tappable, not just the icon.
+              return InkWell(
+                onTap: () => onCategorySelected!(cat),
+                borderRadius: BorderRadius.circular(12),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  decoration: BoxDecoration(
+                    color: isActive
+                        ? color.withValues(alpha: 0.06)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
+                  child: inner,
                 ),
               );
             }),

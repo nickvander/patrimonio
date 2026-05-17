@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:plaid_flutter/plaid_flutter.dart';
 import 'package:web/web.dart' as web;
 import '../services/api_service.dart';
+import '../main.dart' show themeModeNotifier;
+import '../services/preferences.dart';
 import '../widgets/net_worth_card.dart';
+import '../widgets/monthly_cash_flow_card.dart';
+import '../widgets/budgets_card.dart';
+import '../widgets/net_worth_goal_tile.dart';
 import '../widgets/accounts_breakdown_card.dart';
 import '../widgets/portfolio_card.dart';
 import '../widgets/fx_widget.dart';
@@ -13,13 +19,19 @@ import '../widgets/accounts_list_widget.dart';
 import '../widgets/transactions_tab.dart';
 import '../widgets/add_account_dialog.dart';
 import '../widgets/add_crypto_dialog.dart';
+import '../widgets/command_palette.dart';
+import '../widgets/skeleton.dart';
+import '../widgets/sync_error_banner.dart';
+import '../widgets/notifications_panel.dart';
+import '../utils/account_category.dart';
+import '../utils/theme_colors.dart';
+import 'account_transactions_screen.dart';
 import 'connect_bank_screen.dart';
 import 'import_screen.dart';
 import 'wealth_projection_screen.dart';
 import '../components/date_range_selector.dart';
 import '../components/allocation_heatmap.dart';
 import '../components/trends_chart.dart';
-import '../utils/currency.dart';
 import 'package:patrimonio/screens/tax_planning_screen.dart';
 import '../services/auth_service.dart';
 
@@ -30,7 +42,8 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen>
+    with SingleTickerProviderStateMixin {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
   String? _error;
@@ -47,34 +60,586 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<Map<String, dynamic>>? _trendData;
   DateRange _selectedRange = DateRange.oneYear;
   String _targetCurrency = 'USD'; // Master currency state
+  TabController? _tabController;
+  // Category that the AllocationHeatmap is currently drilled into. When
+  // non-null, the PortfolioCard's holdings table filters to that category.
+  String? _portfolioCategoryFilter;
+  // Cmd-K deep-link search overrides — set by the palette callbacks so
+  // the target tab pre-filters to the picked row. They're cleared on
+  // any user-driven search change in the target widget.
+  String? _portfolioSearchOverride;
+  String? _transactionsSearchOverride;
+  // Cmd-K row highlight target. Cleared automatically ~2s after being
+  // set so the pulse fades back to the normal row chrome.
+  String? _highlightedTxId;
+  // Pagination — the API returns at most 50 transactions per call. We
+  // track whether the latest page filled the limit (so there may be more)
+  // and call _loadMoreTransactions() to append the next slice.
+  static const int _txPageSize = 50;
+  bool _transactionsHasMore = true;
 
   @override
   void initState() {
     super.initState();
+    // Restore previously selected reporting currency + tab + chart range
+    // from localStorage so a refresh doesn't reset the user's context.
     _targetCurrency = _loadSavedCurrency();
+    final savedRange = Preferences.getDateRange();
+    if (savedRange != null) {
+      for (final r in DateRange.values) {
+        if (r.name == savedRange) {
+          _selectedRange = r;
+          break;
+        }
+      }
+    }
+    final savedTab = Preferences.getLastTab().clamp(0, 6);
+    _tabController = TabController(
+      length: 7,
+      vsync: this,
+      initialIndex: savedTab,
+      // 300ms (the Material default) makes the transition feel sluggish on a
+      // dense desktop dashboard; 180ms is short enough to feel near-instant
+      // while still smoothing the slide.
+      animationDuration: const Duration(milliseconds: 180),
+    );
+    _tabController!.addListener(() {
+      if (!_tabController!.indexIsChanging) {
+        Preferences.setLastTab(_tabController!.index);
+      }
+    });
     _loadAllData();
     _checkRedirectStatus();
   }
 
+  @override
+  void dispose() {
+    _tabController?.dispose();
+    super.dispose();
+  }
+
   String _loadSavedCurrency() {
-    try {
-      final saved = web.window.localStorage.getItem(
-        'patrimonio.reportingCurrency',
-      );
-      if (saved == 'USD' || saved == 'MXN') return saved!;
-    } catch (_) {
-      // Ignore storage failures; default currency still works.
+    final saved = Preferences.getCurrency();
+    return (saved == 'USD' || saved == 'MXN') ? saved : 'USD';
+  }
+
+  // First-run state: the dashboard has loaded successfully but the user has
+  // no accounts yet. We swap the entire body for an onboarding hero and hide
+  // the tab bar + currency chrome — every tab is empty in this state and
+  // would mislead a fresh user into thinking the app is broken.
+  bool get _hasAccounts {
+    final accounts = _overview?['accounts'] as List?;
+    return accounts != null && accounts.isNotEmpty;
+  }
+
+  bool get _isFirstRun => !_isLoading && _error == null && !_hasAccounts;
+
+  // Build the searchable index used by the Cmd-K palette. We do it on
+  // demand so the list always reflects the most recent _loadAllData()
+  // payload. Each item carries a callback that navigates to the right
+  // tab so the palette doesn't have to know the dashboard's layout.
+  List<PaletteItem> _buildPaletteItems() {
+    final items = <PaletteItem>[];
+
+    void jumpTab(int i) => _tabController?.animateTo(i);
+
+    // Mirror the currency / FX setup _buildBody does so the account
+    // panel that opens from the palette uses the same reporting context.
+    final fxRate = (_fxRate?['rate'] as num?)?.toDouble() ?? 1.0;
+    final conversionFactor = _targetCurrency == 'MXN' ? fxRate : 1.0;
+    final currencyFormat = NumberFormat.currency(
+      name: _targetCurrency,
+      symbol: '$_targetCurrency ',
+    );
+
+    const tabs = [
+      ('Overview', 0, Icons.dashboard_outlined, Color(0xFF00E676)),
+      ('Portfolio', 1, Icons.pie_chart_outline, Color(0xFF1DE9B6)),
+      ('Transactions', 2, Icons.receipt_long_outlined, Color(0xFF00B0FF)),
+      ('Cash flow', 3, Icons.account_balance_wallet_outlined, Color(0xFF1DE9B6)),
+      ('Projections', 4, Icons.trending_up_outlined, Color(0xFFFFB300)),
+      ('Tax planning', 5, Icons.account_balance_outlined, Color(0xFFAB47BC)),
+      ('Management', 6, Icons.settings_outlined, Color(0xFF90A4AE)),
+    ];
+    for (final (label, idx, icon, color) in tabs) {
+      items.add(PaletteItem(
+        label: 'Jump to $label',
+        subtitle: 'Tab',
+        icon: icon,
+        accent: color,
+        onSelected: () => jumpTab(idx),
+      ));
     }
-    return 'USD';
+
+    final allAccounts = (_overview?['accounts'] as List?) ?? const [];
+    for (final raw in allAccounts) {
+      final a = raw as Map<String, dynamic>;
+      final nick = (a['nickname'] ?? '').toString();
+      final name = (a['name'] ?? '').toString();
+      final inst = (a['institution_name'] ?? '').toString();
+      items.add(PaletteItem(
+        label: nick.isNotEmpty ? '$nick (${a['account_type'] ?? ''})' : name,
+        subtitle: 'Account · $inst',
+        icon: Icons.account_balance_wallet_outlined,
+        accent: const Color(0xFF1DE9B6),
+        // Deep-link: open the account-detail side panel directly so the
+        // user doesn't have to scroll the accounts column to find it.
+        onSelected: () => showAccountTransactionsPanel(
+          context,
+          account: a,
+          allAccounts: allAccounts,
+          conversionFactor: conversionFactor,
+          currencyFormat: currencyFormat,
+          targetCurrency: _targetCurrency,
+          usdMxnRate: fxRate,
+          onBalanceUpdate: (id, bal) async {
+            try {
+              await _apiService.updateAccountBalance(id, bal);
+              _loadAllData();
+            } catch (_) {}
+          },
+          onRenameAccount: (id, nickname) async {
+            try {
+              await _apiService.renameAccount(id, nickname);
+              _loadAllData();
+            } catch (_) {}
+          },
+        ),
+      ));
+    }
+
+    for (final raw in ((_portfolioData?['holdings'] as List?) ?? const [])) {
+      final h = raw as Map<String, dynamic>;
+      final ticker = (h['ticker_symbol'] ?? '').toString();
+      final name = (h['name'] ?? '').toString();
+      // Pick the most specific token we have for the search seed so the
+      // holdings table filters to a single row.
+      final seed = ticker.isNotEmpty ? ticker : name;
+      items.add(PaletteItem(
+        label: ticker.isNotEmpty ? '$ticker — $name' : name,
+        subtitle: 'Holding',
+        icon: Icons.show_chart,
+        accent: const Color(0xFF00B0FF),
+        onSelected: () {
+          setState(() => _portfolioSearchOverride = seed);
+          jumpTab(1);
+        },
+      ));
+    }
+
+    // Cap transactions to a recent window so the palette stays snappy
+    // even with thousands of rows.
+    final txs = _transactions ?? const [];
+    for (final raw in txs.take(200)) {
+      final t = raw as Map<String, dynamic>;
+      final desc = (t['description'] ?? '').toString();
+      final id = t['id']?.toString();
+      items.add(PaletteItem(
+        label: desc,
+        subtitle:
+            'Transaction · ${t['account_name'] ?? ''} · ${t['date'] ?? ''}',
+        icon: Icons.receipt_outlined,
+        accent: const Color(0xFFFFB300),
+        onSelected: () {
+          setState(() {
+            _transactionsSearchOverride = desc;
+            _highlightedTxId = id;
+          });
+          jumpTab(2);
+          // Clear the pulse after ~2.4s so the row holds for ~1.3s after
+          // the 550ms fade-in completes, then takes 550ms to fade back
+          // out. Subsequent palette picks can pulse fresh because we
+          // gate on the id being the one we just set.
+          if (id != null) {
+            Future.delayed(const Duration(milliseconds: 2400), () {
+              if (!mounted) return;
+              if (_highlightedTxId == id) {
+                setState(() => _highlightedTxId = null);
+              }
+            });
+          }
+        },
+      ));
+    }
+
+    return items;
+  }
+
+  void _openPalette() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (_) => CommandPaletteDialog(items: _buildPaletteItems()),
+    );
   }
 
   void _setTargetCurrency(String currency) {
     setState(() => _targetCurrency = currency);
-    try {
-      web.window.localStorage.setItem('patrimonio.reportingCurrency', currency);
-    } catch (_) {
-      // Ignore storage failures; the in-memory selection still updates.
+    Preferences.setCurrency(currency);
+  }
+
+  /// Five-tile compact stat strip pinned to the top of the Overview tab.
+  /// All values are derived from the already-loaded /dashboard/overview
+  /// payload so no extra API call is needed.
+  Widget _buildStatStrip({
+    required NumberFormat currencyFormat,
+    required double conversionFactor,
+  }) {
+    final overview = _overview ?? const <String, dynamic>{};
+    final accounts = (overview['accounts'] as List?) ?? const [];
+    final typeBreakdown = (overview['type_breakdown'] as List?) ?? const [];
+
+    final netWorth =
+        ((overview['net_worth'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
+
+    // Walk accounts to compute liabilities (credit-type balances treated as
+    // positive owed amounts) and the cash / investment subtotals. Uses the
+    // shared categorizeAccount() so this stays in sync with the accounts
+    // column grouping below.
+    double liabilities = 0;
+    double cash = 0;
+    double investments = 0;
+    for (final raw in accounts) {
+      final acc = raw as Map<String, dynamic>;
+      final usdBal = ((acc['current_balance'] as num?)?.toDouble() ?? 0.0);
+      final reported = usdBal.abs() * conversionFactor;
+      switch (categorizeAccount(acc['account_type']?.toString())) {
+        case AccountCategory.credit:
+        case AccountCategory.loan:
+          liabilities += reported;
+        case AccountCategory.cash:
+          cash += reported;
+        case AccountCategory.investment:
+        case AccountCategory.crypto:
+          investments += reported;
+        case AccountCategory.other:
+          // Don't double-count unknowns into cash/investments; they're
+          // still in net_worth (computed server-side) so the totals
+          // remain consistent.
+          break;
+      }
     }
+
+    // If accounts list is empty (unlikely) fall back to type_breakdown totals.
+    if (accounts.isEmpty && typeBreakdown.isNotEmpty) {
+      for (final raw in typeBreakdown) {
+        final item = raw as Map<String, dynamic>;
+        final v =
+            ((item['total_usd'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
+        switch (categorizeAccount(item['account_type']?.toString())) {
+          case AccountCategory.cash:
+            cash += v.abs();
+          case AccountCategory.investment:
+          case AccountCategory.crypto:
+            investments += v.abs();
+          case AccountCategory.credit:
+          case AccountCategory.loan:
+            liabilities += v.abs();
+          case AccountCategory.other:
+            break;
+        }
+      }
+    }
+
+    final assets = netWorth + liabilities;
+
+    final tiles = <_StatTile>[
+      _StatTile(
+        label: 'Net worth',
+        value: currencyFormat.format(netWorth),
+        accent: const Color(0xFF00E676),
+        emphasized: true,
+      ),
+      _StatTile(
+        label: 'Assets',
+        value: currencyFormat.format(assets),
+        accent: context.textMuted,
+      ),
+      _StatTile(
+        label: 'Liabilities',
+        value: currencyFormat.format(liabilities),
+        accent: Colors.redAccent,
+      ),
+      _StatTile(
+        label: 'Cash',
+        value: currencyFormat.format(cash),
+        accent: const Color(0xFF00B0FF),
+      ),
+      _StatTile(
+        label: 'Investments',
+        value: currencyFormat.format(investments),
+        accent: const Color(0xFF1DE9B6),
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        // Tile widths derived from total available width minus 4×spacing.
+        // Below ~640 the tiles wrap to two rows automatically.
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: tiles
+              .map((t) => SizedBox(
+                    width: c.maxWidth >= 880
+                        ? (c.maxWidth - 4 * 12) / 5
+                        : c.maxWidth >= 560
+                            ? (c.maxWidth - 12) / 2 - 0.5
+                            : c.maxWidth,
+                    child: t,
+                  ))
+              .toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildFxBadge({bool compact = false}) {
+    final rate = (_fxRate?['rate'] as num?)?.toDouble();
+    final recordedAtRaw = _fxRate?['recorded_at'] as String?;
+    final recordedLocal = recordedAtRaw == null
+        ? null
+        : DateTime.tryParse(recordedAtRaw)?.toLocal();
+    final isStale = recordedLocal != null &&
+        DateTime.now().difference(recordedLocal).inHours > 24;
+
+    // Compact mode drops the "1 USD = " / " MXN" framing so a phone-width
+    // AppBar can still show the live rate alongside the currency toggle.
+    final label = rate == null
+        ? (compact ? '— MXN' : '1 USD = — MXN')
+        : compact
+            ? NumberFormat('0.00').format(rate)
+            : '1 USD = ${NumberFormat('0.00').format(rate)} MXN';
+    final accent =
+        isStale ? Colors.orangeAccent : const Color(0xFF1DE9B6);
+
+    final tooltip = rate == null
+        ? 'Exchange rate loading…'
+        : recordedLocal == null
+            ? 'Live USD/MXN exchange rate'
+            : '${isStale ? "Stale rate — " : "Updated "}'
+                '${DateFormat('MMM d, y · h:mm a').format(recordedLocal)} '
+                '${recordedLocal.timeZoneName}';
+
+    return Tooltip(
+      message: tooltip,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: context.tint(0.06),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: context.accentBorder(accent)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.swap_horiz, size: 14, color: accent),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: accent,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Full-page welcome shown when the user has not connected any accounts.
+  // Lives in the body slot so the AppBar's tab strip can be dropped — every
+  // tab is empty in this state and would mislead a fresh user.
+  Widget _buildOnboardingHero() {
+    final plaidReady = _setupStatus?['ready_for_plaid_linking'] == true;
+
+    Widget actionTile({
+      required IconData icon,
+      required String title,
+      required String subtitle,
+      required Color accent,
+      required VoidCallback? onPressed,
+      String? disabledHint,
+    }) {
+      final enabled = onPressed != null;
+      return Material(
+        color: Colors.white.withValues(alpha: enabled ? 0.05 : 0.02),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onPressed,
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: enabled
+                    ? context.accentBorder(accent)
+                    : context.accentSoft(accent),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 28, color: accent),
+                const SizedBox(height: 12),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: enabled ? context.textPrimary : context.textSubtle,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  enabled
+                      ? subtitle
+                      : (disabledHint ?? subtitle),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: enabled ? context.textMuted : context.textFaint,
+                    height: 1.4,
+                  ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: LayoutBuilder(
+                builder: (ctx, c) {
+                  final stack = c.maxWidth < 560;
+                  final tiles = [
+                    actionTile(
+                      icon: Icons.account_balance,
+                      title: 'Link a US bank',
+                      subtitle:
+                          'Securely connect via Plaid — balances and transactions sync automatically.',
+                      accent: const Color(0xFF1DE9B6),
+                      onPressed: plaidReady
+                          ? () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const ConnectBankScreen(),
+                                ),
+                              ).then((_) => _loadAllData());
+                            }
+                          : null,
+                      disabledHint:
+                          'Plaid credentials not configured yet — use CSV or manual for now.',
+                    ),
+                    actionTile(
+                      icon: Icons.upload_file,
+                      title: 'Import Mexico CSV or PDF',
+                      subtitle:
+                          'Drop a statement from Bancomer, Banamex, Santander or Banorte.',
+                      accent: const Color(0xFF00B0FF),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ImportScreen(),
+                          ),
+                        ).then((_) => _loadAllData());
+                      },
+                    ),
+                    actionTile(
+                      icon: Icons.add_circle_outline,
+                      title: 'Add a manual account',
+                      subtitle:
+                          'Track a cash balance, brokerage, or anything else by hand.',
+                      accent: const Color(0xFF00E676),
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (context) => AddAccountDialog(
+                            onAccountCreated: _loadAllData,
+                          ),
+                        );
+                      },
+                    ),
+                  ];
+
+                  final tileWidth = stack
+                      ? c.maxWidth - 48
+                      : (c.maxWidth - 48 - 2 * 16) / 3;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.savings_outlined,
+                        size: 40,
+                        color: Color(0xFF00E676),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Welcome to Patrimonio',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: context.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Connect your first account to see your net worth, '
+                        'transactions, and projections in one place.',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: context.textMuted,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Wrap(
+                        spacing: 16,
+                        runSpacing: 16,
+                        children: tiles
+                            .map((t) => SizedBox(width: tileWidth, child: t))
+                            .toList(),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Already linked accounts elsewhere? They will appear here as soon as the first sync completes.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.textFaint,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _checkRedirectStatus() {
@@ -101,11 +666,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Future<void> _loadAllData() async {
+  Future<void> _refreshData() => _loadAllData(silent: true);
+
+  Future<void> _loadMoreTransactions() async {
+    final offset = _transactions?.length ?? 0;
+    final more =
+        await _apiService.getTransactions(limit: _txPageSize, offset: offset);
+    if (!mounted) return;
     setState(() {
-      _isLoading = true;
-      _error = null;
+      _transactions = [...(_transactions ?? const []), ...more];
+      // If the server returned fewer rows than we asked for, we hit the
+      // tail of the table — no point offering Load more again.
+      _transactionsHasMore = more.length >= _txPageSize;
     });
+  }
+
+  Future<void> _loadAllData({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    } else {
+      setState(() => _error = null);
+    }
 
     try {
       final results = await Future.wait([
@@ -116,7 +700,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _apiService.getSyncStatus(),
         _apiService.getSetupStatus(),
         _apiService.getExchangeRate('USD', 'MXN'),
-        _apiService.getTransactions(),
+        _apiService.getTransactions(limit: _txPageSize),
         _apiService.getAllocationData(),
         _apiService.getTrendData(),
       ]);
@@ -144,17 +728,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _setupStatus = results[5] as Map<String, dynamic>;
         _fxRate = results[6] as Map<String, dynamic>;
         _transactions = results[7] as List<dynamic>;
+        // If the first page came back smaller than the page size, there
+        // can't be more pages. Saves us a wasted "Load more" tap.
+        _transactionsHasMore = _transactions!.length >= _txPageSize;
 
         _allocationData = allocationRaw.map((e) {
           final category = e['category'] as String;
           final subCategory = e['sub_category'] as String;
           final value = (e['value'] as num).toDouble();
+          final quantity = (e['quantity'] as num?)?.toDouble() ?? 0.0;
 
           return AllocationData(
             category,
             subCategory,
             value,
             categoryColors[category] ?? Colors.blueGrey,
+            quantity: quantity,
           );
         }).toList();
 
@@ -178,72 +767,116 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final isCompact = MediaQuery.sizeOf(context).width < 720;
 
-    return DefaultTabController(
-      length: 6,
-      child: Scaffold(
-        appBar: AppBar(
+    // During the first-run state we strip the chrome: tab bar (every tab
+    // would be empty) and currency / FX controls (no balances to convert).
+    final firstRun = _isFirstRun;
+
+    return Shortcuts(
+      shortcuts: <LogicalKeySet, Intent>{
+        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyK):
+            const _OpenPaletteIntent(),
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyK):
+            const _OpenPaletteIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _OpenPaletteIntent: CallbackAction<_OpenPaletteIntent>(
+            onInvoke: (_) {
+              if (!firstRun) _openPalette();
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+              appBar: AppBar(
           title: const Text(
             'Patrimonio',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
-          bottom: TabBar(
-            isScrollable: isCompact,
-            tabAlignment: isCompact ? TabAlignment.start : TabAlignment.fill,
-            indicatorColor: const Color(0xFF00E676),
-            labelColor: Color(0xFF00E676),
-            unselectedLabelColor: Colors.grey,
-            tabs: [
-              Tab(text: 'Overview'),
-              Tab(text: 'Portfolio'),
-              Tab(text: 'Transactions'),
-              Tab(text: isCompact ? 'Proj.' : 'Projections'),
-              Tab(text: isCompact ? 'Tax' : 'Tax Planning'),
-              Tab(text: isCompact ? 'Manage' : 'Management'),
-            ],
-          ),
-          actions: [
-            TextButton.icon(
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-              ),
-              onPressed: () {
-                _setTargetCurrency(_targetCurrency == 'USD' ? 'MXN' : 'USD');
-              },
-              icon: Icon(
-                Icons.currency_exchange,
-                color: _targetCurrency == 'MXN'
-                    ? const Color(0xFF00E676)
-                    : Colors.white70,
-              ),
-              label: Text(
-                'Report: $_targetCurrency',
-                style: TextStyle(
-                  color: _targetCurrency == 'MXN'
-                      ? const Color(0xFF00E676)
-                      : Colors.white70,
-                  fontWeight: FontWeight.bold,
+          bottom: firstRun
+              ? null
+              : TabBar(
+                  controller: _tabController,
+                  isScrollable: isCompact,
+                  tabAlignment:
+                      isCompact ? TabAlignment.start : TabAlignment.fill,
+                  indicatorColor: const Color(0xFF00E676),
+                  labelColor: const Color(0xFF00E676),
+                  unselectedLabelColor: Colors.grey,
+                  tabs: [
+                    const Tab(text: 'Overview'),
+                    const Tab(text: 'Portfolio'),
+                    const Tab(text: 'Transactions'),
+                    Tab(text: isCompact ? 'Cash' : 'Cash flow'),
+                    Tab(text: isCompact ? 'Proj.' : 'Projections'),
+                    Tab(text: isCompact ? 'Tax' : 'Tax planning'),
+                    Tab(text: isCompact ? 'Manage' : 'Management'),
+                  ],
                 ),
+          actions: firstRun
+              ? const []
+              : [
+                  // Compact FX pill on wide; phones drop it entirely
+                  // because the Management tab still surfaces the rate
+                  // and the AppBar gets squeezed once tabs scroll.
+                  if (!isCompact) _buildFxBadge(compact: true),
+                  if (!isCompact) const SizedBox(width: 4),
+                  NotificationsBell(
+                    notifications: deriveNotifications(
+                      syncData: _syncData ?? const [],
+                      netWorthHistory: _netWorthHistory ?? const [],
+                      onJumpToManagement: () =>
+                          _tabController?.animateTo(6),
+                    ),
+                  ),
+                  _ThemeCycleButton(),
+                  _CurrencyToggleButton(
+                    targetCurrency: _targetCurrency,
+                    onSwap: () => _setTargetCurrency(
+                        _targetCurrency == 'USD' ? 'MXN' : 'USD'),
+                  ),
+                  IconButton(
+                    tooltip: 'Sign out',
+                    icon: const Icon(Icons.logout),
+                    onPressed: () async {
+                      await AuthService.instance.logout();
+                    },
+                  ),
+                  const SizedBox(width: 4),
+                ],
+        ),
+              body: Column(
+                children: [
+                  if (!firstRun)
+                    SyncErrorBanner(
+                      syncData: _syncData ?? const [],
+                      onJumpToManagement: () =>
+                          _tabController?.animateTo(6),
+                      onReconnect: (id) async {
+                        // Defer to the existing handleReconnect routine
+                        // by hopping to Management and letting the user
+                        // hit the row's Reconnect — simpler than wiring
+                        // the Plaid flow up out of band here.
+                        _tabController?.animateTo(6);
+                      },
+                    ),
+                  Expanded(child: _buildBody()),
+                ],
               ),
             ),
-            const SizedBox(width: 8),
-            IconButton(
-              tooltip: 'Sign out',
-              icon: const Icon(Icons.logout, color: Colors.white70),
-              onPressed: () async {
-                await AuthService.instance.logout();
-              },
-            ),
-            const SizedBox(width: 4),
-          ],
+          ),
         ),
-        body: _buildBody(),
-      ),
-    );
+      );
   }
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      // Skeleton mirrors the Overview tab's actual KPI / cash-flow / body
+      // layout so the page doesn't reflow when data arrives. Other tabs
+      // are gated behind this load so a single overview skeleton suffices.
+      return const OverviewSkeleton();
     }
 
     if (_error != null) {
@@ -264,62 +897,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
+    if (_isFirstRun) {
+      return _buildOnboardingHero();
+    }
+
     final fxRate = (_fxRate?['rate'] as num?)?.toDouble() ?? 1.0;
     final conversionFactor = _targetCurrency == 'MXN' ? fxRate : 1.0;
     final currencyFormat = NumberFormat.currency(
       name: _targetCurrency,
       symbol: '$_targetCurrency ',
     );
-    final rateLabel = _fxRate == null
-        ? 'FX loading'
-        : '1 USD = ${NumberFormat.decimalPattern().format(fxRate)} MXN';
-
-    Widget buildCurrencyContext() {
-      final sourceBreakdown =
-          (_overview?['currency_breakdown'] as List?)
-              ?.map((item) => item as Map<String, dynamic>)
-              .toList() ??
-          [];
-
-      return Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        ),
-        child: Wrap(
-          spacing: 14,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              'Reporting currency: $_targetCurrency',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
-              ),
-            ),
-            Text(
-              rateLabel,
-              style: const TextStyle(color: Colors.white60, fontSize: 12),
-            ),
-            if (sourceBreakdown.isNotEmpty)
-              Text(
-                'Sources: ${sourceBreakdown.map((item) {
-                  final currency = (item['currency'] ?? 'USD').toString();
-                  final net = ((item['net'] ?? 0.0) as num).toDouble();
-                  return formatCurrencyAmount(net, currency);
-                }).join(' · ')}',
-                style: const TextStyle(color: Colors.white60, fontSize: 12),
-              ),
-          ],
-        ),
-      );
-    }
-
     Widget buildTabContainer(Widget child, {bool scrollable = true}) {
       final padding = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
       final content = Center(
@@ -340,13 +927,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Widget buildAccountsColumn() {
       return Column(
         children: [
-          buildCurrencyContext(),
           AccountsListWidget(
             accounts: _overview?['accounts'] ?? [],
             conversionFactor: conversionFactor,
             currencyFormat: currencyFormat,
             targetCurrency: _targetCurrency,
             usdMxnRate: fxRate,
+            onGoToManagement: () => _tabController?.animateTo(6),
             onBalanceUpdate: (id, bal) async {
               try {
                 await _apiService.updateAccountBalance(id, bal);
@@ -373,6 +960,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 );
               }
             },
+            onRenameAccount: (id, nickname) async {
+              try {
+                await _apiService.renameAccount(id, nickname);
+                _loadAllData();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      nickname.isEmpty
+                          ? 'Nickname cleared'
+                          : 'Renamed to "$nickname"',
+                    ),
+                  ),
+                );
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Rename failed: $e')),
+                );
+              }
+            },
           ),
           const SizedBox(height: 24),
           CreditUtilizationCard(
@@ -389,7 +997,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         builder: (context, constraints) {
           final isNarrow = constraints.maxWidth < 520;
           final title = const Text(
-            'Net Worth History',
+            'Net worth history',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           );
           final selector = SingleChildScrollView(
@@ -398,7 +1006,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               selectedRange: _selectedRange,
               onRangeChanged: (range) {
                 setState(() => _selectedRange = range);
-                // In a real app, we'd refetch data for specific range here
+                Preferences.setDateRange(range.name);
               },
             ),
           );
@@ -424,21 +1032,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     Future<void> runSync() async {
-      setState(() => _isLoading = true);
+      // Don't flip the page into the full-screen loading spinner — the user
+      // experiences that as a hard refresh. Show a transient SnackBar
+      // instead and silently refresh data when the call completes.
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor:
+                      AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 12),
+              Text('Syncing all institutions…'),
+            ],
+          ),
+          duration: Duration(seconds: 30),
+        ),
+      );
       try {
         await _apiService.syncInstitutions();
+        if (!mounted) return;
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Sync complete'),
+            duration: Duration(seconds: 2),
+          ),
+        );
       } catch (e) {
         debugPrint("Sync error: $e");
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Sync failed: $e')));
-        }
+        if (!mounted) return;
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          SnackBar(content: Text('Sync failed: $e')),
+        );
       }
-      _loadAllData();
+      // Reload without flipping _isLoading — just refresh the data fields.
+      await _refreshData();
     }
 
-    Future<void> _handleReconnect(String institutionId) async {
+    Future<void> handleReconnect(String institutionId) async {
       setState(() => _isLoading = true);
       try {
         final data = await _apiService.getReconnectToken(institutionId);
@@ -514,7 +1155,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   const SizedBox(width: 10),
                   const Text(
-                    'Launch Setup',
+                    'Launch setup',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ],
@@ -524,7 +1165,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 blocking.isEmpty
                     ? 'Plaid linking can start. Optional services may still improve data quality.'
                     : 'Complete required setup before real users can link Plaid accounts.',
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
+                style: TextStyle(color: context.textMuted, fontSize: 13),
               ),
               const SizedBox(height: 12),
               ...checks.map((raw) {
@@ -544,7 +1185,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         color: configured
                             ? const Color(0xFF00E676)
                             : check['severity'] == 'optional'
-                            ? Colors.white30
+                            ? context.textFaint
                             : Colors.orangeAccent,
                         size: 18,
                       ),
@@ -561,8 +1202,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             Text(
                               check['detail'] ?? '',
-                              style: const TextStyle(
-                                color: Colors.white54,
+                              style: TextStyle(
+                                color: context.textSubtle,
                                 fontSize: 12,
                               ),
                             ),
@@ -575,9 +1216,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               }),
               if (recommended.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                const Text(
+                Text(
                   'Recommended before production: configure live exchange rates.',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                  style: TextStyle(color: context.textSubtle, fontSize: 12),
                 ),
               ],
             ],
@@ -605,13 +1246,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               selectedRange: _selectedRange,
             ),
           ),
-          const SizedBox(height: 24),
-          if (_trendData != null)
-            CashFlowTrendsChart(
-              trends: _trendData!,
-              conversionFactor: conversionFactor,
-              currencyFormat: currencyFormat,
-            ),
         ],
       );
     }
@@ -620,22 +1254,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
       LayoutBuilder(
         builder: (context, constraints) {
           final isNarrow = constraints.maxWidth < 900;
-          if (isNarrow) {
-            return Column(
-              children: [
-                buildAccountsColumn(),
-                const SizedBox(height: 24),
-                buildChartsColumn(true),
-              ],
-            );
-          }
+          final stats = _buildStatStrip(
+            currencyFormat: currencyFormat,
+            conversionFactor: conversionFactor,
+          );
 
-          return Row(
+          final body = isNarrow
+              ? Column(
+                  children: [
+                    buildAccountsColumn(),
+                    const SizedBox(height: 24),
+                    buildChartsColumn(true),
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 1, child: buildAccountsColumn()),
+                    const SizedBox(width: 24),
+                    Expanded(flex: 3, child: buildChartsColumn(false)),
+                  ],
+                );
+
+          return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(flex: 1, child: buildAccountsColumn()),
-              const SizedBox(width: 24),
-              Expanded(flex: 3, child: buildChartsColumn(false)),
+              stats,
+              const SizedBox(height: 24),
+              // Net-worth-focused widgets stay on Overview. Cash-flow
+              // widgets (monthly card, trends, budgets) moved to the
+              // dedicated 'Cash flow' tab so this view stays a
+              // net-worth-at-a-glance summary.
+              NetWorthGoalTile(
+                netWorthUsd:
+                    (_overview?['net_worth'] as num?)?.toDouble() ?? 0.0,
+                conversionFactor: conversionFactor,
+                currencyFormat: currencyFormat,
+              ),
+              const SizedBox(height: 24),
+              body,
             ],
           );
         },
@@ -652,6 +1309,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 data: _allocationData!,
                 conversionFactor: conversionFactor,
                 currencyFormat: currencyFormat,
+                activeCategory: _portfolioCategoryFilter,
+                onCategorySelected: (cat) => setState(() {
+                  // Tapping the active band clears the filter — saves a
+                  // round-trip through the chip's X button.
+                  _portfolioCategoryFilter =
+                      _portfolioCategoryFilter == cat ? null : cat;
+                }),
               ),
             ),
           PortfolioCard(
@@ -660,6 +1324,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             currencyFormat: currencyFormat,
             targetCurrency: _targetCurrency,
             usdMxnRate: fxRate,
+            categoryFilter: _portfolioCategoryFilter,
+            onClearCategoryFilter: () =>
+                setState(() => _portfolioCategoryFilter = null),
+            searchOverride: _portfolioSearchOverride,
           ),
           const SizedBox(height: 24),
           AccountsBreakdownCard(
@@ -675,15 +1343,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final transactionsTab = buildTabContainer(
       TransactionsTab(
         transactions: _transactions ?? [],
+        accounts: (_overview?['accounts'] as List?) ?? const [],
         conversionFactor: conversionFactor,
         currencyFormat: currencyFormat,
         targetCurrency: _targetCurrency,
         usdMxnRate: fxRate,
-        onUpdate: (id, {userCategory, userNotes}) async {
+        onGoToManagement: () => _tabController?.animateTo(6),
+        apiService: _apiService,
+        onTransactionAdded: () => _refreshData(),
+        onLoadMore: _loadMoreTransactions,
+        hasMore: _transactionsHasMore,
+        searchOverride: _transactionsSearchOverride,
+        highlightedTxId: _highlightedTxId,
+        onUpdate: (id, {userCategory, userNotes, accountId}) async {
           try {
-            await _apiService.updateTransaction(id,
-                userCategory: userCategory, userNotes: userNotes);
-            _loadAllData();
+            await _apiService.updateTransaction(
+              id,
+              userCategory: userCategory,
+              userNotes: userNotes,
+              accountId: accountId,
+            );
+            await _refreshData();
           } catch (e) {
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
@@ -691,6 +1371,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
             );
           }
         },
+        onDelete: (id) async {
+          await _apiService.deleteTransaction(id);
+          await _refreshData();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Transaction deleted')),
+          );
+        },
+      ),
+    );
+
+    // Dedicated cash-flow page: monthly summary, the bar-chart of
+    // recent months, and per-category budgets. These used to crowd the
+    // Overview; pulling them out keeps Overview focused on net worth.
+    final cashFlowTab = buildTabContainer(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          MonthlyCashFlowCard(
+            trends: _trendData ?? const [],
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
+          ),
+          const SizedBox(height: 24),
+          if (_trendData != null)
+            CashFlowTrendsChart(
+              trends: _trendData!,
+              conversionFactor: conversionFactor,
+              currencyFormat: currencyFormat,
+            ),
+          const SizedBox(height: 24),
+          BudgetsCard(
+            transactions: _transactions ?? const [],
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
+            apiService: _apiService,
+          ),
+        ],
       ),
     );
 
@@ -718,219 +1436,514 @@ class _DashboardScreenState extends State<DashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Data Sources & Sync',
+            'Data sources & sync',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: SyncStatusCard(
-                  syncData: _syncData ?? [],
-                  onRetrySync: runSync,
-                  onReconnect: _handleReconnect,
-                  onDelete: (id) async {
-                    final confirm = await showDialog<bool>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Delete Institution'),
-                        content: const Text('Are you sure? This will remove ALL accounts and history for this institution.'),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-                          TextButton(
-                            onPressed: () => Navigator.pop(context, true),
-                            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-                            child: const Text('Delete Everything'),
-                          ),
-                        ],
+          LayoutBuilder(builder: (ctx, c) {
+            // Below ~720px the SyncStatusCard + FxWidget pair gets squeezed
+            // into unreadability when forced side-by-side. Stack them.
+            final isNarrow = c.maxWidth < 720;
+            final sync = SyncStatusCard(
+              syncData: _syncData ?? [],
+              onRetrySync: runSync,
+              onRetrySingle: (id) async {
+                try {
+                  await _apiService.syncInstitution(id);
+                  await _refreshData();
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Retry failed: $e')),
+                  );
+                }
+              },
+              onRetryBatch: (ids) async {
+                try {
+                  await _apiService.syncInstitutionsBatch(ids);
+                  await _refreshData();
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Retry failed: $e')),
+                  );
+                }
+              },
+              onReconnect: handleReconnect,
+              onDelete: (id) async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Delete institution'),
+                    content: const Text(
+                        'Are you sure? This will remove ALL accounts and history for this institution.'),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel')),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: TextButton.styleFrom(
+                            foregroundColor: Colors.redAccent),
+                        child: const Text('Delete everything'),
                       ),
-                    );
+                    ],
+                  ),
+                );
 
-                    if (confirm == true) {
-                      try {
-                        await _apiService.deleteInstitution(id);
-                        _loadAllData();
-                      } catch (e) {
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
-                      }
-                    }
-                  },
-                ),
-              ),
-              const SizedBox(width: 24),
-              Expanded(child: FxWidget(latestRate: _fxRate ?? {})),
-            ],
-          ),
+                if (confirm == true) {
+                  try {
+                    await _apiService.deleteInstitution(id);
+                    _loadAllData();
+                  } catch (e) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Delete failed: $e')));
+                  }
+                }
+              },
+            );
+            final fx = FxWidget(
+              latestRate: _fxRate ?? {},
+              onRefresh: () async {
+                try {
+                  final fresh = await _apiService.getExchangeRate(
+                    'USD',
+                    'MXN',
+                    force: true,
+                  );
+                  if (!mounted) return;
+                  setState(() => _fxRate = fresh);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('FX rate refreshed')),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Refresh failed: $e')),
+                  );
+                }
+              },
+            );
+            if (isNarrow) {
+              return Column(
+                children: [
+                  sync,
+                  const SizedBox(height: 16),
+                  fx,
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: sync),
+                const SizedBox(width: 24),
+                Expanded(child: fx),
+              ],
+            );
+          }),
           const SizedBox(height: 24),
           buildSetupStatusCard(),
           const SizedBox(height: 24),
-          const Text(
-            'Connect Standard Accounts',
-            style: TextStyle(fontSize: 16, color: Colors.white70),
+          Text(
+            'Connect standard accounts',
+            style: TextStyle(fontSize: 16, color: context.textMuted),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
+          // Connect-bank buttons. LayoutBuilder + Wrap lets them sit 2-up
+          // when there's room, then reflow to full-width single-column on
+          // phones — without crushing the "Import Mexico (CSV/PDF)" label
+          // into ellipsis territory inside a forced 50% Expanded.
+          LayoutBuilder(builder: (ctx, c) {
+            final isNarrow = c.maxWidth < 560;
+            final tileWidth = isNarrow ? c.maxWidth : (c.maxWidth - 16) / 2;
+            Widget tile(IconData icon, String label,
+                {Color? bg, VoidCallback? onPressed}) {
+              return SizedBox(
+                width: tileWidth,
                 child: ElevatedButton.icon(
-                  icon: const Icon(Icons.sync),
-                  label: const Text('Sync All Accounts'),
+                  icon: Icon(icon),
+                  label: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 20),
-                    backgroundColor: Colors.blueAccent.withValues(alpha: 0.2),
+                    backgroundColor:
+                        bg ?? Colors.blueAccent.withValues(alpha: 0.2),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
                   ),
-                  onPressed: runSync,
+                  onPressed: onPressed,
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.add_link),
-                  label: const Text('Link Plaid (US Banks)'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    backgroundColor: const Color(
-                      0xFF1DE9B6,
-                    ).withValues(alpha: 0.2),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
+              );
+            }
+            return Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              children: [
+                tile(Icons.sync, 'Sync all accounts',
+                    bg: Colors.blueAccent.withValues(alpha: 0.2),
+                    onPressed: runSync),
+                tile(
+                  Icons.add_link,
+                  'Link Plaid (US Banks)',
+                  bg: const Color(0xFF1DE9B6).withValues(alpha: 0.2),
                   onPressed: plaidReady()
                       ? () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => ConnectBankScreen(),
+                              builder: (context) => const ConnectBankScreen(),
                             ),
                           ).then((_) => _loadAllData());
                         }
                       : null,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.upload_file),
-                  label: const Text('Import Mexico (CSV/PDF)'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    backgroundColor: Colors.white12,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ImportScreen(),
-                      ),
-                    ).then((_) => _loadAllData());
-                  },
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.add_circle_outline),
-                  label: const Text('Add Manual Account'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    backgroundColor: Colors.white12,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) =>
-                          AddAccountDialog(onAccountCreated: _loadAllData),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
+                tile(Icons.upload_file, 'Import Mexico (CSV/PDF)',
+                    bg: context.hairline,
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ImportScreen(),
+                        ),
+                      ).then((_) => _loadAllData());
+                    }),
+                tile(Icons.add_circle_outline, 'Add manual account',
+                    bg: context.hairline,
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) =>
+                            AddAccountDialog(onAccountCreated: _loadAllData),
+                      );
+                    }),
+              ],
+            );
+          }),
           const SizedBox(height: 32),
-          const Text(
-            'Connect Crypto Exchanges',
-            style: TextStyle(fontSize: 16, color: Colors.white70),
+          Text(
+            'Connect crypto exchanges',
+            style: TextStyle(fontSize: 16, color: context.textMuted),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.login, color: Colors.white),
-                  label: const Text('Link Coinbase'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    backgroundColor: const Color(0xFF0052FF),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+          LayoutBuilder(builder: (ctx, c) {
+            final isNarrow = c.maxWidth < 560;
+            final tileWidth = isNarrow ? c.maxWidth : (c.maxWidth - 16) / 2;
+            return Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              children: [
+                SizedBox(
+                  width: tileWidth,
+                  child: ElevatedButton.icon(
+                    icon: Icon(Icons.login, color: context.textPrimary),
+                    label: const Text(
+                      'Link Coinbase',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  onPressed: () {
-                    // Start OAuth flow by redirecting to backend
-                    final baseUrl = _apiService.baseUrl;
-                    web.window.location.href = '$baseUrl/auth/coinbase';
-                  },
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: ElevatedButton.icon(
-                  icon: const Icon(
-                    Icons.currency_exchange,
-                    color: Color(0xFF00E676),
-                  ),
-                  label: const Text('Connect Bitso'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    backgroundColor: const Color(
-                      0xFF00E676,
-                    ).withValues(alpha: 0.1),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => AddCryptoDialog(
-                        exchange: 'bitso',
-                        onLinked: _loadAllData,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      backgroundColor: const Color(0xFF0052FF),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                    );
-                  },
+                    ),
+                    onPressed: () {
+                      final baseUrl = _apiService.baseUrl;
+                      web.window.location.href = '$baseUrl/auth/coinbase';
+                    },
+                  ),
                 ),
-              ),
-            ],
-          ),
+                SizedBox(
+                  width: tileWidth,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(
+                      Icons.currency_exchange,
+                      color: Color(0xFF00E676),
+                    ),
+                    label: const Text(
+                      'Connect Bitso',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      backgroundColor:
+                          const Color(0xFF00E676).withValues(alpha: 0.1),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => AddCryptoDialog(
+                          exchange: 'bitso',
+                          onLinked: _loadAllData,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          }),
         ],
       ),
     );
 
     return TabBarView(
+      controller: _tabController,
       children: [
-        overviewTab,
-        portfolioTab,
-        transactionsTab,
-        projectionsTab,
-        taxPlanningTab,
-        managementTab,
+        _KeepAliveTab(child: overviewTab),
+        _KeepAliveTab(child: portfolioTab),
+        _KeepAliveTab(child: transactionsTab),
+        _KeepAliveTab(child: cashFlowTab),
+        _KeepAliveTab(child: projectionsTab),
+        _KeepAliveTab(child: taxPlanningTab),
+        _KeepAliveTab(child: managementTab),
       ],
+    );
+  }
+}
+
+/// Keeps a TabBarView child alive across tab switches so its State (and any
+/// initState API calls — projections, tax planning, etc.) only fires once.
+/// Without this, every click of Projections or Tax planning re-fetched its
+/// data, which the user perceives as a sluggish tab switch.
+class _KeepAliveTab extends StatefulWidget {
+  final Widget child;
+  const _KeepAliveTab({required this.child});
+
+  @override
+  State<_KeepAliveTab> createState() => _KeepAliveTabState();
+}
+
+class _KeepAliveTabState extends State<_KeepAliveTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color accent;
+  final bool emphasized;
+
+  const _StatTile({
+    required this.label,
+    required this.value,
+    required this.accent,
+    this.emphasized = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: context.tileSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: emphasized
+              ? context.accentBorder(accent)
+              : context.accentSoft(accent),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 10,
+              letterSpacing: 1.2,
+              fontWeight: FontWeight.w700,
+              color: accent.withValues(alpha: 0.9),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: emphasized ? 22 : 18,
+              fontWeight: emphasized ? FontWeight.w900 : FontWeight.w700,
+              color: context.textPrimary,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Intent fired by Cmd-K / Ctrl-K to open the global command palette.
+class _OpenPaletteIntent extends Intent {
+  const _OpenPaletteIntent();
+}
+
+/// Compact reporting-currency pill. Replaces the dual icon-only /
+/// labelled-button compound that lived inline in the AppBar — the
+/// pill is the same shape regardless of breakpoint so the chrome on
+/// the right side of the AppBar stays even.
+class _CurrencyToggleButton extends StatelessWidget {
+  final String targetCurrency;
+  final VoidCallback onSwap;
+
+  const _CurrencyToggleButton({
+    required this.targetCurrency,
+    required this.onSwap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final active = targetCurrency == 'MXN';
+    final accent =
+        active ? const Color(0xFF00E676) : Theme.of(context).colorScheme.onSurface;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Tooltip(
+        message: 'Reporting in $targetCurrency · tap to swap',
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onSwap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: context.accentBorder(accent)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.currency_exchange, size: 14, color: accent),
+                const SizedBox(width: 6),
+                Text(
+                  targetCurrency,
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Single-tap theme picker. Tapping cycles system → light → dark →
+/// system; long-press still surfaces the explicit picker for users who
+/// know exactly which mode they want without cycling.
+class _ThemeCycleButton extends StatelessWidget {
+  static const _order = [ThemeMode.system, ThemeMode.light, ThemeMode.dark];
+
+  IconData _iconFor(ThemeMode m) => switch (m) {
+        ThemeMode.system => Icons.brightness_auto,
+        ThemeMode.light => Icons.light_mode_outlined,
+        ThemeMode.dark => Icons.dark_mode_outlined,
+      };
+
+  String _labelFor(ThemeMode m) => switch (m) {
+        ThemeMode.system => 'System theme',
+        ThemeMode.light => 'Light theme',
+        ThemeMode.dark => 'Dark theme',
+      };
+
+  void _persist(ThemeMode m) => Preferences.setThemeMode(switch (m) {
+        ThemeMode.system => 'system',
+        ThemeMode.light => 'light',
+        ThemeMode.dark => 'dark',
+      });
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeModeNotifier,
+      builder: (ctx, mode, _) {
+        return GestureDetector(
+          onLongPress: () async {
+            final picked = await showMenu<ThemeMode>(
+              context: context,
+              position: const RelativeRect.fromLTRB(1000, 56, 0, 0),
+              items: const [
+                PopupMenuItem(
+                  value: ThemeMode.system,
+                  child: ListTile(
+                    dense: true,
+                    leading: Icon(Icons.brightness_auto),
+                    title: Text('System default'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: ThemeMode.light,
+                  child: ListTile(
+                    dense: true,
+                    leading: Icon(Icons.light_mode_outlined),
+                    title: Text('Light'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: ThemeMode.dark,
+                  child: ListTile(
+                    dense: true,
+                    leading: Icon(Icons.dark_mode_outlined),
+                    title: Text('Dark'),
+                  ),
+                ),
+              ],
+            );
+            if (picked != null) {
+              themeModeNotifier.value = picked;
+              _persist(picked);
+            }
+          },
+          child: IconButton(
+            tooltip:
+                '${_labelFor(mode)} · tap to cycle, long-press to pick',
+            // AnimatedSwitcher fades between the per-mode icons so the
+            // tap-cycle reads as a smooth icon swap rather than an
+            // instant glyph flip.
+            icon: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              transitionBuilder: (child, anim) => FadeTransition(
+                opacity: anim,
+                child: ScaleTransition(scale: anim, child: child),
+              ),
+              child: Icon(
+                _iconFor(mode),
+                key: ValueKey(mode),
+              ),
+            ),
+            onPressed: () {
+              final next = _order[(_order.indexOf(mode) + 1) % _order.length];
+              themeModeNotifier.value = next;
+              _persist(next);
+            },
+          ),
+        );
+      },
     );
   }
 }

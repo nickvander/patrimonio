@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 
 class SyncStatusCard extends StatelessWidget {
   final List<dynamic> syncData;
   final VoidCallback? onRetrySync;
+  /// Optional targeted-retry hook. When provided, the "Retry N failed"
+  /// shortcut loops this for each failed institution rather than calling
+  /// the global onRetrySync (which syncs every institution).
+  final Future<void> Function(String id)? onRetrySingle;
+  /// Optional batched-retry hook. Preferred over [onRetrySingle] when
+  /// provided — replaces N sequential HTTP calls with one round-trip.
+  final Future<void> Function(List<String> ids)? onRetryBatch;
   final Function(String id)? onReconnect;
   final Function(String id)? onDelete;
 
@@ -11,12 +19,38 @@ class SyncStatusCard extends StatelessWidget {
     super.key,
     required this.syncData,
     this.onRetrySync,
+    this.onRetrySingle,
+    this.onRetryBatch,
     this.onReconnect,
     this.onDelete,
   });
 
+  /// Ids of institutions stuck in error / failed state. We exclude
+  /// `reconnect_required` because retry won't help — those need the
+  /// Plaid Link reconnect flow, which is handled separately.
+  List<String> _failedIds() {
+    return syncData.where((raw) {
+      if (raw is! Map) return false;
+      final s = raw['sync_status']?.toString();
+      return s == 'error' || s == 'failed';
+    }).map((raw) => (raw as Map)['id'].toString()).toList();
+  }
+
+  /// Institutions that need a re-sync attempt — failed status, or stuck
+  /// in `reconnect_required`. The `error`/`failed` ones can be retried in
+  /// place; `reconnect_required` ones need the Plaid Link flow but show
+  /// up in the count so the user knows total attention required.
+  int get _failedCount {
+    return syncData.where((raw) {
+      if (raw is! Map) return false;
+      final s = raw['sync_status']?.toString();
+      return s == 'error' || s == 'failed' || s == 'reconnect_required';
+    }).length;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final failed = _failedCount;
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -25,13 +59,82 @@ class SyncStatusCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Institution Sync Status',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'INSTITUTIONS',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.textSubtle,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+                if (failed > 0 &&
+                    (onRetryBatch != null ||
+                        onRetrySingle != null ||
+                        onRetrySync != null))
+                  TextButton.icon(
+                    onPressed: () async {
+                      final ids = _failedIds();
+                      // Preference: batched > per-institution loop >
+                      // global fallback. The batched path is one HTTP
+                      // round-trip server-side via ANY($1).
+                      if (onRetryBatch != null) {
+                        try {
+                          await onRetryBatch!(ids);
+                        } catch (_) {/* swallowed; UI re-renders */}
+                      } else if (onRetrySingle != null) {
+                        for (final id in ids) {
+                          try {
+                            await onRetrySingle!(id);
+                          } catch (_) {/* continue on individual errors */}
+                        }
+                      } else {
+                        onRetrySync?.call();
+                      }
+                    },
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: Text('Retry $failed failed'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.orangeAccent,
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 24),
             if (syncData.isEmpty)
-              const Center(child: Text('No institutions linked yet.'))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Column(
+                  children: [
+                    Icon(Icons.account_balance_outlined,
+                        size: 32, color: context.textFaint),
+                    const SizedBox(height: 8),
+                    Text(
+                      'No institutions linked yet',
+                      style: TextStyle(
+                        color: context.textMuted,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Use the buttons below to connect a bank, import a\nstatement, or add a manual account.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Icon(Icons.arrow_downward,
+                        size: 18, color: context.textFaint),
+                  ],
+                ),
+              )
             else
               ...syncData.map((inst) => _buildSyncRow(inst)),
           ],
@@ -41,6 +144,13 @@ class SyncStatusCard extends StatelessWidget {
   }
 
   Widget _buildSyncRow(Map<String, dynamic> inst) {
+    return LayoutBuilder(builder: (ctx, c) {
+      final isNarrow = c.maxWidth < 420;
+      return _buildSyncRowBody(inst, isNarrow);
+    });
+  }
+
+  Widget _buildSyncRowBody(Map<String, dynamic> inst, bool isNarrow) {
     final status = inst['sync_status'] ?? 'unknown';
 
     IconData statusIcon;
@@ -124,6 +234,18 @@ class SyncStatusCard extends StatelessWidget {
                               fontStyle: FontStyle.italic,
                             ),
                           ),
+                        )
+                      else if (status == 'error' || status == 'failed')
+                        const Padding(
+                          padding: EdgeInsets.only(top: 4.0),
+                          child: Text(
+                            'Sync failed. Reason unknown — try Retry or Reconnect.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.redAccent,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
                         ),
                     ],
                   ),
@@ -132,31 +254,46 @@ class SyncStatusCard extends StatelessWidget {
             ),
           ),
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               if (status == 'reconnect_required')
-                TextButton.icon(
-                  onPressed: () => onReconnect?.call(inst['id']),
-                  icon: const Icon(Icons.link, size: 16),
-                  label: const Text('Reconnect'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.deepOrangeAccent,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                ),
+                isNarrow
+                    ? IconButton(
+                        onPressed: () => onReconnect?.call(inst['id']),
+                        icon: const Icon(Icons.link,
+                            color: Colors.deepOrangeAccent, size: 20),
+                        tooltip: 'Reconnect',
+                        padding: const EdgeInsets.all(6),
+                        constraints: const BoxConstraints(),
+                      )
+                    : TextButton.icon(
+                        onPressed: () => onReconnect?.call(inst['id']),
+                        icon: const Icon(Icons.link, size: 16),
+                        label: const Text('Reconnect'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.deepOrangeAccent,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                      ),
               if ([
                 'error',
                 'failed',
                 'setup_required',
               ].contains(status))
                 IconButton(
-                  icon: const Icon(Icons.refresh, color: Colors.teal),
+                  icon: const Icon(Icons.refresh, color: Colors.teal, size: 20),
                   onPressed: onRetrySync,
-                  tooltip: 'Retry Sync',
+                  tooltip: 'Retry sync',
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
                 ),
               IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                icon: const Icon(Icons.delete_outline,
+                    color: Colors.redAccent, size: 20),
                 onPressed: () => onDelete?.call(inst['id']),
-                tooltip: 'Delete Institution',
+                tooltip: 'Delete institution',
+                padding: const EdgeInsets.all(6),
+                constraints: const BoxConstraints(),
               ),
             ],
           ),

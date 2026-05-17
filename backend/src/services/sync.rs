@@ -7,14 +7,54 @@ use std::collections::HashMap;
 
 /// Sync engine — Expands Plaid data pulling for all linked institutions.
 pub async fn sync_all_institutions(db: &PgPool, config: &AppConfig) -> Result<()> {
-    tracing::info!("Sync engine: starting sync for all institutions");
+    sync_institutions(db, config, None).await
+}
+
+/// Sync engine variant that scopes the run to a single institution. Used
+/// by the "Retry N failed" UI action so we don't touch healthy
+/// institutions just to reattempt a couple of broken ones.
+pub async fn sync_one_institution(
+    db: &PgPool,
+    config: &AppConfig,
+    id: uuid::Uuid,
+) -> Result<()> {
+    sync_institutions(db, config, Some(vec![id])).await
+}
+
+/// Internal sync loop. When `only_ids` is `Some`, only those institutions
+/// are selected; otherwise every linked institution gets synced.
+pub async fn sync_institutions(
+    db: &PgPool,
+    config: &AppConfig,
+    only_ids: Option<Vec<uuid::Uuid>>,
+) -> Result<()> {
+    tracing::info!(
+        "Sync engine: starting sync for {}",
+        match &only_ids {
+            Some(ids) => format!("{} institution(s)", ids.len()),
+            None => "all institutions".to_string(),
+        }
+    );
     let client = Client::new();
 
-    let rows = sqlx::query(
-        "SELECT id, name, integration_type, plaid_access_token_enc, plaid_transactions_cursor FROM institutions"
-    )
-    .fetch_all(db)
-    .await?;
+    let rows = if let Some(ids) = only_ids {
+        // ANY($1) lets us pass the Uuid array as one bind param and
+        // returns rows in arbitrary order; per-id ordering doesn't
+        // matter since the sync engine treats each row independently.
+        sqlx::query(
+            "SELECT id, name, integration_type, plaid_access_token_enc, plaid_transactions_cursor \
+             FROM institutions WHERE id = ANY($1)"
+        )
+        .bind(&ids)
+        .fetch_all(db)
+        .await?
+    } else {
+        sqlx::query(
+            "SELECT id, name, integration_type, plaid_access_token_enc, plaid_transactions_cursor FROM institutions"
+        )
+        .fetch_all(db)
+        .await?
+    };
 
     for row in rows {
         let inst_id: uuid::Uuid = row.get("id");
@@ -92,6 +132,26 @@ pub async fn sync_all_institutions(db: &PgPool, config: &AppConfig) -> Result<()
                             )
                             .bind(inst_id).bind(external_id).bind(name).bind(subtype).bind(current_bal).bind(available_bal)
                             .execute(db).await?;
+                        }
+
+                        // Persist today's balance into balance_snapshots so
+                        // net_worth_history actually contains Plaid accounts.
+                        // Without this, the history endpoint only sees the
+                        // Manual institution and the chart's stacked area
+                        // looks like Manual is the only contributor.
+                        if let Some(bal) = current_bal {
+                            let _ = sqlx::query(
+                                r#"
+                                INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd)
+                                SELECT id, $1, CURRENT_DATE, 'USD', $1 FROM accounts WHERE external_id = $2
+                                ON CONFLICT (account_id, as_of_date)
+                                DO UPDATE SET balance = EXCLUDED.balance, balance_usd = EXCLUDED.balance_usd, created_at = NOW()
+                                "#
+                            )
+                            .bind(bal)
+                            .bind(external_id)
+                            .execute(db)
+                            .await;
                         }
                     }
                 }
@@ -296,9 +356,11 @@ async fn update_sync_status(db: &PgPool, inst_id: uuid::Uuid, status: &str, erro
 fn plaid_error_status(payload: &serde_json::Value) -> Option<&'static str> {
     let error_code = payload["error_code"].as_str()?;
     match error_code {
-        "ITEM_LOGIN_REQUIRED" | "ITEM_LOCKED" | "USER_PERMISSION_REVOKED" | "PENDING_EXPIRATION" => {
-            Some("reconnect_required")
-        }
+        // NO_ACCOUNTS surfaces when Plaid loses visibility on an Item's accounts
+        // (e.g. Vanguard MFA expiry). Surfacing it as reconnect_required gives
+        // the user a clear "Reconnect" action rather than a generic error.
+        "ITEM_LOGIN_REQUIRED" | "ITEM_LOCKED" | "USER_PERMISSION_REVOKED"
+        | "PENDING_EXPIRATION" | "NO_ACCOUNTS" => Some("reconnect_required"),
         "PRODUCT_NOT_READY" => Some("pending"),
         _ => Some("error"),
     }
@@ -323,9 +385,17 @@ async fn upsert_plaid_transaction(db: &PgPool, tx: &serde_json::Value) -> Result
         .as_array()
         .and_then(|items| items.first())
         .and_then(|item| item.as_str());
+    // Plaid's Personal Finance Category taxonomy has two levels:
+    //   primary  — coarse bucket, e.g. "LOAN_PAYMENTS"
+    //   detailed — specific, e.g. "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT"
+    // The detailed enum is *much* more useful in the UI, so we store
+    // both. Legacy `category[0]` is kept as a fallback for older items
+    // that pre-date the PFC taxonomy.
     let category = tx["personal_finance_category"]["primary"]
         .as_str()
         .or(legacy_category);
+    let category_detailed = tx["personal_finance_category"]["detailed"].as_str();
+    let payment_channel = tx["payment_channel"].as_str();
 
     let internal_acc = sqlx::query("SELECT id FROM accounts WHERE external_id = $1")
         .bind(acc_ext_id)
@@ -336,8 +406,8 @@ async fn upsert_plaid_transaction(db: &PgPool, tx: &serde_json::Value) -> Result
         let acc_id: uuid::Uuid = acc_row.get("id");
         sqlx::query(
             r#"
-            INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, merchant_name, pending, source)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'plaid')
+            INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, category_detailed, payment_channel, merchant_name, pending, source)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'plaid')
             ON CONFLICT (account_id, external_id)
             DO UPDATE SET
                 date = EXCLUDED.date,
@@ -345,6 +415,8 @@ async fn upsert_plaid_transaction(db: &PgPool, tx: &serde_json::Value) -> Result
                 amount = EXCLUDED.amount,
                 currency = EXCLUDED.currency,
                 category = EXCLUDED.category,
+                category_detailed = EXCLUDED.category_detailed,
+                payment_channel = EXCLUDED.payment_channel,
                 merchant_name = EXCLUDED.merchant_name,
                 pending = EXCLUDED.pending
             "#
@@ -356,6 +428,8 @@ async fn upsert_plaid_transaction(db: &PgPool, tx: &serde_json::Value) -> Result
         .bind(amount)
         .bind(currency)
         .bind(category)
+        .bind(category_detailed)
+        .bind(payment_channel)
         .bind(merchant_name)
         .bind(pending)
         .execute(db)

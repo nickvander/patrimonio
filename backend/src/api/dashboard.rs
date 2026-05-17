@@ -1,10 +1,14 @@
 use axum::{
-    extract::State,
+    extract::{Query, State},
+    http::{header, StatusCode},
+    response::{IntoResponse, Response},
     routing::get,
     Json, Router,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::Row;
+use std::collections::{BTreeMap, HashMap};
+use tracing::error;
 
 use crate::AppState;
 
@@ -18,6 +22,8 @@ pub fn router() -> Router<AppState> {
         .route("/credit-utilization", get(credit_utilization))
         .route("/sync-status", get(sync_status))
         .route("/transactions", get(recent_transactions))
+        .route("/transactions/export", get(export_transactions_csv))
+        .route("/transactions/manual", axum::routing::post(create_manual_transaction))
 }
 
 /// Dashboard overview: net worth, account breakdown, recent changes
@@ -134,7 +140,7 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
     // Individual Accounts
     let accounts_rows = sqlx::query(
         r#"
-        SELECT a.id, a.name, a.account_type, a.current_balance, a.currency, 
+        SELECT a.id, a.name, a.nickname, a.account_type, a.current_balance, a.currency,
                i.name as institution_name, a.ticker_symbol, a.crypto_amount
         FROM accounts a
         JOIN institutions i ON a.institution_id = i.id
@@ -149,6 +155,7 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
         .map(|r| AccountDetail {
             id: r.get::<uuid::Uuid, _>("id").to_string(),
             name: r.get("name"),
+            nickname: r.try_get::<Option<String>, _>("nickname").ok().flatten(),
             institution_name: r.get("institution_name"),
             account_type: r.get("account_type"),
             current_balance: r.try_get::<rust_decimal::Decimal, _>("current_balance")
@@ -183,42 +190,67 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
     })
 }
 
-/// Historical net worth data for charting (aggregated from balance_snapshots)
+/// Historical net worth data for charting (aggregated from balance_snapshots),
+/// broken down by institution so the frontend can render contribution lines.
 async fn net_worth_history(State(state): State<AppState>) -> Json<Vec<NetWorthPoint>> {
-    // We need to properly aggregate historical points in USD
-    // Since balance_snapshots table has balance_usd, we use that for a consistent base.
+    // Grouped per (date, institution) so each row carries that institution's
+    // assets and liabilities on that date. Empty institution slots simply
+    // don't appear and the chart treats them as zero/no-data.
     let rows = sqlx::query(
         r#"
         SELECT bs.as_of_date,
-               COALESCE(SUM(CASE WHEN a.account_type NOT IN ('credit') THEN bs.balance_usd ELSE 0 END), 0) as total_assets_usd,
-               COALESCE(SUM(CASE WHEN a.account_type = 'credit' THEN ABS(bs.balance_usd) ELSE 0 END), 0) as total_liabilities_usd
+               i.name as institution_name,
+               COALESCE(SUM(CASE WHEN a.account_type NOT IN ('credit') THEN bs.balance_usd ELSE 0 END), 0) as inst_assets_usd,
+               COALESCE(SUM(CASE WHEN a.account_type = 'credit' THEN ABS(bs.balance_usd) ELSE 0 END), 0) as inst_liabilities_usd
         FROM balance_snapshots bs
         JOIN accounts a ON bs.account_id = a.id
-        GROUP BY bs.as_of_date
-        ORDER BY bs.as_of_date ASC
+        JOIN institutions i ON a.institution_id = i.id
+        GROUP BY bs.as_of_date, i.name
+        ORDER BY bs.as_of_date ASC, i.name ASC
         "#
     )
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
 
-    Json(
-        rows.iter()
-            .map(|r| {
-                let assets: f64 = r.try_get::<rust_decimal::Decimal, _>("total_assets_usd")
-                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
-                let liabilities: f64 = r.try_get::<rust_decimal::Decimal, _>("total_liabilities_usd")
-                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
-                NetWorthPoint {
-                    date: r.try_get::<chrono::NaiveDate, _>("as_of_date")
-                        .ok().map(|d| d.to_string()).unwrap_or_default(),
-                    total_assets: assets,
-                    total_liabilities: liabilities,
-                    net_worth: assets - liabilities,
-                }
-            })
-            .collect(),
-    )
+    let mut points: BTreeMap<chrono::NaiveDate, NetWorthPoint> = BTreeMap::new();
+
+    for r in &rows {
+        let date = match r.try_get::<chrono::NaiveDate, _>("as_of_date") {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        let inst: String = r
+            .try_get::<String, _>("institution_name")
+            .unwrap_or_else(|_| "Unknown".to_string());
+        let assets: f64 = r
+            .try_get::<rust_decimal::Decimal, _>("inst_assets_usd")
+            .ok()
+            .map(|d| d.to_string().parse().unwrap_or(0.0))
+            .unwrap_or(0.0);
+        let liabilities: f64 = r
+            .try_get::<rust_decimal::Decimal, _>("inst_liabilities_usd")
+            .ok()
+            .map(|d| d.to_string().parse().unwrap_or(0.0))
+            .unwrap_or(0.0);
+        let inst_net = assets - liabilities;
+
+        let entry = points.entry(date).or_insert_with(|| NetWorthPoint {
+            date: date.to_string(),
+            total_assets: 0.0,
+            total_liabilities: 0.0,
+            net_worth: 0.0,
+            by_institution: HashMap::new(),
+        });
+        entry.total_assets += assets;
+        entry.total_liabilities += liabilities;
+        entry.net_worth = entry.total_assets - entry.total_liabilities;
+        // If an institution has multiple rows on the same date (e.g. ETL
+        // duplication), sum rather than overwrite.
+        *entry.by_institution.entry(inst).or_insert(0.0) += inst_net;
+    }
+
+    Json(points.into_values().collect())
 }
 
 /// All investment holdings across all accounts
@@ -227,7 +259,8 @@ async fn holdings(State(state): State<AppState>) -> Json<HoldingsResponse> {
         r#"
         SELECT h.symbol, h.name, h.quantity, h.price, h.value,
                h.cost_basis, h.currency, h.holding_type,
-               a.name as account_name, i.name as institution_name
+               COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
+               i.name as institution_name
         FROM holdings h
         JOIN accounts a ON h.account_id = a.id
         JOIN institutions i ON a.institution_id = i.id
@@ -315,7 +348,7 @@ async fn credit_utilization(State(state): State<AppState>) -> Json<Vec<CreditUti
 async fn sync_status(State(state): State<AppState>) -> Json<Vec<SyncStatusEntry>> {
     let rows = sqlx::query(
         r#"
-        SELECT name, integration_type, sync_status, last_synced_at, country
+        SELECT id, name, integration_type, sync_status, last_synced_at, country, last_sync_error
         FROM institutions
         ORDER BY name
         "#
@@ -327,6 +360,9 @@ async fn sync_status(State(state): State<AppState>) -> Json<Vec<SyncStatusEntry>
     Json(
         rows.iter()
             .map(|r| SyncStatusEntry {
+                id: r.try_get::<uuid::Uuid, _>("id")
+                    .map(|u| u.to_string())
+                    .unwrap_or_default(),
                 name: r.get("name"),
                 integration_type: r.get("integration_type"),
                 country: r.get("country"),
@@ -334,23 +370,43 @@ async fn sync_status(State(state): State<AppState>) -> Json<Vec<SyncStatusEntry>
                     .unwrap_or_else(|_| "unknown".to_string()),
                 last_synced_at: r.try_get::<chrono::DateTime<chrono::Utc>, _>("last_synced_at")
                     .ok().map(|d| d.to_rfc3339()),
+                last_sync_error: r.try_get::<Option<String>, _>("last_sync_error")
+                    .ok().flatten(),
             })
             .collect(),
     )
 }
 
-/// Recent transactions across all accounts
-async fn recent_transactions(State(state): State<AppState>) -> Json<Vec<TransactionEntry>> {
+/// Recent transactions across all accounts. `limit` defaults to 50 and is
+/// capped at 500 to keep one response cheap; `offset` lets the frontend
+/// page through the rest with a 'Load more' button.
+#[derive(Deserialize)]
+struct TransactionsQuery {
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
+async fn recent_transactions(
+    State(state): State<AppState>,
+    Query(q): Query<TransactionsQuery>,
+) -> Json<Vec<TransactionEntry>> {
+    let limit = q.limit.unwrap_or(50).clamp(1, 500);
+    let offset = q.offset.unwrap_or(0).max(0);
     let rows = sqlx::query(
         r#"
-        SELECT t.id, t.account_id, a.name as account_name, t.amount, t.currency,
-               t.date, t.description, t.category, t.pending
+        SELECT t.id, t.account_id,
+               COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
+               t.amount, t.currency,
+               t.date, t.description, t.category, t.category_detailed,
+               t.payment_channel, t.merchant_name, t.pending
         FROM transactions t
         JOIN accounts a ON t.account_id = a.id
         ORDER BY t.date DESC, t.created_at DESC
-        LIMIT 50
+        LIMIT $1 OFFSET $2
         "#
     )
+    .bind(limit)
+    .bind(offset)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
@@ -369,11 +425,199 @@ async fn recent_transactions(State(state): State<AppState>) -> Json<Vec<Transact
                     date: r.get::<chrono::NaiveDate, _>("date").to_string(),
                     description: r.get("description"),
                     category: r.get("category"),
+                    category_detailed: r
+                        .try_get::<Option<String>, _>("category_detailed")
+                        .ok()
+                        .flatten(),
+                    payment_channel: r
+                        .try_get::<Option<String>, _>("payment_channel")
+                        .ok()
+                        .flatten(),
+                    merchant_name: r
+                        .try_get::<Option<String>, _>("merchant_name")
+                        .ok()
+                        .flatten(),
                     pending: r.get("pending"),
                 }
             })
             .collect(),
     )
+}
+
+/// CSV export of every transaction across all accounts. Streams the
+/// whole table — useful for an annual tax-prep dump. We escape
+/// quotes/commas by wrapping every text field in double quotes and
+/// doubling any embedded double quote.
+async fn export_transactions_csv(
+    State(state): State<AppState>,
+) -> Response {
+    let rows = sqlx::query(
+        r#"
+        SELECT t.id, t.date, t.amount, t.currency, t.description,
+               COALESCE(t.category, '') as category,
+               COALESCE(t.category_detailed, '') as category_detailed,
+               COALESCE(t.payment_channel, '') as payment_channel,
+               COALESCE(t.merchant_name, '') as merchant_name,
+               COALESCE(t.source, '') as source,
+               t.pending,
+               COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
+               COALESCE(i.name, '') as institution_name
+        FROM transactions t
+        JOIN accounts a ON t.account_id = a.id
+        JOIN institutions i ON a.institution_id = i.id
+        ORDER BY t.date DESC, t.created_at DESC
+        "#
+    )
+    .fetch_all(&state.db)
+    .await;
+
+    let rows = match rows {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Failed to query transactions for export: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "export failed")
+                .into_response();
+        }
+    };
+
+    fn esc(s: &str) -> String {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    }
+
+    let mut body = String::with_capacity(rows.len() * 128 + 256);
+    body.push_str(
+        "id,date,account,institution,description,merchant,category,category_detailed,payment_channel,amount,currency,source,pending\n"
+    );
+    for r in rows {
+        let id: uuid::Uuid = r.get("id");
+        let date: chrono::NaiveDate = r.get("date");
+        let amount: rust_decimal::Decimal = r.get("amount");
+        let currency: String = r.get("currency");
+        let description: String = r.get("description");
+        let category: String = r.get("category");
+        let category_detailed: String = r.get("category_detailed");
+        let payment_channel: String = r.get("payment_channel");
+        let merchant: String = r.get("merchant_name");
+        let source: String = r.get("source");
+        let pending: bool = r.get("pending");
+        let account_name: String = r.get("account_name");
+        let institution_name: String = r.get("institution_name");
+        body.push_str(&format!(
+            "{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+            id,
+            date,
+            esc(&account_name),
+            esc(&institution_name),
+            esc(&description),
+            esc(&merchant),
+            esc(&category),
+            esc(&category_detailed),
+            esc(&payment_channel),
+            amount,
+            currency,
+            esc(&source),
+            pending,
+        ));
+    }
+
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let filename = format!("patrimonio-transactions-{}.csv", today);
+    (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{}\"", filename),
+            ),
+        ],
+        body,
+    )
+        .into_response()
+}
+
+#[derive(Deserialize)]
+struct CreateManualTransactionRequest {
+    account_id: uuid::Uuid,
+    date: chrono::NaiveDate,
+    description: String,
+    /// Positive numbers are outflows (expenses), negative are inflows.
+    /// Same sign convention the rest of the app already uses for
+    /// transactions, so the new row appears correctly in every view.
+    amount: rust_decimal::Decimal,
+    currency: String,
+    #[serde(default)]
+    category: Option<String>,
+    #[serde(default)]
+    notes: Option<String>,
+}
+
+/// Add a transaction the user typed in themselves (cash purchases,
+/// gifts, anything Plaid never sees). Reuses the same row shape as
+/// imported transactions; only the `source` field differentiates them.
+async fn create_manual_transaction(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateManualTransactionRequest>,
+) -> Response {
+    // Deterministic external_id so a duplicate manual entry (same date /
+    // amount / description on the same account) collapses to one row
+    // instead of stacking up if the user double-submits.
+    let signature = format!(
+        "manual:{}:{}:{}",
+        payload.date,
+        payload.amount,
+        payload
+            .description
+            .to_lowercase()
+            .chars()
+            .take(50)
+            .collect::<String>()
+    );
+    let result = sqlx::query(
+        r#"
+        INSERT INTO transactions
+            (account_id, external_id, date, description, amount, currency, category, source, source_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual', 'manual_add')
+        ON CONFLICT (account_id, external_id) DO NOTHING
+        RETURNING id
+        "#,
+    )
+    .bind(payload.account_id)
+    .bind(&signature)
+    .bind(payload.date)
+    .bind(&payload.description)
+    .bind(payload.amount)
+    .bind(&payload.currency)
+    .bind(&payload.category)
+    .fetch_optional(&state.db)
+    .await;
+    match result {
+        Ok(Some(row)) => {
+            let id: uuid::Uuid = row.get("id");
+            // If the user added notes, fold them through the same
+            // user-override path the inline editor uses.
+            if let Some(notes) = payload.notes.as_ref().filter(|n| !n.is_empty()) {
+                let _ = sqlx::query(
+                    "UPDATE transactions SET user_notes = $1 WHERE id = $2",
+                )
+                .bind(notes)
+                .bind(id)
+                .execute(&state.db)
+                .await;
+            }
+            (StatusCode::CREATED, Json(serde_json::json!({"id": id.to_string()})))
+                .into_response()
+        }
+        Ok(None) => {
+            // Duplicate (same signature already in the table). Treat as
+            // a no-op so the UI snackbar can say "already added".
+            (StatusCode::CONFLICT, "duplicate manual transaction").into_response()
+        }
+        Err(e) => {
+            error!("Failed to insert manual transaction: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "insert failed").into_response()
+        }
+    }
 }
 
 /// Asset allocation by category and sub-category (account/holding)
@@ -391,15 +635,24 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
 
     let rows = sqlx::query(
         r#"
-        SELECT category, sub_category, SUM(value_usd) as value
+        SELECT category, sub_category, SUM(value_usd) as value, SUM(qty) as quantity
         FROM (
-            -- Holdings
-            SELECT COALESCE(holding_type, 'Stocks/ETFs') as category, 
-                   COALESCE(symbol, name) as sub_category,
+            -- Holdings: prefer security name when the symbol looks like
+            -- an opaque Plaid security_id (long, mixed-case — common for
+            -- un-tickered Vanguard funds). Real tickers (<=8 chars,
+            -- uppercase) keep displaying as the ticker.
+            SELECT COALESCE(holding_type, 'Stocks/ETFs') as category,
+                   CASE
+                       WHEN symbol IS NULL THEN name
+                       WHEN LENGTH(symbol) > 8 OR (symbol <> UPPER(symbol) AND LENGTH(symbol) > 4)
+                            THEN COALESCE(NULLIF(name, ''), symbol)
+                       ELSE symbol
+                   END as sub_category,
                    CASE
                        WHEN currency = 'MXN' THEN value / $1::numeric
                        ELSE value
-                   END as value_usd
+                   END as value_usd,
+                   COALESCE(quantity, 0)::numeric as qty
             FROM holdings
             UNION ALL
             -- Cash accounts
@@ -408,9 +661,10 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
                    CASE
                        WHEN currency = 'MXN' THEN current_balance / $1::numeric
                        ELSE current_balance
-                   END as value_usd
+                   END as value_usd,
+                   0::numeric as qty
             FROM accounts
-            WHERE account_type IN ('checking', 'savings', 'cash')
+            WHERE account_type IN ('checking', 'savings', 'cash', 'cash management', 'cd', 'money market')
             UNION ALL
             -- Crypto accounts
             SELECT 'Crypto' as category,
@@ -418,7 +672,8 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
                    CASE
                        WHEN currency = 'MXN' THEN current_balance / $1::numeric
                        ELSE current_balance
-                   END as value_usd
+                   END as value_usd,
+                   COALESCE(crypto_amount, 0)::numeric as qty
             FROM accounts
             WHERE account_type IN ('crypto')
         ) sub
@@ -436,10 +691,16 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
             .map(|r| {
                 let value: f64 = r.try_get::<rust_decimal::Decimal, _>("value")
                     .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+                let quantity: f64 = r
+                    .try_get::<rust_decimal::Decimal, _>("quantity")
+                    .ok()
+                    .map(|d| d.to_string().parse().unwrap_or(0.0))
+                    .unwrap_or(0.0);
                 AllocationEntry {
                     category: r.try_get::<String, _>("category").unwrap_or_else(|_| "Other".to_string()),
                     sub_category: r.try_get::<String, _>("sub_category").unwrap_or_else(|_| "Unknown".to_string()),
                     value,
+                    quantity,
                 }
             })
             .collect(),
@@ -493,6 +754,10 @@ struct DashboardOverview {
 struct AccountDetail {
     id: String,
     name: String,
+    /// User-defined nickname that overrides the bank-supplied `name`
+    /// in the UI. None when not set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    nickname: Option<String>,
     institution_name: String,
     account_type: String,
     current_balance: f64,
@@ -532,6 +797,8 @@ struct NetWorthPoint {
     total_assets: f64,
     total_liabilities: f64,
     net_worth: f64,
+    /// Per-institution net contribution (assets - liabilities) for this date.
+    by_institution: HashMap<String, f64>,
 }
 
 #[derive(Serialize)]
@@ -570,11 +837,13 @@ struct CreditUtilization {
 
 #[derive(Serialize)]
 struct SyncStatusEntry {
+    id: String,
     name: String,
     integration_type: String,
     country: String,
     sync_status: String,
     last_synced_at: Option<String>,
+    last_sync_error: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -587,6 +856,17 @@ struct TransactionEntry {
     date: String,
     description: String,
     category: Option<String>,
+    /// Plaid's `personal_finance_category.detailed` — much more specific
+    /// than `category` (e.g. "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT" vs
+    /// just "LOAN_PAYMENTS"). The frontend prefers this when set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    category_detailed: Option<String>,
+    /// "online" / "in_store" / "other" / "bank" — surfaced as a small
+    /// chip alongside the category in the detail panel.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    payment_channel: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    merchant_name: Option<String>,
     pending: bool,
 }
 
@@ -595,6 +875,8 @@ struct AllocationEntry {
     category: String,
     sub_category: String,
     value: f64,
+    /// Total share count for holdings (0 for cash and crypto-by-value rows).
+    quantity: f64,
 }
 
 #[derive(Serialize)]

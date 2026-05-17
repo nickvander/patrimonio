@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/theme_colors.dart';
 
 enum DateRange { oneMonth, yearToDate, oneYear, fiveYears, all }
 
@@ -26,17 +27,18 @@ class DateRangeSelector extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildSegment('1M', DateRange.oneMonth, horizontalPadding),
-          _buildSegment('YTD', DateRange.yearToDate, horizontalPadding),
-          _buildSegment('1Y', DateRange.oneYear, horizontalPadding),
-          _buildSegment('5Y', DateRange.fiveYears, horizontalPadding),
-          _buildSegment('ALL', DateRange.all, horizontalPadding),
+          _buildSegment(context, '1M', DateRange.oneMonth, horizontalPadding),
+          _buildSegment(context, 'YTD', DateRange.yearToDate, horizontalPadding),
+          _buildSegment(context, '1Y', DateRange.oneYear, horizontalPadding),
+          _buildSegment(context, '5Y', DateRange.fiveYears, horizontalPadding),
+          _buildSegment(context, 'ALL', DateRange.all, horizontalPadding),
         ],
       ),
     );
   }
 
   Widget _buildSegment(
+    BuildContext context,
     String label,
     DateRange range,
     double horizontalPadding,
@@ -59,7 +61,7 @@ class DateRangeSelector extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.greenAccent : Colors.white70,
+            color: isSelected ? Colors.greenAccent : context.textMuted,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
             fontSize: 12,
           ),
