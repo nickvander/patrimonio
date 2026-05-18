@@ -231,10 +231,10 @@ class _ImportScreenState extends State<ImportScreen> {
                   ),
                   child: Column(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.upload_file,
                         size: 64,
-                        color: Color(0xFF00E676),
+                        color: context.positive,
                       ),
                       const SizedBox(height: 16),
                       if (_selectedFiles.isNotEmpty)
@@ -366,9 +366,9 @@ class _ImportScreenState extends State<ImportScreen> {
                                 );
                               });
                             },
-                            child: const Text(
+                            child: Text(
                               'Select all',
-                              style: TextStyle(color: Color(0xFF00E676)),
+                              style: TextStyle(color: context.positive),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -411,7 +411,7 @@ class _ImportScreenState extends State<ImportScreen> {
                           borderRadius: BorderRadius.circular(8),
                           side: BorderSide(
                             color: isSelected
-                                ? const Color(0xFF00E676).withValues(alpha: 0.5)
+                                ? context.positive.withValues(alpha: 0.5)
                                 : context.hairline,
                             width: 1,
                           ),
@@ -419,8 +419,8 @@ class _ImportScreenState extends State<ImportScreen> {
                         margin: const EdgeInsets.only(bottom: 8.0),
                         child: CheckboxListTile(
                           value: isSelected,
-                          activeColor: const Color(0xFF00E676),
-                          checkColor: Colors.black,
+                          activeColor: context.positive,
+                          checkColor: Colors.white,
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 16.0,
                             vertical: 4.0,
@@ -496,8 +496,8 @@ class _ImportScreenState extends State<ImportScreen> {
                     width: double.infinity,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00E676),
-                        foregroundColor: Colors.black,
+                        backgroundColor: context.positive,
+                        foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
                       onPressed: _confirmImport,
@@ -546,13 +546,13 @@ class _ImportScreenState extends State<ImportScreen> {
                     width: double.infinity,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00E676),
-                        foregroundColor: Colors.black,
+                        backgroundColor: context.positive,
+                        foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
                       onPressed: _isUploading ? null : _uploadFile,
                       child: _isUploading
-                          ? const CircularProgressIndicator(color: Colors.black)
+                          ? const CircularProgressIndicator(color: Colors.white)
                           : const Text(
                               'Process statement',
                               style: TextStyle(fontWeight: FontWeight.bold),

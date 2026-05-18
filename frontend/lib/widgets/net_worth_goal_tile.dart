@@ -31,11 +31,13 @@ class NetWorthGoalTile extends StatelessWidget {
     final pct = (netWorthUsd / goalUsd).clamp(0.0, 1.0);
     final pctLabel = (pct * 100).toStringAsFixed(1);
     final yearsRemaining = goalYear - DateTime.now().year;
+    // Brightness-aware so the goal accent is AA-readable on both
+    // surfaces — neon emerald/teal/yellow only pass on dark cards.
     final color = pct >= 1.0
-        ? const Color(0xFF00E676)
+        ? context.positive
         : pct >= 0.5
-            ? const Color(0xFF1DE9B6)
-            : const Color(0xFFFFD600);
+            ? context.tealAccent
+            : context.yellowAccent;
 
     return Card(
       elevation: 4,

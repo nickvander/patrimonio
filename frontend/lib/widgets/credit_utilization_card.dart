@@ -78,8 +78,8 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                     color: totalUtilization > 30
-                        ? Colors.orange
-                        : const Color(0xFF00E676),
+                        ? context.warning
+                        : context.positive,
                   ),
                 ),
               ],
@@ -91,8 +91,8 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
                 value: (totalUtilization / 100).clamp(0.0, 1.0),
                 backgroundColor: context.hairline,
                 color: totalUtilization > 30
-                    ? Colors.orange
-                    : const Color(0xFF00E676),
+                    ? context.warning
+                    : context.positive,
                 minHeight: 8,
               ),
             ),
@@ -149,9 +149,9 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
                       ),
                       Text(
                         item['institution_name'] ?? '',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: Colors.grey,
+                          color: context.textSubtle,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -177,8 +177,8 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
                 value: (util / 100).clamp(0.0, 1.0),
                 backgroundColor: context.hairline,
                 color: util > 30
-                    ? Colors.orange.withValues(alpha: 0.7)
-                    : const Color(0xFF00E676).withValues(alpha: 0.7),
+                    ? context.warning.withValues(alpha: 0.7)
+                    : context.positive.withValues(alpha: 0.7),
                 minHeight: 4,
               ),
             ),

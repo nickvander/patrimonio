@@ -23,20 +23,29 @@ extension ThemeColorsExt on BuildContext {
   Color get textPrimary => _scheme.onSurface;
 
   /// Muted text (was `Colors.white70`).
-  Color get textMuted => _scheme.onSurface.withValues(alpha: 0.7);
+  ///
+  /// Light mode bumps the alpha to 0.85 so secondary labels on white
+  /// (TabBar inactive tabs, sub-titles in cards) stay readable. At
+  /// 0.7 the post-composite gray was too washed out — visible
+  /// contrast against pure white tested below WCAG AA on a real
+  /// display even though raw maths claimed it cleared.
+  Color get textMuted =>
+      _scheme.onSurface.withValues(alpha: _isDark ? 0.7 : 0.85);
 
   /// Subtle text (was `Colors.white54`).
   ///
-  /// Light mode boosts the alpha to 0.7 so it clears WCAG AA against the
-  /// scaffold; dark mode keeps the original 0.54 (which is fine on a near-
-  /// black surface).
+  /// Light mode boosts to 0.78. The previous 0.7 was meant to clear
+  /// WCAG AA against the scaffold but rendered too pale for small
+  /// labels (date group headers, secondary amount annotations like
+  /// "MXN 47,651.01"). Dark mode keeps the original 0.54 which is
+  /// fine on the near-black surface.
   Color get textSubtle =>
-      _scheme.onSurface.withValues(alpha: _isDark ? 0.54 : 0.7);
+      _scheme.onSurface.withValues(alpha: _isDark ? 0.54 : 0.78);
 
   /// Faint text (was `Colors.white38`). Reserve for decorative non-essential
   /// labels — still nudged up in light mode but stays below body weight.
   Color get textFaint =>
-      _scheme.onSurface.withValues(alpha: _isDark ? 0.38 : 0.56);
+      _scheme.onSurface.withValues(alpha: _isDark ? 0.38 : 0.65);
 
   /// Hairline / divider color. Dark mode used `Colors.white12`; light
   /// mode wants something noticeably darker than the card surface so

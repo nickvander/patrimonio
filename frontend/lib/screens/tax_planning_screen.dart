@@ -114,7 +114,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     );
     final isCapGains = tx['category'] == 'Investment Sale';
     final iconColor =
-        isCapGains ? Colors.purpleAccent : const Color(0xFF1DE9B6);
+        isCapGains ? context.purpleAccent : context.tealAccent;
     final needsConversion = sourceCurrency != widget.targetCurrency;
 
     return InkWell(
@@ -175,11 +175,11 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
               children: [
                 Text(
                   widget.currencyFormat.format(converted),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
-                    color: Color(0xFF00E676),
-                    fontFeatures: [FontFeature.tabularFigures()],
+                    color: context.positive,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -307,8 +307,8 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                   icon: const Icon(Icons.download),
                   label: const Text('Export CSV'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00E676),
-                    foregroundColor: Colors.black,
+                    backgroundColor: context.positive,
+                    foregroundColor: Colors.white,
                   ),
                 ),
                 const SizedBox(width: 8),

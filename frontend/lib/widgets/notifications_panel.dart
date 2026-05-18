@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../utils/theme_colors.dart';
+
 /// One notification row shown in the bell-icon popover.
 class AppNotification {
   final IconData icon;
@@ -154,14 +156,14 @@ class NotificationsBell extends StatelessWidget {
       itemBuilder: (_) {
         if (notifications.isEmpty) {
           return [
-            const PopupMenuItem(
+            PopupMenuItem(
               enabled: false,
               child: ListTile(
                 dense: true,
                 leading: Icon(Icons.check_circle_outline,
-                    color: Color(0xFF00E676)),
-                title: Text('All clear'),
-                subtitle: Text('No alerts right now.'),
+                    color: context.positive),
+                title: const Text('All clear'),
+                subtitle: const Text('No alerts right now.'),
               ),
             ),
           ];

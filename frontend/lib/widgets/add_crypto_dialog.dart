@@ -72,9 +72,12 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
   @override
   Widget build(BuildContext context) {
     final isCoinbase = widget.exchange == 'coinbase';
+    // Coinbase blue is brand-fixed (it's their logo colour); Bitso
+    // uses our brightness-aware positive accent so the icon stays
+    // AA-readable in both themes.
     final accentColor = isCoinbase
-        ? const Color(0xFF0052FF)
-        : const Color(0xFF00E676);
+        ? context.info
+        : context.positive;
 
     return AlertDialog(
       title: Row(
@@ -103,11 +106,11 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
                   // In a real browser, this would open the link
                   // web.window.open('https://bitso.com/api_info', '_blank');
                 },
-                child: const Text(
+                child: Text(
                   'Where do I find my API keys? ↗',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF00E676),
+                    color: context.positive,
                     fontWeight: FontWeight.bold,
                   ),
                 ),

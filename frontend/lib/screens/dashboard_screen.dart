@@ -184,7 +184,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         label: nick.isNotEmpty ? '$nick (${a['account_type'] ?? ''})' : name,
         subtitle: 'Account · $inst',
         icon: Icons.account_balance_wallet_outlined,
-        accent: const Color(0xFF1DE9B6),
+        accent: context.tealAccent,
         // Deep-link: open the account-detail side panel directly so the
         // user doesn't have to scroll the accounts column to find it.
         onSelected: () => showAccountTransactionsPanel(
@@ -222,7 +222,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         label: ticker.isNotEmpty ? '$ticker — $name' : name,
         subtitle: 'Holding',
         icon: Icons.show_chart,
-        accent: const Color(0xFF00B0FF),
+        accent: context.info,
         onSelected: () {
           setState(() => _portfolioSearchOverride = seed);
           jumpTab(1);
@@ -242,7 +242,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         subtitle:
             'Transaction · ${t['account_name'] ?? ''} · ${t['date'] ?? ''}',
         icon: Icons.receipt_outlined,
-        accent: const Color(0xFFFFB300),
+        accent: context.warning,
         onSelected: () {
           setState(() {
             _transactionsSearchOverride = desc;
@@ -350,7 +350,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       _StatTile(
         label: 'Net worth',
         value: currencyFormat.format(netWorth),
-        accent: const Color(0xFF00E676),
+        accent: context.positive,
         emphasized: true,
       ),
       _StatTile(
@@ -361,17 +361,17 @@ class _DashboardScreenState extends State<DashboardScreen>
       _StatTile(
         label: 'Liabilities',
         value: currencyFormat.format(liabilities),
-        accent: Colors.redAccent,
+        accent: context.negative,
       ),
       _StatTile(
         label: 'Cash',
         value: currencyFormat.format(cash),
-        accent: const Color(0xFF00B0FF),
+        accent: context.info,
       ),
       _StatTile(
         label: 'Investments',
         value: currencyFormat.format(investments),
-        accent: const Color(0xFF1DE9B6),
+        accent: context.tealAccent,
       ),
     ];
 
@@ -539,7 +539,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       title: 'Link a US bank',
                       subtitle:
                           'Securely connect via Plaid — balances and transactions sync automatically.',
-                      accent: const Color(0xFF1DE9B6),
+                      accent: context.tealAccent,
                       onPressed: plaidReady
                           ? () {
                               Navigator.push(
@@ -558,7 +558,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       title: 'Import Mexico CSV or PDF',
                       subtitle:
                           'Drop a statement from Bancomer, Banamex, Santander or Banorte.',
-                      accent: const Color(0xFF00B0FF),
+                      accent: context.info,
                       onPressed: () {
                         Navigator.push(
                           context,
@@ -573,7 +573,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       title: 'Add a manual account',
                       subtitle:
                           'Track a cash balance, brokerage, or anything else by hand.',
-                      accent: const Color(0xFF00E676),
+                      accent: context.positive,
                       onPressed: () {
                         showDialog(
                           context: context,
