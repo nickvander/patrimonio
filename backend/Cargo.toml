@@ -69,6 +69,15 @@ totp-rs = { version = "5.6", features = ["otpauth"] }
 webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation"] }
 url = "2"
 
+# JWT verification for the Plaid webhook signature. Plaid signs every
+# webhook body with an ES256 JWT in the `Plaid-Verification` header;
+# the receiver fetches the signing key from Plaid's
+# /webhook_verification_key/get endpoint, verifies the signature, and
+# checks that the JWT's `request_body_sha256` claim matches the SHA-256
+# of the raw request body. We use the JWK extraction path so the key
+# rotation flow (Plaid issues new key IDs periodically) is automatic.
+jsonwebtoken = "9"
+
 # Scheduling
 tokio-cron-scheduler = "0.13"
 csv = "1.3"

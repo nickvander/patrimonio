@@ -1,5 +1,5 @@
 use axum::{
-    extract::State,
+    extract::{Extension, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post, delete},
@@ -8,6 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 
+use crate::api::session::AuthContext;
 use crate::AppState;
 use crate::services::encryption;
 use tracing::{info, error};
@@ -45,16 +46,25 @@ struct SyncRequest {
 }
 
 /// Manually trigger a sync. With an empty body the engine runs against
-/// every institution; with `{"ids": [...]}` it runs against only those.
+/// every institution the caller owns; with `{"ids": [...]}` it runs
+/// against only those (each id is verified to belong to the caller —
+/// foreign ids are silently filtered out so an attacker can't probe
+/// for the existence of another user's institutions).
 async fn trigger_sync(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
     body: Option<Json<SyncRequest>>,
 ) -> axum::response::Response {
     let config = state.config.clone();
     let db = state.db.clone();
     let only_ids = body.and_then(|b| b.0.ids);
-    if let Err(e) =
-        crate::services::sync::sync_institutions(&db, &config, only_ids).await
+    if let Err(e) = crate::services::sync::sync_user_institutions(
+        &db,
+        &config,
+        ctx.user_id,
+        only_ids,
+    )
+    .await
     {
         tracing::error!("Manual Plaid sync failed: {}", e);
         return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, axum::response::Json(serde_json::json!({
@@ -66,16 +76,23 @@ async fn trigger_sync(
 }
 
 /// Sync a single institution by id — used by the per-institution
-/// retry shortcut on the dashboard so we don't touch healthy
-/// institutions on every retry tap.
+/// retry shortcut on the dashboard. Ownership is checked at the
+/// engine layer (the institution row is loaded with a `user_id`
+/// predicate); a foreign id returns 404-equivalent silently.
 async fn trigger_sync_one(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
     axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
 ) -> axum::response::Response {
     let config = state.config.clone();
     let db = state.db.clone();
-    if let Err(e) =
-        crate::services::sync::sync_one_institution(&db, &config, id).await
+    if let Err(e) = crate::services::sync::sync_user_institutions(
+        &db,
+        &config,
+        ctx.user_id,
+        Some(vec![id]),
+    )
+    .await
     {
         tracing::error!("Per-institution sync failed for {id}: {e}");
         return (
@@ -90,16 +107,21 @@ async fn trigger_sync_one(
     Json(serde_json::json!({"status": "ok"})).into_response()
 }
 
-/// List all linked institutions
-async fn list_institutions(State(state): State<AppState>) -> Json<Vec<InstitutionResponse>> {
+/// List all linked institutions for the authenticated user.
+async fn list_institutions(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<Vec<InstitutionResponse>> {
     let rows = sqlx::query(
         r#"
         SELECT id, name, institution_type, country, integration_type,
                last_synced_at, sync_status, last_sync_error, created_at
         FROM institutions
+        WHERE user_id = $1
         ORDER BY name
         "#
     )
+    .bind(ctx.user_id)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
@@ -127,12 +149,13 @@ async fn list_institutions(State(state): State<AppState>) -> Json<Vec<Institutio
 /// Manually create an institution (for CSV-imported / Mexican accounts)
 async fn create_institution(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
     Json(req): Json<CreateInstitutionRequest>,
 ) -> Response {
     let row = match sqlx::query(
         r#"
-        INSERT INTO institutions (name, institution_type, country, integration_type)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO institutions (name, institution_type, country, integration_type, user_id)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING id, name, institution_type, country, integration_type,
                   last_synced_at, sync_status, created_at
         "#
@@ -141,6 +164,7 @@ async fn create_institution(
     .bind(&req.institution_type)
     .bind(&req.country)
     .bind(&req.integration_type)
+    .bind(ctx.user_id)
     .fetch_one(&state.db)
     .await
     {
@@ -235,6 +259,7 @@ async fn create_link_token(State(state): State<AppState>) -> Response {
 /// Creates a Plaid Link token for update mode (reconnect)
 async fn create_reconnect_token(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
     axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
 ) -> Response {
     let (client_id, secret) = match (&state.config.plaid_client_id, &state.config.plaid_secret) {
@@ -242,8 +267,15 @@ async fn create_reconnect_token(
         _ => return json_error(StatusCode::SERVICE_UNAVAILABLE, "Plaid is not configured", None),
     };
 
-    let row = match sqlx::query("SELECT plaid_access_token_enc FROM institutions WHERE id = $1")
+    // Ownership predicate prevents reconnecting another user's
+    // institution. Without the user_id filter an attacker who knew
+    // a victim's institution UUID could mint a Plaid Link token
+    // bound to the victim's bank session.
+    let row = match sqlx::query(
+        "SELECT plaid_access_token_enc FROM institutions WHERE id = $1 AND user_id = $2"
+    )
         .bind(id)
+        .bind(ctx.user_id)
         .fetch_one(&state.db)
         .await
     {
@@ -296,6 +328,7 @@ async fn create_reconnect_token(
 /// Exchanges the public token for an access token
 async fn exchange_public_token(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
     Json(req): Json<ExchangeTokenRequest>,
 ) -> axum::response::Response {
     let (client_id, secret) = match (&state.config.plaid_client_id, &state.config.plaid_secret) {
@@ -378,8 +411,8 @@ async fn exchange_public_token(
 
     let row = match sqlx::query(
         r#"
-        INSERT INTO institutions (name, institution_type, country, integration_type, plaid_item_id, plaid_access_token_enc, sync_status)
-        VALUES ($1, $2, 'US', 'plaid', $3, $4, 'syncing')
+        INSERT INTO institutions (name, institution_type, country, integration_type, plaid_item_id, plaid_access_token_enc, sync_status, user_id)
+        VALUES ($1, $2, 'US', 'plaid', $3, $4, 'syncing', $5)
         RETURNING id, name, institution_type, country, integration_type,
                   last_synced_at, sync_status, created_at
         "#
@@ -388,6 +421,7 @@ async fn exchange_public_token(
     .bind(&req.institution_type)
     .bind(item_id)
     .bind(&encrypted_token)
+    .bind(ctx.user_id)
     .fetch_one(&state.db)
     .await
     {
@@ -400,8 +434,11 @@ async fn exchange_public_token(
 
     let config = state.config.clone();
     let db = state.db.clone();
+    let user_id = ctx.user_id;
     tokio::spawn(async move {
-        if let Err(e) = crate::services::sync::sync_all_institutions(&db, &config).await {
+        if let Err(e) =
+            crate::services::sync::sync_user_institutions(&db, &config, user_id, None).await
+        {
             tracing::error!("Immediate Plaid sync failed for new institution: {}", e);
         }
     });
@@ -434,6 +471,7 @@ struct LinkCryptoRequest {
 /// Link a crypto exchange with API credentials
 async fn link_crypto_institution(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
     Json(req): Json<LinkCryptoRequest>,
 ) -> axum::response::Response {
     let enc_key = match state.config.encryption_key.as_ref() {
@@ -465,8 +503,8 @@ async fn link_crypto_institution(
 
     let row = match sqlx::query(
         r#"
-        INSERT INTO institutions (name, institution_type, country, integration_type, api_key_enc, api_secret_enc, api_pass_enc)
-        VALUES ($1, 'crypto', 'Global', $2, $3, $4, $5)
+        INSERT INTO institutions (name, institution_type, country, integration_type, api_key_enc, api_secret_enc, api_pass_enc, user_id)
+        VALUES ($1, 'crypto', 'Global', $2, $3, $4, $5, $6)
         RETURNING id, name, institution_type, country, integration_type,
                   last_synced_at, sync_status, created_at
         "#
@@ -476,6 +514,7 @@ async fn link_crypto_institution(
     .bind(&key_enc)
     .bind(&secret_enc)
     .bind(&pass_enc)
+    .bind(ctx.user_id)
     .fetch_one(&state.db)
     .await
     {
@@ -488,8 +527,11 @@ async fn link_crypto_institution(
 
     let config = state.config.clone();
     let db = state.db.clone();
+    let user_id = ctx.user_id;
     tokio::spawn(async move {
-        if let Err(e) = crate::services::sync::sync_all_institutions(&db, &config).await {
+        if let Err(e) =
+            crate::services::sync::sync_user_institutions(&db, &config, user_id, None).await
+        {
             tracing::error!("Immediate crypto sync failed for new institution: {}", e);
         }
     });
@@ -540,56 +582,67 @@ struct PlaidWebhook {
 
 /// Webhook from Plaid triggered on item updates.
 ///
-/// Plaid signs every webhook with a JWT in `Plaid-Verification`; the
-/// receiver must fetch the signing key from `/webhook_verification_key/get`
-/// and validate ES256 before trusting the body. Implementing that is
-/// tracked as a follow-up — see `work/FUTURE.md`. Until then the
-/// handler refuses to process any webhook: the response is the same
-/// 401 a missing session cookie would give, which matches what Plaid's
-/// dashboard expects for a misconfigured endpoint.
+/// Plaid signs every webhook with a JWT in `Plaid-Verification`. We
+/// reject any request that doesn't carry the header, and any request
+/// whose JWT fails ES256 verification, has a stale `iat`, or whose
+/// `request_body_sha256` claim doesn't match the SHA-256 of the body
+/// the receiver actually saw. The full rule set lives in
+/// `services::plaid_webhook_verify`. Only after verification do we
+/// touch the DB or spawn a background sync.
+///
+/// The body has to be read as `Bytes` (not `Json<PlaidWebhook>`)
+/// because the verifier hashes the raw bytes — `serde_json::from_slice`
+/// happens *after* the signature check passes.
 async fn plaid_webhook(
     State(state): State<AppState>,
     headers: axum::http::HeaderMap,
-    Json(req): Json<PlaidWebhook>,
+    body: axum::body::Bytes,
 ) -> axum::response::Response {
-    // Refuse to process unless the signature is presented AND we have
-    // a verifier configured. Today the verifier is unimplemented (see
-    // doc above), so this path always refuses — that's the safe
-    // default. Don't 200 a webhook we can't authenticate.
-    let has_signature = headers.contains_key("plaid-verification");
-    if !has_signature {
-        tracing::warn!(
-            "Plaid webhook rejected: missing Plaid-Verification header (type={}, code={})",
-            req.webhook_type,
-            req.webhook_code,
-        );
+    let Some(verification) = headers
+        .get("plaid-verification")
+        .and_then(|v| v.to_str().ok())
+    else {
+        tracing::warn!("Plaid webhook rejected: missing Plaid-Verification header");
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(serde_json::json!({"error": "Webhook signature required"})),
         )
             .into_response();
+    };
+
+    if let Err(e) = crate::services::plaid_webhook_verify::verify_plaid_webhook(
+        &state.config,
+        verification,
+        body.as_ref(),
+    )
+    .await
+    {
+        tracing::warn!("Plaid webhook signature verification failed: {e}");
+        return (
+            axum::http::StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "Webhook signature invalid"})),
+        )
+            .into_response();
     }
-    // TODO(webhook-verify): fetch Plaid's webhook JWK, validate the
-    // ES256 JWT in `Plaid-Verification`, then process. Until then we
-    // refuse all webhooks — even signed-looking ones — to avoid
-    // accepting forged payloads.
-    tracing::warn!(
-        "Plaid webhook signed but verification not yet implemented; refusing (type={}, code={})",
+
+    let req: PlaidWebhook = match serde_json::from_slice(&body) {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("Plaid webhook body verified but unparseable: {e}");
+            return (
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Malformed webhook body"})),
+            )
+                .into_response();
+        }
+    };
+
+    tracing::info!(
+        "Plaid webhook (verified): {} - {} for item {}",
         req.webhook_type,
         req.webhook_code,
+        req.item_id
     );
-    return (
-        axum::http::StatusCode::UNAUTHORIZED,
-        Json(serde_json::json!({"error": "Webhook verification not configured"})),
-    )
-        .into_response();
-
-    // Old, post-verification logic below is unreachable. Kept structurally
-    // so re-enabling once the verifier is in just deletes the early
-    // returns above.
-    #[allow(unreachable_code)]
-    {
-    tracing::info!("Plaid Webhook: {} - {} for item {}", req.webhook_type, req.webhook_code, req.item_id);
 
     let status = match req.webhook_code.as_str() {
         "ERROR" | "ITEM_LOGIN_REQUIRED" | "PENDING_EXPIRATION" | "USER_PERMISSION_REVOKED" => {
@@ -611,7 +664,7 @@ async fn plaid_webhook(
 
     let config = state.config.clone();
     let db = state.db.clone();
-    
+
     tokio::spawn(async move {
         if let Err(e) = crate::services::sync::sync_all_institutions(&db, &config).await {
             tracing::error!("Plaid webhook background sync failed: {}", e);
@@ -619,25 +672,30 @@ async fn plaid_webhook(
     });
 
     Json(serde_json::json!({"status": "received"})).into_response()
-    }
 }
 
 /// Delete an institution and all associated data
 async fn delete_institution(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
     axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
 ) -> impl IntoResponse {
-    info!("Deleting institution: {}", id);
+    info!("Deleting institution {} for user {}", id, ctx.user_id);
 
-    // SQLX automatically handles cascading if defined in the schema,
-    // but we'll be explicit about deleting dependent data if needed.
-    // Assuming schema has cascading deletes for accounts, transactions, etc.
-    let result = sqlx::query("DELETE FROM institutions WHERE id = $1")
-        .bind(id)
-        .execute(&state.db)
-        .await;
+    // Ownership predicate keeps the delete scoped to the caller's
+    // institutions. Schema cascading handles accounts/transactions/
+    // holdings/balance_snapshots; without this filter, an attacker
+    // who knew a victim's institution UUID could nuke their entire
+    // tree of financial data.
+    let result =
+        sqlx::query("DELETE FROM institutions WHERE id = $1 AND user_id = $2")
+            .bind(id)
+            .bind(ctx.user_id)
+            .execute(&state.db)
+            .await;
 
     match result {
+        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => {
             error!("Failed to delete institution: {}", e);
