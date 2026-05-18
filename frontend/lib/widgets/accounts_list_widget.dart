@@ -84,6 +84,7 @@ class AccountsListWidget extends StatelessWidget {
     final investmentAccounts = <dynamic>[];
     final cryptoAccounts = <dynamic>[];
     final loanAccounts = <dynamic>[];
+    final realAssetAccounts = <dynamic>[];
     final otherAccounts = <dynamic>[];
 
     // Track distinct unknown account_type tokens so we can both surface
@@ -103,6 +104,8 @@ class AccountsListWidget extends StatelessWidget {
           cryptoAccounts.add(acc);
         case AccountCategory.loan:
           loanAccounts.add(acc);
+        case AccountCategory.realAsset:
+          realAssetAccounts.add(acc);
         case AccountCategory.other:
           otherAccounts.add(acc);
           final raw = (acc['account_type'] ?? '').toString().trim();
@@ -186,6 +189,15 @@ class AccountsListWidget extends StatelessWidget {
                     loanAccounts,
                     Icons.home_rounded,
                     true,
+                    context.yellowAccent,
+                  ),
+                if (realAssetAccounts.isNotEmpty)
+                  _buildAccountGroup(
+                    context,
+                    'Real assets',
+                    realAssetAccounts,
+                    Icons.maps_home_work_rounded,
+                    false,
                     context.yellowAccent,
                   ),
                 if (otherAccounts.isNotEmpty)

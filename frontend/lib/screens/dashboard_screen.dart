@@ -66,6 +66,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   List<Map<String, dynamic>>? _trendData;
   Map<String, dynamic>? _sinceLastLogin;
   List<dynamic>? _subscriptions;
+  List<dynamic>? _ignoredSubscriptions;
   List<dynamic>? _fxTransfers;
   // Pending date-window seed from a chart-bar tap. When non-null, the
   // TransactionsTab seeds its filters with a custom date range covering
@@ -317,6 +318,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     double liabilities = 0;
     double cash = 0;
     double investments = 0;
+    double realAssets = 0;
     for (final raw in accounts) {
       final acc = raw as Map<String, dynamic>;
       final usdBal = ((acc['current_balance'] as num?)?.toDouble() ?? 0.0);
@@ -330,6 +332,8 @@ class _DashboardScreenState extends State<DashboardScreen>
         case AccountCategory.investment:
         case AccountCategory.crypto:
           investments += reported;
+        case AccountCategory.realAsset:
+          realAssets += reported;
         case AccountCategory.other:
           // Don't double-count unknowns into cash/investments; they're
           // still in net_worth (computed server-side) so the totals
@@ -353,6 +357,8 @@ class _DashboardScreenState extends State<DashboardScreen>
           case AccountCategory.credit:
           case AccountCategory.loan:
             liabilities += v.abs();
+          case AccountCategory.realAsset:
+            realAssets += v.abs();
           case AccountCategory.other:
             break;
         }
@@ -392,19 +398,31 @@ class _DashboardScreenState extends State<DashboardScreen>
         value: currencyFormat.format(investments),
         accent: context.tealAccent,
       ),
+      // Real assets tile shows up only when the user actually has any —
+      // a typical brand-new account has none and an empty $0 tile would
+      // waste the row's horizontal budget.
+      if (realAssets > 0)
+        _StatTile(
+          label: 'Real assets',
+          value: currencyFormat.format(realAssets),
+          accent: context.yellowAccent,
+        ),
     ];
 
     return LayoutBuilder(
       builder: (ctx, c) {
-        // Tile widths derived from total available width minus 4×spacing.
-        // Below ~640 the tiles wrap to two rows automatically.
+        // Tile widths derived from total available width minus
+        // (n-1)×spacing where n is the actual tile count. Earlier the
+        // divisor was hard-coded to 5 so a 6th "Real assets" tile
+        // overflowed the row on wide screens.
+        final n = tiles.length;
         return Wrap(
           spacing: 12,
           runSpacing: 12,
           children: tiles
               .map((t) => SizedBox(
                     width: c.maxWidth >= 880
-                        ? (c.maxWidth - 4 * 12) / 5
+                        ? (c.maxWidth - (n - 1) * 12) / n
                         : c.maxWidth >= 560
                             ? (c.maxWidth - 12) / 2 - 0.5
                             : c.maxWidth,
@@ -413,6 +431,141 @@ class _DashboardScreenState extends State<DashboardScreen>
               .toList(),
         );
       },
+    );
+  }
+
+  /// "Hidden from subscriptions" panel — small card listing every
+  /// merchant the user previously dismissed via the × on the
+  /// SubscriptionsCard. Each row has an "Unhide" button that DELETEs
+  /// the underlying `ignored_subscription_merchants` row so the
+  /// detector can resurface the cluster on its next run.
+  Widget _buildIgnoredSubscriptionsPanel() {
+    final ignored = _ignoredSubscriptions ?? const [];
+    if (ignored.isEmpty) return const SizedBox.shrink();
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.visibility_off_outlined,
+                    size: 18, color: context.textSubtle),
+                const SizedBox(width: 8),
+                Text(
+                  'Hidden from subscriptions',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: context.textPrimary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${ignored.length}',
+                  style:
+                      TextStyle(fontSize: 12, color: context.textSubtle),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'You dismissed these as "not a subscription." Unhide a row to let the detector reconsider it.',
+              style: TextStyle(fontSize: 11, color: context.textSubtle),
+            ),
+            const SizedBox(height: 8),
+            for (final raw in ignored)
+              _buildIgnoredRow(raw as Map<String, dynamic>),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIgnoredRow(Map<String, dynamic> row) {
+    final key = (row['merchant_key'] ?? '').toString();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              key,
+              style: TextStyle(fontSize: 13, color: context.textPrimary),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          TextButton.icon(
+            icon: const Icon(Icons.refresh, size: 14),
+            label: const Text('Unhide'),
+            onPressed: () async {
+              try {
+                await _apiService.unignoreSubscription(key);
+                await _refreshData();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('"$key" is back in the subscription detector')),
+                );
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Unhide failed: $e')),
+                );
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Plaid-environment indicator. Returns an empty SizedBox in
+  /// production (no chrome to distract), an amber pill labelled
+  /// `Sandbox` / `Development` otherwise. Reads `plaid_environment`
+  /// from `/api/setup/status` (already loaded into _setupStatus).
+  Widget _buildEnvChip() {
+    final env = (_setupStatus?['plaid_environment'] ?? '')
+        .toString()
+        .toLowerCase()
+        .trim();
+    if (env.isEmpty || env == 'production') {
+      return const SizedBox.shrink();
+    }
+    final label = env == 'sandbox'
+        ? 'Sandbox'
+        : env == 'development'
+            ? 'Dev'
+            : env;
+    return Tooltip(
+      message:
+          'Plaid is in $env mode. Linked accounts will not access real bank data.',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: context.accentSoft(context.warning),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: context.accentBorder(context.warning)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.science_outlined, size: 14, color: context.warning),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: context.warning,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -773,6 +926,9 @@ class _DashboardScreenState extends State<DashboardScreen>
             .getSubscriptions()
             .catchError((_) => <dynamic>[]),
         _apiService.getFxTransfers().catchError((_) => <dynamic>[]),
+        _apiService
+            .getIgnoredSubscriptions()
+            .catchError((_) => <dynamic>[]),
       ]);
 
       debugPrint("All data loaded successfully");
@@ -825,6 +981,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         _sinceLastLogin = results[10] as Map<String, dynamic>?;
         _subscriptions = results[11] as List<dynamic>;
         _fxTransfers = results[12] as List<dynamic>;
+        _ignoredSubscriptions = results[13] as List<dynamic>;
         _isLoading = false;
       });
 
@@ -898,6 +1055,13 @@ class _DashboardScreenState extends State<DashboardScreen>
             // out and theme cycle stay so the user can always escape
             // or change brightness.
             if (!firstRun) ...[
+              // Sandbox / Development indicator — Plaid Production
+              // is the silent default (no chip), but any test
+              // environment gets a small amber pill so the user
+              // doesn't accidentally type real bank credentials
+              // into a sandbox instance.
+              if (!isCompact) _buildEnvChip(),
+              if (!isCompact) const SizedBox(width: 4),
               // Compact FX pill on wide; phones drop it entirely
               // because the Management tab still surfaces the rate
               // and the AppBar gets squeezed once tabs scroll.
@@ -1595,6 +1759,13 @@ class _DashboardScreenState extends State<DashboardScreen>
               },
             ),
           const SizedBox(height: 24),
+          // Hidden-from-subscriptions list. Surfaces only when there's
+          // something to un-hide — keeps the cash-flow tab quiet for
+          // users who never dismissed anything.
+          if ((_ignoredSubscriptions ?? const []).isNotEmpty)
+            _buildIgnoredSubscriptionsPanel(),
+          if ((_ignoredSubscriptions ?? const []).isNotEmpty)
+            const SizedBox(height: 24),
           // Detected recurring outflows — surfaces what's silently
           // eating the budget every month. Tapping a row seeds the
           // transactions search with the merchant.

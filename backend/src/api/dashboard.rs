@@ -27,7 +27,15 @@ pub fn router() -> Router<AppState> {
         .route("/transactions/manual", axum::routing::post(create_manual_transaction))
         .route("/since-last-login", get(since_last_login))
         .route("/subscriptions", get(detected_subscriptions))
+        .route(
+            "/subscriptions/ignored",
+            get(list_ignored_subscriptions),
+        )
         .route("/subscriptions/ignore", axum::routing::post(ignore_subscription))
+        .route(
+            "/subscriptions/ignored/{merchant_key}",
+            axum::routing::delete(unignore_subscription),
+        )
         .route("/fx-transfers", get(list_fx_transfers).post(detect_fx_transfers))
         .route(
             "/fx-transfers/{id}",
@@ -1816,6 +1824,75 @@ async fn ignore_subscription(
         Ok(_) => StatusCode::NO_CONTENT,
         Err(e) => {
             error!("ignore_subscription failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct IgnoredSubscription {
+    merchant_key: String,
+    ignored_at: String,
+}
+
+/// List every dismissed subscription merchant for this user. Used by
+/// the "Manage hidden subscriptions" panel so the user can undo a
+/// previous dismiss without manually editing the DB.
+async fn list_ignored_subscriptions(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<Vec<IgnoredSubscription>> {
+    let rows = sqlx::query(
+        "SELECT merchant_key, ignored_at FROM ignored_subscription_merchants \
+         WHERE user_id = $1 ORDER BY ignored_at DESC",
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    Json(
+        rows.iter()
+            .filter_map(|r| {
+                let merchant_key = r.try_get::<String, _>("merchant_key").ok()?;
+                let ignored_at = r
+                    .try_get::<chrono::DateTime<chrono::Utc>, _>("ignored_at")
+                    .ok()
+                    .map(|d| d.to_rfc3339())
+                    .unwrap_or_default();
+                Some(IgnoredSubscription {
+                    merchant_key,
+                    ignored_at,
+                })
+            })
+            .collect(),
+    )
+}
+
+/// Un-ignore: delete the row so the detector can re-surface this
+/// merchant on its next run. Idempotent — returns 204 either way
+/// (deleting a non-existent ignore is a no-op).
+async fn unignore_subscription(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    axum::extract::Path(merchant_key): axum::extract::Path<String>,
+) -> StatusCode {
+    let key = merchant_key.trim().to_lowercase();
+    if key.is_empty() {
+        return StatusCode::BAD_REQUEST;
+    }
+    let result = sqlx::query(
+        "DELETE FROM ignored_subscription_merchants \
+         WHERE user_id = $1 AND merchant_key = $2",
+    )
+    .bind(ctx.user_id)
+    .bind(&key)
+    .execute(&state.db)
+    .await;
+    match result {
+        Ok(_) => StatusCode::NO_CONTENT,
+        Err(e) => {
+            error!("unignore_subscription failed: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         }
     }

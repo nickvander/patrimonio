@@ -1137,15 +1137,47 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    displayLabel(tx),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                      height: 1.2,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          displayLabel(tx),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            height: 1.2,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      // "Split" pill on rows that are a child of a split.
+                      // Cheap visual cue so the user can tell the $50
+                      // grocery line is actually a leg of a larger ATM
+                      // withdrawal, not a standalone $50 charge. The
+                      // parent itself is filtered out of the list at
+                      // the SQL layer (NOT EXISTS subquery).
+                      if ((tx['parent_id'] ?? '').toString().isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: context.accentSoft(context.tealAccent),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Split',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: context.tealAccent,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 2),
                   Text(

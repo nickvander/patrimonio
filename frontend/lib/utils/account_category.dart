@@ -12,6 +12,13 @@ enum AccountCategory {
   credit,
   crypto,
   loan,
+  /// Non-financial assets that don't sync with a bank or exchange:
+  /// real estate, vehicles, collectibles, private-equity stakes. The
+  /// user revalues these manually via the per-row "Revalue" action.
+  /// Contributes to total Assets / Net worth like any other asset
+  /// but renders in its own group on the Accounts column so the
+  /// user can find it without scrolling past Cash + Investments.
+  realAsset,
   other,
 }
 
@@ -24,11 +31,28 @@ AccountCategory categorizeAccount(String? rawType) {
   // an exact-match expansion every time.
   if (t.contains('credit')) return AccountCategory.credit;
   if (t.contains('crypto')) return AccountCategory.crypto;
+  // Auto LOANS go into loans, but a bare "auto" or "vehicle" alone is
+  // the asset itself — check the loan-side terms first.
   if (t.contains('mortgage') ||
       t.contains('loan') ||
       t.contains('student') ||
-      t.contains('auto')) {
+      t.contains('auto loan')) {
     return AccountCategory.loan;
+  }
+  // Non-financial assets the user revalues manually. Match by the
+  // substrings the add-account dialog exposes (Real estate, Vehicle,
+  // Private equity, Collectibles, Other asset). "Other asset" is the
+  // catch-all the user can pick for an LLC stake or angel investment
+  // we haven't given a label.
+  if (t.contains('real estate') ||
+      t.contains('vehicle') ||
+      t == 'auto' ||
+      t == 'car' ||
+      t.contains('private equity') ||
+      t.contains('collectible') ||
+      t.contains('other asset') ||
+      t.contains('property')) {
+    return AccountCategory.realAsset;
   }
   if (t.contains('ira') ||
       t.contains('401') ||

@@ -52,13 +52,21 @@ pub fn dummy_verify() {
 
 /// Cheap structural password policy. We deliberately stay loose on
 /// composition rules (NIST SP 800-63B discourages them) and lean on
-/// minimum length.
+/// minimum length + a breach-list lookup so a long-but-common pick
+/// (`password12345`, `qwerty1234567`) gets rejected.
 pub fn validate_password_policy(password: &str) -> Result<()> {
     if password.chars().count() < 12 {
         return Err(anyhow!("Password must be at least 12 characters"));
     }
     if password.chars().count() > 256 {
         return Err(anyhow!("Password must be at most 256 characters"));
+    }
+    if crate::services::common_passwords::is_common_password(password) {
+        return Err(anyhow!(
+            "This password appears in known data-breach lists. \
+             Pick something less common — a passphrase of four \
+             unrelated words is a good default."
+        ));
     }
     Ok(())
 }
@@ -78,5 +86,20 @@ mod tests {
     fn policy_rejects_short() {
         assert!(validate_password_policy("short").is_err());
         assert!(validate_password_policy("aaaaaaaaaaaa").is_ok());
+    }
+
+    #[test]
+    fn policy_rejects_common_breached() {
+        // 12+ chars (passes length) but a top-of-breach-list pick.
+        assert!(validate_password_policy("password1234").is_err());
+        assert!(validate_password_policy("qwerty123456").is_err());
+        assert!(validate_password_policy("Password1234").is_err()); // case-insensitive
+    }
+
+    #[test]
+    fn policy_accepts_passphrases() {
+        // The recommended pattern from the rejection message.
+        assert!(validate_password_policy("aurora-fjord-pelican-cordon").is_ok());
+        assert!(validate_password_policy("correct horse battery staple").is_ok());
     }
 }

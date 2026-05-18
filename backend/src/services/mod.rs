@@ -15,3 +15,4 @@ pub mod recovery;
 pub mod totp;
 pub mod plaid_webhook_verify;
 pub mod fx_transfer_link;
+pub mod common_passwords;

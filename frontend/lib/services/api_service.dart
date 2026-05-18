@@ -452,6 +452,31 @@ class ApiService {
     return body;
   }
 
+  /// List every dismissed subscription merchant. Returned shape:
+  /// `[{merchant_key, ignored_at}, ...]`.
+  Future<List<dynamic>> getIgnoredSubscriptions() async {
+    final response = await _get(
+      Uri.parse('$_baseUrl/dashboard/subscriptions/ignored'),
+    );
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Failed to load ignored subscriptions');
+  }
+
+  /// Un-ignore: lets the detector resurface this merchant on the
+  /// next run. Idempotent — 204 either way.
+  Future<void> unignoreSubscription(String merchantKey) async {
+    final response = await _delete(
+      Uri.parse(
+        '$_baseUrl/dashboard/subscriptions/ignored/${Uri.encodeComponent(merchantKey)}',
+      ),
+    );
+    if (response.statusCode != 204) {
+      throw Exception('Failed to un-ignore subscription');
+    }
+  }
+
   /// Mark a detected subscription cluster as "not actually a
   /// subscription" — the detector skips this merchant on future runs.
   Future<void> ignoreSubscription(String merchant) async {

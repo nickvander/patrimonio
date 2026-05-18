@@ -20,22 +20,25 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
   String _currency = 'USD';
   bool _isSubmitting = false;
 
-  final List<String> _types = [
-    'Checking',
-    'Savings',
-    'CD',
-    'Investment',
-    'Brokerage',
-    'Crypto',
-    'IRA',
-    '401k',
-    'Credit Card',
-    'Loan',
-    'Mortgage',
-    'Real Estate',
-    'Other Asset',
-    'Other Liability',
+  // Grouped type list. Section labels are rendered as disabled
+  // entries so the user sees the structure (Cash / Investments / …)
+  // without scanning 14 flat items.
+  static const _typeGroups = <(String, List<String>)>[
+    ('Cash & banking', ['Checking', 'Savings', 'CD']),
+    ('Investments', ['Brokerage', 'Investment', 'IRA', '401k']),
+    ('Crypto', ['Crypto']),
+    ('Real assets', [
+      'Real Estate',
+      'Vehicle',
+      'Private Equity',
+      'Collectibles',
+      'Other Asset',
+    ]),
+    ('Liabilities', ['Credit Card', 'Loan', 'Mortgage', 'Other Liability']),
   ];
+
+  static List<String> get _types =>
+      _typeGroups.expand((g) => g.$2).toList();
 
   @override
   Widget build(BuildContext context) {
@@ -66,10 +69,37 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                 initialValue: _type,
                 dropdownColor: Theme.of(context).colorScheme.surface,
                 decoration: const InputDecoration(labelText: 'Account type'),
-                items: _types
-                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                    .toList(),
-                onChanged: (v) => setState(() => _type = v!),
+                items: [
+                  for (final (label, types) in _typeGroups) ...[
+                    // Group header — disabled so it can't be picked but
+                    // visually separates the list. Material's
+                    // DropdownMenuItem doesn't natively support disabled
+                    // headers, so we render with `enabled: false`.
+                    DropdownMenuItem<String>(
+                      enabled: false,
+                      value: null,
+                      child: Text(
+                        label.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.0,
+                          color: context.textFaint,
+                        ),
+                      ),
+                    ),
+                    ...types.map((t) => DropdownMenuItem(
+                          value: t,
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 12),
+                            child: Text(t),
+                          ),
+                        )),
+                  ],
+                ],
+                onChanged: (v) {
+                  if (v != null) setState(() => _type = v);
+                },
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
