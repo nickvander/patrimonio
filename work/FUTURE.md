@@ -195,11 +195,25 @@ haven't been re-synced since the lot code shipped.
 
 ---
 
-## 2b. Cross-currency cash-transfer linking (Wise / Bank → Nu / etc.)
+## 2b. Cross-currency cash-transfer linking (Wise / Bank → Nu / etc.)  ✅ shipped
 
-**Status:** Open. **Effort:** medium (~1 day). **Impact:** medium —
-fills a real gap in the bi-national money flow that the investment
-lot tracking deliberately does NOT cover.
+**Status:** Done. Migration `2026051803_cash_fx_transfers.sql` plus
+`services/fx_transfer_link.rs` + 4 dashboard endpoints
+(`GET/POST /api/dashboard/fx-transfers`, `PATCH/DELETE
+/api/dashboard/fx-transfers/{id}`). Auto-detection runs after every
+sync — see `services::sync` end-of-function loop.
+
+**Remaining (low-priority follow-up):**
+
+* "Cross-currency transfers" line on the cash-flow tab, showing
+  each link's implied rate next to the day's spot rate.
+* A "Manage links" view (Settings page or Management tab) so the
+  user can see + unlink all detected pairs without having to find
+  one of the legs in the transaction list.
+
+----
+
+(Original plan retained below for historical context.)
 
 ### Why
 
@@ -264,9 +278,19 @@ conversion. As a result:
 
 ---
 
-## 3. "What changed since last login" diff banner
+## 3. "What changed since last login" diff banner  ✅ shipped
 
-**Status:** Open. **Effort:** half day total. **Impact:** medium — high return-visit value.
+**Status:** Done. Migration `2026051802_previous_login_at.sql` added
+`users.previous_login_at`, rolled forward by every login path
+(password / TOTP / passkey). `GET /api/dashboard/since-last-login`
+returns `{previous_login_at, new_transactions, largest_move,
+sync_errors[]}`; `widgets/since_last_login_banner.dart` is dismissible
+(keyed on the anchor timestamp). "View" CTA seeds the Transactions
+tab's date filter to `(anchor → today)`.
+
+----
+
+(Original plan retained below for historical context.)
 
 ### Why
 
@@ -359,10 +383,10 @@ only.
 
 **Remaining (low-priority follow-up):**
 
-* `app_settings` is still global — budgets/goals stored there would
-  bleed across users once a second invite is redeemed. Single
-  migration + a few query updates to add `user_id`. Probably worth
-  doing before a second real user actually exists.
+* ~~`app_settings` is still global~~ ✅ shipped in migration
+  `2026051805_app_settings_user_id.sql` — column added, backfilled
+  to the bootstrap user, primary key changed to `(user_id, key)`,
+  both handlers filter on `ctx.user_id`.
 * Roles (`owner` vs `read-only`) deferred — single-household
   deployments don't need it; revisit if there's actual demand for
   advisor access.
@@ -370,36 +394,86 @@ only.
 
 ---
 
-## 6. Production Plaid readiness
+## 6. Production Plaid readiness  — partially shipped
 
-**Status:** From `work/NEXT.md` (2026-05-12); still relevant.
+**Status:** Production credentials are live. Webhook receiver +
+ES256 verification + per-item scoped sync are all on `main`. The
+gap that remains is purely deployment: nobody's actually told Plaid
+where to deliver webhooks.
 
-### What's actually needed beyond what's done
+### Shipped
 
-- Real Plaid `development` or `production` credentials in `.env` (currently `sandbox` works fine).
-- Webhook receiver for `DEFAULT_UPDATE` / `INITIAL_UPDATE` / `TRANSACTIONS_REMOVED` / `ITEM_LOGIN_REQUIRED` — the app polls today, which is fine for sandbox but burns Plaid quota in prod.
-- Reconnect UX when `ITEM_LOGIN_REQUIRED` fires: the existing `getReconnectToken` API call works, but Management tab doesn't surface it prominently enough — currently buried.
-- "Sandbox vs prod" indicator chip in the AppBar so the user knows which environment they're in.
+* ES256 JWT verification (`services/plaid_webhook_verify.rs`).
+* Receiver at `/api/institutions/webhook`, public router, refuses
+  unsigned requests.
+* `PLAID_WEBHOOK_URL` config field + Link-token wiring in both
+  `create_link_token` and `create_reconnect_token` — items linked
+  from this point on inherit the webhook URL.
+* Status-only codes (`ITEM_LOGIN_REQUIRED`, `PENDING_EXPIRATION`)
+  flip the institution's `sync_status` without firing a sync.
+* Update codes (`DEFAULT_UPDATE`, `HISTORICAL_UPDATE`,
+  `INITIAL_UPDATE`, `SYNC_UPDATES_AVAILABLE`, `TRANSACTIONS_REMOVED`)
+  trigger `sync_one_institution(item_id)` — scoped, not global.
+* Sticky reconnect banner above the dashboard that opens Plaid Link
+  directly (no Management-tab detour).
+
+### What's left
+
+* **Public HTTPS endpoint.** Today's `docker compose up` on a
+  laptop isn't reachable from Plaid's egress. Need a real deployment
+  (nginx + Let's Encrypt) with `PLAID_WEBHOOK_URL` pointed at it.
+  See NEXT.md item 3 for the deployment runbook scope.
+* **Sandbox vs Production indicator chip** in the AppBar so the user
+  knows which environment they're in. `/api/setup/status` already
+  exposes `plaid_env`; the frontend just needs to render a small
+  amber pill next to the FX badge when env != "production".
+* **Forced ITEM_LOGIN_REQUIRED drill** — Plaid sandbox can simulate
+  this; verify the reconnect banner + inline Plaid Link flow work
+  end-to-end.
 
 ### Acceptance
 
-A real bank account links end-to-end against `production` Plaid, syncs transactions on schedule via webhook (not poll), and survives a forced `ITEM_LOGIN_REQUIRED` test (Plaid sandbox provides this) by surfacing a reconnect CTA.
+A real bank account links end-to-end against `production` Plaid, the
+api receives an `INITIAL_UPDATE` webhook (visible in
+`docker logs patrimonio-api-1 | grep "Plaid webhook"`), and the
+dashboard updates without the user clicking Sync.
 
 ---
 
-## 7. Backups + deployment runbook
+## 7. Backups + restore runbook  ✅ shipped
 
-**Status:** From `work/NEXT.md`; still the biggest operational risk. The app is holding real bank credentials in encrypted form, but only on the local Docker volume.
+**Status:** Done. See commit `055aa46` and `docs/operations.md`.
 
-### Minimum viable
+### What landed
 
-- A `scripts/backup.sh` that runs `pg_dump | gpg --encrypt` to a target directory, plus `scripts/restore.sh` that goes the other way. Cron daily.
-- Runbook in `docs/operations.md`: how to restore, how to verify the encryption key is recoverable, how to rotate `ENCRYPTION_KEY` (involves re-encrypting every `api_key_enc` / `api_secret_enc` / `plaid_access_token_enc` / `totp_secret_enc` column).
-- A documented restore drill: build a fresh stack from the backup, verify Plaid tokens still decrypt, verify a login works.
+* `scripts/backup.sh` — `pg_dump | gpg --symmetric AES256 > timestamped
+  file`, picks postgres by compose-project label, retention pruning
+  (default 14), sidecar `.meta` (migration head + pg version + source
+  project + byte size), round-trip self-verify before returning
+  success.
+* `scripts/restore.sh` — decrypt → DROP/CREATE → psql with
+  ON_ERROR_STOP, confirmation prompt naming the project being
+  clobbered (`--yes` skips for cron), prints smoke counts after.
+* `scripts/rotate-encryption-key.sh` + `backend/src/bin/
+  rotate_encryption_key.rs` — one-shot binary shipped in the api
+  image, walks every `*_enc` column, decrypts with OLD, re-encrypts
+  with NEW, self-checks via round-trip BEFORE committing.
+* `docs/operations.md` — backup strategy, cron line, restore drill
+  against an isolated `-p patrimonio-restore-test` project,
+  disaster recovery against `patrimonio`, ENCRYPTION_KEY rotation
+  procedure, common failure modes.
 
-### Acceptance
+Drill executed against real Production data: 4 plaid_access_token_enc
++ 1 totp_secret_enc preserved across backup → restore → rotation →
+re-rotation back to original.
 
-`./scripts/restore.sh <encrypted-dump>` produces a working dev stack from a backup taken a day prior. Plaid sync still works against the restored data.
+### Optional follow-ups
+
+* Off-machine backup sync (rsync to a separate host / S3). The dump
+  is already AES256-encrypted so it's safe to drop on any storage
+  the user trusts to be durable.
+* Auto-monitor: alert when `~/.patrimonio-backup.log` shows no
+  successful run in 48h.
 
 ---
 
@@ -462,12 +536,14 @@ longer possible. See entry "5. Multi-user support" above for the
 remaining low-priority polish (`app_settings`, roles, isolation
 integration test).
 
-### CSRF defence-in-depth
+### CSRF defence-in-depth  ✅ shipped
 
-**Tracking:** This section. **Audit ID:** H4.
-**Status:** Today protected by `SameSite=Lax` + no GET routes with side effects + `withCredentials` CORS allow-listing. A regression in any of those three would expose us.
-
-**Plan:** Require a `X-Requested-With: fetch` header on every authed mutating route (POST/PUT/PATCH/DELETE). The frontend already uses fetch-equivalents; just add the header in `api_service.dart` and reject server-side when missing. Cheap, two-line per side.
+**Tracking:** This section. **Audit ID:** H4. **Status:** Done.
+`session::require_csrf_header` middleware rejects POST/PUT/PATCH/
+DELETE on the protected router without `X-Requested-With`. Frontend
+`api_service.dart` + `passkeys.dart` + the `connect_bank_screen`
+Plaid Link flow all send `X-Requested-With: fetch`. CORS extended
+in `main.rs::build_cors_layer` to permit the header on preflights.
 
 ### Rate-limit hardening
 
@@ -476,12 +552,18 @@ integration test).
 
 **Plan:** Add a global anonymous-failure counter + an unconditional `tokio::time::sleep(rand 50–150 ms)` on every failed verify. Optional: exponential backoff per-username (5, 10, 30, 60, 120 s).
 
-### Trusted-proxy aware `client_ip`
+### Trusted-proxy aware `client_ip`  ✅ shipped
 
-**Tracking:** This section. **Audit ID:** L4.
-**Status:** `client_ip` honours `X-Forwarded-For` / `X-Real-IP` unconditionally. With no upstream proxy this lets an attacker spoof their IP and evade per-IP rate-limit math.
+**Tracking:** This section. **Audit ID:** L4. **Status:** Done.
+New `TRUSTED_PROXY_CIDRS` env var parsed into `Vec<ipnet::IpNet>`.
+Edge middleware `sanitize_forwarded_headers` (in `main.rs`) strips
+X-Forwarded-For + X-Real-IP from requests whose TCP peer isn't in
+the allow-list. `axum::serve` uses `into_make_service_with_connect_info::
+<SocketAddr>()` so the middleware can read the peer.
 
-**Plan:** Take `ip` from the TCP peer by default; only honour the headers when the peer is in a `TRUSTED_PROXY_CIDRS` env-configured allow-list (likely just `127.0.0.1` + the docker bridge in our case).
+Verified live: spoofed XFF from an untrusted peer lands in
+`auth_audit.ip_address = NULL` (header stripped at the edge before
+the handler ran).
 
 ### HIBP / breached-password check
 
@@ -523,3 +605,186 @@ default for the API container is now 20.
 
 **Plan:** AEAD-encrypt the state with `ENCRYPTION_KEY` before `SETEX`. The challenge is short-TTL (5 min) so the blast radius is small; this is hardening, not urgent.
 
+
+---
+
+# Backlog handoff — late May 2026
+
+> Added after the 2026-05-18 walkthrough confirmed the dashboard,
+> security, and tx-management batches all work end-to-end against
+> real Production data. These are the ideas that came up during the
+> walkthrough but didn't fit the in-scope batches. Ordered by
+> impact-per-effort.
+
+## A. Split-transaction polish  ⏱️ ~2 hours each
+
+Split / unsplit + the validation dialog all work. Three small
+follow-ups make daily use nicer:
+
+* **"Split" chip on child rows in the transactions list.** Children
+  render identically to regular rows today, so a $100 grocery split
+  of a $200 ATM withdrawal looks like a standalone $100 row. A small
+  badge ("Split", or a `Icons.call_split` glyph at the row's left
+  edge) makes it obvious. ~10 lines in `widgets/transactions_tab.dart`
+  row builder; the `parent_id` field is already on the wire.
+* **Quick-split presets.** Common patterns: 50/50, 60/40, 70/30,
+  "evenly across N." A dropdown in the dialog header that
+  recomputes amounts to the chosen ratio.
+* **Edit-split.** Today you have to Unsplit + re-split to change
+  amounts. Adding an "Edit split" action on a parent (visible
+  because parent_id is null + children exist) would open the dialog
+  pre-populated with current children.
+
+## B. Subscription detection improvements  ⏱️ ~half day total
+
+The detector + "Mark as not a subscription" both work, but the model
+is one-way:
+
+* **Unhide UI.** The dismiss × is one-way. Add a "Manage hidden
+  merchants" section in Settings (or Management tab) listing
+  rows from `ignored_subscription_merchants` with a remove
+  affordance. ~30 lines.
+* **Cancelled-subscription detection.** Current heuristic filters
+  out clusters whose most-recent charge is >90 days ago. A separate
+  "Stopped" section would surface "Netflix charged you monthly Jan
+  2024 → Dec 2024, last charge 5 months ago" — useful for
+  audit / "did I actually cancel that?".
+* **Per-account split.** When the user has both a credit card and a
+  checking account, identical subscriptions sometimes land on both
+  (paid via Apple Pay, then a fee from checking too). Show the
+  account distribution per detected subscription so the user can
+  see which channel.
+
+## C. Mexican CSV / PDF parser polish  ⏱️ ~1 hour
+
+The Plaid path now applies the generic-prefix allowlist (`MISC DEBIT`,
+`ACH ...`, `POS ...`, etc.) via `transaction_display.dart`. The
+Mexican parsers (`services/parser/nu_mexico.rs`, `banamex.rs`,
+`cetes.rs`) still produce raw bank descriptions like
+`MISC DEBIT 20260418` directly into the `description` column.
+
+The parsers extract more useful tokens during PDF parsing (merchant
+codes, payee strings); they just don't surface them in a separate
+column. Either:
+
+* Wire `payment_payee` / `original_description` columns into the
+  parsers (the columns already exist from the Plaid work) so the
+  display ladder kicks in for these rows too.
+* OR run a post-parse cleaning step that strips the prefix +
+  drops the date suffix when present.
+
+Acceptance: opening a Mexican CSV row in the detail modal no
+longer shows `MISC DEBIT 20260418` as the title.
+
+## D. "Unhide" / general "Manage hidden things" panel  ⏱️ ~3 hours
+
+A growing list of UI elements have dismissed state with no Unhide
+path:
+
+* Ignored subscriptions (`ignored_subscription_merchants`).
+* Since-last-login banners (`Preferences.sinceLastLoginDismissed`).
+* FX-transfer links unlinked by the user — currently the detector
+  may re-propose them, but the user might want a way to mark "never
+  re-suggest this pair".
+
+A single Settings panel listing all the things-the-user-said-no-to
+with per-row remove would be cleaner than scattering per-feature
+manage screens.
+
+## E. Production deployment runbook  ⏱️ ~half day (also see NEXT.md #3)
+
+`docs/operations.md` covers backup/restore and key rotation but
+not actual production deploy. A new `docs/deployment.md` should
+cover:
+
+* Reverse proxy (nginx / Caddy) + TLS cert (Let's Encrypt) sample
+  configs.
+* `TRUSTED_PROXY_CIDRS` setup with the reverse proxy's actual IP.
+* `PLAID_WEBHOOK_URL` registration + the "re-link or update one
+  institution to pick up the URL" detail.
+* Where to put the public URL (typical: a VPS with docker-compose
+  pointed at port 8080 behind nginx).
+* Health-check + restart policy (systemd unit or
+  `docker compose --restart unless-stopped` already in place).
+* Log rotation (api logs grow unbounded; `docker compose` doesn't
+  auto-rotate).
+
+## F. Sandbox vs Production indicator chip  ⏱️ ~30 min
+
+`/api/setup/status` already exposes `plaid_env` (`sandbox` /
+`development` / `production`). The frontend should render a tiny
+amber pill next to the FX badge when it's not "production" — so
+the user has a visual cue when they're hitting the test bank.
+
+Files: `frontend/lib/screens/dashboard_screen.dart` (AppBar actions
+list), maybe a new small widget under `widgets/`.
+
+## G. Real-time dashboard via websockets  ⏱️ ~1 day  🎯 elegant but deferred
+
+Plaid webhooks now trigger background syncs, but the frontend still
+finds out by polling (it just doesn't poll often). A websocket
+"dashboard data invalidated" channel would let the dashboard refresh
+the moment a sync completes — useful when a new transaction lands
+while the user is looking at the Overview.
+
+Significant scope: new websocket endpoint, broadcast plumbing,
+frontend reconnect logic, auth scoping (a user shouldn't see
+another user's invalidations). Park until polling actually feels
+slow.
+
+## H. Net-worth aggregation in SQL  (audit P5)
+
+Already documented in the audit section above. Worth lifting here
+because it'll start to dominate cold-cache loads as more
+institutions accumulate. The Rust-side `BTreeMap` walk is
+manageable at today's scale (~5 institutions × 30d history) but
+quadratic in (institutions × days). A single `jsonb_object_agg`
+on the postgres side is cheap.
+
+## I. Inline transaction rename + bulk-edit polish  ⏱️ ~half day
+
+The detail modal's rename works well, but for "rename a bunch of
+rows quickly" the modal-per-row flow is heavy. Two affordances:
+
+* **Inline rename**: long-press / right-click on a row opens a
+  small inline text input on the row itself. Saves on submit.
+* **Keyboard shortcut**: `R` when a row is focused opens the rename
+  dialog directly without opening the detail modal first.
+
+The bulk-rename "Also apply to N matching" already exists from
+the detail modal, so this is purely about reducing clicks for
+one-off renames.
+
+## J. Flutter canvaskit responsiveness  ⏱️ unknown
+
+Observed during walkthrough: rapid taps + screenshots occasionally
+freeze the renderer for 30+ seconds. Recovers on next interaction.
+Doesn't appear in normal user pacing. Worth keeping a note in case
+it gets worse with more widgets on the page:
+
+* Consider switching from canvaskit to the html renderer for
+  layout-heavy screens (transactions list, recurring charges) —
+  `flutter build web --web-renderer html` is the global switch but
+  it sacrifices some font rendering quality.
+* Or audit for accidental rebuild loops (every setState in the
+  dashboard rebuilds 7 tabs). The `_KeepAliveTab` wrapper around
+  each tab already mitigates this; could check whether the
+  TransactionsTab's `didUpdateWidget` is firing more than necessary
+  when `_txDateSeed` clears.
+
+This is a "investigate when it actually annoys someone" item, not
+urgent.
+
+## K. Test infrastructure  ⏱️ ~half day
+
+Coverage of the new endpoints in `backend/tests/` is thin:
+
+* `backend/tests/auth_endpoints.rs` covers auth. New endpoints
+  (`fx-transfers`, `subscriptions`, `since-last-login`, `splits`,
+  `subscriptions/ignore`) have only unit tests for their internal
+  helpers (`fx_transfer_link::score_match` etc.). An integration
+  test would catch regressions when the SQL changes underneath.
+* `scripts/smoke.cjs` exercises the bootstrap → dashboard golden
+  path but doesn't touch any of the new features. Worth adding a
+  "split + unsplit", "dismiss subscription", and "FX-detect"
+  step so the smoke test exercises the new surfaces.

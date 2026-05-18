@@ -11,107 +11,128 @@ small wins.
 
 ## Top 3
 
-### 1. Backups + restore runbook  ⏱️ ~half day  🎯 highest operational risk
+### 1. Real-estate / manual assets  ⏱️ ~half day  🎯 completes net worth
 
-**Why now.** The system holds real encrypted bank credentials
-(`plaid_access_token_enc`, `api_secret_enc`, `totp_secret_enc`) only
-on the local Postgres Docker volume. One `docker volume prune`, one
-disk failure, one container recreate-by-mistake and they're gone —
-along with every transaction, every lot, every account row. The MVP
-just needs:
+**Why now.** Investment lots, multi-currency cash, and a polished tx
+list all ship, but "net worth" still excludes anything not tracked by
+a bank or exchange — a house, a car, an LLC stake, private equity.
+For affluent users the gap is often 30–60% of true net worth.
 
-- `scripts/backup.sh` — `pg_dump` + `gpg --encrypt` to a target dir.
-- `scripts/restore.sh` — the reverse.
-- Daily cron entry documented (host crontab, not in-container).
-- `docs/operations.md` — restore drill steps + how to rotate
-  `ENCRYPTION_KEY` (re-encrypts every `*_enc` column).
-- Run the drill once: build a fresh stack from a backup, verify
-  Plaid sync still works against restored data, verify a login.
+**Scope.** `accounts.account_type` already accepts arbitrary values.
+Add `real_estate` + `private_equity` + `vehicle` to the seed list of
+known types and extend `add_account_dialog.dart` with:
+- Friendly type chooser (Property / Vehicle / Private investment / Other).
+- Optional `last_valued_at` + `valuation_notes` text field.
+- "Revalue" button on the row that bumps `current_balance` and
+  appends a new `balance_snapshots` entry.
 
-**Tracked in** `work/FUTURE.md` item 7. **Files**: new
-`scripts/backup.sh`, `scripts/restore.sh`, `docs/operations.md`.
+NetWorthCard already category-aggregates by `account_type`, so the
+values flow through automatically. The harder UX bit is choosing
+icons + colors that don't look out of place next to bank logos.
 
-### 2. "What changed since last login" diff banner  ⏱️ ~half day  🎯 high return-visit value
+**Files**: `frontend/lib/widgets/add_account_dialog.dart`,
+`frontend/lib/utils/account_category.dart`,
+`backend/src/api/accounts.rs` (already supports arbitrary types).
 
-**Why now.** `users.last_login_at` and `balance_snapshots` already
-exist. The numbers needed to answer "what's new since you were last
-here" are sitting in the DB; we just don't surface them. Cheap
-shipment, immediately useful.
+### 2. HIBP / breached-password check  ⏱️ ~half day  🎯 closes audit L3
 
-**Scope**: new `GET /api/dashboard/since-last-login` returning
-`{ new_transactions, largest_balance_move, sync_errors[] }`. Frontend
-banner above NetWorthCard on Overview, dismissible (state in
-Preferences so it stays dismissed for that login).
+**Why now.** Password policy is length-only (≥12, ≤256). A user can
+still pick a long-but-pwned password (`correcthorse123` etc.). With
+real Plaid Production tokens behind that password, this is worth
+closing.
 
-**Tracked in** `work/FUTURE.md` item 3. **Files**: new endpoint in
-`backend/src/api/dashboard.rs`; new widget under
-`frontend/lib/widgets/`.
+**Approach.** Embed a top-100k-pwned bloom filter (≈80 KB) at build
+time and check at signup + change-password. The k-anonymity range
+API exists but adds a network round-trip on the hot path.
 
-### 3. Cross-currency cash-transfer linking (Wise → Nu, etc.)  ⏱️ ~1 day  🎯 closes the multi-currency story
+**Files**: new `backend/src/services/password_check.rs`,
+`backend/src/api/session.rs` (hook into bootstrap / register /
+change-password). The wordlist is one-time download from
+https://haveibeenpwned.com/Passwords (NTLM hashes by prevalence,
+top 100k = ~10 MB raw, ~80 KB as a bloom).
 
-**Why now.** Investment lots ship cleanly with FX-aware cost basis.
-The remaining bi-national gap is cash movements between currencies —
-when the user does US bank → Wise → Nu Bank, the two `transactions`
-rows are unlinked and the implicit Wise FX rate is lost. Without
-this, the "MXN cash on hand" view is missing its provenance.
+**Tracked in** `work/FUTURE.md` Security audit follow-ups → "HIBP".
 
-**Scope**: auto-detect USD-out + MXN-in pairs within a short
-window when amounts back-out to a plausible FX rate and the
-description contains a remittance keyword. New `cash_fx_transfers`
-table. Surface the link + implied rate in the transaction detail
-modal + cash-flow tab.
+### 3. Production deployment + Plaid webhook activation  ⏱️ ~half day  🎯 unblocks push delivery
 
-**Tracked in** `work/FUTURE.md` item 2b. The doc has the full plan
-including out-of-scope clarification ("realized FX gain on held MXN
-cash" is deliberately deferred — too hard to model right without
-real user demand).
+**Why now.** All the webhook infrastructure shipped (ES256 verify +
+scoped sync + per-item delivery), but Plaid still polls because
+`PLAID_WEBHOOK_URL` isn't actually configured against a public URL.
+Today's deployment is `docker compose up` on a laptop; for webhooks
+to fire we need:
+
+* A publicly-reachable HTTPS URL pointing at the api container's
+  `/api/institutions/webhook`.
+* `PLAID_WEBHOOK_URL` set in `.env`.
+* Re-link or update one institution so Plaid picks up the new URL.
+* Sandbox-vs-prod indicator chip in the AppBar so the user can see
+  which environment they're hitting.
+
+**Scope.** Document the prod deployment in `docs/operations.md` (or a
+new `docs/deployment.md`): nginx reverse proxy config example,
+TLS cert provisioning, `TRUSTED_PROXY_CIDRS` setting, the
+`PLAID_WEBHOOK_URL` registration. Then add the chip:
+`backend/src/api/setup.rs` exposes `plaid_env`; add a small badge
+next to the FX pill in `dashboard_screen.dart` that reads `Sandbox`
+in amber when not in production.
+
+**Files**: `docs/deployment.md` (new), `frontend/lib/screens/
+dashboard_screen.dart`, maybe `frontend/lib/widgets/fx_widget.dart`
+for the chip layout.
 
 ## Quick wins (≤2 hours each)
 
-Pick one of these as a warm-up if energy is low:
+Pick one as a warm-up:
 
-- **`scripts/dev-rebuild-frontend.sh`** that wraps the rebuild +
-  re-stamp-CSP dance documented in `work/CURRENT.md`. The CSP loss
-  on rebuild has tripped us multiple sessions — automating it
-  removes the foot-gun.
-- **Render the dual-currency P&L panel data on `portfolio_card.dart`
-  beyond the tile summary** — per-holding rows currently show only
-  native-currency P&L. The backend already returns
-  `gain_loss_usd` / `gain_loss_mxn` per row; the card just isn't
-  reading them.
-- **Recovery-codes-low banner**. Security screen shows
-  `_unusedRecoveryCodes` count but doesn't warn when low. Add a
-  yellow tile when count drops below 3.
-- **`work/NEXT.md` and `work/CURRENT.md` refresh** — already current
-  as of this commit, but they go stale fast. Pencil in a 5-min
-  pass at the END of each session as part of the wrap-up.
-- **`app_settings` user_id column** (M7 leftover). Currently this
-  table is global, which means budgets/goals would leak across users
-  once a second invite is redeemed. Single migration + a few query
-  updates. Tracked in `work/FUTURE.md` Security audit follow-ups.
-- ~~Drag-and-drop on the import screen + multi-select polish~~
-  ✅ shipped 2026-05-18. `services/file_drop_web.dart` +
-  `import_screen.dart` updates. See FUTURE.md 3b for details.
+- **`scripts/dev-rebuild-frontend.sh`** — wrap the rebuild + re-stamp-CSP
+  dance documented in `work/CURRENT.md`. The security-headers loss on
+  rebuild has tripped multiple sessions; automating removes the
+  foot-gun.
+- **Unhide subscriptions** — the dismiss × on `SubscriptionsCard`
+  is one-way today. Add a tiny "Manage hidden merchants" page (or
+  section in Settings / Management) that lists rows from
+  `ignored_subscription_merchants` with a remove button.
+- **Mexican parser polish** — `services/parser/nu_mexico.rs`,
+  `banamex.rs`, and `cetes.rs` produce raw bank descriptions
+  ("MISC DEBIT 20260418"). Wire the same generic-prefix allowlist
+  from `transaction_display.dart` into the parsers so the rows look
+  like the Plaid ones.
+- **Split-child badge in the list** — children render as regular
+  rows today. A small "Split" chip on the row would make it obvious
+  the row originated from a parent. ~10 lines in
+  `widgets/transactions_tab.dart` row builder.
+- **Inline rename** — current rename requires opening the detail
+  modal. A long-press (or a "rename" icon on the row hover) would
+  cut clicks for the common case.
+- **Cancelled subscription detection** — extend the detector to
+  surface a separate "Stopped" section for clusters whose most-
+  recent charge is >90 days ago (currently filtered out). Helpful
+  for "did Netflix actually charge me last month?"
+- **Recovery-codes-low banner** — Security screen knows
+  `_unusedRecoveryCodes` but doesn't warn when low. A yellow tile
+  when count drops below 3.
 
 ## Deferred — explicitly NOT next
 
-- **Real-estate / manual assets** (FUTURE.md item 4) — useful for
-  affluent users but not blocking. Pick up when a user actually asks.
-- **FIDO2 cross-device flow polish** — passkeys work; cross-device QR
-  is browser-handled and probably fine. Wait for a real complaint.
-- **`work/NEXT.md` (this file) restructuring into multiple files** —
-  there's a temptation to make it phases / categories / etc.
-  Resist. The point of this file is "what to do next session" and
-  it should fit on one screen.
+* **Color palette overhaul deeper polish** — most of the WCAG fixes
+  shipped. What's left is cosmetic (chart hover smoothness, scaffold
+  chroma tweak). Pick up when there's a real complaint or alongside
+  another visual feature.
+* **prefer_const_literals lint sweep** — see `work/FUTURE.md`.
+* **Real-time websocket dashboard updates** — Plaid webhooks just
+  trigger background syncs; the frontend still polls on tab switch.
+  A websocket "data invalidated" channel would be cleaner but it's
+  significant scope and the polling works fine at this scale.
 
 ## How to pick up cold
 
-1. Read `work/CURRENT.md` (you're here, this file is below it).
-2. Read this file (`work/NEXT.md`) — top 3 items above.
-3. If picking item 1, 2, or 3: open the linked `work/FUTURE.md`
-   section for the full plan.
-4. Verify the stack is up: `cd ~/patrimonio && docker compose ps`
-   should show api, frontend, postgres (healthy), redis all Up.
+1. Read `work/CURRENT.md` for the snapshot.
+2. Read this file (`work/NEXT.md`) — top 3 + quick wins.
+3. For Tier-1: open the linked `work/FUTURE.md` section.
+4. Verify the stack: `docker compose ps` shows all four containers
+   Up / Healthy.
 5. Verify auth: `curl http://127.0.0.1:8080/api/health` →
    `{"status":"ok","database":"connected"}`.
-6. Ship + commit + push.
+6. Ship → commit → push branch (direct-push to main is blocked by
+   the Claude Code auto-classifier; do the fast-forward merge dance
+   yourself).
