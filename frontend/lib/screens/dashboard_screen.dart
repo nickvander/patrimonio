@@ -1391,12 +1391,13 @@ class _DashboardScreenState extends State<DashboardScreen>
         hasMore: _transactionsHasMore,
         searchOverride: _transactionsSearchOverride,
         highlightedTxId: _highlightedTxId,
-        onUpdate: (id, {userCategory, userNotes, accountId}) async {
+        onUpdate: (id, {userCategory, userNotes, userDescription, accountId}) async {
           try {
             await _apiService.updateTransaction(
               id,
               userCategory: userCategory,
               userNotes: userNotes,
+              userDescription: userDescription,
               accountId: accountId,
             );
             await _refreshData();

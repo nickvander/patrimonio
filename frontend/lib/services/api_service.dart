@@ -547,11 +547,16 @@ class ApiService {
     String? userCategory,
     String? userNotes,
     String? accountId,
+    // `userDescription` semantics: null = leave alone, empty string =
+    // clear the override (revert to the auto-picked label), any other
+    // value = set the display override to that string.
+    String? userDescription,
   }) async {
     final body = <String, dynamic>{};
     if (userCategory != null) body['user_category'] = userCategory;
     if (userNotes != null) body['user_notes'] = userNotes;
     if (accountId != null) body['account_id'] = accountId;
+    if (userDescription != null) body['user_description'] = userDescription;
 
     final response = await _patch(
       Uri.parse('$_baseUrl/accounts/transactions/$txId'),

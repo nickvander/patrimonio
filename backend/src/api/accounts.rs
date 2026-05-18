@@ -413,6 +413,11 @@ pub struct TransactionResponse {
     pub counterparty_logo_url: Option<String>,
     pub user_category: Option<String>,
     pub user_notes: Option<String>,
+    /// User-supplied display label that overrides the auto-picked one.
+    /// When present, the frontend's `displayLabel` helper uses this
+    /// before any of the counterparty / merchant / original fallbacks.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_description: Option<String>,
     pub source: Option<String>,
     pub account_name: String,
     pub institution_name: String,
@@ -437,7 +442,7 @@ async fn get_account_transactions(
         SELECT t.id, t.date, t.description, t.amount, t.currency, t.category,
                t.category_detailed, t.payment_channel, t.merchant_name,
                t.original_description, t.counterparty_name, t.counterparty_logo_url,
-               t.user_category, t.user_notes, t.source,
+               t.user_category, t.user_notes, t.user_description, t.source,
                COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
                i.name as institution_name
         FROM transactions t
@@ -473,6 +478,7 @@ async fn get_account_transactions(
         counterparty_logo_url: row.try_get::<Option<String>, _>("counterparty_logo_url").ok().flatten(),
         user_category: row.try_get("user_category").ok(),
         user_notes: row.try_get("user_notes").ok(),
+        user_description: row.try_get::<Option<String>, _>("user_description").ok().flatten(),
         source: row.try_get("source").ok(),
         account_name: row.get("account_name"),
         institution_name: row.get("institution_name"),
@@ -485,6 +491,10 @@ async fn get_account_transactions(
 struct UpdateTransactionRequest {
     user_category: Option<String>,
     user_notes: Option<String>,
+    /// User-supplied display label that overrides the cleaned Plaid /
+    /// counterparty / original-description fallback chain. Empty
+    /// string clears the override; missing key leaves it alone.
+    user_description: Option<String>,
     /// Reassign the transaction to a different account. Used when a manual
     /// import landed on the wrong account.
     account_id: Option<uuid::Uuid>,
@@ -518,18 +528,28 @@ async fn update_transaction(
         }
     }
 
+    // For user_description specifically, an explicit empty string
+    // clears the override (reverts the row to the auto-picked label);
+    // a missing key leaves the existing value alone. CASE encodes
+    // both semantics in one SQL expression.
     let result = sqlx::query(
         r#"
         UPDATE transactions
         SET user_category = COALESCE($1, user_category),
             user_notes    = COALESCE($2, user_notes),
-            account_id    = COALESCE($3, account_id),
+            user_description = CASE
+                WHEN $3::text IS NULL THEN user_description
+                WHEN $3::text = '' THEN NULL
+                ELSE $3::text
+            END,
+            account_id    = COALESCE($4, account_id),
             updated_at    = NOW()
-        WHERE id = $4 AND user_id = $5
+        WHERE id = $5 AND user_id = $6
         "#,
     )
     .bind(payload.user_category)
     .bind(payload.user_notes)
+    .bind(payload.user_description)
     .bind(payload.account_id)
     .bind(tx_id)
     .bind(ctx.user_id)

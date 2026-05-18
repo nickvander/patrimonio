@@ -449,12 +449,13 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         currencyFormat: widget.currencyFormat,
         targetCurrency: widget.targetCurrency,
         usdMxnRate: widget.usdMxnRate,
-        onUpdate: (id, {userCategory, userNotes, accountId}) async {
+        onUpdate: (id, {userCategory, userNotes, userDescription, accountId}) async {
           try {
             await _apiService.updateTransaction(
               id,
               userCategory: userCategory,
               userNotes: userNotes,
+              userDescription: userDescription,
               accountId: accountId,
             );
             _fetchTransactions();

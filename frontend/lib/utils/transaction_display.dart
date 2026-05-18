@@ -1,35 +1,36 @@
 import 'transaction_description.dart';
 
 /// Pick the best human-readable label for a transaction, walking a
-/// preference ladder of Plaid-provided fields:
+/// preference ladder:
 ///
-///   1. `counterparty_name`     — Plaid's enriched merchant entity. When
-///                                 present this is usually the right
-///                                 answer ("Patagonia", "Spotify").
-///   2. `merchant_name`         — Plaid's older single-string merchant
-///                                 field. Less reliable than the
-///                                 counterparties array but better than
-///                                 a generic `name`.
-///   3. `original_description`  — the raw bank line. We only fall back
-///                                 to this when the cleaned
+///   0. `user_description`      — explicit per-row override the user
+///                                 typed in. Wins over every Plaid
+///                                 field because if they bothered to
+///                                 rename a row, that's the truth they
+///                                 want to see. Not run through the
+///                                 case/separator normaliser — what
+///                                 they typed is what shows.
+///   1. `counterparty_name`     — Plaid's enriched merchant entity.
+///   2. `merchant_name`         — Plaid's older single-string merchant.
+///   3. `original_description`  — raw bank line, only when the cleaned
 ///                                 `description` is short and generic
-///                                 (≤ 22 chars) — long descriptions
-///                                 from the bank usually contain real
-///                                 information already.
-///   4. `description`           — Plaid's cleaned `name`. The current
-///                                 default — used when nothing better
-///                                 is available.
+///                                 (≤ 22 chars).
+///   4. `description`           — Plaid's cleaned `name`. The default.
 ///
-/// All chosen strings are then run through [cleanTransactionDescription]
-/// to normalise case, drop POS reference codes, etc. The raw values are
+/// Plaid-side strings are run through [cleanTransactionDescription] to
+/// normalise case, drop POS reference codes, etc. Raw values are
 /// preserved on the transaction map — only the *display* string is
-/// derived here.
+/// derived here. Clearing `user_description` reverts to the auto pick.
 String displayLabel(Map<String, dynamic> tx) {
   String? nonEmpty(dynamic v) {
     if (v == null) return null;
     final s = v.toString().trim();
     return s.isEmpty ? null : s;
   }
+
+  // User-supplied override wins — exact text, no normalisation.
+  final userDescription = nonEmpty(tx['user_description']);
+  if (userDescription != null) return userDescription;
 
   final counterparty = nonEmpty(tx['counterparty_name']);
   if (counterparty != null) return cleanTransactionDescription(counterparty);

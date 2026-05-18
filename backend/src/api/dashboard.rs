@@ -428,6 +428,7 @@ async fn recent_transactions(
                t.date, t.description, t.category, t.category_detailed,
                t.payment_channel, t.merchant_name,
                t.original_description, t.counterparty_name, t.counterparty_logo_url,
+               t.user_description,
                t.pending
         FROM transactions t
         JOIN accounts a ON t.account_id = a.id
@@ -479,6 +480,10 @@ async fn recent_transactions(
                         .flatten(),
                     counterparty_logo_url: r
                         .try_get::<Option<String>, _>("counterparty_logo_url")
+                        .ok()
+                        .flatten(),
+                    user_description: r
+                        .try_get::<Option<String>, _>("user_description")
                         .ok()
                         .flatten(),
                     pending: r.get("pending"),
@@ -941,6 +946,10 @@ struct TransactionEntry {
     counterparty_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     counterparty_logo_url: Option<String>,
+    /// User-supplied display label, preferred by `displayLabel` over
+    /// every Plaid-side fallback when set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    user_description: Option<String>,
     pending: bool,
 }
 

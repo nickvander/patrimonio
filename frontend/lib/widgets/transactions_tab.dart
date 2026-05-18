@@ -18,7 +18,10 @@ class TransactionsTab extends StatefulWidget {
   final String targetCurrency;
   final double usdMxnRate;
   final Function(String id,
-      {String? userCategory, String? userNotes, String? accountId})? onUpdate;
+      {String? userCategory,
+      String? userNotes,
+      String? userDescription,
+      String? accountId})? onUpdate;
   final Future<void> Function(String id)? onDelete;
   /// Optional callback to jump to the Management tab (used by the empty
   /// state's "Go to Management" button). Wired by the dashboard.
@@ -505,6 +508,79 @@ class _TransactionsTabState extends State<TransactionsTab> {
     );
     if (accId == null || accId.isEmpty) return;
     await _applyBulkUpdate(accountId: accId);
+  }
+
+  /// Open the rename dialog for a single transaction. Empty string saves
+  /// as "clear the override" (sets user_description back to NULL — row
+  /// reverts to the auto-picked label). The raw bank description stays
+  /// untouched regardless.
+  Future<void> _renameTransaction(dynamic tx) async {
+    final onUpdate = widget.onUpdate;
+    if (onUpdate == null) return;
+    final controller = TextEditingController(
+      text: (tx['user_description'] ?? '').toString(),
+    );
+    final result = await showDialog<String?>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Rename transaction'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Display label only. The original bank description is '
+                'preserved and remains visible in this row’s detail '
+                'panel under "Raw bank text".',
+                style: TextStyle(fontSize: 12, color: context.textSubtle),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Display label',
+                  hintText: 'e.g. Rent — John',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(null),
+              child: const Text('Cancel'),
+            ),
+            // Clear button only when something is set on the row already
+            // — avoids a dead button on transactions that never had an
+            // override applied.
+            if ((tx['user_description'] ?? '').toString().isNotEmpty)
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(''),
+                child: const Text('Clear override'),
+              ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.of(ctx).pop(controller.text.trim()),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+    if (result == null || !mounted) return;
+    // Close the detail modal so the rename takes effect on the
+    // refreshed list rather than the stale copy this dialog opened on.
+    Navigator.of(context).pop();
+    try {
+      await onUpdate(tx['id'].toString(), userDescription: result);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Rename failed: $e')),
+      );
+    }
   }
 
   // Per-tx PATCH is the only API we have, so we loop. With ~hundreds of
@@ -1145,14 +1221,32 @@ class _TransactionsTabState extends State<TransactionsTab> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              titleDescription,
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    titleDescription,
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                // Rename pencil — opens a dialog to
+                                // set/clear the per-row override. The
+                                // raw description stays untouched and
+                                // remains visible in "Raw bank text"
+                                // below.
+                                IconButton(
+                                  tooltip: 'Rename',
+                                  iconSize: 18,
+                                  visualDensity: VisualDensity.compact,
+                                  icon: const Icon(Icons.edit_outlined),
+                                  onPressed: () => _renameTransaction(tx),
+                                ),
+                              ],
                             ),
                             if (merchant.isNotEmpty &&
                                 merchant.toLowerCase() !=
