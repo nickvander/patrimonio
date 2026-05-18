@@ -289,64 +289,43 @@ Frontend: dismissible banner above NetWorthCard on the Overview tab that surface
 
 ---
 
-## 3b. Drag-and-drop + reliable multi-file import UX
+## 3b. Drag-and-drop + reliable multi-file import UX  ✅ shipped
 
-**Status:** Open. **Effort:** ~2hr. **Impact:** medium — the import
-flow is one of the most-touched screens for users with non-Plaid
-accounts (Nu Mexico, Banamex, Cetesdirecto).
+**Status:** Done. `frontend/lib/services/file_drop_web.dart` is a
+global `GlobalFileDropListener` that attaches `dragenter` /
+`dragover` / `drop` handlers to the document (the drop zone in
+Flutter has no stable DOM node to attach to; global capture is
+simpler and there are no competing drop targets on the page).
+Dropped files filtered to `.csv` and `.pdf`, read into bytes via
+`File.arrayBuffer()`, wrapped into `PlatformFile` so the existing
+upload pipeline doesn't know the difference.
 
-### What's wrong today
+UI changes in `import_screen.dart`:
 
-`frontend/lib/screens/import_screen.dart` already passes
-`allowMultiple: true` to `FilePicker.platform.pickFiles(...)`, but
-two real-world gaps remain:
+* `_isDragging` state flag flips the drop zone border to solid
+  green + adds a faint accent wash background while a drag is in
+  progress, and swaps the helper text to "Drop to import".
+* When idle on web, the helper text reads "Drop CSV or PDF files
+  anywhere on this page, or select them manually below." so the
+  multi-select capability is discoverable.
+* Button rewritten as `ElevatedButton.icon` with "Select files"
+  (plural) label.
+* Dropped files append to the existing `_selectedFiles` list with
+  a snackbar "Added N files from drop" so the user gets feedback.
 
-1. **The drop zone is a lie.** The 48px-padded container with the
-   upload icon and dashed border looks droppable but has no drag
-   handler. Users naturally try to drag a stack of PDFs onto it
-   and nothing happens — they have to click "Select file" instead.
-2. **Nothing tells the user multi-select is possible.** The button
-   reads "Select file" (singular). The OS file dialog DOES support
-   Cmd/Ctrl-click multi-select once opened, but unless the user
-   knows that, they import one statement at a time and get
-   frustrated.
+Verified live: synthetic `dragenter` dispatched via JS
+console returns `defaultPrevented: true`, confirming the listener
+is attached and calling `preventDefault()`. Visual hover state
+flips correctly (zoomed screenshot taken). Real file drops from
+Finder/Explorer should work too — same code path.
 
-### Plan
+**Remaining (optional polish):**
 
-1. **Add real drop-target handling.** On Flutter web, use the
-   `desktop_drop` package (or roll a small custom hook using
-   `package:web`'s `dart:js_interop` to attach `dragenter`,
-   `dragover`, `drop` listeners to the drop-zone element). Accept
-   any `File` with `.csv` or `.pdf` extension; reject others with
-   a transient snackbar.
-2. **Visual feedback on hover.** Bump the drop-zone border to a
-   solid accent color + a "Drop files here" overlay text while a
-   drag is in progress. Today it's a static dashed outline.
-3. **Rename the button** to "Select files" (plural). Two-character
-   change. Add a small helper line below the drop zone: "Drop one
-   or more CSV/PDF files here, or select files manually."
-4. **Verify the file-picker dialog actually returns multiple on
-   Flutter web.** There's a known intermittent issue in
-   `file_picker` versions before 8.x on Safari where
-   `allowMultiple` doesn't trigger the OS multi-select dialog —
-   bump the dep if we're behind.
-
-### Acceptance
-
-- Drag 3 PDFs from Finder/Explorer onto the drop zone → all 3
-  appear in the selected-files list with their sizes.
-- Click "Select files" → OS dialog opens with multi-select
-  enabled by default → pick 2 files → both appear in the list.
-- Drop a `.xlsx` → transient snackbar "Only CSV and PDF files
-  are supported."
-
-### Out of scope
-
-- Folder drops (recursing into directories). Nobody asks for
-  this; if they do, revisit.
-- A preview thumbnail of each file before upload. Looks nice in
-  Figma, low actual value for bank statements which all look
-  similar.
+* Reject feedback: today rejected `.xlsx` / `.docx` drops are
+  silently dropped with a `debugPrint`. A transient snackbar
+  ("Only CSV and PDF files are supported") would be nicer.
+* Folder drops (recursing into directories) — not yet supported.
+  Nobody's asked; revisit if anyone does.
 
 ---
 

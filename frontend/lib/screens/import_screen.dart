@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../utils/theme_colors.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/api_service.dart';
+import '../services/file_drop_web.dart';
 
 class ImportScreen extends StatefulWidget {
   const ImportScreen({super.key});
@@ -27,6 +29,17 @@ class _ImportScreenState extends State<ImportScreen> {
   bool _requiresPassword = false;
   final TextEditingController _passwordController = TextEditingController();
 
+  /// True while the user is dragging files over the page. Flips the
+  /// drop-zone border + shows the "Drop files here" overlay so the
+  /// user gets feedback that the page actually accepts the drop.
+  bool _isDragging = false;
+
+  /// Web-only drag-and-drop listener. Null on non-web targets — the
+  /// import screen is reachable from the dashboard which itself only
+  /// runs on web today, but the null-check keeps the screen safe if
+  /// it's ever rendered headlessly (tests, future native build).
+  GlobalFileDropListener? _dropListener;
+
   // Descriptions that should be auto-deselected (informational, not real transactions)
   static const _autoDeselectPatterns = [
     'EXENCION COBRO COMISION',
@@ -38,6 +51,49 @@ class _ImportScreenState extends State<ImportScreen> {
   void initState() {
     super.initState();
     _fetchAccounts();
+    if (kIsWeb) {
+      _dropListener = GlobalFileDropListener(
+        onFiles: _handleDroppedFiles,
+        onDragState: (active) {
+          if (!mounted) return;
+          setState(() => _isDragging = active);
+        },
+      );
+      _dropListener!.attach();
+    }
+  }
+
+  @override
+  void dispose() {
+    _dropListener?.detach();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  /// Append dropped files to the existing selection (same shape as
+  /// "Add more files" via the picker). If a preview was already
+  /// rendered for a previous batch, throw it out — the new files
+  /// need their own parse pass.
+  void _handleDroppedFiles(List<PlatformFile> files) {
+    if (files.isEmpty) return;
+    setState(() {
+      _selectedFiles = [..._selectedFiles, ...files];
+      _previewTransactions = null;
+      _selectedIndices = {};
+      _message = null;
+      _requiresPassword = false;
+      _passwordController.clear();
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          files.length == 1
+              ? 'Added 1 file from drop'
+              : 'Added ${files.length} files from drop',
+        ),
+      ),
+    );
   }
 
   Future<void> _fetchAccounts() async {
@@ -221,22 +277,56 @@ class _ImportScreenState extends State<ImportScreen> {
             const SizedBox(height: 32),
             if (_previewTransactions == null)
               Center(
-                child: Container(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  curve: Curves.easeOut,
                   width: double.infinity,
                   padding: const EdgeInsets.all(48),
                   decoration: BoxDecoration(
-                    color: context.tint(0.05),
+                    color: _isDragging
+                        ? context.positive.withValues(alpha: 0.08)
+                        : context.tint(0.05),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: context.hairline, width: 2),
+                    border: Border.all(
+                      color: _isDragging ? context.positive : context.hairline,
+                      width: 2,
+                    ),
                   ),
                   child: Column(
                     children: [
+                      // Same icon in both states — the border + label
+                      // change is the affordance. Some Material icons
+                      // (file_download in particular) don't render at
+                      // 64px reliably on Flutter web's CanvasKit so
+                      // we don't risk swapping.
                       Icon(
                         Icons.upload_file,
                         size: 64,
                         color: context.positive,
                       ),
                       const SizedBox(height: 16),
+                      if (_isDragging)
+                        Text(
+                          'Drop to import',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: context.positive,
+                          ),
+                        )
+                      else if (kIsWeb && _selectedFiles.isEmpty)
+                        Text(
+                          'Drop CSV or PDF files anywhere on this page, or select them manually below.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: context.textSubtle,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      if (_isDragging || (kIsWeb && _selectedFiles.isEmpty))
+                        const SizedBox(height: 16),
+                      if (_selectedFiles.isEmpty && !kIsWeb && !_isDragging)
+                        const Text('No files selected'),
                       if (_selectedFiles.isNotEmpty)
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -290,15 +380,19 @@ class _ImportScreenState extends State<ImportScreen> {
                               ),
                             ),
                           ],
-                        )
-                      else
-                        const Text('No files selected'),
+                        ),
                       const SizedBox(height: 24),
-                      ElevatedButton(
+                      ElevatedButton.icon(
                         onPressed: _isUploading ? null : _pickFile,
-                        child: Text(
+                        icon: Icon(
                           _selectedFiles.isEmpty
-                              ? 'Select file(s)'
+                              ? Icons.folder_open_outlined
+                              : Icons.add_circle_outline,
+                          size: 18,
+                        ),
+                        label: Text(
+                          _selectedFiles.isEmpty
+                              ? 'Select files'
                               : 'Add more files',
                         ),
                       ),

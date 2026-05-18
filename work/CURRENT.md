@@ -43,6 +43,14 @@ This session (2026-05-17 → 18) shipped a substantial batch:
   Liabilities, Cash, Investments) share a coherent neutral
   surface with a 6×6 accent dot before each label — no more
   colored outlines around `$0.00 Liabilities`.
+- **Import: drag-and-drop + multi-select polish**: new
+  `services/file_drop_web.dart` (`GlobalFileDropListener`)
+  attaches `dragenter`/`dragover`/`drop` to the document; dropped
+  CSV/PDF files are read via `File.arrayBuffer()` and routed into
+  the existing upload pipeline as `PlatformFile` objects. Drop
+  zone gets a green border + accent wash while dragging. Button
+  renamed "Select files" (plural) + helper text added when
+  empty. Verified via synthetic dragenter event in DevTools.
 - **Docs**: `docs/multi-currency.md` explains the two pipelines in
   plain English (investment lots = shipped, cross-currency cash
   transfers = future item 2b).

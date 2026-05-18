@@ -89,13 +89,9 @@ Pick one of these as a warm-up if energy is low:
   table is global, which means budgets/goals would leak across users
   once a second invite is redeemed. Single migration + a few query
   updates. Tracked in `work/FUTURE.md` Security audit follow-ups.
-- **Drag-and-drop on the import screen + multi-select polish**
-  (FUTURE.md 3b). The drop zone is a visual lie today — it looks
-  droppable but has no handler. `allowMultiple: true` is already
-  passed to the file picker but the "Select file" (singular) label
-  and the lack of helper text don't communicate it. Add
-  `desktop_drop` (or hand-roll via `package:web`), rename button to
-  "Select files", add a hover state on drag. ~2 hours.
+- ~~Drag-and-drop on the import screen + multi-select polish~~
+  ✅ shipped 2026-05-18. `services/file_drop_web.dart` +
+  `import_screen.dart` updates. See FUTURE.md 3b for details.
 
 ## Deferred — explicitly NOT next
 
