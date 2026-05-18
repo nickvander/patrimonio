@@ -326,6 +326,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
             }),
             const SizedBox(height: 24),
             _buildKpiStrip(),
+            const SizedBox(height: 16),
+            _buildDualCurrencyPanel(),
             const SizedBox(height: 20),
             Theme(
               data: Theme.of(context).copyWith(
@@ -344,6 +346,191 @@ class _PortfolioCardState extends State<PortfolioCard> {
           ],
         ),
       ),
+    );
+  }
+
+  /// Side-by-side "Total value" + "Profit / Loss" panel showing BOTH
+  /// US Dollars (USD) and Mexican Pesos (MXN). For bi-national users,
+  /// the single-currency hero above isn't enough — the same portfolio
+  /// looks different in USD vs MXN depending on FX moves, and the
+  /// backend now computes both numbers using per-lot historical FX
+  /// rates (when `holding_lots` rows exist; current FX otherwise).
+  ///
+  /// Acronym key (spelled out in the UI label, not assumed):
+  ///   USD = United States Dollar
+  ///   MXN = Mexican Peso
+  ///   P/L = Profit or Loss (also written as "Gain / Loss")
+  Widget _buildDualCurrencyPanel() {
+    final data = widget.portfolioData;
+    // Backend exposes these alongside the legacy `total_value` /
+    // `total_gain_loss` (which are sums in native currency and don't
+    // make sense across mixed USD+MXN portfolios).
+    final valUsd = (data['total_value_usd'] as num?)?.toDouble();
+    final valMxn = (data['total_value_mxn'] as num?)?.toDouble();
+    final costUsd = (data['total_cost_basis_usd'] as num?)?.toDouble();
+    final costMxn = (data['total_cost_basis_mxn'] as num?)?.toDouble();
+    final glUsd = (data['total_gain_loss_usd'] as num?)?.toDouble();
+    final glMxn = (data['total_gain_loss_mxn'] as num?)?.toDouble();
+    // Backwards compat: if the backend hasn't been redeployed yet
+    // the new fields are absent — skip the panel rather than render
+    // half-empty boxes.
+    if (valUsd == null || valMxn == null) {
+      return const SizedBox.shrink();
+    }
+    final glPctUsd = (costUsd != null && costUsd > 0)
+        ? ((valUsd - costUsd) / costUsd) * 100.0
+        : 0.0;
+    final glPctMxn = (costMxn != null && costMxn > 0)
+        ? ((valMxn - costMxn) / costMxn) * 100.0
+        : 0.0;
+
+    final usdFmt = NumberFormat.currency(locale: 'en_US', symbol: '\$');
+    final mxnFmt = NumberFormat.currency(locale: 'es_MX', symbol: 'MX\$');
+
+    Widget tile({
+      required String currencyTitle,
+      required String currencySubtitle,
+      required String totalValueStr,
+      required double gainLoss,
+      required String gainLossStr,
+      required double gainLossPct,
+    }) {
+      final positive = gainLoss >= 0;
+      return Expanded(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: context.tint(0.04),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: context.hairline),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    currencyTitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: context.textPrimary,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    currencySubtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.textSubtle,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Total value',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: context.textSubtle,
+                  letterSpacing: 0.4,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                totalValueStr,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: context.textPrimary,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Profit / Loss',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: context.textSubtle,
+                  letterSpacing: 0.4,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  Icon(
+                    positive ? Icons.arrow_upward : Icons.arrow_downward,
+                    size: 12,
+                    color: positive ? context.positive : context.negative,
+                  ),
+                  const SizedBox(width: 2),
+                  Flexible(
+                    child: Text(
+                      '${positive ? '+' : ''}$gainLossStr (${gainLossPct.toStringAsFixed(2)}%)',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: positive ? context.positive : context.negative,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final usdTile = tile(
+      currencyTitle: 'USD',
+      currencySubtitle: 'US Dollar',
+      totalValueStr: usdFmt.format(valUsd),
+      gainLoss: glUsd ?? 0,
+      gainLossStr: usdFmt.format((glUsd ?? 0).abs()),
+      gainLossPct: glPctUsd,
+    );
+    final mxnTile = tile(
+      currencyTitle: 'MXN',
+      currencySubtitle: 'Mexican Peso',
+      totalValueStr: mxnFmt.format(valMxn),
+      gainLoss: glMxn ?? 0,
+      gainLossStr: mxnFmt.format((glMxn ?? 0).abs()),
+      gainLossPct: glPctMxn,
+    );
+
+    return LayoutBuilder(
+      builder: (context, c) {
+        final narrow = c.maxWidth < 520;
+        if (narrow) {
+          // Stack on phone widths — two tiles side-by-side are too
+          // squeezed to fit the value + P/L numbers without
+          // ellipsising. Vertical stack keeps the comparison readable.
+          return Column(
+            children: [
+              Row(children: [usdTile]),
+              const SizedBox(height: 8),
+              Row(children: [mxnTile]),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            usdTile,
+            const SizedBox(width: 12),
+            mxnTile,
+          ],
+        );
+      },
     );
   }
 
