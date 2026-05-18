@@ -267,13 +267,36 @@ async fn net_worth_history(
 }
 
 /// All investment holdings for this user across their accounts.
+///
+/// Each holding is reported in BOTH USD and MXN so a bi-national
+/// investor can read their position either way without converting in
+/// their head. When `holding_lots` rows exist for a holding, the cost
+/// basis is computed by summing each lot's `qty * cost_per_unit`
+/// converted at that lot's own `usd_fx_rate` — this is the proper
+/// FX-aware basis. When no lots exist (today's default — the lot
+/// table is forward-compat infrastructure; `services/sync.rs` doesn't
+/// populate it yet) we fall back to `holdings.cost_basis` converted
+/// at the current FX rate, which still produces the right number in
+/// the native currency and a reasonable approximation in the other.
 async fn holdings(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Json<HoldingsResponse> {
+    let fx_row = sqlx::query(
+        "SELECT rate FROM exchange_rates WHERE base_currency = 'USD' AND target_currency = 'MXN' ORDER BY recorded_at DESC LIMIT 1"
+    )
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
+    let fx_usd_to_mxn: f64 = fx_row
+        .map(|r| r.get::<rust_decimal::Decimal, _>("rate"))
+        .and_then(|d| d.to_string().parse::<f64>().ok())
+        .unwrap_or(20.0);
+
     let rows = sqlx::query(
         r#"
-        SELECT h.symbol, h.name, h.quantity, h.price, h.value,
+        SELECT h.id, h.symbol, h.name, h.quantity, h.price, h.value,
                h.cost_basis, h.currency, h.holding_type,
                COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
                i.name as institution_name
@@ -289,12 +312,75 @@ async fn holdings(
     .await
     .unwrap_or_default();
 
+    // Pull any lots for this user in one query, group by holding.
+    let lot_rows = sqlx::query(
+        r#"
+        SELECT holding_id, qty, cost_per_unit, currency, usd_fx_rate
+        FROM holding_lots
+        WHERE user_id = $1
+        "#
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let mut lots_by_holding: HashMap<uuid::Uuid, Vec<(f64, f64, String, f64)>> =
+        HashMap::new();
+    for r in &lot_rows {
+        let hid: uuid::Uuid = match r.try_get("holding_id") { Ok(v) => v, Err(_) => continue };
+        let qty: f64 = r.try_get::<rust_decimal::Decimal, _>("qty").ok()
+            .map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+        let cpu: f64 = r.try_get::<rust_decimal::Decimal, _>("cost_per_unit").ok()
+            .map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+        let ccy: String = r.try_get("currency").unwrap_or_else(|_| "USD".to_string());
+        let fx: f64 = r.try_get::<rust_decimal::Decimal, _>("usd_fx_rate").ok()
+            .map(|d| d.to_string().parse().unwrap_or(1.0)).unwrap_or(1.0);
+        lots_by_holding.entry(hid).or_default().push((qty, cpu, ccy, fx));
+    }
+
+    let to_usd = |amount: f64, ccy: &str| -> f64 {
+        match ccy {
+            "USD" => amount,
+            "MXN" => amount / fx_usd_to_mxn,
+            _ => amount, // unknown currency — treat as 1:1 to USD for now
+        }
+    };
+
     let holdings_list: Vec<HoldingDetail> = rows.iter()
         .map(|r| {
+            let id: uuid::Uuid = r.try_get("id").unwrap_or_else(|_| uuid::Uuid::nil());
             let value: f64 = r.try_get::<rust_decimal::Decimal, _>("value")
                 .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
-            let cost_basis: f64 = r.try_get::<rust_decimal::Decimal, _>("cost_basis")
+            let cost_basis_native: f64 = r.try_get::<rust_decimal::Decimal, _>("cost_basis")
                 .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+            let currency: String = r.get("currency");
+
+            // Cost basis in USD: prefer lots (FX-aware) when present;
+            // fall back to current-FX conversion of the flat basis.
+            let cost_basis_usd = if let Some(lots) = lots_by_holding.get(&id) {
+                lots.iter()
+                    .map(|(qty, cpu, ccy, fx)| {
+                        let native = qty * cpu;
+                        // Lot's currency may differ from holding's
+                        // currency in edge cases (multi-currency
+                        // brokerages); convert via the lot's recorded
+                        // historical FX rate.
+                        match ccy.as_str() {
+                            "USD" => native,
+                            "MXN" => if *fx > 0.0 { native / fx } else { native / fx_usd_to_mxn },
+                            _ => native,
+                        }
+                    })
+                    .sum::<f64>()
+            } else {
+                to_usd(cost_basis_native, &currency)
+            };
+
+            let value_usd = to_usd(value, &currency);
+            let cost_basis_mxn = cost_basis_usd * fx_usd_to_mxn;
+            let value_mxn = value_usd * fx_usd_to_mxn;
+
             HoldingDetail {
                 symbol: r.get("symbol"),
                 name: r.get("name"),
@@ -303,10 +389,18 @@ async fn holdings(
                 price: r.try_get::<rust_decimal::Decimal, _>("price")
                     .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
                 value,
-                cost_basis,
-                gain_loss: value - cost_basis,
-                gain_loss_pct: if cost_basis > 0.0 { ((value - cost_basis) / cost_basis) * 100.0 } else { 0.0 },
-                currency: r.get("currency"),
+                cost_basis: cost_basis_native,
+                gain_loss: value - cost_basis_native,
+                gain_loss_pct: if cost_basis_native > 0.0 {
+                    ((value - cost_basis_native) / cost_basis_native) * 100.0
+                } else { 0.0 },
+                value_usd,
+                value_mxn,
+                cost_basis_usd,
+                cost_basis_mxn,
+                gain_loss_usd: value_usd - cost_basis_usd,
+                gain_loss_mxn: value_mxn - cost_basis_mxn,
+                currency,
                 holding_type: r.try_get::<String, _>("holding_type").unwrap_or_default(),
                 account_name: r.get("account_name"),
                 institution_name: r.get("institution_name"),
@@ -316,12 +410,22 @@ async fn holdings(
 
     let total_value: f64 = holdings_list.iter().map(|h| h.value).sum();
     let total_cost: f64 = holdings_list.iter().map(|h| h.cost_basis).sum();
+    let total_value_usd: f64 = holdings_list.iter().map(|h| h.value_usd).sum();
+    let total_value_mxn: f64 = holdings_list.iter().map(|h| h.value_mxn).sum();
+    let total_cost_usd: f64 = holdings_list.iter().map(|h| h.cost_basis_usd).sum();
+    let total_cost_mxn: f64 = holdings_list.iter().map(|h| h.cost_basis_mxn).sum();
 
     Json(HoldingsResponse {
         total_value,
         total_cost_basis: total_cost,
         total_gain_loss: total_value - total_cost,
         total_gain_loss_pct: if total_cost > 0.0 { ((total_value - total_cost) / total_cost) * 100.0 } else { 0.0 },
+        total_value_usd,
+        total_value_mxn,
+        total_cost_basis_usd: total_cost_usd,
+        total_cost_basis_mxn: total_cost_mxn,
+        total_gain_loss_usd: total_value_usd - total_cost_usd,
+        total_gain_loss_mxn: total_value_mxn - total_cost_mxn,
         holdings: holdings_list,
     })
 }
@@ -872,10 +976,24 @@ struct NetWorthPoint {
 
 #[derive(Serialize)]
 struct HoldingsResponse {
+    /// Totals in the holdings' native currencies summed naively.
+    /// Useful when every holding shares one currency; meaningless
+    /// when mixing USD + MXN positions, in which case the consumer
+    /// should read `total_value_usd` / `total_value_mxn`.
     total_value: f64,
     total_cost_basis: f64,
     total_gain_loss: f64,
     total_gain_loss_pct: f64,
+    /// Dual-currency totals — each holding converted via current FX
+    /// (or per-lot historical FX when `holding_lots` rows are
+    /// available) and summed. Bi-national investors should display
+    /// whichever side matches their reporting currency.
+    total_value_usd: f64,
+    total_value_mxn: f64,
+    total_cost_basis_usd: f64,
+    total_cost_basis_mxn: f64,
+    total_gain_loss_usd: f64,
+    total_gain_loss_mxn: f64,
     holdings: Vec<HoldingDetail>,
 }
 
@@ -889,6 +1007,19 @@ struct HoldingDetail {
     cost_basis: f64,
     gain_loss: f64,
     gain_loss_pct: f64,
+    /// Per-holding dual-currency conversions. `value_usd` and
+    /// `cost_basis_usd` always agree with the holding's native
+    /// number when the security is USD-denominated; for MXN
+    /// securities they're computed via current FX. The MXN side is
+    /// always derivable from the USD side via current FX, but we
+    /// pre-compute both so the frontend doesn't need the FX rate to
+    /// render the row.
+    value_usd: f64,
+    value_mxn: f64,
+    cost_basis_usd: f64,
+    cost_basis_mxn: f64,
+    gain_loss_usd: f64,
+    gain_loss_mxn: f64,
     currency: String,
     holding_type: String,
     account_name: String,

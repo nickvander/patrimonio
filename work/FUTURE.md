@@ -121,9 +121,17 @@ The migration is staged so each step has its own commit. The riskiest one is ste
 
 ---
 
-## 1. Better Plaid transaction descriptions
+## 1. Better Plaid transaction descriptions  ✅ shipped (steps 1–4)
 
-**Status:** Open. **Effort:** ~half day backend + ~2hr frontend. **Impact:** high — affects every transaction row the user sees.
+**Status:** Done. Migrations `2026051704_plaid_enrichment.sql` +
+`2026051706_user_description.sql` are on `main`; the sync engine
+pulls `original_description` + best counterparty; the frontend's
+`displayLabel` walks counterparty → merchant → original →
+description; per-row rename override (`user_description`) is wired
+end-to-end with a pencil icon in the detail modal. Remaining
+follow-up: integration test exercising a canned Plaid JSON fixture
+into the enriched DB columns. Original plan preserved below for
+reference.
 
 ### The problem
 
@@ -169,9 +177,60 @@ What's also in the Plaid payload but we ignore:
 
 ---
 
-## 2. FX-aware cost basis & lots
+## 2. FX-aware cost basis & lots  🚧 schema + read API shipped; sync engine is the follow-up
 
-**Status:** Open. **Effort:** 1–2 days. **Impact:** high — bi-national P&L is wrong without it. The deferred Tax Accuracy item from `work/NEXT.md`.
+**Status:** Foundation landed. Migration `2026051708_holding_lots.sql`
+is on `main` (`holding_lots(id, holding_id, account_id, user_id,
+acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id,
+created_at)` with per-user + per-source indexes). The `/api/dashboard/
+holdings` endpoint now returns dual-currency totals + per-holding
+`{value_usd, value_mxn, cost_basis_usd, cost_basis_mxn,
+gain_loss_usd, gain_loss_mxn}` — sourced from `holding_lots` rows
+when present (per-lot historical FX) and falling back to
+`holdings.cost_basis` converted at current FX otherwise.
+
+**Remaining work (the actually-FX-aware part):** the sync engine
+doesn't populate `holding_lots` yet — `services/sync.rs` calls
+`/investments/holdings/get` (current positions) but NOT
+`/investments/transactions/get` (buy/sell events). The MVP we
+shipped delivers the dual-currency surface today using current FX
+for everyone; once the sync writes lots the same endpoint
+automatically switches to the per-lot historical FX without any
+API-shape changes.
+
+### Sync-engine follow-up plan
+
+1. Extend `services/sync.rs` to also call
+   `https://{env}.plaid.com/investments/transactions/get` per
+   institution per sync. Cursor-paginate identically to
+   `/transactions/sync`.
+2. For each `investment_transaction` with type `buy` (and `dividend`
+   with `reinvest=true`, and `transfer` for in-kind), insert a
+   `holding_lots` row using the transaction's `iso_currency_code`,
+   `price`, and `quantity`. Set `usd_fx_rate` from the FX rate on
+   `transaction.date` — pull from `exchange_rates` (which is
+   already day-stamped) with a nearest-prior-date lookup.
+3. For each `sell`: FIFO-deplete lots, computing the realized
+   gain in both USD and MXN. Optionally persist a `realized_lots`
+   audit row (out of scope for the MVP).
+4. Existing `holdings.cost_basis` continues to be written as a
+   running average — the dual-currency endpoint already prefers
+   lots over it.
+5. Add an idempotency test: re-running sync on the same
+   institution must not duplicate lots (`(holding_id, source_id)`
+   unique partial index already enforces this).
+
+### Frontend follow-up
+
+* `portfolio_card.dart` consumes `value_usd` / `value_mxn` etc. today
+  — verify the bi-national display picks up the new fields and
+  shows MXN-side P&L when the user toggles to MXN reporting.
+* Add a small "Cost basis breakdown" tooltip on each portfolio row
+  when a holding has more than one lot (per-lot acquisition date
+  + qty + native cost), so power users can see why their MXN P&L
+  differs from a naive current-FX conversion.
+
+**Original plan preserved below.**
 
 ### Why
 
