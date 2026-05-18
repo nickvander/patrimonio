@@ -1,5 +1,5 @@
 use axum::{
-    extract::{DefaultBodyLimit, Multipart, State},
+    extract::{DefaultBodyLimit, Extension, Multipart, State},
     http::StatusCode,
     response::IntoResponse,
     routing::post,
@@ -8,6 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
+use crate::api::session::AuthContext;
 use crate::services::parser;
 use crate::AppState;
 
@@ -32,20 +33,21 @@ pub fn router() -> Router<AppState> {
 
 async fn confirm_handler(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
     Json(payload): Json<ConfirmImportRequest>,
 ) -> axum::response::Response {
     let mut imported_count = 0;
     let mut duplicate_count = 0;
 
-    // Guard against the "Banamex PDF imported into a Vanguard 401(k)" case
-    // (which has actually happened). If every parsed transaction shares a
-    // currency that doesn't match the target account's currency, refuse the
-    // import and tell the user — there is no plausible reason to import
-    // MXN bank statements into a USD brokerage.
+    // Currency-mismatch guard, scoped to caller's accounts so that an
+    // attacker can't probe other users' account currencies via import
+    // attempts. A foreign account id returns None → triggers the
+    // standard "account not found" path below.
     let target_currency: Option<String> = match sqlx::query_scalar::<_, String>(
-        "SELECT currency FROM accounts WHERE id = $1",
+        "SELECT currency FROM accounts WHERE id = $1 AND user_id = $2",
     )
     .bind(payload.account_id)
+    .bind(ctx.user_id)
     .fetch_optional(&state.db)
     .await
     {
@@ -55,6 +57,17 @@ async fn confirm_handler(
             None
         }
     };
+
+    if target_currency.is_none() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "status": "error",
+                "message": "Target account not found.",
+            })),
+        )
+            .into_response();
+    }
 
     if let Some(target_cur) = target_currency.as_deref() {
         let tx_currencies: std::collections::HashSet<String> = payload
@@ -93,8 +106,8 @@ async fn confirm_handler(
         );
 
         let result = sqlx::query(
-            "INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, source, source_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 'csv', $8)
+            "INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, source, source_id, user_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'csv', $8, $9)
              ON CONFLICT (account_id, external_id) DO NOTHING",
         )
         .bind(payload.account_id)
@@ -105,6 +118,7 @@ async fn confirm_handler(
         .bind(&tx.currency)
         .bind(tx.category)
         .bind("csv_import")
+        .bind(ctx.user_id)
         .execute(&state.db)
         .await;
 

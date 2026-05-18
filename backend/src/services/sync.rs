@@ -5,59 +5,98 @@ use crate::config::AppConfig;
 use crate::services::encryption;
 use std::collections::HashMap;
 
-/// Sync engine — Expands Plaid data pulling for all linked institutions.
+/// Sync every institution in the database, regardless of owner. Used
+/// by the cron-scheduled refresh; the per-institution loop pulls
+/// `user_id` off each row and stamps it onto inserted accounts,
+/// transactions, balance snapshots, and holdings, so multi-user data
+/// never crosses tenants even when the engine runs untethered to a
+/// session.
 pub async fn sync_all_institutions(db: &PgPool, config: &AppConfig) -> Result<()> {
-    sync_institutions(db, config, None).await
+    sync_institutions(db, config, None, None).await
 }
 
-/// Sync engine variant that scopes the run to a single institution. Used
-/// by the "Retry N failed" UI action so we don't touch healthy
-/// institutions just to reattempt a couple of broken ones.
+/// Sync engine variant scoped to a single user. Used by the manual
+/// "Sync all accounts" button on the dashboard — the caller's session
+/// supplies `user_id`, and the engine skips every institution that
+/// doesn't belong to them.
+pub async fn sync_user_institutions(
+    db: &PgPool,
+    config: &AppConfig,
+    user_id: uuid::Uuid,
+    only_ids: Option<Vec<uuid::Uuid>>,
+) -> Result<()> {
+    sync_institutions(db, config, Some(user_id), only_ids).await
+}
+
+/// Sync engine variant scoped to a single institution. Kept as a thin
+/// wrapper for callers that already verified ownership. New code
+/// should prefer `sync_user_institutions(.., Some(vec![id]))` so the
+/// engine itself enforces the per-user filter.
 pub async fn sync_one_institution(
     db: &PgPool,
     config: &AppConfig,
     id: uuid::Uuid,
 ) -> Result<()> {
-    sync_institutions(db, config, Some(vec![id])).await
+    sync_institutions(db, config, None, Some(vec![id])).await
 }
 
-/// Internal sync loop. When `only_ids` is `Some`, only those institutions
-/// are selected; otherwise every linked institution gets synced.
+/// Internal sync loop.
+///
+/// * `user_filter` — when `Some`, only institutions owned by this user
+///   are touched. The cron-scheduled run passes `None`.
+/// * `only_ids` — when `Some`, narrows the run to those institution ids.
+///   Combined with `user_filter`, foreign ids are silently filtered out.
 pub async fn sync_institutions(
     db: &PgPool,
     config: &AppConfig,
+    user_filter: Option<uuid::Uuid>,
     only_ids: Option<Vec<uuid::Uuid>>,
 ) -> Result<()> {
     tracing::info!(
-        "Sync engine: starting sync for {}",
+        "Sync engine: starting sync for {} (user_filter={})",
         match &only_ids {
             Some(ids) => format!("{} institution(s)", ids.len()),
             None => "all institutions".to_string(),
-        }
+        },
+        user_filter
+            .map(|u| u.to_string())
+            .unwrap_or_else(|| "<all>".to_string()),
     );
     let client = Client::new();
 
-    let rows = if let Some(ids) = only_ids {
-        // ANY($1) lets us pass the Uuid array as one bind param and
-        // returns rows in arbitrary order; per-id ordering doesn't
-        // matter since the sync engine treats each row independently.
-        sqlx::query(
-            "SELECT id, name, integration_type, plaid_access_token_enc, plaid_transactions_cursor \
+    let rows = match (&only_ids, &user_filter) {
+        (Some(ids), Some(uid)) => sqlx::query(
+            "SELECT id, name, integration_type, plaid_access_token_enc, plaid_transactions_cursor, user_id \
+             FROM institutions WHERE id = ANY($1) AND user_id = $2"
+        )
+        .bind(ids)
+        .bind(uid)
+        .fetch_all(db)
+        .await?,
+        (Some(ids), None) => sqlx::query(
+            "SELECT id, name, integration_type, plaid_access_token_enc, plaid_transactions_cursor, user_id \
              FROM institutions WHERE id = ANY($1)"
         )
-        .bind(&ids)
+        .bind(ids)
         .fetch_all(db)
-        .await?
-    } else {
-        sqlx::query(
-            "SELECT id, name, integration_type, plaid_access_token_enc, plaid_transactions_cursor FROM institutions"
+        .await?,
+        (None, Some(uid)) => sqlx::query(
+            "SELECT id, name, integration_type, plaid_access_token_enc, plaid_transactions_cursor, user_id \
+             FROM institutions WHERE user_id = $1"
+        )
+        .bind(uid)
+        .fetch_all(db)
+        .await?,
+        (None, None) => sqlx::query(
+            "SELECT id, name, integration_type, plaid_access_token_enc, plaid_transactions_cursor, user_id FROM institutions"
         )
         .fetch_all(db)
-        .await?
+        .await?,
     };
 
     for row in rows {
         let inst_id: uuid::Uuid = row.get("id");
+        let inst_user_id: uuid::Uuid = row.get("user_id");
         let inst_name: String = row.get("name");
         let integration_type: String = row.get("integration_type");
         update_sync_status(db, inst_id, "syncing", None).await;
@@ -115,41 +154,49 @@ pub async fn sync_institutions(
                         let current_bal = acc["balances"]["current"].as_f64();
                         let available_bal = acc["balances"]["available"].as_f64();
 
-                        let existing = sqlx::query("SELECT id FROM accounts WHERE external_id = $1")
+                        // Look up account scoped to this institution +
+                        // owner. external_id is Plaid-issued and shouldn't
+                        // collide across users, but the ownership predicate
+                        // is cheap defence.
+                        let existing = sqlx::query(
+                            "SELECT id FROM accounts WHERE external_id = $1 AND user_id = $2"
+                        )
                             .bind(external_id)
+                            .bind(inst_user_id)
                             .fetch_optional(db).await?;
 
                         if existing.is_some() {
-                            sqlx::query("UPDATE accounts SET current_balance = $1, available_balance = $2, updated_at = NOW() WHERE external_id = $3")
-                                .bind(current_bal).bind(available_bal).bind(external_id)
+                            sqlx::query(
+                                "UPDATE accounts SET current_balance = $1, available_balance = $2, updated_at = NOW() WHERE external_id = $3 AND user_id = $4"
+                            )
+                                .bind(current_bal).bind(available_bal).bind(external_id).bind(inst_user_id)
                                 .execute(db).await?;
                         } else {
                             sqlx::query(
                                 r#"
-                                INSERT INTO accounts (institution_id, external_id, name, account_type, currency, current_balance, available_balance)
-                                VALUES ($1, $2, $3, $4, 'USD', $5, $6)
+                                INSERT INTO accounts (institution_id, external_id, name, account_type, currency, current_balance, available_balance, user_id)
+                                VALUES ($1, $2, $3, $4, 'USD', $5, $6, $7)
                                 "#
                             )
-                            .bind(inst_id).bind(external_id).bind(name).bind(subtype).bind(current_bal).bind(available_bal)
+                            .bind(inst_id).bind(external_id).bind(name).bind(subtype).bind(current_bal).bind(available_bal).bind(inst_user_id)
                             .execute(db).await?;
                         }
 
                         // Persist today's balance into balance_snapshots so
                         // net_worth_history actually contains Plaid accounts.
-                        // Without this, the history endpoint only sees the
-                        // Manual institution and the chart's stacked area
-                        // looks like Manual is the only contributor.
+                        // user_id propagates from the institution row above.
                         if let Some(bal) = current_bal {
                             let _ = sqlx::query(
                                 r#"
-                                INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd)
-                                SELECT id, $1, CURRENT_DATE, 'USD', $1 FROM accounts WHERE external_id = $2
+                                INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd, user_id)
+                                SELECT id, $1, CURRENT_DATE, 'USD', $1, $3 FROM accounts WHERE external_id = $2 AND user_id = $3
                                 ON CONFLICT (account_id, as_of_date)
                                 DO UPDATE SET balance = EXCLUDED.balance, balance_usd = EXCLUDED.balance_usd, created_at = NOW()
                                 "#
                             )
                             .bind(bal)
                             .bind(external_id)
+                            .bind(inst_user_id)
                             .execute(db)
                             .await;
                         }
@@ -187,7 +234,7 @@ pub async fn sync_institutions(
                     for key in ["added", "modified"] {
                         if let Some(transactions) = tx_val[key].as_array() {
                             for tx in transactions {
-                                upsert_plaid_transaction(db, tx).await?;
+                                upsert_plaid_transaction(db, tx, inst_user_id).await?;
                             }
                         }
                     }
@@ -195,8 +242,11 @@ pub async fn sync_institutions(
                     if let Some(removed) = tx_val["removed"].as_array() {
                         for tx in removed {
                             if let Some(tx_ext_id) = tx["transaction_id"].as_str() {
-                                sqlx::query("DELETE FROM transactions WHERE external_id = $1")
+                                sqlx::query(
+                                    "DELETE FROM transactions WHERE external_id = $1 AND user_id = $2"
+                                )
                                     .bind(tx_ext_id)
+                                    .bind(inst_user_id)
                                     .execute(db)
                                     .await?;
                             }
@@ -263,16 +313,19 @@ pub async fn sync_institutions(
                                 let val = h["institution_value"].as_f64().unwrap_or(0.0);
                                 let cost_basis = h["cost_basis"].as_f64().unwrap_or(val);
 
-                                let internal_acc = sqlx::query("SELECT id FROM accounts WHERE external_id = $1")
+                                let internal_acc = sqlx::query(
+                                    "SELECT id FROM accounts WHERE external_id = $1 AND user_id = $2"
+                                )
                                     .bind(acc_ext_id)
+                                    .bind(inst_user_id)
                                     .fetch_optional(db).await.unwrap_or(None);
 
                                 if let Some(acc_row) = internal_acc {
                                     let acc_id: uuid::Uuid = acc_row.get("id");
                                     let _ = sqlx::query(
                                         r#"
-                                        INSERT INTO holdings (account_id, external_id, symbol, name, quantity, price, value, cost_basis, holding_type)
-                                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                                        INSERT INTO holdings (account_id, external_id, symbol, name, quantity, price, value, cost_basis, holding_type, user_id)
+                                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                                         ON CONFLICT (account_id, external_id) WHERE external_id IS NOT NULL
                                         DO UPDATE SET
                                             symbol = EXCLUDED.symbol,
@@ -294,6 +347,7 @@ pub async fn sync_institutions(
                                     .bind(val)
                                     .bind(cost_basis)
                                     .bind(holding_type)
+                                    .bind(inst_user_id)
                                     .execute(db).await;
                                 }
                             }
@@ -302,21 +356,21 @@ pub async fn sync_institutions(
                 }
             },
             "coinbase" => {
-                if let Err(e) = crate::services::crypto::CryptoService::sync_coinbase(db, config, inst_id).await {
+                if let Err(e) = crate::services::crypto::CryptoService::sync_coinbase(db, config, inst_id, inst_user_id).await {
                     tracing::error!("Failed to sync Coinbase for {}: {}", inst_name, e);
                     update_sync_status(db, inst_id, "error", Some(&e.to_string())).await;
                     sync_ok = false;
                 }
             },
             "coinbase_oauth" => {
-                if let Err(e) = crate::services::crypto::CryptoService::sync_coinbase_oauth(db, config, inst_id).await {
+                if let Err(e) = crate::services::crypto::CryptoService::sync_coinbase_oauth(db, config, inst_id, inst_user_id).await {
                     tracing::error!("Failed to sync Coinbase OAuth for {}: {}", inst_name, e);
                     update_sync_status(db, inst_id, "error", Some(&e.to_string())).await;
                     sync_ok = false;
                 }
             },
             "bitso" => {
-                if let Err(e) = crate::services::crypto::CryptoService::sync_bitso(db, config, inst_id).await {
+                if let Err(e) = crate::services::crypto::CryptoService::sync_bitso(db, config, inst_id, inst_user_id).await {
                     tracing::error!("Failed to sync Bitso for {}: {}", inst_name, e);
                     update_sync_status(db, inst_id, "error", Some(&e.to_string())).await;
                     sync_ok = false;
@@ -366,7 +420,11 @@ fn plaid_error_status(payload: &serde_json::Value) -> Option<&'static str> {
     }
 }
 
-async fn upsert_plaid_transaction(db: &PgPool, tx: &serde_json::Value) -> Result<()> {
+async fn upsert_plaid_transaction(
+    db: &PgPool,
+    tx: &serde_json::Value,
+    user_id: uuid::Uuid,
+) -> Result<()> {
     let acc_ext_id = tx["account_id"].as_str().unwrap_or("");
     let tx_ext_id = tx["transaction_id"].as_str().unwrap_or("");
     if acc_ext_id.is_empty() || tx_ext_id.is_empty() {
@@ -404,10 +462,15 @@ async fn upsert_plaid_transaction(db: &PgPool, tx: &serde_json::Value) -> Result
     let original_description = tx["original_description"].as_str();
     let (counterparty_name, counterparty_logo_url) = best_counterparty(&tx["counterparties"]);
 
-    let internal_acc = sqlx::query("SELECT id FROM accounts WHERE external_id = $1")
-        .bind(acc_ext_id)
-        .fetch_optional(db)
-        .await?;
+    // Account lookup scoped by user — accidental cross-tenant external_id
+    // collisions are silently ignored rather than letting Plaid data from
+    // one user land in another user's account.
+    let internal_acc =
+        sqlx::query("SELECT id FROM accounts WHERE external_id = $1 AND user_id = $2")
+            .bind(acc_ext_id)
+            .bind(user_id)
+            .fetch_optional(db)
+            .await?;
 
     if let Some(acc_row) = internal_acc {
         let acc_id: uuid::Uuid = acc_row.get("id");
@@ -417,11 +480,11 @@ async fn upsert_plaid_transaction(db: &PgPool, tx: &serde_json::Value) -> Result
                 account_id, external_id, date, description, amount, currency,
                 category, category_detailed, payment_channel, merchant_name,
                 pending, source, original_description, counterparty_name,
-                counterparty_logo_url
+                counterparty_logo_url, user_id
             )
             VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'plaid',
-                $12, $13, $14
+                $12, $13, $14, $15
             )
             ON CONFLICT (account_id, external_id)
             DO UPDATE SET
@@ -453,6 +516,7 @@ async fn upsert_plaid_transaction(db: &PgPool, tx: &serde_json::Value) -> Result
         .bind(original_description)
         .bind(counterparty_name.as_deref())
         .bind(counterparty_logo_url.as_deref())
+        .bind(user_id)
         .execute(db)
         .await?;
     }

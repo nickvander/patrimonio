@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Query, State},
+    extract::{Extension, Query, State},
     response::IntoResponse,
     routing::get,
     Json, Router,
@@ -7,6 +7,7 @@ use axum::{
 use serde::Deserialize;
 use csv::Writer;
 use chrono::Datelike;
+use crate::api::session::AuthContext;
 use crate::{AppState, services::tax::{TaxService, TaxEstimation}};
 
 pub fn router() -> Router<AppState> {
@@ -25,12 +26,13 @@ struct TaxQuery {
 
 async fn get_tax_summary(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
     Query(query): Query<TaxQuery>,
 ) -> axum::response::Response {
     let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
     let status = query.status.unwrap_or_else(|| "Single".to_string());
 
-    match TaxService::calculate_yearly_tax(&state.db, year, &status).await {
+    match TaxService::calculate_yearly_tax(&state.db, year, &status, ctx.user_id).await {
         Ok(estimation) => Json::<TaxEstimation>(estimation).into_response(),
         Err(e) => {
             tracing::error!("Failed to calculate tax estimation: {}", e);
@@ -45,11 +47,12 @@ async fn get_tax_summary(
 
 async fn get_tax_transactions(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
     Query(query): Query<TaxQuery>,
 ) -> axum::response::Response {
     let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
 
-    match TaxService::get_taxable_transactions(&state.db, year).await {
+    match TaxService::get_taxable_transactions(&state.db, year, ctx.user_id).await {
         Ok(transactions) => Json::<Vec<crate::models::transaction::Transaction>>(transactions).into_response(),
         Err(e) => {
              tracing::error!("Failed to fetch taxable transactions: {}", e);
@@ -64,11 +67,12 @@ async fn get_tax_transactions(
 
 async fn export_tax_csv(
      State(state): State<AppState>,
+     Extension(ctx): Extension<AuthContext>,
      Query(query): Query<TaxQuery>,
 ) -> axum::response::Response {
     let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
-    
-    let transactions = match TaxService::get_taxable_transactions(&state.db, year).await {
+
+    let transactions = match TaxService::get_taxable_transactions(&state.db, year, ctx.user_id).await {
         Ok(t) => t,
         Err(e) => {
             return (
@@ -111,12 +115,13 @@ async fn export_tax_csv(
 
 async fn export_tax_pdf(
      State(state): State<AppState>,
+     Extension(ctx): Extension<AuthContext>,
      Query(query): Query<TaxQuery>,
 ) -> axum::response::Response {
     let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
     let status = query.status.unwrap_or_else(|| "Single".to_string());
-    
-    let estimation = match TaxService::calculate_yearly_tax(&state.db, year, &status).await {
+
+    let estimation = match TaxService::calculate_yearly_tax(&state.db, year, &status, ctx.user_id).await {
         Ok(est) => est,
         Err(e) => {
             return (

@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Query, State},
+    extract::{Extension, Query, State},
     http::{header, StatusCode},
     response::{IntoResponse, Response},
     routing::get,
@@ -10,6 +10,7 @@ use sqlx::Row;
 use std::collections::{BTreeMap, HashMap};
 use tracing::error;
 
+use crate::api::session::AuthContext;
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -26,12 +27,17 @@ pub fn router() -> Router<AppState> {
         .route("/transactions/manual", axum::routing::post(create_manual_transaction))
 }
 
-/// Dashboard overview: net worth, account breakdown, recent changes
-async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOverview> {
+/// Dashboard overview: net worth, account breakdown, recent changes —
+/// scoped to the authenticated user. Every aggregate filters on
+/// `user_id` so a brand-new account from another tenant can never
+/// contribute to this user's totals.
+async fn dashboard_overview(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<DashboardOverview> {
     // Phase 1: three independent queries — currency totals, FX rate,
-    // and per-account detail — go in parallel. Originally these were
-    // four sequential awaits; the dashboard is the hottest read path
-    // so the round-trip win is meaningful.
+    // and per-account detail — go in parallel. The FX rate is the
+    // only global query (exchange rates aren't per-user).
     let (currency_rows, fx_row, accounts_rows) = tokio::join!(
         sqlx::query(
             r#"
@@ -39,9 +45,10 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
                    COALESCE(SUM(CASE WHEN account_type NOT IN ('credit') THEN current_balance ELSE 0 END), 0) as assets,
                    COALESCE(SUM(CASE WHEN account_type = 'credit' THEN ABS(current_balance) ELSE 0 END), 0) as liabilities
             FROM accounts
+            WHERE user_id = $1
             GROUP BY currency
             "#
-        ).fetch_all(&state.db),
+        ).bind(ctx.user_id).fetch_all(&state.db),
         sqlx::query(
             "SELECT rate FROM exchange_rates WHERE base_currency = 'USD' AND target_currency = 'MXN' ORDER BY recorded_at DESC LIMIT 1"
         ).fetch_optional(&state.db),
@@ -51,9 +58,10 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
                    i.name as institution_name, a.ticker_symbol, a.crypto_amount
             FROM accounts a
             JOIN institutions i ON a.institution_id = i.id
+            WHERE a.user_id = $1
             ORDER BY a.account_type, a.name
             "#
-        ).fetch_all(&state.db),
+        ).bind(ctx.user_id).fetch_all(&state.db),
     );
     let currency_rows = currency_rows.unwrap_or_default();
     let accounts_rows = accounts_rows.unwrap_or_default();
@@ -83,7 +91,8 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
         .unwrap_or(20.0);
 
     // Phase 2: the two remaining aggregates depend on fx_rate but not
-    // on each other — run them concurrently as well.
+    // on each other — run them concurrently as well. Both filtered to
+    // the caller's accounts.
     let (type_rows, institution_rows) = tokio::join!(
         sqlx::query(
             r#"
@@ -97,10 +106,12 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
                        END
                    ), 0) as total_usd
             FROM accounts
+            WHERE user_id = $2
             GROUP BY account_type
             "#
         )
         .bind(fx_rate)
+        .bind(ctx.user_id)
         .fetch_all(&state.db),
         sqlx::query(
             r#"
@@ -115,11 +126,13 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
                    ), 0) as total_usd
             FROM accounts a
             JOIN institutions i ON a.institution_id = i.id
+            WHERE a.user_id = $2
             GROUP BY i.name, i.country
             ORDER BY total DESC
             "#
         )
         .bind(fx_rate)
+        .bind(ctx.user_id)
         .fetch_all(&state.db),
     );
     let type_rows = type_rows.unwrap_or_default();
@@ -189,10 +202,11 @@ async fn dashboard_overview(State(state): State<AppState>) -> Json<DashboardOver
 
 /// Historical net worth data for charting (aggregated from balance_snapshots),
 /// broken down by institution so the frontend can render contribution lines.
-async fn net_worth_history(State(state): State<AppState>) -> Json<Vec<NetWorthPoint>> {
-    // Grouped per (date, institution) so each row carries that institution's
-    // assets and liabilities on that date. Empty institution slots simply
-    // don't appear and the chart treats them as zero/no-data.
+async fn net_worth_history(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<Vec<NetWorthPoint>> {
+    // Grouped per (date, institution) for this user.
     let rows = sqlx::query(
         r#"
         SELECT bs.as_of_date,
@@ -202,10 +216,12 @@ async fn net_worth_history(State(state): State<AppState>) -> Json<Vec<NetWorthPo
         FROM balance_snapshots bs
         JOIN accounts a ON bs.account_id = a.id
         JOIN institutions i ON a.institution_id = i.id
+        WHERE bs.user_id = $1
         GROUP BY bs.as_of_date, i.name
         ORDER BY bs.as_of_date ASC, i.name ASC
         "#
     )
+    .bind(ctx.user_id)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
@@ -250,8 +266,11 @@ async fn net_worth_history(State(state): State<AppState>) -> Json<Vec<NetWorthPo
     Json(points.into_values().collect())
 }
 
-/// All investment holdings across all accounts
-async fn holdings(State(state): State<AppState>) -> Json<HoldingsResponse> {
+/// All investment holdings for this user across their accounts.
+async fn holdings(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<HoldingsResponse> {
     let rows = sqlx::query(
         r#"
         SELECT h.symbol, h.name, h.quantity, h.price, h.value,
@@ -261,9 +280,11 @@ async fn holdings(State(state): State<AppState>) -> Json<HoldingsResponse> {
         FROM holdings h
         JOIN accounts a ON h.account_id = a.id
         JOIN institutions i ON a.institution_id = i.id
+        WHERE h.user_id = $1
         ORDER BY h.value DESC NULLS LAST
         "#
     )
+    .bind(ctx.user_id)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
@@ -305,18 +326,22 @@ async fn holdings(State(state): State<AppState>) -> Json<HoldingsResponse> {
     })
 }
 
-/// Credit card utilization for all credit accounts
-async fn credit_utilization(State(state): State<AppState>) -> Json<Vec<CreditUtilization>> {
+/// Credit card utilization for this user's credit accounts.
+async fn credit_utilization(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<Vec<CreditUtilization>> {
     let rows = sqlx::query(
         r#"
         SELECT a.name, a.current_balance, a.credit_limit,
                i.name as institution_name
         FROM accounts a
         JOIN institutions i ON a.institution_id = i.id
-        WHERE a.account_type IN ('credit', 'credit card')
+        WHERE a.account_type IN ('credit', 'credit card') AND a.user_id = $1
         ORDER BY i.name, a.name
         "#
     )
+    .bind(ctx.user_id)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
@@ -341,15 +366,20 @@ async fn credit_utilization(State(state): State<AppState>) -> Json<Vec<CreditUti
     )
 }
 
-/// Sync status of all institutions
-async fn sync_status(State(state): State<AppState>) -> Json<Vec<SyncStatusEntry>> {
+/// Sync status of this user's institutions.
+async fn sync_status(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<Vec<SyncStatusEntry>> {
     let rows = sqlx::query(
         r#"
         SELECT id, name, integration_type, sync_status, last_synced_at, country, last_sync_error
         FROM institutions
+        WHERE user_id = $1
         ORDER BY name
         "#
     )
+    .bind(ctx.user_id)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
@@ -385,6 +415,7 @@ struct TransactionsQuery {
 
 async fn recent_transactions(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
     Query(q): Query<TransactionsQuery>,
 ) -> Json<Vec<TransactionEntry>> {
     let limit = q.limit.unwrap_or(50).clamp(1, 500);
@@ -400,10 +431,12 @@ async fn recent_transactions(
                t.pending
         FROM transactions t
         JOIN accounts a ON t.account_id = a.id
+        WHERE t.user_id = $1
         ORDER BY t.date DESC, t.created_at DESC
-        LIMIT $1 OFFSET $2
+        LIMIT $2 OFFSET $3
         "#
     )
+    .bind(ctx.user_id)
     .bind(limit)
     .bind(offset)
     .fetch_all(&state.db)
@@ -461,6 +494,7 @@ async fn recent_transactions(
 /// doubling any embedded double quote.
 async fn export_transactions_csv(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
 ) -> Response {
     let rows = sqlx::query(
         r#"
@@ -476,9 +510,11 @@ async fn export_transactions_csv(
         FROM transactions t
         JOIN accounts a ON t.account_id = a.id
         JOIN institutions i ON a.institution_id = i.id
+        WHERE t.user_id = $1
         ORDER BY t.date DESC, t.created_at DESC
         "#
     )
+    .bind(ctx.user_id)
     .fetch_all(&state.db)
     .await;
 
@@ -568,8 +604,21 @@ struct CreateManualTransactionRequest {
 /// imported transactions; only the `source` field differentiates them.
 async fn create_manual_transaction(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
     Json(payload): Json<CreateManualTransactionRequest>,
 ) -> Response {
+    // Verify the target account belongs to this caller before
+    // creating a transaction against it — otherwise an attacker
+    // could plant rows on a victim's account.
+    let owns = sqlx::query("SELECT 1 FROM accounts WHERE id = $1 AND user_id = $2")
+        .bind(payload.account_id)
+        .bind(ctx.user_id)
+        .fetch_optional(&state.db)
+        .await;
+    if !matches!(owns, Ok(Some(_))) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+
     // Deterministic external_id so a duplicate manual entry (same date /
     // amount / description on the same account) collapses to one row
     // instead of stacking up if the user double-submits.
@@ -587,8 +636,8 @@ async fn create_manual_transaction(
     let result = sqlx::query(
         r#"
         INSERT INTO transactions
-            (account_id, external_id, date, description, amount, currency, category, source, source_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual', 'manual_add')
+            (account_id, external_id, date, description, amount, currency, category, source, source_id, user_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual', 'manual_add', $8)
         ON CONFLICT (account_id, external_id) DO NOTHING
         RETURNING id
         "#,
@@ -600,19 +649,19 @@ async fn create_manual_transaction(
     .bind(payload.amount)
     .bind(&payload.currency)
     .bind(&payload.category)
+    .bind(ctx.user_id)
     .fetch_optional(&state.db)
     .await;
     match result {
         Ok(Some(row)) => {
             let id: uuid::Uuid = row.get("id");
-            // If the user added notes, fold them through the same
-            // user-override path the inline editor uses.
             if let Some(notes) = payload.notes.as_ref().filter(|n| !n.is_empty()) {
                 let _ = sqlx::query(
-                    "UPDATE transactions SET user_notes = $1 WHERE id = $2",
+                    "UPDATE transactions SET user_notes = $1 WHERE id = $2 AND user_id = $3",
                 )
                 .bind(notes)
                 .bind(id)
+                .bind(ctx.user_id)
                 .execute(&state.db)
                 .await;
             }
@@ -620,8 +669,6 @@ async fn create_manual_transaction(
                 .into_response()
         }
         Ok(None) => {
-            // Duplicate (same signature already in the table). Treat as
-            // a no-op so the UI snackbar can say "already added".
             (StatusCode::CONFLICT, "duplicate manual transaction").into_response()
         }
         Err(e) => {
@@ -631,8 +678,11 @@ async fn create_manual_transaction(
     }
 }
 
-/// Asset allocation by category and sub-category (account/holding)
-async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationEntry>> {
+/// Asset allocation by category and sub-category, scoped to caller.
+async fn asset_allocation(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<Vec<AllocationEntry>> {
     let fx_rate = sqlx::query(
         "SELECT rate FROM exchange_rates WHERE base_currency = 'USD' AND target_currency = 'MXN' ORDER BY recorded_at DESC LIMIT 1"
     )
@@ -648,10 +698,6 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
         r#"
         SELECT category, sub_category, SUM(value_usd) as value, SUM(qty) as quantity
         FROM (
-            -- Holdings: prefer security name when the symbol looks like
-            -- an opaque Plaid security_id (long, mixed-case — common for
-            -- un-tickered Vanguard funds). Real tickers (<=8 chars,
-            -- uppercase) keep displaying as the ticker.
             SELECT COALESCE(holding_type, 'Stocks/ETFs') as category,
                    CASE
                        WHEN symbol IS NULL THEN name
@@ -665,8 +711,8 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
                    END as value_usd,
                    COALESCE(quantity, 0)::numeric as qty
             FROM holdings
+            WHERE user_id = $2
             UNION ALL
-            -- Cash accounts
             SELECT 'Cash' as category,
                    name as sub_category,
                    CASE
@@ -676,8 +722,8 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
                    0::numeric as qty
             FROM accounts
             WHERE account_type IN ('checking', 'savings', 'cash', 'cash management', 'cd', 'money market')
+              AND user_id = $2
             UNION ALL
-            -- Crypto accounts
             SELECT 'Crypto' as category,
                    name as sub_category,
                    CASE
@@ -687,12 +733,14 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
                    COALESCE(crypto_amount, 0)::numeric as qty
             FROM accounts
             WHERE account_type IN ('crypto')
+              AND user_id = $2
         ) sub
         GROUP BY category, sub_category
         ORDER BY value DESC
         "#
     )
     .bind(fx_rate)
+    .bind(ctx.user_id)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
@@ -718,8 +766,11 @@ async fn asset_allocation(State(state): State<AppState>) -> Json<Vec<AllocationE
     )
 }
 
-/// Monthly income and spending trends
-async fn cash_flow_trends(State(state): State<AppState>) -> Json<Vec<CashFlowPoint>> {
+/// Monthly income and spending trends for this user.
+async fn cash_flow_trends(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<Vec<CashFlowPoint>> {
     let rows = sqlx::query(
         r#"
         SELECT TO_CHAR(date, 'YYYY-MM') as month,
@@ -727,10 +778,12 @@ async fn cash_flow_trends(State(state): State<AppState>) -> Json<Vec<CashFlowPoi
                SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as spending
         FROM transactions
         WHERE date >= CURRENT_DATE - INTERVAL '12 months'
+          AND user_id = $1
         GROUP BY month
         ORDER BY month ASC
         "#
     )
+    .bind(ctx.user_id)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();

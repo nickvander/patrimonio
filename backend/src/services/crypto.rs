@@ -16,10 +16,20 @@ type HmacSha256 = Hmac<Sha256>;
 pub struct CryptoService;
 
 impl CryptoService {
-    /// Sync Coinbase using OAuth 2.0
-    pub async fn sync_coinbase_oauth(db: &PgPool, config: &AppConfig, inst_id: uuid::Uuid) -> Result<()> {
-        let row = sqlx::query("SELECT name, api_key_enc, api_secret_enc FROM institutions WHERE id = $1")
+    /// Sync Coinbase using OAuth 2.0. `user_id` is the institution
+    /// owner — propagated onto every account row written here so the
+    /// per-user filter holds for crypto accounts the same as Plaid.
+    pub async fn sync_coinbase_oauth(
+        db: &PgPool,
+        config: &AppConfig,
+        inst_id: uuid::Uuid,
+        user_id: uuid::Uuid,
+    ) -> Result<()> {
+        let row = sqlx::query(
+            "SELECT name, api_key_enc, api_secret_enc FROM institutions WHERE id = $1 AND user_id = $2"
+        )
             .bind(inst_id)
+            .bind(user_id)
             .fetch_one(db).await?;
             
         let name: String = row.get("name");
@@ -83,23 +93,25 @@ impl CryptoService {
                     let price = CryptoPriceService::get_spot_price(currency, "USD").await.unwrap_or(Decimal::ZERO);
                     let valuation = amount * price;
 
-                    let existing = sqlx::query("SELECT id FROM accounts WHERE external_id = $1")
-                        .bind(external_id).fetch_optional(db).await?;
+                    let existing = sqlx::query(
+                        "SELECT id FROM accounts WHERE external_id = $1 AND user_id = $2"
+                    )
+                        .bind(external_id).bind(user_id).fetch_optional(db).await?;
 
                     if let Some(r) = existing {
                         let id: uuid::Uuid = r.get("id");
                         sqlx::query(
-                            "UPDATE accounts SET crypto_amount = $1, current_balance = $2, updated_at = NOW() WHERE id = $3"
+                            "UPDATE accounts SET crypto_amount = $1, current_balance = $2, updated_at = NOW() WHERE id = $3 AND user_id = $4"
                         )
-                        .bind(amount).bind(valuation).bind(id).execute(db).await?;
+                        .bind(amount).bind(valuation).bind(id).bind(user_id).execute(db).await?;
                     } else {
                         sqlx::query(
                             r#"
-                            INSERT INTO accounts (institution_id, external_id, name, account_type, currency, ticker_symbol, crypto_amount, current_balance)
-                            VALUES ($1, $2, $3, 'crypto', 'USD', $4, $5, $6)
+                            INSERT INTO accounts (institution_id, external_id, name, account_type, currency, ticker_symbol, crypto_amount, current_balance, user_id)
+                            VALUES ($1, $2, $3, 'crypto', 'USD', $4, $5, $6, $7)
                             "#
                         )
-                        .bind(inst_id).bind(external_id).bind(acc_name).bind(currency).bind(amount).bind(valuation)
+                        .bind(inst_id).bind(external_id).bind(acc_name).bind(currency).bind(amount).bind(valuation).bind(user_id)
                         .execute(db).await?;
                     }
                 }
@@ -109,10 +121,19 @@ impl CryptoService {
         Ok(())
     }
 
-    /// Sync Bitso using API Keys
-    pub async fn sync_bitso(db: &PgPool, config: &AppConfig, inst_id: uuid::Uuid) -> Result<()> {
-        let row = sqlx::query("SELECT name, api_key_enc, api_secret_enc FROM institutions WHERE id = $1")
+    /// Sync Bitso using API Keys. `user_id` mirrors `sync_coinbase_oauth`
+    /// — every account row stamped with the owner.
+    pub async fn sync_bitso(
+        db: &PgPool,
+        config: &AppConfig,
+        inst_id: uuid::Uuid,
+        user_id: uuid::Uuid,
+    ) -> Result<()> {
+        let row = sqlx::query(
+            "SELECT name, api_key_enc, api_secret_enc FROM institutions WHERE id = $1 AND user_id = $2"
+        )
             .bind(inst_id)
+            .bind(user_id)
             .fetch_one(db).await?;
             
         let name: String = row.get("name");
@@ -151,23 +172,25 @@ impl CryptoService {
                     let price = CryptoPriceService::get_spot_price(currency, "MXN").await.unwrap_or(Decimal::ZERO);
                     let valuation = total * price;
 
-                    let existing = sqlx::query("SELECT id FROM accounts WHERE external_id = $1")
-                        .bind(&external_id).fetch_optional(db).await?;
+                    let existing = sqlx::query(
+                        "SELECT id FROM accounts WHERE external_id = $1 AND user_id = $2"
+                    )
+                        .bind(&external_id).bind(user_id).fetch_optional(db).await?;
 
                     if let Some(r) = existing {
                         let id: uuid::Uuid = r.get("id");
                         sqlx::query(
-                            "UPDATE accounts SET crypto_amount = $1, current_balance = $2, updated_at = NOW() WHERE id = $3"
+                            "UPDATE accounts SET crypto_amount = $1, current_balance = $2, updated_at = NOW() WHERE id = $3 AND user_id = $4"
                         )
-                        .bind(total).bind(valuation).bind(id).execute(db).await?;
+                        .bind(total).bind(valuation).bind(id).bind(user_id).execute(db).await?;
                     } else {
                         sqlx::query(
                             r#"
-                            INSERT INTO accounts (institution_id, external_id, name, account_type, currency, ticker_symbol, crypto_amount, current_balance)
-                            VALUES ($1, $2, $3, 'crypto', 'MXN', $4, $5, $6)
+                            INSERT INTO accounts (institution_id, external_id, name, account_type, currency, ticker_symbol, crypto_amount, current_balance, user_id)
+                            VALUES ($1, $2, $3, 'crypto', 'MXN', $4, $5, $6, $7)
                             "#
                         )
-                        .bind(inst_id).bind(external_id).bind(acc_name).bind(currency.to_uppercase()).bind(total).bind(valuation)
+                        .bind(inst_id).bind(external_id).bind(acc_name).bind(currency.to_uppercase()).bind(total).bind(valuation).bind(user_id)
                         .execute(db).await?;
                     }
                 }
@@ -177,10 +200,14 @@ impl CryptoService {
         Ok(())
     }
 
-    /// Legacy sync_coinbase for API key (optional, keeping it simple)
-    pub async fn sync_coinbase(db: &PgPool, config: &AppConfig, inst_id: uuid::Uuid) -> Result<()> {
-        // We'll just call the OAuth one if it's there or just let it fail if not configured
-        // For now, users should use OAuth.
-        Self::sync_coinbase_oauth(db, config, inst_id).await
+    /// Legacy sync_coinbase wrapper for API-key auth (kept for symmetry
+    /// with the OAuth variant; routes through the same code path).
+    pub async fn sync_coinbase(
+        db: &PgPool,
+        config: &AppConfig,
+        inst_id: uuid::Uuid,
+        user_id: uuid::Uuid,
+    ) -> Result<()> {
+        Self::sync_coinbase_oauth(db, config, inst_id, user_id).await
     }
 }

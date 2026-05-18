@@ -96,10 +96,13 @@ async fn main() -> Result<()> {
             Box::pin(async move {
                 tracing::info!("Running daily balance snapshot cron...");
                 let today = chrono::Utc::now().naive_utc().date();
+                // Cron runs without a session — pull user_id straight
+                // from the source account so each snapshot inherits its
+                // owner without any per-user iteration.
                 let _ = sqlx::query(
                     r#"
-                    INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd)
-                    SELECT id, current_balance, $1, currency, current_balance
+                    INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd, user_id)
+                    SELECT id, current_balance, $1, currency, current_balance, user_id
                     FROM accounts
                     ON CONFLICT (account_id, as_of_date) DO NOTHING
                     "#

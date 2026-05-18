@@ -106,12 +106,16 @@ async fn coinbase_callback(
             return frontend_redirect(&state, "error", Some("Auth temporarily unavailable")).into_response();
         }
     };
-    let Some(_user_id) = bound_user_id else {
+    let Some(bound_user_id) = bound_user_id else {
         return frontend_redirect(&state, "error", Some("Invalid or expired OAuth state")).into_response();
     };
-    // _user_id is reserved for the day institutions get a user_id column
-    // (see FUTURE.md multi-user item). Today the schema is single-user
-    // so just dropping the variable is OK; we still validated identity.
+    let bound_user_uuid = match uuid::Uuid::parse_str(&bound_user_id) {
+        Ok(u) => u,
+        Err(e) => {
+            tracing::error!("OAuth state had non-UUID user_id: {}", e);
+            return frontend_redirect(&state, "error", Some("Invalid OAuth state")).into_response();
+        }
+    };
 
     let code = match query.code {
         Some(code) => code,
@@ -191,12 +195,17 @@ async fn coinbase_callback(
                 }
             };
 
-            // Create or update institution for Coinbase
+            // Create or update institution for Coinbase, scoped to the
+            // user the OAuth state was bound to. Without the per-user
+            // predicate two users linking Coinbase would race for the
+            // same row, and one would silently overwrite the other's
+            // tokens.
             let update = sqlx::query(
-                "UPDATE institutions SET api_key_enc = $1, api_secret_enc = $2 WHERE name = 'Coinbase' AND integration_type = 'coinbase_oauth'"
+                "UPDATE institutions SET api_key_enc = $1, api_secret_enc = $2 WHERE name = 'Coinbase' AND integration_type = 'coinbase_oauth' AND user_id = $3"
             )
             .bind(&acc_enc)
             .bind(&ref_enc)
+            .bind(bound_user_uuid)
             .execute(&state.db)
             .await;
 
@@ -205,13 +214,14 @@ async fn coinbase_callback(
                 Ok(_) => {
                     if let Err(e) = sqlx::query(
                         r#"
-                        INSERT INTO institutions (id, name, institution_type, country, integration_type, api_key_enc, api_secret_enc)
-                        VALUES ($1, 'Coinbase', 'crypto', 'Global', 'coinbase_oauth', $2, $3)
+                        INSERT INTO institutions (id, name, institution_type, country, integration_type, api_key_enc, api_secret_enc, user_id)
+                        VALUES ($1, 'Coinbase', 'crypto', 'Global', 'coinbase_oauth', $2, $3, $4)
                         "#
                     )
                     .bind(uuid::Uuid::new_v4())
                     .bind(&acc_enc)
                     .bind(&ref_enc)
+                    .bind(bound_user_uuid)
                     .execute(&state.db)
                     .await
                     {

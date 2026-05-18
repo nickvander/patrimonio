@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, patch, delete},
@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use tracing::{error, info};
 
+use crate::api::session::AuthContext;
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -32,6 +33,7 @@ struct UpdateNicknameRequest {
 /// Plaid sync never touches this column, so the rename survives re-sync.
 async fn update_account_nickname(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
     Json(payload): Json<UpdateNicknameRequest>,
 ) -> impl IntoResponse {
@@ -42,10 +44,11 @@ async fn update_account_nickname(
         Some(trimmed)
     };
     let result = sqlx::query(
-        "UPDATE accounts SET nickname = $1, updated_at = NOW() WHERE id = $2",
+        "UPDATE accounts SET nickname = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3",
     )
     .bind(value)
     .bind(id)
+    .bind(ctx.user_id)
     .execute(&state.db)
     .await;
     match result {
@@ -65,30 +68,42 @@ struct UpdateBalanceRequest {
 
 async fn update_account_balance(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
     Json(payload): Json<UpdateBalanceRequest>,
 ) -> impl IntoResponse {
     info!("Updating balance for account {}: {}", id, payload.current_balance);
 
-    // 1. Update the account's current balance
+    // 1. Update the account's current balance — scoped to owner.
     let update_acc = sqlx::query(
-        "UPDATE accounts SET current_balance = $1, updated_at = NOW() WHERE id = $2"
+        "UPDATE accounts SET current_balance = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3"
     )
     .bind(payload.current_balance)
     .bind(id)
+    .bind(ctx.user_id)
     .execute(&state.db)
     .await;
 
-    if let Err(e) = update_acc {
-        error!("Failed to update account balance: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    match &update_acc {
+        Err(e) => {
+            error!("Failed to update account balance: {}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+        Ok(r) if r.rows_affected() == 0 => {
+            return StatusCode::NOT_FOUND.into_response();
+        }
+        Ok(_) => {}
     }
 
-    // 2. Fetch the account's currency to ensure the snapshot is accurate
-    let account = sqlx::query("SELECT currency FROM accounts WHERE id = $1")
-        .bind(id)
-        .fetch_one(&state.db)
-        .await;
+    // 2. Fetch the account's currency to ensure the snapshot is accurate.
+    //    Still scoped by user_id — defence in depth even though step 1
+    //    already proved ownership.
+    let account =
+        sqlx::query("SELECT currency FROM accounts WHERE id = $1 AND user_id = $2")
+            .bind(id)
+            .bind(ctx.user_id)
+            .fetch_one(&state.db)
+            .await;
 
     if let Ok(row) = account {
         let currency: String = row.get("currency");
@@ -116,9 +131,9 @@ async fn update_account_balance(
 
         let _ = sqlx::query(
             r#"
-            INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd)
-            VALUES ($1, $2, CURRENT_DATE, $3, $4)
-            ON CONFLICT (account_id, as_of_date) 
+            INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd, user_id)
+            VALUES ($1, $2, CURRENT_DATE, $3, $4, $5)
+            ON CONFLICT (account_id, as_of_date)
             DO UPDATE SET balance = EXCLUDED.balance, balance_usd = EXCLUDED.balance_usd, created_at = NOW()
             "#
         )
@@ -126,6 +141,7 @@ async fn update_account_balance(
         .bind(payload.current_balance)
         .bind(currency)
         .bind(balance_usd)
+        .bind(ctx.user_id)
         .execute(&state.db)
         .await;
     }
@@ -133,8 +149,11 @@ async fn update_account_balance(
     StatusCode::OK.into_response()
 }
 
-/// List all accounts across all institutions
-async fn list_accounts(State(state): State<AppState>) -> Json<Vec<AccountResponse>> {
+/// List all accounts the authenticated user owns.
+async fn list_accounts(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<Vec<AccountResponse>> {
     let rows = sqlx::query(
         r#"
         SELECT a.id, a.name, a.nickname, a.account_type, a.currency,
@@ -142,9 +161,11 @@ async fn list_accounts(State(state): State<AppState>) -> Json<Vec<AccountRespons
                i.name as institution_name, i.country, a.updated_at
         FROM accounts a
         JOIN institutions i ON a.institution_id = i.id
+        WHERE a.user_id = $1
         ORDER BY i.name, a.name
         "#
     )
+    .bind(ctx.user_id)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
@@ -172,8 +193,11 @@ async fn list_accounts(State(state): State<AppState>) -> Json<Vec<AccountRespons
     Json(accounts)
 }
 
-/// Get a summary of all accounts (total assets, liabilities, net worth)
-async fn accounts_summary(State(state): State<AppState>) -> Json<AccountsSummary> {
+/// Get a summary of accounts for this user (total assets, liabilities, net worth)
+async fn accounts_summary(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<AccountsSummary> {
     let row = sqlx::query(
         r#"
         SELECT
@@ -181,8 +205,10 @@ async fn accounts_summary(State(state): State<AppState>) -> Json<AccountsSummary
             COALESCE(SUM(CASE WHEN account_type = 'credit' THEN ABS(current_balance) ELSE 0 END), 0) as total_liabilities,
             COUNT(*) as account_count
         FROM accounts
+        WHERE user_id = $1
         "#
     )
+    .bind(ctx.user_id)
     .fetch_one(&state.db)
     .await;
 
@@ -219,30 +245,54 @@ pub struct CreateAccountRequest {
 
 async fn create_account(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
     Json(payload): Json<CreateAccountRequest>,
 ) -> impl IntoResponse {
-    info!("Creating manual account: {}", payload.name);
+    info!("Creating manual account for user {}: {}", ctx.user_id, payload.name);
 
-    // 1. Get or create a "Manual" institution if none provided
+    // 1. Get or create a per-user "Manual" institution. Each user gets
+    //    their own Manual row so manual accounts can never bleed across
+    //    tenants via the institution table.
     let institution_id = if let Some(id) = payload.institution_id {
-        id
+        // Verify the supplied institution belongs to this user.
+        let owns = sqlx::query(
+            "SELECT 1 FROM institutions WHERE id = $1 AND user_id = $2"
+        )
+        .bind(id)
+        .bind(ctx.user_id)
+        .fetch_optional(&state.db)
+        .await;
+        match owns {
+            Ok(Some(_)) => id,
+            Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+            Err(e) => {
+                error!("Failed to verify institution ownership: {}", e);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        }
     } else {
-        // Find "Manual" institution
-        let inst = sqlx::query("SELECT id FROM institutions WHERE name = 'Manual'")
-            .fetch_optional(&state.db)
-            .await;
-        
+        // Find this user's Manual institution.
+        let inst = sqlx::query(
+            "SELECT id FROM institutions WHERE name = 'Manual' AND user_id = $1"
+        )
+        .bind(ctx.user_id)
+        .fetch_optional(&state.db)
+        .await;
         match inst {
             Ok(Some(row)) => row.get("id"),
             Ok(None) => {
-                // Create it
                 let new_inst_id = uuid::Uuid::new_v4();
-                let _ = sqlx::query(
-                    "INSERT INTO institutions (id, name, institution_type, country, integration_type) VALUES ($1, 'Manual', 'manual', 'MX', 'manual')"
+                let created = sqlx::query(
+                    "INSERT INTO institutions (id, name, institution_type, country, integration_type, user_id) VALUES ($1, 'Manual', 'manual', 'MX', 'manual', $2)"
                 )
                 .bind(new_inst_id)
+                .bind(ctx.user_id)
                 .execute(&state.db)
                 .await;
+                if let Err(e) = created {
+                    error!("Failed to create per-user Manual institution: {}", e);
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
                 new_inst_id
             }
             Err(e) => {
@@ -252,12 +302,12 @@ async fn create_account(
         }
     };
 
-    // 2. Insert the account
+    // 2. Insert the account, stamped with the owner.
     let account_id = uuid::Uuid::new_v4();
     let result = sqlx::query(
         r#"
-        INSERT INTO accounts (id, institution_id, name, account_type, currency, current_balance, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        INSERT INTO accounts (id, institution_id, name, account_type, currency, current_balance, updated_at, user_id)
+        VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)
         "#
     )
     .bind(account_id)
@@ -266,6 +316,7 @@ async fn create_account(
     .bind(&payload.account_type)
     .bind(&payload.currency)
     .bind(payload.initial_balance)
+    .bind(ctx.user_id)
     .execute(&state.db)
     .await;
 
@@ -282,7 +333,7 @@ async fn create_account(
         )
         .fetch_one(&state.db)
         .await;
-        
+
         if let Ok(r) = rate_row {
             let rate: rust_decimal::Decimal = r.get("rate");
             if !rate.is_zero() {
@@ -293,14 +344,15 @@ async fn create_account(
 
     let _ = sqlx::query(
         r#"
-        INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd)
-        VALUES ($1, $2, CURRENT_DATE, $3, $4)
+        INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd, user_id)
+        VALUES ($1, $2, CURRENT_DATE, $3, $4, $5)
         "#
     )
     .bind(account_id)
     .bind(payload.initial_balance)
     .bind(&payload.currency)
     .bind(balance_usd)
+    .bind(ctx.user_id)
     .execute(&state.db)
     .await;
 
@@ -373,9 +425,13 @@ pub struct TransactionResponse {
 /// will let the user page beyond this cap.
 async fn get_account_transactions(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
 ) -> Json<Vec<TransactionResponse>> {
     const MAX_ACCOUNT_TRANSACTIONS: i64 = 1000;
+    // Scoped to the caller. An unknown account id (or one belonging to
+    // another user) returns an empty list — the same shape the UI sees
+    // for a brand-new empty account.
     let rows = sqlx::query(
         r#"
         SELECT t.id, t.date, t.description, t.amount, t.currency, t.category,
@@ -387,12 +443,13 @@ async fn get_account_transactions(
         FROM transactions t
         JOIN accounts a ON t.account_id = a.id
         JOIN institutions i ON a.institution_id = i.id
-        WHERE t.account_id = $1
+        WHERE t.account_id = $1 AND t.user_id = $2
         ORDER BY t.date DESC, t.created_at DESC
-        LIMIT $2
+        LIMIT $3
         "#
     )
     .bind(id)
+    .bind(ctx.user_id)
     .bind(MAX_ACCOUNT_TRANSACTIONS)
     .fetch_all(&state.db)
     .await
@@ -438,13 +495,28 @@ struct UpdateTransactionRequest {
 /// "leave it alone" rather than "clear it".
 async fn update_transaction(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
     Path(tx_id): Path<uuid::Uuid>,
     Json(payload): Json<UpdateTransactionRequest>,
 ) -> impl IntoResponse {
     info!(
-        "Updating transaction {}: cat={:?}, notes={:?}, account_id={:?}",
-        tx_id, payload.user_category, payload.user_notes, payload.account_id
+        "Updating transaction {} for user {}: cat={:?}, notes={:?}, account_id={:?}",
+        tx_id, ctx.user_id, payload.user_category, payload.user_notes, payload.account_id
     );
+
+    // If the caller is moving the transaction to a different account,
+    // that destination must also belong to them. Otherwise an attacker
+    // could re-parent a transaction into someone else's account.
+    if let Some(dest) = payload.account_id {
+        let owns = sqlx::query("SELECT 1 FROM accounts WHERE id = $1 AND user_id = $2")
+            .bind(dest)
+            .bind(ctx.user_id)
+            .fetch_optional(&state.db)
+            .await;
+        if !matches!(owns, Ok(Some(_))) {
+            return StatusCode::NOT_FOUND.into_response();
+        }
+    }
 
     let result = sqlx::query(
         r#"
@@ -453,17 +525,19 @@ async fn update_transaction(
             user_notes    = COALESCE($2, user_notes),
             account_id    = COALESCE($3, account_id),
             updated_at    = NOW()
-        WHERE id = $4
+        WHERE id = $4 AND user_id = $5
         "#,
     )
     .bind(payload.user_category)
     .bind(payload.user_notes)
     .bind(payload.account_id)
     .bind(tx_id)
+    .bind(ctx.user_id)
     .execute(&state.db)
     .await;
 
     match result {
+        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
         Ok(_) => StatusCode::OK.into_response(),
         Err(e) => {
             error!("Failed to update transaction: {}", e);
@@ -472,17 +546,21 @@ async fn update_transaction(
     }
 }
 
-/// Delete a single transaction.
+/// Delete a single transaction belonging to the caller.
 async fn delete_transaction(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
     Path(tx_id): Path<uuid::Uuid>,
 ) -> impl IntoResponse {
-    info!("Deleting transaction: {}", tx_id);
-    let result = sqlx::query("DELETE FROM transactions WHERE id = $1")
-        .bind(tx_id)
-        .execute(&state.db)
-        .await;
+    info!("Deleting transaction {} for user {}", tx_id, ctx.user_id);
+    let result =
+        sqlx::query("DELETE FROM transactions WHERE id = $1 AND user_id = $2")
+            .bind(tx_id)
+            .bind(ctx.user_id)
+            .execute(&state.db)
+            .await;
     match result {
+        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => {
             error!("Failed to delete transaction: {}", e);
@@ -491,19 +569,23 @@ async fn delete_transaction(
     }
 }
 
-/// Delete a single account
+/// Delete a single account belonging to the caller. Transactions,
+/// holdings, and balance_snapshots cascade via the FK.
 async fn delete_account(
     State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
 ) -> impl IntoResponse {
-    info!("Deleting account: {}", id);
+    info!("Deleting account {} for user {}", id, ctx.user_id);
 
-    let result = sqlx::query("DELETE FROM accounts WHERE id = $1")
+    let result = sqlx::query("DELETE FROM accounts WHERE id = $1 AND user_id = $2")
         .bind(id)
+        .bind(ctx.user_id)
         .execute(&state.db)
         .await;
 
     match result {
+        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => {
             error!("Failed to delete account: {}", e);

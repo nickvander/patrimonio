@@ -131,11 +131,16 @@ impl TaxService {
         dec!(0)
     }
 
-    pub async fn calculate_yearly_tax(db: &PgPool, year: i32, status: &str) -> Result<TaxEstimation> {
+    pub async fn calculate_yearly_tax(
+        db: &PgPool,
+        year: i32,
+        status: &str,
+        user_id: uuid::Uuid,
+    ) -> Result<TaxEstimation> {
         let start_date = chrono::NaiveDate::from_ymd_opt(year, 1, 1).unwrap();
         let end_date = chrono::NaiveDate::from_ymd_opt(year, 12, 31).unwrap();
 
-        // 1. Calculate Ordinary Income (Sum of Salary/Income transactions)
+        // 1. Calculate Ordinary Income (Sum of Salary/Income transactions) — scoped to user.
         let income_row = sqlx::query(
             r#"
             SELECT COALESCE(SUM(amount), 0) as total_income
@@ -143,35 +148,35 @@ impl TaxService {
             WHERE date >= $1 AND date <= $2
             AND amount > 0
             AND (category = 'Income' OR category = 'Salary' OR category = 'Interest')
+            AND user_id = $3
             "#
         )
         .bind(start_date)
         .bind(end_date)
+        .bind(user_id)
         .fetch_one(db)
         .await?;
 
         let ordinary_income: Decimal = income_row.try_get("total_income").unwrap_or_default();
 
-        // 2. Realized Capital Gains (Blended Cost Basis Approach)
-        // Scalable generic approach: Determine the overall portfolio cost basis ratio
-        // from the `holdings` table, and apply that ratio globally to sale proceeds.
+        // 2. Realized Capital Gains (Blended Cost Basis Approach) — scoped to user.
         let basis_row = sqlx::query(
             r#"
             SELECT COALESCE(SUM(cost_basis), 0) as total_basis, COALESCE(SUM(value), 0) as total_value
             FROM holdings
-            WHERE value > 0 AND cost_basis IS NOT NULL
+            WHERE value > 0 AND cost_basis IS NOT NULL AND user_id = $1
             "#
         )
+        .bind(user_id)
         .fetch_one(db)
         .await?;
 
         let total_basis: Decimal = basis_row.try_get("total_basis").unwrap_or_default();
         let total_value: Decimal = basis_row.try_get("total_value").unwrap_or_default();
-        
-        let mut cost_basis_ratio = dec!(0.8); // fallback conservative 80% basis (20% gains)
+
+        let mut cost_basis_ratio = dec!(0.8);
         if total_value > dec!(0) {
             let actual_ratio = total_basis / total_value;
-            // Prevent nonsense ratios (e.g., basis > value or negative)
             if actual_ratio > dec!(0) && actual_ratio <= dec!(1) {
                 cost_basis_ratio = actual_ratio;
             }
@@ -184,10 +189,12 @@ impl TaxService {
             WHERE date >= $1 AND date <= $2
             AND amount > 0
             AND category = 'Investment Sale'
+            AND user_id = $3
             "#
         )
         .bind(start_date)
         .bind(end_date)
+        .bind(user_id)
         .fetch_one(db)
         .await?;
         
@@ -215,25 +222,31 @@ impl TaxService {
         })
     }
 
-    pub async fn get_taxable_transactions(db: &PgPool, year: i32) -> Result<Vec<crate::models::transaction::Transaction>> {
-         let start_date = chrono::NaiveDate::from_ymd_opt(year, 1, 1).unwrap();
-         let end_date = chrono::NaiveDate::from_ymd_opt(year, 12, 31).unwrap();
+    pub async fn get_taxable_transactions(
+        db: &PgPool,
+        year: i32,
+        user_id: uuid::Uuid,
+    ) -> Result<Vec<crate::models::transaction::Transaction>> {
+        let start_date = chrono::NaiveDate::from_ymd_opt(year, 1, 1).unwrap();
+        let end_date = chrono::NaiveDate::from_ymd_opt(year, 12, 31).unwrap();
 
-         let rows = sqlx::query_as::<_, crate::models::transaction::Transaction>(
-             r#"
-             SELECT *
-             FROM transactions
-             WHERE date >= $1 AND date <= $2
-             AND amount > 0
-             AND (category = 'Income' OR category = 'Salary' OR category = 'Interest' OR category = 'Investment Sale')
-             ORDER BY date DESC
-             "#
-         )
-         .bind(start_date)
-         .bind(end_date)
-         .fetch_all(db)
-         .await?;
+        let rows = sqlx::query_as::<_, crate::models::transaction::Transaction>(
+            r#"
+            SELECT *
+            FROM transactions
+            WHERE date >= $1 AND date <= $2
+            AND amount > 0
+            AND (category = 'Income' OR category = 'Salary' OR category = 'Interest' OR category = 'Investment Sale')
+            AND user_id = $3
+            ORDER BY date DESC
+            "#
+        )
+        .bind(start_date)
+        .bind(end_date)
+        .bind(user_id)
+        .fetch_all(db)
+        .await?;
 
-         Ok(rows)
+        Ok(rows)
     }
 }
