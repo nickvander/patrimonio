@@ -66,6 +66,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   List<Map<String, dynamic>>? _trendData;
   Map<String, dynamic>? _sinceLastLogin;
   List<dynamic>? _subscriptions;
+  List<dynamic>? _fxTransfers;
   // Pending date-window seed from a chart-bar tap. When non-null, the
   // TransactionsTab seeds its filters with a custom date range covering
   // the picked month, then clears the override so manual filter edits
@@ -771,6 +772,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         _apiService
             .getSubscriptions()
             .catchError((_) => <dynamic>[]),
+        _apiService.getFxTransfers().catchError((_) => <dynamic>[]),
       ]);
 
       debugPrint("All data loaded successfully");
@@ -822,6 +824,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         _trendData = trendsRaw.map((e) => e as Map<String, dynamic>).toList();
         _sinceLastLogin = results[10] as Map<String, dynamic>?;
         _subscriptions = results[11] as List<dynamic>;
+        _fxTransfers = results[12] as List<dynamic>;
         _isLoading = false;
       });
 
@@ -1462,6 +1465,57 @@ class _DashboardScreenState extends State<DashboardScreen>
         highlightedTxId: _highlightedTxId,
         dateSeed: _txDateSeed,
         onDateSeedConsumed: () => setState(() => _txDateSeed = null),
+        fxTransfers: _fxTransfers ?? const [],
+        onConfirmFxTransfer: (id) async {
+          try {
+            await _apiService.confirmFxTransfer(id);
+            await _refreshData();
+          } catch (e) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Confirm failed: $e')),
+            );
+          }
+        },
+        onUnlinkFxTransfer: (id) async {
+          try {
+            await _apiService.unlinkFxTransfer(id);
+            await _refreshData();
+          } catch (e) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Unlink failed: $e')),
+            );
+          }
+        },
+        onDetectFxTransfers: () async {
+          final messenger = ScaffoldMessenger.of(context);
+          messenger.showSnackBar(
+            const SnackBar(content: Text('Scanning for cross-currency transfers…')),
+          );
+          try {
+            final r = await _apiService.detectFxTransfers();
+            await _refreshData();
+            if (!mounted) return;
+            messenger.hideCurrentSnackBar();
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text(
+                  (r['inserted'] as num? ?? 0) > 0
+                      ? 'Linked ${r['inserted']} transfer pair${(r['inserted'] as num? ?? 0) == 1 ? '' : 's'} '
+                          '(checked ${r['checked']} candidates)'
+                      : 'No new transfers found',
+                ),
+              ),
+            );
+          } catch (e) {
+            if (!mounted) return;
+            messenger.hideCurrentSnackBar();
+            messenger.showSnackBar(
+              SnackBar(content: Text('Detection failed: $e')),
+            );
+          }
+        },
         onUpdate: (id, {userCategory, userNotes, userDescription, accountId}) async {
           try {
             await _apiService.updateTransaction(

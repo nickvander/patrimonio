@@ -27,6 +27,12 @@ pub fn router() -> Router<AppState> {
         .route("/transactions/manual", axum::routing::post(create_manual_transaction))
         .route("/since-last-login", get(since_last_login))
         .route("/subscriptions", get(detected_subscriptions))
+        .route("/fx-transfers", get(list_fx_transfers).post(detect_fx_transfers))
+        .route(
+            "/fx-transfers/{id}",
+            axum::routing::delete(unlink_fx_transfer)
+                .patch(confirm_fx_transfer),
+        )
 }
 
 /// Dashboard overview: net worth, account breakdown, recent changes —
@@ -1542,4 +1548,196 @@ async fn detected_subscriptions(
     });
     out.truncate(20);
     Json(out)
+}
+
+// ---------- Cross-currency cash-transfer linking ----------
+
+#[derive(Serialize)]
+struct FxTransferEntry {
+    id: String,
+    source_tx_id: String,
+    dest_tx_id: String,
+    source_amount: f64,
+    source_currency: String,
+    dest_amount: f64,
+    dest_currency: String,
+    implied_fx_rate: f64,
+    detection_confidence: i32,
+    user_confirmed: bool,
+    detected_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    matched_keyword: Option<String>,
+    /// Display labels for the source/dest legs — the frontend prefers
+    /// these over re-deriving them from the transactions list, which
+    /// it might not have loaded yet on a deep-link.
+    source_label: String,
+    dest_label: String,
+    /// Date strings (YYYY-MM-DD) so a phone-width modal doesn't have
+    /// to format a full timestamp.
+    source_date: String,
+    dest_date: String,
+}
+
+/// List every detected (and user-confirmed) cross-currency cash
+/// transfer for the caller. Used by the transactions detail modal to
+/// show "Linked to" when the user is looking at one leg of a pair.
+async fn list_fx_transfers(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<Vec<FxTransferEntry>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            f.id, f.source_tx_id, f.dest_tx_id,
+            f.source_amount, f.source_currency,
+            f.dest_amount, f.dest_currency,
+            f.implied_fx_rate, f.detection_confidence,
+            f.user_confirmed, f.detected_at, f.matched_keyword,
+            ts.description AS source_desc,
+            COALESCE(ts.user_description, ts.counterparty_name, ts.merchant_name, ts.description) AS source_label,
+            ts.date AS source_date,
+            COALESCE(td.user_description, td.counterparty_name, td.merchant_name, td.description) AS dest_label,
+            td.date AS dest_date
+        FROM cash_fx_transfers f
+        JOIN transactions ts ON ts.id = f.source_tx_id
+        JOIN transactions td ON td.id = f.dest_tx_id
+        WHERE f.user_id = $1
+        ORDER BY f.detected_at DESC
+        "#,
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    Json(
+        rows.iter()
+            .map(|r| FxTransferEntry {
+                id: r.get::<uuid::Uuid, _>("id").to_string(),
+                source_tx_id: r.get::<uuid::Uuid, _>("source_tx_id").to_string(),
+                dest_tx_id: r.get::<uuid::Uuid, _>("dest_tx_id").to_string(),
+                source_amount: r
+                    .try_get::<rust_decimal::Decimal, _>("source_amount")
+                    .ok()
+                    .and_then(|d| d.to_string().parse().ok())
+                    .unwrap_or(0.0),
+                source_currency: r.get("source_currency"),
+                dest_amount: r
+                    .try_get::<rust_decimal::Decimal, _>("dest_amount")
+                    .ok()
+                    .and_then(|d| d.to_string().parse().ok())
+                    .unwrap_or(0.0),
+                dest_currency: r.get("dest_currency"),
+                implied_fx_rate: r
+                    .try_get::<rust_decimal::Decimal, _>("implied_fx_rate")
+                    .ok()
+                    .and_then(|d| d.to_string().parse().ok())
+                    .unwrap_or(0.0),
+                detection_confidence: r
+                    .try_get::<i16, _>("detection_confidence")
+                    .unwrap_or(0) as i32,
+                user_confirmed: r.try_get("user_confirmed").unwrap_or(false),
+                detected_at: r
+                    .try_get::<chrono::DateTime<chrono::Utc>, _>("detected_at")
+                    .map(|d| d.to_rfc3339())
+                    .unwrap_or_default(),
+                matched_keyword: r
+                    .try_get::<Option<String>, _>("matched_keyword")
+                    .ok()
+                    .flatten(),
+                source_label: r.try_get::<Option<String>, _>("source_label").ok().flatten()
+                    .unwrap_or_else(|| r.try_get::<String, _>("source_desc").unwrap_or_default()),
+                dest_label: r.try_get::<Option<String>, _>("dest_label").ok().flatten()
+                    .unwrap_or_default(),
+                source_date: r
+                    .try_get::<chrono::NaiveDate, _>("source_date")
+                    .map(|d| d.to_string())
+                    .unwrap_or_default(),
+                dest_date: r
+                    .try_get::<chrono::NaiveDate, _>("dest_date")
+                    .map(|d| d.to_string())
+                    .unwrap_or_default(),
+            })
+            .collect(),
+    )
+}
+
+#[derive(Serialize)]
+struct DetectFxResponse {
+    checked: usize,
+    inserted: usize,
+}
+
+/// Run the FX-transfer detector for the caller. Idempotent — repeated
+/// runs only ever ADD new links (the unique index dedupes), never
+/// re-evaluate confirmed pairs. The detection lives in
+/// `services::fx_transfer_link::detect_for_user`; this endpoint is
+/// the user-triggered entry point. The sync engine could also call
+/// it at the end of every sync, but that's an iteration we defer
+/// until users actually find the manual button annoying.
+async fn detect_fx_transfers(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<DetectFxResponse> {
+    match crate::services::fx_transfer_link::detect_for_user(&state.db, ctx.user_id).await {
+        Ok((checked, inserted)) => Json(DetectFxResponse { checked, inserted }),
+        Err(e) => {
+            error!("fx-transfer detection failed for user {}: {}", ctx.user_id, e);
+            Json(DetectFxResponse {
+                checked: 0,
+                inserted: 0,
+            })
+        }
+    }
+}
+
+/// User-confirm an auto-detected link. Sets `user_confirmed = true`
+/// so future detection runs leave it alone, and so the UI can show
+/// a different visual state.
+async fn confirm_fx_transfer(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
+) -> StatusCode {
+    let result = sqlx::query(
+        "UPDATE cash_fx_transfers SET user_confirmed = TRUE \
+         WHERE id = $1 AND user_id = $2",
+    )
+    .bind(id)
+    .bind(ctx.user_id)
+    .execute(&state.db)
+    .await;
+    match result {
+        Ok(r) if r.rows_affected() == 1 => StatusCode::OK,
+        Ok(_) => StatusCode::NOT_FOUND,
+        Err(e) => {
+            error!("confirm_fx_transfer failed for {}: {}", id, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
+}
+
+/// Remove a link entirely. The two underlying transactions are
+/// untouched — only the cash_fx_transfers row goes away, so a future
+/// detection run could re-propose it.
+async fn unlink_fx_transfer(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
+) -> StatusCode {
+    let result = sqlx::query(
+        "DELETE FROM cash_fx_transfers WHERE id = $1 AND user_id = $2",
+    )
+    .bind(id)
+    .bind(ctx.user_id)
+    .execute(&state.db)
+    .await;
+    match result {
+        Ok(r) if r.rows_affected() == 1 => StatusCode::NO_CONTENT,
+        Ok(_) => StatusCode::NOT_FOUND,
+        Err(e) => {
+            error!("unlink_fx_transfer failed for {}: {}", id, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
 }

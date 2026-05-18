@@ -57,6 +57,17 @@ class TransactionsTab extends StatefulWidget {
   /// Fires after the widget has consumed [dateSeed] so the dashboard
   /// can clear its own copy and stop re-applying it on rebuilds.
   final VoidCallback? onDateSeedConsumed;
+  /// Detected cross-currency cash transfers — indexed by source/dest
+  /// transaction id in the detail modal to show "Linked to <leg>".
+  /// Defaults to empty so older call sites compile without changes.
+  final List<dynamic> fxTransfers;
+  /// User-triggered scan for FX transfer pairs. Fires from the detail
+  /// modal's "Scan for transfers" action. Null = hide that action.
+  final Future<void> Function()? onDetectFxTransfers;
+  /// Mark an auto-detected link as user-confirmed.
+  final Future<void> Function(String id)? onConfirmFxTransfer;
+  /// Remove a link entirely. The two underlying transactions stay put.
+  final Future<void> Function(String id)? onUnlinkFxTransfer;
 
   const TransactionsTab({
     super.key,
@@ -77,6 +88,10 @@ class TransactionsTab extends StatefulWidget {
     this.highlightedTxId,
     this.dateSeed,
     this.onDateSeedConsumed,
+    this.fxTransfers = const [],
+    this.onDetectFxTransfers,
+    this.onConfirmFxTransfer,
+    this.onUnlinkFxTransfer,
   });
 
   @override
@@ -817,6 +832,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 tooltip: 'Export CSV',
               ),
             ],
+            if (widget.onDetectFxTransfers != null)
+              IconButton(
+                tooltip: 'Scan for cross-currency transfers (Wise / Remitly / etc.)',
+                icon: const Icon(Icons.swap_horiz, size: 22),
+                onPressed: () => widget.onDetectFxTransfers!(),
+              ),
             if (isNarrow)
               IconButton(
                 onPressed: () =>
@@ -1531,6 +1552,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
                     ),
                     maxLines: 3,
                   ),
+                  // Linked cross-currency transfer block — surfaces
+                  // when this tx is one leg of a Wise / Remitly / etc.
+                  // pair. Confirm / Unlink act on the
+                  // cash_fx_transfers row. The block is silent on
+                  // rows that don't participate in any link.
+                  ..._fxTransferBlock(tx['id']?.toString() ?? ''),
                   if (similar.isNotEmpty) ...[
                     const SizedBox(height: 20),
                     _sectionLabel('Recent at this merchant'),
@@ -1652,6 +1679,141 @@ class _TransactionsTabState extends State<TransactionsTab> {
         return SlideTransition(position: anim.drive(tween), child: child);
       },
     );
+  }
+
+  /// Detail-modal block for any cross-currency cash transfer this
+  /// transaction is part of. Returns an empty list when the tx isn't
+  /// linked, so callers can spread it unconditionally.
+  ///
+  /// Auto-detected links get a "Confirm" button (sets user_confirmed
+  /// on the row); confirmed and auto-detected alike get "Unlink"
+  /// which removes the link entirely.
+  List<Widget> _fxTransferBlock(String txId) {
+    if (txId.isEmpty || widget.fxTransfers.isEmpty) {
+      return const [];
+    }
+    final matches = widget.fxTransfers.where((raw) {
+      if (raw is! Map) return false;
+      return raw['source_tx_id']?.toString() == txId ||
+          raw['dest_tx_id']?.toString() == txId;
+    }).toList();
+    if (matches.isEmpty) return const [];
+
+    final widgets = <Widget>[
+      const SizedBox(height: 20),
+      _sectionLabel('Linked cross-currency transfer'),
+      const SizedBox(height: 6),
+    ];
+    for (final raw in matches) {
+      final m = raw as Map<String, dynamic>;
+      final isSource = m['source_tx_id']?.toString() == txId;
+      final otherLabel = (isSource
+              ? m['dest_label']
+              : m['source_label'])
+          ?.toString() ??
+          '—';
+      final otherDate =
+          (isSource ? m['dest_date'] : m['source_date'])?.toString() ?? '';
+      final implied = (m['implied_fx_rate'] as num?)?.toDouble() ?? 0.0;
+      final srcAmt = (m['source_amount'] as num?)?.toDouble() ?? 0.0;
+      final dstAmt = (m['dest_amount'] as num?)?.toDouble() ?? 0.0;
+      final srcCcy = (m['source_currency'] ?? '').toString();
+      final dstCcy = (m['dest_currency'] ?? '').toString();
+      final confirmed = m['user_confirmed'] == true;
+      final confidence = (m['detection_confidence'] as num?)?.toInt() ?? 0;
+      final keyword = (m['matched_keyword'] ?? '').toString();
+
+      final accent = confirmed ? context.tealAccent : context.warning;
+
+      widgets.add(Container(
+        margin: const EdgeInsets.only(top: 6),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        decoration: BoxDecoration(
+          color: context.accentSoft(accent),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: context.accentBorder(accent)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.swap_horiz, size: 14, color: accent),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    isSource
+                        ? '→ $otherLabel${otherDate.isEmpty ? '' : ' · $otherDate'}'
+                        : '← $otherLabel${otherDate.isEmpty ? '' : ' · $otherDate'}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: context.textPrimary,
+                      fontSize: 13,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text(
+                  confirmed
+                      ? 'Confirmed'
+                      : 'Auto · $confidence%${keyword.isEmpty ? '' : ' · $keyword'}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: accent,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${_formatNative(srcAmt, srcCcy)} → ${_formatNative(dstAmt, dstCcy)} '
+              '· implied ${implied.toStringAsFixed(2)} $dstCcy/$srcCcy',
+              style: TextStyle(
+                fontSize: 12,
+                color: context.textMuted,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (!confirmed && widget.onConfirmFxTransfer != null)
+                  TextButton(
+                    onPressed: () async {
+                      Navigator.of(context).pop();
+                      await widget.onConfirmFxTransfer!(m['id'].toString());
+                    },
+                    child: const Text('Confirm'),
+                  ),
+                if (widget.onUnlinkFxTransfer != null)
+                  TextButton(
+                    onPressed: () async {
+                      Navigator.of(context).pop();
+                      await widget.onUnlinkFxTransfer!(m['id'].toString());
+                    },
+                    child: Text(
+                      'Unlink',
+                      style: TextStyle(color: context.negative),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ));
+    }
+    return widgets;
+  }
+
+  /// Format a native-currency amount as "USD 1,234.56". Keeps the
+  /// currency code visible so the user can read both legs of a
+  /// transfer at a glance.
+  String _formatNative(double amount, String currency) {
+    final fmt = NumberFormat.currency(name: currency, symbol: '$currency ');
+    return fmt.format(amount.abs());
   }
 
   Widget _sectionLabel(String label) {

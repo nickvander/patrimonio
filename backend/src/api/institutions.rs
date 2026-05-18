@@ -214,7 +214,7 @@ async fn create_link_token(State(state): State<AppState>) -> Response {
     let client = reqwest::Client::new();
     let url = format!("https://{}.plaid.com/link/token/create", state.config.plaid_env);
     
-    let payload = serde_json::json!({
+    let mut payload = serde_json::json!({
         "client_id": client_id,
         "secret": secret,
         "client_name": "Patrimonio",
@@ -226,6 +226,15 @@ async fn create_link_token(State(state): State<AppState>) -> Response {
         "products": ["transactions", "investments"],
         "redirect_uri": state.config.plaid_redirect_uri
     });
+    // Plaid will POST update notifications to this URL once the item
+    // is created. Items inherit the webhook URL from their link
+    // session, so the *first* time Plaid Production is configured the
+    // operator MUST set PLAID_WEBHOOK_URL — items linked before that
+    // env var was set will keep polling forever until the user
+    // re-links them or hits /item/webhook/update (not yet exposed).
+    if let Some(webhook) = &state.config.plaid_webhook_url {
+        payload["webhook"] = serde_json::Value::String(webhook.clone());
+    }
 
     let response = match client.post(&url)
         .json(&payload)
@@ -303,7 +312,7 @@ async fn create_reconnect_token(
     
     // Plaid /link/token/create in update mode still requires country_codes
     // and language. Match the values used by the new-link flow above.
-    let payload = serde_json::json!({
+    let mut payload = serde_json::json!({
         "client_id": client_id,
         "secret": secret,
         "client_name": "Patrimonio",
@@ -315,6 +324,13 @@ async fn create_reconnect_token(
         },
         "redirect_uri": state.config.plaid_redirect_uri
     });
+    // Re-establish the webhook URL on every reconnect. Items that
+    // were originally linked before PLAID_WEBHOOK_URL was configured
+    // pick up the URL here, so reconnecting an old institution is
+    // also the recommended way to flip it from polling to push.
+    if let Some(webhook) = &state.config.plaid_webhook_url {
+        payload["webhook"] = serde_json::Value::String(webhook.clone());
+    }
 
     let response = match client.post(&url).json(&payload).send().await {
         Ok(r) => r,
@@ -662,14 +678,62 @@ async fn plaid_webhook(
             .await;
     }
 
-    let config = state.config.clone();
-    let db = state.db.clone();
+    // Look up which institution this item_id belongs to so the
+    // background sync touches only the one item Plaid is telling us
+    // about — `sync_all_institutions` was correct but wasteful: with
+    // a dozen linked banks every webhook used to hit every Plaid API.
+    let inst_row = sqlx::query(
+        "SELECT id FROM institutions WHERE plaid_item_id = $1",
+    )
+    .bind(&req.item_id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
 
-    tokio::spawn(async move {
-        if let Err(e) = crate::services::sync::sync_all_institutions(&db, &config).await {
-            tracing::error!("Plaid webhook background sync failed: {}", e);
+    // Only kick a sync for the codes that signal new data. Status-only
+    // codes (ITEM_LOGIN_REQUIRED, PENDING_EXPIRATION) already updated
+    // sync_status above and don't have anything to pull.
+    let should_sync = matches!(
+        req.webhook_code.as_str(),
+        "SYNC_UPDATES_AVAILABLE"
+            | "DEFAULT_UPDATE"
+            | "HISTORICAL_UPDATE"
+            | "INITIAL_UPDATE"
+            | "TRANSACTIONS_REMOVED"
+    );
+
+    if should_sync {
+        let config = state.config.clone();
+        let db = state.db.clone();
+        match inst_row.and_then(|r| r.try_get::<uuid::Uuid, _>("id").ok()) {
+            Some(inst_id) => {
+                tokio::spawn(async move {
+                    if let Err(e) =
+                        crate::services::sync::sync_one_institution(&db, &config, inst_id).await
+                    {
+                        tracing::error!(
+                            "Plaid webhook background sync for institution {} failed: {}",
+                            inst_id,
+                            e
+                        );
+                    }
+                });
+            }
+            None => {
+                // Unknown item_id — almost always means Plaid is
+                // sending us a webhook for an item that was deleted
+                // on our side. Log but don't fall back to a
+                // global sync; that would re-emit duplicate work for
+                // every linked institution every time a stale
+                // webhook lands.
+                tracing::warn!(
+                    "Plaid webhook for unknown item_id={} (institution probably deleted); skipping sync",
+                    req.item_id
+                );
+            }
         }
-    });
+    }
 
     Json(serde_json::json!({"status": "received"})).into_response()
 }

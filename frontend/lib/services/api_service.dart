@@ -438,6 +438,49 @@ class ApiService {
     throw Exception('Failed to load subscriptions');
   }
 
+  /// Linked cross-currency cash transfers. Each row pairs a USD-out
+  /// with an MXN-in (or reverse) plus the implied FX rate Wise/Remitly
+  /// gave the user.
+  Future<List<dynamic>> getFxTransfers() async {
+    final response = await _get(
+      Uri.parse('$_baseUrl/dashboard/fx-transfers'),
+    );
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Failed to load FX transfers');
+  }
+
+  /// Run a detection pass on the server. Returns
+  /// `{checked, inserted}` so the UI can say "added N new links".
+  Future<Map<String, dynamic>> detectFxTransfers() async {
+    final response = await _post(
+      Uri.parse('$_baseUrl/dashboard/fx-transfers'),
+    );
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception('FX detection failed');
+  }
+
+  Future<void> confirmFxTransfer(String id) async {
+    final response = await _patch(
+      Uri.parse('$_baseUrl/dashboard/fx-transfers/$id'),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Confirm failed (${response.statusCode})');
+    }
+  }
+
+  Future<void> unlinkFxTransfer(String id) async {
+    final response = await _delete(
+      Uri.parse('$_baseUrl/dashboard/fx-transfers/$id'),
+    );
+    if (response.statusCode != 204) {
+      throw Exception('Unlink failed (${response.statusCode})');
+    }
+  }
+
   Future<Map<String, dynamic>> getSetupStatus() async {
     // Setup status is a public endpoint — used by the login screen — so
     // we still send credentials but the server does not require them.

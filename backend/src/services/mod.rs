@@ -14,3 +14,4 @@ pub mod sessions;
 pub mod recovery;
 pub mod totp;
 pub mod plaid_webhook_verify;
+pub mod fx_transfer_link;

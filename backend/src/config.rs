@@ -26,6 +26,14 @@ pub struct AppConfig {
     pub coinbase_redirect_uri: String,
     pub frontend_base_url: String,
     pub plaid_redirect_uri: Option<String>,
+    /// Public URL Plaid uses to deliver webhooks for items linked
+    /// through this deployment. Set to the externally-reachable HTTPS
+    /// URL of the `/api/institutions/webhook` route — e.g.
+    /// `https://patrimonio.example.com/api/institutions/webhook`.
+    /// When unset, link-token creation omits the `webhook` field so
+    /// Plaid silently falls back to polling — which is fine for
+    /// sandbox / local dev but burns quota in production.
+    pub plaid_webhook_url: Option<String>,
     pub allowed_origins: Vec<String>,
     /// Force the session cookie's `Secure` flag on. Default false; the
     /// cookie is also marked Secure automatically when
@@ -82,6 +90,7 @@ impl AppConfig {
                 .unwrap_or_else(|_| "http://localhost:8080/api/auth/coinbase/callback".to_string()),
             frontend_base_url,
             plaid_redirect_uri: env_non_empty("PLAID_REDIRECT_URI"),
+            plaid_webhook_url: env_non_empty("PLAID_WEBHOOK_URL"),
             allowed_origins,
             // Default to true (secure-by-default). Local dev over
             // plain http://localhost must explicitly opt out with
