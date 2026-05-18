@@ -25,6 +25,8 @@ pub fn router() -> Router<AppState> {
         .route("/transactions", get(recent_transactions))
         .route("/transactions/export", get(export_transactions_csv))
         .route("/transactions/manual", axum::routing::post(create_manual_transaction))
+        .route("/since-last-login", get(since_last_login))
+        .route("/subscriptions", get(detected_subscriptions))
 }
 
 /// Dashboard overview: net worth, account breakdown, recent changes —
@@ -532,7 +534,7 @@ async fn recent_transactions(
                t.date, t.description, t.category, t.category_detailed,
                t.payment_channel, t.merchant_name,
                t.original_description, t.counterparty_name, t.counterparty_logo_url,
-               t.user_description,
+               t.user_description, t.payment_payee, t.payment_payer,
                t.pending
         FROM transactions t
         JOIN accounts a ON t.account_id = a.id
@@ -588,6 +590,14 @@ async fn recent_transactions(
                         .flatten(),
                     user_description: r
                         .try_get::<Option<String>, _>("user_description")
+                        .ok()
+                        .flatten(),
+                    payment_payee: r
+                        .try_get::<Option<String>, _>("payment_payee")
+                        .ok()
+                        .flatten(),
+                    payment_payer: r
+                        .try_get::<Option<String>, _>("payment_payer")
                         .ok()
                         .flatten(),
                     pending: r.get("pending"),
@@ -1081,6 +1091,15 @@ struct TransactionEntry {
     /// every Plaid-side fallback when set.
     #[serde(skip_serializing_if = "Option::is_none")]
     user_description: Option<String>,
+    /// Plaid `payment_meta.payee` — for ACH/wire/bill-pay rows where the
+    /// bank's `name` is "Miscellaneous Debit" but the payee is the only
+    /// useful identifier (e.g. "PG&E", "VERIZON").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    payment_payee: Option<String>,
+    /// Plaid `payment_meta.payer` — symmetric to `payment_payee` for
+    /// incoming wires/ACH where Plaid identifies who sent the funds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    payment_payer: Option<String>,
     pending: bool,
 }
 
@@ -1098,4 +1117,429 @@ struct CashFlowPoint {
     month: String,
     income: f64,
     spending: f64,
+}
+
+#[derive(Serialize)]
+struct SinceLastLogin {
+    /// ISO-8601 timestamp of the prior login (the anchor). `None` when
+    /// this is the user's very first session — the banner stays hidden
+    /// in that case so a fresh user doesn't see "0 since never".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    previous_login_at: Option<String>,
+    /// Count of new transactions across all of this user's accounts
+    /// since `previous_login_at`. Counts rows whose `created_at` is
+    /// after that timestamp — Plaid sync stamps `created_at` at insert
+    /// time so this correctly reflects "what the sync engine has
+    /// produced since you were last here," not "what dates the bank
+    /// stamped on them."
+    new_transactions: i64,
+    /// Largest absolute balance move on any single account since the
+    /// anchor, in USD. `None` when no two snapshots straddle the anchor
+    /// (insufficient history).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    largest_move: Option<BalanceMove>,
+    /// Names of institutions whose `sync_status` flipped to a problem
+    /// state since the anchor. Used for "Chase needs reconnecting" call-outs.
+    sync_errors: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct BalanceMove {
+    account_name: String,
+    delta_usd: f64,
+}
+
+/// "What changed since your last visit." Anchors on `users.previous_login_at`
+/// (the second-most-recent login). When the user has never logged in twice
+/// the entire response is suppressed so a fresh user doesn't see a useless
+/// "0 since never" banner.
+async fn since_last_login(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<SinceLastLogin> {
+    let anchor_row = sqlx::query(
+        "SELECT previous_login_at FROM users WHERE id = $1",
+    )
+    .bind(ctx.user_id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
+
+    let anchor: Option<chrono::DateTime<chrono::Utc>> = anchor_row
+        .and_then(|r| r.try_get::<chrono::DateTime<chrono::Utc>, _>("previous_login_at").ok());
+
+    let Some(anchor) = anchor else {
+        return Json(SinceLastLogin {
+            previous_login_at: None,
+            new_transactions: 0,
+            largest_move: None,
+            sync_errors: vec![],
+        });
+    };
+
+    // 1) New transactions count. We count by `created_at` — what the sync
+    //    engine added — rather than by transaction `date`, because Plaid
+    //    can backfill old dates and the user would care most about "new
+    //    rows that appeared in my list since I was last here."
+    let tx_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM transactions \
+         WHERE user_id = $1 AND created_at > $2",
+    )
+    .bind(ctx.user_id)
+    .bind(anchor)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(0);
+
+    // 2) Largest single-account balance move. Compare each account's
+    //    most recent snapshot at or after the anchor against the most
+    //    recent one strictly before the anchor. Skip accounts that
+    //    don't have a "before" snapshot — for a newly-linked account
+    //    we'd otherwise count the whole balance as a "move."
+    let moves = sqlx::query(
+        r#"
+        WITH before AS (
+            SELECT DISTINCT ON (bs.account_id) bs.account_id, bs.balance_usd
+            FROM balance_snapshots bs
+            WHERE bs.user_id = $1 AND bs.created_at <= $2
+            ORDER BY bs.account_id, bs.created_at DESC
+        ),
+        after AS (
+            SELECT DISTINCT ON (bs.account_id) bs.account_id, bs.balance_usd
+            FROM balance_snapshots bs
+            WHERE bs.user_id = $1 AND bs.created_at > $2
+            ORDER BY bs.account_id, bs.created_at DESC
+        )
+        SELECT
+            COALESCE(NULLIF(a.nickname, ''), a.name) AS account_name,
+            (after.balance_usd - before.balance_usd) AS delta_usd
+        FROM after
+        JOIN before ON before.account_id = after.account_id
+        JOIN accounts a ON a.id = after.account_id
+        WHERE a.user_id = $1
+        "#,
+    )
+    .bind(ctx.user_id)
+    .bind(anchor)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let largest_move = moves
+        .iter()
+        .filter_map(|r| {
+            let name: String = r.try_get("account_name").ok()?;
+            let delta: rust_decimal::Decimal = r.try_get("delta_usd").ok()?;
+            let delta_f: f64 = delta.to_string().parse().ok()?;
+            Some(BalanceMove {
+                account_name: name,
+                delta_usd: delta_f,
+            })
+        })
+        .max_by(|a, b| {
+            a.delta_usd
+                .abs()
+                .partial_cmp(&b.delta_usd.abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+        // A delta < $1 is noise (rounding, sub-dollar FX drift); hide it.
+        .filter(|m| m.delta_usd.abs() >= 1.0);
+
+    // 3) Institutions that have an error or reconnect_required status
+    //    whose last sync error landed AFTER the anchor. We approximate
+    //    with the row's `last_synced_at` since that's the only timestamp
+    //    we keep — a more accurate "errored since" timestamp would
+    //    require a separate column.
+    let sync_errors: Vec<String> = sqlx::query(
+        "SELECT name FROM institutions \
+         WHERE user_id = $1 \
+           AND sync_status IN ('error', 'reconnect_required') \
+           AND (last_synced_at IS NULL OR last_synced_at >= $2)",
+    )
+    .bind(ctx.user_id)
+    .bind(anchor)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default()
+    .iter()
+    .filter_map(|r| r.try_get::<String, _>("name").ok())
+    .collect();
+
+    Json(SinceLastLogin {
+        previous_login_at: Some(anchor.to_rfc3339()),
+        new_transactions: tx_count,
+        largest_move,
+        sync_errors,
+    })
+}
+
+#[derive(Serialize)]
+struct DetectedSubscription {
+    /// Display label for the merchant. Picked from the same ladder as
+    /// the transactions list so renames propagate.
+    merchant: String,
+    /// Monthly burn in USD (sum of all charges / number-of-months observed).
+    /// Always positive — sign is implied (it's a recurring outflow).
+    monthly_usd: f64,
+    /// Estimated cadence in days between the two most recent charges.
+    /// 30 = monthly, 7 = weekly, etc.
+    cadence_days: i32,
+    /// Date (YYYY-MM-DD) of the most recent charge.
+    last_charge_date: String,
+    /// Native amount + currency of the most recent charge so the UI
+    /// can format it correctly.
+    last_amount: f64,
+    currency: String,
+    /// How many separate charges we saw. >= 3 to qualify as recurring.
+    occurrences: i32,
+}
+
+/// Detected recurring outflows (subscriptions, bills, gym dues, etc.).
+///
+/// Heuristic: group every expense transaction (amount > 0) of the last
+/// 12 months by a merchant key + amount band. A cluster qualifies as
+/// "recurring" when:
+///   * ≥ 3 occurrences,
+///   * median gap between consecutive charges is 5–62 days (covers
+///     weekly through bi-monthly cadence; one-off bursts are filtered
+///     out by the gap floor, annual renewals are filtered out by the
+///     gap ceiling — both can be added if anyone asks).
+///   * Most recent charge is within 90 days (older clusters are
+///     considered cancelled subscriptions, not currently-active ones).
+///
+/// Returns sorted by monthly_usd descending so the most expensive
+/// subscriptions surface first.
+async fn detected_subscriptions(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<Vec<DetectedSubscription>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            t.date, t.amount, t.currency,
+            t.description, t.merchant_name, t.counterparty_name,
+            t.user_description, t.payment_payee
+        FROM transactions t
+        WHERE t.user_id = $1
+          AND t.amount > 0
+          AND t.date >= CURRENT_DATE - INTERVAL '365 days'
+        ORDER BY t.date DESC
+        "#,
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    if rows.is_empty() {
+        return Json(vec![]);
+    }
+
+    // Look up the latest USD/MXN rate once for the monthly_usd
+    // normalisation. A MXN-denominated subscription gets reported in
+    // USD so the user can compare totals across currencies. If the
+    // rate is missing we conservatively skip MXN rows from the USD
+    // total — they'll still appear with their native amount.
+    let fx_mxn_row = sqlx::query(
+        "SELECT rate FROM exchange_rates WHERE base_currency = 'USD' AND target_currency = 'MXN' \
+         ORDER BY recorded_at DESC LIMIT 1",
+    )
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
+    let fx_mxn: Option<f64> = fx_mxn_row
+        .and_then(|r| r.try_get::<rust_decimal::Decimal, _>("rate").ok())
+        .and_then(|d| d.to_string().parse::<f64>().ok())
+        .filter(|r| *r > 0.0);
+
+    // Build a key per (normalised merchant, amount band). Amount band
+    // is the rounded-to-nearest-dollar value, so a $9.99 / $10.00 /
+    // $10.01 Netflix sequence all cluster (banks occasionally vary
+    // sub-cent on rolling charges).
+    use std::collections::HashMap;
+    struct Cluster {
+        merchant: String,
+        currency: String,
+        // (date_yyyymmdd, amount_native) for every observed charge.
+        events: Vec<(chrono::NaiveDate, f64)>,
+    }
+    let mut clusters: HashMap<String, Cluster> = HashMap::new();
+
+    fn merchant_key(
+        user_desc: Option<&str>,
+        counterparty: Option<&str>,
+        merchant: Option<&str>,
+        payee: Option<&str>,
+        description: &str,
+    ) -> String {
+        // Mirrors the frontend's display ladder (excluding original
+        // description, which is too noisy for clustering — POS reference
+        // codes vary per swipe). Lowercase + trim so case doesn't split
+        // clusters.
+        let raw = user_desc
+            .filter(|s| !s.trim().is_empty())
+            .or(counterparty.filter(|s| !s.trim().is_empty()))
+            .or(merchant.filter(|s| !s.trim().is_empty()))
+            .or(payee.filter(|s| !s.trim().is_empty()))
+            .unwrap_or(description);
+        raw.trim().to_lowercase()
+    }
+
+    fn display_merchant(
+        user_desc: Option<&str>,
+        counterparty: Option<&str>,
+        merchant: Option<&str>,
+        payee: Option<&str>,
+        description: &str,
+    ) -> String {
+        // Pick the most user-recognisable name for display. Same source
+        // ladder as `merchant_key` but preserves the original case.
+        user_desc
+            .filter(|s| !s.trim().is_empty())
+            .or(counterparty.filter(|s| !s.trim().is_empty()))
+            .or(merchant.filter(|s| !s.trim().is_empty()))
+            .or(payee.filter(|s| !s.trim().is_empty()))
+            .unwrap_or(description)
+            .trim()
+            .to_string()
+    }
+
+    for r in &rows {
+        let date: chrono::NaiveDate = match r.try_get("date") {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        let amount: f64 = r
+            .try_get::<rust_decimal::Decimal, _>("amount")
+            .ok()
+            .and_then(|d| d.to_string().parse().ok())
+            .unwrap_or(0.0);
+        if amount <= 0.0 {
+            continue;
+        }
+        let currency: String = r.try_get("currency").unwrap_or_else(|_| "USD".into());
+        let description: String = r.try_get("description").unwrap_or_default();
+        let merchant_name: Option<String> =
+            r.try_get::<Option<String>, _>("merchant_name").ok().flatten();
+        let counterparty_name: Option<String> = r
+            .try_get::<Option<String>, _>("counterparty_name")
+            .ok()
+            .flatten();
+        let user_description: Option<String> = r
+            .try_get::<Option<String>, _>("user_description")
+            .ok()
+            .flatten();
+        let payment_payee: Option<String> = r
+            .try_get::<Option<String>, _>("payment_payee")
+            .ok()
+            .flatten();
+
+        let key_part = merchant_key(
+            user_description.as_deref(),
+            counterparty_name.as_deref(),
+            merchant_name.as_deref(),
+            payment_payee.as_deref(),
+            &description,
+        );
+        // Skip generic strings that we can't meaningfully cluster on —
+        // letting them through would lump every "Miscellaneous Debit"
+        // row together and report a fake subscription.
+        let lower = key_part.as_str();
+        let generic_prefixes = [
+            "miscellaneous", "ach ", "pos ", "online ", "wire ", "transfer", "debit", "credit",
+            "withdrawal", "deposit", "bill payment", "electronic ",
+        ];
+        if generic_prefixes
+            .iter()
+            .any(|p| lower == *p || lower.starts_with(p))
+        {
+            continue;
+        }
+        let band = amount.round() as i64;
+        let key = format!("{}::{}", key_part, band);
+        let display_name = display_merchant(
+            user_description.as_deref(),
+            counterparty_name.as_deref(),
+            merchant_name.as_deref(),
+            payment_payee.as_deref(),
+            &description,
+        );
+        clusters
+            .entry(key)
+            .or_insert_with(|| Cluster {
+                merchant: display_name.clone(),
+                currency: currency.clone(),
+                events: Vec::new(),
+            })
+            .events
+            .push((date, amount));
+    }
+
+    let today = chrono::Utc::now().date_naive();
+    let mut out = Vec::new();
+    for cluster in clusters.values_mut() {
+        // Most-recent first; we already pulled rows ORDER BY date DESC
+        // but sort again for safety.
+        cluster
+            .events
+            .sort_by(|a, b| b.0.cmp(&a.0));
+
+        if cluster.events.len() < 3 {
+            continue;
+        }
+        let last_charge = cluster.events[0].0;
+        if (today - last_charge).num_days() > 90 {
+            // Most recent charge is over 90 days old — treat as cancelled.
+            continue;
+        }
+        // Median gap between consecutive charges. Bail unless median is
+        // in the recurring-cadence band.
+        let mut gaps: Vec<i64> = cluster
+            .events
+            .windows(2)
+            .map(|w| (w[0].0 - w[1].0).num_days().abs())
+            .collect();
+        gaps.sort();
+        let median_gap = gaps[gaps.len() / 2];
+        if median_gap < 5 || median_gap > 62 {
+            continue;
+        }
+        let total: f64 = cluster.events.iter().map(|(_, a)| a).sum();
+        let months_observed = (cluster.events.len() as f64 * median_gap as f64) / 30.4375;
+        let avg_per_month = if months_observed > 0.0 {
+            total / months_observed
+        } else {
+            total
+        };
+        let monthly_usd = if cluster.currency.eq_ignore_ascii_case("USD") {
+            avg_per_month
+        } else if cluster.currency.eq_ignore_ascii_case("MXN") {
+            match fx_mxn {
+                Some(r) => avg_per_month / r,
+                None => 0.0,
+            }
+        } else {
+            avg_per_month
+        };
+        let last_amount = cluster.events[0].1;
+        out.push(DetectedSubscription {
+            merchant: cluster.merchant.clone(),
+            monthly_usd,
+            cadence_days: median_gap as i32,
+            last_charge_date: last_charge.to_string(),
+            last_amount,
+            currency: cluster.currency.clone(),
+            occurrences: cluster.events.len() as i32,
+        });
+    }
+
+    out.sort_by(|a, b| {
+        b.monthly_usd
+            .partial_cmp(&a.monthly_usd)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    out.truncate(20);
+    Json(out)
 }

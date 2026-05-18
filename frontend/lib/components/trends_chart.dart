@@ -7,12 +7,18 @@ class CashFlowTrendsChart extends StatelessWidget {
   final List<Map<String, dynamic>> trends;
   final double conversionFactor;
   final NumberFormat currencyFormat;
+  /// Fires with the bar-group's month (YYYY-MM string) when the user
+  /// taps a bar. Used by the dashboard to seed a date-range filter on
+  /// the Transactions tab — the chart becomes a drill-in surface.
+  /// Null = chart stays inert (legacy callers).
+  final void Function(String month)? onMonthSelected;
 
   const CashFlowTrendsChart({
     super.key,
     required this.trends,
     required this.conversionFactor,
     required this.currencyFormat,
+    this.onMonthSelected,
   });
 
   @override
@@ -89,12 +95,39 @@ class CashFlowTrendsChart extends StatelessWidget {
                     touchTooltipData: BarTouchTooltipData(
                       getTooltipColor: (_) => context.tooltipSurface,
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                        // Add a "tap to filter" hint to the bottom of the
+                        // tooltip so the click affordance is discoverable —
+                        // most users don't expect chart bars to be tappable.
+                        final headerLine = rodIndex == 0 ? 'Income' : 'Spending';
+                        final amountLine = currencyFormat.format(rod.toY * conversionFactor);
+                        final hint = onMonthSelected == null
+                            ? ''
+                            : '\nTap to view transactions';
                         return BarTooltipItem(
-                          '${rodIndex == 0 ? "Income" : "Spending"}\n${currencyFormat.format(rod.toY * conversionFactor)}',
+                          '$headerLine\n$amountLine$hint',
                           TextStyle(color: context.tooltipOnSurface),
                         );
                       },
                     ),
+                    // Wire bar taps to the filter callback. fl_chart
+                    // gives us `groupIndex` (which month group) — we
+                    // look that up in `trends` and emit the YYYY-MM
+                    // string back to the caller.
+                    touchCallback: onMonthSelected == null
+                        ? null
+                        : (event, response) {
+                            // Only act on tap-up events — drags and hovers
+                            // should not change the filter.
+                            if (event is! FlTapUpEvent) return;
+                            final spot = response?.spot;
+                            if (spot == null) return;
+                            final idx = spot.touchedBarGroupIndex;
+                            if (idx < 0 || idx >= trends.length) return;
+                            final month = trends[idx]['month'];
+                            if (month is String && month.isNotEmpty) {
+                              onMonthSelected!(month);
+                            }
+                          },
                   ),
                   titlesData: FlTitlesData(
                     show: true,

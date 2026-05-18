@@ -558,6 +558,19 @@ async fn upsert_plaid_transaction(
     // UI gets a real merchant + logo when `merchant_name` is null.
     let original_description = tx["original_description"].as_str();
     let (counterparty_name, counterparty_logo_url) = best_counterparty(&tx["counterparties"]);
+    // `payment_meta.payee` / `payer` are the only useful identifiers on
+    // ACH transfers, wires, and bill-pay rows where `name` is generic
+    // ("Miscellaneous Debit") and both merchant + counterparty are null.
+    // Trim whitespace; empty/whitespace-only stays None so the display
+    // ladder skips past it cleanly.
+    let payment_payee = tx["payment_meta"]["payee"]
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let payment_payer = tx["payment_meta"]["payer"]
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
 
     // Account lookup scoped by user — accidental cross-tenant external_id
     // collisions are silently ignored rather than letting Plaid data from
@@ -577,11 +590,11 @@ async fn upsert_plaid_transaction(
                 account_id, external_id, date, description, amount, currency,
                 category, category_detailed, payment_channel, merchant_name,
                 pending, source, original_description, counterparty_name,
-                counterparty_logo_url, user_id
+                counterparty_logo_url, payment_payee, payment_payer, user_id
             )
             VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'plaid',
-                $12, $13, $14, $15
+                $12, $13, $14, $15, $16, $17
             )
             ON CONFLICT (account_id, external_id)
             DO UPDATE SET
@@ -596,7 +609,9 @@ async fn upsert_plaid_transaction(
                 pending = EXCLUDED.pending,
                 original_description = EXCLUDED.original_description,
                 counterparty_name = EXCLUDED.counterparty_name,
-                counterparty_logo_url = EXCLUDED.counterparty_logo_url
+                counterparty_logo_url = EXCLUDED.counterparty_logo_url,
+                payment_payee = COALESCE(EXCLUDED.payment_payee, transactions.payment_payee),
+                payment_payer = COALESCE(EXCLUDED.payment_payer, transactions.payment_payer)
             "#
         )
         .bind(acc_id)
@@ -613,6 +628,8 @@ async fn upsert_plaid_transaction(
         .bind(original_description)
         .bind(counterparty_name.as_deref())
         .bind(counterparty_logo_url.as_deref())
+        .bind(payment_payee)
+        .bind(payment_payer)
         .bind(user_id)
         .execute(db)
         .await?;

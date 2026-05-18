@@ -23,10 +23,13 @@ import '../widgets/add_crypto_dialog.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/skeleton.dart';
 import '../widgets/sync_error_banner.dart';
+import '../widgets/since_last_login_banner.dart';
+import '../widgets/subscriptions_card.dart';
 import '../widgets/notifications_panel.dart';
 import '../theme/palette.dart';
 import '../utils/account_category.dart';
 import '../utils/theme_colors.dart';
+import '../utils/transaction_display.dart';
 import 'account_transactions_screen.dart';
 import 'connect_bank_screen.dart';
 import 'import_screen.dart';
@@ -61,6 +64,13 @@ class _DashboardScreenState extends State<DashboardScreen>
   List<dynamic>? _transactions;
   List<AllocationData>? _allocationData;
   List<Map<String, dynamic>>? _trendData;
+  Map<String, dynamic>? _sinceLastLogin;
+  List<dynamic>? _subscriptions;
+  // Pending date-window seed from a chart-bar tap. When non-null, the
+  // TransactionsTab seeds its filters with a custom date range covering
+  // the picked month, then clears the override so manual filter edits
+  // aren't overwritten on the next dashboard rebuild.
+  ({DateTime start, DateTime end})? _txDateSeed;
   DateRange _selectedRange = DateRange.oneYear;
   String _targetCurrency = 'USD'; // Master currency state
   TabController? _tabController;
@@ -236,9 +246,13 @@ class _DashboardScreenState extends State<DashboardScreen>
     for (final raw in txs.take(200)) {
       final t = raw as Map<String, dynamic>;
       final desc = (t['description'] ?? '').toString();
+      // Prefer the same label the user sees in the row — so renamed
+      // transactions are findable in Cmd-K under their new name, not
+      // their original "Miscellaneous Debit" text.
+      final label = displayLabel(t);
       final id = t['id']?.toString();
       items.add(PaletteItem(
-        label: desc,
+        label: label,
         subtitle:
             'Transaction · ${t['account_name'] ?? ''} · ${t['date'] ?? ''}',
         icon: Icons.receipt_outlined,
@@ -687,6 +701,41 @@ class _DashboardScreenState extends State<DashboardScreen>
     });
   }
 
+  /// State-level reconnect handler so non-tab UI (the sticky sync
+  /// banner) can open Plaid Link directly without hopping to the
+  /// Management tab first. Mirrors the nested `handleReconnect` used
+  /// from the Management tab's row buttons; both feed into the same
+  /// `PlaidLink.open()` flow.
+  Future<void> _handleReconnect(String institutionId) async {
+    setState(() => _isLoading = true);
+    try {
+      final data = await _apiService.getReconnectToken(institutionId);
+      final linkToken = data['link_token'];
+      final cfg = LinkTokenConfiguration(token: linkToken);
+      PlaidLink.onSuccess.listen((_) {
+        debugPrint('Plaid reconnect success');
+        // Defer to the global sync via the public API method so the
+        // dashboard data refreshes once tokens roll forward.
+        _apiService.syncInstitutions().then((_) {
+          if (mounted) _loadAllData(silent: true);
+        }).catchError((_) {});
+      });
+      PlaidLink.onExit.listen((_) {
+        if (mounted) _loadAllData(silent: true);
+      });
+      PlaidLink.create(configuration: cfg);
+      PlaidLink.open();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Reconnect failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _loadAllData({bool silent = false}) async {
     if (!silent) {
       setState(() {
@@ -716,6 +765,12 @@ class _DashboardScreenState extends State<DashboardScreen>
         _apiService.getTransactions(limit: _txPageSize),
         _apiService.getAllocationData(),
         _apiService.getTrendData(),
+        // These two are non-blocking — a failure shouldn't take the
+        // whole dashboard down. Wrap each Future so it can't propagate.
+        _apiService.getSinceLastLogin().catchError((_) => null),
+        _apiService
+            .getSubscriptions()
+            .catchError((_) => <dynamic>[]),
       ]);
 
       debugPrint("All data loaded successfully");
@@ -765,6 +820,8 @@ class _DashboardScreenState extends State<DashboardScreen>
         }).toList();
 
         _trendData = trendsRaw.map((e) => e as Map<String, dynamic>).toList();
+        _sinceLastLogin = results[10] as Map<String, dynamic>?;
+        _subscriptions = results[11] as List<dynamic>;
         _isLoading = false;
       });
 
@@ -883,13 +940,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                       syncData: _syncData ?? const [],
                       onJumpToManagement: () =>
                           _tabController?.animateTo(6),
-                      onReconnect: (id) async {
-                        // Defer to the existing handleReconnect routine
-                        // by hopping to Management and letting the user
-                        // hit the row's Reconnect — simpler than wiring
-                        // the Plaid flow up out of band here.
-                        _tabController?.animateTo(6);
-                      },
+                      // Open Plaid Link directly so a "Chase needs
+                      // reconnecting" banner is one click to resolve,
+                      // not three (banner → Management → row button).
+                      onReconnect: _handleReconnect,
                     ),
                   Expanded(child: _buildBody()),
                 ],
@@ -1319,6 +1373,17 @@ class _DashboardScreenState extends State<DashboardScreen>
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // "What changed since your last visit" — pinned above the
+              // stat strip so it's the first thing the user sees on
+              // return. Suppresses itself when there's nothing new.
+              SinceLastLoginBanner(
+                summary: _sinceLastLogin,
+                currencyFormat: currencyFormat,
+                conversionFactor: conversionFactor,
+                onJumpToTransactions: () => _tabController?.animateTo(2),
+                onJumpToManagement: () => _tabController?.animateTo(6),
+              ),
+              if (_sinceLastLogin != null) const SizedBox(height: 12),
               stats,
               const SizedBox(height: 24),
               // Net-worth-focused widgets stay on Overview. Cash-flow
@@ -1395,6 +1460,8 @@ class _DashboardScreenState extends State<DashboardScreen>
         hasMore: _transactionsHasMore,
         searchOverride: _transactionsSearchOverride,
         highlightedTxId: _highlightedTxId,
+        dateSeed: _txDateSeed,
+        onDateSeedConsumed: () => setState(() => _txDateSeed = null),
         onUpdate: (id, {userCategory, userNotes, userDescription, accountId}) async {
           try {
             await _apiService.updateTransaction(
@@ -1441,8 +1508,38 @@ class _DashboardScreenState extends State<DashboardScreen>
               trends: _trendData!,
               conversionFactor: conversionFactor,
               currencyFormat: currencyFormat,
+              // Clicking a month group jumps to Transactions filtered
+              // to that month — the cash-flow chart becomes a drill-in.
+              onMonthSelected: (monthIso) {
+                final parts = monthIso.split('-');
+                if (parts.length < 2) return;
+                final year = int.tryParse(parts[0]);
+                final month = int.tryParse(parts[1]);
+                if (year == null || month == null) return;
+                final start = DateTime(year, month, 1);
+                final end = DateTime(year, month + 1, 0); // last of month
+                setState(() => _txDateSeed = (start: start, end: end));
+                _tabController?.animateTo(2);
+              },
             ),
           const SizedBox(height: 24),
+          // Detected recurring outflows — surfaces what's silently
+          // eating the budget every month. Tapping a row seeds the
+          // transactions search with the merchant.
+          if ((_subscriptions ?? const []).isNotEmpty) ...[
+            SubscriptionsCard(
+              subscriptions: _subscriptions!,
+              conversionFactor: conversionFactor,
+              usdMxnRate: fxRate,
+              currencyFormat: currencyFormat,
+              targetCurrency: _targetCurrency,
+              onTapMerchant: (m) {
+                setState(() => _transactionsSearchOverride = m);
+                _tabController?.animateTo(2);
+              },
+            ),
+            const SizedBox(height: 24),
+          ],
           BudgetsCard(
             transactions: _transactions ?? const [],
             conversionFactor: conversionFactor,

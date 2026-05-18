@@ -92,6 +92,15 @@ class Preferences {
   static String getThemeMode() => _read('themeMode') ?? 'dark';
   static void setThemeMode(String mode) => _write('themeMode', mode);
 
+  /// Dismiss state for the "since last login" banner. Keyed on the
+  /// previous-login timestamp so dismissing today's banner doesn't
+  /// suppress the one that should appear after the next login.
+  static bool getSinceLastLoginDismissedFor(String anchorIso) =>
+      _read('sinceLastLoginDismissed') == anchorIso;
+
+  static void dismissSinceLastLoginFor(String anchorIso) =>
+      _write('sinceLastLoginDismissed', anchorIso);
+
   /// Per-category monthly budgets, stored as a JSON object on the wire:
   /// {"Restaurants": 500.0, "Groceries": 800.0, ...}. Values are in USD
   /// (the backend storage unit); the UI converts for display.

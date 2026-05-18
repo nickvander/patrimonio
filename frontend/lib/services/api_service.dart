@@ -412,6 +412,32 @@ class ApiService {
     throw Exception('Failed to load sync status');
   }
 
+  /// Summary of "what changed since your previous login" — used by the
+  /// dismissible Overview banner. Returns null when the user has no
+  /// previous login (first session ever), so the caller can skip rendering.
+  Future<Map<String, dynamic>?> getSinceLastLogin() async {
+    final response = await _get(
+      Uri.parse('$_baseUrl/dashboard/since-last-login'),
+    );
+    if (response.statusCode != 200) return null;
+    final body = json.decode(response.body) as Map<String, dynamic>;
+    // Backend signals "no previous login" by omitting `previous_login_at`.
+    if (body['previous_login_at'] == null) return null;
+    return body;
+  }
+
+  /// Detected recurring outflows (subscriptions, bills, gym, etc.).
+  /// See `dashboard.rs::detected_subscriptions` for the heuristic.
+  Future<List<dynamic>> getSubscriptions() async {
+    final response = await _get(
+      Uri.parse('$_baseUrl/dashboard/subscriptions'),
+    );
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Failed to load subscriptions');
+  }
+
   Future<Map<String, dynamic>> getSetupStatus() async {
     // Setup status is a public endpoint — used by the login screen — so
     // we still send credentials but the server does not require them.

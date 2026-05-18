@@ -418,6 +418,13 @@ pub struct TransactionResponse {
     /// before any of the counterparty / merchant / original fallbacks.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_description: Option<String>,
+    /// Plaid `payment_meta.payee` — recovers the merchant for
+    /// ACH/wire/bill-pay rows where Plaid's `name` is generic.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payment_payee: Option<String>,
+    /// Plaid `payment_meta.payer` — symmetric for incoming transfers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payment_payer: Option<String>,
     pub source: Option<String>,
     pub account_name: String,
     pub institution_name: String,
@@ -443,6 +450,7 @@ async fn get_account_transactions(
                t.category_detailed, t.payment_channel, t.merchant_name,
                t.original_description, t.counterparty_name, t.counterparty_logo_url,
                t.user_category, t.user_notes, t.user_description, t.source,
+               t.payment_payee, t.payment_payer,
                COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
                i.name as institution_name
         FROM transactions t
@@ -479,6 +487,8 @@ async fn get_account_transactions(
         user_category: row.try_get("user_category").ok(),
         user_notes: row.try_get("user_notes").ok(),
         user_description: row.try_get::<Option<String>, _>("user_description").ok().flatten(),
+        payment_payee: row.try_get::<Option<String>, _>("payment_payee").ok().flatten(),
+        payment_payer: row.try_get::<Option<String>, _>("payment_payer").ok().flatten(),
         source: row.try_get("source").ok(),
         account_name: row.get("account_name"),
         institution_name: row.get("institution_name"),

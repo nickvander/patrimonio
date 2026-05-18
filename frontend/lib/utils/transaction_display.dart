@@ -1,5 +1,49 @@
 import 'transaction_description.dart';
 
+/// Generic Plaid / bank "name" strings that carry no information.
+/// When the row's `description` matches one of these (case-insensitive,
+/// trimmed, optionally prefix-matched), the display ladder skips past
+/// it and prefers any other identifier we have.
+///
+/// Kept as a single-word prefix list so "Miscellaneous Debit",
+/// "miscellaneous credit", "Miscellaneous credit 20260418" all match
+/// — banks occasionally append a date or reference code without
+/// changing the leading token.
+const _genericDescriptionPrefixes = <String>[
+  'miscellaneous',
+  'ach debit',
+  'ach credit',
+  'ach payment',
+  'ach withdrawal',
+  'ach deposit',
+  'pos purchase',
+  'pos debit',
+  'pos credit',
+  'online banking',
+  'online transfer',
+  'wire transfer',
+  'transfer in',
+  'transfer out',
+  'bank transfer',
+  'bill payment',
+  'electronic payment',
+  'electronic withdrawal',
+  'direct deposit',
+  'debit',
+  'credit',
+  'withdrawal',
+  'deposit',
+];
+
+bool _looksGeneric(String s) {
+  final lower = s.trim().toLowerCase();
+  if (lower.isEmpty) return true;
+  for (final prefix in _genericDescriptionPrefixes) {
+    if (lower == prefix || lower.startsWith('$prefix ')) return true;
+  }
+  return false;
+}
+
 /// Pick the best human-readable label for a transaction, walking a
 /// preference ladder:
 ///
@@ -12,10 +56,15 @@ import 'transaction_description.dart';
 ///                                 they typed is what shows.
 ///   1. `counterparty_name`     — Plaid's enriched merchant entity.
 ///   2. `merchant_name`         — Plaid's older single-string merchant.
-///   3. `original_description`  — raw bank line, only when the cleaned
-///                                 `description` is short and generic
-///                                 (≤ 22 chars).
-///   4. `description`           — Plaid's cleaned `name`. The default.
+///   3. `payment_payee` / `payment_payer` — Plaid `payment_meta`. The
+///                                 only useful identifier on most
+///                                 ACH / wire / bill-pay rows. Use payee
+///                                 for outflows, payer for inflows.
+///   4. `original_description`  — raw bank line. Preferred over the
+///                                 cleaned `description` whenever the
+///                                 latter is one of the known-generic
+///                                 prefixes (see `_genericDescriptionPrefixes`).
+///   5. `description`           — Plaid's cleaned `name`. The default.
 ///
 /// Plaid-side strings are run through [cleanTransactionDescription] to
 /// normalise case, drop POS reference codes, etc. Raw values are
@@ -40,15 +89,28 @@ String displayLabel(Map<String, dynamic> tx) {
 
   final desc = nonEmpty(tx['description']);
   final orig = nonEmpty(tx['original_description']);
+  // Sign convention: amount > 0 is an outflow (expense). We prefer
+  // payee for outflows and payer for inflows; if only one side is
+  // populated we fall through to it regardless of sign.
+  final amount = (tx['amount'] as num?)?.toDouble() ?? 0.0;
+  final payee = nonEmpty(tx['payment_payee']);
+  final payer = nonEmpty(tx['payment_payer']);
+  final paymentSide = amount > 0
+      ? (payee ?? payer)
+      : (payer ?? payee);
 
-  // Short, generic `description` ("Miscellaneous Debit",
-  // "Miscellaneous Credit", "ACH DEBIT", "POS PURCHASE") — prefer the
-  // raw bank line when we have one.
-  if (desc != null && orig != null && desc.length <= 22) {
-    return cleanTransactionDescription(orig);
+  if (desc != null && _looksGeneric(desc)) {
+    // Skip past the generic description in favour of any specific
+    // identifier we have. Ordered: payment_meta → original_description
+    // → the generic description as a last resort.
+    if (paymentSide != null) return cleanTransactionDescription(paymentSide);
+    if (orig != null && !_looksGeneric(orig)) {
+      return cleanTransactionDescription(orig);
+    }
   }
 
   if (desc != null) return cleanTransactionDescription(desc);
+  if (paymentSide != null) return cleanTransactionDescription(paymentSide);
   if (orig != null) return cleanTransactionDescription(orig);
   return 'Unknown';
 }

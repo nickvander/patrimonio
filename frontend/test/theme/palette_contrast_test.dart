@@ -144,21 +144,42 @@ void main() {
     // textSubtle and textFaint apply an alpha to onSurface. The
     // composited result against the scaffold must clear AA (textSubtle)
     // and AA-large (textFaint) — these regressed before when the alphas
-    // were too thin against the light scaffold.
+    // were too thin against the light scaffold. The alphas under test
+    // match ThemeColorsExt's current values for light mode (textSubtle
+    // 0.78, textFaint 0.65). If ThemeColorsExt rebalances these, update
+    // here AND there.
     test('textSubtle on light scaffold passes AA', () {
       final scaffold = BrandPalette.scaffoldBackground(Brightness.light);
-      // onSurface @ 0.7 alpha matches the boosted textSubtle in
-      // ThemeColorsExt for light mode.
-      final subtle = Colors.black.withValues(alpha: 0.7);
+      final subtle = Colors.black.withValues(alpha: 0.78);
       expect(
           contrastRatio(composite(subtle, scaffold), scaffold), greaterThan(4.5));
     });
 
     test('textFaint on light scaffold passes AA-large', () {
       final scaffold = BrandPalette.scaffoldBackground(Brightness.light);
-      final faint = Colors.black.withValues(alpha: 0.56);
+      final faint = Colors.black.withValues(alpha: 0.65);
       expect(
           contrastRatio(composite(faint, scaffold), scaffold), greaterThan(3.0));
+    });
+
+    test('textSubtle on white card passes AA', () {
+      // Cards in light mode are pure white. The same alpha must clear
+      // AA against the card too — a card-only field reading subtitle
+      // text is the more common rendering surface than the scaffold.
+      final subtle = Colors.black.withValues(alpha: 0.78);
+      expect(
+          contrastRatio(composite(subtle, Colors.white), Colors.white),
+          greaterThan(4.5));
+    });
+
+    test('textMuted on light scaffold passes AA', () {
+      // textMuted is the secondary-label tier (0.85 alpha). It sees a
+      // lot of placement on subtitles + tabbar inactive labels, so
+      // hold it to AA-normal too.
+      final scaffold = BrandPalette.scaffoldBackground(Brightness.light);
+      final muted = Colors.black.withValues(alpha: 0.85);
+      expect(
+          contrastRatio(composite(muted, scaffold), scaffold), greaterThan(4.5));
     });
   });
 }

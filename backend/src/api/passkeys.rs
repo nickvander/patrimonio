@@ -462,7 +462,10 @@ async fn login_finish(
         .await
         .map_err(internal)?;
 
-    let _ = sqlx::query("UPDATE users SET last_login_at = NOW() WHERE id = $1")
+    let _ = sqlx::query(
+        "UPDATE users SET previous_login_at = last_login_at, \
+                          last_login_at = NOW() WHERE id = $1",
+    )
         .bind(user_id)
         .execute(&state.db)
         .await;

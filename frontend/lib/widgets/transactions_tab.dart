@@ -47,6 +47,16 @@ class TransactionsTab extends StatefulWidget {
   /// with a transient accent fill so the exact row the user picked is
   /// obvious even when other rows share the same description.
   final String? highlightedTxId;
+  /// Date window from a chart-bar tap (cash-flow chart). When non-null
+  /// the filter dialog opens pre-seeded to a custom range and the chip
+  /// strip shows the picked window. The widget self-applies on the
+  /// first didUpdateWidget that sees a new value, then ignores
+  /// subsequent dashboard rebuilds with the same seed so manual edits
+  /// stick.
+  final ({DateTime start, DateTime end})? dateSeed;
+  /// Fires after the widget has consumed [dateSeed] so the dashboard
+  /// can clear its own copy and stop re-applying it on rebuilds.
+  final VoidCallback? onDateSeedConsumed;
 
   const TransactionsTab({
     super.key,
@@ -65,6 +75,8 @@ class TransactionsTab extends StatefulWidget {
     this.hasMore = false,
     this.searchOverride,
     this.highlightedTxId,
+    this.dateSeed,
+    this.onDateSeedConsumed,
   });
 
   @override
@@ -99,6 +111,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
       _appliedOverride = seed;
       _searchOpenOnNarrow = true;
     }
+    _maybeApplyDateSeed(widget.dateSeed);
   }
 
   @override
@@ -113,6 +126,29 @@ class _TransactionsTabState extends State<TransactionsTab> {
         _searchOpenOnNarrow = true;
       });
     }
+    if (widget.dateSeed != null && widget.dateSeed != old.dateSeed) {
+      _maybeApplyDateSeed(widget.dateSeed);
+    }
+  }
+
+  /// Drop a chart-tap date window into the active filters. Pushes the
+  /// `onDateSeedConsumed` callback so the dashboard clears its copy
+  /// and manual filter edits aren't overwritten on the next rebuild.
+  void _maybeApplyDateSeed(({DateTime start, DateTime end})? seed) {
+    if (seed == null) return;
+    // Schedule for after the current build so initState callers don't
+    // setState during the build pass.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _filters = _filters.copyWith(
+          dateRange: TxDateRange.custom,
+          customStart: seed.start,
+          customEnd: seed.end,
+        );
+      });
+      widget.onDateSeedConsumed?.call();
+    });
   }
 
   @override
@@ -128,12 +164,31 @@ class _TransactionsTabState extends State<TransactionsTab> {
     if (!hasSearch && !hasFilters) return widget.transactions;
     return widget.transactions.where((tx) {
       if (hasSearch) {
+        // Filter on the displayed label (post-rename, post-counterparty
+        // resolution) so a user-entered rename like "Costco" is searchable.
+        // Also matches the raw description so the bank's "AMAZON.COM*9F3B"
+        // still finds the row before the user renamed it.
+        final label = displayLabel(Map<String, dynamic>.from(tx as Map))
+            .toLowerCase();
         final desc = (tx['description'] ?? '').toString().toLowerCase();
+        final orig = (tx['original_description'] ?? '').toString().toLowerCase();
+        final merchant = (tx['merchant_name'] ?? '').toString().toLowerCase();
+        final counterparty =
+            (tx['counterparty_name'] ?? '').toString().toLowerCase();
+        final payee = (tx['payment_payee'] ?? '').toString().toLowerCase();
+        final payer = (tx['payment_payer'] ?? '').toString().toLowerCase();
         final acct = (tx['account_name'] ?? '').toString().toLowerCase();
         final cat = (tx['category'] ?? '').toString().toLowerCase();
-        if (!desc.contains(q) && !acct.contains(q) && !cat.contains(q)) {
-          return false;
-        }
+        final matches = label.contains(q) ||
+            desc.contains(q) ||
+            orig.contains(q) ||
+            merchant.contains(q) ||
+            counterparty.contains(q) ||
+            payee.contains(q) ||
+            payer.contains(q) ||
+            acct.contains(q) ||
+            cat.contains(q);
+        if (!matches) return false;
       }
       if (hasFilters && !_filters.matches(tx)) return false;
       return true;
@@ -514,73 +569,130 @@ class _TransactionsTabState extends State<TransactionsTab> {
   /// as "clear the override" (sets user_description back to NULL — row
   /// reverts to the auto-picked label). The raw bank description stays
   /// untouched regardless.
-  Future<void> _renameTransaction(dynamic tx) async {
+  ///
+  /// When [similarIds] is non-empty the dialog offers a "also apply to N
+  /// other rows that share this raw description" checkbox. Picking it
+  /// runs the same PATCH against every id so the user can squash a
+  /// cluster of "Miscellaneous Debit" rows in one stroke.
+  Future<void> _renameTransaction(
+    dynamic tx, {
+    List<String> similarIds = const [],
+  }) async {
     final onUpdate = widget.onUpdate;
     if (onUpdate == null) return;
     final controller = TextEditingController(
       text: (tx['user_description'] ?? '').toString(),
     );
-    final result = await showDialog<String?>(
+    // Default: applyToAll is true when there ARE similar rows — most
+    // users renaming a generic "Miscellaneous Debit" want it to stick
+    // for the whole cluster. They can untick if they want one-off.
+    var applyToAll = similarIds.isNotEmpty;
+    final result = await showDialog<({String text, bool applyToAll})?>(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Rename transaction'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Display label only. The original bank description is '
-                'preserved and remains visible in this row’s detail '
-                'panel under "Raw bank text".',
-                style: TextStyle(fontSize: 12, color: context.textSubtle),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'Display label',
-                  hintText: 'e.g. Rent — John',
-                  border: OutlineInputBorder(),
+        return StatefulBuilder(builder: (ctx, setLocal) {
+          return AlertDialog(
+            title: const Text('Rename transaction'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Display label only. The original bank description is '
+                  'preserved and remains visible in this row’s detail '
+                  'panel under "Raw bank text".',
+                  style: TextStyle(fontSize: 12, color: context.textSubtle),
                 ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Display label',
+                    hintText: 'e.g. Rent — John',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                if (similarIds.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    value: applyToAll,
+                    onChanged: (v) =>
+                        setLocal(() => applyToAll = v ?? false),
+                    title: Text(
+                      'Also apply to ${similarIds.length} matching '
+                      'transaction${similarIds.length == 1 ? '' : 's'}',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    subtitle: Text(
+                      'Rows that share this raw bank description.',
+                      style: TextStyle(
+                          fontSize: 11, color: context.textSubtle),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(null),
+                child: const Text('Cancel'),
+              ),
+              // Clear button only when something is set on the row already
+              // — avoids a dead button on transactions that never had an
+              // override applied.
+              if ((tx['user_description'] ?? '').toString().isNotEmpty)
+                TextButton(
+                  onPressed: () => Navigator.of(ctx)
+                      .pop((text: '', applyToAll: applyToAll)),
+                  child: const Text('Clear override'),
+                ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop((
+                  text: controller.text.trim(),
+                  applyToAll: applyToAll,
+                )),
+                child: const Text('Save'),
               ),
             ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(null),
-              child: const Text('Cancel'),
-            ),
-            // Clear button only when something is set on the row already
-            // — avoids a dead button on transactions that never had an
-            // override applied.
-            if ((tx['user_description'] ?? '').toString().isNotEmpty)
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(''),
-                child: const Text('Clear override'),
-              ),
-            FilledButton(
-              onPressed: () =>
-                  Navigator.of(ctx).pop(controller.text.trim()),
-              child: const Text('Save'),
-            ),
-          ],
-        );
+          );
+        });
       },
     );
     if (result == null || !mounted) return;
     // Close the detail modal so the rename takes effect on the
     // refreshed list rather than the stale copy this dialog opened on.
     Navigator.of(context).pop();
-    try {
-      await onUpdate(tx['id'].toString(), userDescription: result);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Rename failed: $e')),
-      );
+    final ids = <String>[
+      tx['id'].toString(),
+      if (result.applyToAll) ...similarIds,
+    ];
+    final messenger = ScaffoldMessenger.of(context);
+    var failed = 0;
+    for (final id in ids) {
+      try {
+        await onUpdate(id, userDescription: result.text);
+      } catch (_) {
+        failed++;
+      }
     }
+    if (!mounted) return;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          ids.length == 1
+              ? (failed == 0
+                  ? 'Renamed'
+                  : 'Rename failed')
+              : (failed == 0
+                  ? 'Renamed ${ids.length} transactions'
+                  : 'Renamed ${ids.length - failed} · $failed failed'),
+        ),
+      ),
+    );
   }
 
   // Per-tx PATCH is the only API we have, so we loop. With ~hundreds of
@@ -1240,11 +1352,18 @@ class _TransactionsTabState extends State<TransactionsTab> {
                                 // remains visible in "Raw bank text"
                                 // below.
                                 IconButton(
-                                  tooltip: 'Rename',
+                                  tooltip: merchantMatches.isEmpty
+                                      ? 'Rename'
+                                      : 'Rename (+${merchantMatches.length} matching)',
                                   iconSize: 18,
                                   visualDensity: VisualDensity.compact,
                                   icon: const Icon(Icons.edit_outlined),
-                                  onPressed: () => _renameTransaction(tx),
+                                  onPressed: () => _renameTransaction(
+                                    tx,
+                                    similarIds: merchantMatches
+                                        .map((m) => m['id'].toString())
+                                        .toList(),
+                                  ),
                                 ),
                               ],
                             ),

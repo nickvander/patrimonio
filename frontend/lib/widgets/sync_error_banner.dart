@@ -31,14 +31,18 @@ class SyncErrorBanner extends StatelessWidget {
         .where((p) => p['sync_status'] == 'reconnect_required')
         .toList();
 
+    // Use the brightness-aware warning accent so the banner reads
+    // against both the white light-mode card and the dark surface.
+    // Colors.orangeAccent on its own is ~2.1:1 on white — fails AA for
+    // body text and reads as washed-out.
+    final accent = context.warning;
     return Container(
       margin: const EdgeInsets.fromLTRB(24, 16, 24, 0),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.orangeAccent.withValues(alpha: 0.12),
+        color: context.accentSoft(accent),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: Colors.orangeAccent.withValues(alpha: 0.5)),
+        border: Border.all(color: context.accentBorder(accent)),
       ),
       child: LayoutBuilder(builder: (ctx, c) {
         final isNarrow = c.maxWidth < 560;
@@ -56,16 +60,30 @@ class SyncErrorBanner extends StatelessWidget {
                 ? names.join(' · ')
                 : '${names.take(2).join(' · ')} +${names.length - 2}';
 
+        // When exactly one institution needs reconnecting, the button
+        // says "Reconnect <Name>" so the action is unambiguous. With
+        // 2+ we fall back to "Reconnect first" which targets the most
+        // recent failure — saves the user one click vs forcing them
+        // into the Management tab when every problem is the same kind.
+        Widget? reconnectButton;
+        if (reconnectOnly.isNotEmpty && onReconnect != null) {
+          final target = reconnectOnly.first;
+          final targetName = (target['name'] ?? '').toString();
+          final label = reconnectOnly.length == 1
+              ? (targetName.isEmpty ? 'Reconnect' : 'Reconnect $targetName')
+              : 'Reconnect ${reconnectOnly.length}…';
+          reconnectButton = FilledButton.icon(
+            onPressed: () =>
+                onReconnect!(target['id'].toString()),
+            icon: const Icon(Icons.link, size: 16),
+            label: Text(label),
+          );
+        }
         final actionRow = Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            if (reconnectOnly.length == 1 && onReconnect != null)
-              TextButton.icon(
-                onPressed: () =>
-                    onReconnect!(reconnectOnly.first['id'].toString()),
-                icon: const Icon(Icons.link, size: 16),
-                label: const Text('Reconnect'),
-              ),
+            if (reconnectButton != null) reconnectButton,
+            if (reconnectButton != null) const SizedBox(width: 8),
             TextButton.icon(
               onPressed: onJumpToManagement,
               icon: const Icon(Icons.settings, size: 16),
@@ -80,14 +98,14 @@ class SyncErrorBanner extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded,
-                      color: Colors.orangeAccent, size: 18),
+                  Icon(Icons.warning_amber_rounded,
+                      color: accent, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       summary,
-                      style: const TextStyle(
-                        color: Colors.orangeAccent,
+                      style: TextStyle(
+                        color: accent,
                         fontWeight: FontWeight.w700,
                       ),
                       maxLines: 1,
@@ -109,13 +127,12 @@ class SyncErrorBanner extends StatelessWidget {
         }
         return Row(
           children: [
-            const Icon(Icons.warning_amber_rounded,
-                color: Colors.orangeAccent, size: 18),
+            Icon(Icons.warning_amber_rounded, color: accent, size: 18),
             const SizedBox(width: 8),
             Text(
               summary,
-              style: const TextStyle(
-                color: Colors.orangeAccent,
+              style: TextStyle(
+                color: accent,
                 fontWeight: FontWeight.w700,
               ),
             ),

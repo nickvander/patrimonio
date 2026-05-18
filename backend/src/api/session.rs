@@ -535,7 +535,14 @@ async fn login(
         .await
         .map_err(internal)?;
 
-    let _ = sqlx::query("UPDATE users SET last_login_at = NOW() WHERE id = $1")
+    // Roll the prior login forward so the dashboard's "since last
+    // login" anchor uses the previous session, not the one we're
+    // about to create. Done in one statement so a concurrent login
+    // can't observe an inconsistent intermediate state.
+    let _ = sqlx::query(
+        "UPDATE users SET previous_login_at = last_login_at, \
+                          last_login_at = NOW() WHERE id = $1",
+    )
         .bind(user_id)
         .execute(&state.db)
         .await;
@@ -891,7 +898,10 @@ async fn totp_verify(
     let full = sessions::create_session(&state.db, validated.user_id, ua.as_deref(), ip.as_deref())
         .await
         .map_err(internal)?;
-    let _ = sqlx::query("UPDATE users SET last_login_at = NOW() WHERE id = $1")
+    let _ = sqlx::query(
+        "UPDATE users SET previous_login_at = last_login_at, \
+                          last_login_at = NOW() WHERE id = $1",
+    )
         .bind(validated.user_id)
         .execute(&state.db)
         .await;
