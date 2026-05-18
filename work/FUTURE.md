@@ -128,52 +128,11 @@ The migration is staged so each step has its own commit. The riskiest one is ste
 pulls `original_description` + best counterparty; the frontend's
 `displayLabel` walks counterparty → merchant → original →
 description; per-row rename override (`user_description`) is wired
-end-to-end with a pencil icon in the detail modal. Remaining
-follow-up: integration test exercising a canned Plaid JSON fixture
-into the enriched DB columns. Original plan preserved below for
-reference.
+end-to-end with a pencil icon in the detail modal.
 
-### The problem
-
-Many transaction rows in the dashboard render with vague labels: `Robinhood`, `DISCOVER`, `Miscellaneous Debit`, `Miscellaneous Credit`. Some of this is bank-quality (the user's bank reported the transaction to Plaid with that exact `name`, so there's no enrichment to do), but the sync code is also leaving Plaid enrichment data on the table.
-
-Check the live data first:
-
-```bash
-docker exec patrimonio-postgres-1 psql -U patrimonio -d patrimonio -c "
-  SELECT description, merchant_name, category_detailed, COUNT(*) AS n
-  FROM transactions
-  WHERE merchant_name IS NULL
-     OR description ILIKE '%miscellaneous%'
-  GROUP BY description, merchant_name, category_detailed
-  ORDER BY n DESC LIMIT 30;
-"
-```
-
-### What Plaid actually offers that we're not using
-
-`backend/src/services/sync.rs:368-433` (`insert_or_update_transaction`) currently reads:
-- `tx["name"]` → stored as `description`
-- `tx["merchant_name"]` → stored as `merchant_name` (often null)
-- `tx["personal_finance_category"]["primary"]` and `.detailed`
-
-What's also in the Plaid payload but we ignore:
-- **`original_description`** — the raw bank line, useful as a fallback when `name` is generic. We don't store it at all.
-- **`counterparties[]`** — array of enriched counterparty entities, each with `name`, `type`, `logo_url`, `website`, `confidence_level`. The "right" merchant lives here for many transactions where `merchant_name` is null. Docs: https://plaid.com/docs/api/products/transactions/#transactions-sync-response-added-counterparties
-- **`payment_meta.{ppd_id, reference_number, payer, payee}`** — useful for ACH/wire transactions where the description otherwise reads "ACH DEBIT".
-
-### Plan
-
-1. **Migration:** add `original_description TEXT`, `counterparty_name TEXT`, `counterparty_logo_url TEXT` to `transactions`. New file: `backend/migrations/2026MMDD01_plaid_enrichment.sql`. Backfill not needed — next sync repopulates.
-2. **Backend sync.rs change** (single function, ~30 lines): pull `original_description`, pick the highest-confidence counterparty from `counterparties[]` (filter `confidence_level == "VERY_HIGH"` or `"HIGH"`, take first), and write all three new columns alongside the existing inserts. Keep `description` writing `tx["name"]` for backwards compatibility — the UI will pick the best of the three.
-3. **Frontend display helper:** new `frontend/lib/utils/transaction_display.dart` with `String displayLabel(tx)` that picks `counterparty_name` ?? `merchant_name` ?? (if `description.length < 15 && original_description != null`) `original_description` ?? `description`. Call it from `_buildTransactionRow` in `frontend/lib/widgets/transactions_tab.dart` and from `_showTransactionDetails`. Show the counterparty logo when available.
-4. **UI affordance for the truly-generic cases:** in the transaction detail modal, surface a "Rename" action that writes to a new `user_description` column (parallel to existing `user_category` / `user_notes` — same pattern). For "Miscellaneous Debit" rows there's nothing Plaid can do; let the user override locally.
-
-### Acceptance
-
-- A fresh Plaid sync of a typical dev account stores `counterparty_name` for at least 60% of rows that previously had `merchant_name IS NULL`.
-- The dashboard transaction list visibly improves: rows that used to say "Robinhood" / "Miscellaneous Debit" either show a better label or carry a user-applied override.
-- Existing tests still pass; add at least one integration test that reads a canned Plaid JSON fixture and asserts the enriched fields land in the DB.
+**Remaining follow-up:** integration test exercising a canned Plaid
+JSON fixture into the enriched DB columns. Lower priority; the
+hand-test on real Plaid Production data confirmed the path works.
 
 ---
 
@@ -233,28 +192,6 @@ haven't been re-synced since the lot code shipped.
   `lot_disposals` table for full audit trail. The current sync
   just FIFO-depletes; the realized P&L is computable but
   transient.
-
-**Original plan preserved below.**
-
-### Why
-
-A US/Mexico investor who bought VTI at $200 (USD 1 ↔ MXN 17.5) and looks at it today at $220 (USD 1 ↔ MXN 19.0) has different P&L expressed in USD vs MXN. The current `holdings` table stores only a flat `cost_basis` in a single currency — that lets the user see USD P&L but understates or overstates the MXN view by 10–20%.
-
-### Plan
-
-1. New table `holding_lots(id, holding_id, acquired_at, qty, cost_per_unit, currency, fx_rate_at_acquisition_to_usd)`. Migration in `backend/migrations/`.
-2. Backend ingestion: Plaid investments returns transactions of type `buy` / `sell` — append a new lot on `buy`, FIFO-deplete on `sell`. New service `services/lots.rs`. Extend `services/sync.rs` to call it from the investments path.
-3. Currency-aware P&L computation in `services/sync.rs` or a new view: for each lot, compute (current_value * current_fx) − (cost_basis * fx_at_acquisition) in both USD and MXN, sum across lots per holding.
-4. Frontend: extend `portfolio_card.dart` to add a "Cost basis (USD)" and "Cost basis (MXN)" pair of columns next to the existing Value column. Show unrealized gain in both currencies.
-
-### Acceptance
-
-- Manual round-trip: synthesize a holding with two lots at different historical FX rates, verify the displayed P&L in MXN ≠ converted-from-USD P&L (because the cost basis was held at a different rate).
-- Existing PortfolioCard tests still pass; add one new test exercising the lot aggregation.
-
-### Note
-
-`work/NEXT.md` defers this until "real transaction and holding data is reliable" (Phase 13). That gate is now met — Phase 13's data-quality work is in `main`.
 
 ---
 
@@ -370,25 +307,26 @@ The `accounts` table already accepts arbitrary `account_type`. Two new types: `r
 
 ---
 
-## 5. Multi-user support
+## 5. Multi-user support  ✅ shipped (data model + invitation flow)
 
-**Status:** Deliberately deferred — opens the door to advisor / partner access. ~1–2 days, mostly schema. Owner of the upgrade has to be willing to touch every table.
+**Status:** Done. Migration `2026051705_multi_user_ownership.sql` added
+`user_id` to institutions/accounts/transactions/holdings/
+balance_snapshots; every financial query updated with the ownership
+predicate (~60 queries). Invitation-based registration shipped in
+`2026051707_invite_tokens.sql` + `api/invites.rs` + the
+`RegisterScreen` UI. The bootstrap path remains for the first user
+only.
 
-### Why this is a bigger lift than it looks
+**Remaining (low-priority follow-up):**
 
-Every financial data table currently assumes one user owns everything: `institutions`, `accounts`, `transactions`, `holdings`, `balance_snapshots`, `exchange_rates` (FX is global so this one stays). The `users` / `user_sessions` / `recovery_codes` / `auth_audit` tables are already user-scoped — they were designed for it.
-
-### Plan
-
-1. **Migration**: add `owner_user_id UUID REFERENCES users(id)` to every data table. Backfill to the existing bootstrap user. Add NOT NULL after backfill.
-2. **Every query in `backend/src/api/` and `backend/src/services/`** gains a `WHERE owner_user_id = $N` clause. There are ~60 such queries; this is the bulk of the work.
-3. **Bootstrap stops being one-shot**: change `/api/auth/bootstrap` to allow N users only if invited. Add `invite_tokens` table + `/api/auth/invite` endpoint that emits a one-time signup token. README updates to reflect.
-4. **Roles**: at minimum `owner` vs `read-only`. Plaid linking + account management requires `owner`; an advisor `read-only` user can see net worth and projections but can't edit.
-
-### Acceptance
-
-- A second user can bootstrap with an invite token, see ONLY accounts they own, cannot read another user's transactions.
-- Integration test: create two users, populate distinct accounts, assert `/api/dashboard/overview` returns disjoint data for each.
+* `app_settings` is still global — budgets/goals stored there would
+  bleed across users once a second invite is redeemed. Single
+  migration + a few query updates to add `user_id`. Probably worth
+  doing before a second real user actually exists.
+* Roles (`owner` vs `read-only`) deferred — single-household
+  deployments don't need it; revisit if there's actual demand for
+  advisor access.
+* Integration test exercising cross-tenant isolation.
 
 ---
 
@@ -453,87 +391,14 @@ Test infra ready to lean on:
 
 ---
 
-## Biometric / passkey sign-in (FIDO2 / WebAuthn)
+## Biometric / passkey sign-in (FIDO2 / WebAuthn)  ✅ shipped
 
-**Status:** Open. User-requested in the May 17 2026 palette session: "is it also possible to allow biometrics login from the phone?" Yes — and the right primitive is passkeys, not platform-specific biometrics, because Patrimonio is a Flutter *web* app served over a real origin. A passkey registered on the user's phone with Face ID / Touch ID / Android biometric can sign them into the web app from that phone (and, if the user opts into cloud sync via iCloud Keychain / Google Password Manager / Microsoft, from their desktop browser too) without ever installing a native app.
-
-**Tracking:** This file.
-
-### Why passkeys, not platform biometrics
-
-A few options exist for "biometric login":
-
-| Option | Works on | Reality for Patrimonio |
-|---|---|---|
-| `local_auth` (Flutter plugin) | iOS, Android, macOS, Windows only | We're served as a web app via nginx — `local_auth` doesn't run in the browser. Would force a separate native build path. |
-| Native iOS / Android wrappers | Requires App Store / Play Store distribution | Out of scope for a single-user self-hosted app. |
-| **WebAuthn / passkeys (FIDO2)** | Every modern browser on every modern OS — iOS 16+, Android, Windows Hello, macOS, Linux Chromium | One implementation, works for the user's phone *and* their desktop. The biometric prompt is shown by the platform (Face ID / Touch ID / Windows Hello) and the key never leaves the device. |
-
-Passkeys are the standard answer here. Apple, Google, and Microsoft all sync them between the user's devices via their respective password managers, so a passkey registered on the phone "just works" on the desktop afterwards.
-
-### Scope of the work
-
-This is a real feature, not a small change. Three-side implementation:
-
-**Backend (Rust / axum, ~1 day):**
-
-- Add the `webauthn-rs` crate (mature Rust FIDO2 implementation by the WebAuthn working group).
-- Schema: new `passkey_credentials` table, one row per registered device per user.
-  ```sql
-  CREATE TABLE passkey_credentials (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    credential_id BYTEA NOT NULL UNIQUE,        -- WebAuthn cred id (raw)
-    public_key BYTEA NOT NULL,                  -- COSE-encoded public key
-    sign_count BIGINT NOT NULL DEFAULT 0,       -- replay-attack counter
-    transports TEXT[],                          -- "internal", "hybrid", "usb"…
-    nickname TEXT,                              -- "iPhone 15", "Yubikey 5C"
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_used_at TIMESTAMPTZ
-  );
-  ```
-- Four endpoints, all CSRF-protected and behind the existing session middleware where appropriate:
-  - `POST /api/auth/passkeys/register/start` — authenticated; returns a `PublicKeyCredentialCreationOptions` challenge.
-  - `POST /api/auth/passkeys/register/finish` — authenticated; verifies the attestation, stores the new credential.
-  - `POST /api/auth/passkeys/login/start` — unauthenticated; takes a username, returns the `PublicKeyCredentialRequestOptions` challenge (or a discoverable-credential flow with no username).
-  - `POST /api/auth/passkeys/login/finish` — unauthenticated; verifies the assertion, issues the same session cookie the password login does today.
-- A short-lived per-challenge state store (5 min TTL) in Redis to keep challenges out of cookies.
-
-**Frontend (Flutter web, ~0.5 day):**
-
-- The `webauthn` Dart package is thin or non-existent for web targets — most teams call `navigator.credentials.create()` / `.get()` directly via `package:web` (which is already in `pubspec.yaml`). The dance is:
-  1. Fetch `/register/start`, base64url-decode the `challenge` and `user.id` fields into Uint8Array.
-  2. Call `navigator.credentials.create({ publicKey: options })` — this is what triggers the platform's Face ID / Touch ID / Windows Hello prompt.
-  3. Base64url-encode the response and POST it to `/register/finish`.
-  4. Login uses `navigator.credentials.get()` — same encoding dance.
-- A "Register this device" button in `security_screen.dart` (already exists) and a "Sign in with passkey" button on `auth_gate.dart`.
-- Show a list of registered passkeys in security settings with the device nickname + last-used timestamp + a "Remove" button.
-
-**Schema-only migration risk:** None — additive table, doesn't touch the password auth path. Passkeys are *in addition to* the password sign-in, not a replacement.
-
-### Open design questions to settle when picked up
-
-1. **Username-first vs discoverable credentials.** Discoverable (resident) credentials let the user sign in without typing a username — the platform UI just lists the available passkeys for `auth.patrimonio.app`. This is the nicer UX but uses slightly more space on the authenticator. Default to discoverable; it's what every modern site uses.
-2. **Origin / RP ID.** Production `rp_id` must match the actual host. For local dev (`127.0.0.1:3000`) WebAuthn requires either `localhost` or HTTPS — needs a small dev-mode `rp_id = "localhost"` toggle. Worth verifying in a throwaway test before committing.
-3. **Account recovery.** If a user loses all their passkeys (lost phone, no cloud sync), they fall back to their existing password + 2FA (Patrimonio already has TOTP wired up — see `c0f4909`). No new recovery flow needed initially.
-4. **Cross-device flow.** The "use your phone to sign in on a desktop browser" flow is QR-code-mediated and handled entirely by the browser/OS — no extra backend work, just verify the `transports: ["hybrid"]` advertisement is preserved.
-
-### Why this is worth doing
-
-- The user explicitly asked for it.
-- Removes the only remaining password-based step in the daily flow once registered. Password + TOTP becomes a fallback only.
-- Modern phones make biometric unlock dramatically faster than typing a 12+ char password on a touch keyboard.
-- Patrimonio holds financial data — a phishing-resistant credential (which is what passkeys are; the private key never leaves the device) is meaningfully more secure than a password.
-
-### Out of scope for this work item
-
-- Any native iOS/Android build path. Stay web-only.
-- Replacing the password login. Passkeys augment it; they don't replace it.
-- A "magic link" email login, even though it might come up as a parallel suggestion — it's a separate flow with different threat model and we're not going to chase both.
-
-### Rollback
-
-Each side reverts cleanly: drop the `passkey_credentials` table (migration is idempotent on the DROP side), revert the Rust endpoint module, remove the frontend buttons + JS interop. No data migration needed because passkeys are additive — password sign-in keeps working untouched.
+**Status:** Done. `passkey_credentials` table on main; `webauthn-rs`
+wired into `api/passkeys.rs`; register flow lives on the Security
+screen, login flow on `auth_gate.dart` ("Sign in with passkey").
+Cross-device (phone-to-desktop QR) and hardware-key support both
+work transparently via `webauthn-rs`. Discoverable credentials are
+the default; account recovery still falls back to password + TOTP.
 
 ---
 
@@ -541,28 +406,21 @@ Each side reverts cleanly: drop the `passkey_credentials` table (migration is id
 
 > Items raised by the May 17 audit (commit context: `34c47a7`'s direct successor) that did NOT land in the same PR. Each one is scoped so the next agent can pick it up cold.
 
-### Plaid webhook JWT verification
+### Plaid webhook JWT verification  ✅ shipped
 
-**Tracking:** This section. **Audit ID:** H3 (partial).
-**Status:** Webhook endpoint was moved to the public router and refuses every request that lacks a `Plaid-Verification` header. Signature *validation* is still TODO — see `backend/src/api/institutions.rs:plaid_webhook`. Until landed the webhook is unreachable in practice (which is the safe default).
+**Audit ID:** H3. Shipped in commit `04c9038`. ES256 verification
+via the `jsonwebtoken` crate, signing key cached in-process by `kid`
+(1-hour TTL), 5-minute `iat` anti-replay window, constant-time SHA-256
+comparison between the JWT's `request_body_sha256` and the actual
+body bytes. See `backend/src/services/plaid_webhook_verify.rs`.
 
-**Plan:**
-1. Fetch and cache Plaid's signing key from `POST /webhook_verification_key/get` (per-key-id, refresh on rotation).
-2. ES256-verify the JWT in `Plaid-Verification`, where the JWT body is the SHA-256 of the raw HTTP body. `jsonwebtoken` crate handles this.
-3. Reject if `iat` is more than 5 minutes old (replay window).
-4. Remove the early-return guard in `plaid_webhook` and let the legacy logic run.
+### Multi-user data model (IDOR latency)  ✅ shipped
 
-### Multi-user data model (IDOR latency)
-
-**Tracking:** This section. **Audit ID:** M7.
-**Status:** Today the schema is single-user — `accounts`, `institutions`, `transactions`, `holdings`, `balance_snapshots` have no `user_id` column. Every "by id" handler in `accounts.rs`, `institutions.rs`, `imports.rs`, `dashboard.rs` therefore lacks an ownership predicate. **Do NOT create a second `users` row until the columns + predicates land**, or it becomes cross-tenant data exposure with no further code change.
-
-**Plan:**
-1. Migration: add `user_id UUID REFERENCES users(id) ON DELETE CASCADE` to every per-user table, NULLable at first.
-2. Backfill: assign all existing rows to the sole `users` row.
-3. Migration: `ALTER COLUMN user_id SET NOT NULL`.
-4. Code: in every handler that takes `Path<Uuid>`, fetch with `WHERE id = $1 AND user_id = $auth`. The audit lists every site to update.
-5. Drop the multi-user banner from `OVERVIEW.md` once verified.
+**Audit ID:** M7. Shipped in commit `83023da`. `user_id` columns +
+ownership predicates everywhere; cross-tenant data exposure is no
+longer possible. See entry "5. Multi-user support" above for the
+remaining low-priority polish (`app_settings`, roles, isolation
+integration test).
 
 ### CSRF defence-in-depth
 
@@ -606,12 +464,10 @@ Each side reverts cleanly: drop the `passkey_credentials` table (migration is id
 
 **Plan:** Replace with a single `jsonb_object_agg` query in the DB.
 
-### Connection-pool size
+### Connection-pool size  ✅ shipped
 
-**Tracking:** This section. **Audit ID:** P7.
-**Status:** `DATABASE_MAX_CONNECTIONS` defaults to 5 in `.env.example`. The webapp + the daily-snapshot cron + the manual-sync trigger can each consume a connection; one burst (e.g. an interactive sync + dashboard load) and the pool blocks.
-
-**Plan:** Default to 20 for the API container. The cron's single connection is negligible. Already bumped in the audit-driven commit.
+**Audit ID:** P7. Bumped in the audit-driven commit `6e1270a`. Pool
+default for the API container is now 20.
 
 ### WebAuthn `localhost` rp_id rewrite
 

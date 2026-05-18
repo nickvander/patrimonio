@@ -1,111 +1,102 @@
-# Current Phase: Phase 13: Data Quality and Reconciliation
+# Current state — snapshot
 
-> **Last Updated:** 2026-05-13
-> **Status:** Plaid Production migration complete. Data Quality Phase (Phase 13) is underway with user overrides, notes, and hardened deduplication implemented.
+> **Last updated:** 2026-05-18
+> **Branch:** `main` (origin/main caught up — nothing local-only)
 
-## What's Done - Full Build Summary
+## Where we are
 
-### Core Infrastructure
-- Rust backend with axum, SQLx, PostgreSQL 17, and Redis 7
-- Docker Compose stack for API, Postgres, Redis, and Flutter web frontend
-- Host ports chosen to avoid common local conflicts: app `3000`, API `8080`, Postgres `5433`, Redis `6380`
-- API health, dashboard, accounts, FX, imports, Plaid, Coinbase, Bitso, and tax route areas
-- Local smoke script for API and browser rendering validation
-- **Plaid Production Environment**: Fully migrated from Sandbox with real-world credential support
-- **OAuth Update Mode**: Support for reconnecting institutions when credentials expire or change
+Patrimonio is well past the "demo" phase. Plaid Production is live with
+real bank credentials; the auth stack has passwords, TOTP, recovery
+codes, passkeys (FIDO2), and invitation-based registration; the
+backend is multi-user-safe end-to-end (M7); investment cost basis is
+FX-aware with per-lot historical USDMXN tracking. Day-to-day use is
+the loop the user actually has.
 
-### Dashboard & Visualization
-- Flutter dashboard UI for net worth, accounts, breakdowns, portfolio, FX, utilization, sync status, and tax planning
-- Interactive net worth and portfolio visualizations
-- 12-month cash-flow trends and asset allocation views
-- S&P 500 performance benchmark context
-- Transaction search, title-cased descriptions, and category icons
+This session (2026-05-17 → 18) shipped a substantial batch:
 
-### Data Quality & Reconciliation
-- **User Overrides**: Manual category corrections and transaction notes that persist across syncs
-- **Source Tracking**: Audit trail for every transaction (`plaid` vs `csv`)
-- **Deterministic Deduplication**: Signature-based hashing for CSV imports to prevent duplicate entries
-- **Account Management**: Support for deleting institutions and individual accounts
-- Manual CSV/PDF imports for Nu Mexico, Banamex, and Cetesdirecto
-- Global USD/MXN display support
+- **Security audit follow-ups**: Plaid webhook ES256 JWT verification
+  (audit H3); multi-user `user_id` columns + ownership predicates on
+  every financial-data query (audit M7).
+- **Invitation registration**: `invite_tokens` table + mint/list/revoke
+  endpoints + public `/api/auth/register` redemption + the
+  `RegisterScreen` UI that opens when the URL contains `?invite=...`.
+- **Transaction polish**: per-row `user_description` override (the
+  rename pattern), pencil icon in the detail modal, displayLabel
+  picks user override first. Plaid counterparties + original
+  description were already shipped earlier.
+- **FX-aware cost basis**: `holding_lots` table + sync engine pull
+  from `/investments/transactions/get` writing per-buy lots with
+  historical USDMXN, FIFO depletion on sell with zero-qty marker
+  rows for idempotency. `/api/dashboard/holdings` returns dual-
+  currency P&L using lots when present + current-FX fallback.
+- **Dual-currency portfolio panel**: USD + MXN tiles side-by-side
+  with explicit "US Dollar" / "Mexican Peso" subtitles (no naked
+  acronyms).
+- **Theme/contrast pass**: light-mode text alphas bumped (0.7→0.85
+  for muted, 0.7→0.78 for subtle, 0.56→0.65 for faint); ~20
+  hardcoded dark-only neon hex literals migrated to brightness-
+  aware palette tokens (`context.positive`, `context.tealAccent`,
+  etc.). AppBar `iconTheme` + `actionsIconTheme` set explicitly so
+  the Security shield + Sign-out arrow stay visible in both modes.
+- **KPI tile redesign**: Net worth gets a hero treatment (accent
+  wash background + left-edge bar). The other four (Assets,
+  Liabilities, Cash, Investments) share a coherent neutral
+  surface with a 6×6 accent dot before each label — no more
+  colored outlines around `$0.00 Liabilities`.
+- **Docs**: `docs/multi-currency.md` explains the two pipelines in
+  plain English (investment lots = shipped, cross-currency cash
+  transfers = future item 2b).
 
-### Crypto and Tax
-- Coinbase OAuth 2.0 with refresh support and encrypted token storage
-- Bitso read-only API integration with HMAC-signed requests
-- Crypto price and valuation services
-- US federal and Mexico ISR tax estimates
-- Taxable transaction CSV/PDF exports
-
-### Launch Hardening
-- Flutter web build served from an nginx container at `http://127.0.0.1:3000`
-- Docker build path verified for backend and frontend
-- Browser smoke testing added through `scripts/smoke.cjs`
-- Documentation refreshed for current local launch flow
-
-## Remaining Known Issues
-
-| Issue | Area | Severity |
-|-------|------|----------|
-| Portfolio legend can show repeated generic labels when sandbox data is sparse | Portfolio | Low |
-| Mixed-case descriptions may still need edge-case cleanup | Transactions | Low |
-| Credit card icons could use more issuer-specific variation | Transactions | Low |
-| Tax shows zero when sandbox data has no taxable events | Tax Planning | Expected |
-
-## What Could Come Next
-
-See [NEXT.md](NEXT.md) for the prioritized backlog.
-
-1. **Production Plaid readiness**: Real credential validation, reconnect flows, provider error states, and first-run real-vs-sandbox UX.
-2. **Deployment and operations**: Hosted frontend/API, managed database/cache, secret management, backups, and monitoring.
-3. **Data quality and reconciliation**: Duplicate prevention, import/source metadata, category review, stale data indicators.
-4. **Real market data**: Replace static benchmark assumptions with sourced historical market data.
-5. **Tax accuracy**: Deferred until account, transaction, holding, and source data are reliable.
-
-## How to Continue Work
-
-### Start the dev environment
+## How to run locally
 
 ```bash
 cd ~/patrimonio
-docker compose up --build -d
-docker compose ps
+docker compose up -d            # starts api, frontend, postgres, redis
+docker compose ps               # all four should be Up / Healthy
 ```
 
-Open `http://127.0.0.1:3000`.
+- App:      `http://127.0.0.1:3000`
+- API:      `http://127.0.0.1:8080`
+- Postgres: host port `5433` (inside: 5432)
+- Redis:    host port `6380` (inside: 6379)
 
-### Test endpoints
+### Backend changes
 
 ```bash
-curl http://127.0.0.1:8080/api/health
-curl http://127.0.0.1:8080/api/accounts/summary
-curl http://127.0.0.1:8080/api/dashboard/overview
+docker compose up -d --build api      # rebuild + restart
+docker logs -f patrimonio-api-1       # tail
 ```
 
-### Run smoke validation
+### Frontend changes
 
 ```bash
-NODE_PATH=/path/to/node_modules ./scripts/smoke.cjs
+docker compose up -d --build frontend
+# After recreate, re-stamp the security headers (they live in the
+# nginx config, which the build overwrites):
+docker cp frontend/security_headers.conf \
+  patrimonio-frontend-1:/etc/nginx/conf.d/security_headers.conf \
+  && docker exec patrimonio-frontend-1 nginx -s reload
 ```
 
-Use `SKIP_BROWSER=1 ./scripts/smoke.cjs` only when Playwright/browser dependencies are unavailable.
+(The CSP rebuild gotcha: build → live container has the bundled
+JS but its nginx config doesn't include the most-recent security
+headers tweak; re-copying the file + reloading nginx fixes it.
+Worth automating eventually — see `work/NEXT.md`.)
 
-### Make backend changes
+## Known caveats / "expected" behavior
 
-```bash
-docker compose up --build -d api
-docker compose logs -f api
-```
+| Behavior | Why |
+|---|---|
+| AppBar action icons cached after a frontend rebuild | Hard-reload (Cmd/Ctrl+Shift+R) bypasses the browser bundle cache. SW is the self-unregistering kind so it isn't the cause. |
+| MXN P&L tile equals current-FX conversion of USD | `holding_lots` hasn't populated yet — click Sync. |
+| `INVALID_PRODUCT` / `PRODUCTS_NOT_SUPPORTED` in api logs after a sync | An institution doesn't expose Plaid's `investments` product. Cash + balance sync still works for it. |
+| "Miscellaneous Credit" / "Miscellaneous Debit" rows | Plaid `name` is genuinely "Miscellaneous Debit" for some transactions — the bank didn't send better. Use the pencil-icon rename in the detail modal. |
+| Cross-currency cash transfers (Wise → Nu) show as two unlinked rows | Not yet modeled (`work/FUTURE.md` item 2b). |
 
-### Make frontend changes
+## Pointers
 
-```bash
-cd frontend
-flutter analyze
-flutter build web
-```
-
-Rebuild the local web container after frontend changes:
-
-```bash
-docker compose up --build -d frontend
-```
+- `work/OVERVIEW.md` — what the app is + the institutions it tracks
+- `work/NEXT.md` — what to do next session (refreshed 2026-05-18)
+- `work/FUTURE.md` — full backlog with per-item plans
+- `work/DECISIONS.md` — architecture decision records
+- `docs/multi-currency.md` — user-facing guide to the USD/MXN model
