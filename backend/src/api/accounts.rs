@@ -21,6 +21,10 @@ pub fn router() -> Router<AppState> {
         .route("/{id}/nickname", patch(update_account_nickname))
         .route("/{id}/transactions", get(get_account_transactions))
         .route("/transactions/{tx_id}", patch(update_transaction).delete(delete_transaction))
+        .route(
+            "/transactions/{tx_id}/splits",
+            axum::routing::post(split_transaction).delete(unsplit_transaction),
+        )
 }
 
 #[derive(Deserialize)]
@@ -425,6 +429,10 @@ pub struct TransactionResponse {
     /// Plaid `payment_meta.payer` — symmetric for incoming transfers.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub payment_payer: Option<String>,
+    /// Non-null when this row is a child of a split. The parent itself
+    /// is filtered out of list views by the read-side query.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
     pub source: Option<String>,
     pub account_name: String,
     pub institution_name: String,
@@ -450,13 +458,14 @@ async fn get_account_transactions(
                t.category_detailed, t.payment_channel, t.merchant_name,
                t.original_description, t.counterparty_name, t.counterparty_logo_url,
                t.user_category, t.user_notes, t.user_description, t.source,
-               t.payment_payee, t.payment_payer,
+               t.payment_payee, t.payment_payer, t.parent_id,
                COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
                i.name as institution_name
         FROM transactions t
         JOIN accounts a ON t.account_id = a.id
         JOIN institutions i ON a.institution_id = i.id
         WHERE t.account_id = $1 AND t.user_id = $2
+          AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
         ORDER BY t.date DESC, t.created_at DESC
         LIMIT $3
         "#
@@ -489,6 +498,11 @@ async fn get_account_transactions(
         user_description: row.try_get::<Option<String>, _>("user_description").ok().flatten(),
         payment_payee: row.try_get::<Option<String>, _>("payment_payee").ok().flatten(),
         payment_payer: row.try_get::<Option<String>, _>("payment_payer").ok().flatten(),
+        parent_id: row
+            .try_get::<Option<uuid::Uuid>, _>("parent_id")
+            .ok()
+            .flatten()
+            .map(|u| u.to_string()),
         source: row.try_get("source").ok(),
         account_name: row.get("account_name"),
         institution_name: row.get("institution_name"),
@@ -619,6 +633,234 @@ async fn delete_account(
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => {
             error!("Failed to delete account: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct SplitRequest {
+    splits: Vec<SplitChild>,
+}
+
+#[derive(Deserialize)]
+struct SplitChild {
+    description: String,
+    amount: rust_decimal::Decimal,
+    /// User-supplied category for this leg. None = inherit the parent's
+    /// category at insert time (then editable like any other tx).
+    #[serde(default)]
+    category: Option<String>,
+}
+
+/// Split a transaction into N children. The original parent stays in
+/// the DB for audit but is hidden from every list and aggregate by the
+/// `NOT EXISTS (SELECT 1 FROM transactions c WHERE c.parent_id = t.id)`
+/// filter that's now woven through the read-side queries.
+///
+/// Validates:
+///   * `splits.len() >= 2` — a one-split "split" is just an edit.
+///   * Every child amount has the same sign as the parent. A split
+///     that mixes inflows + outflows is almost always a typo (and the
+///     few legitimate cases — partial refunds — are better modeled
+///     as separate manual transactions).
+///   * `sum(child.amount) == parent.amount` to within 1 cent. The 1¢
+///     tolerance handles the inevitable rounding when splitting a
+///     $33.34 charge three ways.
+///   * No nested splits — you can't split a row that's already a
+///     child of another split.
+///   * Parent isn't already split (re-splitting would orphan the
+///     existing children).
+async fn split_transaction(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path(tx_id): Path<uuid::Uuid>,
+    Json(payload): Json<SplitRequest>,
+) -> impl IntoResponse {
+    use rust_decimal::Decimal;
+    if payload.splits.len() < 2 {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(serde_json::json!({"error": "Need at least two splits"})),
+        )
+            .into_response();
+    }
+
+    let parent_row = sqlx::query(
+        r#"
+        SELECT t.id, t.account_id, t.date, t.amount, t.currency, t.description,
+               t.category, t.user_category, t.source, t.parent_id,
+               (SELECT 1 FROM transactions c WHERE c.parent_id = t.id LIMIT 1) AS has_children
+        FROM transactions t
+        WHERE t.id = $1 AND t.user_id = $2
+        "#,
+    )
+    .bind(tx_id)
+    .bind(ctx.user_id)
+    .fetch_optional(&state.db)
+    .await;
+    let parent = match parent_row {
+        Ok(Some(r)) => r,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(e) => {
+            error!("split_transaction lookup failed: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+    let parent_parent_id: Option<uuid::Uuid> = parent.try_get("parent_id").ok();
+    if parent_parent_id.is_some() {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(serde_json::json!({"error": "Cannot split a transaction that is already a split-child"})),
+        )
+            .into_response();
+    }
+    let has_children: Option<i32> = parent.try_get("has_children").ok();
+    if has_children.is_some() {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(serde_json::json!({"error": "Transaction is already split — unsplit first"})),
+        )
+            .into_response();
+    }
+
+    let parent_amount: Decimal = parent.get("amount");
+    let parent_account_id: uuid::Uuid = parent.get("account_id");
+    let parent_date: chrono::NaiveDate = parent.get("date");
+    let parent_currency: String = parent.get("currency");
+    let parent_category: Option<String> = parent.try_get("category").ok();
+    let parent_source: Option<String> = parent.try_get("source").ok().flatten();
+
+    let parent_is_positive = parent_amount.is_sign_positive();
+    let mut total = Decimal::ZERO;
+    for child in &payload.splits {
+        let trimmed = child.description.trim();
+        if trimmed.is_empty() {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({"error": "Every split needs a description"})),
+            )
+                .into_response();
+        }
+        if child.amount.is_zero() {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({"error": "Zero-amount splits are not allowed"})),
+            )
+                .into_response();
+        }
+        if child.amount.is_sign_positive() != parent_is_positive {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "Every split must share the parent's sign (all expense or all income)"
+                })),
+            )
+                .into_response();
+        }
+        total += child.amount;
+    }
+    // 1¢ tolerance — split-three-ways rounding on a $33.34 charge.
+    let diff = (total - parent_amount).abs();
+    if diff > Decimal::new(1, 2) {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(serde_json::json!({
+                "error": format!(
+                    "Split total ({}) doesn't match parent ({}) — off by {}",
+                    total, parent_amount, diff
+                )
+            })),
+        )
+            .into_response();
+    }
+
+    // Transactional insert so a mid-flight failure can't leave a
+    // half-split row.
+    let mut tx = match state.db.begin().await {
+        Ok(t) => t,
+        Err(e) => {
+            error!("split begin failed: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    for child in &payload.splits {
+        let category = child
+            .category
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .map(str::to_string)
+            .or_else(|| parent_category.clone());
+        let res = sqlx::query(
+            r#"
+            INSERT INTO transactions (
+                account_id, parent_id, date, description, amount, currency,
+                category, user_category, source, user_id
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            "#,
+        )
+        .bind(parent_account_id)
+        .bind(tx_id)
+        .bind(parent_date)
+        .bind(child.description.trim())
+        .bind(child.amount)
+        .bind(&parent_currency)
+        .bind(category.as_deref())
+        .bind(child.category.as_deref().filter(|s| !s.trim().is_empty()))
+        .bind(parent_source.as_deref().unwrap_or("split"))
+        .bind(ctx.user_id)
+        .execute(&mut *tx)
+        .await;
+        if let Err(e) = res {
+            error!("split child insert failed: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    }
+    if let Err(e) = tx.commit().await {
+        error!("split commit failed: {e}");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    (
+        StatusCode::CREATED,
+        Json(serde_json::json!({
+            "parent_id": tx_id.to_string(),
+            "splits": payload.splits.len()
+        })),
+    )
+        .into_response()
+}
+
+/// Un-split: delete every child of this parent. The parent itself
+/// stays untouched, so the original transaction re-emerges in the
+/// list. Returns 404 when the target isn't a split parent owned by
+/// the caller. Returns 200 with the count of removed children.
+async fn unsplit_transaction(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path(tx_id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    // Ownership predicate via JOIN to parent — without this an
+    // attacker who knew a parent UUID could nuke another user's
+    // splits. The DELETE only fires when the parent belongs to ctx.
+    let result = sqlx::query(
+        r#"
+        DELETE FROM transactions
+        WHERE parent_id = $1
+          AND parent_id IN (SELECT id FROM transactions WHERE id = $1 AND user_id = $2)
+        "#,
+    )
+    .bind(tx_id)
+    .bind(ctx.user_id)
+    .execute(&state.db)
+    .await;
+    match result {
+        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
+        Ok(r) => Json(serde_json::json!({"removed": r.rows_affected()})).into_response(),
+        Err(e) => {
+            error!("unsplit_transaction failed: {e}");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }

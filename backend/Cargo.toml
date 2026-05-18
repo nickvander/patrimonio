@@ -46,6 +46,10 @@ thiserror = "2"
 # Encryption (for Plaid tokens)
 aes-gcm = "0.10"
 hex = "0.4"
+# Parses TRUSTED_PROXY_CIDRS into IpNet ranges so the proxy-aware
+# client_ip middleware can strip X-Forwarded-For when the TCP peer
+# isn't in the allow-list. Tiny crate, no dep tail.
+ipnet = "2"
 rand = "0.8"
 hmac = "0.12"
 sha2 = "0.10"

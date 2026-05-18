@@ -1383,7 +1383,17 @@ class _DashboardScreenState extends State<DashboardScreen>
                 summary: _sinceLastLogin,
                 currencyFormat: currencyFormat,
                 conversionFactor: conversionFactor,
-                onJumpToTransactions: () => _tabController?.animateTo(2),
+                onJumpToTransactions: (anchor) {
+                  // Seed a custom date range from the previous-login
+                  // anchor through today so the transactions list is
+                  // pre-filtered to exactly the rows the banner is
+                  // talking about.
+                  setState(() => _txDateSeed = (
+                    start: DateTime(anchor.year, anchor.month, anchor.day),
+                    end: DateTime.now(),
+                  ));
+                  _tabController?.animateTo(2);
+                },
                 onJumpToManagement: () => _tabController?.animateTo(6),
               ),
               if (_sinceLastLogin != null) const SizedBox(height: 12),
@@ -1488,6 +1498,14 @@ class _DashboardScreenState extends State<DashboardScreen>
             );
           }
         },
+        onSplitTransaction: (parentId, splits) async {
+          await _apiService.splitTransaction(parentId, splits);
+          await _refreshData();
+        },
+        onUnsplitTransaction: (parentId) async {
+          await _apiService.unsplitTransaction(parentId);
+          await _refreshData();
+        },
         onDetectFxTransfers: () async {
           final messenger = ScaffoldMessenger.of(context);
           messenger.showSnackBar(
@@ -1590,6 +1608,21 @@ class _DashboardScreenState extends State<DashboardScreen>
               onTapMerchant: (m) {
                 setState(() => _transactionsSearchOverride = m);
                 _tabController?.animateTo(2);
+              },
+              onIgnoreMerchant: (m) async {
+                try {
+                  await _apiService.ignoreSubscription(m);
+                  await _refreshData();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('"$m" hidden from subscriptions')),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed: $e')),
+                  );
+                }
               },
             ),
             const SizedBox(height: 24),

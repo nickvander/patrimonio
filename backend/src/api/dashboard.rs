@@ -27,6 +27,7 @@ pub fn router() -> Router<AppState> {
         .route("/transactions/manual", axum::routing::post(create_manual_transaction))
         .route("/since-last-login", get(since_last_login))
         .route("/subscriptions", get(detected_subscriptions))
+        .route("/subscriptions/ignore", axum::routing::post(ignore_subscription))
         .route("/fx-transfers", get(list_fx_transfers).post(detect_fx_transfers))
         .route(
             "/fx-transfers/{id}",
@@ -541,10 +542,12 @@ async fn recent_transactions(
                t.payment_channel, t.merchant_name,
                t.original_description, t.counterparty_name, t.counterparty_logo_url,
                t.user_description, t.payment_payee, t.payment_payer,
+               t.parent_id,
                t.pending
         FROM transactions t
         JOIN accounts a ON t.account_id = a.id
         WHERE t.user_id = $1
+          AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
         ORDER BY t.date DESC, t.created_at DESC
         LIMIT $2 OFFSET $3
         "#
@@ -606,6 +609,11 @@ async fn recent_transactions(
                         .try_get::<Option<String>, _>("payment_payer")
                         .ok()
                         .flatten(),
+                    parent_id: r
+                        .try_get::<Option<uuid::Uuid>, _>("parent_id")
+                        .ok()
+                        .flatten()
+                        .map(|u| u.to_string()),
                     pending: r.get("pending"),
                 }
             })
@@ -636,6 +644,7 @@ async fn export_transactions_csv(
         JOIN accounts a ON t.account_id = a.id
         JOIN institutions i ON a.institution_id = i.id
         WHERE t.user_id = $1
+          AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
         ORDER BY t.date DESC, t.created_at DESC
         "#
     )
@@ -898,12 +907,13 @@ async fn cash_flow_trends(
 ) -> Json<Vec<CashFlowPoint>> {
     let rows = sqlx::query(
         r#"
-        SELECT TO_CHAR(date, 'YYYY-MM') as month,
-               SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
-               SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as spending
-        FROM transactions
-        WHERE date >= CURRENT_DATE - INTERVAL '12 months'
-          AND user_id = $1
+        SELECT TO_CHAR(t.date, 'YYYY-MM') as month,
+               SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END) as income,
+               SUM(CASE WHEN t.amount < 0 THEN ABS(t.amount) ELSE 0 END) as spending
+        FROM transactions t
+        WHERE t.date >= CURRENT_DATE - INTERVAL '12 months'
+          AND t.user_id = $1
+          AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
         GROUP BY month
         ORDER BY month ASC
         "#
@@ -1106,6 +1116,10 @@ struct TransactionEntry {
     /// incoming wires/ACH where Plaid identifies who sent the funds.
     #[serde(skip_serializing_if = "Option::is_none")]
     payment_payer: Option<String>,
+    /// When non-null, this transaction is a child of a split. Display
+    /// hint only — children aggregate exactly like regular transactions.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_id: Option<String>,
     pending: bool,
 }
 
@@ -1189,8 +1203,9 @@ async fn since_last_login(
     //    can backfill old dates and the user would care most about "new
     //    rows that appeared in my list since I was last here."
     let tx_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM transactions \
-         WHERE user_id = $1 AND created_at > $2",
+        "SELECT COUNT(*) FROM transactions t \
+         WHERE t.user_id = $1 AND t.created_at > $2 \
+           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)",
     )
     .bind(ctx.user_id)
     .bind(anchor)
@@ -1320,6 +1335,20 @@ async fn detected_subscriptions(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Json<Vec<DetectedSubscription>> {
+    // Pull the user's dismissed-as-not-subscription set first, so we
+    // can skip those keys during clustering. Small table; we hold the
+    // whole thing in memory.
+    let ignored_rows = sqlx::query(
+        "SELECT merchant_key FROM ignored_subscription_merchants WHERE user_id = $1",
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+    let ignored: std::collections::HashSet<String> = ignored_rows
+        .iter()
+        .filter_map(|r| r.try_get::<String, _>("merchant_key").ok())
+        .collect();
     let rows = sqlx::query(
         r#"
         SELECT
@@ -1330,6 +1359,7 @@ async fn detected_subscriptions(
         WHERE t.user_id = $1
           AND t.amount > 0
           AND t.date >= CURRENT_DATE - INTERVAL '365 days'
+          AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
         ORDER BY t.date DESC
         "#,
     )
@@ -1461,6 +1491,14 @@ async fn detected_subscriptions(
             .iter()
             .any(|p| lower == *p || lower.starts_with(p))
         {
+            continue;
+        }
+        // User-dismissed cluster ("this isn't a subscription"). Skip
+        // the merchant entirely — the dismissed key matches whatever
+        // the detector clustered on at the time, so re-running won't
+        // re-surface it unless the underlying tx data changed in a
+        // way that produces a different key.
+        if ignored.contains(&key_part) {
             continue;
         }
         let band = amount.round() as i64;
@@ -1737,6 +1775,47 @@ async fn unlink_fx_transfer(
         Ok(_) => StatusCode::NOT_FOUND,
         Err(e) => {
             error!("unlink_fx_transfer failed for {}: {}", id, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct IgnoreSubscriptionRequest {
+    /// Lowercased + trimmed merchant key the user wants the detector
+    /// to stop showing. Mirrors the key the detector itself clusters
+    /// on, so the frontend can send the same `merchant` value it
+    /// rendered.
+    merchant: String,
+}
+
+/// Mark a detected-subscription cluster as "not a subscription."
+/// Lands a row in `ignored_subscription_merchants`; subsequent
+/// detector runs skip the key entirely. The user can re-confirm by
+/// just letting the cluster come back (we don't expose an
+/// "unignore" today — if you actually need to undo, delete the row
+/// directly from the DB).
+async fn ignore_subscription(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Json(req): Json<IgnoreSubscriptionRequest>,
+) -> StatusCode {
+    let key = req.merchant.trim().to_lowercase();
+    if key.is_empty() {
+        return StatusCode::BAD_REQUEST;
+    }
+    let result = sqlx::query(
+        "INSERT INTO ignored_subscription_merchants (user_id, merchant_key) \
+         VALUES ($1, $2) ON CONFLICT DO NOTHING",
+    )
+    .bind(ctx.user_id)
+    .bind(&key)
+    .execute(&state.db)
+    .await;
+    match result {
+        Ok(_) => StatusCode::NO_CONTENT,
+        Err(e) => {
+            error!("ignore_subscription failed: {e}");
             StatusCode::INTERNAL_SERVER_ERROR
         }
     }

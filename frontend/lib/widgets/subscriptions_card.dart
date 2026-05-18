@@ -23,6 +23,10 @@ class SubscriptionsCard extends StatelessWidget {
   /// Optional callback to seed the transactions tab's search with the
   /// merchant name so the user can drill into the underlying rows.
   final void Function(String merchant)? onTapMerchant;
+  /// "This isn't a subscription, stop showing it." Dismisses the row
+  /// and POSTs to `/dashboard/subscriptions/ignore` so the detector
+  /// skips this merchant on its next run.
+  final Future<void> Function(String merchant)? onIgnoreMerchant;
 
   const SubscriptionsCard({
     super.key,
@@ -32,6 +36,7 @@ class SubscriptionsCard extends StatelessWidget {
     required this.currencyFormat,
     required this.targetCurrency,
     this.onTapMerchant,
+    this.onIgnoreMerchant,
   });
 
   @override
@@ -207,6 +212,14 @@ class SubscriptionsCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (onIgnoreMerchant != null)
+              IconButton(
+                tooltip: 'Not a subscription — hide this row',
+                iconSize: 16,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.close),
+                onPressed: () => onIgnoreMerchant!(merchant),
+              ),
           ],
         ),
       ),

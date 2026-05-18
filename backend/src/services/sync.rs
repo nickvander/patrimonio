@@ -489,9 +489,49 @@ pub async fn sync_institutions(
                 .bind(inst_id)
                 .execute(db).await;
         }
-            
+
         tracing::info!("Successfully synced {}", inst_name);
     }
+
+    // Per-user FX-transfer detection sweep. Runs once after every
+    // institution belonging to a given user has finished syncing —
+    // this is where new candidate pairs first become visible
+    // (the USD-out and the MXN-in only land in the same window once
+    // both their institutions have run /transactions/sync). Failures
+    // here are logged but don't fail the sync itself.
+    //
+    // For the broader "all institutions" run we collect distinct
+    // user_ids from the rows we processed and run detection once
+    // per user. Detection itself is idempotent (the unique pair
+    // index dedupes), so re-running on every sync is safe — the only
+    // cost is the candidate scan, which is bounded to the last 90
+    // days and is sub-second on small accounts.
+    let user_ids: Vec<uuid::Uuid> = match user_filter {
+        Some(uid) => vec![uid],
+        None => {
+            let rows = sqlx::query("SELECT DISTINCT user_id FROM institutions")
+                .fetch_all(db)
+                .await
+                .unwrap_or_default();
+            rows.iter()
+                .filter_map(|r| r.try_get::<uuid::Uuid, _>("user_id").ok())
+                .collect()
+        }
+    };
+    for uid in user_ids {
+        match crate::services::fx_transfer_link::detect_for_user(db, uid).await {
+            Ok((checked, inserted)) => {
+                if inserted > 0 {
+                    tracing::info!(
+                        "fx_transfer_link: user {} - {}/{} new links from {} candidates",
+                        uid, inserted, inserted, checked
+                    );
+                }
+            }
+            Err(e) => tracing::warn!("fx_transfer_link: user {} sweep failed: {}", uid, e),
+        }
+    }
+
     Ok(())
 }
 

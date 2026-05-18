@@ -34,6 +34,13 @@ pub struct AppConfig {
     /// Plaid silently falls back to polling — which is fine for
     /// sandbox / local dev but burns quota in production.
     pub plaid_webhook_url: Option<String>,
+    /// CIDRs whose source IPs are allowed to set X-Forwarded-For /
+    /// X-Real-IP on incoming requests. Headers from any other peer are
+    /// stripped before reaching the handlers (so a malicious client
+    /// can't spoof their IP to evade per-IP rate limiting). Empty in
+    /// dev with no upstream proxy. In production, set to the docker
+    /// bridge + your reverse-proxy's IP (e.g. `127.0.0.1/32,172.17.0.0/16`).
+    pub trusted_proxy_cidrs: Vec<ipnet::IpNet>,
     pub allowed_origins: Vec<String>,
     /// Force the session cookie's `Secure` flag on. Default false; the
     /// cookie is also marked Secure automatically when
@@ -91,6 +98,9 @@ impl AppConfig {
             frontend_base_url,
             plaid_redirect_uri: env_non_empty("PLAID_REDIRECT_URI"),
             plaid_webhook_url: env_non_empty("PLAID_WEBHOOK_URL"),
+            trusted_proxy_cidrs: parse_cidr_list(
+                &std::env::var("TRUSTED_PROXY_CIDRS").unwrap_or_default(),
+            ),
             allowed_origins,
             // Default to true (secure-by-default). Local dev over
             // plain http://localhost must explicitly opt out with
@@ -109,4 +119,23 @@ fn env_non_empty(name: &str) -> Option<String> {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
+}
+
+/// Parse a comma-separated CIDR list (e.g. "127.0.0.1/32,172.17.0.0/16")
+/// into IpNet values. Invalid entries are silently skipped with a
+/// tracing warning so a typo doesn't take the whole server down — the
+/// worst case is "no peers are trusted" which means XFF is always
+/// stripped, which is the safer side to fail on anyway.
+fn parse_cidr_list(raw: &str) -> Vec<ipnet::IpNet> {
+    raw.split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .filter_map(|s| match s.parse::<ipnet::IpNet>() {
+            Ok(net) => Some(net),
+            Err(e) => {
+                tracing::warn!("TRUSTED_PROXY_CIDRS: invalid entry '{}' ({})", s, e);
+                None
+            }
+        })
+        .collect()
 }

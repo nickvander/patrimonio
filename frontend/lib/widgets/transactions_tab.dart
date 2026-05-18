@@ -8,6 +8,7 @@ import '../utils/currency.dart';
 import '../utils/transaction_description.dart';
 import '../utils/transaction_display.dart';
 import 'add_transaction_dialog.dart';
+import 'split_transaction_dialog.dart';
 import 'transaction_filters.dart';
 
 class TransactionsTab extends StatefulWidget {
@@ -68,6 +69,14 @@ class TransactionsTab extends StatefulWidget {
   final Future<void> Function(String id)? onConfirmFxTransfer;
   /// Remove a link entirely. The two underlying transactions stay put.
   final Future<void> Function(String id)? onUnlinkFxTransfer;
+  /// Split a parent into children. `splits` is a list of maps
+  /// `{description, amount, [category]}`. Server validates the sum
+  /// matches the parent and rejects with a useful error otherwise.
+  final Future<void> Function(String parentId, List<Map<String, dynamic>> splits)?
+      onSplitTransaction;
+  /// Un-split: delete every child of the given parent. Used from the
+  /// detail modal of a split-child (which knows its `parent_id`).
+  final Future<void> Function(String parentId)? onUnsplitTransaction;
 
   const TransactionsTab({
     super.key,
@@ -92,6 +101,8 @@ class TransactionsTab extends StatefulWidget {
     this.onDetectFxTransfers,
     this.onConfirmFxTransfer,
     this.onUnlinkFxTransfer,
+    this.onSplitTransaction,
+    this.onUnsplitTransaction,
   });
 
   @override
@@ -578,6 +589,51 @@ class _TransactionsTabState extends State<TransactionsTab> {
     );
     if (accId == null || accId.isEmpty) return;
     await _applyBulkUpdate(accountId: accId);
+  }
+
+  /// Open the split editor for [tx]. On save, fires
+  /// `widget.onSplitTransaction` with the parent id and the children
+  /// list; the dashboard refreshes the list which causes the parent
+  /// to disappear (replaced by its children).
+  Future<void> _openSplitDialog(
+    dynamic tx,
+    String sourceCurrency,
+    double sourceAmount,
+    String parentLabel,
+    String parentCategory,
+  ) async {
+    final onSplit = widget.onSplitTransaction;
+    if (onSplit == null) return;
+
+    final result = await showDialog<List<Map<String, dynamic>>?>(
+      context: context,
+      builder: (_) => SplitTransactionDialog(
+        parentAmount: sourceAmount,
+        parentCurrency: sourceCurrency,
+        parentLabel: parentLabel,
+        parentCategory: parentCategory,
+        usdMxnRate: widget.usdMxnRate,
+        targetCurrency: widget.targetCurrency,
+        reportingFormat: widget.currencyFormat,
+      ),
+    );
+    if (result == null || result.isEmpty) return;
+    if (!mounted) return;
+    // Close the detail modal so the refreshed list (which hides the
+    // parent) is the visible state.
+    Navigator.of(context).pop();
+    try {
+      await onSplit(tx['id'].toString(), result);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Split into ${result.length} parts')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Split failed: $e')),
+      );
+    }
   }
 
   /// Open the rename dialog for a single transaction. Empty string saves
@@ -1596,6 +1652,53 @@ class _TransactionsTabState extends State<TransactionsTab> {
                           );
                         }
                       },
+                    ),
+                  ],
+                  // Split / Unsplit affordance. A child row offers
+                  // "Unsplit" (restore the parent + delete every
+                  // sibling); a regular row offers "Split". Hidden
+                  // for the very small set of states that don't make
+                  // sense — e.g. a manually-added row that's already
+                  // a child (since it has a parent_id) follows the
+                  // child branch.
+                  if (widget.onSplitTransaction != null ||
+                      widget.onUnsplitTransaction != null) ...[
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        if ((tx['parent_id'] ?? '').toString().isEmpty &&
+                            widget.onSplitTransaction != null)
+                          OutlinedButton.icon(
+                            onPressed: () =>
+                                _openSplitDialog(tx, sourceCurrency, sourceAmount,
+                                    titleDescription, originalCategory),
+                            icon: const Icon(Icons.call_split, size: 16),
+                            label: const Text('Split this transaction'),
+                          ),
+                        if ((tx['parent_id'] ?? '').toString().isNotEmpty &&
+                            widget.onUnsplitTransaction != null)
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              Navigator.of(context).pop();
+                              try {
+                                await widget.onUnsplitTransaction!(
+                                    (tx['parent_id'] ?? '').toString());
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Split removed')),
+                                );
+                              } catch (e) {
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Unsplit failed: $e')),
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.call_merge, size: 16),
+                            label: const Text('Unsplit (restore original)'),
+                          ),
+                      ],
                     ),
                   ],
                   const SizedBox(height: 20),

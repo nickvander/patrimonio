@@ -19,8 +19,11 @@ class SinceLastLoginBanner extends StatefulWidget {
   /// Conversion factor for USD-stored deltas (1.0 for USD reporting,
   /// USD/MXN rate when reporting in MXN).
   final double conversionFactor;
-  /// Tapping the "View transactions" CTA jumps to the Transactions tab.
-  final VoidCallback? onJumpToTransactions;
+  /// Tapping the "View transactions" CTA jumps to the Transactions
+  /// tab. Receives the anchor (previous-login) date so the dashboard
+  /// can seed a date filter to "since X" — the banner stops being a
+  /// vague hop and becomes a real drill-in.
+  final void Function(DateTime anchor)? onJumpToTransactions;
   /// Tapping the "Open management" CTA jumps to the Management tab (used
   /// to surface a sync_errors call-out next to the institution row).
   final VoidCallback? onJumpToManagement;
@@ -152,9 +155,9 @@ class _SinceLastLoginBannerState extends State<SinceLastLoginBanner> {
               ],
             ),
           ),
-          if (newTx > 0 && widget.onJumpToTransactions != null)
+          if (newTx > 0 && widget.onJumpToTransactions != null && anchor != null)
             TextButton(
-              onPressed: widget.onJumpToTransactions,
+              onPressed: () => widget.onJumpToTransactions!(anchor),
               child: const Text('View'),
             ),
           if (syncErrors.isNotEmpty && widget.onJumpToManagement != null)

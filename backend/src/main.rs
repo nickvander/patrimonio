@@ -1,16 +1,17 @@
 use anyhow::Result;
 use tokio_cron_scheduler::{Job, JobScheduler};
 use axum::{
-    extract::State,
+    extract::{ConnectInfo, State},
     http::{
         header::{AUTHORIZATION, CONTENT_TYPE, COOKIE, SET_COOKIE},
         HeaderValue, Method,
     },
-    middleware::from_fn_with_state,
-    response::Json,
+    middleware::{from_fn, from_fn_with_state, Next},
+    response::{Json, Response},
     routing::get,
     Router,
 };
+use std::net::SocketAddr;
 use serde::Serialize;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
@@ -167,24 +168,78 @@ async fn main() -> Result<()> {
         // Keep the existing URLs (registered with Coinbase) but require
         // an authenticated session.
         .nest("/api/auth", patrimonio::api::auth::router())
+        // Inner-to-outer: require_csrf_header runs first (rejects
+        // POST/PUT/PATCH/DELETE without X-Requested-With), then
+        // require_auth populates AuthContext. Order matters because
+        // axum applies layers in reverse, so the LAST .layer() is the
+        // OUTERMOST middleware. We want CSRF on the outside — auth
+        // bypass would still be 401 from the inner layer, but the
+        // outer CSRF check is cheaper and more obvious.
         .layer(from_fn_with_state(
             state.clone(),
             patrimonio::api::session::require_auth,
+        ))
+        .layer(axum::middleware::from_fn(
+            patrimonio::api::session::require_csrf_header,
         ));
 
     let app = public
         .merge(protected)
+        // Sanitise proxy-set headers BEFORE anything else looks at the
+        // request. If the TCP peer isn't in TRUSTED_PROXY_CIDRS we strip
+        // X-Forwarded-For + X-Real-IP so downstream rate-limiting can't
+        // be evaded by a malicious client setting the headers itself.
+        // Has to be from_fn (not from_fn_with_state) because the layer
+        // applies before the State extractor would resolve.
+        .layer(from_fn_with_state(
+            state.clone(),
+            sanitize_forwarded_headers,
+        ))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);
 
-    // Start server
+    // Start server. `into_make_service_with_connect_info::<SocketAddr>()`
+    // is required so the sanitize_forwarded_headers layer can read the
+    // TCP peer's address via the ConnectInfo extractor.
     let addr = format!("0.0.0.0:{}", config.port);
     tracing::info!("Listening on {}", addr);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
+}
+
+/// Strip X-Forwarded-For and X-Real-IP from requests whose TCP peer
+/// isn't in `state.config.trusted_proxy_cidrs`. Subsequent handlers
+/// can then unconditionally trust those headers when present — the
+/// trust check has been moved here, at the edge of the process.
+///
+/// Empty trusted list: every peer is untrusted, so XFF is always
+/// stripped. Local dev with no upstream proxy stays in this state by
+/// default, which matches the historical behavior (XFF was honored
+/// indiscriminately before; now it's ignored, which is safer).
+async fn sanitize_forwarded_headers(
+    State(state): State<patrimonio::AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    mut req: axum::extract::Request,
+    next: Next,
+) -> Response {
+    let trusted = state
+        .config
+        .trusted_proxy_cidrs
+        .iter()
+        .any(|cidr| cidr.contains(&peer.ip()));
+    if !trusted {
+        let headers = req.headers_mut();
+        headers.remove("x-forwarded-for");
+        headers.remove("x-real-ip");
+    }
+    next.run(req).await
 }
 
 fn build_cors_layer(allowed_origins: &[String]) -> CorsLayer {
@@ -213,7 +268,16 @@ fn build_cors_layer(allowed_origins: &[String]) -> CorsLayer {
             Method::PATCH,
             Method::DELETE,
         ])
-        .allow_headers([CONTENT_TYPE, AUTHORIZATION, COOKIE])
+        .allow_headers([
+            CONTENT_TYPE,
+            AUTHORIZATION,
+            COOKIE,
+            // X-Requested-With is the CSRF defence-in-depth header
+            // required by the require_csrf_header middleware on every
+            // mutating route. CORS has to allow-list it explicitly
+            // because it's a non-simple header.
+            axum::http::header::HeaderName::from_static("x-requested-with"),
+        ])
         .expose_headers([SET_COOKIE])
         .allow_credentials(true)
 }

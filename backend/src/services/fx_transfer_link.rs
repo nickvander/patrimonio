@@ -95,6 +95,7 @@ pub async fn detect_for_user(db: &PgPool, user_id: uuid::Uuid) -> Result<(usize,
           AND t.date >= CURRENT_DATE - INTERVAL '90 days'
           AND t.currency IN ('USD', 'MXN')
           AND ABS(t.amount) >= $2
+          AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
         ORDER BY t.date ASC, t.id ASC
         "#,
     )

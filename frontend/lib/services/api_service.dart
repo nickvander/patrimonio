@@ -30,6 +30,22 @@ class ApiService {
   /// XHRs in development, and is harmless in same-origin production.
   static final BrowserClient _client = BrowserClient()..withCredentials = true;
 
+  /// X-Requested-With sentinel. The backend's `require_csrf_header`
+  /// middleware rejects mutating requests without this header — a
+  /// classic CSRF attacker can't set custom headers from a malicious
+  /// origin without triggering a CORS preflight that our backend
+  /// refuses. The exact value doesn't matter (the middleware only
+  /// checks for non-empty), but we use "fetch" to match the convention
+  /// jQuery and friends introduced years ago.
+  static const Map<String, String> _csrfHeader = {
+    'X-Requested-With': 'fetch',
+  };
+
+  Map<String, String> _withCsrf(Map<String, String>? extra) {
+    if (extra == null || extra.isEmpty) return _csrfHeader;
+    return {..._csrfHeader, ...extra};
+  }
+
   Future<http.Response> _get(Uri uri) async {
     final res = await _client.get(uri);
     _maybeUnauthorized(res);
@@ -37,25 +53,25 @@ class ApiService {
   }
 
   Future<http.Response> _post(Uri uri, {Object? body, Map<String, String>? headers}) async {
-    final res = await _client.post(uri, body: body, headers: headers);
+    final res = await _client.post(uri, body: body, headers: _withCsrf(headers));
     _maybeUnauthorized(res);
     return res;
   }
 
   Future<http.Response> _patch(Uri uri, {Object? body, Map<String, String>? headers}) async {
-    final res = await _client.patch(uri, body: body, headers: headers);
+    final res = await _client.patch(uri, body: body, headers: _withCsrf(headers));
     _maybeUnauthorized(res);
     return res;
   }
 
   Future<http.Response> _put(Uri uri, {Object? body, Map<String, String>? headers}) async {
-    final res = await _client.put(uri, body: body, headers: headers);
+    final res = await _client.put(uri, body: body, headers: _withCsrf(headers));
     _maybeUnauthorized(res);
     return res;
   }
 
   Future<http.Response> _delete(Uri uri) async {
-    final res = await _client.delete(uri);
+    final res = await _client.delete(uri, headers: _csrfHeader);
     _maybeUnauthorized(res);
     return res;
   }
@@ -80,7 +96,7 @@ class ApiService {
   Future<LoginOutcome> login(String username, String password) async {
     final res = await _client.post(
       Uri.parse('$_baseUrl/auth/login'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({'username': username, 'password': password}),
     );
     if (res.statusCode == 200) {
@@ -96,7 +112,7 @@ class ApiService {
   Future<AuthUser> verifyTotp(String code) async {
     final res = await _client.post(
       Uri.parse('$_baseUrl/auth/totp/verify'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({'code': code}),
     );
     if (res.statusCode == 200) {
@@ -112,7 +128,7 @@ class ApiService {
   }) async {
     final res = await _client.post(
       Uri.parse('$_baseUrl/auth/bootstrap'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({
         'username': username,
         'email': email,
@@ -142,7 +158,7 @@ class ApiService {
   }) async {
     final res = await _client.post(
       Uri.parse('$_baseUrl/auth/register'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({
         'token': token,
         'username': username,
@@ -168,7 +184,7 @@ class ApiService {
   Future<InviteMint> createInvite({int? expiresInHours, String? note}) async {
     final res = await _client.post(
       Uri.parse('$_baseUrl/auth/invites'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({
         if (expiresInHours != null) 'expires_in_hours': expiresInHours,
         if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
@@ -200,7 +216,10 @@ class ApiService {
   }
 
   Future<void> revokeInvite(String id) async {
-    final res = await _client.delete(Uri.parse('$_baseUrl/auth/invites/$id'));
+    final res = await _client.delete(
+      Uri.parse('$_baseUrl/auth/invites/$id'),
+      headers: _csrfHeader,
+    );
     _maybeUnauthorized(res);
     if (res.statusCode != 204) {
       throw _errorFromBody(res, fallback: 'Failed to revoke invite');
@@ -214,7 +233,7 @@ class ApiService {
   }) async {
     final res = await _client.post(
       Uri.parse('$_baseUrl/auth/recover'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({
         'username': username,
         'code': code,
@@ -229,6 +248,7 @@ class ApiService {
   Future<List<String>> regenerateRecoveryCodes() async {
     final res = await _client.post(
       Uri.parse('$_baseUrl/auth/recovery-codes/regenerate'),
+      headers: _csrfHeader,
     );
     if (res.statusCode == 200) {
       final body = json.decode(res.body) as Map<String, dynamic>;
@@ -248,7 +268,10 @@ class ApiService {
   }
 
   Future<({String secretBase32, String provisioningUri})> beginTotpEnroll() async {
-    final res = await _client.post(Uri.parse('$_baseUrl/auth/totp/enroll'));
+    final res = await _client.post(
+      Uri.parse('$_baseUrl/auth/totp/enroll'),
+      headers: _csrfHeader,
+    );
     if (res.statusCode == 200) {
       final body = json.decode(res.body) as Map<String, dynamic>;
       return (
@@ -263,7 +286,7 @@ class ApiService {
   Future<void> confirmTotpEnroll(String code) async {
     final res = await _client.post(
       Uri.parse('$_baseUrl/auth/totp/confirm'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({'code': code}),
     );
     if (res.statusCode != 204) {
@@ -275,7 +298,7 @@ class ApiService {
   Future<void> disableTotp(String currentPassword) async {
     final res = await _client.post(
       Uri.parse('$_baseUrl/auth/totp/disable'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({'current_password': currentPassword}),
     );
     if (res.statusCode != 204) {
@@ -319,7 +342,10 @@ class ApiService {
   }
 
   Future<void> logout() async {
-    final res = await _client.post(Uri.parse('$_baseUrl/auth/logout'));
+    final res = await _client.post(
+      Uri.parse('$_baseUrl/auth/logout'),
+      headers: _csrfHeader,
+    );
     if (res.statusCode != 204 && res.statusCode != 200) {
       throw _errorFromBody(res, fallback: 'Logout failed');
     }
@@ -328,7 +354,7 @@ class ApiService {
   Future<void> changePassword(String currentPassword, String newPassword) async {
     final res = await _client.post(
       Uri.parse('$_baseUrl/auth/change-password'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({
         'current_password': currentPassword,
         'new_password': newPassword,
@@ -424,6 +450,19 @@ class ApiService {
     // Backend signals "no previous login" by omitting `previous_login_at`.
     if (body['previous_login_at'] == null) return null;
     return body;
+  }
+
+  /// Mark a detected subscription cluster as "not actually a
+  /// subscription" — the detector skips this merchant on future runs.
+  Future<void> ignoreSubscription(String merchant) async {
+    final response = await _post(
+      Uri.parse('$_baseUrl/dashboard/subscriptions/ignore'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'merchant': merchant}),
+    );
+    if (response.statusCode != 204) {
+      throw Exception('Failed to dismiss subscription');
+    }
   }
 
   /// Detected recurring outflows (subscriptions, bills, gym, etc.).
@@ -664,7 +703,7 @@ class ApiService {
   ) async {
     final response = await _post(
       Uri.parse('$_baseUrl/imports/confirm'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({
         'account_id': accountId,
         'transactions': transactions,
@@ -681,7 +720,7 @@ class ApiService {
   Future<void> updateAccountBalance(String accountId, double balance) async {
     final response = await _patch(
       Uri.parse('$_baseUrl/accounts/$accountId/balance'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({'current_balance': balance}),
     );
     if (response.statusCode != 200) {
@@ -702,7 +741,7 @@ class ApiService {
   Future<void> renameAccount(String accountId, String nickname) async {
     final response = await _patch(
       Uri.parse('$_baseUrl/accounts/$accountId/nickname'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({'nickname': nickname}),
     );
     if (response.statusCode != 200) {
@@ -728,7 +767,7 @@ class ApiService {
 
     final response = await _patch(
       Uri.parse('$_baseUrl/accounts/transactions/$txId'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode(body),
     );
     if (response.statusCode != 200) {
@@ -766,7 +805,7 @@ class ApiService {
     };
     final response = await _post(
       Uri.parse('$_baseUrl/dashboard/transactions/manual'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode(body),
     );
     if (response.statusCode == 409) {
@@ -774,6 +813,37 @@ class ApiService {
     }
     if (response.statusCode != 201) {
       throw Exception('Failed to add transaction: ${response.body}');
+    }
+  }
+
+  /// Split a transaction into [splits] children. Each split is
+  /// `{description, amount, [category]}`. The original parent stays
+  /// in the DB for audit but is hidden from every list view.
+  Future<void> splitTransaction(
+    String txId,
+    List<Map<String, dynamic>> splits,
+  ) async {
+    final response = await _post(
+      Uri.parse('$_baseUrl/accounts/transactions/$txId/splits'),
+      headers: _withCsrf({'Content-Type': 'application/json'}),
+      body: json.encode({'splits': splits}),
+    );
+    if (response.statusCode != 201) {
+      // Surface the server's reason (422 with `error` field) so the
+      // dialog can show "Split total doesn't match" etc. exactly as
+      // the server saw it.
+      throw _errorFromBody(response, fallback: 'Split failed');
+    }
+  }
+
+  /// Delete every child of a split parent — un-splits the transaction.
+  /// The parent re-emerges in the list.
+  Future<void> unsplitTransaction(String parentTxId) async {
+    final response = await _delete(
+      Uri.parse('$_baseUrl/accounts/transactions/$parentTxId/splits'),
+    );
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw _errorFromBody(response, fallback: 'Unsplit failed');
     }
   }
 
@@ -794,7 +864,7 @@ class ApiService {
   }) async {
     final response = await _post(
       Uri.parse('$_baseUrl/accounts'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({
         'name': name,
         'account_type': type,
@@ -844,7 +914,7 @@ class ApiService {
   }) async {
     final response = await _post(
       Uri.parse('$_baseUrl/institutions/crypto'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({
         'name': name,
         'integration_type': integrationType,
@@ -908,7 +978,7 @@ class ApiService {
   Future<void> syncInstitutionsBatch(List<String> institutionIds) async {
     final response = await _post(
       Uri.parse('$_baseUrl/institutions/sync'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({'ids': institutionIds}),
     );
     if (response.statusCode != 200) {
@@ -929,7 +999,7 @@ class ApiService {
   Future<void> putSetting(String key, dynamic value) async {
     final response = await _put(
       Uri.parse('$_baseUrl/settings/$key'),
-      headers: {'Content-Type': 'application/json'},
+      headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode(value),
     );
     if (response.statusCode != 200) {

@@ -103,7 +103,10 @@ class PasskeyService {
     // 1. Ask the server for the challenge + options.
     final startRes = await _client.post(
       Uri.parse('$_baseUrl/register/start'),
-      headers: {'Content-Type': 'application/json'},
+      headers: const {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'fetch',
+      },
     );
     if (startRes.statusCode != 200) {
       throw PasskeyException(
@@ -127,7 +130,10 @@ class PasskeyService {
     //    outer level too — that's what the DB row reads.
     final finishRes = await _client.post(
       Uri.parse('$_baseUrl/register/finish'),
-      headers: {'Content-Type': 'application/json'},
+      headers: const {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'fetch',
+      },
       body: jsonEncode({
         'nonce': nonce,
         'credential': credJson,
@@ -167,7 +173,10 @@ class PasskeyService {
 
     final startRes = await _client.post(
       Uri.parse('$_baseUrl/login/start'),
-      headers: {'Content-Type': 'application/json'},
+      headers: const {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'fetch',
+      },
       body: jsonEncode({'username': username.trim()}),
     );
     if (startRes.statusCode != 200) {
@@ -186,7 +195,10 @@ class PasskeyService {
 
     final finishRes = await _client.post(
       Uri.parse('$_baseUrl/login/finish'),
-      headers: {'Content-Type': 'application/json'},
+      headers: const {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'fetch',
+      },
       body: jsonEncode({'nonce': nonce, 'credential': credJson}),
     );
     if (finishRes.statusCode != 200) {
@@ -219,7 +231,10 @@ class PasskeyService {
   }
 
   Future<void> remove(String id) async {
-    final res = await _client.delete(Uri.parse('$_baseUrl/$id'));
+    final res = await _client.delete(
+      Uri.parse('$_baseUrl/$id'),
+      headers: const {'X-Requested-With': 'fetch'},
+    );
     if (res.statusCode == 401) {
       throw UnauthorizedException();
     }

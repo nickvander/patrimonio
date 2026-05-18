@@ -1017,6 +1017,46 @@ pub struct AuthContext {
     pub session_id: Uuid,
 }
 
+/// CSRF defence-in-depth.
+///
+/// Today the session cookie has `SameSite=Lax`, GETs have no side
+/// effects, and CORS allow-lists the credentialed origin. Belt-and-
+/// suspenders: require `X-Requested-With: fetch` (or any non-empty
+/// value) on every mutating method (POST/PUT/PATCH/DELETE). A
+/// classic CSRF attacker can't set custom headers from a malicious
+/// origin without triggering a preflight, and our CORS layer
+/// rejects unknown origins on preflights — so a request that reaches
+/// the handler without this header is either misconfigured first-
+/// party JS (we add it client-side) or a CSRF attempt.
+///
+/// Public webhook routes mount BEFORE this layer (in the public
+/// router) so Plaid's webhooks aren't broken. The protected router
+/// is the only thing this middleware wraps.
+pub async fn require_csrf_header(
+    req: axum::extract::Request,
+    next: Next,
+) -> Response {
+    use axum::http::Method;
+    let m = req.method().clone();
+    if matches!(m, Method::GET | Method::HEAD | Method::OPTIONS) {
+        return next.run(req).await;
+    }
+    let ok = req
+        .headers()
+        .get("x-requested-with")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
+    if !ok {
+        return ApiError::new(
+            StatusCode::FORBIDDEN,
+            "X-Requested-With header required on mutating requests",
+        )
+        .into_response();
+    }
+    next.run(req).await
+}
+
 pub async fn require_auth(
     State(state): State<AppState>,
     jar: CookieJar,

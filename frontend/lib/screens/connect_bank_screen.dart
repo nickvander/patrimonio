@@ -50,6 +50,7 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
     try {
       final response = await http.post(
         Uri.parse('http://$host:8080/api/institutions/link-token'),
+        headers: const {'X-Requested-With': 'fetch'},
       );
 
       if (response.statusCode == 200) {
@@ -88,7 +89,10 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
 
       final response = await http.post(
         Uri.parse('http://$host:8080/api/institutions/exchange-token'),
-        headers: {'Content-Type': 'application/json'},
+        headers: const {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'fetch',
+        },
         body: json.encode({
           'public_token': publicToken,
           'institution_name': institutionName,
