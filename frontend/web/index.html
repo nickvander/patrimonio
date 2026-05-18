@@ -14,8 +14,11 @@
   <meta name="apple-mobile-web-app-title" content="Patrimonio">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <!-- Favicon — SVG first for crisp Retina rendering, PNG as
+       fallback for older browsers (Chrome <80 / Safari <16) that
+       don't accept SVG as a link rel="icon" source. -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg"/>
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon.png"/>
 
   <title>Patrimonio</title>
   <link rel="manifest" href="manifest.json">
@@ -49,28 +52,35 @@
       pointer-events: none;
     }
 
-    /* Logo mark */
+    /* Logo mark — the SVG below has its own rounded-square
+       background built in, so the splash-logo container is just
+       a sizing + glow wrapper. The glow is a soft brand-green
+       drop-shadow that pulses to signal "loading" without a
+       spinner; once the Flutter app boots the whole splash
+       fades out. */
     .splash-logo {
-      width: 72px;
-      height: 72px;
-      border-radius: 18px;
-      background: linear-gradient(135deg, #00E676 0%, #00C853 50%, #009624 100%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 24px;
-      box-shadow: 0 8px 32px rgba(0, 230, 118, 0.25);
-      animation: pulse-glow 2s ease-in-out infinite;
+      width: 96px;
+      height: 96px;
+      margin-bottom: 28px;
+      animation: pulse-glow 2.4s ease-in-out infinite;
+      filter: drop-shadow(0 12px 32px rgba(0, 230, 118, 0.28));
     }
 
     .splash-logo svg {
-      width: 40px;
-      height: 40px;
+      width: 100%;
+      height: 100%;
+      display: block;
     }
 
     @keyframes pulse-glow {
-      0%, 100% { box-shadow: 0 8px 32px rgba(0, 230, 118, 0.25); }
-      50% { box-shadow: 0 8px 48px rgba(0, 230, 118, 0.45); }
+      0%, 100% {
+        filter: drop-shadow(0 12px 32px rgba(0, 230, 118, 0.22));
+        transform: scale(1.0);
+      }
+      50% {
+        filter: drop-shadow(0 14px 40px rgba(0, 230, 118, 0.45));
+        transform: scale(1.04);
+      }
     }
 
     .splash-title {
@@ -114,12 +124,30 @@
   </style>
 </head>
 <body>
-  <!-- ===== Splash Screen (pure HTML — shows instantly) ===== -->
+  <!-- ===== Splash Screen (pure HTML — shows instantly) =====
+       The SVG inlined below is the Patrimonio brand mark: three
+       ascending columns + a summit dot on an emerald-gradient
+       rounded square. Kept inline (rather than <img src=...>)
+       so it paints with the rest of the splash HTML on the first
+       frame, before any network round-trip for the SVG asset. -->
   <div id="splash">
     <div class="splash-logo">
-      <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <text x="50%" y="52%" dominant-baseline="middle" text-anchor="middle"
-              font-family="Inter, sans-serif" font-weight="800" font-size="26" fill="white">P</text>
+      <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none">
+        <defs>
+          <linearGradient id="splash-bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#00E676"/>
+            <stop offset="100%" stop-color="#009B4A"/>
+          </linearGradient>
+          <linearGradient id="splash-bar" x1="0" y1="0" x2="0" y2="64" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#FFFFFF" stop-opacity="1"/>
+            <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.88"/>
+          </linearGradient>
+        </defs>
+        <rect width="64" height="64" rx="14" ry="14" fill="url(#splash-bg)"/>
+        <rect x="14" y="38" width="8" height="14" rx="3" fill="#FFFFFF" opacity="0.55"/>
+        <rect x="28" y="28" width="8" height="24" rx="3" fill="#FFFFFF" opacity="0.78"/>
+        <rect x="42" y="18" width="8" height="34" rx="3" fill="url(#splash-bar)"/>
+        <circle cx="46" cy="11" r="4" fill="#FFFFFF"/>
       </svg>
     </div>
     <div class="splash-title">Patrimonio</div>

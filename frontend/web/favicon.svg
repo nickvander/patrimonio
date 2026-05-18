@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Patrimonio logo mark — no wordmark.
+
+  Concept: a stepped ascending column ending in a "summit" dot.
+  Reads as growth / wealth / accumulation while being abstract
+  enough to feel like a brand mark rather than a literal bar chart.
+
+  Designed to survive 16×16 favicon scale: three columns are wide
+  enough to stay distinct, the dot at the top is the recognisable
+  hook. Gradient on the background gives depth without losing the
+  silhouette when tab-bar UIs render it on white or grey.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00E676"/>
+      <stop offset="100%" stop-color="#009B4A"/>
+    </linearGradient>
+    <linearGradient id="bar" x1="0" y1="0" x2="0" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.88"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded-square emerald background -->
+  <rect width="64" height="64" rx="14" ry="14" fill="url(#bg)"/>
+
+  <!-- Three ascending columns. Heights chosen so each step is
+       visually distinct at 16×16 (the smallest the favicon ships
+       at) while leaving room for the summit dot up top. -->
+  <rect x="14" y="38" width="8" height="14" rx="3" fill="#FFFFFF" opacity="0.55"/>
+  <rect x="28" y="28" width="8" height="24" rx="3" fill="#FFFFFF" opacity="0.78"/>
+  <rect x="42" y="18" width="8" height="34" rx="3" fill="url(#bar)"/>
+
+  <!-- Summit dot — the memorable hook. Sits above the tallest
+       column and slightly to its left so it reads as the target /
+       peak being approached, not just decoration. -->
+  <circle cx="46" cy="11" r="4" fill="#FFFFFF"/>
+</svg>
