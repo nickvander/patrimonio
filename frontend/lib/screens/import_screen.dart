@@ -73,9 +73,20 @@ class _ImportScreenState extends State<ImportScreen> {
   /// Append dropped files to the existing selection (same shape as
   /// "Add more files" via the picker). If a preview was already
   /// rendered for a previous batch, throw it out — the new files
-  /// need their own parse pass.
+  /// need their own parse pass. Drops are silently ignored while
+  /// an upload is in flight to avoid the "files appeared but
+  /// weren't sent" confusion.
   void _handleDroppedFiles(List<PlatformFile> files) {
     if (files.isEmpty) return;
+    if (_isUploading) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Wait for the current import to finish before adding more files.'),
+        ),
+      );
+      return;
+    }
     setState(() {
       _selectedFiles = [..._selectedFiles, ...files];
       _previewTransactions = null;
@@ -283,29 +294,93 @@ class _ImportScreenState extends State<ImportScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(48),
                   decoration: BoxDecoration(
-                    color: _isDragging
-                        ? context.positive.withValues(alpha: 0.08)
-                        : context.tint(0.05),
+                    color: _isUploading
+                        ? context.info.withValues(alpha: 0.06)
+                        : _isDragging
+                            ? context.positive.withValues(alpha: 0.08)
+                            : context.tint(0.05),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: _isDragging ? context.positive : context.hairline,
+                      color: _isUploading
+                          ? context.info
+                          : _isDragging
+                              ? context.positive
+                              : context.hairline,
                       width: 2,
                     ),
                   ),
                   child: Column(
                     children: [
-                      // Same icon in both states — the border + label
-                      // change is the affordance. Some Material icons
-                      // (file_download in particular) don't render at
-                      // 64px reliably on Flutter web's CanvasKit so
-                      // we don't risk swapping.
-                      Icon(
-                        Icons.upload_file,
-                        size: 64,
-                        color: context.positive,
-                      ),
+                      // Three states drive the icon area:
+                      //   1. Uploading → progress spinner with the
+                      //      file count overlay so the user knows
+                      //      something's happening for big batches
+                      //      (a year of 12 monthly Banamex PDFs can
+                      //      take 60-120s on the backend).
+                      //   2. Dragging  → upload icon, accent green.
+                      //   3. Idle      → upload icon, accent green.
+                      if (_isUploading)
+                        SizedBox(
+                          width: 64,
+                          height: 64,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              CircularProgressIndicator(
+                                strokeWidth: 4,
+                                color: context.info,
+                              ),
+                              Text(
+                                '${_selectedFiles.length}',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  color: context.info,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures()
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        Icon(
+                          Icons.upload_file,
+                          size: 64,
+                          color: context.positive,
+                        ),
                       const SizedBox(height: 16),
-                      if (_isDragging)
+                      if (_isUploading)
+                        Column(
+                          children: [
+                            Text(
+                              _selectedFiles.length == 1
+                                  ? 'Processing 1 file…'
+                                  : 'Processing ${_selectedFiles.length} files…',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: context.info,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Large batches can take 30-120 seconds — '
+                              'each PDF is parsed individually on the server.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: context.textSubtle,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                        ),
+                      // Drag / idle helper text — hidden while
+                      // uploading so the status block above owns
+                      // the user's attention.
+                      if (!_isUploading && _isDragging)
                         Text(
                           'Drop to import',
                           style: TextStyle(
@@ -314,7 +389,9 @@ class _ImportScreenState extends State<ImportScreen> {
                             color: context.positive,
                           ),
                         )
-                      else if (kIsWeb && _selectedFiles.isEmpty)
+                      else if (!_isUploading &&
+                          kIsWeb &&
+                          _selectedFiles.isEmpty)
                         Text(
                           'Drop CSV or PDF files anywhere on this page, or select them manually below.',
                           style: TextStyle(
@@ -323,9 +400,13 @@ class _ImportScreenState extends State<ImportScreen> {
                           ),
                           textAlign: TextAlign.center,
                         ),
-                      if (_isDragging || (kIsWeb && _selectedFiles.isEmpty))
+                      if (!_isUploading &&
+                          (_isDragging || (kIsWeb && _selectedFiles.isEmpty)))
                         const SizedBox(height: 16),
-                      if (_selectedFiles.isEmpty && !kIsWeb && !_isDragging)
+                      if (!_isUploading &&
+                          _selectedFiles.isEmpty &&
+                          !kIsWeb &&
+                          !_isDragging)
                         const Text('No files selected'),
                       if (_selectedFiles.isNotEmpty)
                         Column(

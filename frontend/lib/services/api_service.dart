@@ -510,14 +510,37 @@ class ApiService {
     }
 
     try {
+      // 180s timeout. PDF parsing runs in a spawn_blocking task on
+      // the backend and is CPU-bound per file; a batch of 12 monthly
+      // statements can plausibly take 60-120 seconds total. The
+      // previous 60s timeout was below that envelope and would
+      // cancel the upload mid-parse.
       final streamedResponse = await _client.send(request).timeout(
-        const Duration(seconds: 60),
+        const Duration(seconds: 180),
       );
       final response = await http.Response.fromStream(streamedResponse);
       _maybeUnauthorized(response);
 
       if (response.statusCode == 200) {
         return json.decode(response.body) as Map<String, dynamic>;
+      }
+      // Payload-too-large surfaces as a real 413 OR (more often
+      // through the axum multipart stack) as a truncated body that
+      // makes parsing fail with 4xx/5xx. Give the user a specific
+      // hint when the size pattern matches so they don't have to
+      // guess.
+      if (response.statusCode == 413 ||
+          response.body.contains('failed to read stream') ||
+          response.body.contains('body limit exceeded')) {
+        final totalMb = files
+                .map((f) => (f.bytes?.length ?? 0))
+                .fold<int>(0, (a, b) => a + b) /
+            (1024 * 1024);
+        throw Exception(
+          'Upload too large (${totalMb.toStringAsFixed(1)} MB across '
+          '${files.length} file${files.length == 1 ? '' : 's'}). '
+          'Try splitting into smaller batches.',
+        );
       }
       throw Exception('Server returned ${response.statusCode}: ${response.body}');
     } on http.ClientException catch (e) {

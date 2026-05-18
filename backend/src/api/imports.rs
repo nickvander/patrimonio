@@ -26,7 +26,12 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route(
             "/upload",
-            post(upload_handler).layer(DefaultBodyLimit::max(20 * 1024 * 1024)),
+            // 100MB cap. A year of monthly Banamex / Nu Mexico PDFs
+            // (typically 3-5MB each) lands around 40-60MB; the old
+            // 20MB limit truncated the multipart stream mid-upload
+            // with the misleading `failed to read stream` error.
+            // 100MB gives ~2× headroom over a normal year's worth.
+            post(upload_handler).layer(DefaultBodyLimit::max(100 * 1024 * 1024)),
         )
         .route("/confirm", post(confirm_handler))
 }
