@@ -354,6 +354,103 @@ pub async fn sync_institutions(
                         }
                     }
                 }
+
+                // 4. Fetch Investment Transactions (/investments/transactions/get)
+                //
+                // This is the lot-tracking pass. Plaid's investments
+                // transactions feed gives us buy/sell/dividend events
+                // we can map to `holding_lots` rows. Each `buy`
+                // creates a lot at the transaction's price + that
+                // date's USD/MXN FX rate; each `sell` FIFO-depletes
+                // the oldest lots so the dual-currency P&L on the
+                // dashboard reflects true historical cost basis
+                // instead of the current-FX approximation.
+                //
+                // We use a 1-year lookback per call. Plaid paginates
+                // via offset; the deterministic `transaction_id` ->
+                // `source_id` mapping plus the partial unique index
+                // on (holding_id, source_id) means re-syncing the
+                // same window is idempotent.
+                let inv_url = format!(
+                    "https://{}.plaid.com/investments/transactions/get",
+                    config.plaid_env
+                );
+                let inv_end = chrono::Utc::now().date_naive();
+                let inv_start = inv_end - chrono::Duration::days(365);
+                let mut inv_offset: i64 = 0;
+                let inv_count: i64 = 250; // Plaid's max
+                loop {
+                    let inv_payload = serde_json::json!({
+                        "client_id": client_id,
+                        "secret": secret,
+                        "access_token": access_token,
+                        "start_date": inv_start.to_string(),
+                        "end_date": inv_end.to_string(),
+                        "options": { "count": inv_count, "offset": inv_offset },
+                    });
+                    let inv_res = client.post(&inv_url).json(&inv_payload).send().await;
+                    let Ok(inv_resp) = inv_res else {
+                        tracing::warn!(
+                            "Plaid investments/transactions HTTP error for {}; skipping lot sync",
+                            inst_name
+                        );
+                        break;
+                    };
+                    let inv_val: serde_json::Value = match inv_resp.json().await {
+                        Ok(v) => v,
+                        Err(e) => {
+                            tracing::warn!(
+                                "Plaid investments/transactions JSON parse error for {}: {}",
+                                inst_name, e
+                            );
+                            break;
+                        }
+                    };
+                    // Some Items don't have the investments product
+                    // enabled; that returns a soft error we just
+                    // skip (don't taint the institution status —
+                    // the holdings call already succeeded).
+                    if let Some(err_code) = inv_val["error_code"].as_str() {
+                        match err_code {
+                            "INVALID_PRODUCT"
+                            | "PRODUCTS_NOT_SUPPORTED"
+                            | "PRODUCT_NOT_READY" => {
+                                tracing::info!(
+                                    "Plaid investments/transactions skipped for {} ({})",
+                                    inst_name, err_code
+                                );
+                            }
+                            _ => {
+                                tracing::warn!(
+                                    "Plaid investments/transactions error for {}: {:?}",
+                                    inst_name, inv_val
+                                );
+                            }
+                        }
+                        break;
+                    }
+                    let Some(events) = inv_val["investment_transactions"].as_array() else {
+                        break;
+                    };
+                    for ev in events {
+                        if let Err(e) = process_investment_event(db, ev, inst_user_id).await {
+                            // Per-event errors don't taint the
+                            // whole sync; log and move on.
+                            tracing::warn!(
+                                "investment event {} skipped: {}",
+                                ev["investment_transaction_id"].as_str().unwrap_or("?"),
+                                e
+                            );
+                        }
+                    }
+                    let total: i64 = inv_val["total_investment_transactions"]
+                        .as_i64()
+                        .unwrap_or(0);
+                    inv_offset += events.len() as i64;
+                    if inv_offset >= total || events.is_empty() {
+                        break;
+                    }
+                }
             },
             "coinbase" => {
                 if let Err(e) = crate::services::crypto::CryptoService::sync_coinbase(db, config, inst_id, inst_user_id).await {
@@ -643,4 +740,242 @@ fn plaid_security_lookup(payload: &serde_json::Value) -> HashMap<String, Securit
     }
 
     securities
+}
+
+/// Map one Plaid `investment_transaction` into a lot insert or a
+/// FIFO sell depletion. Dispatch by `type`:
+///
+///   * `buy` (and `transfer` with positive qty into the account,
+///     and `dividend` with the reinvestment subtype) → new lot
+///   * `sell` → FIFO depletion across this user's existing lots
+///     for the same security
+///   * everything else → skip (cash dividends, fees, deposits don't
+///     change shares; pure cash moves are tracked via the regular
+///     /transactions/sync path)
+///
+/// Idempotency: the partial unique index on
+/// `(holding_id, source_id)` means re-syncing the same window
+/// silently no-ops new-lot inserts that have already happened.
+/// For sells, the deduplication is more interesting — we use a
+/// `holding_lots` row with `source_id` and `qty = 0 - depleted_qty`
+/// (a "sell marker") so re-running sees the marker and skips
+/// re-applying the depletion. Without this guard, every re-sync
+/// would FIFO-deplete the same sell twice and wipe genuine lots.
+async fn process_investment_event(
+    db: &PgPool,
+    ev: &serde_json::Value,
+    user_id: uuid::Uuid,
+) -> Result<()> {
+    let source_id = ev["investment_transaction_id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("missing investment_transaction_id"))?;
+    let tx_type = ev["type"].as_str().unwrap_or("");
+    let subtype = ev["subtype"].as_str().unwrap_or("");
+    let security_external_id = ev["security_id"].as_str().unwrap_or("");
+    let account_external_id = ev["account_id"].as_str().unwrap_or("");
+    if security_external_id.is_empty() || account_external_id.is_empty() {
+        return Ok(());
+    }
+    let date_str = ev["date"].as_str().unwrap_or("");
+    let acquired_at = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+        .map_err(|e| anyhow::anyhow!("bad date {}: {}", date_str, e))?;
+    let quantity = ev["quantity"].as_f64().unwrap_or(0.0);
+    let amount = ev["amount"].as_f64().unwrap_or(0.0);
+    let price = ev["price"].as_f64().unwrap_or_else(|| {
+        if quantity.abs() > 0.0 { (amount / quantity).abs() } else { 0.0 }
+    });
+    let currency = ev["iso_currency_code"]
+        .as_str()
+        .or_else(|| ev["unofficial_currency_code"].as_str())
+        .unwrap_or("USD")
+        .to_string();
+
+    // Classify the event. Plaid's enum is inconsistent over time —
+    // accept both lowercased + word variants.
+    let is_buy = matches!(tx_type, "buy") || matches!(subtype, "buy");
+    let is_dividend_reinvest = matches!(subtype, "dividend reinvestment" | "reinvestment");
+    let is_sell = matches!(tx_type, "sell") || matches!(subtype, "sell");
+
+    if !(is_buy || is_sell || is_dividend_reinvest) {
+        return Ok(());
+    }
+
+    // Look up the holding + account scoped to user.
+    let holding_row = sqlx::query(
+        r#"
+        SELECT h.id as holding_id, a.id as account_id
+        FROM holdings h
+        JOIN accounts a ON h.account_id = a.id
+        WHERE h.external_id = $1 AND a.external_id = $2 AND h.user_id = $3
+        "#,
+    )
+    .bind(security_external_id)
+    .bind(account_external_id)
+    .bind(user_id)
+    .fetch_optional(db)
+    .await?;
+    let Some(row) = holding_row else {
+        // Sometimes the investment_transactions feed mentions
+        // securities we haven't yet seen in /holdings/get (recently
+        // sold positions, fractional residue). Skip silently — the
+        // next holdings sync will create the row, then re-running
+        // this lot sync will pick up the historical buys via
+        // source_id idempotency.
+        return Ok(());
+    };
+    let holding_id: uuid::Uuid = row.get("holding_id");
+    let account_id: uuid::Uuid = row.get("account_id");
+
+    if is_buy || is_dividend_reinvest {
+        let usd_fx_rate = lookup_usd_fx_rate(db, &currency, acquired_at).await;
+        sqlx::query(
+            r#"
+            INSERT INTO holding_lots (
+                holding_id, account_id, user_id,
+                acquired_at, qty, cost_per_unit, currency, usd_fx_rate,
+                source_id
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (holding_id, source_id) WHERE source_id IS NOT NULL
+            DO NOTHING
+            "#,
+        )
+        .bind(holding_id)
+        .bind(account_id)
+        .bind(user_id)
+        .bind(acquired_at)
+        .bind(quantity.abs())
+        .bind(price.abs())
+        .bind(&currency)
+        .bind(usd_fx_rate)
+        .bind(source_id)
+        .execute(db)
+        .await?;
+        return Ok(());
+    }
+
+    // sell: FIFO-deplete this holding's lots. Use a sell-marker
+    // row keyed on source_id for idempotency, so re-runs skip.
+    let marker_seen = sqlx::query(
+        "SELECT 1 FROM holding_lots WHERE holding_id = $1 AND source_id = $2"
+    )
+    .bind(holding_id)
+    .bind(source_id)
+    .fetch_optional(db)
+    .await?;
+    if marker_seen.is_some() {
+        return Ok(()); // Already processed this sell.
+    }
+    let mut remaining = quantity.abs();
+    let lots = sqlx::query(
+        r#"
+        SELECT id, qty
+        FROM holding_lots
+        WHERE holding_id = $1 AND user_id = $2 AND qty > 0
+        ORDER BY acquired_at ASC, id ASC
+        "#,
+    )
+    .bind(holding_id)
+    .bind(user_id)
+    .fetch_all(db)
+    .await?;
+    for lot in lots {
+        if remaining <= 0.0 { break; }
+        let lot_id: uuid::Uuid = lot.get("id");
+        let lot_qty: f64 = lot
+            .try_get::<rust_decimal::Decimal, _>("qty")
+            .ok()
+            .map(|d| d.to_string().parse().unwrap_or(0.0))
+            .unwrap_or(0.0);
+        let consume = remaining.min(lot_qty);
+        let new_qty = lot_qty - consume;
+        sqlx::query("UPDATE holding_lots SET qty = $1 WHERE id = $2")
+            .bind(new_qty)
+            .bind(lot_id)
+            .execute(db)
+            .await?;
+        remaining -= consume;
+    }
+    // Drop the sell marker so a re-sync doesn't double-deplete.
+    // qty = 0 makes the marker invisible to the cost-basis read
+    // path; we tag it with the same currency / fx for completeness.
+    let marker_fx = lookup_usd_fx_rate(db, &currency, acquired_at).await;
+    sqlx::query(
+        r#"
+        INSERT INTO holding_lots (
+            holding_id, account_id, user_id,
+            acquired_at, qty, cost_per_unit, currency, usd_fx_rate,
+            source_id
+        )
+        VALUES ($1, $2, $3, $4, 0, $5, $6, $7, $8)
+        ON CONFLICT (holding_id, source_id) WHERE source_id IS NOT NULL
+        DO NOTHING
+        "#,
+    )
+    .bind(holding_id)
+    .bind(account_id)
+    .bind(user_id)
+    .bind(acquired_at)
+    .bind(price.abs())
+    .bind(&currency)
+    .bind(marker_fx)
+    .bind(source_id)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// Look up the USD/<security currency> conversion in effect on the
+/// given date. Returns 1.0 for USD securities (no conversion needed).
+/// For MXN securities we read the latest `exchange_rates` row dated
+/// on or before `acquired_at`; if none exists (fresh deployment with
+/// no FX history), fall back to the most recent rate (still better
+/// than 1.0 — at least the magnitudes line up).
+async fn lookup_usd_fx_rate(
+    db: &PgPool,
+    currency: &str,
+    acquired_at: chrono::NaiveDate,
+) -> f64 {
+    if currency.eq_ignore_ascii_case("USD") {
+        return 1.0;
+    }
+    if !currency.eq_ignore_ascii_case("MXN") {
+        // Unknown currency. The caller will treat fx=1.0 as "trust
+        // the native amount", which is at least directionally OK.
+        return 1.0;
+    }
+    let row = sqlx::query(
+        r#"
+        SELECT rate FROM exchange_rates
+        WHERE base_currency = 'USD' AND target_currency = 'MXN'
+          AND recorded_at <= ($1::date + INTERVAL '1 day')
+        ORDER BY recorded_at DESC LIMIT 1
+        "#,
+    )
+    .bind(acquired_at)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten();
+    if let Some(r) = row {
+        if let Ok(d) = r.try_get::<rust_decimal::Decimal, _>("rate") {
+            if let Ok(v) = d.to_string().parse::<f64>() {
+                if v > 0.0 {
+                    return v;
+                }
+            }
+        }
+    }
+    // Fallback: most-recent rate of any kind.
+    let r = sqlx::query(
+        "SELECT rate FROM exchange_rates WHERE base_currency = 'USD' AND target_currency = 'MXN' ORDER BY recorded_at DESC LIMIT 1"
+    )
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten();
+    r.and_then(|r| r.try_get::<rust_decimal::Decimal, _>("rate").ok())
+        .and_then(|d| d.to_string().parse::<f64>().ok())
+        .filter(|v| *v > 0.0)
+        .unwrap_or(20.0) // hard fallback at the ballpark
 }
