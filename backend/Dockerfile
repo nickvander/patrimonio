@@ -25,6 +25,10 @@ RUN cargo build --release
 
 # Verify the binary exists and is not trivially small
 RUN ls -la target/release/patrimonio && test $(stat -c%s target/release/patrimonio) -gt 1000000
+# Same check for the rotate_encryption_key one-shot — it's shipped alongside
+# so the operator can run a key rotation from the same image instead of
+# needing a Rust toolchain on the host. See docs/operations.md.
+RUN ls -la target/release/rotate_encryption_key && test $(stat -c%s target/release/rotate_encryption_key) -gt 1000000
 
 # Runtime stage
 FROM debian:bookworm-slim
@@ -32,6 +36,7 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates qpdf && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/patrimonio /usr/local/bin/patrimonio
+COPY --from=builder /app/target/release/rotate_encryption_key /usr/local/bin/rotate_encryption_key
 COPY --from=builder /app/migrations /app/migrations
 
 WORKDIR /app
