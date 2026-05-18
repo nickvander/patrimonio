@@ -258,6 +258,75 @@ A US/Mexico investor who bought VTI at $200 (USD 1 ↔ MXN 17.5) and looks at it
 
 ---
 
+## 2b. Cross-currency cash-transfer linking (Wise / Bank → Nu / etc.)
+
+**Status:** Open. **Effort:** medium (~1 day). **Impact:** medium —
+fills a real gap in the bi-national money flow that the investment
+lot tracking deliberately does NOT cover.
+
+### Why
+
+The lot tracking in item 2 covers **investment securities** (stocks,
+ETFs, mutual funds) bought via brokerage. It does not model the FX
+event when the user moves cash between currencies via a remittance
+service. Example real flow:
+
+  US bank (USD)  →  Wise transfer (USD→MXN FX)  →  Nu Bank (MXN)
+
+Today this shows up in Patrimonio as two unrelated `transactions`
+rows: a USD outflow from the US bank and an MXN inflow at Nu Bank,
+with no link between them and no recorded FX rate for the
+conversion. As a result:
+
+- The user has no record of the implicit Wise FX rate they got.
+- "USD cash on hand" effectively disappears and "MXN cash on hand"
+  appears, with no audit trail tying the two together.
+- Any future "realized FX gain/loss on cash held in MXN" computation
+  has nothing to anchor on.
+
+### Plan
+
+1. **Detection (best-effort, scoped):** a new service
+   `services/fx_transfer_link.rs` looks at recent transactions and
+   pairs USD-out + MXN-in (or vice versa) when:
+   - The two transactions are within a tight window (default ±5 days).
+   - The amounts line up at *some* plausible USDMXN rate (compare to
+     `exchange_rates` for that date ±10% tolerance — Wise spreads can
+     widen the gap).
+   - The description on one or both contains a remittance hint
+     ("WISE", "TRANSFERWISE", "REMITLY", "XOOM", "WESTERN UNION").
+2. **New table** `cash_fx_transfers(id, user_id, source_tx_id,
+   dest_tx_id, source_amount, source_currency, dest_amount,
+   dest_currency, implied_fx_rate, detected_at, detection_confidence,
+   user_confirmed)` storing the linked pair + the back-computed rate.
+3. **Frontend:** in the transaction detail modal, when a row is
+   part of a linked transfer, show a "Linked to" block with the
+   counterpart transaction + the implied FX rate + a "Confirm" /
+   "Unlink" pair of buttons so the user can override the auto
+   detection.
+4. **Reporting:** add a "Cross-currency transfers" line to the cash
+   flow tab showing each linked transfer with the implied rate next
+   to the day's market rate — so the user can see whether Wise gave
+   them a good or bad deal compared to the spot rate.
+
+### Acceptance
+
+- A USD-out transaction at $1000 + MXN-in transaction at MX$19,500
+  two days later, both with "WISE" in the description, auto-link.
+- The implied rate (19.5) appears on both transactions' detail
+  modals + on the cash-flow tab.
+- Manual link / unlink actions persist across syncs.
+
+### Out of scope
+
+- Realized FX gain/loss on the MXN cash *held* over time (changes
+  in spot rate after acquisition). That's a separate, harder
+  question: it requires deciding when "MXN held since the Wise
+  transfer" stops being a coherent unit (each Nu Bank outflow is
+  arguably a lot disposal). Park this until users actually ask.
+
+---
+
 ## 3. "What changed since last login" diff banner
 
 **Status:** Open. **Effort:** half day total. **Impact:** medium — high return-visit value.
