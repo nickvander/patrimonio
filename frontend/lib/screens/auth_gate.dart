@@ -3,6 +3,7 @@ import '../services/auth_service.dart';
 import 'bootstrap_screen.dart';
 import 'dashboard_screen.dart';
 import 'login_screen.dart';
+import 'register_screen.dart';
 import 'totp_challenge_screen.dart';
 
 /// Single owner of the top-level routing decision: which screen to
@@ -30,6 +31,14 @@ class _AuthGateState extends State<AuthGate> {
 
   @override
   Widget build(BuildContext context) {
+    // Invitation redemption is encoded as `?invite=<token>`. When the
+    // user is signed-out (not bootstrapped, not signed-in) and a
+    // token is present, route to the register flow instead of the
+    // login screen. Once they sign in, AuthGate flips to signedIn
+    // and the dashboard takes over — the param can stay in the URL.
+    final inviteToken = Uri.base.queryParameters['invite']?.trim();
+    final hasInvite = inviteToken != null && inviteToken.isNotEmpty;
+
     switch (_state.phase) {
       case AuthPhase.unknown:
         return const Scaffold(
@@ -38,6 +47,9 @@ class _AuthGateState extends State<AuthGate> {
       case AuthPhase.needsBootstrap:
         return const BootstrapScreen();
       case AuthPhase.signedOut:
+        if (hasInvite) {
+          return RegisterScreen(inviteToken: inviteToken);
+        }
         return const LoginScreen();
       case AuthPhase.awaitingTotp:
         return const TotpChallengeScreen();

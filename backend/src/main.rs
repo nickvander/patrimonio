@@ -152,6 +152,9 @@ async fn main() -> Result<()> {
         .nest("/api/projections", patrimonio::api::projections::router())
         .nest("/api/tax", patrimonio::api::tax::router())
         .nest("/api/settings", patrimonio::api::settings::router())
+        // Invitation-token mint / list / revoke — authenticated, so
+        // only existing users can create new ones.
+        .nest("/api/auth/invites", patrimonio::api::invites::router())
         // /api/auth/me, /logout, /change-password live here so that
         // require_auth populates AuthContext for the handlers.
         .nest("/api/auth", patrimonio::api::session::protected_router())

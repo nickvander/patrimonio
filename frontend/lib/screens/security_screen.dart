@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/passkeys.dart';
+import '../utils/theme_colors.dart';
 import '../widgets/recovery_codes_dialog.dart';
 
 /// Account security: change password, manage 2FA, regenerate recovery
@@ -23,6 +24,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
   int? _unusedRecoveryCodes;
   List<ActiveSession>? _sessions;
   List<PasskeySummary>? _passkeys;
+  List<InviteSummary>? _invites;
   String? _error;
 
   @override
@@ -52,12 +54,22 @@ class _SecurityScreenState extends State<SecurityScreen> {
       } catch (_) {
         passkeys = const [];
       }
+      // Invites list is best-effort too (404 on older backends; empty
+      // list otherwise). Loaded in parallel with the rest so the screen
+      // doesn't block on it.
+      List<InviteSummary>? invites;
+      try {
+        invites = await _api.listInvites();
+      } catch (_) {
+        invites = const [];
+      }
       if (!mounted) return;
       setState(() {
         _user = user;
         _unusedRecoveryCodes = count;
         _sessions = sessions;
         _passkeys = passkeys;
+        _invites = invites;
       });
     } catch (e) {
       if (mounted) {
@@ -420,9 +432,200 @@ class _SecurityScreenState extends State<SecurityScreen> {
                     const SizedBox(height: 16),
                     _buildPasskeysSection(),
                     const SizedBox(height: 16),
+                    _buildInvitesSection(),
+                    const SizedBox(height: 16),
                     _buildSessionsSection(),
                   ],
                 ),
+    );
+  }
+
+  /// Mint a one-time invite link + copy the share URL to the
+  /// clipboard. The plaintext token is never recoverable after the
+  /// mint response, so we show it in a dialog the user can re-copy
+  /// before dismissing.
+  Future<void> _mintInvite() async {
+    try {
+      final invite = await _api.createInvite();
+      if (!mounted) return;
+      await Clipboard.setData(ClipboardData(text: invite.url));
+      final expires = DateFormat.yMMMd().add_jm().format(invite.expiresAt.toLocal());
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) {
+          return AlertDialog(
+            title: const Text('Invite link ready'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Share this URL with the new user. It works for one '
+                  'account creation and expires on:',
+                ),
+                const SizedBox(height: 6),
+                Text(expires,
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 12),
+                SelectableText(
+                  invite.url,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Copied to clipboard.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: invite.url));
+                },
+                child: const Text('Copy again'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Done'),
+              ),
+            ],
+          );
+        },
+      );
+      await _loadInvites();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed: ${e.toString().replaceFirst('Exception: ', '')}')),
+      );
+    }
+  }
+
+  Future<void> _loadInvites() async {
+    try {
+      final list = await _api.listInvites();
+      if (mounted) setState(() => _invites = list);
+    } catch (_) {
+      // Non-fatal; the rest of the security screen still renders.
+    }
+  }
+
+  Future<void> _revokeInvite(InviteSummary inv) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Revoke invite?'),
+        content: const Text(
+          'The link will stop working immediately. You can mint a new '
+          'one if you change your mind.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Revoke'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await _api.revokeInvite(inv.id);
+      await _loadInvites();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Revoke failed: ${e.toString().replaceFirst('Exception: ', '')}')),
+      );
+    }
+  }
+
+  Widget _buildInvitesSection() {
+    final invites = _invites ?? const <InviteSummary>[];
+    final now = DateTime.now();
+    final live = invites.where((i) => !i.used && i.expiresAt.isAfter(now)).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _section('Invite users'),
+            TextButton.icon(
+              onPressed: _mintInvite,
+              icon: const Icon(Icons.add_link, size: 16),
+              label: const Text('New invite link'),
+            ),
+          ],
+        ),
+        if (invites.isEmpty)
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.mail_outline),
+              title: Text('No invites'),
+              subtitle: Text(
+                'Generate a one-time link to let another person sign up '
+                'for their own Patrimonio account.',
+              ),
+            ),
+          )
+        else
+          Card(
+            child: Column(
+              children: [
+                for (var i = 0; i < invites.length; i++) ...[
+                  if (i > 0) const Divider(height: 1),
+                  ListTile(
+                    leading: Icon(
+                      invites[i].used
+                          ? Icons.check_circle_outline
+                          : invites[i].expiresAt.isBefore(now)
+                              ? Icons.history_toggle_off
+                              : Icons.link,
+                    ),
+                    title: Text(
+                      invites[i].used
+                          ? 'Redeemed'
+                          : invites[i].expiresAt.isBefore(now)
+                              ? 'Expired'
+                              : 'Active',
+                    ),
+                    subtitle: Text(
+                      invites[i].used && invites[i].usedAt != null
+                          ? 'Used ${DateFormat.yMMMd().format(invites[i].usedAt!.toLocal())}'
+                          : 'Expires ${DateFormat.yMMMd().add_jm().format(invites[i].expiresAt.toLocal())}',
+                    ),
+                    trailing: invites[i].used || invites[i].expiresAt.isBefore(now)
+                        ? null
+                        : IconButton(
+                            tooltip: 'Revoke',
+                            icon: const Icon(Icons.close),
+                            onPressed: () => _revokeInvite(invites[i]),
+                          ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        if (live.length >= 3) ...[
+          const SizedBox(height: 4),
+          Text(
+            'You have ${live.length} active invites — consider revoking unused links.',
+            style: TextStyle(fontSize: 11, color: context.textSubtle),
+          ),
+        ],
+      ],
     );
   }
 

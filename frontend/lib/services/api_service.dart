@@ -131,6 +131,82 @@ class ApiService {
     throw _errorFromBody(res, fallback: 'Bootstrap failed');
   }
 
+  /// Redeem an invite token + create a new user account. Same shape
+   /// as bootstrap on success: the new user is signed in, recovery
+   /// codes are returned once.
+  Future<BootstrapOutcome> register({
+    required String token,
+    required String username,
+    String? email,
+    required String password,
+  }) async {
+    final res = await _client.post(
+      Uri.parse('$_baseUrl/auth/register'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'token': token,
+        'username': username,
+        'email': email,
+        'password': password,
+      }),
+    );
+    if (res.statusCode == 200) {
+      final body = json.decode(res.body) as Map<String, dynamic>;
+      final codes = ((body['recovery_codes'] as List?) ?? const [])
+          .cast<String>();
+      return BootstrapOutcome(
+        AuthUser.fromJson(body['user'] as Map<String, dynamic>),
+        codes,
+      );
+    }
+    throw _errorFromBody(res, fallback: 'Registration failed');
+  }
+
+  /// Mint a new invite token. Authenticated. Returns the plaintext
+  /// token + a shareable URL (`<frontend>/?invite=<token>`) + the
+  /// absolute expiry time in ISO 8601.
+  Future<InviteMint> createInvite({int? expiresInHours, String? note}) async {
+    final res = await _client.post(
+      Uri.parse('$_baseUrl/auth/invites'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        if (expiresInHours != null) 'expires_in_hours': expiresInHours,
+        if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+      }),
+    );
+    _maybeUnauthorized(res);
+    if (res.statusCode == 200) {
+      final body = json.decode(res.body) as Map<String, dynamic>;
+      return InviteMint(
+        id: body['id'] as String,
+        token: body['token'] as String,
+        url: body['url'] as String,
+        expiresAt: DateTime.parse(body['expires_at'] as String),
+      );
+    }
+    throw _errorFromBody(res, fallback: 'Failed to mint invite');
+  }
+
+  Future<List<InviteSummary>> listInvites() async {
+    final res = await _get(Uri.parse('$_baseUrl/auth/invites'));
+    if (res.statusCode == 200) {
+      final body = json.decode(res.body) as List<dynamic>;
+      return body
+          .cast<Map<String, dynamic>>()
+          .map(InviteSummary.fromJson)
+          .toList();
+    }
+    throw _errorFromBody(res, fallback: 'Failed to list invites');
+  }
+
+  Future<void> revokeInvite(String id) async {
+    final res = await _client.delete(Uri.parse('$_baseUrl/auth/invites/$id'));
+    _maybeUnauthorized(res);
+    if (res.statusCode != 204) {
+      throw _errorFromBody(res, fallback: 'Failed to revoke invite');
+    }
+  }
+
   Future<void> recover({
     required String username,
     required String code,

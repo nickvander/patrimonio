@@ -10,3 +10,4 @@ pub mod session;
 pub mod tax;
 pub mod setup;
 pub mod settings;
+pub mod invites;

@@ -29,6 +29,7 @@ pub fn public_router() -> Router<AppState> {
     Router::new()
         .route("/login", post(login))
         .route("/bootstrap", post(bootstrap))
+        .route("/register", post(register))
         .route("/status", get(status))
         .route("/recover", post(recover))
         .route("/totp/verify", post(totp_verify))
@@ -86,6 +87,20 @@ pub struct BootstrapRequest {
     pub username: String,
     pub email: Option<String>,
     pub password: String,
+}
+
+#[derive(Deserialize)]
+pub struct RegisterRequest {
+    pub token: String,
+    pub username: String,
+    pub email: Option<String>,
+    pub password: String,
+}
+
+#[derive(Serialize)]
+pub struct RegisterResponse {
+    pub user: UserView,
+    pub recovery_codes: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -273,6 +288,114 @@ async fn bootstrap(
     Ok((
         jar,
         Json(BootstrapResponse {
+            user,
+            recovery_codes,
+        }),
+    ))
+}
+
+/// Public registration handler — redeems an invite token, creates a
+/// user, signs them in, returns one batch of recovery codes. The
+/// invite must be unused and unexpired; ownership of the invite (who
+/// minted it) is irrelevant for redemption.
+async fn register(
+    State(state): State<AppState>,
+    jar: CookieJar,
+    headers: HeaderMap,
+    Json(body): Json<RegisterRequest>,
+) -> Result<(CookieJar, Json<RegisterResponse>), ApiError> {
+    let username = body.username.trim().to_string();
+    if username.is_empty() || username.len() > 64 {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "Username must be 1-64 characters.",
+        ));
+    }
+    if body.token.trim().is_empty() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "Invite token is required.",
+        ));
+    }
+    let email = body
+        .email
+        .as_ref()
+        .map(|e| e.trim().to_string())
+        .filter(|e| !e.is_empty());
+
+    password::validate_password_policy(&body.password)
+        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, &e.to_string()))?;
+
+    let hash = password::hash_password(&body.password).map_err(internal)?;
+    let ua = user_agent(&headers);
+    let ip = client_ip(&headers);
+
+    // Insert the user first, then atomically mark the invite as used.
+    // Order matters: if we marked the invite used first and the user
+    // insert failed (e.g. username conflict), the invite would be
+    // burned with no account behind it.
+    let user_id_result: Result<Uuid, sqlx::Error> = sqlx::query_scalar(
+        r#"
+        INSERT INTO users (username, email, password_hash, last_login_at)
+        VALUES ($1, $2, $3, NOW())
+        RETURNING id
+        "#,
+    )
+    .bind(&username)
+    .bind(email.as_deref())
+    .bind(&hash)
+    .fetch_one(&state.db)
+    .await;
+
+    let user_id = match user_id_result {
+        Ok(id) => id,
+        Err(sqlx::Error::Database(db_err)) if db_err.constraint().is_some() => {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "That username is already taken.",
+            ));
+        }
+        Err(e) => return Err(internal(e)),
+    };
+
+    // Now consume the invite. If it fails (token invalid / expired /
+    // already used), roll back the just-created user — otherwise we'd
+    // leave a user-shaped artifact behind for an invalid invite.
+    if let Err(reason) =
+        crate::api::invites::consume_invite(&state.db, body.token.trim(), user_id).await
+    {
+        let _ = sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_id)
+            .execute(&state.db)
+            .await;
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, reason));
+    }
+
+    record_audit(
+        &state.db,
+        "register",
+        Some(&username),
+        Some(user_id),
+        ip.as_deref(),
+        ua.as_deref(),
+        true,
+        None,
+    )
+    .await;
+
+    let session = sessions::create_session(&state.db, user_id, ua.as_deref(), ip.as_deref())
+        .await
+        .map_err(internal)?;
+
+    let recovery_codes = recovery::regenerate(&state.db, user_id)
+        .await
+        .map_err(internal)?;
+
+    let jar = jar.add(build_session_cookie(&state, session.token, session.expires_at));
+    let user = load_user_view(&state.db, user_id).await.map_err(internal)?;
+    Ok((
+        jar,
+        Json(RegisterResponse {
             user,
             recovery_codes,
         }),

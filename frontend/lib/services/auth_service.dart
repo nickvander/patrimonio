@@ -165,6 +165,53 @@ class BootstrapOutcome {
   const BootstrapOutcome(this.user, this.recoveryCodes);
 }
 
+/// Returned from /api/auth/invites POST — the plaintext invite token
+/// shown ONCE so the admin can share the URL. After this response the
+/// only stored thing on the server is the SHA-256 hash.
+class InviteMint {
+  final String id;
+  final String token;
+  final String url;
+  final DateTime expiresAt;
+  const InviteMint({
+    required this.id,
+    required this.token,
+    required this.url,
+    required this.expiresAt,
+  });
+}
+
+/// One row from /api/auth/invites GET — the metadata view that omits
+/// the plaintext token (which only ever exists in the mint response).
+class InviteSummary {
+  final String id;
+  final DateTime createdAt;
+  final DateTime expiresAt;
+  final bool used;
+  final DateTime? usedAt;
+  final String? note;
+  const InviteSummary({
+    required this.id,
+    required this.createdAt,
+    required this.expiresAt,
+    required this.used,
+    required this.usedAt,
+    required this.note,
+  });
+  factory InviteSummary.fromJson(Map<String, dynamic> json) {
+    return InviteSummary(
+      id: json['id'] as String,
+      createdAt: DateTime.parse(json['created_at'] as String),
+      expiresAt: DateTime.parse(json['expires_at'] as String),
+      used: json['used'] as bool? ?? false,
+      usedAt: (json['used_at'] as String?) == null
+          ? null
+          : DateTime.parse(json['used_at'] as String),
+      note: json['note'] as String?,
+    );
+  }
+}
+
 /// One row from /api/auth/sessions — used by the Security screen's
 /// "Active sessions" list.
 class ActiveSession {
