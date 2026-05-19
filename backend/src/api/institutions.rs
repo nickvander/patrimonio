@@ -24,6 +24,7 @@ pub fn router() -> Router<AppState> {
         .route("/reconnect-token/{id}", post(create_reconnect_token))
         .route("/{id}", delete(delete_institution))
         .route("/exchange-token", post(exchange_public_token))
+        .route("/update-webhook", post(update_webhooks_all))
         .route("/crypto", post(link_crypto_institution))
 }
 
@@ -774,4 +775,139 @@ fn json_error(status: StatusCode, error: &str, details: Option<&str>) -> Respons
         payload["details"] = serde_json::Value::String(details.to_string());
     }
     (status, Json(payload)).into_response()
+}
+
+/// One-shot: call Plaid's `/item/webhook/update` for every institution
+/// the caller owns. Used after the operator first sets PLAID_WEBHOOK_URL
+/// on a deployment that already has linked items — Plaid binds the
+/// webhook URL at link-time, so pre-existing items keep polling forever
+/// unless either re-linked or pointed at the new URL via this endpoint.
+///
+/// Returns a per-institution result so the UI can show a table of
+/// "updated / failed / skipped (no Plaid token)" rows.
+async fn update_webhooks_all(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Response {
+    let (client_id, secret) = match (&state.config.plaid_client_id, &state.config.plaid_secret) {
+        (Some(client_id), Some(secret)) => (client_id, secret),
+        _ => return json_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Plaid is not configured",
+            Some("Set PLAID_CLIENT_ID and PLAID_SECRET"),
+        ),
+    };
+
+    let webhook_url = match &state.config.plaid_webhook_url {
+        Some(u) if !u.is_empty() => u.clone(),
+        _ => return json_error(
+            StatusCode::BAD_REQUEST,
+            "PLAID_WEBHOOK_URL is not set",
+            Some("Set PLAID_WEBHOOK_URL to a public HTTPS URL pointing at /api/institutions/webhook, then retry"),
+        ),
+    };
+
+    let enc_key = match state.config.encryption_key.as_ref() {
+        Some(k) => k,
+        None => return json_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Encryption not configured",
+            None,
+        ),
+    };
+
+    let rows = match sqlx::query(
+        "SELECT id, name, plaid_access_token_enc FROM institutions \
+         WHERE user_id = $1 AND plaid_access_token_enc IS NOT NULL",
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(e) => return json_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to list institutions",
+            Some(&e.to_string()),
+        ),
+    };
+
+    let client = reqwest::Client::new();
+    let url = format!("https://{}.plaid.com/item/webhook/update", state.config.plaid_env);
+
+    let mut updated = 0usize;
+    let mut failed = 0usize;
+    let mut results: Vec<serde_json::Value> = Vec::with_capacity(rows.len());
+
+    for row in rows {
+        let id: uuid::Uuid = match row.try_get("id") {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let name: String = row.try_get("name").unwrap_or_default();
+        let enc_token: Vec<u8> = match row.try_get("plaid_access_token_enc") {
+            Ok(t) => t,
+            Err(_) => {
+                results.push(serde_json::json!({
+                    "id": id, "name": name, "ok": false, "reason": "missing token",
+                }));
+                failed += 1;
+                continue;
+            }
+        };
+        let access_token = match encryption::decrypt(enc_key, &enc_token) {
+            Ok(t) => t,
+            Err(_) => {
+                results.push(serde_json::json!({
+                    "id": id, "name": name, "ok": false, "reason": "decrypt failed",
+                }));
+                failed += 1;
+                continue;
+            }
+        };
+
+        let payload = serde_json::json!({
+            "client_id": client_id,
+            "secret": secret,
+            "access_token": access_token,
+            "webhook": webhook_url,
+        });
+
+        let response = match client.post(&url).json(&payload).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                results.push(serde_json::json!({
+                    "id": id, "name": name, "ok": false, "reason": format!("network: {}", e),
+                }));
+                failed += 1;
+                continue;
+            }
+        };
+        let status = response.status();
+        let body = response.json::<serde_json::Value>().await.unwrap_or(serde_json::Value::Null);
+        if status.is_success() {
+            updated += 1;
+            results.push(serde_json::json!({ "id": id, "name": name, "ok": true }));
+        } else {
+            failed += 1;
+            results.push(serde_json::json!({
+                "id": id, "name": name, "ok": false,
+                "reason": body.get("error_message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("plaid error")
+                    .to_string(),
+            }));
+        }
+    }
+
+    info!(
+        "update-webhook: updated {} institutions, {} failed",
+        updated, failed
+    );
+    Json(serde_json::json!({
+        "updated": updated,
+        "failed": failed,
+        "webhook_url": webhook_url,
+        "results": results,
+    })).into_response()
 }

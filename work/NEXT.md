@@ -1,6 +1,6 @@
 # Next session — handoff
 
-> **Last updated:** 2026-05-18
+> **Last updated:** 2026-05-18 (evening, after Top-3 sprint)
 > **Purpose:** Pickup-ready priorities for the next agent. Each item
 > has a why, scope sketch, and where to look in code. Ordered by
 > impact-per-effort.
@@ -9,108 +9,96 @@
 is the "what to actually do next" filter — top three by impact +
 small wins.
 
-## Top 3
+## Recently shipped (do NOT re-do)
 
-### 1. Real-estate / manual assets  ⏱️ ~half day  🎯 completes net worth
+The previous two sessions cleared most of the original NEXT.md. The
+Top-3 from this session's pickup prompt all shipped:
 
-**Why now.** Investment lots, multi-currency cash, and a polished tx
-list all ship, but "net worth" still excludes anything not tracked by
-a bank or exchange — a house, a car, an LLC stake, private equity.
-For affluent users the gap is often 30–60% of true net worth.
+* `since_last_login.largest_move` flips sign for liability accounts.
+* Recovery-codes-low warning tile when count < 3.
+* Cancelled-subscription detection — separate "Stopped (N)"
+  collapsed section, 91–548 day band.
+* Mexican parser polish via `parser::polish_description` (strips
+  trailing date suffixes + bilingual generic-prefix list).
+* `/api/institutions/update-webhook` one-shot endpoint to
+  backfill Plaid webhook URL onto existing items.
+* `/api/setup/status` exposes a new `plaid_webhook` check.
+* `docs/deployment.md` rewritten with a concrete single-VPS
+  runbook covering nginx + LE, `TRUSTED_PROXY_CIDRS`, webhook
+  activation, log rotation, backups.
 
-**Scope.** `accounts.account_type` already accepts arbitrary values.
-Add `real_estate` + `private_equity` + `vehicle` to the seed list of
-known types and extend `add_account_dialog.dart` with:
-- Friendly type chooser (Property / Vehicle / Private investment / Other).
-- Optional `last_valued_at` + `valuation_notes` text field.
-- "Revalue" button on the row that bumps `current_balance` and
-  appends a new `balance_snapshots` entry.
+Also previously: real-estate / manual assets, HIBP check,
+sandbox-vs-prod chip, split-child badge, unhide-subscriptions UI,
+SQL liability classifier + cash-flow internal-transfer exclusion.
 
-NetWorthCard already category-aggregates by `account_type`, so the
-values flow through automatically. The harder UX bit is choosing
-icons + colors that don't look out of place next to bank logos.
+## Top 3 for the next session
 
-**Files**: `frontend/lib/widgets/add_account_dialog.dart`,
-`frontend/lib/utils/account_category.dart`,
-`backend/src/api/accounts.rs` (already supports arbitrary types).
+### 1. Frontend tile for the webhook setup-status check  ⏱️ ~30 min  🎯 closes the deployment loop
 
-### 2. HIBP / breached-password check  ⏱️ ~half day  🎯 closes audit L3
+**Why now.** The JSON is shipped (`/api/setup/status` returns a
+`plaid_webhook` entry) but the Management tab card listing setup
+checks hasn't been updated to render it. A user looking at the page
+today doesn't know whether their webhook is configured.
 
-**Why now.** Password policy is length-only (≥12, ≤256). A user can
-still pick a long-but-pwned password (`correcthorse123` etc.). With
-real Plaid Production tokens behind that password, this is worth
-closing.
+**Scope.** Find the setup-status renderer in the frontend
+(probably `frontend/lib/screens/management_screen.dart` or a tile
+widget in `frontend/lib/widgets/`). The check has fields `key`,
+`label`, `configured`, `severity`, `detail` — same shape as the
+existing checks, so this might just be a matter of adding an icon
+mapping for the `plaid_webhook` key.
 
-**Approach.** Embed a top-100k-pwned bloom filter (≈80 KB) at build
-time and check at signup + change-password. The k-anonymity range
-API exists but adds a network round-trip on the hot path.
+While there: add a small "Update all institutions" button visible
+only when `plaid_webhook` is configured AND there are linked
+Plaid institutions. The button POSTs to
+`/api/institutions/update-webhook` and shows the per-row result.
 
-**Files**: new `backend/src/services/password_check.rs`,
-`backend/src/api/session.rs` (hook into bootstrap / register /
-change-password). The wordlist is one-time download from
-https://haveibeenpwned.com/Passwords (NTLM hashes by prevalence,
-top 100k = ~10 MB raw, ~80 KB as a bloom).
+### 2. Split-transaction polish (presets + edit)  ⏱️ ~2 hours each
 
-**Tracked in** `work/FUTURE.md` Security audit follow-ups → "HIBP".
+Two small UX wins:
 
-### 3. Production deployment + Plaid webhook activation  ⏱️ ~half day  🎯 unblocks push delivery
+* **Quick-split presets** in the split dialog header (50/50,
+  60/40, 70/30, "evenly across N"). A dropdown that recomputes
+  amounts to the chosen ratio.
+* **Edit-split** action on parents. Today the user has to
+  Unsplit then re-Split to change amounts. Add an "Edit split"
+  affordance that opens the dialog pre-populated with current
+  children.
 
-**Why now.** All the webhook infrastructure shipped (ES256 verify +
-scoped sync + per-item delivery), but Plaid still polls because
-`PLAID_WEBHOOK_URL` isn't actually configured against a public URL.
-Today's deployment is `docker compose up` on a laptop; for webhooks
-to fire we need:
+Tracked in `work/FUTURE.md` section A.
 
-* A publicly-reachable HTTPS URL pointing at the api container's
-  `/api/institutions/webhook`.
-* `PLAID_WEBHOOK_URL` set in `.env`.
-* Re-link or update one institution so Plaid picks up the new URL.
-* Sandbox-vs-prod indicator chip in the AppBar so the user can see
-  which environment they're hitting.
+### 3. Net-worth aggregation in SQL (audit P5)  ⏱️ ~half day  🎯 cold-cache cost
 
-**Scope.** Document the prod deployment in `docs/operations.md` (or a
-new `docs/deployment.md`): nginx reverse proxy config example,
-TLS cert provisioning, `TRUSTED_PROXY_CIDRS` setting, the
-`PLAID_WEBHOOK_URL` registration. Then add the chip:
-`backend/src/api/setup.rs` exposes `plaid_env`; add a small badge
-next to the FX pill in `dashboard_screen.dart` that reads `Sandbox`
-in amber when not in production.
+`backend/src/api/dashboard.rs` walks a Rust-side BTreeMap to build
+the per-account-type history series. Cheap at today's scale (5
+institutions × 30d) but quadratic. The audit (P5) recommends a
+`jsonb_object_agg` on the postgres side instead. Now that
+`is_liability_account_type()` exists, the SQL is clean to write.
 
-**Files**: `docs/deployment.md` (new), `frontend/lib/screens/
-dashboard_screen.dart`, maybe `frontend/lib/widgets/fx_widget.dart`
-for the chip layout.
+Tracked in `work/FUTURE.md` section H.
 
-## Quick wins (≤2 hours each)
+## Quick wins (≤ 2 hours each)
 
 Pick one as a warm-up:
 
-- **`scripts/dev-rebuild-frontend.sh`** — wrap the rebuild + re-stamp-CSP
-  dance documented in `work/CURRENT.md`. The security-headers loss on
-  rebuild has tripped multiple sessions; automating removes the
-  foot-gun.
-- **Unhide subscriptions** — the dismiss × on `SubscriptionsCard`
-  is one-way today. Add a tiny "Manage hidden merchants" page (or
-  section in Settings / Management) that lists rows from
-  `ignored_subscription_merchants` with a remove button.
-- **Mexican parser polish** — `services/parser/nu_mexico.rs`,
-  `banamex.rs`, and `cetes.rs` produce raw bank descriptions
-  ("MISC DEBIT 20260418"). Wire the same generic-prefix allowlist
-  from `transaction_display.dart` into the parsers so the rows look
-  like the Plaid ones.
-- **Split-child badge in the list** — children render as regular
-  rows today. A small "Split" chip on the row would make it obvious
-  the row originated from a parent. ~10 lines in
-  `widgets/transactions_tab.dart` row builder.
-- **Inline rename** — current rename requires opening the detail
-  modal. A long-press (or a "rename" icon on the row hover) would
-  cut clicks for the common case.
-- **Cancelled subscription detection** — extend the detector to
-  surface a separate "Stopped" section for clusters whose most-
-  recent charge is >90 days ago (currently filtered out). Helpful
-  for "did Netflix actually charge me last month?"
-- **Recovery-codes-low banner** — Security screen knows
-  `_unusedRecoveryCodes` but doesn't warn when low. A yellow tile
-  when count drops below 3.
+- **`scripts/dev-rebuild-frontend.sh`** — wrap the rebuild +
+  re-stamp-CSP dance documented in `work/CURRENT.md`. (Note:
+  this session didn't observe the re-stamp problem — the
+  rebuild bakes `security_headers.conf` into the image now —
+  but a one-liner script around `docker compose ... build
+  frontend` is still nice. Verify whether the re-stamp is
+  still needed before scripting.)
+- **Inline transaction rename** — long-press on a row opens a
+  small inline text field instead of the detail modal.
+  Section I in FUTURE.md.
+- **Subscription per-account split** — show which account
+  charged each detected subscription (some land on both the
+  credit card and the checking account via Apple Pay
+  passthrough). Section B in FUTURE.md.
+- **Integration tests for new endpoints** — `fx-transfers`,
+  `subscriptions/ignore`, `splits`, `since-last-login`,
+  `institutions/update-webhook` have unit tests for helpers
+  but nothing exercises the full request/response. Section K
+  in FUTURE.md.
 
 ## Deferred — explicitly NOT next
 

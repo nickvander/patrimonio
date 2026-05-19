@@ -193,8 +193,50 @@ fn test_detect_and_parse_content() {
     let result = detect_and_parse("random_name.csv", nu_data, None).unwrap();
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].currency, "MXN");
-    
+
     let banamex_data = "Fecha,Concepto,Monto\n15/03/2024,Test,10.0".as_bytes();
     let result = detect_and_parse("statement.csv", banamex_data, None).unwrap();
     assert_eq!(result.len(), 1);
+}
+
+#[test]
+fn test_polish_description_strips_trailing_yyyymmdd() {
+    assert_eq!(polish_description("MISC DEBIT 20260418"), "MISC DEBIT");
+    assert_eq!(polish_description("UBER MEXICO 20260418"), "UBER MEXICO");
+    assert_eq!(polish_description("UBER 20260418 OAXACA"), "UBER 20260418 OAXACA"); // mid-string is not stripped
+}
+
+#[test]
+fn test_polish_description_strips_trailing_dmy_date() {
+    assert_eq!(polish_description("COMPRA OXXO 18/04/2026"), "OXXO");
+    assert_eq!(polish_description("PAGO RECIBIDO 18-04-2026"), "RECIBIDO");
+}
+
+#[test]
+fn test_polish_description_strips_generic_prefix() {
+    assert_eq!(polish_description("COMPRA OXXO"), "OXXO");
+    assert_eq!(polish_description("RETIRO CAJERO BANAMEX"), "CAJERO BANAMEX");
+    assert_eq!(polish_description("MISC DEBIT NETFLIX"), "NETFLIX");
+}
+
+#[test]
+fn test_polish_description_preserves_when_strip_would_empty() {
+    // "MISC DEBIT" alone has nothing after the prefix — keep it so the
+    // user doesn't see a blank row.
+    assert_eq!(polish_description("MISC DEBIT"), "MISC DEBIT");
+    // Only a date and a prefix — keep the prefix as the safety net.
+    assert_eq!(polish_description("MISC DEBIT 20260418"), "MISC DEBIT");
+}
+
+#[test]
+fn test_polish_description_collapses_whitespace() {
+    assert_eq!(polish_description("UBER    EATS   MEXICO"), "UBER EATS MEXICO");
+}
+
+#[test]
+fn test_polish_description_idempotent() {
+    let once = polish_description("COMPRA OXXO 20260418");
+    let twice = polish_description(&once);
+    assert_eq!(once, twice);
+    assert_eq!(once, "OXXO");
 }

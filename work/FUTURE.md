@@ -637,44 +637,40 @@ follow-ups make daily use nicer:
 
 ## B. Subscription detection improvements  ⏱️ ~half day total
 
-The detector + "Mark as not a subscription" both work, but the model
-is one-way:
-
-* **Unhide UI.** The dismiss × is one-way. Add a "Manage hidden
-  merchants" section in Settings (or Management tab) listing
-  rows from `ignored_subscription_merchants` with a remove
-  affordance. ~30 lines.
-* **Cancelled-subscription detection.** Current heuristic filters
-  out clusters whose most-recent charge is >90 days ago. A separate
-  "Stopped" section would surface "Netflix charged you monthly Jan
-  2024 → Dec 2024, last charge 5 months ago" — useful for
-  audit / "did I actually cancel that?".
+* **Unhide UI** (✅ partial — the dismiss × on the active rows is
+  still one-way at the card; a "Manage hidden merchants" panel
+  rolled into Section D below is the proper home).
+* **Cancelled-subscription detection** — ✅ shipped 2026-05-18.
+  Detector tags `status: "active"|"cancelled"` and the card
+  renders a collapsed "Stopped (N)" section for clusters last
+  charged 91–548 days ago. Older clusters are still dropped as
+  noise.
 * **Per-account split.** When the user has both a credit card and a
   checking account, identical subscriptions sometimes land on both
   (paid via Apple Pay, then a fee from checking too). Show the
   account distribution per detected subscription so the user can
   see which channel.
 
-## C. Mexican CSV / PDF parser polish  ⏱️ ~1 hour
+## C. Mexican CSV / PDF parser polish — ✅ shipped 2026-05-18
 
-The Plaid path now applies the generic-prefix allowlist (`MISC DEBIT`,
-`ACH ...`, `POS ...`, etc.) via `transaction_display.dart`. The
-Mexican parsers (`services/parser/nu_mexico.rs`, `banamex.rs`,
-`cetes.rs`) still produce raw bank descriptions like
-`MISC DEBIT 20260418` directly into the `description` column.
+`parser::polish_description` strips trailing date suffixes
+(`20260418`, `18/04/2026`, `18-04-2026`) and a bilingual generic-
+prefix list (`MISC DEBIT`, `ACH `, `POS `, `COMPRA `, `RETIRO `,
+`ABONO `, `CARGO `, `DEPOSITO `, `TRASPASO `, `PAGO `, etc.) when
+there's meaningful text after stripping. `detect_and_parse` wraps
+every parser branch with `polish_all(...)` so the cleanup runs
+regardless of which parser fired. Direct callers
+(`banamex::parse_csv`, etc.) still get raw output — the existing
+unit tests passed unchanged.
 
-The parsers extract more useful tokens during PDF parsing (merchant
-codes, payee strings); they just don't surface them in a separate
-column. Either:
+Open follow-ups for this surface:
 
-* Wire `payment_payee` / `original_description` columns into the
-  parsers (the columns already exist from the Plaid work) so the
-  display ladder kicks in for these rows too.
-* OR run a post-parse cleaning step that strips the prefix +
-  drops the date suffix when present.
-
-Acceptance: opening a Mexican CSV row in the detail modal no
-longer shows `MISC DEBIT 20260418` as the title.
+* If the PDF parsers also stash `merchant_code` / `payee` tokens
+  they currently throw away, plumb them through to
+  `payment_payee` / `original_description` columns so the
+  frontend display ladder can pick them too. The polish helper is
+  good enough for now; the column-level fix is for later when the
+  parsers themselves are touched.
 
 ## D. "Unhide" / general "Manage hidden things" panel  ⏱️ ~3 hours
 
@@ -691,23 +687,27 @@ A single Settings panel listing all the things-the-user-said-no-to
 with per-row remove would be cleaner than scattering per-feature
 manage screens.
 
-## E. Production deployment runbook  ⏱️ ~half day (also see NEXT.md #3)
+## E. Production deployment runbook — ✅ shipped 2026-05-18
 
-`docs/operations.md` covers backup/restore and key rotation but
-not actual production deploy. A new `docs/deployment.md` should
-cover:
+`docs/deployment.md` now has a "VPS deployment (single-host)"
+section covering host provisioning, nginx + Let's Encrypt sample,
+`TRUSTED_PROXY_CIDRS` setup, the webhook activation flow
+(re-link OR the new `POST /api/institutions/update-webhook`
+one-shot), log rotation, and a pointer to the backup runbook.
+`/api/setup/status` now reports a `plaid_webhook` check so the
+Management tab can see at a glance whether push delivery is
+wired.
 
-* Reverse proxy (nginx / Caddy) + TLS cert (Let's Encrypt) sample
-  configs.
-* `TRUSTED_PROXY_CIDRS` setup with the reverse proxy's actual IP.
-* `PLAID_WEBHOOK_URL` registration + the "re-link or update one
-  institution to pick up the URL" detail.
-* Where to put the public URL (typical: a VPS with docker-compose
-  pointed at port 8080 behind nginx).
-* Health-check + restart policy (systemd unit or
-  `docker compose --restart unless-stopped` already in place).
-* Log rotation (api logs grow unbounded; `docker compose` doesn't
-  auto-rotate).
+Follow-ups deferred from this sprint:
+
+* Frontend tile in the Management tab consuming the new
+  `plaid_webhook` setup-status check — currently the JSON field
+  is shipped but the UI hasn't been updated to render it as its
+  own card. ~20 lines.
+* A "Push webhooks to all institutions" button on the Management
+  tab that POSTs to `/api/institutions/update-webhook` — saves
+  the operator from curl. The endpoint already returns a per-row
+  result list ready to render as a table.
 
 ## F. Sandbox vs Production indicator chip  ⏱️ ~30 min
 

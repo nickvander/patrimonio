@@ -413,22 +413,58 @@ class _SecurityScreenState extends State<SecurityScreen> {
                     ),
                     const SizedBox(height: 16),
                     _section('Recovery codes'),
-                    Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.vpn_key_outlined),
-                        title: Text(
-                          '${_unusedRecoveryCodes ?? 0} unused codes',
+                    if ((_unusedRecoveryCodes ?? 99) < 3)
+                      Card(
+                        color: context.warning.withValues(alpha: 0.12),
+                        shape: RoundedRectangleBorder(
+                          side: BorderSide(
+                            color: context.warning.withValues(alpha: 0.6),
+                          ),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        subtitle: const Text(
-                          'Regenerate if you lose your saved codes — all '
-                          'old codes stop working.',
+                        child: ListTile(
+                          leading: Icon(
+                            Icons.warning_amber_rounded,
+                            color: context.warning,
+                          ),
+                          title: Text(
+                            (_unusedRecoveryCodes ?? 0) == 0
+                                ? 'No recovery codes left'
+                                : 'Only ${_unusedRecoveryCodes ?? 0} recovery '
+                                  'code${(_unusedRecoveryCodes ?? 0) == 1 ? '' : 's'} left',
+                            style: TextStyle(
+                              color: context.warning,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          subtitle: const Text(
+                            'If you lose your authenticator and run out of '
+                            'codes you can be locked out. Regenerate now to '
+                            'restore a full set of 10.',
+                          ),
+                          trailing: FilledButton(
+                            onPressed: _regenerateRecoveryCodes,
+                            child: const Text('Regenerate'),
+                          ),
                         ),
-                        trailing: TextButton(
-                          onPressed: _regenerateRecoveryCodes,
-                          child: const Text('Regenerate'),
+                      )
+                    else
+                      Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.vpn_key_outlined),
+                          title: Text(
+                            '${_unusedRecoveryCodes ?? 0} unused codes',
+                          ),
+                          subtitle: const Text(
+                            'Regenerate if you lose your saved codes — all '
+                            'old codes stop working.',
+                          ),
+                          trailing: TextButton(
+                            onPressed: _regenerateRecoveryCodes,
+                            child: const Text('Regenerate'),
+                          ),
                         ),
                       ),
-                    ),
                     const SizedBox(height: 16),
                     _buildPasskeysSection(),
                     const SizedBox(height: 16),

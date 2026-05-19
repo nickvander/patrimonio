@@ -1247,6 +1247,10 @@ async fn since_last_login(
     //    recent one strictly before the anchor. Skip accounts that
     //    don't have a "before" snapshot — for a newly-linked account
     //    we'd otherwise count the whole balance as a "move."
+    //
+    //    Sign convention: positive delta means net worth went up.
+    //    Liability balances are flipped — a credit card going $500 → $1500
+    //    is a $1000 increase in what you owe, i.e. -$1000 to net worth.
     let moves = sqlx::query(
         r#"
         WITH before AS (
@@ -1263,7 +1267,10 @@ async fn since_last_login(
         )
         SELECT
             COALESCE(NULLIF(a.nickname, ''), a.name) AS account_name,
-            (after.balance_usd - before.balance_usd) AS delta_usd
+            CASE WHEN is_liability_account_type(a.account_type)
+                 THEN -(after.balance_usd - before.balance_usd)
+                 ELSE (after.balance_usd - before.balance_usd)
+            END AS delta_usd
         FROM after
         JOIN before ON before.account_id = after.account_id
         JOIN accounts a ON a.id = after.account_id
@@ -1343,6 +1350,12 @@ struct DetectedSubscription {
     currency: String,
     /// How many separate charges we saw. >= 3 to qualify as recurring.
     occurrences: i32,
+    /// "active" when last charge is within 90 days, "cancelled" when
+    /// the cluster qualified as recurring at some point but hasn't
+    /// charged in the last 90 days. The frontend renders cancelled
+    /// subscriptions in a separate, collapsed "Stopped" section so
+    /// the user can audit "did I actually cancel that?".
+    status: &'static str,
 }
 
 /// Detected recurring outflows (subscriptions, bills, gym dues, etc.).
@@ -1563,10 +1576,17 @@ async fn detected_subscriptions(
             continue;
         }
         let last_charge = cluster.events[0].0;
-        if (today - last_charge).num_days() > 90 {
-            // Most recent charge is over 90 days old — treat as cancelled.
+        let days_since = (today - last_charge).num_days();
+        // Either "active" (last charge ≤ 90 days) or "cancelled" (between
+        // 91 days and 18 months ago). Clusters older than that are
+        // unlikely to be useful audit signal, so drop them entirely.
+        let status: &'static str = if days_since <= 90 {
+            "active"
+        } else if days_since <= 548 {
+            "cancelled"
+        } else {
             continue;
-        }
+        };
         // Median gap between consecutive charges. Bail unless median is
         // in the recurring-cadence band.
         let mut gaps: Vec<i64> = cluster
@@ -1605,15 +1625,24 @@ async fn detected_subscriptions(
             last_amount,
             currency: cluster.currency.clone(),
             occurrences: cluster.events.len() as i32,
+            status,
         });
     }
 
+    // Active first (sorted by monthly spend), then cancelled (sorted by
+    // recency of last charge — most recently stopped is most actionable).
     out.sort_by(|a, b| {
-        b.monthly_usd
-            .partial_cmp(&a.monthly_usd)
-            .unwrap_or(std::cmp::Ordering::Equal)
+        match (a.status, b.status) {
+            ("active", "cancelled") => std::cmp::Ordering::Less,
+            ("cancelled", "active") => std::cmp::Ordering::Greater,
+            ("cancelled", "cancelled") => b.last_charge_date.cmp(&a.last_charge_date),
+            _ => b
+                .monthly_usd
+                .partial_cmp(&a.monthly_usd)
+                .unwrap_or(std::cmp::Ordering::Equal),
+        }
     });
-    out.truncate(20);
+    out.truncate(40);
     Json(out)
 }
 

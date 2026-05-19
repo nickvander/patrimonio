@@ -55,6 +55,20 @@ async fn setup_status(State(state): State<AppState>) -> Json<SetupStatus> {
                 "Set Coinbase OAuth credentials to enable Coinbase linking".to_string()
             },
         },
+        SetupCheck {
+            // Surfaced in the Management tab so the user can see whether
+            // Plaid push delivery is wired up. Without this URL set Plaid
+            // falls back to polling every ~4h, which is the default but
+            // not what someone running a real deployment wants.
+            key: "plaid_webhook".to_string(),
+            label: "Plaid webhook URL".to_string(),
+            configured: config.plaid_webhook_url.is_some(),
+            severity: "recommended".to_string(),
+            detail: match &config.plaid_webhook_url {
+                Some(url) => format!("Configured → {}", url),
+                None => "Set PLAID_WEBHOOK_URL to a public HTTPS endpoint to enable real-time syncs (see docs/deployment.md)".to_string(),
+            },
+        },
     ];
 
     let ready_for_plaid_linking = checks

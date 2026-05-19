@@ -10,7 +10,12 @@ import '../utils/theme_colors.dart';
 /// Empty list collapses to nothing — the heuristic needs ≥ 3 occurrences
 /// of the same merchant + amount band, so a brand-new user with sparse
 /// history sees no card at all rather than an empty pane.
-class SubscriptionsCard extends StatelessWidget {
+///
+/// The backend tags each row `status: "active" | "cancelled"`. Cancelled
+/// rows last charged 91–548 days ago, and surface below the active list
+/// in a collapsed "Stopped" section so the user can audit
+/// "did I actually cancel that?".
+class SubscriptionsCard extends StatefulWidget {
   final List<dynamic> subscriptions;
   /// Conversion factor for the USD-stored `monthly_usd` field.
   /// 1.0 for USD reporting, USD/MXN rate when reporting in MXN.
@@ -40,11 +45,34 @@ class SubscriptionsCard extends StatelessWidget {
   });
 
   @override
+  State<SubscriptionsCard> createState() => _SubscriptionsCardState();
+}
+
+class _SubscriptionsCardState extends State<SubscriptionsCard> {
+  bool _stoppedExpanded = false;
+
+  @override
   Widget build(BuildContext context) {
-    if (subscriptions.isEmpty) return const SizedBox.shrink();
+    if (widget.subscriptions.isEmpty) return const SizedBox.shrink();
+
+    // Partition by status. Rows without an explicit status field fall
+    // back to active so older backends keep working.
+    final active = <Map<String, dynamic>>[];
+    final stopped = <Map<String, dynamic>>[];
+    for (final s in widget.subscriptions) {
+      final m = s as Map<String, dynamic>;
+      final status = (m['status'] ?? 'active').toString();
+      if (status == 'cancelled') {
+        stopped.add(m);
+      } else {
+        active.add(m);
+      }
+    }
+
     // Total monthly burn — top-of-card summary so the user knows the
-    // pile size before diving into individual rows.
-    final totalMonthly = subscriptions.fold<double>(0.0, (sum, s) {
+    // pile size before diving into individual rows. Cancelled rows are
+    // excluded; they're not charging anymore.
+    final totalMonthly = active.fold<double>(0.0, (sum, s) {
       final v = (s['monthly_usd'] as num?)?.toDouble() ?? 0.0;
       return sum + v;
     });
@@ -76,7 +104,8 @@ class SubscriptionsCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    '${subscriptions.length} detected',
+                    '${active.length} active'
+                    '${stopped.isEmpty ? '' : ' · ${stopped.length} stopped'}',
                     style: TextStyle(
                       fontSize: 12,
                       color: context.textSubtle,
@@ -86,7 +115,7 @@ class SubscriptionsCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '≈ ${currencyFormat.format(totalMonthly * conversionFactor)} / mo',
+                  '≈ ${widget.currencyFormat.format(totalMonthly * widget.conversionFactor)} / mo',
                   style: TextStyle(
                     fontSize: 13,
                     color: context.textPrimary,
@@ -103,10 +132,70 @@ class SubscriptionsCard extends StatelessWidget {
               style: TextStyle(fontSize: 11, color: context.textSubtle),
             ),
             const SizedBox(height: 12),
-            for (var i = 0; i < subscriptions.length; i++) ...[
-              if (i > 0)
-                Divider(height: 1, color: context.hairline),
-              _row(context, subscriptions[i] as Map<String, dynamic>),
+            if (active.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'No active subscriptions detected.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.textSubtle,
+                  ),
+                ),
+              )
+            else
+              for (var i = 0; i < active.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: context.hairline),
+                _row(context, active[i], cancelled: false),
+              ],
+            if (stopped.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Divider(height: 1, color: context.hairline),
+              InkWell(
+                onTap: () => setState(
+                  () => _stoppedExpanded = !_stoppedExpanded,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _stoppedExpanded
+                            ? Icons.expand_less
+                            : Icons.expand_more,
+                        size: 18,
+                        color: context.textSubtle,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Stopped (${stopped.length})',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: context.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Last charged > 90 days ago',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: context.textSubtle,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (_stoppedExpanded)
+                for (var i = 0; i < stopped.length; i++) ...[
+                  if (i > 0) Divider(height: 1, color: context.hairline),
+                  _row(context, stopped[i], cancelled: true),
+                ],
             ],
           ],
         ),
@@ -114,7 +203,11 @@ class SubscriptionsCard extends StatelessWidget {
     );
   }
 
-  Widget _row(BuildContext context, Map<String, dynamic> s) {
+  Widget _row(
+    BuildContext context,
+    Map<String, dynamic> s, {
+    required bool cancelled,
+  }) {
     final merchant = (s['merchant'] ?? '—').toString();
     final monthlyUsd = (s['monthly_usd'] as num?)?.toDouble() ?? 0.0;
     final cadence = (s['cadence_days'] as num?)?.toInt() ?? 30;
@@ -131,8 +224,18 @@ class SubscriptionsCard extends StatelessWidget {
                 ? 'Monthly'
                 : 'Every ${cadence}d';
 
+    // Muted treatment for cancelled rows: lower opacity icon tile,
+    // subdued text. The row is still tappable to drill into the
+    // historical transactions.
+    final accent =
+        cancelled ? context.neutralAccent : context.purpleAccent;
+    final primaryColor =
+        cancelled ? context.textSubtle : context.textPrimary;
+
     return InkWell(
-      onTap: onTapMerchant == null ? null : () => onTapMerchant!(merchant),
+      onTap: widget.onTapMerchant == null
+          ? null
+          : () => widget.onTapMerchant!(merchant),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Row(
@@ -142,12 +245,14 @@ class SubscriptionsCard extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: context.accentSoft(context.purpleAccent),
+                color: context.accentSoft(accent),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
-                Icons.repeat_rounded,
-                color: context.purpleAccent,
+                cancelled
+                    ? Icons.history_toggle_off
+                    : Icons.repeat_rounded,
+                color: accent,
                 size: 18,
               ),
             ),
@@ -161,7 +266,7 @@ class SubscriptionsCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: context.textPrimary,
+                      color: primaryColor,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -187,23 +292,25 @@ class SubscriptionsCard extends StatelessWidget {
                   // Convert via reporting currency so $9.99 and $14.99
                   // can be compared at a glance regardless of the
                   // underlying native currency.
-                  currencyFormat.format(
+                  widget.currencyFormat.format(
                     convertCurrency(
                       lastAmount,
                       from: currency,
-                      to: targetCurrency,
-                      usdMxnRate: usdMxnRate,
+                      to: widget.targetCurrency,
+                      usdMxnRate: widget.usdMxnRate,
                     ),
                   ),
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: context.textPrimary,
+                    color: primaryColor,
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
                 Text(
-                  '${currencyFormat.format(monthlyUsd * conversionFactor)} / mo',
+                  cancelled
+                      ? 'was ${widget.currencyFormat.format(monthlyUsd * widget.conversionFactor)} / mo'
+                      : '${widget.currencyFormat.format(monthlyUsd * widget.conversionFactor)} / mo',
                   style: TextStyle(
                     fontSize: 11,
                     color: context.textSubtle,
@@ -212,13 +319,17 @@ class SubscriptionsCard extends StatelessWidget {
                 ),
               ],
             ),
-            if (onIgnoreMerchant != null)
+            // Hide the "× not a subscription" affordance for cancelled
+            // rows — they're already historical, dismissing wouldn't add
+            // info and the affordance would be confusing ("not a
+            // subscription" vs "stopped subscription").
+            if (!cancelled && widget.onIgnoreMerchant != null)
               IconButton(
                 tooltip: 'Not a subscription — hide this row',
                 iconSize: 16,
                 visualDensity: VisualDensity.compact,
                 icon: const Icon(Icons.close),
-                onPressed: () => onIgnoreMerchant!(merchant),
+                onPressed: () => widget.onIgnoreMerchant!(merchant),
               ),
           ],
         ),

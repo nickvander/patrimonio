@@ -1,7 +1,7 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-05-18 (post-walkthrough)
-> **Branch:** `main` — fully caught up via the auto-classifier-blocked-direct-push, branch-merge-by-hand dance.
+> **Last updated:** 2026-05-18 (evening — post-Top-3 sprint)
+> **Branch:** feature branch with the latest sprint awaiting fast-forward merge to `main`.
 
 ## Where we are
 
@@ -39,6 +39,49 @@ have shipped. The app now does:
   untrusted peers at the edge.
 * `app_settings.user_id` (M7 leftover) — budgets / goals no longer
   leak across users.
+
+## Evening sprint (2026-05-18, after the walkthrough)
+
+Shipped in this session, in order:
+
+* **`since_last_login` largest-move sign for liabilities.** The SQL
+  now flips the delta for liability accounts via
+  `is_liability_account_type`. A credit card going $500 → $1500 now
+  reports as `-$1000` (net worth went down by $1000) instead of the
+  previous false-positive `+$1000`.
+* **Recovery-codes-low warning** on the Security screen. When the
+  unused count drops below 3 the row swaps to an amber warning tile
+  with a prominent "Regenerate" CTA. ≥ 3 still shows the original
+  neutral card.
+* **Cancelled-subscription detection.** Backend `dashboard.rs::
+  detected_subscriptions` now tags each cluster `status:
+  "active"|"cancelled"` and includes clusters whose most-recent
+  charge is 91–548 days old (instead of dropping them). The
+  frontend `SubscriptionsCard` renders cancelled rows in a
+  collapsed "Stopped (N)" section below the active list, with a
+  muted color treatment and no "× not a subscription" affordance.
+* **Mexican parser polish.** New `parser::polish_description`
+  helper strips trailing date suffixes (`20260418`, `18/04/2026`,
+  `18-04-2026`) and a bilingual list of generic prefixes
+  (`MISC DEBIT`, `ACH `, `POS `, `COMPRA `, `RETIRO `, `ABONO `,
+  `CARGO `, `DEPOSITO `, `TRASPASO `, `PAGO `, …) when there's
+  meaningful text after stripping. `detect_and_parse` runs every
+  parser's output through it. Direct callers
+  (`banamex::parse_csv`, etc.) still get the raw output so the
+  existing unit tests aren't disturbed.
+* **Production webhook activation.**
+  * `GET /api/setup/status` now reports a "Plaid webhook URL"
+    check so the Management tab can see at a glance whether push
+    delivery is wired.
+  * New `POST /api/institutions/update-webhook` iterates every
+    Plaid item the caller owns and calls Plaid's
+    `/item/webhook/update` with the configured URL — saves
+    re-linking institutions that were created before
+    `PLAID_WEBHOOK_URL` was set.
+  * `docs/deployment.md` rewritten with a concrete single-VPS
+    runbook: nginx + Let's Encrypt sample, `TRUSTED_PROXY_CIDRS`
+    setup, webhook activation flow (re-link OR one-shot
+    update-webhook), log rotation, backup pointers.
 
 ## Walkthrough verification (2026-05-18)
 
@@ -96,10 +139,10 @@ Worth scripting: see NEXT.md quick win for `scripts/dev-rebuild-frontend.sh`.
 |---|---|
 | Flutter canvaskit can briefly hang on rapid clicks | Renderer quirk; recovers on next interaction. Not a code regression. |
 | Auth audit `ip_address` is NULL in local dev | `TRUSTED_PROXY_CIDRS` empty by default → XFF stripped → no IP. Set the env var with nginx's IP in prod. |
-| Plaid webhooks aren't actually being delivered yet | `PLAID_WEBHOOK_URL` must be a public HTTPS URL. Set it in `.env` once the deployment is reachable from Plaid's egress. |
+| Plaid webhooks aren't actually being delivered yet | `PLAID_WEBHOOK_URL` must be a public HTTPS URL. Set it in `.env` once the deployment is reachable from Plaid's egress. `docs/deployment.md` now walks through nginx + Let's Encrypt + `POST /api/institutions/update-webhook` to backfill existing items. |
 | Sandbox vs Production indistinguishable in the UI | No AppBar chip yet — see NEXT.md / FUTURE.md item "Sandbox vs Prod indicator". |
 | "Interest earned" subscription is hidden once dismissed; no Unhide UI | Delete the `ignored_subscription_merchants` row directly to un-dismiss — UI affordance is a small follow-up. |
-| Mexican CSV / PDF parsers don't apply the generic-prefix allowlist | Plaid path got the smarter labels, the Mexican parsers still produce raw bank strings (often `MISC DEBIT yyyymmdd`). Worth a sweep. |
+| Mexican CSV / PDF parsers used to produce raw bank strings | ✅ Fixed this session. `parser::polish_description` strips trailing date suffixes + a bilingual generic-prefix list before the rows hit the DB. |
 
 ## Pointers
 
