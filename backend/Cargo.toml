@@ -11,6 +11,15 @@ axum-extra = { version = "0.10", features = ["cookie"] }
 tokio = { version = "1", features = ["full"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace", "limit"] }
+# Streaming primitives used by the CSV export. `bytes::Bytes` is the
+# wire type axum's `Body::from_stream` wants; `tokio-stream` gives
+# us `wrappers::ReceiverStream` so an mpsc channel can feed the
+# response body chunk-by-chunk without buffering the whole CSV
+# in memory.
+bytes = "1"
+tokio-stream = "0.1"
+# `futures::StreamExt::try_next` to consume sqlx's row stream.
+futures-util = "0.3"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

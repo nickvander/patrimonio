@@ -120,6 +120,7 @@ async fn try_setup(
         .nest("/api/accounts", patrimonio::api::accounts::router())
         .nest("/api/institutions", patrimonio::api::institutions::router())
         .nest("/api/dashboard", patrimonio::api::dashboard::router())
+        .nest("/api/imports", patrimonio::api::imports::router())
         .nest("/api/auth", patrimonio::api::session::protected_router())
         .layer(from_fn_with_state(
             state.clone(),
@@ -393,6 +394,98 @@ async fn update_webhook_without_csrf_header_is_403() {
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::FORBIDDEN);
+}
+
+// =====================================================================
+// /api/imports/upload — CSRF gate + auth gate + empty-body shape
+// =====================================================================
+// These tests exist because the frontend `uploadStatements` silently
+// 403-ed for a week — the multipart helper bypassed `_withCsrf` so
+// PDFs never reached the handler. The gate-level tests below catch
+// that class of regression even without a real PDF fixture.
+
+#[tokio::test]
+async fn upload_unauthenticated_is_401() {
+    let Some((app, _pool)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    // With CSRF but no session cookie. Should hit require_auth → 401.
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/imports/upload")
+                .header("X-Requested-With", "patrimonio-test")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn upload_without_csrf_is_403() {
+    let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+    // No X-Requested-With → CSRF middleware short-circuits with 403
+    // BEFORE the handler runs. This is the exact failure mode the
+    // frontend was hitting silently.
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/imports/upload")
+                .header(header::COOKIE, cookie_header(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn upload_with_no_files_is_400() {
+    // CSRF + auth pass; multipart parses zero files → 400 "No files
+    // were found in the upload request." Single-shot JSON response
+    // (not NDJSON) because we never reach the spawn point.
+    let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/imports/upload")
+                .header(header::COOKIE, cookie_header(&token))
+                .header("X-Requested-With", "patrimonio-test")
+                // Valid (empty) multipart body — boundary declared,
+                // zero parts. Axum's multipart parser accepts the
+                // empty body and the handler returns 400 on the
+                // post-parse "no files" check.
+                .header(
+                    header::CONTENT_TYPE,
+                    "multipart/form-data; boundary=----testboundary",
+                )
+                .body(Body::from("------testboundary--\r\n"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["status"], "error");
+    assert!(body["message"]
+        .as_str()
+        .unwrap_or("")
+        .contains("No files"));
 }
 
 // =====================================================================

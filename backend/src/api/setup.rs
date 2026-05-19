@@ -69,6 +69,20 @@ async fn setup_status(State(state): State<AppState>) -> Json<SetupStatus> {
                 None => "Set PLAID_WEBHOOK_URL to a public HTTPS endpoint to enable real-time syncs (see docs/deployment.md)".to_string(),
             },
         },
+        SetupCheck {
+            // ALLOWED_ORIGINS controls which origins the CORS layer
+            // accepts. An empty list (or one missing the frontend's
+            // real origin) silently breaks the browser-side login
+            // flow on a real deployment — the request never reaches
+            // the handler. Surfacing it here turns "the app just
+            // doesn't work" into a one-glance diagnosis.
+            key: "cors".to_string(),
+            label: "CORS allow-list".to_string(),
+            configured: !config.allowed_origins.is_empty()
+                && config.allowed_origins.iter().any(|o| o == &config.frontend_base_url),
+            severity: "required_for_linking".to_string(),
+            detail: cors_check_detail(config),
+        },
     ];
 
     let ready_for_plaid_linking = checks
@@ -99,4 +113,35 @@ struct SetupCheck {
     configured: bool,
     severity: String,
     detail: String,
+}
+
+/// Human-readable diagnostic for the CORS check. Lists the expected
+/// frontend origin + the actual allow-list contents so the operator
+/// doesn't have to grep logs to see why the browser is failing the
+/// preflight.
+fn cors_check_detail(config: &crate::config::AppConfig) -> String {
+    let origins_str = if config.allowed_origins.is_empty() {
+        "(empty)".to_string()
+    } else {
+        config.allowed_origins.join(", ")
+    };
+    if config.allowed_origins.is_empty() {
+        format!(
+            "ALLOWED_ORIGINS is empty — the browser will fail CORS preflights. \
+             Set it to include {} (or whatever origin the frontend is served from).",
+            config.frontend_base_url
+        )
+    } else if !config
+        .allowed_origins
+        .iter()
+        .any(|o| o == &config.frontend_base_url)
+    {
+        format!(
+            "ALLOWED_ORIGINS = [{}] but the frontend is served from {} — \
+             add it to the list or the browser will fail CORS preflights.",
+            origins_str, config.frontend_base_url
+        )
+    } else {
+        format!("Allow-list: {}", origins_str)
+    }
 }

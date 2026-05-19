@@ -16,6 +16,20 @@ class UnauthorizedException implements Exception {
   String toString() => message;
 }
 
+/// Per-file progress tick from the streaming upload handler.
+/// `done` is the count of files that have finished parsing
+/// (regardless of success/failure); `total` is the batch size from
+/// the initial `started` event. `lastFile` is the most recently
+/// completed file name + ok flag. The import screen uses these to
+/// render "N of M done: foo.pdf" in real time while a large batch
+/// of PDFs is parsing on the server.
+typedef ImportProgressCallback = void Function({
+  required int done,
+  required int total,
+  String? lastFile,
+  bool? lastFileOk,
+});
+
 class ApiService {
   String get _baseUrl {
     final host = web.window.location.hostname.isEmpty
@@ -78,6 +92,17 @@ class ApiService {
   }
 
   void _maybeUnauthorized(http.Response res) {
+    if (res.statusCode == 401) {
+      AuthService.instance.handleUnauthorized();
+      throw UnauthorizedException();
+    }
+  }
+
+  /// Same contract as `_maybeUnauthorized` but for a
+  /// `http.StreamedResponse` (used by uploadStatements, which can't
+  /// materialise the full body into an `http.Response` without
+  /// defeating the streaming progress events).
+  void _maybeUnauthorizedStreamed(http.StreamedResponse res) {
     if (res.statusCode == 401) {
       AuthService.instance.handleUnauthorized();
       throw UnauthorizedException();
@@ -642,14 +667,23 @@ class ApiService {
     }
   }
 
-  /// Multi-file batch wrapper around the same /imports/upload
-  /// endpoint. The server accepts any number of `file` parts in a
-  /// single multipart and parses each independently — much faster
-  /// than 12 round-trips for a year of monthly statements, and lets
-  /// the user confirm everything in one preview.
+  /// Multi-file batch wrapper around /imports/upload. The endpoint
+  /// emits NDJSON events (one per line):
+  ///   `{"event":"started","total":N}`
+  ///   `{"event":"file_done","name":"foo.pdf","ok":true}` × N
+  ///   `{"event":"done", ...legacy ImportResponse shape...}`
+  ///     OR
+  ///   `{"event":"password_required","message":"..."}`
+  ///
+  /// This method reads the stream chunk-by-chunk, fires
+  /// [onProgress] on each `file_done`, and returns the terminal
+  /// `done` / `password_required` payload as the legacy single-shot
+  /// map (so callers that don't care about progress just keep
+  /// working).
   Future<Map<String, dynamic>> uploadStatements(
     List<PlatformFile> files, {
     String? password,
+    ImportProgressCallback? onProgress,
   }) async {
     if (files.isEmpty) {
       throw Exception('No files to upload');
@@ -658,6 +692,10 @@ class ApiService {
       'POST',
       Uri.parse('$_baseUrl/imports/upload'),
     );
+    // Mirror the protected router's CSRF guard. The multipart
+    // helper bypasses our _post wrapper, so the header has to be
+    // attached by hand.
+    request.headers['x-requested-with'] = 'patrimonio';
     for (final f in files) {
       if (f.bytes == null) continue;
       request.files.add(
@@ -674,16 +712,81 @@ class ApiService {
       // for several seconds (qpdf decrypt + lopdf extract + table
       // recovery). A worst-case batch — e.g. two years of monthly
       // Banamex PDFs on a busy single-vCPU VPS — can plausibly take
-      // ~5 minutes; 600s gives a generous safety margin. The
-      // previous 180s ceiling regularly fired on large batches and
-      // surfaced as a misleading TimeoutException with no partial
-      // success preserved.
+      // ~5 minutes; 600s gives a generous safety margin.
       final streamedResponse = await _client.send(request).timeout(
         const Duration(seconds: 600),
       );
-      final response = await http.Response.fromStream(streamedResponse);
-      _maybeUnauthorized(response);
+      _maybeUnauthorizedStreamed(streamedResponse);
 
+      if (streamedResponse.statusCode == 200) {
+        // Read NDJSON line-by-line. The terminal event (`done` /
+        // `password_required`) is returned to the caller; every
+        // `file_done` in between fires the progress callback.
+        int totalFiles = files.length;
+        int doneCount = 0;
+        Map<String, dynamic>? terminal;
+
+        final buffer = StringBuffer();
+        await for (final chunk in streamedResponse.stream) {
+          buffer.write(utf8.decode(chunk, allowMalformed: true));
+          // Pop complete lines off the front of the buffer; leave a
+          // partial trailing line for the next chunk.
+          var raw = buffer.toString();
+          int newline;
+          while ((newline = raw.indexOf('\n')) >= 0) {
+            final line = raw.substring(0, newline).trim();
+            raw = raw.substring(newline + 1);
+            if (line.isEmpty) continue;
+            Map<String, dynamic> event;
+            try {
+              event = json.decode(line) as Map<String, dynamic>;
+            } catch (_) {
+              continue;
+            }
+            switch (event['event']) {
+              case 'started':
+                totalFiles = (event['total'] as num?)?.toInt() ?? totalFiles;
+                onProgress?.call(
+                  done: 0,
+                  total: totalFiles,
+                );
+                break;
+              case 'file_done':
+                doneCount++;
+                onProgress?.call(
+                  done: doneCount,
+                  total: totalFiles,
+                  lastFile: event['name']?.toString(),
+                  lastFileOk: event['ok'] as bool?,
+                );
+                break;
+              case 'password_required':
+                terminal = {
+                  'status': 'password_required',
+                  'message': event['message'] ?? '',
+                };
+                break;
+              case 'done':
+                // The `done` payload is the legacy ImportResponse
+                // shape inline — peel the wrapper.
+                terminal = Map<String, dynamic>.from(event)..remove('event');
+                break;
+            }
+          }
+          buffer.clear();
+          buffer.write(raw);
+        }
+
+        if (terminal != null) return terminal;
+        throw Exception(
+          'Upload stream ended without a terminal event '
+          '(server may have crashed mid-batch).',
+        );
+      }
+
+      // Non-200 path. Fall through to the legacy error handling
+      // by collecting the body into one string.
+      final response = await http.Response.fromStream(streamedResponse);
       if (response.statusCode == 200) {
         return json.decode(response.body) as Map<String, dynamic>;
       }

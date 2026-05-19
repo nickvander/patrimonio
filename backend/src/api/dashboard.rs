@@ -666,96 +666,147 @@ async fn recent_transactions(
 /// whole table — useful for an annual tax-prep dump. We escape
 /// quotes/commas by wrapping every text field in double quotes and
 /// doubling any embedded double quote.
+/// Streams the user's transactions as CSV. Both ends of the pipe
+/// are streaming:
+///   * The DB query uses `.fetch(...)` (not `.fetch_all`) so sqlx
+///     hands us rows one at a time instead of buffering the whole
+///     result set in memory.
+///   * The response body is an `mpsc::channel` wrapped in a
+///     `ReceiverStream` and handed to `axum::body::Body::from_stream`,
+///     so each row's bytes leave the server the moment they're
+///     formatted — no `String` buffer holding the entire CSV.
+///
+/// Net effect: a 50k-row export now fits in O(channel_buffer * row_size)
+/// memory instead of O(row_count * row_size × ~5 with CSV overhead).
+/// Audit P4.
 async fn export_transactions_csv(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Response {
-    let rows = sqlx::query(
-        r#"
-        SELECT t.id, t.date, t.amount, t.currency, t.description,
-               COALESCE(t.category, '') as category,
-               COALESCE(t.category_detailed, '') as category_detailed,
-               COALESCE(t.payment_channel, '') as payment_channel,
-               COALESCE(t.merchant_name, '') as merchant_name,
-               COALESCE(t.source, '') as source,
-               t.pending,
-               COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
-               COALESCE(i.name, '') as institution_name
-        FROM transactions t
-        JOIN accounts a ON t.account_id = a.id
-        JOIN institutions i ON a.institution_id = i.id
-        WHERE t.user_id = $1
-          AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
-        ORDER BY t.date DESC, t.created_at DESC
-        "#
-    )
-    .bind(ctx.user_id)
-    .fetch_all(&state.db)
-    .await;
-
-    let rows = match rows {
-        Ok(r) => r,
-        Err(e) => {
-            error!("Failed to query transactions for export: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "export failed")
-                .into_response();
-        }
-    };
-
-    fn esc(s: &str) -> String {
-        format!("\"{}\"", s.replace('"', "\"\""))
-    }
-
-    let mut body = String::with_capacity(rows.len() * 128 + 256);
-    body.push_str(
-        "id,date,account,institution,description,merchant,category,category_detailed,payment_channel,amount,currency,source,pending\n"
-    );
-    for r in rows {
-        let id: uuid::Uuid = r.get("id");
-        let date: chrono::NaiveDate = r.get("date");
-        let amount: rust_decimal::Decimal = r.get("amount");
-        let currency: String = r.get("currency");
-        let description: String = r.get("description");
-        let category: String = r.get("category");
-        let category_detailed: String = r.get("category_detailed");
-        let payment_channel: String = r.get("payment_channel");
-        let merchant: String = r.get("merchant_name");
-        let source: String = r.get("source");
-        let pending: bool = r.get("pending");
-        let account_name: String = r.get("account_name");
-        let institution_name: String = r.get("institution_name");
-        body.push_str(&format!(
-            "{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
-            id,
-            date,
-            esc(&account_name),
-            esc(&institution_name),
-            esc(&description),
-            esc(&merchant),
-            esc(&category),
-            esc(&category_detailed),
-            esc(&payment_channel),
-            amount,
-            currency,
-            esc(&source),
-            pending,
-        ));
-    }
+    use bytes::Bytes;
+    use futures_util::StreamExt;
 
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let filename = format!("patrimonio-transactions-{}.csv", today);
-    (
-        StatusCode::OK,
-        [
-            (header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()),
-            (
-                header::CONTENT_DISPOSITION,
-                format!("attachment; filename=\"{}\"", filename),
-            ),
-        ],
-        body,
-    )
-        .into_response()
+
+    // The channel-buffer of 16 lets the writer get ahead of the
+    // socket without holding the whole CSV in RAM. Bigger is
+    // faster on a fast link, but 16 chunks × ~256 bytes/row is a
+    // ~4 KB ceiling — already plenty for a TCP send buffer to
+    // drain into.
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(16);
+    let db = state.db.clone();
+    let user_id = ctx.user_id;
+
+    tokio::spawn(async move {
+        fn esc(s: &str) -> String {
+            format!("\"{}\"", s.replace('"', "\"\""))
+        }
+
+        // Header row first. A send failure here means the client
+        // already disconnected — abort cleanly without spending DB
+        // work on a request nobody is reading.
+        if tx
+            .send(Ok(Bytes::from_static(
+                b"id,date,account,institution,description,merchant,category,category_detailed,payment_channel,amount,currency,source,pending\n",
+            )))
+            .await
+            .is_err()
+        {
+            return;
+        }
+
+        let mut stream = sqlx::query(
+            r#"
+            SELECT t.id, t.date, t.amount, t.currency, t.description,
+                   COALESCE(t.category, '') as category,
+                   COALESCE(t.category_detailed, '') as category_detailed,
+                   COALESCE(t.payment_channel, '') as payment_channel,
+                   COALESCE(t.merchant_name, '') as merchant_name,
+                   COALESCE(t.source, '') as source,
+                   t.pending,
+                   COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
+                   COALESCE(i.name, '') as institution_name
+            FROM transactions t
+            JOIN accounts a ON t.account_id = a.id
+            JOIN institutions i ON a.institution_id = i.id
+            WHERE t.user_id = $1
+              AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
+            ORDER BY t.date DESC, t.created_at DESC
+            "#,
+        )
+        .bind(user_id)
+        .fetch(&db);
+
+        while let Some(row_result) = stream.next().await {
+            let row = match row_result {
+                Ok(r) => r,
+                Err(e) => {
+                    error!("export_transactions_csv stream error: {}", e);
+                    // Surface the failure to the client as an io
+                    // error — axum will close the body with an
+                    // error frame and downstream tools (curl, the
+                    // browser download) will report the truncation
+                    // instead of silently shipping a half CSV.
+                    let _ = tx
+                        .send(Err(std::io::Error::other(format!(
+                            "csv stream: {}",
+                            e
+                        ))))
+                        .await;
+                    return;
+                }
+            };
+            let id: uuid::Uuid = row.get("id");
+            let date: chrono::NaiveDate = row.get("date");
+            let amount: rust_decimal::Decimal = row.get("amount");
+            let currency: String = row.get("currency");
+            let description: String = row.get("description");
+            let category: String = row.get("category");
+            let category_detailed: String = row.get("category_detailed");
+            let payment_channel: String = row.get("payment_channel");
+            let merchant: String = row.get("merchant_name");
+            let source: String = row.get("source");
+            let pending: bool = row.get("pending");
+            let account_name: String = row.get("account_name");
+            let institution_name: String = row.get("institution_name");
+            let line = format!(
+                "{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+                id,
+                date,
+                esc(&account_name),
+                esc(&institution_name),
+                esc(&description),
+                esc(&merchant),
+                esc(&category),
+                esc(&category_detailed),
+                esc(&payment_channel),
+                amount,
+                currency,
+                esc(&source),
+                pending,
+            );
+            if tx.send(Ok(Bytes::from(line))).await.is_err() {
+                // Client dropped. Stop the loop so we don't keep
+                // pulling rows that will never ship.
+                return;
+            }
+        }
+    });
+
+    let body = axum::body::Body::from_stream(
+        tokio_stream::wrappers::ReceiverStream::new(rx),
+    );
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "text/csv; charset=utf-8")
+        .header(
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{}\"", filename),
+        )
+        .body(body)
+        .unwrap()
 }
 
 #[derive(Deserialize)]

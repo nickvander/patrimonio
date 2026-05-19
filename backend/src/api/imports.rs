@@ -1,10 +1,11 @@
 use axum::{
     extract::{DefaultBodyLimit, Extension, Multipart, State},
-    http::StatusCode,
-    response::IntoResponse,
+    http::{header, StatusCode},
+    response::{IntoResponse, Response},
     routing::post,
     Json, Router,
 };
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
@@ -20,6 +21,44 @@ pub struct ImportResponse {
     pub status: String,
     pub transactions_count: usize,
     pub transactions: Vec<ParsedTransaction>,
+}
+
+/// Stream of NDJSON events emitted by the `/upload` endpoint while
+/// it parses the batch. The frontend reads chunked bytes, splits on
+/// newline, parses each line as one of these variants, and renders
+/// per-file progress between the user's click and the final result.
+///
+/// Old clients that don't speak the stream just keep reading until
+/// the connection closes and look at the last line — the `done` /
+/// `password_required` events carry the same shape as the legacy
+/// single-shot `ImportResponse`, so a non-streaming client that
+/// only parses the LAST JSON object still works.
+#[derive(Serialize)]
+#[serde(tag = "event", rename_all = "snake_case")]
+enum ImportEvent {
+    /// Sent first, before any parses start. `total` is the file
+    /// count the client should compare per-file `done` events
+    /// against to compute "N of M" progress.
+    Started { total: usize },
+    /// One per file. Emitted in the order parses complete (not the
+    /// order they were submitted) — parallel parsing means the
+    /// 8 MB statement may finish after the 2 MB one that was
+    /// queued later.
+    FileDone {
+        name: String,
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    /// Terminal: at least one file is encrypted and we need the
+    /// user to supply a password before retrying. Mirrors the
+    /// legacy `status: "password_required"` response.
+    PasswordRequired { message: String },
+    /// Terminal: every file finished (some may have failed) and
+    /// here is the aggregated result. Same shape as the legacy
+    /// single-shot response — `transactions` is the concatenated
+    /// list across every successful file.
+    Done(ImportResponse),
 }
 
 pub fn router() -> Router<AppState> {
@@ -172,7 +211,7 @@ async fn confirm_handler(
 async fn upload_handler(
     State(_state): State<AppState>,
     mut multipart: Multipart,
-) -> impl IntoResponse {
+) -> Response {
     let mut files: Vec<(String, Vec<u8>)> = Vec::new();
     let mut password: Option<String> = None;
 
@@ -236,148 +275,211 @@ async fn upload_handler(
     }
 
     let total_files = files.len();
-    let mut all_transactions: Vec<ParsedTransaction> = Vec::new();
-    let mut success_files: Vec<String> = Vec::new();
-    let mut errors: Vec<String> = Vec::new();
-    // Password-failure signals can't early-return from the middle of
-    // a parallel fan-out (the other tasks are running on the blocking
-    // pool and can't be cancelled mid-parse). Collect everything, then
-    // decide the response after the join phase.
-    let mut password_state: Option<&'static str> = None;
 
-    // Fan the parses out across the blocking pool so a batch of 24
-    // monthly PDFs doesn't run end-to-end at single-thread speed.
-    // The previous sequential loop hit the frontend's 180 s timeout
-    // for any batch beyond ~10 files; with the fan-out the wall-time
-    // is roughly ceil(N / cpus) × per-file instead of N × per-file.
-    // spawn_blocking moves each parse off the tokio worker (qpdf +
-    // lopdf are CPU- and disk-bound). No explicit concurrency cap
-    // because the blocking pool already bounds at 512 threads and
-    // the OS scheduler takes care of CPU contention; pathological
-    // inputs (200+ PDFs in one upload) are blocked at the
-    // DefaultBodyLimit layer above.
-    let mut set: tokio::task::JoinSet<(
-        String,
-        anyhow::Result<Vec<ParsedTransaction>>,
-    )> = tokio::task::JoinSet::new();
-    for (file_name, file_data) in files {
-        info!(
-            "Queueing file for parse: {} ({} bytes)",
-            file_name,
-            file_data.len()
-        );
-        let pwd_owned = password.clone();
-        let name_for_task = file_name.clone();
-        set.spawn_blocking(move || {
-            let result =
-                parser::detect_and_parse(&name_for_task, &file_data, pwd_owned.as_deref());
-            (name_for_task, result)
-        });
-    }
+    // Stream NDJSON events back to the client as parses complete.
+    // The response body is an mpsc channel wrapped in a
+    // `ReceiverStream` and handed to `axum::body::Body::from_stream`;
+    // each parse completion produces a `file_done` event that the
+    // frontend renders as "N of M done: foo.pdf". The legacy
+    // single-shot response shape is preserved as the final `done`
+    // event — clients that only parse the last line of the
+    // response still get the original payload.
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(16);
 
-    while let Some(join_result) = set.join_next().await {
-        let (file_name, parse_result) = match join_result {
-            Ok(pair) => pair,
-            Err(e) => {
-                error!("Parse task join failed: {}", e);
-                errors.push(format!("internal join error: {}", e));
-                continue;
-            }
-        };
-        match parse_result {
-            Ok(mut txs) => {
-                success_files.push(file_name);
-                all_transactions.append(&mut txs);
-            }
-            Err(e) => {
-                let error_msg = e.to_string();
-                // Password issues abort the whole batch: the UI must
-                // re-prompt and we retry every file with the new
-                // password. Mixing successful + password_required
-                // files would be confusing.
-                if error_msg.contains("INCORRECT_PASSWORD") {
-                    password_state = Some("incorrect");
-                } else if error_msg.contains("PASSWORD_REQUIRED") {
-                    // "incorrect" trumps "required" when both fire
-                    // in the same batch — the user already supplied
-                    // a password and it was wrong.
-                    if password_state != Some("incorrect") {
-                        password_state = Some("required");
+    tokio::spawn(async move {
+        // Serialize one event into a single NDJSON line and push it
+        // through the channel. Returns false when the client has
+        // dropped (best-effort short-circuit so we stop pulling
+        // work for a request nobody is reading).
+        async fn emit(
+            tx: &tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
+            event: &ImportEvent,
+        ) -> bool {
+            let mut bytes = match serde_json::to_vec(event) {
+                Ok(b) => b,
+                Err(e) => {
+                    error!("Failed to serialise import event: {}", e);
+                    return false;
+                }
+            };
+            bytes.push(b'\n');
+            tx.send(Ok(Bytes::from(bytes))).await.is_ok()
+        }
+
+        if !emit(&tx, &ImportEvent::Started { total: total_files }).await {
+            return;
+        }
+
+        let mut all_transactions: Vec<ParsedTransaction> = Vec::new();
+        let mut success_files: Vec<String> = Vec::new();
+        let mut errors: Vec<String> = Vec::new();
+        // Password-failure signals can't early-return from the middle
+        // of a parallel fan-out (the other tasks are running on the
+        // blocking pool and can't be cancelled mid-parse). Collect
+        // everything, then decide the terminal event after the join
+        // phase.
+        let mut password_state: Option<&'static str> = None;
+
+        // Fan the parses out across the blocking pool so a batch of
+        // 24 monthly PDFs doesn't run end-to-end at single-thread
+        // speed. No explicit concurrency cap — the blocking pool
+        // already bounds at 512 threads and the OS scheduler handles
+        // CPU contention. Pathological inputs are blocked at the
+        // DefaultBodyLimit layer above.
+        let mut set: tokio::task::JoinSet<(
+            String,
+            anyhow::Result<Vec<ParsedTransaction>>,
+        )> = tokio::task::JoinSet::new();
+        for (file_name, file_data) in files {
+            info!(
+                "Queueing file for parse: {} ({} bytes)",
+                file_name,
+                file_data.len()
+            );
+            let pwd_owned = password.clone();
+            let name_for_task = file_name.clone();
+            set.spawn_blocking(move || {
+                let result =
+                    parser::detect_and_parse(&name_for_task, &file_data, pwd_owned.as_deref());
+                (name_for_task, result)
+            });
+        }
+
+        while let Some(join_result) = set.join_next().await {
+            let (file_name, parse_result) = match join_result {
+                Ok(pair) => pair,
+                Err(e) => {
+                    error!("Parse task join failed: {}", e);
+                    errors.push(format!("internal join error: {}", e));
+                    let _ = emit(
+                        &tx,
+                        &ImportEvent::FileDone {
+                            name: "(unknown)".to_string(),
+                            ok: false,
+                            error: Some(format!("internal join error: {}", e)),
+                        },
+                    )
+                    .await;
+                    continue;
+                }
+            };
+            match parse_result {
+                Ok(mut txs) => {
+                    let _ = emit(
+                        &tx,
+                        &ImportEvent::FileDone {
+                            name: file_name.clone(),
+                            ok: true,
+                            error: None,
+                        },
+                    )
+                    .await;
+                    success_files.push(file_name);
+                    all_transactions.append(&mut txs);
+                }
+                Err(e) => {
+                    let error_msg = e.to_string();
+                    if error_msg.contains("INCORRECT_PASSWORD") {
+                        password_state = Some("incorrect");
+                    } else if error_msg.contains("PASSWORD_REQUIRED") {
+                        // "incorrect" trumps "required" — if the
+                        // user already supplied a password and it
+                        // was wrong, that's the more accurate hint.
+                        if password_state != Some("incorrect") {
+                            password_state = Some("required");
+                        }
+                    } else {
+                        error!("Parser failed for {}: {}", file_name, error_msg);
+                        errors.push(format!("{}: {}", file_name, error_msg));
                     }
-                } else {
-                    error!("Parser failed for {}: {}", file_name, error_msg);
-                    errors.push(format!("{}: {}", file_name, error_msg));
+                    let _ = emit(
+                        &tx,
+                        &ImportEvent::FileDone {
+                            name: file_name,
+                            ok: false,
+                            error: Some(error_msg),
+                        },
+                    )
+                    .await;
                 }
             }
         }
-    }
 
-    // Any password-required result short-circuits the whole batch so
-    // the UI can re-prompt + retry every file at once.
-    if let Some(state) = password_state {
-        let message = if state == "incorrect" {
-            "The provided password was incorrect. Please try again."
-        } else {
-            "This statement is encrypted. Please enter your PDF password (e.g., your RFC) to unlock it."
-        };
-        return (
-            StatusCode::OK,
-            Json(ImportResponse {
-                message: message.to_string(),
-                status: "password_required".to_string(),
-                transactions_count: 0,
-                transactions: vec![],
-            }),
-        )
-            .into_response();
-    }
+        // Any password-required result short-circuits with the
+        // dedicated event so the UI can re-prompt + retry every
+        // file at once.
+        if let Some(state) = password_state {
+            let message = if state == "incorrect" {
+                "The provided password was incorrect. Please try again."
+            } else {
+                "This statement is encrypted. Please enter your PDF password (e.g., your RFC) to unlock it."
+            };
+            let _ = emit(
+                &tx,
+                &ImportEvent::PasswordRequired {
+                    message: message.to_string(),
+                },
+            )
+            .await;
+            return;
+        }
 
-    // Every file failed — propagate the error so the user can fix it.
-    if all_transactions.is_empty() && !errors.is_empty() {
-        return (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(ImportResponse {
-                message: format!("Processing Error: {}", errors.join("; ")),
-                status: "error".to_string(),
-                transactions_count: 0,
-                transactions: vec![],
-            }),
-        )
-            .into_response();
-    }
-
-    info!(
-        "Parsed {} transactions from {} of {} files",
-        all_transactions.len(),
-        success_files.len(),
-        total_files,
-    );
-
-    let message = if errors.is_empty() {
-        format!(
-            "Successfully parsed {} transactions from {} file{}.",
-            all_transactions.len(),
-            success_files.len(),
-            if success_files.len() == 1 { "" } else { "s" },
-        )
-    } else {
-        format!(
-            "Parsed {} transactions from {} of {} files. Skipped: {}",
+        info!(
+            "Parsed {} transactions from {} of {} files",
             all_transactions.len(),
             success_files.len(),
             total_files,
-            errors.join("; "),
-        )
-    };
+        );
 
-    (
-        StatusCode::OK,
-        Json(ImportResponse {
-            message,
-            status: "success".to_string(),
-            transactions_count: all_transactions.len(),
-            transactions: all_transactions,
-        }),
-    )
-        .into_response()
+        // Every file failed — propagate the error in the terminal
+        // event so the frontend can show it. Status stays at HTTP 200
+        // (the stream itself succeeded); the client distinguishes
+        // success from per-row failure via the `Done` event's inner
+        // `status` field, same contract as the legacy response.
+        let status_str = if all_transactions.is_empty() && !errors.is_empty() {
+            "error"
+        } else {
+            "success"
+        };
+
+        let message = if errors.is_empty() {
+            format!(
+                "Successfully parsed {} transactions from {} file{}.",
+                all_transactions.len(),
+                success_files.len(),
+                if success_files.len() == 1 { "" } else { "s" },
+            )
+        } else if all_transactions.is_empty() {
+            format!("Processing Error: {}", errors.join("; "))
+        } else {
+            format!(
+                "Parsed {} transactions from {} of {} files. Skipped: {}",
+                all_transactions.len(),
+                success_files.len(),
+                total_files,
+                errors.join("; "),
+            )
+        };
+
+        let _ = emit(
+            &tx,
+            &ImportEvent::Done(ImportResponse {
+                message,
+                status: status_str.to_string(),
+                transactions_count: all_transactions.len(),
+                transactions: all_transactions,
+            }),
+        )
+        .await;
+    });
+
+    let body = axum::body::Body::from_stream(
+        tokio_stream::wrappers::ReceiverStream::new(rx),
+    );
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/x-ndjson")
+        .body(body)
+        .unwrap()
 }

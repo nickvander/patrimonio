@@ -47,6 +47,16 @@ class _ImportScreenState extends State<ImportScreen> {
   /// until the OS dialog returns).
   int? _readingFileCount;
 
+  /// Per-file upload-parse progress fed by the backend's NDJSON
+  /// stream. `_uploadDone` is the count of files the server has
+  /// finished (success OR failure); `_uploadLastFile` is the most
+  /// recently completed file name. Rendered under the spinner so
+  /// a long batch (12+ PDFs) shows live progress instead of a
+  /// blank "Processing N files…" wait.
+  int _uploadDone = 0;
+  String? _uploadLastFile;
+  bool _uploadLastFileOk = true;
+
   /// Web-only drag-and-drop listener. Null on non-web targets — the
   /// import screen is reachable from the dashboard which itself only
   /// runs on web today, but the null-check keeps the screen safe if
@@ -217,6 +227,9 @@ class _ImportScreenState extends State<ImportScreen> {
     setState(() {
       _isUploading = true;
       _message = null;
+      _uploadDone = 0;
+      _uploadLastFile = null;
+      _uploadLastFileOk = true;
     });
 
     try {
@@ -225,6 +238,21 @@ class _ImportScreenState extends State<ImportScreen> {
         password: _passwordController.text.trim().isEmpty
             ? null
             : _passwordController.text.trim(),
+        onProgress: ({
+          required int done,
+          required int total,
+          String? lastFile,
+          bool? lastFileOk,
+        }) {
+          if (!mounted) return;
+          setState(() {
+            _uploadDone = done;
+            if (lastFile != null) {
+              _uploadLastFile = lastFile;
+              _uploadLastFileOk = lastFileOk ?? true;
+            }
+          });
+        },
       );
 
       setState(() {
@@ -442,7 +470,10 @@ class _ImportScreenState extends State<ImportScreen> {
                             Text(
                               _selectedFiles.length == 1
                                   ? 'Processing 1 file…'
-                                  : 'Processing ${_selectedFiles.length} files…',
+                                  : _uploadDone > 0
+                                      ? 'Processing $_uploadDone of '
+                                          '${_selectedFiles.length} files…'
+                                      : 'Processing ${_selectedFiles.length} files…',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
@@ -450,15 +481,36 @@ class _ImportScreenState extends State<ImportScreen> {
                               ),
                             ),
                             const SizedBox(height: 4),
-                            Text(
-                              'Large batches can take 30-120 seconds — '
-                              'each PDF is parsed individually on the server.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: context.textSubtle,
+                            // Live per-file caption fed by the
+                            // backend's NDJSON stream. Falls back to
+                            // the original generic hint until the
+                            // first file completes (a few seconds
+                            // into the parse phase).
+                            if (_uploadLastFile != null)
+                              Text(
+                                _uploadLastFileOk
+                                    ? 'Last: ${_uploadLastFile!}'
+                                    : 'Last: ${_uploadLastFile!} (skipped)',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: _uploadLastFileOk
+                                      ? context.textSubtle
+                                      : context.warning,
+                                ),
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              )
+                            else
+                              Text(
+                                'Large batches can take 30-120 seconds — '
+                                'each PDF is parsed individually on the server.',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.textSubtle,
+                                ),
+                                textAlign: TextAlign.center,
                               ),
-                              textAlign: TextAlign.center,
-                            ),
                             const SizedBox(height: 16),
                           ],
                         ),

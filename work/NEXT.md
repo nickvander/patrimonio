@@ -53,22 +53,22 @@ from the trailing 4–5 sprints (all on `main`):
   rename dialog (with the bulk-apply "also apply to N matching"
   checkbox when applicable); far fewer clicks than the detail-
   modal flow. Long-press keeps the selection-mode semantics.
+* **Streaming CSV export** (audit P4): `export_transactions_csv`
+  rewritten as `sqlx fetch` → `mpsc::channel` →
+  `axum::body::Body::from_stream`. A 50k-row export now fits in
+  O(channel_buffer × row_size) RAM.
+* **Per-file upload progress:** `/imports/upload` now emits NDJSON
+  events (`started` → `file_done` × N → `done` /
+  `password_required`). Frontend reads chunked bytes and renders
+  "Processing N of M files… · Last: foo.pdf" in real time.
+* **CORS check in setup-status:** new `cors` check warns when
+  `ALLOWED_ORIGINS` is missing the actual `FRONTEND_BASE_URL`.
+* **README auth section:** documents TOTP enroll / recovery
+  codes / passkey register flows + the hardening defaults.
 
 ## Top 3 for the next session
 
-### 1. Streaming CSV export  ⏱️ ~half day  🎯 closes the audit P4 memory spike
-
-`export_transactions_csv` in `backend/src/api/dashboard.rs` builds
-the full CSV into a `String` before responding. Fine today; ugly
-memory spike on a multi-year export. Swap to
-`axum::body::Body::from_stream` with a `tokio_stream::wrappers::
-ReceiverStream` fed by a `tokio::spawn`'d task that writes rows one
-at a time. The audit (P4) carved the plan.
-
-**Acceptance:** export 50k+ rows without spiking RSS; the response
-starts streaming bytes before the query has read every row.
-
-### 2. Multi-user roles (`owner` vs `read-only`)  ⏱️ ~half day  🎯 advisor / spouse access
+### 1. Multi-user roles (`owner` vs `read-only`)  ⏱️ ~half day  🎯 advisor / spouse access
 
 Single-household deployments don't need it, but the moment someone
 wants to grant a family member view-only access this becomes
@@ -81,7 +81,7 @@ field so the inviter can pick.
 confirm GET endpoints return data + every mutating endpoint
 returns 403.
 
-### 3. Real-time dashboard via websockets  ⏱️ ~1 day  🎯 elegant; can defer further
+### 2. Real-time dashboard via websockets  ⏱️ ~1 day  🎯 elegant; can defer further
 
 Plaid webhooks trigger background syncs; the frontend still
 finds out by polling on tab switch. A websocket "dashboard data
@@ -94,24 +94,34 @@ shouldn't see another user's invalidations). Tracked in
 Park unless polling actually starts to feel slow — the rest of
 Tier 2 is higher impact-per-effort.
 
+### 3. Streaming "upload preflight" / `Sessions "new since last visit"` badge
+
+Two ~1-hour items worth bundling:
+
+* `users.last_login_at` exists; the Security screen's active-sessions
+  list could flag sessions created since that anchor with a small
+  pill ("new since 5d ago"). Improves the "is someone else logged in"
+  glance without a separate audit-log dive.
+* When the file picker / drop reader is slow on a low-end machine,
+  the "Reading N files…" status now shows it. A "preflight" check
+  before upload that sanity-checks total size + warns ahead of the
+  413 cliff would be polish on top.
+
 ## Quick wins (≤ 2 hours each)
 
 Pick one as a warm-up:
 
-- **README.md auth section** — currently documents bootstrap only.
-  Add TOTP enrollment, recovery codes, passkey register flow.
-- **CORS audit in setup-status** — `ALLOWED_ORIGINS` warning fires
-  on startup but isn't surfaced in `/api/setup/status`. Would
-  help during deployment debugging.
-- **Sessions "new since last visit" badge** — `users.last_login_at`
-  exists; the Security screen's active-sessions list could flag
-  sessions created since that anchor.
-- **Per-file upload progress** — chunked JSON / SSE from the
-  upload handler so the UI can show "8 of 12 done: foo.pdf".
-  Parallel parsing already in place; just needs a progress
-  channel.
 - **`prefer_const_literals_to_create_immutables` sweep** — lint
   cleanup; cosmetic.
+- **Manual sync trigger UI** — Management tab has the per-row
+  retry buttons; a top-level "sync everything now" button next to
+  the FX widget would make manual refresh discoverable.
+- **Inline-rename `R` keyboard shortcut** (FUTURE.md I follow-up).
+  Right-click works; `R` on a focused row would help power users.
+- **Per-file upload result table** — the streaming progress shows
+  "Last: foo.pdf" but doesn't keep the full list. A small
+  expandable section under the spinner could surface every
+  per-file outcome (especially useful when 2 of 12 failed).
 
 ## Deferred — explicitly NOT next
 

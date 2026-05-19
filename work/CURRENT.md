@@ -40,6 +40,37 @@ have shipped. The app now does:
 * `app_settings.user_id` (M7 leftover) — budgets / goals no longer
   leak across users.
 
+## CSV stream + upload progress + CORS + README sprint (2026-05-19)
+
+* **Streaming CSV export** (audit P4). `export_transactions_csv`
+  now uses `sqlx::query(...).fetch(&db)` for row-by-row reads +
+  an `mpsc::channel` + `tokio_stream::wrappers::ReceiverStream` +
+  `axum::body::Body::from_stream` for the response body. Killed
+  two memory sources at once: the row-buffer Vec and the full-CSV
+  String. Adds `bytes`, `tokio-stream`, `futures-util` as direct
+  deps (already transitive). A 50k-row export now fits in
+  O(channel_buffer × row_size) RAM.
+* **Per-file upload progress** via NDJSON event stream. The
+  `/imports/upload` handler now emits one JSON object per line:
+  `started{total}` → `file_done{name, ok, error?}` × N →
+  `done{...legacy ImportResponse...}` (or `password_required`).
+  Frontend `uploadStatements` reads chunked bytes, parses each
+  line, fires an `onProgress` callback per `file_done`. Import
+  screen renders "Processing N of M files… · Last: foo.pdf".
+  Bad-file rows surface with "(skipped)" in the warning colour.
+* **CORS check in `/api/setup/status`**. New `cors` check with
+  `severity: required_for_linking` warns when `ALLOWED_ORIGINS`
+  is empty or missing the actual `FRONTEND_BASE_URL`. Message
+  spells out the expected vs actual lists so the operator
+  doesn't have to grep logs to find the misconfiguration.
+* **README auth section**. New "Securing the account: TOTP,
+  recovery codes, passkeys" block. Documents the enroll →
+  confirm → log-in-in-same-step flow that the recent TOTP
+  replay-marker fix unblocked; the recovery-codes mint + warn-
+  when-low UX; the passkey register flow incl. cross-device QR;
+  and the hardening defaults (rate-limit jitter, trusted proxy,
+  CSRF header).
+
 ## FX dismissal + inline rename + rate-limit sprint (2026-05-19)
 
 * **FX-pair "never re-suggest"** (FUTURE.md D follow-up). New

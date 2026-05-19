@@ -583,12 +583,18 @@ the handler ran).
 
 **Plan:** Either ship an embedded top-100k bloom (~80 KB) loaded at startup, or call HIBP's k-anonymity range API on signup + change-password. The bloom is simpler and avoids the network round-trip on the hot path.
 
-### Streaming CSV export
+### Streaming CSV export — ✅ shipped 2026-05-19
 
-**Tracking:** This section. **Audit ID:** P4.
-**Status:** `export_transactions_csv` builds the full CSV into a `String` before responding. Memory spike on large exports.
-
-**Plan:** Use `axum::body::Body::from_stream` with a `tokio_stream::wrappers::ReceiverStream` fed by a `tokio::spawn`'d task that writes rows one at a time.
+**Audit ID:** P4. **Status:** Done.
+`export_transactions_csv` now streams both ends of the pipe:
+`sqlx::query(...).fetch(&db)` hands rows to the writer one at
+a time (instead of buffering the result set in a Vec); the
+writer pushes formatted lines into an `mpsc::channel` wrapped in
+`tokio_stream::wrappers::ReceiverStream` and handed to
+`axum::body::Body::from_stream`. A 50k-row export now fits in
+O(channel_buffer × row_size) RAM instead of O(row_count ×
+row_size × ~5 CSV overhead). Added `bytes`, `tokio-stream`,
+`futures-util` as direct deps (already transitive).
 
 ### Net-worth aggregation in SQL
 

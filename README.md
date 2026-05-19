@@ -97,6 +97,74 @@ In any deployment served over HTTPS, set `COOKIE_SECURE=true` in
 marked Secure automatically when `FRONTEND_BASE_URL` starts with
 `https://`.
 
+### Securing the account: TOTP, recovery codes, passkeys
+
+After bootstrap, open the **Security** screen (shield icon in the
+top-right of the dashboard) to layer extra factors on top of the
+password.
+
+**TOTP (recommended for every install)**
+
+1. Security → "Add an authenticator app".
+2. Scan the QR with Authy / Google Authenticator / 1Password, OR
+   paste the displayed base32 secret if your authenticator doesn't
+   scan.
+3. Enter the 6-digit code from your authenticator to confirm. The
+   confirm step uses a no-replay-advance verifier — you can log
+   in immediately afterward with the same code, even if you're
+   still inside the same 30 s TOTP step.
+4. On subsequent logins, `/login` returns `requires_totp: true`
+   after the password step and the UI prompts for the code via
+   `POST /api/auth/totp/verify`.
+
+The TOTP secret is encrypted at rest with `ENCRYPTION_KEY` (set
+this before enabling TOTP — see Plaid section).
+
+**Recovery codes**
+
+Bootstrap mints 10 one-time recovery codes and shows them ONCE on
+the response. Save them somewhere persistent (password manager,
+printed copy). Each code is a 12-character base32 string.
+
+* The Security screen shows the count of unused codes. When it
+  drops below 3 a warning tile appears with a "Regenerate" CTA.
+* `POST /api/auth/recover` consumes a code + resets the password.
+  Use this if you lose your authenticator AND can't reach the
+  database to clear the `users` row.
+* "Regenerate" mints a fresh batch of 10 codes and invalidates the
+  old ones in one stroke — useful if a code might've leaked.
+
+**Passkeys (FIDO2 / WebAuthn)**
+
+Hardware keys (YubiKey, Apple Touch ID, Windows Hello,
+cross-device phone-to-desktop QR) all work via
+[`webauthn-rs`](https://github.com/kanidm/webauthn-rs).
+
+1. Security → "Register a passkey".
+2. Follow the browser prompt — pick the authenticator type your
+   device offers.
+3. On the login screen, click "Sign in with a passkey" instead of
+   typing a password. The discoverable-credentials flow means you
+   don't need to type a username first.
+
+Multiple passkeys can be registered per account — keep a hardware
+key in a safe as backup. Account recovery still falls back to
+password + TOTP, so removing all passkeys doesn't lock you out.
+
+**Hardening notes**
+
+* Failed login attempts get a 50–150 ms random jitter before
+  responding (closes a sub-threshold brute-force probe at HTTP
+  throughput) and the 429 path applies exponential backoff
+  (1 → 2 → 4 → 8 → 16 → 30 s capped) once you cross 5 failures
+  per minute.
+* `X-Forwarded-For` from untrusted peers is stripped before
+  reaching the rate limiter — set `TRUSTED_PROXY_CIDRS` to your
+  reverse-proxy's IP in production.
+* CSRF defence: every mutating request (POST/PUT/PATCH/DELETE)
+  must include an `X-Requested-With` header. The frontend sends
+  this automatically; curl / scripted clients need to add it.
+
 ### Smoke Test
 ```bash
 NODE_PATH=/path/to/node_modules ./scripts/smoke.cjs
