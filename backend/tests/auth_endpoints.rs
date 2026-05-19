@@ -13,6 +13,8 @@
 //! `cargo test -- --test-threads=1`. Parallel execution leads to one
 //! test's TRUNCATE wiping another's data mid-flight and surfaces as
 //! random 500s on bootstrap.
+//!
+//! Easiest invocation from the repo root:  `./scripts/test.sh`
 
 use std::sync::Arc;
 
@@ -374,7 +376,7 @@ async fn session_management_endpoints() {
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let token_a = set_cookie_value(res.headers()).expect("bootstrap cookie");
+    let _token_a = set_cookie_value(res.headers()).expect("bootstrap cookie");
 
     // Log in twice more from different "browsers" — same user, two
     // additional sessions. Each login revokes the previous cookie if

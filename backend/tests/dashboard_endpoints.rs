@@ -14,6 +14,13 @@
 //! serially — run the suite with `cargo test -- --test-threads=1`.
 //! Parallel execution leads to one test's TRUNCATE wiping another's
 //! data mid-flight and surfaces as random 500s on bootstrap.
+//!
+//! Easiest invocation from the repo root:
+//!
+//!     ./scripts/test.sh
+//!
+//! That wrapper handles the dockerised toolchain, ensures the test
+//! DB exists, sets the env var, and threads `--test-threads=1`.
 
 use std::sync::Arc;
 
