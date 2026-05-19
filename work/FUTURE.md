@@ -545,12 +545,23 @@ DELETE on the protected router without `X-Requested-With`. Frontend
 Plaid Link flow all send `X-Requested-With: fetch`. CORS extended
 in `main.rs::build_cors_layer` to permit the header on preflights.
 
-### Rate-limit hardening
+### Rate-limit hardening — ✅ shipped 2026-05-19
 
-**Tracking:** This section. **Audit ID:** M2.
-**Status:** Per-username threshold is 5/min, per-IP 15/min; without `X-Forwarded-For` (no trusted proxy in dev) the IP path is skipped. An attacker with one valid username can still spray 5 passwords/min indefinitely.
-
-**Plan:** Add a global anonymous-failure counter + an unconditional `tokio::time::sleep(rand 50–150 ms)` on every failed verify. Optional: exponential backoff per-username (5, 10, 30, 60, 120 s).
+**Audit ID:** M2. **Status:** Done.
+* 50-150 ms `password::random_login_jitter()` runs on every
+  failed verify (unknown user / inactive / bad password / bad
+  TOTP / bad recovery code). Stops sub-threshold spray attacks
+  from probing at HTTP throughput.
+* `rate_limited` now does an exponential-backoff sleep on the
+  429 path: 1 s → 2 → 4 → 8 → 16 → 30 capped, indexed by
+  attempts-past-threshold. A persistent brute-forcer's
+  effective throughput collapses to ~1 attempt per 30 s per
+  username once they cross the line; legitimate user who
+  mistyped 5× experiences at most a 1 s delay on attempt 6.
+* Global anonymous-failure counter was contemplated but skipped
+  — the per-IP path (threshold × 3) covers the spread-across-
+  usernames case, and the global counter adds an in-memory or
+  Redis dependency without a clear additional defence.
 
 ### Trusted-proxy aware `client_ip`  ✅ shipped
 
@@ -699,12 +710,15 @@ Open follow-ups for this surface:
 
 Deferred follow-up:
 
-* **FX-pair "never re-suggest"**. Today the detector silently re-
-  proposes pairs whose `cash_fx_transfers` row the user deleted.
-  Implementing this needs a new `dismissed_fx_pairs` table
-  (keyed on the two underlying tx ids, or a stable pair hash) +
-  a detector predicate. The HiddenItemsScreen already has the
-  spot for it.
+* **FX-pair "never re-suggest"** — ✅ shipped 2026-05-19. New
+  migration `2026051808_dismissed_fx_pairs.sql`, detector
+  predicate in `fx_transfer_link::detect_for_user`, transactional
+  unlink (delete + dismissal insert in one tx), and a new
+  FX-pair section in `HiddenItemsScreen` with a Restore button.
+  In passing, fixed a latent sign-convention bug in the FX
+  detector (was filtering for `amount > 0` as outflow, but the
+  app stores expense as negative; the detector had been finding
+  zero candidates against real data).
 
 ## E. Production deployment runbook — ✅ shipped 2026-05-18
 
@@ -757,19 +771,27 @@ is unchanged. Liability sign continues to be respected via the
 `net_worth_history_aggregates_per_date_and_institution` +
 `net_worth_history_handles_liabilities` lock the behaviour in.
 
-## I. Inline transaction rename + bulk-edit polish  ⏱️ ~half day
+## I. Inline transaction rename + bulk-edit polish — ✅ partially shipped
 
-The detail modal's rename works well, but for "rename a bunch of
-rows quickly" the modal-per-row flow is heavy. Two affordances:
+* **Right-click → rename dialog** — ✅ shipped 2026-05-19.
+  Right-click on a transaction row opens the lightweight
+  `_renameTransaction` dialog directly, skipping the detail-
+  modal hop. The bulk-apply "also apply to N matching" checkbox
+  shows when the row is part of a description-cluster (same
+  `_similarTransactionIds` helper the detail modal uses). Long-
+  press still triggers selection mode — those two gestures
+  don't compete now.
 
-* **Inline rename**: long-press / right-click on a row opens a
-  small inline text input on the row itself. Saves on submit.
-* **Keyboard shortcut**: `R` when a row is focused opens the rename
-  dialog directly without opening the detail modal first.
+Remaining:
 
-The bulk-rename "Also apply to N matching" already exists from
-the detail modal, so this is purely about reducing clicks for
-one-off renames.
+* **`R` keyboard shortcut** when a row is focused → rename
+  dialog. Requires Flutter focus management around each row +
+  a top-level RawKeyboardListener; deferred since right-click
+  already cuts the click count by ~50%.
+* **True inline rename** (replace the description text with an
+  editable TextField on the row itself instead of popping a
+  dialog). Would feel more native but the dialog flow is fine
+  for now.
 
 ## J. Flutter canvaskit responsiveness  ⏱️ unknown
 

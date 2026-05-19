@@ -40,6 +40,41 @@ have shipped. The app now does:
 * `app_settings.user_id` (M7 leftover) — budgets / goals no longer
   leak across users.
 
+## FX dismissal + inline rename + rate-limit sprint (2026-05-19)
+
+* **FX-pair "never re-suggest"** (FUTURE.md D follow-up). New
+  migration `2026051808_dismissed_fx_pairs.sql` + detector
+  predicate in `fx_transfer_link::detect_for_user` that consults
+  the table before proposing pairs. `unlink_fx_transfer` now
+  runs the DELETE + dismissal INSERT in one DB transaction.
+  Two new endpoints (`GET /fx-transfers/dismissed`,
+  `DELETE /fx-transfers/dismissed/{id}`) feed a new FX-pair
+  section in the HiddenItemsScreen with a Restore button per
+  row. Closes the gap where the detector kept re-proposing
+  pairs the user had explicitly unlinked.
+* **FX detector sign-convention bug fix** (separate). The
+  detector was filtering on `amount > 0 = outflow`, but the
+  app stores expense as NEGATIVE (per Plaid sync's
+  `let amount = -tx["amount"]` and `cash_flow_trends`). The
+  filter was inverted, which is why every detector run found
+  0 candidates against real data. Source/dest sign checks +
+  the explanatory comment fixed.
+* **Inline transaction rename via right-click** (FUTURE.md I).
+  Right-click on a transaction row opens the lightweight
+  `_renameTransaction` dialog directly — no detail-modal hop.
+  The bulk-apply "also apply to N matching rows" checkbox
+  shows when the row is part of a description-cluster. Long-
+  press semantics (start selection mode) unchanged. R-shortcut
+  deferred to a future sprint.
+* **Rate-limit hardening** (audit M2). Per-user exponential
+  backoff inside `rate_limited` (1 s → 2 → 4 → 8 → 16 → 30
+  capped) so a brute-forcer who crosses the 5/min threshold
+  can't probe at HTTP throughput. Plus a 50–150 ms random
+  jitter (`password::random_login_jitter`) on every failed
+  verify path — unknown user, inactive user, bad password,
+  bad TOTP code, bad recovery code. Closes the "spray 5
+  passwords/min indefinitely under threshold" attack.
+
 ## Sign-fixes + split polish + smoke sprint (2026-05-18, late late)
 
 * **Subscription detector sign-convention bug fixed.** The detector

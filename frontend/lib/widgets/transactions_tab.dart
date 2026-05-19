@@ -767,6 +767,28 @@ class _TransactionsTabState extends State<TransactionsTab> {
   /// other rows that share this raw description" checkbox. Picking it
   /// runs the same PATCH against every id so the user can squash a
   /// cluster of "Miscellaneous Debit" rows in one stroke.
+  /// IDs of every transaction in the currently-loaded list that
+  /// shares the given row's raw bank description (excluding the row
+  /// itself). Same predicate the detail modal uses for the
+  /// "also apply to N matching" bulk-rename checkbox.
+  List<String> _similarTransactionIds(dynamic tx) {
+    final rawDescription = (tx['description'] ?? '').toString();
+    if (rawDescription.trim().isEmpty) return const [];
+    final selfId = tx['id'];
+    return widget.transactions
+        .where((other) {
+          if (other is! Map) return false;
+          if (other['id'] == selfId) return false;
+          return (other['description'] ?? '')
+                  .toString()
+                  .trim()
+                  .toLowerCase() ==
+              rawDescription.trim().toLowerCase();
+        })
+        .map((m) => (m as Map)['id'].toString())
+        .toList();
+  }
+
   Future<void> _renameTransaction(
     dynamic tx, {
     List<String> similarIds = const [],
@@ -1199,6 +1221,22 @@ class _TransactionsTabState extends State<TransactionsTab> {
           });
         }
       },
+      // Right-click on web (Flutter maps secondary tap to right-click)
+      // opens the quick rename dialog directly — skips the detail
+      // modal hop. The dialog itself is the existing
+      // `_renameTransaction` which is already a lightweight 1-field
+      // form, so this is purely about cutting clicks for power users
+      // cleaning up "Miscellaneous Debit"-style clusters.
+      onSecondaryTap: widget.onUpdate == null
+          ? null
+          : () {
+              if (id == null || _selectionMode) return;
+              // Compute the "similar rows" set the same way the
+              // detail modal does so the bulk-apply checkbox appears
+              // when this row is part of a cluster.
+              final similarIds = _similarTransactionIds(tx);
+              _renameTransaction(tx, similarIds: similarIds);
+            },
       hoverColor: context.tint(0.03),
       child: AnimatedContainer(
         // Three overlapping signals share this background:

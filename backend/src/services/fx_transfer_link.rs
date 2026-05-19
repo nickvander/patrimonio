@@ -109,21 +109,47 @@ pub async fn detect_for_user(db: &PgPool, user_id: uuid::Uuid) -> Result<(usize,
         .filter_map(|r| TxCandidate::from_row(r).ok())
         .collect();
 
+    // 2b. Load the user's permanently-dismissed pairs so we skip them
+    //     during the walk below. Without this the detector would
+    //     happily re-propose a pair the user explicitly told us to
+    //     stop suggesting on the previous sweep.
+    let dismissed_rows = sqlx::query(
+        "SELECT source_tx_id, dest_tx_id FROM dismissed_fx_pairs WHERE user_id = $1",
+    )
+    .bind(user_id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+    let dismissed: std::collections::HashSet<(uuid::Uuid, uuid::Uuid)> = dismissed_rows
+        .iter()
+        .filter_map(|r| {
+            let s: uuid::Uuid = r.try_get("source_tx_id").ok()?;
+            let d: uuid::Uuid = r.try_get("dest_tx_id").ok()?;
+            Some((s, d))
+        })
+        .collect();
+
     // 3. Walk every (USD-out, MXN-in) pair AND (MXN-out, USD-in)
-    //    pair. We only consider expense-on-source + income-on-dest
-    //    (sign convention: amount > 0 is outflow), since a transfer
-    //    is always one of each.
+    //    pair. We only consider expense-on-source + income-on-dest.
+    //    Sign convention: outflow is stored as NEGATIVE (matches
+    //    `services/sync.rs` which negates Plaid's outflow-positive
+    //    amounts on import, and `cash_flow_trends` which sums
+    //    `amount > 0` as income). An older comment here claimed
+    //    "amount > 0 is outflow" — that was inverted and caused
+    //    every detector run to short-circuit with 0 candidates
+    //    against real data.
     let mut checked = 0usize;
     let mut inserted = 0usize;
 
     for source in &candidates {
-        if source.amount <= 0.0 {
-            // source must be an outflow (positive amount in this app's
-            // sign convention).
+        if source.amount >= 0.0 {
+            // source must be an outflow (negative amount in this
+            // app's sign convention).
             continue;
         }
         for dest in &candidates {
-            if dest.amount >= 0.0 {
+            if dest.amount <= 0.0 {
+                // dest must be an inflow (positive amount).
                 continue;
             }
             if source.id == dest.id {
@@ -136,6 +162,12 @@ pub async fn detect_for_user(db: &PgPool, user_id: uuid::Uuid) -> Result<(usize,
                 continue;
             }
             if source.currency == dest.currency {
+                continue;
+            }
+            // Skip permanently-dismissed pairs. The user has already
+            // looked at this exact two-tx combination and said "not
+            // a transfer" — re-proposing it would be a regression.
+            if dismissed.contains(&(source.id, dest.id)) {
                 continue;
             }
 

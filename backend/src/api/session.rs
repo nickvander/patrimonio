@@ -452,6 +452,10 @@ async fn login(
         // remote attacker can enumerate valid usernames by clocking
         // /login responses.
         password::dummy_verify();
+        // 50-150 ms jitter before responding. Stops a brute-forcer
+        // from probing at full HTTP throughput while still below the
+        // 5/min hard rate-limit threshold.
+        password::random_login_jitter().await;
         record_audit(
             &state.db,
             "login",
@@ -466,6 +470,7 @@ async fn login(
         return Err(invalid_credentials());
     };
     if !is_active {
+        password::random_login_jitter().await;
         record_audit(
             &state.db,
             "login",
@@ -481,6 +486,7 @@ async fn login(
     }
     let ok = password::verify_password(&body.password, &hash).map_err(internal)?;
     if !ok {
+        password::random_login_jitter().await;
         record_audit(
             &state.db,
             "login",
@@ -678,6 +684,10 @@ async fn recover(
     let target_user = match (user_row, code_owner) {
         (Some((user_id,)), Some(owner_uid)) if user_id == owner_uid => user_id,
         _ => {
+            // Same jitter as the password path — recovery codes are
+            // higher-entropy but still finite (10 codes per user), so
+            // a high-throughput probe is worth slowing down.
+            password::random_login_jitter().await;
             // Log under the `login` event so the rate limiter sees it
             // and exponential lockout applies to recovery attempts too.
             record_audit(&state.db, "login", Some(&username), None, ip.as_deref(), ua.as_deref(), false, Some("recover_invalid")).await;
@@ -891,6 +901,10 @@ async fn totp_verify(
     let ip = client_ip(&headers);
 
     if !ok {
+        // Same rate-limit defence as the password path: 50-150 ms
+        // jitter before responding so a brute-forcer can't probe
+        // TOTP codes (1 in 1M per attempt) at HTTP throughput.
+        password::random_login_jitter().await;
         record_audit(&state.db, "totp_verify", None, Some(validated.user_id), ip.as_deref(), ua.as_deref(), false, Some("bad_code")).await;
         return Err(ApiError::new(
             StatusCode::UNAUTHORIZED,
@@ -1155,6 +1169,15 @@ async fn rate_limited(db: &PgPool, username: &str, ip: Option<&str>) -> bool {
     .unwrap_or(0);
 
     if by_user >= FAILED_ATTEMPT_THRESHOLD {
+        // Exponential backoff on the 429 path. The first attempt over
+        // threshold pauses 1 s before responding; each subsequent
+        // attempt within the 60 s window doubles up to 30 s. A
+        // brute-forcer can no longer probe at HTTP throughput once
+        // they cross the line — the throttle scales with their
+        // persistence. The legitimate user who mistyped 5× in a row
+        // experiences at most a 1 s delay on attempt 6, well under
+        // the patience floor.
+        backoff_sleep(by_user - FAILED_ATTEMPT_THRESHOLD + 1).await;
         return true;
     }
     if let Some(ip) = ip {
@@ -1172,10 +1195,21 @@ async fn rate_limited(db: &PgPool, username: &str, ip: Option<&str>) -> bool {
         .await
         .unwrap_or(0);
         if by_ip >= FAILED_ATTEMPT_THRESHOLD * 3 {
+            backoff_sleep(by_ip - FAILED_ATTEMPT_THRESHOLD * 3 + 1).await;
             return true;
         }
     }
     false
+}
+
+/// 1 s → 2 s → 4 s → 8 s → 16 s → 30 s capped exponential backoff.
+/// `excess` is the 1-indexed number of attempts past the rate-limit
+/// threshold (1 = first over). Used by `rate_limited` to slow the
+/// 429 response so a brute-forcer can't probe at HTTP throughput.
+async fn backoff_sleep(excess: i64) {
+    let exp = std::cmp::min(5_i64, (excess - 1).max(0)) as u32;
+    let secs: u64 = std::cmp::min(30, 1u64 << exp);
+    tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
 }
 
 #[allow(clippy::too_many_arguments)]

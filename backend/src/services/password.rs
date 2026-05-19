@@ -50,6 +50,22 @@ pub fn dummy_verify() {
     let _ = verify_password("dummy", DUMMY_HASH);
 }
 
+/// Random 50–150 ms sleep injected after every failed verify path
+/// (unknown user / inactive / bad password / bad TOTP). Closes a
+/// rate-limit gap where an attacker holding one valid username could
+/// previously spray 5 passwords/minute below the threshold at full
+/// HTTP throughput. With the jitter the per-attempt floor is the
+/// random delay, so brute-force throughput is gated by network
+/// concurrency rather than verify latency.
+///
+/// Cost to the legitimate user: max 150 ms per typo, which is
+/// imperceptible vs. an Argon2 verify already taking 100–200 ms.
+pub async fn random_login_jitter() {
+    use rand::Rng;
+    let ms: u64 = rand::thread_rng().gen_range(50..=150);
+    tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+}
+
 /// Cheap structural password policy. We deliberately stay loose on
 /// composition rules (NIST SP 800-63B discourages them) and lean on
 /// minimum length + a breach-list lookup so a long-but-common pick

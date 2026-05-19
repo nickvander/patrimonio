@@ -37,6 +37,15 @@ pub fn router() -> Router<AppState> {
             axum::routing::delete(unignore_subscription),
         )
         .route("/fx-transfers", get(list_fx_transfers).post(detect_fx_transfers))
+        // Static "dismissed" segments mounted BEFORE the dynamic
+        // /{id} route so axum's matcher prefers them — otherwise
+        // /fx-transfers/dismissed could be parsed as id="dismissed"
+        // and 400 on the UUID extractor.
+        .route("/fx-transfers/dismissed", get(list_dismissed_fx_pairs))
+        .route(
+            "/fx-transfers/dismissed/{id}",
+            axum::routing::delete(restore_dismissed_fx_pair),
+        )
         .route(
             "/fx-transfers/{id}",
             axum::routing::delete(unlink_fx_transfer)
@@ -1928,26 +1937,183 @@ async fn confirm_fx_transfer(
     }
 }
 
-/// Remove a link entirely. The two underlying transactions are
-/// untouched — only the cash_fx_transfers row goes away, so a future
-/// detection run could re-propose it.
+/// Remove a link entirely. The two underlying transactions stay
+/// put. The pair is ALSO recorded in `dismissed_fx_pairs` so the
+/// next detector run won't re-propose it — the user already said
+/// "not a transfer." Restoring is a per-row Delete in the Hidden
+/// Items screen.
 async fn unlink_fx_transfer(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
 ) -> StatusCode {
+    let mut tx = match state.db.begin().await {
+        Ok(t) => t,
+        Err(e) => {
+            error!("unlink_fx_transfer begin failed for {}: {}", id, e);
+            return StatusCode::INTERNAL_SERVER_ERROR;
+        }
+    };
+
+    // Capture the underlying tx ids BEFORE deleting so we can land
+    // the dismissal row. RETURNING saves a separate SELECT and
+    // keeps both operations in one statement-level snapshot.
+    let row = match sqlx::query(
+        "DELETE FROM cash_fx_transfers WHERE id = $1 AND user_id = $2 \
+         RETURNING source_tx_id, dest_tx_id",
+    )
+    .bind(id)
+    .bind(ctx.user_id)
+    .fetch_optional(&mut *tx)
+    .await
+    {
+        Ok(Some(r)) => r,
+        Ok(None) => return StatusCode::NOT_FOUND,
+        Err(e) => {
+            error!("unlink_fx_transfer delete failed for {}: {}", id, e);
+            return StatusCode::INTERNAL_SERVER_ERROR;
+        }
+    };
+
+    let source_tx_id: uuid::Uuid = match row.try_get("source_tx_id") {
+        Ok(v) => v,
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
+    };
+    let dest_tx_id: uuid::Uuid = match row.try_get("dest_tx_id") {
+        Ok(v) => v,
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
+    };
+
+    if let Err(e) = sqlx::query(
+        "INSERT INTO dismissed_fx_pairs (user_id, source_tx_id, dest_tx_id) \
+         VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+    )
+    .bind(ctx.user_id)
+    .bind(source_tx_id)
+    .bind(dest_tx_id)
+    .execute(&mut *tx)
+    .await
+    {
+        error!("unlink_fx_transfer dismiss insert failed for {}: {}", id, e);
+        return StatusCode::INTERNAL_SERVER_ERROR;
+    }
+
+    if let Err(e) = tx.commit().await {
+        error!("unlink_fx_transfer commit failed for {}: {}", id, e);
+        return StatusCode::INTERNAL_SERVER_ERROR;
+    }
+
+    StatusCode::NO_CONTENT
+}
+
+#[derive(Serialize)]
+struct DismissedFxPair {
+    /// Stable id for the dismissal row — pass back as a DELETE
+    /// path parameter to restore.
+    id: String,
+    /// Display labels for the two legs of the dismissed transfer.
+    /// Picked from the underlying transactions list so renames in
+    /// the tx list propagate here without a separate sync step.
+    source_label: String,
+    dest_label: String,
+    source_date: String,
+    dest_date: String,
+    /// Native amount + currency for each leg. The frontend uses
+    /// these to render the "Wise USD 1000 → MXN 20000" line.
+    source_amount: f64,
+    source_currency: String,
+    dest_amount: f64,
+    dest_currency: String,
+    dismissed_at: String,
+}
+
+/// List every FX-pair the caller has permanently dismissed. Used by
+/// the Hidden Items screen. Joins to `transactions` for the display
+/// labels — if either underlying tx has been deleted (Plaid
+/// TRANSACTIONS_REMOVED, manual cleanup) the dismissal row was
+/// already cascaded away by the FKs, so a missing-tx row never
+/// appears here.
+async fn list_dismissed_fx_pairs(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<Vec<DismissedFxPair>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT d.id, d.dismissed_at,
+               s.date AS source_date,
+               s.amount AS source_amount,
+               s.currency AS source_currency,
+               COALESCE(NULLIF(s.user_description, ''), s.description) AS source_label,
+               de.date AS dest_date,
+               de.amount AS dest_amount,
+               de.currency AS dest_currency,
+               COALESCE(NULLIF(de.user_description, ''), de.description) AS dest_label
+        FROM dismissed_fx_pairs d
+        JOIN transactions s  ON s.id  = d.source_tx_id
+        JOIN transactions de ON de.id = d.dest_tx_id
+        WHERE d.user_id = $1
+        ORDER BY d.dismissed_at DESC
+        "#,
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    Json(
+        rows.iter()
+            .map(|r| DismissedFxPair {
+                id: r.get::<uuid::Uuid, _>("id").to_string(),
+                source_label: r.try_get("source_label").unwrap_or_default(),
+                dest_label: r.try_get("dest_label").unwrap_or_default(),
+                source_date: r
+                    .try_get::<chrono::NaiveDate, _>("source_date")
+                    .map(|d| d.to_string())
+                    .unwrap_or_default(),
+                dest_date: r
+                    .try_get::<chrono::NaiveDate, _>("dest_date")
+                    .map(|d| d.to_string())
+                    .unwrap_or_default(),
+                source_amount: r
+                    .try_get::<rust_decimal::Decimal, _>("source_amount")
+                    .ok()
+                    .and_then(|d| d.to_string().parse().ok())
+                    .unwrap_or(0.0),
+                source_currency: r.try_get("source_currency").unwrap_or_default(),
+                dest_amount: r
+                    .try_get::<rust_decimal::Decimal, _>("dest_amount")
+                    .ok()
+                    .and_then(|d| d.to_string().parse().ok())
+                    .unwrap_or(0.0),
+                dest_currency: r.try_get("dest_currency").unwrap_or_default(),
+                dismissed_at: r
+                    .try_get::<chrono::DateTime<chrono::Utc>, _>("dismissed_at")
+                    .map(|d| d.to_rfc3339())
+                    .unwrap_or_default(),
+            })
+            .collect(),
+    )
+}
+
+/// Restore a previously-dismissed FX pair — deletes the row so the
+/// next detector run is free to surface the pair again. Idempotent:
+/// returns 204 even when the row is already gone.
+async fn restore_dismissed_fx_pair(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
+) -> StatusCode {
     let result = sqlx::query(
-        "DELETE FROM cash_fx_transfers WHERE id = $1 AND user_id = $2",
+        "DELETE FROM dismissed_fx_pairs WHERE id = $1 AND user_id = $2",
     )
     .bind(id)
     .bind(ctx.user_id)
     .execute(&state.db)
     .await;
     match result {
-        Ok(r) if r.rows_affected() == 1 => StatusCode::NO_CONTENT,
-        Ok(_) => StatusCode::NOT_FOUND,
+        Ok(_) => StatusCode::NO_CONTENT,
         Err(e) => {
-            error!("unlink_fx_transfer failed for {}: {}", id, e);
+            error!("restore_dismissed_fx_pair failed for {}: {}", id, e);
             StatusCode::INTERNAL_SERVER_ERROR
         }
     }

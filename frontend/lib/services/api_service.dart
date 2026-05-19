@@ -546,6 +546,31 @@ class ApiService {
     }
   }
 
+  /// List FX pairs the user has permanently dismissed. Each row is
+  /// `{ id, source_label, dest_label, source_date, dest_date,
+  /// source_amount, source_currency, dest_amount, dest_currency,
+  /// dismissed_at }`. Used by the Hidden Items screen.
+  Future<List<dynamic>> getDismissedFxPairs() async {
+    final response = await _get(
+      Uri.parse('$_baseUrl/dashboard/fx-transfers/dismissed'),
+    );
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Failed to load dismissed FX pairs');
+  }
+
+  /// Restore a dismissed FX pair so the detector can re-propose it
+  /// on the next run. Idempotent — 204 even if already gone.
+  Future<void> restoreDismissedFxPair(String dismissalId) async {
+    final response = await _delete(
+      Uri.parse('$_baseUrl/dashboard/fx-transfers/dismissed/$dismissalId'),
+    );
+    if (response.statusCode != 204) {
+      throw Exception('Restore failed (${response.statusCode})');
+    }
+  }
+
   Future<Map<String, dynamic>> getSetupStatus() async {
     // Setup status is a public endpoint — used by the login screen — so
     // we still send credentials but the server does not require them.

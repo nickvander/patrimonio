@@ -31,6 +31,7 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
   bool _loading = true;
   String? _error;
   List<dynamic> _ignoredSubs = const [];
+  List<dynamic> _dismissedFxPairs = const [];
   String? _sinceLastLoginAnchor;
 
   @override
@@ -45,10 +46,16 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
       _error = null;
     });
     try {
-      final ignored = await _api.getIgnoredSubscriptions();
+      // Run both lookups concurrently — they're independent and one
+      // taking longer shouldn't block the other from rendering.
+      final results = await Future.wait([
+        _api.getIgnoredSubscriptions(),
+        _api.getDismissedFxPairs(),
+      ]);
       if (!mounted) return;
       setState(() {
-        _ignoredSubs = ignored;
+        _ignoredSubs = results[0];
+        _dismissedFxPairs = results[1];
         _sinceLastLoginAnchor =
             Preferences.getSinceLastLoginDismissalAnchor();
       });
@@ -87,6 +94,30 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Since-last-login banner will reappear.')),
     );
+  }
+
+  Future<void> _restoreFxPair(String id, String summary) async {
+    try {
+      await _api.restoreDismissedFxPair(id);
+      if (!mounted) return;
+      setState(() {
+        _dismissedFxPairs = _dismissedFxPairs
+            .where((row) => (row as Map)['id'] != id)
+            .toList();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Restored — the detector may re-propose $summary on the next sync.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to restore: $e')),
+      );
+    }
   }
 
   String _formatIgnoredAt(String iso) {
@@ -180,8 +211,64 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
                           ),
                         ),
                       ),
+                    const SizedBox(height: 24),
+                    _sectionHeader(
+                      icon: Icons.swap_horiz_outlined,
+                      title: 'FX-transfer pairs',
+                      count: _dismissedFxPairs.length,
+                    ),
+                    if (_dismissedFxPairs.isEmpty)
+                      _emptyTile(
+                        'No FX pairs are currently dismissed. '
+                        'When you unlink a detected Wise / Remitly / Xoom '
+                        'transfer on the Transactions tab, it lands here so '
+                        'the detector won\'t re-propose it.',
+                      )
+                    else
+                      Card(
+                        child: Column(
+                          children: [
+                            for (var i = 0; i < _dismissedFxPairs.length; i++) ...[
+                              if (i > 0)
+                                Divider(height: 1, color: context.hairline),
+                              _dismissedFxTile(
+                                _dismissedFxPairs[i] as Map<String, dynamic>,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                   ],
                 ),
+    );
+  }
+
+  Widget _dismissedFxTile(Map<String, dynamic> row) {
+    final id = (row['id'] ?? '').toString();
+    final srcLabel = (row['source_label'] ?? '—').toString();
+    final dstLabel = (row['dest_label'] ?? '—').toString();
+    final srcCcy = (row['source_currency'] ?? '').toString();
+    final dstCcy = (row['dest_currency'] ?? '').toString();
+    final srcAmt = (row['source_amount'] as num?)?.toDouble().abs() ?? 0.0;
+    final dstAmt = (row['dest_amount'] as num?)?.toDouble().abs() ?? 0.0;
+    final dismissedAt = (row['dismissed_at'] ?? '').toString();
+    final srcFmt = NumberFormat.currency(name: srcCcy, symbol: '$srcCcy ');
+    final dstFmt = NumberFormat.currency(name: dstCcy, symbol: '$dstCcy ');
+    final summary = '$srcLabel → $dstLabel';
+    return ListTile(
+      dense: true,
+      leading: const Icon(Icons.swap_horiz, size: 18),
+      title: Text(summary, style: const TextStyle(fontSize: 14)),
+      subtitle: Text(
+        '${srcFmt.format(srcAmt)} → ${dstFmt.format(dstAmt)}'
+        '${dismissedAt.isEmpty ? '' : ' · dismissed ${_formatIgnoredAt(dismissedAt)}'}',
+        style: TextStyle(color: context.textSubtle, fontSize: 11),
+      ),
+      trailing: TextButton.icon(
+        onPressed: () => _restoreFxPair(id, summary),
+        icon: const Icon(Icons.refresh, size: 16),
+        label: const Text('Restore'),
+      ),
     );
   }
 

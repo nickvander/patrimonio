@@ -1,6 +1,6 @@
 # Next session — handoff
 
-> **Last updated:** 2026-05-18 (late evening, after Top-3 + split-polish sprint)
+> **Last updated:** 2026-05-18 (after FX-dismissal + inline-rename + rate-limit sprint)
 > **Purpose:** Pickup-ready priorities for the next agent. Each item
 > has a why, scope sketch, and where to look in code. Ordered by
 > impact-per-effort.
@@ -11,118 +11,118 @@ small wins.
 
 ## Recently shipped (do NOT re-do)
 
-Sprint 1 (Top-3 from pickup prompt):
-* `since_last_login.largest_move` flips sign for liability accounts.
-* Recovery-codes-low warning tile when count < 3.
-* Cancelled-subscription detection — separate "Stopped (N)"
-  collapsed section, 91–548 day band.
-* Mexican parser polish via `parser::polish_description`.
-* `/api/institutions/update-webhook` one-shot endpoint +
-  `/api/setup/status` `plaid_webhook` check + Management tab tile
-  with "Push to N institutions" action.
-* `docs/deployment.md` rewritten with concrete single-VPS runbook.
-* Split-transaction quick-split presets + Edit-split affordance.
+This file has been refreshed; the previous Top-3 (SQL net-worth,
+integration tests, Manage hidden things) all shipped. Highlights
+from the trailing 4–5 sprints (all on `main`):
 
-Sprint 2 (SQL + hidden items + tests):
-* `dashboard.rs::net_worth_history` rewritten as a single
-  `jsonb_object_agg` query. Same JSON shape, less Rust work.
-* New `HiddenItemsScreen` reachable from the AppBar
-  visibility-off icon. Lists ignored subscriptions + the
-  since-last-login banner dismissal with per-row restore.
-* 14 new integration tests in `backend/tests/dashboard_endpoints.rs`
-  covering update-webhook, splits (incl. edit-split round-trip),
-  since-last-login, subscription ignore/unignore, fx-transfers
-  listing, and net-worth-history aggregation (per-date +
-  liability sign).
-
-Also previously: real-estate / manual assets, HIBP check,
-sandbox-vs-prod chip, split-child badge, unhide-subscriptions UI,
-SQL liability classifier + cash-flow internal-transfer exclusion.
+* **Auth:** TOTP confirm replay-marker fix (was blocking login for
+  up to 30 s after enrollment); rate-limit hardening with per-user
+  exponential backoff (1→2→4→8→16→30 s capped) on the 429 path +
+  50-150 ms `random_login_jitter` on every failed verify
+  (unknown user / inactive / bad password / bad TOTP / bad
+  recovery code).
+* **Imports:** parallel PDF parse via `JoinSet` (24-file batch goes
+  from N × per-file to ceil(N/cores) × per-file); 10-min frontend
+  timeout with a useful TimeoutException message; "Reading N files…"
+  status during the browser-side byte-read phase.
+* **Subscriptions:** sign-convention bug fix (Interest earned was
+  clustering as a fake subscription); per-account `by_account`
+  breakdown with chips; cancelled-subscription "Stopped (N)"
+  collapsed section.
+* **Splits:** atomic PUT replace-splits endpoint (closed the
+  unsplit-then-resplit race window); quick-split presets (50/50,
+  60/40, 70/30, 40/30/30, even-N slider); edit-split affordance;
+  per-row category dropdown.
+* **Webhook ops:** `/api/setup/status` `plaid_webhook` check +
+  Management-tab "Push to N institutions" trailing button +
+  one-shot `/api/institutions/update-webhook`.
+* **Hidden items:** unified panel for ignored subscriptions + the
+  since-last-login banner dismissal + FX-transfer pairs the user
+  has unlinked. The FX path also fixed a latent sign-convention
+  bug in the detector (was filtering on `amount > 0` as outflow,
+  but the app stores expense as negative — every detector run
+  was returning 0 candidates against real data).
+* **Net-worth aggregation:** rewritten as a single
+  `jsonb_object_agg` query — same JSON shape, less Rust work.
+* **Sign-convention manual-tx bug:** AddTransactionDialog was
+  storing "Expense" as positive (income); fixed.
+* **Test infra:** `scripts/test.sh` wrapper (dockerised toolchain
+  + idempotent test-DB create + `--test-threads=1`); 21 dashboard
+  integration tests including multi-file upload happy path.
+* **Inline transaction rename:** right-click on a row → quick
+  rename dialog (with the bulk-apply "also apply to N matching"
+  checkbox when applicable); far fewer clicks than the detail-
+  modal flow. Long-press keeps the selection-mode semantics.
 
 ## Top 3 for the next session
 
-### 1. Net-worth aggregation in SQL (audit P5)  ⏱️ ~half day  🎯 cold-cache cost
+### 1. Streaming CSV export  ⏱️ ~half day  🎯 closes the audit P4 memory spike
 
-`backend/src/api/dashboard.rs` walks a Rust-side BTreeMap to build
-the per-account-type history series. Cheap at today's scale (5
-institutions × 30d) but quadratic. The audit (P5) recommends a
-`jsonb_object_agg` on the postgres side instead. Now that
-`is_liability_account_type()` exists, the SQL is clean to write.
+`export_transactions_csv` in `backend/src/api/dashboard.rs` builds
+the full CSV into a `String` before responding. Fine today; ugly
+memory spike on a multi-year export. Swap to
+`axum::body::Body::from_stream` with a `tokio_stream::wrappers::
+ReceiverStream` fed by a `tokio::spawn`'d task that writes rows one
+at a time. The audit (P4) carved the plan.
 
-Tracked in `work/FUTURE.md` section H.
+**Acceptance:** export 50k+ rows without spiking RSS; the response
+starts streaming bytes before the query has read every row.
 
-### 2. Integration tests for new endpoints  ⏱️ ~half day  🎯 keeps the surface from regressing
+### 2. Multi-user roles (`owner` vs `read-only`)  ⏱️ ~half day  🎯 advisor / spouse access
 
-`backend/tests/auth_endpoints.rs` covers auth. The recently-added
-endpoints have unit tests for internal helpers but no integration
-tests:
+Single-household deployments don't need it, but the moment someone
+wants to grant a family member view-only access this becomes
+real. Schema: add `role` TEXT to `users` defaulting to `'owner'`.
+Middleware: a `require_owner` guard on every mutating endpoint
+(POST/PUT/PATCH/DELETE). Invite mint endpoint gains a `role`
+field so the inviter can pick.
 
-* `POST /api/institutions/update-webhook`
-* `POST/DELETE /api/accounts/transactions/{id}/splits`
-* `GET /api/dashboard/since-last-login`
-* `GET /api/dashboard/subscriptions`
-* `POST /api/dashboard/subscriptions/ignore`
-* `GET/POST/DELETE /api/dashboard/fx-transfers`
+**Acceptance:** create a read-only invite, redeem it, log in,
+confirm GET endpoints return data + every mutating endpoint
+returns 403.
 
-A "split + edit-split + unsplit" happy-path integration test
-would also lock in the edit-split flow that just shipped (it does
-two API hits in sequence; an integration test catches the
-between-call race if anyone changes the unsplit semantics).
+### 3. Real-time dashboard via websockets  ⏱️ ~1 day  🎯 elegant; can defer further
 
-Tracked in `work/FUTURE.md` section K.
+Plaid webhooks trigger background syncs; the frontend still
+finds out by polling on tab switch. A websocket "dashboard data
+invalidated" channel would make new transactions surface
+immediately. Significant scope: new ws endpoint, broadcast
+plumbing, frontend reconnect logic, auth scoping (a user
+shouldn't see another user's invalidations). Tracked in
+`work/FUTURE.md` section G.
 
-### 3. "Manage hidden things" unified panel  ⏱️ ~3 hours  🎯 paying down dismissal debt
-
-A growing list of UI elements have dismissed state with no Unhide
-path scattered across the app:
-
-* `ignored_subscription_merchants` (the "× not a subscription"
-  affordance on the active rows — the Stopped section already
-  shows cancelled ones).
-* `Preferences.sinceLastLoginDismissed` (banner dismissal).
-* FX-transfer pairs the user has manually unlinked.
-
-A single panel in Settings (or the Management tab) listing
-every "thing you told us no to" with a per-row remove button
-would be cleaner than per-feature manage screens.
-
-Tracked in `work/FUTURE.md` section D.
+Park unless polling actually starts to feel slow — the rest of
+Tier 2 is higher impact-per-effort.
 
 ## Quick wins (≤ 2 hours each)
 
 Pick one as a warm-up:
 
-- **`scripts/dev-rebuild-frontend.sh`** — wrap the rebuild +
-  re-stamp-CSP dance documented in `work/CURRENT.md`. (Note:
-  this session didn't observe the re-stamp problem — the
-  rebuild bakes `security_headers.conf` into the image now —
-  but a one-liner script around `docker compose ... build
-  frontend` is still nice. Verify whether the re-stamp is
-  still needed before scripting.)
-- **Inline transaction rename** — long-press on a row opens a
-  small inline text field instead of the detail modal.
-  Section I in FUTURE.md.
-- **Subscription per-account split** — show which account
-  charged each detected subscription (some land on both the
-  credit card and the checking account via Apple Pay
-  passthrough). Section B in FUTURE.md.
-- **Integration tests for new endpoints** — `fx-transfers`,
-  `subscriptions/ignore`, `splits`, `since-last-login`,
-  `institutions/update-webhook` have unit tests for helpers
-  but nothing exercises the full request/response. Section K
-  in FUTURE.md.
+- **README.md auth section** — currently documents bootstrap only.
+  Add TOTP enrollment, recovery codes, passkey register flow.
+- **CORS audit in setup-status** — `ALLOWED_ORIGINS` warning fires
+  on startup but isn't surfaced in `/api/setup/status`. Would
+  help during deployment debugging.
+- **Sessions "new since last visit" badge** — `users.last_login_at`
+  exists; the Security screen's active-sessions list could flag
+  sessions created since that anchor.
+- **Per-file upload progress** — chunked JSON / SSE from the
+  upload handler so the UI can show "8 of 12 done: foo.pdf".
+  Parallel parsing already in place; just needs a progress
+  channel.
+- **`prefer_const_literals_to_create_immutables` sweep** — lint
+  cleanup; cosmetic.
 
 ## Deferred — explicitly NOT next
 
-* **Color palette overhaul deeper polish** — most of the WCAG fixes
-  shipped. What's left is cosmetic (chart hover smoothness, scaffold
-  chroma tweak). Pick up when there's a real complaint or alongside
-  another visual feature.
-* **prefer_const_literals lint sweep** — see `work/FUTURE.md`.
-* **Real-time websocket dashboard updates** — Plaid webhooks just
-  trigger background syncs; the frontend still polls on tab switch.
-  A websocket "data invalidated" channel would be cleaner but it's
-  significant scope and the polling works fine at this scale.
+* **Color palette deeper polish** — chart hover smoothness +
+  scaffold chroma tweak. Cosmetic; wait for a real complaint.
+* **Flutter canvaskit responsiveness** — render freeze on rapid
+  taps. Open question, no urgent symptom. `work/FUTURE.md` J.
+* **Cross-tenant isolation integration test** — the multi-user
+  data model is correct (every query filters on `user_id`) and
+  the dashboard suite covers the cross-user 404 case. A dedicated
+  isolation test is belt-and-suspenders; revisit if roles land.
 
 ## How to pick up cold
 
@@ -133,6 +133,9 @@ Pick one as a warm-up:
    Up / Healthy.
 5. Verify auth: `curl http://127.0.0.1:8080/api/health` →
    `{"status":"ok","database":"connected"}`.
-6. Ship → commit → push branch (direct-push to main is blocked by
+6. Run the test suite: `./scripts/test.sh` (wrapper handles the
+   dockerised toolchain, idempotent test-DB creation, and the
+   `--test-threads=1` flag).
+7. Ship → commit → push branch (direct-push to main is blocked by
    the Claude Code auto-classifier; do the fast-forward merge dance
    yourself).
