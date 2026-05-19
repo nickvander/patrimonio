@@ -667,22 +667,23 @@ class ApiService {
     }
   }
 
-  /// Multi-file batch wrapper around /imports/upload. The endpoint
-  /// emits NDJSON events (one per line):
-  ///   `{"event":"started","total":N}`
-  ///   `{"event":"file_done","name":"foo.pdf","ok":true}` × N
-  ///   `{"event":"done", ...legacy ImportResponse shape...}`
-  ///     OR
-  ///   `{"event":"password_required","message":"..."}`
+  /// Multi-file batch wrapper around /imports/upload. The server
+  /// returns one `ImportResponse` JSON object per request (the
+  /// shape `{status, message, transactions_count, transactions}`).
   ///
-  /// This method reads the stream chunk-by-chunk, fires
-  /// [onProgress] on each `file_done`, and returns the terminal
-  /// `done` / `password_required` payload as the legacy single-shot
-  /// map (so callers that don't care about progress just keep
-  /// working).
+  /// `onProgress` is accepted but currently never fired — an earlier
+  /// revision streamed NDJSON events for per-file progress, but
+  /// the bidirectional flow (response chunks flushing while the
+  /// request body was still uploading) tripped browser TCP resets
+  /// with ERR_CONNECTION_RESET. Progress will come back via a
+  /// separate channel (websocket or progress-poll endpoint) that
+  /// doesn't share the TCP connection with the upload itself; the
+  /// signature stays so callers don't break when it lands.
   Future<Map<String, dynamic>> uploadStatements(
     List<PlatformFile> files, {
     String? password,
+    @Deprecated('Currently a no-op; progress channel will return on a '
+        'follow-up sprint via a non-shared connection.')
     ImportProgressCallback? onProgress,
   }) async {
     if (files.isEmpty) {
@@ -694,8 +695,9 @@ class ApiService {
     );
     // Mirror the protected router's CSRF guard. The multipart
     // helper bypasses our _post wrapper, so the header has to be
-    // attached by hand.
-    request.headers['x-requested-with'] = 'patrimonio';
+    // attached by hand. Value matches `_csrfHeader` everywhere
+    // else.
+    request.headers['X-Requested-With'] = 'fetch';
     for (final f in files) {
       if (f.bytes == null) continue;
       request.files.add(
@@ -718,74 +720,6 @@ class ApiService {
       );
       _maybeUnauthorizedStreamed(streamedResponse);
 
-      if (streamedResponse.statusCode == 200) {
-        // Read NDJSON line-by-line. The terminal event (`done` /
-        // `password_required`) is returned to the caller; every
-        // `file_done` in between fires the progress callback.
-        int totalFiles = files.length;
-        int doneCount = 0;
-        Map<String, dynamic>? terminal;
-
-        final buffer = StringBuffer();
-        await for (final chunk in streamedResponse.stream) {
-          buffer.write(utf8.decode(chunk, allowMalformed: true));
-          // Pop complete lines off the front of the buffer; leave a
-          // partial trailing line for the next chunk.
-          var raw = buffer.toString();
-          int newline;
-          while ((newline = raw.indexOf('\n')) >= 0) {
-            final line = raw.substring(0, newline).trim();
-            raw = raw.substring(newline + 1);
-            if (line.isEmpty) continue;
-            Map<String, dynamic> event;
-            try {
-              event = json.decode(line) as Map<String, dynamic>;
-            } catch (_) {
-              continue;
-            }
-            switch (event['event']) {
-              case 'started':
-                totalFiles = (event['total'] as num?)?.toInt() ?? totalFiles;
-                onProgress?.call(
-                  done: 0,
-                  total: totalFiles,
-                );
-                break;
-              case 'file_done':
-                doneCount++;
-                onProgress?.call(
-                  done: doneCount,
-                  total: totalFiles,
-                  lastFile: event['name']?.toString(),
-                  lastFileOk: event['ok'] as bool?,
-                );
-                break;
-              case 'password_required':
-                terminal = {
-                  'status': 'password_required',
-                  'message': event['message'] ?? '',
-                };
-                break;
-              case 'done':
-                // The `done` payload is the legacy ImportResponse
-                // shape inline — peel the wrapper.
-                terminal = Map<String, dynamic>.from(event)..remove('event');
-                break;
-            }
-          }
-          buffer.clear();
-          buffer.write(raw);
-        }
-
-        if (terminal != null) return terminal;
-        throw Exception(
-          'Upload stream ended without a terminal event '
-          '(server may have crashed mid-batch).',
-        );
-      }
-
-      // Non-200 path. Fall through to the legacy error handling
-      // by collecting the body into one string.
       final response = await http.Response.fromStream(streamedResponse);
       if (response.statusCode == 200) {
         return json.decode(response.body) as Map<String, dynamic>;
