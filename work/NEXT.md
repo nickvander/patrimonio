@@ -11,34 +11,29 @@ small wins.
 
 ## Recently shipped (do NOT re-do)
 
-The previous two sessions cleared most of the original NEXT.md. The
-Top-3 from this session's pickup prompt all shipped, plus a split-
-transaction polish follow-on:
-
+Sprint 1 (Top-3 from pickup prompt):
 * `since_last_login.largest_move` flips sign for liability accounts.
 * Recovery-codes-low warning tile when count < 3.
 * Cancelled-subscription detection — separate "Stopped (N)"
   collapsed section, 91–548 day band.
-* Mexican parser polish via `parser::polish_description` (strips
-  trailing date suffixes + bilingual generic-prefix list).
-* `/api/institutions/update-webhook` one-shot endpoint to
-  backfill Plaid webhook URL onto existing items.
-* `/api/setup/status` exposes a new `plaid_webhook` check.
-* Management tab setup card renders the new check **and**
-  surfaces a "Push to N institutions" trailing button when
-  `plaid_webhook` is configured + ≥ 1 Plaid item is linked.
-  Result table dialog reports per-row updated/failed.
-* Setup card's bottom-line "recommended before production" copy
-  is now dynamic (lists actual recommended-but-unset labels).
-* `docs/deployment.md` rewritten with a concrete single-VPS
-  runbook covering nginx + LE, `TRUSTED_PROXY_CIDRS`, webhook
-  activation, log rotation, backups.
-* Split-transaction quick-split presets: 50/50, 60/40, 70/30,
-  40/30/30, and "Even split…" (slider for N=2..10) — accessible
-  via a tune icon in the dialog title bar.
-* Edit-split affordance on split children. Re-opens the dialog
-  pre-populated with current children; saving does
-  unsplit-then-resplit atomically client-side.
+* Mexican parser polish via `parser::polish_description`.
+* `/api/institutions/update-webhook` one-shot endpoint +
+  `/api/setup/status` `plaid_webhook` check + Management tab tile
+  with "Push to N institutions" action.
+* `docs/deployment.md` rewritten with concrete single-VPS runbook.
+* Split-transaction quick-split presets + Edit-split affordance.
+
+Sprint 2 (SQL + hidden items + tests):
+* `dashboard.rs::net_worth_history` rewritten as a single
+  `jsonb_object_agg` query. Same JSON shape, less Rust work.
+* New `HiddenItemsScreen` reachable from the AppBar
+  visibility-off icon. Lists ignored subscriptions + the
+  since-last-login banner dismissal with per-row restore.
+* 14 new integration tests in `backend/tests/dashboard_endpoints.rs`
+  covering update-webhook, splits (incl. edit-split round-trip),
+  since-last-login, subscription ignore/unignore, fx-transfers
+  listing, and net-worth-history aggregation (per-date +
+  liability sign).
 
 Also previously: real-estate / manual assets, HIBP check,
 sandbox-vs-prod chip, split-child badge, unhide-subscriptions UI,

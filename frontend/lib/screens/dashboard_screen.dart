@@ -39,6 +39,7 @@ import '../components/allocation_heatmap.dart';
 import '../components/trends_chart.dart';
 import 'package:patrimonio/screens/tax_planning_screen.dart';
 import '../services/auth_service.dart';
+import 'hidden_items_screen.dart';
 import 'security_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -1176,6 +1177,23 @@ class _DashboardScreenState extends State<DashboardScreen>
                 onSwap: () => _setTargetCurrency(
                     _targetCurrency == 'USD' ? 'MXN' : 'USD'),
               ),
+            IconButton(
+              tooltip: 'Hidden items',
+              icon: const Icon(Icons.visibility_off_outlined),
+              onPressed: () => Navigator.of(context)
+                  .push(
+                    MaterialPageRoute(
+                      builder: (_) => const HiddenItemsScreen(),
+                    ),
+                  )
+                  // Returning from the panel may have un-ignored some
+                  // subscriptions. Refresh silently so the dashboard's
+                  // detected-subscriptions card surfaces them again
+                  // without making the user pull-to-refresh.
+                  .then((_) {
+                if (mounted) _loadAllData(silent: true);
+              }),
+            ),
             IconButton(
               tooltip: 'Security',
               icon: const Icon(Icons.shield_outlined),

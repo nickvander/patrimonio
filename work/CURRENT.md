@@ -40,6 +40,40 @@ have shipped. The app now does:
 * `app_settings.user_id` (M7 leftover) — budgets / goals no longer
   leak across users.
 
+## SQL + hidden-items + tests sprint (2026-05-18, late)
+
+* **Net-worth history rewritten in SQL.** The Rust BTreeMap walk in
+  `dashboard.rs::net_worth_history` is gone; a single
+  `WITH per_inst AS (...) SELECT ... jsonb_object_agg(...) GROUP BY
+  as_of_date` query produces one row per date with the per-institution
+  map pre-built. Response shape is byte-identical to what the old
+  code emitted. At today's scale this is barely measurable; at
+  power-user scale (many institutions × long history) it's the
+  difference between O(D·I) Rust work + per-row Decimal parsing and
+  one SQL pass. Liability sign is also still respected via the
+  `is_liability_account_type` helper.
+* **"Hidden items" panel.** New screen reachable from a
+  visibility-off icon next to the Security shield in the AppBar.
+  Surfaces ignored subscriptions (with per-row Restore action,
+  uses the existing `/dashboard/subscriptions/ignored` endpoints)
+  and the since-last-login banner dismissal (Preferences-stored;
+  clears localStorage and lets the banner reappear). FX-pair
+  "permanently ignore" is intentionally deferred — needs a new
+  backend table to materialise the never-resuggest state; tracked
+  in `work/FUTURE.md` section D.
+* **Backend integration tests.** New `tests/dashboard_endpoints.rs`
+  with 14 tests covering: `update-webhook` (503 / 400 / 200-empty
+  / 401 / 403-no-CSRF branches), split create / sign-validate /
+  amount-validate / already-split-422 / cross-user 404, full
+  edit-split round-trip (split → unsplit → re-split with new
+  ratios), unsplit-nonexistent 404, `since-last-login` empty +
+  populated, subscription ignore/unignore round-trip including
+  idempotency + lowercase normalisation + empty-rejection,
+  fx-transfers empty listing, net-worth-history aggregation
+  (asset+liability per institution + per date). Gated on
+  `PATRIMONIO_TEST_DATABASE_URL`; absent = skipped (same pattern
+  as `auth_endpoints.rs`).
+
 ## Late-evening sprint (2026-05-18, follow-on after Top-3 ship)
 
 * **Management tab setup card** now surfaces the `plaid_webhook`

@@ -101,6 +101,19 @@ class Preferences {
   static void dismissSinceLastLoginFor(String anchorIso) =>
       _write('sinceLastLoginDismissed', anchorIso);
 
+  /// The anchor a since-last-login dismissal is currently bound to, or
+  /// null when the banner isn't dismissed. Used by the "Manage hidden
+  /// items" panel to show the user what anchor they suppressed.
+  static String? getSinceLastLoginDismissalAnchor() {
+    final raw = _read('sinceLastLoginDismissed');
+    return (raw == null || raw.isEmpty) ? null : raw;
+  }
+
+  /// Clear the since-last-login dismissal so the banner reappears on
+  /// the next dashboard refresh.
+  static void clearSinceLastLoginDismissal() =>
+      _write('sinceLastLoginDismissed', '');
+
   /// Per-category monthly budgets, stored as a JSON object on the wire:
   /// {"Restaurants": 500.0, "Groceries": 800.0, ...}. Values are in USD
   /// (the backend storage unit); the UI converts for display.

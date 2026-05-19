@@ -59,15 +59,22 @@ async fn try_setup() -> Option<Router> {
         coinbase_redirect_uri: "http://localhost/api/auth/coinbase/callback".to_string(),
         frontend_base_url: "http://localhost:3000".to_string(),
         plaid_redirect_uri: None,
+        plaid_webhook_url: None,
+        trusted_proxy_cidrs: vec![],
         allowed_origins: vec!["http://localhost:3000".to_string()],
         cookie_secure: false,
     };
 
     let redis = redis::Client::open(config.redis_url.clone()).expect("redis");
+    let webauthn = std::sync::Arc::new(
+        patrimonio::api::passkeys::build_webauthn(&config.frontend_base_url)
+            .expect("webauthn builder"),
+    );
     let state = AppState {
         db: pool.clone(),
         redis,
         config: Arc::new(config),
+        webauthn,
     };
 
     let public = Router::new()

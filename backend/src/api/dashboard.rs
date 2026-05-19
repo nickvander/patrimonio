@@ -7,7 +7,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use tracing::error;
 
 use crate::api::session::AuthContext;
@@ -221,70 +221,90 @@ async fn dashboard_overview(
 
 /// Historical net worth data for charting (aggregated from balance_snapshots),
 /// broken down by institution so the frontend can render contribution lines.
+///
+/// The work is done entirely in SQL: a CTE computes per-(date, institution)
+/// assets/liabilities, then the outer SELECT collapses to one row per date
+/// with `jsonb_object_agg` rolling up the per-institution map. This used to
+/// be a Rust BTreeMap walk over O(dates × institutions) rows — fine at
+/// laptop scale but quadratic enough that a power user with a year of
+/// history and a dozen institutions would feel it on cold cache. Postgres
+/// does the same work in one pass, returning ~30-90 rows for a typical
+/// window instead of the dense matrix.
 async fn net_worth_history(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Json<Vec<NetWorthPoint>> {
-    // Grouped per (date, institution) for this user.
+    // `COALESCE(name, 'Unknown')` matches the previous Rust fallback for
+    // the rare case where institutions.name is somehow blank (the column
+    // is NOT NULL today but a defensive default keeps the public JSON
+    // contract stable).
     let rows = sqlx::query(
         r#"
-        SELECT bs.as_of_date,
-               i.name as institution_name,
-               COALESCE(SUM(CASE WHEN NOT is_liability_account_type(a.account_type)
-                                  THEN bs.balance_usd ELSE 0 END), 0) as inst_assets_usd,
-               COALESCE(SUM(CASE WHEN is_liability_account_type(a.account_type)
-                                  THEN ABS(bs.balance_usd) ELSE 0 END), 0) as inst_liabilities_usd
-        FROM balance_snapshots bs
-        JOIN accounts a ON bs.account_id = a.id
-        JOIN institutions i ON a.institution_id = i.id
-        WHERE bs.user_id = $1
-        GROUP BY bs.as_of_date, i.name
-        ORDER BY bs.as_of_date ASC, i.name ASC
-        "#
+        WITH per_inst AS (
+            SELECT bs.as_of_date,
+                   COALESCE(NULLIF(i.name, ''), 'Unknown') AS institution_name,
+                   COALESCE(SUM(CASE WHEN NOT is_liability_account_type(a.account_type)
+                                      THEN bs.balance_usd ELSE 0 END), 0) AS inst_assets_usd,
+                   COALESCE(SUM(CASE WHEN is_liability_account_type(a.account_type)
+                                      THEN ABS(bs.balance_usd) ELSE 0 END), 0) AS inst_liabilities_usd
+            FROM balance_snapshots bs
+            JOIN accounts a ON bs.account_id = a.id
+            JOIN institutions i ON a.institution_id = i.id
+            WHERE bs.user_id = $1
+            GROUP BY bs.as_of_date, COALESCE(NULLIF(i.name, ''), 'Unknown')
+        )
+        SELECT as_of_date,
+               COALESCE(SUM(inst_assets_usd), 0)::float8                    AS total_assets,
+               COALESCE(SUM(inst_liabilities_usd), 0)::float8               AS total_liabilities,
+               COALESCE(SUM(inst_assets_usd) - SUM(inst_liabilities_usd), 0)::float8
+                                                                            AS net_worth,
+               jsonb_object_agg(
+                   institution_name,
+                   (inst_assets_usd - inst_liabilities_usd)::float8
+               )                                                             AS by_institution
+        FROM per_inst
+        GROUP BY as_of_date
+        ORDER BY as_of_date ASC
+        "#,
     )
     .bind(ctx.user_id)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
 
-    let mut points: BTreeMap<chrono::NaiveDate, NetWorthPoint> = BTreeMap::new();
-
-    for r in &rows {
-        let date = match r.try_get::<chrono::NaiveDate, _>("as_of_date") {
-            Ok(d) => d,
-            Err(_) => continue,
-        };
-        let inst: String = r
-            .try_get::<String, _>("institution_name")
-            .unwrap_or_else(|_| "Unknown".to_string());
-        let assets: f64 = r
-            .try_get::<rust_decimal::Decimal, _>("inst_assets_usd")
-            .ok()
-            .map(|d| d.to_string().parse().unwrap_or(0.0))
-            .unwrap_or(0.0);
-        let liabilities: f64 = r
-            .try_get::<rust_decimal::Decimal, _>("inst_liabilities_usd")
-            .ok()
-            .map(|d| d.to_string().parse().unwrap_or(0.0))
-            .unwrap_or(0.0);
-        let inst_net = assets - liabilities;
-
-        let entry = points.entry(date).or_insert_with(|| NetWorthPoint {
-            date: date.to_string(),
-            total_assets: 0.0,
-            total_liabilities: 0.0,
-            net_worth: 0.0,
-            by_institution: HashMap::new(),
-        });
-        entry.total_assets += assets;
-        entry.total_liabilities += liabilities;
-        entry.net_worth = entry.total_assets - entry.total_liabilities;
-        // If an institution has multiple rows on the same date (e.g. ETL
-        // duplication), sum rather than overwrite.
-        *entry.by_institution.entry(inst).or_insert(0.0) += inst_net;
-    }
-
-    Json(points.into_values().collect())
+    Json(
+        rows.into_iter()
+            .filter_map(|r| {
+                let date: chrono::NaiveDate = r.try_get("as_of_date").ok()?;
+                let total_assets: f64 = r.try_get("total_assets").unwrap_or(0.0);
+                let total_liabilities: f64 = r.try_get("total_liabilities").unwrap_or(0.0);
+                let net_worth: f64 = r.try_get("net_worth").unwrap_or(0.0);
+                // `by_institution` is a jsonb object {institution -> f64}.
+                // Read as serde_json::Value, then convert to HashMap so
+                // the response shape exactly matches what the BTreeMap-
+                // based code used to emit. A malformed payload (shouldn't
+                // happen) degrades to an empty map rather than failing
+                // the whole request.
+                let by_institution: HashMap<String, f64> = r
+                    .try_get::<serde_json::Value, _>("by_institution")
+                    .ok()
+                    .and_then(|v| v.as_object().cloned())
+                    .map(|m| {
+                        m.into_iter()
+                            .filter_map(|(k, v)| v.as_f64().map(|f| (k, f)))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                Some(NetWorthPoint {
+                    date: date.to_string(),
+                    total_assets,
+                    total_liabilities,
+                    net_worth,
+                    by_institution,
+                })
+            })
+            .collect(),
+    )
 }
 
 /// All investment holdings for this user across their accounts.

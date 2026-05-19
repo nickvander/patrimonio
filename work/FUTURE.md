@@ -681,20 +681,22 @@ Open follow-ups for this surface:
   good enough for now; the column-level fix is for later when the
   parsers themselves are touched.
 
-## D. "Unhide" / general "Manage hidden things" panel  ⏱️ ~3 hours
+## D. "Unhide" / general "Manage hidden things" panel — ✅ mostly shipped 2026-05-18
 
-A growing list of UI elements have dismissed state with no Unhide
-path:
+* **Ignored subscriptions** — ✅ surfaced in the new HiddenItemsScreen
+  with per-row Restore action. Uses the pre-existing
+  `/dashboard/subscriptions/ignored` GET + DELETE endpoints.
+* **Since-last-login banner** — ✅ surfaced with a "Show again"
+  action that clears the Preferences localStorage key.
 
-* Ignored subscriptions (`ignored_subscription_merchants`).
-* Since-last-login banners (`Preferences.sinceLastLoginDismissed`).
-* FX-transfer links unlinked by the user — currently the detector
-  may re-propose them, but the user might want a way to mark "never
-  re-suggest this pair".
+Deferred follow-up:
 
-A single Settings panel listing all the things-the-user-said-no-to
-with per-row remove would be cleaner than scattering per-feature
-manage screens.
+* **FX-pair "never re-suggest"**. Today the detector silently re-
+  proposes pairs whose `cash_fx_transfers` row the user deleted.
+  Implementing this needs a new `dismissed_fx_pairs` table
+  (keyed on the two underlying tx ids, or a stable pair hash) +
+  a detector predicate. The HiddenItemsScreen already has the
+  spot for it.
 
 ## E. Production deployment runbook — ✅ shipped 2026-05-18
 
@@ -736,14 +738,16 @@ frontend reconnect logic, auth scoping (a user shouldn't see
 another user's invalidations). Park until polling actually feels
 slow.
 
-## H. Net-worth aggregation in SQL  (audit P5)
+## H. Net-worth aggregation in SQL — ✅ shipped 2026-05-18
 
-Already documented in the audit section above. Worth lifting here
-because it'll start to dominate cold-cache loads as more
-institutions accumulate. The Rust-side `BTreeMap` walk is
-manageable at today's scale (~5 institutions × 30d history) but
-quadratic in (institutions × days). A single `jsonb_object_agg`
-on the postgres side is cheap.
+`dashboard.rs::net_worth_history` was rewritten as a single
+`WITH per_inst AS (...) SELECT ... jsonb_object_agg(institution_name,
+inst_net) GROUP BY as_of_date` query, returning one row per date
+with the per-institution map pre-built. The endpoint's JSON shape
+is unchanged. Liability sign continues to be respected via the
+`is_liability_account_type` helper. Integration test
+`net_worth_history_aggregates_per_date_and_institution` +
+`net_worth_history_handles_liabilities` lock the behaviour in.
 
 ## I. Inline transaction rename + bulk-edit polish  ⏱️ ~half day
 
@@ -779,16 +783,39 @@ it gets worse with more widgets on the page:
 This is a "investigate when it actually annoys someone" item, not
 urgent.
 
-## K. Test infrastructure  ⏱️ ~half day
+## K. Test infrastructure — ✅ mostly shipped 2026-05-18
 
-Coverage of the new endpoints in `backend/tests/` is thin:
+New `tests/dashboard_endpoints.rs` covers the recently-added
+endpoints via the same `tower::ServiceExt::oneshot` pattern as
+`auth_endpoints.rs`. 14 tests across:
 
-* `backend/tests/auth_endpoints.rs` covers auth. New endpoints
-  (`fx-transfers`, `subscriptions`, `since-last-login`, `splits`,
-  `subscriptions/ignore`) have only unit tests for their internal
-  helpers (`fx_transfer_link::score_match` etc.). An integration
-  test would catch regressions when the SQL changes underneath.
-* `scripts/smoke.cjs` exercises the bootstrap → dashboard golden
-  path but doesn't touch any of the new features. Worth adding a
-  "split + unsplit", "dismiss subscription", and "FX-detect"
-  step so the smoke test exercises the new surfaces.
+* `/api/institutions/update-webhook` — 503 / 400 / 200-empty /
+  401 / 403 (no CSRF).
+* `/api/accounts/transactions/{id}/splits` — create, sign-
+  validate, amount-validate, already-split-422, cross-user 404.
+* Edit-split round-trip (POST → DELETE → POST with new ratios)
+  locks in the frontend's "Edit split" flow.
+* Unsplit nonexistent → 404.
+* `/api/dashboard/since-last-login` — empty + populated cases,
+  including the parent-hidden-when-children-exist contract.
+* `/api/dashboard/subscriptions/ignore` + ignored + DELETE —
+  round-trip with idempotency, lowercase normalisation, empty-
+  rejection.
+* `/api/dashboard/fx-transfers` — empty listing.
+* `/api/dashboard/net-worth-history` — per-date / per-institution
+  aggregation AND liability sign (locks in the SQL rewrite from
+  section H).
+
+Tests gate on `PATRIMONIO_TEST_DATABASE_URL` — when unset they
+print a skip note and return Ok, so `cargo test` stays green for
+contributors without a Postgres on hand.
+
+Open follow-ups:
+
+* `scripts/smoke.cjs` still doesn't exercise any of the new
+  features (it stops at bootstrap → dashboard golden path). Worth
+  adding a smoke step that splits + unsplits a manually-inserted
+  transaction.
+* The integration tests don't cover Plaid sync, FX detector
+  service, passkey ceremonies, or invite minting — those have
+  much bigger surface areas and warrant their own files.
