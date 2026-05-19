@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
@@ -643,13 +644,17 @@ class ApiService {
     }
 
     try {
-      // 180s timeout. PDF parsing runs in a spawn_blocking task on
-      // the backend and is CPU-bound per file; a batch of 12 monthly
-      // statements can plausibly take 60-120 seconds total. The
-      // previous 60s timeout was below that envelope and would
-      // cancel the upload mid-parse.
+      // 600s (10 min) timeout. The backend parallelises PDF parsing
+      // across the blocking pool, but each file is still CPU-bound
+      // for several seconds (qpdf decrypt + lopdf extract + table
+      // recovery). A worst-case batch — e.g. two years of monthly
+      // Banamex PDFs on a busy single-vCPU VPS — can plausibly take
+      // ~5 minutes; 600s gives a generous safety margin. The
+      // previous 180s ceiling regularly fired on large batches and
+      // surfaced as a misleading TimeoutException with no partial
+      // success preserved.
       final streamedResponse = await _client.send(request).timeout(
-        const Duration(seconds: 180),
+        const Duration(seconds: 600),
       );
       final response = await http.Response.fromStream(streamedResponse);
       _maybeUnauthorized(response);
@@ -676,6 +681,16 @@ class ApiService {
         );
       }
       throw Exception('Server returned ${response.statusCode}: ${response.body}');
+    } on TimeoutException catch (_) {
+      // 10 minutes elapsed without a response. We don't know whether
+      // the server finished parsing or hit its own ceiling; advise
+      // the user to either retry or split the batch rather than
+      // surface the bare "TimeoutException" string.
+      throw Exception(
+        'Upload timed out after 10 minutes. '
+        'Try splitting the batch into smaller groups (e.g. 6 PDFs at a time) '
+        'or check that the API container is still running.',
+      );
     } on http.ClientException catch (e) {
       throw Exception(
         'Network error during upload. Please check your connection and try again. ($e)',

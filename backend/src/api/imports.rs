@@ -239,27 +239,52 @@ async fn upload_handler(
     let mut all_transactions: Vec<ParsedTransaction> = Vec::new();
     let mut success_files: Vec<String> = Vec::new();
     let mut errors: Vec<String> = Vec::new();
+    // Password-failure signals can't early-return from the middle of
+    // a parallel fan-out (the other tasks are running on the blocking
+    // pool and can't be cancelled mid-parse). Collect everything, then
+    // decide the response after the join phase.
+    let mut password_state: Option<&'static str> = None;
 
+    // Fan the parses out across the blocking pool so a batch of 24
+    // monthly PDFs doesn't run end-to-end at single-thread speed.
+    // The previous sequential loop hit the frontend's 180 s timeout
+    // for any batch beyond ~10 files; with the fan-out the wall-time
+    // is roughly ceil(N / cpus) × per-file instead of N × per-file.
+    // spawn_blocking moves each parse off the tokio worker (qpdf +
+    // lopdf are CPU- and disk-bound). No explicit concurrency cap
+    // because the blocking pool already bounds at 512 threads and
+    // the OS scheduler takes care of CPU contention; pathological
+    // inputs (200+ PDFs in one upload) are blocked at the
+    // DefaultBodyLimit layer above.
+    let mut set: tokio::task::JoinSet<(
+        String,
+        anyhow::Result<Vec<ParsedTransaction>>,
+    )> = tokio::task::JoinSet::new();
     for (file_name, file_data) in files {
         info!(
-            "Processing file: {} ({} bytes)",
+            "Queueing file for parse: {} ({} bytes)",
             file_name,
             file_data.len()
         );
-        // detect_and_parse runs qpdf + lopdf synchronously, both of
-        // which are CPU- and disk-bound and would block the tokio
-        // worker for the duration of the parse. spawn_blocking moves
-        // it to the dedicated blocking pool so other requests keep
-        // making progress.
-        let file_name_clone = file_name.clone();
         let pwd_owned = password.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            parser::detect_and_parse(&file_name_clone, &file_data, pwd_owned.as_deref())
-        })
-        .await
-        .map_err(|e| anyhow::anyhow!("parse task join: {}", e))
-        .and_then(|r| r);
-        match result {
+        let name_for_task = file_name.clone();
+        set.spawn_blocking(move || {
+            let result =
+                parser::detect_and_parse(&name_for_task, &file_data, pwd_owned.as_deref());
+            (name_for_task, result)
+        });
+    }
+
+    while let Some(join_result) = set.join_next().await {
+        let (file_name, parse_result) = match join_result {
+            Ok(pair) => pair,
+            Err(e) => {
+                error!("Parse task join failed: {}", e);
+                errors.push(format!("internal join error: {}", e));
+                continue;
+            }
+        };
+        match parse_result {
             Ok(mut txs) => {
                 success_files.push(file_name);
                 all_transactions.append(&mut txs);
@@ -270,34 +295,41 @@ async fn upload_handler(
                 // re-prompt and we retry every file with the new
                 // password. Mixing successful + password_required
                 // files would be confusing.
-                if error_msg.contains("PASSWORD_REQUIRED") {
-                    return (
-                        StatusCode::OK,
-                        Json(ImportResponse {
-                            message: "This statement is encrypted. Please enter your PDF password (e.g., your RFC) to unlock it.".to_string(),
-                            status: "password_required".to_string(),
-                            transactions_count: 0,
-                            transactions: vec![],
-                        }),
-                    )
-                        .into_response();
-                }
                 if error_msg.contains("INCORRECT_PASSWORD") {
-                    return (
-                        StatusCode::OK,
-                        Json(ImportResponse {
-                            message: "The provided password was incorrect. Please try again.".to_string(),
-                            status: "password_required".to_string(),
-                            transactions_count: 0,
-                            transactions: vec![],
-                        }),
-                    )
-                        .into_response();
+                    password_state = Some("incorrect");
+                } else if error_msg.contains("PASSWORD_REQUIRED") {
+                    // "incorrect" trumps "required" when both fire
+                    // in the same batch — the user already supplied
+                    // a password and it was wrong.
+                    if password_state != Some("incorrect") {
+                        password_state = Some("required");
+                    }
+                } else {
+                    error!("Parser failed for {}: {}", file_name, error_msg);
+                    errors.push(format!("{}: {}", file_name, error_msg));
                 }
-                error!("Parser failed for {}: {}", file_name, error_msg);
-                errors.push(format!("{}: {}", file_name, error_msg));
             }
         }
+    }
+
+    // Any password-required result short-circuits the whole batch so
+    // the UI can re-prompt + retry every file at once.
+    if let Some(state) = password_state {
+        let message = if state == "incorrect" {
+            "The provided password was incorrect. Please try again."
+        } else {
+            "This statement is encrypted. Please enter your PDF password (e.g., your RFC) to unlock it."
+        };
+        return (
+            StatusCode::OK,
+            Json(ImportResponse {
+                message: message.to_string(),
+                status: "password_required".to_string(),
+                transactions_count: 0,
+                transactions: vec![],
+            }),
+        )
+            .into_response();
     }
 
     // Every file failed — propagate the error so the user can fix it.
