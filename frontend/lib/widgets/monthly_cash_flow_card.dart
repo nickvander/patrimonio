@@ -90,6 +90,20 @@ class MonthlyCashFlowCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                // Hover hint so the user understands why the numbers
+                // don't equal "sum of every transaction this month."
+                // Without this, a bulk-import month looks suspicious.
+                Tooltip(
+                  message:
+                      'Excludes internal transfers between your accounts and '
+                      'credit-card payments — those move money around your '
+                      'own balance sheet without changing your spending.',
+                  child: Icon(
+                    Icons.info_outline,
+                    size: 14,
+                    color: context.textFaint,
+                  ),
+                ),
               ],
             );
 

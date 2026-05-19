@@ -69,12 +69,30 @@ class CashFlowTrendsChart extends StatelessWidget {
                 return Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Cash flow trends',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'Cash flow trends',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Tooltip(
+                          message:
+                              'Internal transfers (between your accounts) and '
+                              'credit-card bill payments are excluded so the '
+                              'bars reflect actual external income and '
+                              'spending.',
+                          child: Icon(
+                            Icons.info_outline,
+                            size: 14,
+                            color: context.textFaint,
+                          ),
+                        ),
+                      ],
                     ),
                     legend,
                   ],

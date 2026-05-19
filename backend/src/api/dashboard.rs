@@ -59,8 +59,10 @@ async fn dashboard_overview(
         sqlx::query(
             r#"
             SELECT currency,
-                   COALESCE(SUM(CASE WHEN account_type NOT IN ('credit') THEN current_balance ELSE 0 END), 0) as assets,
-                   COALESCE(SUM(CASE WHEN account_type = 'credit' THEN ABS(current_balance) ELSE 0 END), 0) as liabilities
+                   COALESCE(SUM(CASE WHEN NOT is_liability_account_type(account_type)
+                                     THEN current_balance ELSE 0 END), 0) as assets,
+                   COALESCE(SUM(CASE WHEN is_liability_account_type(account_type)
+                                     THEN ABS(current_balance) ELSE 0 END), 0) as liabilities
             FROM accounts
             WHERE user_id = $1
             GROUP BY currency
@@ -228,8 +230,10 @@ async fn net_worth_history(
         r#"
         SELECT bs.as_of_date,
                i.name as institution_name,
-               COALESCE(SUM(CASE WHEN a.account_type NOT IN ('credit') THEN bs.balance_usd ELSE 0 END), 0) as inst_assets_usd,
-               COALESCE(SUM(CASE WHEN a.account_type = 'credit' THEN ABS(bs.balance_usd) ELSE 0 END), 0) as inst_liabilities_usd
+               COALESCE(SUM(CASE WHEN NOT is_liability_account_type(a.account_type)
+                                  THEN bs.balance_usd ELSE 0 END), 0) as inst_assets_usd,
+               COALESCE(SUM(CASE WHEN is_liability_account_type(a.account_type)
+                                  THEN ABS(bs.balance_usd) ELSE 0 END), 0) as inst_liabilities_usd
         FROM balance_snapshots bs
         JOIN accounts a ON bs.account_id = a.id
         JOIN institutions i ON a.institution_id = i.id
@@ -922,6 +926,23 @@ async fn cash_flow_trends(
         WHERE t.date >= CURRENT_DATE - INTERVAL '12 months'
           AND t.user_id = $1
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
+          -- Exclude internal-transfer noise from the cash-flow view:
+          --
+          --   TRANSFER_IN_*  / TRANSFER_OUT_* (PFC) — money moving
+          --     between the user's own accounts. Counting these as
+          --     income or spending double-counts the same dollars on
+          --     both sides and makes the monthly card / bar chart
+          --     useless right after a bulk import.
+          --
+          --   LOAN_PAYMENTS_CREDIT_CARD_PAYMENT — paying off a credit
+          --     card the app is already tracking. The original purchase
+          --     was already counted as spending on the CC; counting
+          --     the payment-from-checking again doubles it. Other
+          --     LOAN_PAYMENTS_* (mortgage, student, auto) stay
+          --     in-scope because the destination account isn't
+          --     necessarily tracked.
+          AND COALESCE(t.category, '') NOT IN ('TRANSFER_IN', 'TRANSFER_OUT')
+          AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
         GROUP BY month
         ORDER BY month ASC
         "#

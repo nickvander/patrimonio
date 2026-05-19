@@ -205,8 +205,10 @@ async fn accounts_summary(
     let row = sqlx::query(
         r#"
         SELECT
-            COALESCE(SUM(CASE WHEN account_type NOT IN ('credit') THEN current_balance ELSE 0 END), 0) as total_assets,
-            COALESCE(SUM(CASE WHEN account_type = 'credit' THEN ABS(current_balance) ELSE 0 END), 0) as total_liabilities,
+            COALESCE(SUM(CASE WHEN NOT is_liability_account_type(account_type)
+                              THEN current_balance ELSE 0 END), 0) as total_assets,
+            COALESCE(SUM(CASE WHEN is_liability_account_type(account_type)
+                              THEN ABS(current_balance) ELSE 0 END), 0) as total_liabilities,
             COUNT(*) as account_count
         FROM accounts
         WHERE user_id = $1
