@@ -5,8 +5,10 @@ import '../services/api_service.dart';
 
 /// Dialog for manually entering a transaction — for cash spend, gifts,
 /// reimbursements, anything Plaid never sees. Default sign convention
-/// matches the rest of the app: amount > 0 = outflow (expense),
-/// amount < 0 = inflow (income); the UI hides that with a clearer
+/// matches the rest of the app: amount < 0 = outflow (expense),
+/// amount > 0 = inflow (income). This mirrors the Plaid sync path
+/// which negates Plaid's "outflow-positive" amounts on import (see
+/// `backend/src/services/sync.rs`). The UI hides that with a clearer
 /// "Expense / Income" toggle and computes the sign at submit time.
 class AddTransactionDialog extends StatefulWidget {
   final List<dynamic> accounts;
@@ -84,7 +86,8 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       );
       return;
     }
-    final signed = _isExpense ? raw : -raw;
+    // App convention: expense = negative, income = positive.
+    final signed = _isExpense ? -raw : raw;
     final currency =
         (account['currency'] ?? 'USD').toString().toUpperCase();
 

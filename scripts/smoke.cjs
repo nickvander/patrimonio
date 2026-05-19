@@ -65,6 +65,14 @@ async function request(path, options = {}) {
   if (cookies && !headers.has('cookie')) {
     headers.set('cookie', cookies);
   }
+  // Auto-attach the CSRF header on every mutating method so the
+  // smoke test stays in sync with `require_csrf_header` on the
+  // protected router. Callers that pass their own header win.
+  const method = (options.method || 'GET').toUpperCase();
+  const mutating = method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE';
+  if (mutating && !headers.has('x-requested-with')) {
+    headers.set('x-requested-with', 'patrimonio-smoke');
+  }
   const response = await fetch(`${apiBase}${path}`, { ...options, headers });
   captureCookies(response);
   const text = await response.text();
@@ -84,6 +92,7 @@ function cleanupDatabase() {
     DELETE FROM accounts WHERE name = '${manualAccountName}';
     DELETE FROM accounts WHERE institution_id IN (SELECT id FROM institutions WHERE name = '${cryptoInstitutionName}');
     DELETE FROM institutions WHERE name = '${cryptoInstitutionName}';
+    DELETE FROM ignored_subscription_merchants WHERE merchant_key LIKE 'smoke-%';
   `;
 
   execFileSync(
@@ -218,11 +227,131 @@ async function smokeManualAccountAndImport() {
   const emptyUpload = await fetch(`${apiBase}/imports/upload`, {
     method: 'POST',
     body: new FormData(),
-    headers: cookieHeader() ? { cookie: cookieHeader() } : {},
+    // FormData uploads also need the CSRF header — fetch can't pull
+    // it from the request() helper because we bypass it for the
+    // multipart body.
+    headers: {
+      'x-requested-with': 'patrimonio-smoke',
+      ...(cookieHeader() ? { cookie: cookieHeader() } : {}),
+    },
   });
   assert(emptyUpload.status === 400, `empty upload returned ${emptyUpload.status}`);
 
   record('manual account and import flow', { accountId: account.id });
+  return { accountId: account.id, transactionId: transactions.body[0].id };
+}
+
+/// Exercise the surfaces that landed in recent sprints: split /
+/// edit-split (via PUT) / unsplit, the subscription dismiss
+/// roundtrip, and the FX-transfer detect endpoint. The smoke
+/// account starts with a single $4.56 expense seeded by
+/// smokeManualAccountAndImport; we re-use it for the split flow.
+async function smokeRecentFeatures({ accountId, transactionId }) {
+  // ---- splits: POST -> PUT (atomic edit) -> DELETE ----
+  const split = await request(`/accounts/transactions/${transactionId}/splits`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      splits: [
+        { description: 'Smoke half A', amount: -2.28 },
+        { description: 'Smoke half B', amount: -2.28 },
+      ],
+    }),
+  });
+  assert(split.response.status === 201, `split returned ${split.response.status}: ${JSON.stringify(split.body)}`);
+
+  // The parent is hidden once it has children; both children appear
+  // in the transactions list with parent_id set.
+  const afterSplit = await request('/dashboard/transactions?limit=200');
+  const children = (afterSplit.body || []).filter((t) => t.parent_id === transactionId);
+  assert(children.length === 2, `expected 2 split children, got ${children.length}`);
+
+  // Re-splitting via POST would 422 ("already split"). The new PUT
+  // endpoint atomically replaces.
+  const edit = await request(`/accounts/transactions/${transactionId}/splits`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      splits: [
+        { description: 'Smoke 60', amount: -2.74 },
+        { description: 'Smoke 40', amount: -1.82 },
+      ],
+    }),
+  });
+  assert(edit.response.status === 200, `edit-split returned ${edit.response.status}: ${JSON.stringify(edit.body)}`);
+  assert(edit.body.removed === 2, `edit-split should report removed=2, got ${edit.body.removed}`);
+  assert(edit.body.inserted === 2, `edit-split should report inserted=2, got ${edit.body.inserted}`);
+
+  // Unsplit restores the parent.
+  const unsplit = await request(`/accounts/transactions/${transactionId}/splits`, {
+    method: 'DELETE',
+  });
+  assert(unsplit.response.status === 200, `unsplit returned ${unsplit.response.status}`);
+
+  record('split / edit-split / unsplit round-trip', { transactionId });
+
+  // ---- subscriptions: ignore + list + un-ignore ----
+  const ignoreKey = `smoke-merchant-${suffix}`;
+  const ignore = await request('/dashboard/subscriptions/ignore', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ merchant: ignoreKey }),
+  });
+  assert(ignore.response.status === 204, `subscription ignore returned ${ignore.response.status}`);
+
+  const listed = await request('/dashboard/subscriptions/ignored');
+  assert(listed.response.status === 200, `subscription ignored list returned ${listed.response.status}`);
+  const row = (listed.body || []).find((r) => r.merchant_key === ignoreKey);
+  assert(row, `dismissed merchant not in /ignored list — got ${JSON.stringify(listed.body)}`);
+
+  const unignore = await request(
+    `/dashboard/subscriptions/ignored/${encodeURIComponent(ignoreKey)}`,
+    { method: 'DELETE' },
+  );
+  assert(unignore.response.status === 204, `subscription unignore returned ${unignore.response.status}`);
+  record('subscription ignore / unignore round-trip', { merchantKey: ignoreKey });
+
+  // ---- since-last-login: shape check ----
+  const sll = await request('/dashboard/since-last-login');
+  assert(sll.response.status === 200, `since-last-login returned ${sll.response.status}`);
+  // The endpoint always returns a JSON object with at least new_transactions
+  // (the rest of the fields are conditional on having a prior login).
+  assert(
+    typeof sll.body === 'object' && 'new_transactions' in sll.body,
+    `since-last-login shape unexpected: ${JSON.stringify(sll.body)}`,
+  );
+  record('since-last-login shape', { newTransactions: sll.body.new_transactions });
+
+  // ---- fx-transfer detect: should run cleanly even with no candidates ----
+  const fxList = await request('/dashboard/fx-transfers');
+  assert(fxList.response.status === 200, `fx-transfers GET returned ${fxList.response.status}`);
+  assert(Array.isArray(fxList.body), `fx-transfers GET should return an array`);
+  const fxDetect = await request('/dashboard/fx-transfers', { method: 'POST' });
+  assert(fxDetect.response.status === 200, `fx-transfers detect returned ${fxDetect.response.status}`);
+  assert(
+    typeof fxDetect.body === 'object' &&
+      typeof fxDetect.body.checked === 'number' &&
+      typeof fxDetect.body.inserted === 'number',
+    `fx-transfers detect shape unexpected: ${JSON.stringify(fxDetect.body)}`,
+  );
+  record('fx-transfer listing and detect', {
+    checked: fxDetect.body.checked,
+    inserted: fxDetect.body.inserted,
+  });
+
+  // ---- detected subscriptions: shape check + by_account presence ----
+  const subs = await request('/dashboard/subscriptions');
+  assert(subs.response.status === 200, `subscriptions returned ${subs.response.status}`);
+  assert(Array.isArray(subs.body), `subscriptions should return an array`);
+  // Each row should have a by_account array (length >= 1) per the
+  // per-account-split work that just landed.
+  for (const sub of subs.body) {
+    assert(
+      Array.isArray(sub.by_account) && sub.by_account.length >= 1,
+      `subscription ${sub.merchant} missing by_account: ${JSON.stringify(sub)}`,
+    );
+  }
+  record('detected subscriptions shape', { count: subs.body.length });
 }
 
 async function smokeIntegrationStates() {
@@ -360,7 +489,8 @@ async function smokeBrowser() {
   try {
     await smokeAuth();
     await smokeApi();
-    await smokeManualAccountAndImport();
+    const seeded = await smokeManualAccountAndImport();
+    await smokeRecentFeatures(seeded);
     await smokeIntegrationStates();
     await smokeBrowser();
   } finally {

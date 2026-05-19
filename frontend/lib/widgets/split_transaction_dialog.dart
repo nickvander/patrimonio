@@ -46,6 +46,12 @@ class SplitTransactionDialog extends StatefulWidget {
   /// 'category': String?}`. When null/empty, the dialog seeds
   /// the default 50/50 pair.
   final List<Map<String, dynamic>>? initialDrafts;
+  /// Categories the user already has in the transactions list,
+  /// used to populate a per-row dropdown so the user doesn't have
+  /// to retype "Groceries" exactly. When empty the dropdown is
+  /// hidden (the dialog falls back to inheriting the parent's
+  /// category like it did before).
+  final List<String> availableCategories;
 
   const SplitTransactionDialog({
     super.key,
@@ -57,6 +63,7 @@ class SplitTransactionDialog extends StatefulWidget {
     required this.targetCurrency,
     required this.reportingFormat,
     this.initialDrafts,
+    this.availableCategories = const [],
   });
 
   @override
@@ -173,6 +180,62 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
     setState(() => _drafts.removeAt(idx));
   }
 
+  /// Build a small dropdown of the categories the user already has
+  /// in their transactions list. Includes a "Same as parent" sentinel
+  /// at the top so a row can opt out of overriding the category, and
+  /// preserves a custom value not in the list (e.g. carried over from
+  /// initialDrafts) as a one-off option so it isn't silently lost.
+  Widget _categoryDropdown(int rowIdx) {
+    final draft = _drafts[rowIdx];
+    final current = draft.category.trim();
+    final isInList = current.isEmpty ||
+        current == widget.parentCategory ||
+        widget.availableCategories.contains(current);
+    final items = <DropdownMenuItem<String>>[
+      DropdownMenuItem(
+        value: widget.parentCategory,
+        child: Text(
+          widget.parentCategory.isEmpty
+              ? 'Same as parent (uncategorised)'
+              : 'Same as parent (${widget.parentCategory})',
+          style: const TextStyle(fontSize: 13),
+        ),
+      ),
+      for (final c in widget.availableCategories)
+        if (c != widget.parentCategory)
+          DropdownMenuItem(
+            value: c,
+            child: Text(c, style: const TextStyle(fontSize: 13)),
+          ),
+      // Preserve a value that came from initialDrafts but isn't in the
+      // current category list (e.g. the parent's old category that
+      // never re-appeared after a rename).
+      if (!isInList)
+        DropdownMenuItem(
+          value: current,
+          child: Text(
+            '$current  (existing)',
+            style: const TextStyle(fontSize: 13),
+          ),
+        ),
+    ];
+    return DropdownButtonFormField<String>(
+      value: current.isEmpty ? widget.parentCategory : current,
+      isDense: true,
+      decoration: const InputDecoration(
+        isDense: true,
+        labelText: 'Category',
+        border: OutlineInputBorder(),
+      ),
+      style: TextStyle(
+        fontSize: 13,
+        color: Theme.of(context).colorScheme.onSurface,
+      ),
+      items: items,
+      onChanged: (v) => setState(() => draft.category = v ?? ''),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final sum = _sum();
@@ -262,43 +325,58 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
                         key: ValueKey('split-row-${_drafts.length}-$i-'
                             '${_drafts[i].amountText}'),
                         padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Expanded(
-                              flex: 3,
-                              child: TextFormField(
-                                initialValue: _drafts[i].description,
-                                decoration: const InputDecoration(
-                                  isDense: true,
-                                  labelText: 'Description',
-                                  border: OutlineInputBorder(),
+                            Row(
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: TextFormField(
+                                    initialValue: _drafts[i].description,
+                                    decoration: const InputDecoration(
+                                      isDense: true,
+                                      labelText: 'Description',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    onChanged: (v) =>
+                                        setState(() => _drafts[i].description = v),
+                                  ),
                                 ),
-                                onChanged: (v) =>
-                                    setState(() => _drafts[i].description = v),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              flex: 2,
-                              child: TextFormField(
-                                initialValue: _drafts[i].amountText,
-                                decoration: InputDecoration(
-                                  isDense: true,
-                                  labelText: 'Amount',
-                                  suffixText: widget.parentCurrency,
-                                  border: const OutlineInputBorder(),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  flex: 2,
+                                  child: TextFormField(
+                                    initialValue: _drafts[i].amountText,
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      labelText: 'Amount',
+                                      suffixText: widget.parentCurrency,
+                                      border: const OutlineInputBorder(),
+                                    ),
+                                    keyboardType: const TextInputType.numberWithOptions(
+                                        decimal: true, signed: true),
+                                    onChanged: (v) =>
+                                        setState(() => _drafts[i].amountText = v),
+                                  ),
                                 ),
-                                keyboardType: const TextInputType.numberWithOptions(
-                                    decimal: true, signed: true),
-                                onChanged: (v) =>
-                                    setState(() => _drafts[i].amountText = v),
+                                IconButton(
+                                  tooltip: 'Remove row',
+                                  icon: const Icon(Icons.remove_circle_outline, size: 18),
+                                  onPressed: _drafts.length <= 2 ? null : () => _removeRow(i),
+                                ),
+                              ],
+                            ),
+                            // Category dropdown — only shown when the
+                            // parent's transactions list has any categories
+                            // to pick from. The empty value lets the row
+                            // inherit the parent's category at insert
+                            // time, matching the previous behaviour.
+                            if (widget.availableCategories.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4, right: 48),
+                                child: _categoryDropdown(i),
                               ),
-                            ),
-                            IconButton(
-                              tooltip: 'Remove row',
-                              icon: const Icon(Icons.remove_circle_outline, size: 18),
-                              onPressed: _drafts.length <= 2 ? null : () => _removeRow(i),
-                            ),
                           ],
                         ),
                       ),

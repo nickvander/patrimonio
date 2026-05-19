@@ -634,15 +634,18 @@ default for the API container is now 20.
 
 Open follow-ups for this surface:
 
-* **Edit-split with mid-flight failure recovery** — current flow
-  calls onUnsplit then onSplit sequentially; a failure between
-  the two leaves the parent unsplit (recoverable by re-splitting).
-  A true atomic "replace splits" backend endpoint would let the
-  frontend stop doing two API calls and remove the race window.
-* **Split per-row category picker** — categories are currently
-  carried over from the parent or typed inline. A small dropdown
-  with the top N categories would make recategorising during a
-  split a one-click affair.
+* **Edit-split with mid-flight failure recovery** — ✅ shipped
+  2026-05-18. New `PUT /api/accounts/transactions/{id}/splits`
+  replaces children inside a single DB transaction, eliminating
+  the race window. Frontend uses it when available, falls back
+  to the legacy two-step flow when not. Integration test
+  `put_replace_splits_atomic` + a validation-rollback test lock
+  the behaviour in.
+* **Split per-row category picker** — ✅ shipped 2026-05-18.
+  Each split row now has a dropdown of distinct categories
+  present in the loaded transactions list, with a "Same as
+  parent" sentinel at the top and preservation of unknown
+  initial values as an "(existing)" option.
 
 ## B. Subscription detection improvements  ⏱️ ~half day total
 
@@ -654,11 +657,16 @@ Open follow-ups for this surface:
   renders a collapsed "Stopped (N)" section for clusters last
   charged 91–548 days ago. Older clusters are still dropped as
   noise.
-* **Per-account split.** When the user has both a credit card and a
-  checking account, identical subscriptions sometimes land on both
-  (paid via Apple Pay, then a fee from checking too). Show the
-  account distribution per detected subscription so the user can
-  see which channel.
+* **Per-account split** — ✅ shipped 2026-05-18. Detector now
+  tallies spend per account inside each cluster and returns a
+  `by_account` array (sorted by share descending). Frontend
+  renders compact chips under the cadence subtitle when the
+  cluster spans ≥ 2 accounts, capped at 3 + "+N more".
+* **Sign-convention bug fix** — ✅ shipped 2026-05-18. The
+  detector was filtering on `amount > 0` (income) instead of
+  `< 0` (expense) — "Interest earned" and similar income rows
+  were clustering as fake subscriptions. Window widened to
+  548 days while we were in there.
 
 ## C. Mexican CSV / PDF parser polish — ✅ shipped 2026-05-18
 
@@ -812,10 +820,13 @@ contributors without a Postgres on hand.
 
 Open follow-ups:
 
-* `scripts/smoke.cjs` still doesn't exercise any of the new
-  features (it stops at bootstrap → dashboard golden path). Worth
-  adding a smoke step that splits + unsplits a manually-inserted
-  transaction.
+* `scripts/smoke.cjs` — ✅ extended 2026-05-18. New
+  `smokeRecentFeatures` step covers split / PUT-edit-split /
+  unsplit roundtrip, subscription ignore/unignore, FX-transfer
+  list + detect, since-last-login shape, and the per-account
+  `by_account` array on `/dashboard/subscriptions`. Also fixed
+  a pre-existing CSRF-header gap in the `request()` helper that
+  was silently 403-ing the manual-account POST.
 * The integration tests don't cover Plaid sync, FX detector
   service, passkey ceremonies, or invite minting — those have
   much bigger surface areas and warrant their own files.

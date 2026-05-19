@@ -754,9 +754,11 @@ struct CreateManualTransactionRequest {
     account_id: uuid::Uuid,
     date: chrono::NaiveDate,
     description: String,
-    /// Positive numbers are outflows (expenses), negative are inflows.
-    /// Same sign convention the rest of the app already uses for
-    /// transactions, so the new row appears correctly in every view.
+    /// Negative numbers are outflows (expenses), positive are inflows
+    /// (income). Matches the Plaid sync path in
+    /// `services/sync.rs`, which negates Plaid's outflow-positive
+    /// amounts on import, and `cash_flow_trends` which sums
+    /// `amount > 0` as income.
     amount: rust_decimal::Decimal,
     currency: String,
     #[serde(default)]
@@ -1376,23 +1378,49 @@ struct DetectedSubscription {
     /// subscriptions in a separate, collapsed "Stopped" section so
     /// the user can audit "did I actually cancel that?".
     status: &'static str,
+    /// Per-account distribution within the cluster. Surfaces the
+    /// "Apple Pay charged Visa AND a fee landed on Checking" case so
+    /// the user can see which channel(s) are paying. Sorted descending
+    /// by `total_native`; the largest contributor first.
+    by_account: Vec<SubscriptionAccountSlice>,
+}
+
+#[derive(Serialize)]
+struct SubscriptionAccountSlice {
+    /// Account display name (nickname when set, else bank-supplied name).
+    account_name: String,
+    /// Number of charges that landed on this account in the cluster's
+    /// observed window.
+    occurrences: i32,
+    /// Absolute spend on this account in the cluster's native currency.
+    total_native: f64,
+    /// Share of the cluster total (0.0–1.0). Lets the frontend draw
+    /// a tiny inline bar without recomputing.
+    share: f64,
 }
 
 /// Detected recurring outflows (subscriptions, bills, gym dues, etc.).
 ///
-/// Heuristic: group every expense transaction (amount > 0) of the last
-/// 12 months by a merchant key + amount band. A cluster qualifies as
-/// "recurring" when:
+/// Heuristic: group every **expense** transaction (amount < 0 in this
+/// app's sign convention — see `cash_flow_trends` and the Plaid sync
+/// path; outflows are stored as negative, inflows as positive) of the
+/// last 12 months by a merchant key + amount band. A cluster qualifies
+/// as "recurring" when:
 ///   * ≥ 3 occurrences,
 ///   * median gap between consecutive charges is 5–62 days (covers
 ///     weekly through bi-monthly cadence; one-off bursts are filtered
 ///     out by the gap floor, annual renewals are filtered out by the
 ///     gap ceiling — both can be added if anyone asks).
-///   * Most recent charge is within 90 days (older clusters are
-///     considered cancelled subscriptions, not currently-active ones).
+///   * Most recent charge is within 90 days (within 91–548 days the
+///     cluster is flagged `status: "cancelled"`; older than that is
+///     dropped as noise).
 ///
-/// Returns sorted by monthly_usd descending so the most expensive
-/// subscriptions surface first.
+/// We deliberately exclude income-shaped rows: a checking account
+/// that receives monthly "Interest Earned" credits would otherwise
+/// match the recurring shape and surface as a fake subscription.
+///
+/// Returns sorted by status (active first), then by monthly_usd
+/// descending so the most expensive subscriptions surface first.
 async fn detected_subscriptions(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
@@ -1414,13 +1442,19 @@ async fn detected_subscriptions(
     let rows = sqlx::query(
         r#"
         SELECT
-            t.date, t.amount, t.currency,
+            t.date, t.amount, t.currency, t.account_id,
             t.description, t.merchant_name, t.counterparty_name,
-            t.user_description, t.payment_payee
+            t.user_description, t.payment_payee,
+            COALESCE(NULLIF(a.nickname, ''), a.name) AS account_name
         FROM transactions t
+        JOIN accounts a ON a.id = t.account_id
         WHERE t.user_id = $1
-          AND t.amount > 0
-          AND t.date >= CURRENT_DATE - INTERVAL '365 days'
+          -- Outflows only. Sign convention: amount < 0 = expense,
+          -- amount > 0 = income. Including income would surface
+          -- "Interest earned" / "Dividend" / "Salary" as fake
+          -- "subscriptions" once their recurring shape clusters.
+          AND t.amount < 0
+          AND t.date >= CURRENT_DATE - INTERVAL '548 days'
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
         ORDER BY t.date DESC
         "#,
@@ -1457,11 +1491,25 @@ async fn detected_subscriptions(
     // $10.01 Netflix sequence all cluster (banks occasionally vary
     // sub-cent on rolling charges).
     use std::collections::HashMap;
+    struct AccountTally {
+        display: String,
+        count: u32,
+        // Absolute spend on this account in the cluster's native
+        // currency. Sign is implied by the cluster (outflow).
+        total_native: f64,
+    }
     struct Cluster {
         merchant: String,
         currency: String,
-        // (date_yyyymmdd, amount_native) for every observed charge.
+        // (date_yyyymmdd, amount_native_positive) for every observed
+        // charge. Amounts are stored as the *absolute* value of the
+        // raw row so downstream math (median gap, monthly average)
+        // can stay sign-agnostic.
         events: Vec<(chrono::NaiveDate, f64)>,
+        // Per-account spend within the cluster, keyed by account UUID.
+        // Used to surface "Apple Pay charged Visa AND a fee landed on
+        // Checking" when the same merchant clusters across accounts.
+        by_account: HashMap<uuid::Uuid, AccountTally>,
     }
     let mut clusters: HashMap<String, Cluster> = HashMap::new();
 
@@ -1509,16 +1557,28 @@ async fn detected_subscriptions(
             Ok(d) => d,
             Err(_) => continue,
         };
-        let amount: f64 = r
+        let raw_amount: f64 = r
             .try_get::<rust_decimal::Decimal, _>("amount")
             .ok()
             .and_then(|d| d.to_string().parse().ok())
             .unwrap_or(0.0);
-        if amount <= 0.0 {
+        // SQL filter already restricts to amount < 0, but a defensive
+        // sign check here keeps the loop honest if the WHERE clause is
+        // ever softened. From this point on `amount` is the absolute
+        // outflow magnitude — sign is implied by the cluster.
+        if raw_amount >= 0.0 {
             continue;
         }
+        let amount = raw_amount.abs();
         let currency: String = r.try_get("currency").unwrap_or_else(|_| "USD".into());
         let description: String = r.try_get("description").unwrap_or_default();
+        let account_id: uuid::Uuid = match r.try_get("account_id") {
+            Ok(id) => id,
+            Err(_) => continue,
+        };
+        let account_name: String = r
+            .try_get::<String, _>("account_name")
+            .unwrap_or_else(|_| "Account".into());
         let merchant_name: Option<String> =
             r.try_get::<Option<String>, _>("merchant_name").ok().flatten();
         let counterparty_name: Option<String> = r
@@ -1572,15 +1632,20 @@ async fn detected_subscriptions(
             payment_payee.as_deref(),
             &description,
         );
-        clusters
-            .entry(key)
-            .or_insert_with(|| Cluster {
-                merchant: display_name.clone(),
-                currency: currency.clone(),
-                events: Vec::new(),
-            })
-            .events
-            .push((date, amount));
+        let cluster = clusters.entry(key).or_insert_with(|| Cluster {
+            merchant: display_name.clone(),
+            currency: currency.clone(),
+            events: Vec::new(),
+            by_account: HashMap::new(),
+        });
+        cluster.events.push((date, amount));
+        let tally = cluster.by_account.entry(account_id).or_insert(AccountTally {
+            display: account_name,
+            count: 0,
+            total_native: 0.0,
+        });
+        tally.count += 1;
+        tally.total_native += amount;
     }
 
     let today = chrono::Utc::now().date_naive();
@@ -1637,6 +1702,35 @@ async fn detected_subscriptions(
             avg_per_month
         };
         let last_amount = cluster.events[0].1;
+
+        // Per-account slices: sorted descending by spend, with the
+        // share normalised against the cluster total so the frontend
+        // doesn't have to redo the math. `total` here is the sum of
+        // every tally — same number as `cluster.events.iter().map.sum()`
+        // since we feed both from the same loop, but recomputed
+        // independently to keep the slice serialisation self-contained.
+        let cluster_total: f64 = cluster
+            .by_account
+            .values()
+            .map(|t| t.total_native)
+            .sum::<f64>()
+            .max(f64::MIN_POSITIVE);
+        let mut by_account: Vec<SubscriptionAccountSlice> = cluster
+            .by_account
+            .values()
+            .map(|t| SubscriptionAccountSlice {
+                account_name: t.display.clone(),
+                occurrences: t.count as i32,
+                total_native: t.total_native,
+                share: t.total_native / cluster_total,
+            })
+            .collect();
+        by_account.sort_by(|a, b| {
+            b.total_native
+                .partial_cmp(&a.total_native)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
         out.push(DetectedSubscription {
             merchant: cluster.merchant.clone(),
             monthly_usd,
@@ -1646,6 +1740,7 @@ async fn detected_subscriptions(
             currency: cluster.currency.clone(),
             occurrences: cluster.events.len() as i32,
             status,
+            by_account,
         });
     }
 

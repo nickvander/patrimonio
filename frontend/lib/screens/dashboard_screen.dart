@@ -1828,6 +1828,10 @@ class _DashboardScreenState extends State<DashboardScreen>
           await _apiService.unsplitTransaction(parentId);
           await _refreshData();
         },
+        onReplaceSplits: (parentId, splits) async {
+          await _apiService.replaceSplits(parentId, splits);
+          await _refreshData();
+        },
         onDetectFxTransfers: () async {
           final messenger = ScaffoldMessenger.of(context);
           messenger.showSnackBar(

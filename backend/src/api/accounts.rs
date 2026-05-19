@@ -23,7 +23,9 @@ pub fn router() -> Router<AppState> {
         .route("/transactions/{tx_id}", patch(update_transaction).delete(delete_transaction))
         .route(
             "/transactions/{tx_id}/splits",
-            axum::routing::post(split_transaction).delete(unsplit_transaction),
+            axum::routing::post(split_transaction)
+                .put(replace_splits)
+                .delete(unsplit_transaction),
         )
 }
 
@@ -866,4 +868,179 @@ async fn unsplit_transaction(
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
+}
+
+/// Atomically replace the children of an already-split parent in a
+/// single round-trip. The frontend's "Edit split" flow used to do
+/// DELETE-then-POST (two requests with a small race window where a
+/// concurrent fetch would see the parent restored without children);
+/// this endpoint collapses both ops into one DB transaction so the
+/// row never appears un-split to any reader. Validation rules are
+/// identical to `split_transaction`. Accepts the same payload shape
+/// (`{ "splits": [...] }`) plus an implicit "parent must already be
+/// split" precondition — call POST for the first split, PUT for
+/// every edit afterward.
+async fn replace_splits(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path(tx_id): Path<uuid::Uuid>,
+    Json(payload): Json<SplitRequest>,
+) -> impl IntoResponse {
+    use rust_decimal::Decimal;
+    if payload.splits.len() < 2 {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(serde_json::json!({"error": "Need at least two splits"})),
+        )
+            .into_response();
+    }
+
+    let parent_row = sqlx::query(
+        r#"
+        SELECT t.id, t.account_id, t.date, t.amount, t.currency, t.description,
+               t.category, t.source, t.parent_id
+        FROM transactions t
+        WHERE t.id = $1 AND t.user_id = $2
+        "#,
+    )
+    .bind(tx_id)
+    .bind(ctx.user_id)
+    .fetch_optional(&state.db)
+    .await;
+    let parent = match parent_row {
+        Ok(Some(r)) => r,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(e) => {
+            error!("replace_splits lookup failed: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+    let parent_parent_id: Option<uuid::Uuid> = parent.try_get("parent_id").ok();
+    if parent_parent_id.is_some() {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(serde_json::json!({"error": "Cannot split a transaction that is already a split-child"})),
+        )
+            .into_response();
+    }
+
+    let parent_amount: Decimal = parent.get("amount");
+    let parent_account_id: uuid::Uuid = parent.get("account_id");
+    let parent_date: chrono::NaiveDate = parent.get("date");
+    let parent_currency: String = parent.get("currency");
+    let parent_category: Option<String> = parent.try_get("category").ok();
+    let parent_source: Option<String> = parent.try_get("source").ok().flatten();
+
+    let parent_is_positive = parent_amount.is_sign_positive();
+    let mut total = Decimal::ZERO;
+    for child in &payload.splits {
+        let trimmed = child.description.trim();
+        if trimmed.is_empty() {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({"error": "Every split needs a description"})),
+            )
+                .into_response();
+        }
+        if child.amount.is_zero() {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({"error": "Zero-amount splits are not allowed"})),
+            )
+                .into_response();
+        }
+        if child.amount.is_sign_positive() != parent_is_positive {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "Every split must share the parent's sign (all expense or all income)"
+                })),
+            )
+                .into_response();
+        }
+        total += child.amount;
+    }
+    let diff = (total - parent_amount).abs();
+    if diff > Decimal::new(1, 2) {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(serde_json::json!({
+                "error": format!(
+                    "Split total ({}) doesn't match parent ({}) — off by {}",
+                    total, parent_amount, diff
+                )
+            })),
+        )
+            .into_response();
+    }
+
+    // Single DB transaction: DELETE existing children, then INSERT the
+    // new set. No window in which the parent appears restored.
+    let mut tx = match state.db.begin().await {
+        Ok(t) => t,
+        Err(e) => {
+            error!("replace_splits begin failed: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    let removed = match sqlx::query("DELETE FROM transactions WHERE parent_id = $1")
+        .bind(tx_id)
+        .execute(&mut *tx)
+        .await
+    {
+        Ok(r) => r.rows_affected(),
+        Err(e) => {
+            error!("replace_splits delete failed: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    for child in &payload.splits {
+        let category = child
+            .category
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .map(str::to_string)
+            .or_else(|| parent_category.clone());
+        let res = sqlx::query(
+            r#"
+            INSERT INTO transactions (
+                account_id, parent_id, date, description, amount, currency,
+                category, user_category, source, user_id
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            "#,
+        )
+        .bind(parent_account_id)
+        .bind(tx_id)
+        .bind(parent_date)
+        .bind(child.description.trim())
+        .bind(child.amount)
+        .bind(&parent_currency)
+        .bind(category.as_deref())
+        .bind(child.category.as_deref().filter(|s| !s.trim().is_empty()))
+        .bind(parent_source.as_deref().unwrap_or("split"))
+        .bind(ctx.user_id)
+        .execute(&mut *tx)
+        .await;
+        if let Err(e) = res {
+            error!("replace_splits child insert failed: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    }
+    if let Err(e) = tx.commit().await {
+        error!("replace_splits commit failed: {e}");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "parent_id": tx_id.to_string(),
+            "removed": removed,
+            "inserted": payload.splits.len(),
+        })),
+    )
+        .into_response()
 }

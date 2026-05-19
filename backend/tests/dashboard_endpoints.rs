@@ -546,6 +546,128 @@ async fn split_already_split_returns_422() {
 }
 
 #[tokio::test]
+async fn put_replace_splits_atomic() {
+    // The new PUT endpoint replaces children atomically — no window
+    // where the parent appears un-split to a concurrent reader.
+    let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, account) = seed_account(&pool, user_id).await;
+    let parent = seed_tx(&pool, user_id, account, "Atomic edit", "100.00").await;
+
+    // Initial split.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/accounts/transactions/{parent}/splits"),
+            Some(&serde_json::json!({
+                "splits": [
+                    {"description": "A", "amount": "50.00"},
+                    {"description": "B", "amount": "50.00"}
+                ]
+            })),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // Replace via PUT — no unsplit step needed.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PUT,
+            &format!("/api/accounts/transactions/{parent}/splits"),
+            Some(&serde_json::json!({
+                "splits": [
+                    {"description": "X", "amount": "30.00"},
+                    {"description": "Y", "amount": "30.00"},
+                    {"description": "Z", "amount": "40.00"}
+                ]
+            })),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["removed"], 2);
+    assert_eq!(body["inserted"], 3);
+
+    let amounts: Vec<Decimal> = sqlx::query_scalar(
+        "SELECT amount FROM transactions WHERE parent_id = $1 ORDER BY amount DESC",
+    )
+    .bind(parent)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(amounts.len(), 3);
+    assert_eq!(amounts[0], Decimal::from_str("40.00").unwrap());
+    assert_eq!(amounts[1], Decimal::from_str("30.00").unwrap());
+    assert_eq!(amounts[2], Decimal::from_str("30.00").unwrap());
+}
+
+#[tokio::test]
+async fn put_replace_splits_rejects_total_mismatch() {
+    let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, account) = seed_account(&pool, user_id).await;
+    let parent = seed_tx(&pool, user_id, account, "Bad replace", "100.00").await;
+
+    // Pre-existing split.
+    let _ = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/accounts/transactions/{parent}/splits"),
+            Some(&serde_json::json!({
+                "splits": [
+                    {"description": "A", "amount": "60.00"},
+                    {"description": "B", "amount": "40.00"}
+                ]
+            })),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+
+    // Replace with totals that don't match — must 422, and crucially
+    // must NOT delete the existing children before failing
+    // (transactional rollback).
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PUT,
+            &format!("/api/accounts/transactions/{parent}/splits"),
+            Some(&serde_json::json!({
+                "splits": [
+                    {"description": "X", "amount": "10.00"},
+                    {"description": "Y", "amount": "20.00"}
+                ]
+            })),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    // Original children should still be there. The validation runs
+    // before the BEGIN ... DELETE ... INSERT block.
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM transactions WHERE parent_id = $1",
+    )
+    .bind(parent)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 2);
+}
+
+#[tokio::test]
 async fn edit_split_via_unsplit_then_resplit() {
     // This mirrors what the frontend does for the "Edit split" button:
     // DELETE the children, then re-POST a new split set.

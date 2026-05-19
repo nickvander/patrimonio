@@ -77,6 +77,12 @@ class TransactionsTab extends StatefulWidget {
   /// Un-split: delete every child of the given parent. Used from the
   /// detail modal of a split-child (which knows its `parent_id`).
   final Future<void> Function(String parentId)? onUnsplitTransaction;
+  /// Atomically replace the children of a split parent (used by the
+  /// Edit split flow). Same payload shape as `onSplitTransaction`.
+  final Future<void> Function(
+    String parentId,
+    List<Map<String, dynamic>> splits,
+  )? onReplaceSplits;
 
   const TransactionsTab({
     super.key,
@@ -103,6 +109,7 @@ class TransactionsTab extends StatefulWidget {
     this.onUnlinkFxTransfer,
     this.onSplitTransaction,
     this.onUnsplitTransaction,
+    this.onReplaceSplits,
   });
 
   @override
@@ -591,6 +598,26 @@ class _TransactionsTabState extends State<TransactionsTab> {
     await _applyBulkUpdate(accountId: accId);
   }
 
+  /// Distinct prettified category labels present in the currently
+  /// loaded transactions list. Same source the filter dialog uses so
+  /// the split-row dropdown stays in sync with what the user actually
+  /// has, instead of offering a fixed taxonomy that drifts over time.
+  List<String> _distinctCategories() {
+    final set = <String>{};
+    for (final t in widget.transactions) {
+      if (t is! Map) continue;
+      final cat = prettyCategory(
+        userCategory: t['user_category']?.toString(),
+        detailed: t['category_detailed']?.toString(),
+        primary: t['category']?.toString(),
+      );
+      if (cat.isNotEmpty) set.add(cat);
+    }
+    final list = set.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return list;
+  }
+
   /// Open the split editor for [tx]. On save, fires
   /// `widget.onSplitTransaction` with the parent id and the children
   /// list; the dashboard refreshes the list which causes the parent
@@ -615,6 +642,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
         usdMxnRate: widget.usdMxnRate,
         targetCurrency: widget.targetCurrency,
         reportingFormat: widget.currencyFormat,
+        availableCategories: _distinctCategories(),
       ),
     );
     if (result == null || result.isEmpty) return;
@@ -637,10 +665,11 @@ class _TransactionsTabState extends State<TransactionsTab> {
   }
 
   /// Re-open the split editor pre-populated with the parent's existing
-  /// children, then unsplit-and-re-split atomically on save. The
-  /// backend's `POST /transactions/{id}/splits` refuses to re-split an
-  /// already-split parent (422), so we have to delete the old children
-  /// first via `onUnsplitTransaction`.
+  /// children. Saves via the atomic `PUT /splits` endpoint when the
+  /// dashboard wired up `onReplaceSplits` — single round-trip, no
+  /// race window. Falls back to unsplit-then-resplit when only the
+  /// legacy POST + DELETE handlers are available (older backends or
+  /// embeddings that don't expose the PUT route).
   ///
   /// Sibling lookup is done client-side against `widget.transactions`.
   /// For typical splits (2-5 children) this works — the list page
@@ -657,6 +686,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
   ) async {
     final onSplit = widget.onSplitTransaction;
     final onUnsplit = widget.onUnsplitTransaction;
+    final onReplace = widget.onReplaceSplits;
     if (onSplit == null || onUnsplit == null) return;
 
     final siblings = widget.transactions
@@ -698,18 +728,24 @@ class _TransactionsTabState extends State<TransactionsTab> {
         targetCurrency: widget.targetCurrency,
         reportingFormat: widget.currencyFormat,
         initialDrafts: initialDrafts,
+        availableCategories: _distinctCategories(),
       ),
     );
     if (result == null || result.isEmpty) return;
     if (!mounted) return;
     Navigator.of(context).pop();
     try {
-      // Two-step: tear down the existing children, then create the new
-      // set. On a failure between the two the parent appears restored
-      // in the list — recoverable by re-opening the parent's "Split"
-      // action.
-      await onUnsplit(parentId);
-      await onSplit(parentId, result);
+      if (onReplace != null) {
+        // Atomic path — single PUT replaces children in one DB tx.
+        await onReplace(parentId, result);
+      } else {
+        // Legacy two-step path: tear down the existing children, then
+        // create the new set. On a failure between the two the parent
+        // appears restored in the list — recoverable by re-opening the
+        // parent's "Split" action.
+        await onUnsplit(parentId);
+        await onSplit(parentId, result);
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Split updated (${result.length} parts)')),

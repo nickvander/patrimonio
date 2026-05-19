@@ -215,6 +215,8 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
     final currency = (s['currency'] ?? 'USD').toString();
     final occurrences = (s['occurrences'] as num?)?.toInt() ?? 0;
     final lastDate = DateTime.tryParse(s['last_charge_date'] ?? '');
+    final byAccount =
+        (s['by_account'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
 
     final cadenceLabel = cadence <= 8
         ? 'Weekly'
@@ -282,6 +284,15 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  // Per-account distribution chips. Hidden when the
+                  // cluster only spans one account (single-account is
+                  // the common case and the icon's enough context).
+                  // For 2+ accounts we surface every slice — the share
+                  // is informative even at small sizes.
+                  if (byAccount.length > 1) ...[
+                    const SizedBox(height: 6),
+                    _byAccountChips(context, byAccount, cancelled),
+                  ],
                 ],
               ),
             ),
@@ -334,6 +345,59 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
           ],
         ),
       ),
+    );
+  }
+
+  /// Render the per-account distribution as compact chips. Each chip is
+  /// `AccountName · NN%`. Caps at 3 chips + "+N more" so a pathological
+  /// cluster (e.g. a refund detected across many cards) doesn't blow
+  /// out the row height. Sorted by descending share (backend already
+  /// orders them that way; we just render in order).
+  Widget _byAccountChips(
+    BuildContext context,
+    List<Map<String, dynamic>> slices,
+    bool cancelled,
+  ) {
+    const maxChips = 3;
+    final visible = slices.take(maxChips).toList();
+    final hidden = slices.length - visible.length;
+    final accent =
+        cancelled ? context.neutralAccent : context.purpleAccent;
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      children: [
+        for (final slice in visible)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: context.accentSoft(accent),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              '${slice['account_name'] ?? '—'} · '
+              '${((slice['share'] as num?)?.toDouble() ?? 0.0) * 100 >= 1
+                  ? (((slice['share'] as num?)?.toDouble() ?? 0.0) * 100).round()
+                  : '<1'}%',
+              style: TextStyle(
+                fontSize: 10,
+                color: accent,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        if (hidden > 0)
+          Padding(
+            padding: const EdgeInsets.only(left: 2),
+            child: Text(
+              '+$hidden more',
+              style: TextStyle(
+                fontSize: 10,
+                color: context.textSubtle,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

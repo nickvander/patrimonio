@@ -40,6 +40,49 @@ have shipped. The app now does:
 * `app_settings.user_id` (M7 leftover) — budgets / goals no longer
   leak across users.
 
+## Sign-fixes + split polish + smoke sprint (2026-05-18, late late)
+
+* **Subscription detector sign-convention bug fixed.** The detector
+  filtered `amount > 0` which is *income* in this app's convention
+  (Plaid sync negates outflows; `cash_flow_trends` confirms
+  `> 0 = income`). "Interest earned" was clustering as a fake
+  subscription because of it. Filter now uses `amount < 0` and
+  `.abs()` the values before clustering; a defensive in-loop sign
+  check stays as belt-and-suspenders. Window widened to 548 days
+  to match the cancelled-detection range.
+* **Manual-transaction dialog sign inversion fixed.** The "Add
+  transaction" dialog had `_isExpense ? raw : -raw`, which is
+  backwards — an "Expense" was being stored as income. Now
+  `_isExpense ? -raw : raw`. The matching backend doc comment in
+  `CreateManualTransactionRequest` was also wrong; fixed.
+* **Subscription per-account breakdown.** Detector now joins to
+  `accounts`, tallies spend per `account_id` per cluster, and
+  returns a `by_account` array on each `DetectedSubscription`
+  (sorted by share descending). Frontend renders compact chips
+  under the cadence subtitle when the cluster spans ≥ 2 accounts
+  (caps at 3 chips + "+N more"). Hidden for the single-account
+  common case so the card stays clean.
+* **Atomic edit-split endpoint** `PUT /api/accounts/transactions/
+  {id}/splits`. Replaces children inside a single DB transaction
+  so no concurrent reader sees the parent restored without
+  children. Frontend now uses this when available; falls back to
+  the legacy unsplit-then-resplit dance when not. Two new
+  integration tests cover the happy path + transactional rollback
+  on validation failure.
+* **Per-row category dropdown in the split dialog**, fed from the
+  distinct categories already present in the loaded transactions
+  list (same source the filter dialog uses). Preserves a custom
+  value not in the list as an "(existing)" option so initialDrafts
+  values aren't silently lost.
+* **scripts/smoke.cjs**: previously was silently 403-ing on the
+  manual-account POST because it never sent `X-Requested-With`.
+  The `request()` helper now auto-attaches the header on every
+  mutating method. New `smokeRecentFeatures` step exercises:
+  POST/PUT/DELETE splits round-trip, subscription
+  ignore/un-ignore, `/since-last-login` shape check, FX-transfer
+  list + detect, and `/subscriptions` shape (asserts every row
+  has the new `by_account` array).
+
 ## SQL + hidden-items + tests sprint (2026-05-18, late)
 
 * **Net-worth history rewritten in SQL.** The Rust BTreeMap walk in

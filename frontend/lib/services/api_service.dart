@@ -861,6 +861,25 @@ class ApiService {
     }
   }
 
+  /// Replace the children of an already-split parent in one atomic
+  /// round-trip. Used by the "Edit split" flow — superior to
+  /// unsplit-then-resplit because there's no window where a concurrent
+  /// dashboard read sees the parent restored without children. The
+  /// payload shape matches `splitTransaction`.
+  Future<void> replaceSplits(
+    String txId,
+    List<Map<String, dynamic>> splits,
+  ) async {
+    final response = await _put(
+      Uri.parse('$_baseUrl/accounts/transactions/$txId/splits'),
+      headers: _withCsrf({'Content-Type': 'application/json'}),
+      body: json.encode({'splits': splits}),
+    );
+    if (response.statusCode != 200) {
+      throw _errorFromBody(response, fallback: 'Edit split failed');
+    }
+  }
+
   /// Delete every child of a split parent — un-splits the transaction.
   /// The parent re-emerges in the list.
   Future<void> unsplitTransaction(String parentTxId) async {
