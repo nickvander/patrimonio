@@ -17,6 +17,14 @@ class _SplitDraft {
 /// amount; the Save button stays disabled until they match.
 ///
 /// Returns the list of children on save, null on cancel.
+///
+/// Two modes:
+/// * **Create**: `initialDrafts` is null. Dialog seeds two empty 50/50
+///   rows. Save fires `POST /transactions/{id}/splits`.
+/// * **Edit**: `initialDrafts` is the existing child set. Dialog
+///   pre-populates with current splits. Caller is expected to do
+///   unsplit-then-resplit on Save (the backend rejects splitting an
+///   already-split parent).
 class SplitTransactionDialog extends StatefulWidget {
   /// Parent transaction's amount. Same sign convention as the rest of
   /// the app (amount > 0 = expense / outflow).
@@ -33,6 +41,11 @@ class SplitTransactionDialog extends StatefulWidget {
   final double usdMxnRate;
   final String targetCurrency;
   final NumberFormat reportingFormat;
+  /// Pre-populated splits — supplied when re-opening for an edit.
+  /// Each entry: `{'description': String, 'amount': double,
+  /// 'category': String?}`. When null/empty, the dialog seeds
+  /// the default 50/50 pair.
+  final List<Map<String, dynamic>>? initialDrafts;
 
   const SplitTransactionDialog({
     super.key,
@@ -43,6 +56,7 @@ class SplitTransactionDialog extends StatefulWidget {
     required this.usdMxnRate,
     required this.targetCurrency,
     required this.reportingFormat,
+    this.initialDrafts,
   });
 
   @override
@@ -53,19 +67,29 @@ class SplitTransactionDialog extends StatefulWidget {
 class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
   late List<_SplitDraft> _drafts;
 
+  bool get _isEditing =>
+      widget.initialDrafts != null && widget.initialDrafts!.isNotEmpty;
+
   @override
   void initState() {
     super.initState();
-    // Seed two rows. First row pre-filled with half the amount so the
-    // user can see the format immediately. Category copied from parent
-    // so a quick split doesn't lose the original categorization.
-    final half = (widget.parentAmount / 2).toStringAsFixed(2);
-    final remainder = (widget.parentAmount - double.parse(half))
-        .toStringAsFixed(2);
-    _drafts = [
-      _SplitDraft(amountText: half, category: widget.parentCategory),
-      _SplitDraft(amountText: remainder, category: widget.parentCategory),
-    ];
+    if (_isEditing) {
+      _drafts = widget.initialDrafts!.map((raw) {
+        final amt = (raw['amount'] as num?)?.toDouble() ?? 0.0;
+        return _SplitDraft(
+          description: (raw['description'] ?? '').toString(),
+          amountText: amt.toStringAsFixed(2),
+          category: (raw['category'] ?? widget.parentCategory).toString(),
+        );
+      }).toList();
+      // Defensive: a corrupt initialDrafts shouldn't leave us with
+      // <2 rows (would block save forever).
+      while (_drafts.length < 2) {
+        _drafts.add(_SplitDraft(category: widget.parentCategory));
+      }
+    } else {
+      _applyRatio([0.5, 0.5]);
+    }
   }
 
   double _sum() {
@@ -90,6 +114,45 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
       if ((amt > 0) != (widget.parentAmount > 0)) return false;
     }
     return _sumMatches;
+  }
+
+  /// Replace `_drafts` with N rows whose amounts follow [ratios].
+  /// Trailing row absorbs any cents-of-rounding remainder so the sum
+  /// always equals the parent exactly. Description + category are
+  /// carried over from existing rows where possible, otherwise blank
+  /// / parent-category.
+  void _applyRatio(List<double> ratios) {
+    final n = ratios.length;
+    final allocated = <double>[];
+    for (var i = 0; i < n - 1; i++) {
+      allocated.add(
+        double.parse((widget.parentAmount * ratios[i]).toStringAsFixed(2)),
+      );
+    }
+    final remainder = widget.parentAmount -
+        allocated.fold<double>(0.0, (a, b) => a + b);
+    allocated.add(double.parse(remainder.toStringAsFixed(2)));
+
+    final next = <_SplitDraft>[];
+    for (var i = 0; i < n; i++) {
+      final existing = i < _drafts.length ? _drafts[i] : null;
+      next.add(_SplitDraft(
+        description: existing?.description ?? '',
+        amountText: allocated[i].toStringAsFixed(2),
+        category: existing?.category.isNotEmpty == true
+            ? existing!.category
+            : widget.parentCategory,
+      ));
+    }
+    setState(() => _drafts = next);
+  }
+
+  /// Distribute the parent's amount evenly across [n] rows. Carries
+  /// description / category from existing rows; trailing row gets the
+  /// rounding remainder.
+  void _applyEven(int n) {
+    if (n < 2) return;
+    _applyRatio(List<double>.filled(n, 1.0 / n));
   }
 
   void _addRow() {
@@ -120,7 +183,50 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
     );
 
     return AlertDialog(
-      title: const Text('Split transaction'),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(_isEditing ? 'Edit split' : 'Split transaction'),
+          ),
+          // Quick-split presets. Reset the row set to the chosen
+          // ratio in a single click. "Even" prompts for N via a
+          // nested popup. "Custom" keeps current state — useful as
+          // a no-op label when the user is just confirming the
+          // current values match what they want.
+          PopupMenuButton<String>(
+            tooltip: 'Quick split',
+            icon: const Icon(Icons.tune, size: 18),
+            onSelected: (value) async {
+              switch (value) {
+                case '50/50':
+                  _applyRatio([0.5, 0.5]);
+                  break;
+                case '60/40':
+                  _applyRatio([0.6, 0.4]);
+                  break;
+                case '70/30':
+                  _applyRatio([0.7, 0.3]);
+                  break;
+                case '40/30/30':
+                  _applyRatio([0.4, 0.3, 0.3]);
+                  break;
+                case 'even':
+                  final n = await _promptEvenSplitCount(context);
+                  if (n != null) _applyEven(n);
+                  break;
+              }
+            },
+            itemBuilder: (ctx) => const [
+              PopupMenuItem(value: '50/50', child: Text('50 / 50')),
+              PopupMenuItem(value: '60/40', child: Text('60 / 40')),
+              PopupMenuItem(value: '70/30', child: Text('70 / 30')),
+              PopupMenuItem(value: '40/30/30', child: Text('40 / 30 / 30')),
+              PopupMenuDivider(),
+              PopupMenuItem(value: 'even', child: Text('Even split…')),
+            ],
+          ),
+        ],
+      ),
       content: SizedBox(
         width: 480,
         child: Column(
@@ -149,6 +255,12 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
                   children: [
                     for (var i = 0; i < _drafts.length; i++)
                       Padding(
+                        // The Key ties each row to its draft index so the
+                        // TextFormField's internal state survives ratio
+                        // presets — without it, "60/40" would re-create
+                        // each row and clear the description fields.
+                        key: ValueKey('split-row-${_drafts.length}-$i-'
+                            '${_drafts[i].amountText}'),
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         child: Row(
                           children: [
@@ -274,9 +386,55 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
                   Navigator.pop(context, out);
                 }
               : null,
-          child: const Text('Save split'),
+          child: Text(_isEditing ? 'Save changes' : 'Save split'),
         ),
       ],
     );
   }
+}
+
+/// Prompt the user for the number of rows for an "even" split. 2..10
+/// is plenty — splits beyond 10 are vanishingly rare and the number
+/// keypad keeps the picker compact. Returns null on cancel.
+Future<int?> _promptEvenSplitCount(BuildContext context) async {
+  var n = 3;
+  return showDialog<int>(
+    context: context,
+    builder: (ctx) {
+      return StatefulBuilder(builder: (ctx, setLocal) {
+        return AlertDialog(
+          title: const Text('Split evenly'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Divide the parent amount into $n equal parts.',
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              Slider(
+                value: n.toDouble(),
+                min: 2,
+                max: 10,
+                divisions: 8,
+                label: '$n',
+                onChanged: (v) => setLocal(() => n = v.round()),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, null),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, n),
+              child: const Text('Apply'),
+            ),
+          ],
+        );
+      });
+    },
+  );
 }

@@ -998,6 +998,27 @@ class ApiService {
     }
   }
 
+  /// Push the currently-configured PLAID_WEBHOOK_URL onto every Plaid
+  /// item the caller owns via Plaid's /item/webhook/update. Used after
+  /// the operator first sets the env var on a deployment that already
+  /// has linked items — Plaid binds the webhook URL at link-time, so
+  /// pre-existing items keep polling forever unless either re-linked
+  /// or pointed at the new URL via this endpoint.
+  ///
+  /// Returns `{ "updated": int, "failed": int, "webhook_url": str,
+  /// "results": [{ "id", "name", "ok", "reason"? }] }`.
+  Future<Map<String, dynamic>> updateWebhooks() async {
+    final response = await _post(
+      Uri.parse('$_baseUrl/institutions/update-webhook'),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Update webhook failed (${response.statusCode}): ${response.body}',
+      );
+    }
+    return json.decode(response.body);
+  }
+
   /// Sync an arbitrary set of institutions in one round-trip. Replaces
   /// the client-side loop the "Retry N failed" shortcut used to do.
   Future<void> syncInstitutionsBatch(List<String> institutionIds) async {

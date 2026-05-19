@@ -616,24 +616,33 @@ default for the API container is now 20.
 > walkthrough but didn't fit the in-scope batches. Ordered by
 > impact-per-effort.
 
-## A. Split-transaction polish  ⏱️ ~2 hours each
+## A. Split-transaction polish  ✅ mostly shipped
 
-Split / unsplit + the validation dialog all work. Three small
-follow-ups make daily use nicer:
+* **"Split" chip on child rows** — ✅ already shipped earlier.
+* **Quick-split presets** — ✅ shipped 2026-05-18. Tune icon in the
+  dialog title bar opens 50/50, 60/40, 70/30, 40/30/30, and an
+  "Even split…" with a 2..10 slider. Each preset preserves any
+  description/category the user already typed.
+* **Edit-split** — ✅ shipped 2026-05-18. Outlined "Edit split"
+  button next to "Unsplit" in a child's detail modal. Pre-
+  populates the dialog with the existing children, saves via
+  unsplit-then-resplit (the backend rejects re-splitting an
+  already-split parent, so we tear down + recreate). Sibling
+  lookup is client-side against the currently-loaded transactions
+  list — fine for typical 2-5 way splits; if very large splits
+  ever matter, add a `GET /transactions/{id}/splits` endpoint.
 
-* **"Split" chip on child rows in the transactions list.** Children
-  render identically to regular rows today, so a $100 grocery split
-  of a $200 ATM withdrawal looks like a standalone $100 row. A small
-  badge ("Split", or a `Icons.call_split` glyph at the row's left
-  edge) makes it obvious. ~10 lines in `widgets/transactions_tab.dart`
-  row builder; the `parent_id` field is already on the wire.
-* **Quick-split presets.** Common patterns: 50/50, 60/40, 70/30,
-  "evenly across N." A dropdown in the dialog header that
-  recomputes amounts to the chosen ratio.
-* **Edit-split.** Today you have to Unsplit + re-split to change
-  amounts. Adding an "Edit split" action on a parent (visible
-  because parent_id is null + children exist) would open the dialog
-  pre-populated with current children.
+Open follow-ups for this surface:
+
+* **Edit-split with mid-flight failure recovery** — current flow
+  calls onUnsplit then onSplit sequentially; a failure between
+  the two leaves the parent unsplit (recoverable by re-splitting).
+  A true atomic "replace splits" backend endpoint would let the
+  frontend stop doing two API calls and remove the race window.
+* **Split per-row category picker** — categories are currently
+  carried over from the parent or typed inline. A small dropdown
+  with the top N categories would make recategorising during a
+  split a one-click affair.
 
 ## B. Subscription detection improvements  ⏱️ ~half day total
 
@@ -694,20 +703,15 @@ section covering host provisioning, nginx + Let's Encrypt sample,
 `TRUSTED_PROXY_CIDRS` setup, the webhook activation flow
 (re-link OR the new `POST /api/institutions/update-webhook`
 one-shot), log rotation, and a pointer to the backup runbook.
-`/api/setup/status` now reports a `plaid_webhook` check so the
-Management tab can see at a glance whether push delivery is
-wired.
 
-Follow-ups deferred from this sprint:
-
-* Frontend tile in the Management tab consuming the new
-  `plaid_webhook` setup-status check — currently the JSON field
-  is shipped but the UI hasn't been updated to render it as its
-  own card. ~20 lines.
-* A "Push webhooks to all institutions" button on the Management
-  tab that POSTs to `/api/institutions/update-webhook` — saves
-  the operator from curl. The endpoint already returns a per-row
-  result list ready to render as a table.
+`/api/setup/status` reports the `plaid_webhook` check; the
+Management tab's setup card renders it generically alongside
+every other check **and** shows a "Push to N institutions"
+trailing button when `plaid_webhook` is configured AND ≥ 1 Plaid
+item is linked. The button triggers
+`/api/institutions/update-webhook` and shows a per-row
+updated/failed dialog. The card's bottom-line recap is also
+dynamic now (no more hard-coded "configure live exchange rates").
 
 ## F. Sandbox vs Production indicator chip  ⏱️ ~30 min
 

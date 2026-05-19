@@ -40,6 +40,26 @@ have shipped. The app now does:
 * `app_settings.user_id` (M7 leftover) — budgets / goals no longer
   leak across users.
 
+## Late-evening sprint (2026-05-18, follow-on after Top-3 ship)
+
+* **Management tab setup card** now surfaces the `plaid_webhook`
+  check and exposes a "Push to N institutions" trailing button
+  when the URL is configured and there's ≥ 1 linked Plaid item.
+  Tapping it POSTs `/api/institutions/update-webhook` and shows
+  a result dialog (one row per institution, OK / reason).
+* The card's bottom-line "Recommended before production…" copy
+  is now driven by the actual recommended-but-unset checks
+  (previously hard-coded "configure live exchange rates").
+* **Split-transaction quick-split presets**: a tune icon in the
+  dialog title bar offers 50/50, 60/40, 70/30, 40/30/30, and
+  an "Even split…" picker (slider 2..10). Existing description/
+  category text on each row is preserved when the ratio changes.
+* **Edit-split** action on a child's detail modal opens the
+  dialog pre-populated with the existing siblings. Save runs
+  unsplit-then-resplit atomically client-side. Sibling lookup
+  is from the currently-loaded transactions list — sufficient
+  for ≤ 50-way splits, the only real-world case.
+
 ## Evening sprint (2026-05-18, after the walkthrough)
 
 Shipped in this session, in order:

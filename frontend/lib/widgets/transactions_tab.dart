@@ -636,6 +636,92 @@ class _TransactionsTabState extends State<TransactionsTab> {
     }
   }
 
+  /// Re-open the split editor pre-populated with the parent's existing
+  /// children, then unsplit-and-re-split atomically on save. The
+  /// backend's `POST /transactions/{id}/splits` refuses to re-split an
+  /// already-split parent (422), so we have to delete the old children
+  /// first via `onUnsplitTransaction`.
+  ///
+  /// Sibling lookup is done client-side against `widget.transactions`.
+  /// For typical splits (2-5 children) this works — the list page
+  /// size is much larger than that. If pagination ever cuts off some
+  /// siblings, the safeguard is the sum-check inside the dialog: the
+  /// Save button stays disabled until the rows sum to the parent
+  /// amount, so a partial preload becomes visible immediately.
+  Future<void> _openEditSplitDialog(
+    String parentId,
+    String childCurrency,
+    double childAmount,
+    String parentLabel,
+    String parentCategory,
+  ) async {
+    final onSplit = widget.onSplitTransaction;
+    final onUnsplit = widget.onUnsplitTransaction;
+    if (onSplit == null || onUnsplit == null) return;
+
+    final siblings = widget.transactions
+        .where((row) =>
+            row is Map &&
+            (row['parent_id'] ?? '').toString() == parentId)
+        .toList();
+    if (siblings.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not find split children to edit.')),
+      );
+      return;
+    }
+    final parentAmount = siblings.fold<double>(0.0, (sum, row) {
+      final raw = (row as Map)['amount'];
+      return sum + ((raw as num?)?.toDouble() ?? 0.0);
+    });
+    final initialDrafts = siblings.map<Map<String, dynamic>>((row) {
+      final m = row as Map;
+      return {
+        'description': (m['user_description']?.toString().trim().isNotEmpty ??
+                false)
+            ? m['user_description']
+            : (m['description'] ?? ''),
+        'amount': (m['amount'] as num?)?.toDouble() ?? 0.0,
+        'category': (m['user_category'] ?? m['category'] ?? parentCategory)
+            .toString(),
+      };
+    }).toList();
+
+    final result = await showDialog<List<Map<String, dynamic>>?>(
+      context: context,
+      builder: (_) => SplitTransactionDialog(
+        parentAmount: parentAmount,
+        parentCurrency: childCurrency,
+        parentLabel: parentLabel,
+        parentCategory: parentCategory,
+        usdMxnRate: widget.usdMxnRate,
+        targetCurrency: widget.targetCurrency,
+        reportingFormat: widget.currencyFormat,
+        initialDrafts: initialDrafts,
+      ),
+    );
+    if (result == null || result.isEmpty) return;
+    if (!mounted) return;
+    Navigator.of(context).pop();
+    try {
+      // Two-step: tear down the existing children, then create the new
+      // set. On a failure between the two the parent appears restored
+      // in the list — recoverable by re-opening the parent's "Split"
+      // action.
+      await onUnsplit(parentId);
+      await onSplit(parentId, result);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Split updated (${result.length} parts)')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Edit split failed: $e')),
+      );
+    }
+  }
+
   /// Open the rename dialog for a single transaction. Empty string saves
   /// as "clear the override" (sets user_description back to NULL — row
   /// reverts to the auto-picked label). The raw bank description stays
@@ -1707,6 +1793,20 @@ class _TransactionsTabState extends State<TransactionsTab> {
                                     titleDescription, originalCategory),
                             icon: const Icon(Icons.call_split, size: 16),
                             label: const Text('Split this transaction'),
+                          ),
+                        if ((tx['parent_id'] ?? '').toString().isNotEmpty &&
+                            widget.onSplitTransaction != null &&
+                            widget.onUnsplitTransaction != null)
+                          OutlinedButton.icon(
+                            onPressed: () => _openEditSplitDialog(
+                              (tx['parent_id'] ?? '').toString(),
+                              sourceCurrency,
+                              sourceAmount,
+                              titleDescription,
+                              originalCategory,
+                            ),
+                            icon: const Icon(Icons.edit_outlined, size: 16),
+                            label: const Text('Edit split'),
                           ),
                         if ((tx['parent_id'] ?? '').toString().isNotEmpty &&
                             widget.onUnsplitTransaction != null)

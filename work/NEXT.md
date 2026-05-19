@@ -1,6 +1,6 @@
 # Next session — handoff
 
-> **Last updated:** 2026-05-18 (evening, after Top-3 sprint)
+> **Last updated:** 2026-05-18 (late evening, after Top-3 + split-polish sprint)
 > **Purpose:** Pickup-ready priorities for the next agent. Each item
 > has a why, scope sketch, and where to look in code. Ordered by
 > impact-per-effort.
@@ -12,7 +12,8 @@ small wins.
 ## Recently shipped (do NOT re-do)
 
 The previous two sessions cleared most of the original NEXT.md. The
-Top-3 from this session's pickup prompt all shipped:
+Top-3 from this session's pickup prompt all shipped, plus a split-
+transaction polish follow-on:
 
 * `since_last_login.largest_move` flips sign for liability accounts.
 * Recovery-codes-low warning tile when count < 3.
@@ -23,9 +24,21 @@ Top-3 from this session's pickup prompt all shipped:
 * `/api/institutions/update-webhook` one-shot endpoint to
   backfill Plaid webhook URL onto existing items.
 * `/api/setup/status` exposes a new `plaid_webhook` check.
+* Management tab setup card renders the new check **and**
+  surfaces a "Push to N institutions" trailing button when
+  `plaid_webhook` is configured + ≥ 1 Plaid item is linked.
+  Result table dialog reports per-row updated/failed.
+* Setup card's bottom-line "recommended before production" copy
+  is now dynamic (lists actual recommended-but-unset labels).
 * `docs/deployment.md` rewritten with a concrete single-VPS
   runbook covering nginx + LE, `TRUSTED_PROXY_CIDRS`, webhook
   activation, log rotation, backups.
+* Split-transaction quick-split presets: 50/50, 60/40, 70/30,
+  40/30/30, and "Even split…" (slider for N=2..10) — accessible
+  via a tune icon in the dialog title bar.
+* Edit-split affordance on split children. Re-opens the dialog
+  pre-populated with current children; saving does
+  unsplit-then-resplit atomically client-side.
 
 Also previously: real-estate / manual assets, HIBP check,
 sandbox-vs-prod chip, split-child badge, unhide-subscriptions UI,
@@ -33,40 +46,7 @@ SQL liability classifier + cash-flow internal-transfer exclusion.
 
 ## Top 3 for the next session
 
-### 1. Frontend tile for the webhook setup-status check  ⏱️ ~30 min  🎯 closes the deployment loop
-
-**Why now.** The JSON is shipped (`/api/setup/status` returns a
-`plaid_webhook` entry) but the Management tab card listing setup
-checks hasn't been updated to render it. A user looking at the page
-today doesn't know whether their webhook is configured.
-
-**Scope.** Find the setup-status renderer in the frontend
-(probably `frontend/lib/screens/management_screen.dart` or a tile
-widget in `frontend/lib/widgets/`). The check has fields `key`,
-`label`, `configured`, `severity`, `detail` — same shape as the
-existing checks, so this might just be a matter of adding an icon
-mapping for the `plaid_webhook` key.
-
-While there: add a small "Update all institutions" button visible
-only when `plaid_webhook` is configured AND there are linked
-Plaid institutions. The button POSTs to
-`/api/institutions/update-webhook` and shows the per-row result.
-
-### 2. Split-transaction polish (presets + edit)  ⏱️ ~2 hours each
-
-Two small UX wins:
-
-* **Quick-split presets** in the split dialog header (50/50,
-  60/40, 70/30, "evenly across N"). A dropdown that recomputes
-  amounts to the chosen ratio.
-* **Edit-split** action on parents. Today the user has to
-  Unsplit then re-Split to change amounts. Add an "Edit split"
-  affordance that opens the dialog pre-populated with current
-  children.
-
-Tracked in `work/FUTURE.md` section A.
-
-### 3. Net-worth aggregation in SQL (audit P5)  ⏱️ ~half day  🎯 cold-cache cost
+### 1. Net-worth aggregation in SQL (audit P5)  ⏱️ ~half day  🎯 cold-cache cost
 
 `backend/src/api/dashboard.rs` walks a Rust-side BTreeMap to build
 the per-account-type history series. Cheap at today's scale (5
@@ -75,6 +55,43 @@ institutions × 30d) but quadratic. The audit (P5) recommends a
 `is_liability_account_type()` exists, the SQL is clean to write.
 
 Tracked in `work/FUTURE.md` section H.
+
+### 2. Integration tests for new endpoints  ⏱️ ~half day  🎯 keeps the surface from regressing
+
+`backend/tests/auth_endpoints.rs` covers auth. The recently-added
+endpoints have unit tests for internal helpers but no integration
+tests:
+
+* `POST /api/institutions/update-webhook`
+* `POST/DELETE /api/accounts/transactions/{id}/splits`
+* `GET /api/dashboard/since-last-login`
+* `GET /api/dashboard/subscriptions`
+* `POST /api/dashboard/subscriptions/ignore`
+* `GET/POST/DELETE /api/dashboard/fx-transfers`
+
+A "split + edit-split + unsplit" happy-path integration test
+would also lock in the edit-split flow that just shipped (it does
+two API hits in sequence; an integration test catches the
+between-call race if anyone changes the unsplit semantics).
+
+Tracked in `work/FUTURE.md` section K.
+
+### 3. "Manage hidden things" unified panel  ⏱️ ~3 hours  🎯 paying down dismissal debt
+
+A growing list of UI elements have dismissed state with no Unhide
+path scattered across the app:
+
+* `ignored_subscription_merchants` (the "× not a subscription"
+  affordance on the active rows — the Stopped section already
+  shows cancelled ones).
+* `Preferences.sinceLastLoginDismissed` (banner dismissal).
+* FX-transfer pairs the user has manually unlinked.
+
+A single panel in Settings (or the Management tab) listing
+every "thing you told us no to" with a per-row remove button
+would be cleaner than per-feature manage screens.
+
+Tracked in `work/FUTURE.md` section D.
 
 ## Quick wins (≤ 2 hours each)
 

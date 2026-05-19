@@ -890,6 +890,99 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
+  /// Trigger `POST /api/institutions/update-webhook` to backfill the
+  /// configured PLAID_WEBHOOK_URL onto every existing Plaid item, then
+  /// show a dialog with the per-row result table. Used by the
+  /// plaid_webhook tile in the Management tab's setup card after the
+  /// operator first sets PLAID_WEBHOOK_URL on a deployment that
+  /// already has linked items.
+  Future<void> _pushWebhookToAllInstitutions() async {
+    setState(() => _isLoading = true);
+    try {
+      final result = await _apiService.updateWebhooks();
+      if (!mounted) return;
+      final updated = (result['updated'] as num?)?.toInt() ?? 0;
+      final failed = (result['failed'] as num?)?.toInt() ?? 0;
+      final results = (result['results'] as List?) ?? const [];
+      final url = result['webhook_url']?.toString() ?? '';
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(failed == 0
+              ? 'Webhook URL pushed to $updated institution${updated == 1 ? '' : 's'}'
+              : '$updated updated, $failed failed'),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (url.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: SelectableText(
+                        url,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ...results.map((raw) {
+                    final row = raw as Map<String, dynamic>;
+                    final ok = row['ok'] == true;
+                    final name = row['name']?.toString() ?? 'Unknown';
+                    final reason = row['reason']?.toString() ?? '';
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 3),
+                      child: Row(
+                        children: [
+                          Icon(
+                            ok ? Icons.check_circle : Icons.error_outline,
+                            size: 16,
+                            color: ok
+                                ? context.positive
+                                : context.negative,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              ok ? name : '$name — $reason',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: ok
+                                    ? context.textPrimary
+                                    : context.negative,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Push failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _loadAllData({bool silent = false}) async {
     if (!silent) {
       setState(() {
@@ -1385,6 +1478,20 @@ class _DashboardScreenState extends State<DashboardScreen>
           )
           .toList();
 
+      // Does the caller have at least one Plaid-backed institution?
+      // Used to gate the "Push webhook URL to existing items" action
+      // on the plaid_webhook check — pointless to render the button
+      // when there's nothing for it to update.
+      final plaidInstitutionCount = (_syncData ?? const [])
+          .where(
+            (inst) =>
+                inst is Map &&
+                (inst['integration_type']?.toString().toLowerCase() ??
+                        '')
+                    .contains('plaid'),
+          )
+          .length;
+
       return Card(
         elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1419,6 +1526,27 @@ class _DashboardScreenState extends State<DashboardScreen>
               ...checks.map((raw) {
                 final check = raw as Map<String, dynamic>;
                 final configured = check['configured'] == true;
+                final key = check['key']?.toString() ?? '';
+                // Per-row trailing action. Today only the plaid_webhook
+                // row gets one; designed as a switch so future checks
+                // can hook in the same way without growing a wrapper
+                // layer per check.
+                Widget? trailing;
+                if (key == 'plaid_webhook' &&
+                    configured &&
+                    plaidInstitutionCount > 0) {
+                  trailing = TextButton.icon(
+                    onPressed: () => _pushWebhookToAllInstitutions(),
+                    icon: const Icon(Icons.cloud_upload_outlined, size: 16),
+                    label: Text(
+                      'Push to $plaidInstitutionCount '
+                      'institution${plaidInstitutionCount == 1 ? '' : 's'}',
+                    ),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  );
+                }
                 return Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Row(
@@ -1458,14 +1586,26 @@ class _DashboardScreenState extends State<DashboardScreen>
                           ],
                         ),
                       ),
+                      if (trailing != null) ...[
+                        const SizedBox(width: 8),
+                        trailing,
+                      ],
                     ],
                   ),
                 );
               }),
               if (recommended.isNotEmpty) ...[
                 const SizedBox(height: 12),
+                // Dynamic recap of what's still recommended-but-not-set.
+                // Lists labels from the recommended set; falls back to a
+                // generic line if all the labels happen to be missing.
                 Text(
-                  'Recommended before production: configure live exchange rates.',
+                  'Recommended before production: '
+                  '${recommended
+                          .map((c) => (c as Map)['label']?.toString() ?? '')
+                          .where((s) => s.isNotEmpty)
+                          .join(', ')}'
+                      '.',
                   style: TextStyle(color: context.textSubtle, fontSize: 12),
                 ),
               ],
