@@ -10,7 +10,10 @@
 //! for contributors without a DB on hand.
 //!
 //! Schema is reset between tests via `TRUNCATE ... RESTART IDENTITY
-//! CASCADE` so they can run in any order against the same DB.
+//! CASCADE`. The tests share a single Postgres so they MUST run
+//! serially — run the suite with `cargo test -- --test-threads=1`.
+//! Parallel execution leads to one test's TRUNCATE wiping another's
+//! data mid-flight and surfaces as random 500s on bootstrap.
 
 use std::sync::Arc;
 

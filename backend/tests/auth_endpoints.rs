@@ -8,8 +8,11 @@
 //! is skipped (printed and returns Ok) so `cargo test` stays green for
 //! contributors without a DB on hand.
 //!
-//! Schema is reset between tests using TRUNCATE so they can be run in
-//! any order and any number of times against the same DB.
+//! Schema is reset between tests using TRUNCATE. The tests share a
+//! single Postgres so they MUST run serially — invoke with
+//! `cargo test -- --test-threads=1`. Parallel execution leads to one
+//! test's TRUNCATE wiping another's data mid-flight and surfaces as
+//! random 500s on bootstrap.
 
 use std::sync::Arc;
 

@@ -820,6 +820,14 @@ contributors without a Postgres on hand.
 
 Open follow-ups:
 
+* **Tests must run serially** — both `auth_endpoints.rs` and
+  `dashboard_endpoints.rs` share a single Postgres and TRUNCATE
+  in `try_setup`. Running with cargo's default parallelism leads
+  to random 500s as one test's TRUNCATE wipes another's data
+  mid-flight. Use `cargo test -- --test-threads=1` (documented in
+  the file-level doc comments now). A proper fix would be a
+  Postgres advisory lock around TRUNCATE, or the `serial_test`
+  crate — captured here so a future session can pick it up.
 * `scripts/smoke.cjs` — ✅ extended 2026-05-18. New
   `smokeRecentFeatures` step covers split / PUT-edit-split /
   unsplit roundtrip, subscription ignore/unignore, FX-transfer
