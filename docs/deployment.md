@@ -247,7 +247,11 @@ rather than via "the app feels slow."
 
 Recommended CI checks:
 
-1. `cargo test` for backend logic.
+1. `./scripts/test.sh` for backend logic — runs the full integration
+   suite (`auth_endpoints`, `auth_recovery_totp`, `dashboard_endpoints`)
+   inside a docker-pinned Rust toolchain against a transient
+   Postgres database, with `--test-threads=1` so the shared-DB
+   tests don't race.
 2. `flutter analyze` and `flutter build web` for frontend health.
 3. `docker compose build` to catch container packaging issues.
 4. `mkdocs build` for documentation.

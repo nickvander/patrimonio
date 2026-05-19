@@ -16,6 +16,16 @@ typedef DroppedFilesCallback = void Function(List<PlatformFile> files);
 /// a hover state on the drop zone.
 typedef DragStateCallback = void Function(bool isDragging);
 
+/// Fired the moment a drop event lands but BEFORE we start reading
+/// file bytes. The host can show "Reading N files…" while the
+/// FileReader chews through each PDF — for a big batch (a year of
+/// monthly Banamex statements at ~200 KB each) the read step alone
+/// can run several seconds, and the old behaviour showed nothing
+/// until every file finished. The count is the raw size of the
+/// browser-supplied FileList — pre-filter, so non-CSV/PDF entries
+/// the user dropped by accident still contribute to it.
+typedef ReadingStartCallback = void Function(int fileCount);
+
 /// Attaches drag-and-drop listeners to the document so files can be
 /// dropped anywhere on the page and routed into the existing import
 /// pipeline. We attach globally rather than to a specific element
@@ -35,6 +45,10 @@ typedef DragStateCallback = void Function(bool isDragging);
 class GlobalFileDropListener {
   final DroppedFilesCallback onFiles;
   final DragStateCallback onDragState;
+  /// Optional — fired the moment a drop is detected so the host can
+  /// render a loading state during the byte-read phase. Skipped when
+  /// the host doesn't care (e.g. a no-op preview screen).
+  final ReadingStartCallback? onReadingStart;
   final Iterable<String> allowedExtensions;
 
   late final JSExportedDartFunction _dragEnter;
@@ -48,6 +62,7 @@ class GlobalFileDropListener {
   GlobalFileDropListener({
     required this.onFiles,
     required this.onDragState,
+    this.onReadingStart,
     this.allowedExtensions = const ['csv', 'pdf'],
   }) {
     _dragEnter = ((web.Event e) {
@@ -79,6 +94,11 @@ class GlobalFileDropListener {
       final dragEvent = e as web.DragEvent;
       final dt = dragEvent.dataTransfer;
       if (dt == null) return;
+      // Notify the host that reading is about to start so it can
+      // surface a "Reading N files…" loading state — for a year of
+      // monthly Banamex PDFs this read phase takes seconds and was
+      // previously silent.
+      onReadingStart?.call(dt.files.length);
       // Fire-and-forget — readers complete on microtasks, the host
       // gets the list once everything is loaded.
       unawaited(_readAndDispatch(dt.files));

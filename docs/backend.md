@@ -62,3 +62,35 @@ cd backend
 cargo test
 cargo run
 ```
+
+### Integration tests (requires a Postgres)
+
+The HTTP-level integration tests in `backend/tests/auth_endpoints.rs`,
+`tests/auth_recovery_totp.rs`, and `tests/dashboard_endpoints.rs`
+need a real Postgres reachable via `PATRIMONIO_TEST_DATABASE_URL`.
+They also share a single DB and TRUNCATE on setup, so they MUST
+run serially.
+
+The easiest invocation is the wrapper script at the repo root:
+
+```bash
+./scripts/test.sh                          # full suite
+./scripts/test.sh --test dashboard_endpoints   # one binary
+./scripts/test.sh -- --nocapture           # cargo flags after `--`
+```
+
+The wrapper:
+
+* Builds a one-time `patrimonio-test` docker image with `pkg-config`
+  + `libssl-dev` baked in (the upstream `rust:1.88-slim` doesn't
+  ship them and the linker fails otherwise).
+* Creates the `patrimonio_test` database on the running
+  `patrimonio-postgres-1` container if it doesn't already exist.
+* Sets `PATRIMONIO_TEST_DATABASE_URL` and runs cargo with
+  `--test-threads=1`.
+
+When the env var is unset (e.g. the script's preflight skipped DB
+creation), every integration test prints a skip note and returns
+Ok so `cargo test` stays green for contributors without a DB on
+hand — the suite never silently passes through an unconfigured
+machine.

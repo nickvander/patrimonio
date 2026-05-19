@@ -34,6 +34,19 @@ class _ImportScreenState extends State<ImportScreen> {
   /// user gets feedback that the page actually accepts the drop.
   bool _isDragging = false;
 
+  /// True between "user picked / dropped files" and "byte-read
+  /// completed". The browser's FileReader path reads files
+  /// sequentially via `arrayBuffer()`, which can take several
+  /// seconds for a batch of PDFs. Without this flag the screen
+  /// sits still in its idle state until the read finishes, looking
+  /// frozen — so we render a "Reading N files…" status while the
+  /// flag is true.
+  bool _isReadingFiles = false;
+  /// File count the drop handler told us about (only set during a
+  /// drop — for picker-initiated reads we don't know the count
+  /// until the OS dialog returns).
+  int? _readingFileCount;
+
   /// Web-only drag-and-drop listener. Null on non-web targets — the
   /// import screen is reachable from the dashboard which itself only
   /// runs on web today, but the null-check keeps the screen safe if
@@ -58,6 +71,13 @@ class _ImportScreenState extends State<ImportScreen> {
           if (!mounted) return;
           setState(() => _isDragging = active);
         },
+        onReadingStart: (count) {
+          if (!mounted) return;
+          setState(() {
+            _isReadingFiles = true;
+            _readingFileCount = count;
+          });
+        },
       );
       _dropListener!.attach();
     }
@@ -77,6 +97,15 @@ class _ImportScreenState extends State<ImportScreen> {
   /// an upload is in flight to avoid the "files appeared but
   /// weren't sent" confusion.
   void _handleDroppedFiles(List<PlatformFile> files) {
+    // Reading phase is finished by the time this fires (the drop
+    // listener awaits FileReader before invoking us). Clear the
+    // loading flag whether we keep the files or bounce them.
+    if (mounted) {
+      setState(() {
+        _isReadingFiles = false;
+        _readingFileCount = null;
+      });
+    }
     if (files.isEmpty) return;
     if (_isUploading) {
       if (!mounted) return;
@@ -122,21 +151,42 @@ class _ImportScreenState extends State<ImportScreen> {
   }
 
   Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['csv', 'pdf'],
-      allowMultiple: true,
-    );
+    // file_picker on web reads each file's bytes into memory before
+    // resolving (PlatformFile.bytes is populated synchronously from
+    // the Future). For a year of monthly PDFs that's a non-trivial
+    // wait — flip the reading flag so the UI surfaces "Reading
+    // files…" instead of looking frozen on the idle drop zone.
+    // We don't know the count yet (OS dialog hasn't returned), so
+    // _readingFileCount stays null and the UI falls back to a
+    // generic "Reading files…" string.
+    setState(() {
+      _isReadingFiles = true;
+      _readingFileCount = null;
+    });
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv', 'pdf'],
+        allowMultiple: true,
+      );
 
-    if (result != null && result.files.isNotEmpty) {
-      setState(() {
-        _selectedFiles = result.files;
-        _previewTransactions = null;
-        _selectedIndices = {};
-        _message = null;
-        _requiresPassword = false;
-        _passwordController.clear();
-      });
+      if (result != null && result.files.isNotEmpty) {
+        setState(() {
+          _selectedFiles = result.files;
+          _previewTransactions = null;
+          _selectedIndices = {};
+          _message = null;
+          _requiresPassword = false;
+          _passwordController.clear();
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isReadingFiles = false;
+          _readingFileCount = null;
+        });
+      }
     }
   }
 
@@ -294,14 +344,14 @@ class _ImportScreenState extends State<ImportScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(48),
                   decoration: BoxDecoration(
-                    color: _isUploading
+                    color: (_isUploading || _isReadingFiles)
                         ? context.info.withValues(alpha: 0.06)
                         : _isDragging
                             ? context.positive.withValues(alpha: 0.08)
                             : context.tint(0.05),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: _isUploading
+                      color: (_isUploading || _isReadingFiles)
                           ? context.info
                           : _isDragging
                               ? context.positive
@@ -311,15 +361,19 @@ class _ImportScreenState extends State<ImportScreen> {
                   ),
                   child: Column(
                     children: [
-                      // Three states drive the icon area:
-                      //   1. Uploading → progress spinner with the
-                      //      file count overlay so the user knows
-                      //      something's happening for big batches
-                      //      (a year of 12 monthly Banamex PDFs can
-                      //      take 60-120s on the backend).
-                      //   2. Dragging  → upload icon, accent green.
-                      //   3. Idle      → upload icon, accent green.
-                      if (_isUploading)
+                      // Four states drive the icon area:
+                      //   1. Reading  → spinner with the count we got
+                      //      from the drop handler (or "…" when we
+                      //      came in via the OS file picker — the
+                      //      dialog hasn't returned yet). Fills the
+                      //      previously-silent gap while the
+                      //      FileReader chews through the PDFs.
+                      //   2. Uploading → spinner + file count.
+                      //      Server-side parsing of 12 monthly Banamex
+                      //      PDFs can take 60-120 s.
+                      //   3. Dragging  → upload icon, accent green.
+                      //   4. Idle      → upload icon, accent green.
+                      if (_isUploading || _isReadingFiles)
                         SizedBox(
                           width: 64,
                           height: 64,
@@ -331,7 +385,9 @@ class _ImportScreenState extends State<ImportScreen> {
                                 color: context.info,
                               ),
                               Text(
-                                '${_selectedFiles.length}',
+                                _isReadingFiles
+                                    ? (_readingFileCount?.toString() ?? '…')
+                                    : '${_selectedFiles.length}',
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w800,
@@ -351,7 +407,36 @@ class _ImportScreenState extends State<ImportScreen> {
                           color: context.positive,
                         ),
                       const SizedBox(height: 16),
-                      if (_isUploading)
+                      if (_isReadingFiles)
+                        Column(
+                          children: [
+                            Text(
+                              _readingFileCount == null
+                                  ? 'Reading files…'
+                                  : _readingFileCount == 1
+                                      ? 'Reading 1 file…'
+                                      : 'Reading $_readingFileCount files…',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: context.info,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Loading file contents into the browser '
+                              'before sending. This step is local — '
+                              'no upload yet.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: context.textSubtle,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                        )
+                      else if (_isUploading)
                         Column(
                           children: [
                             Text(
@@ -378,9 +463,9 @@ class _ImportScreenState extends State<ImportScreen> {
                           ],
                         ),
                       // Drag / idle helper text — hidden while
-                      // uploading so the status block above owns
-                      // the user's attention.
-                      if (!_isUploading && _isDragging)
+                      // uploading OR reading so the status block
+                      // above owns the user's attention.
+                      if (!_isUploading && !_isReadingFiles && _isDragging)
                         Text(
                           'Drop to import',
                           style: TextStyle(
@@ -390,6 +475,7 @@ class _ImportScreenState extends State<ImportScreen> {
                           ),
                         )
                       else if (!_isUploading &&
+                          !_isReadingFiles &&
                           kIsWeb &&
                           _selectedFiles.isEmpty)
                         Text(
@@ -401,9 +487,11 @@ class _ImportScreenState extends State<ImportScreen> {
                           textAlign: TextAlign.center,
                         ),
                       if (!_isUploading &&
+                          !_isReadingFiles &&
                           (_isDragging || (kIsWeb && _selectedFiles.isEmpty)))
                         const SizedBox(height: 16),
                       if (!_isUploading &&
+                          !_isReadingFiles &&
                           _selectedFiles.isEmpty &&
                           !kIsWeb &&
                           !_isDragging)
@@ -449,7 +537,7 @@ class _ImportScreenState extends State<ImportScreen> {
                                               icon: const Icon(Icons.close, size: 16),
                                               tooltip: 'Remove',
                                               visualDensity: VisualDensity.compact,
-                                              onPressed: _isUploading
+                                              onPressed: (_isUploading || _isReadingFiles)
                                                   ? null
                                                   : () => _removeFileAt(i),
                                             ),
@@ -464,7 +552,9 @@ class _ImportScreenState extends State<ImportScreen> {
                         ),
                       const SizedBox(height: 24),
                       ElevatedButton.icon(
-                        onPressed: _isUploading ? null : _pickFile,
+                        onPressed: (_isUploading || _isReadingFiles)
+                            ? null
+                            : _pickFile,
                         icon: Icon(
                           _selectedFiles.isEmpty
                               ? Icons.folder_open_outlined
@@ -725,7 +815,7 @@ class _ImportScreenState extends State<ImportScreen> {
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                      onPressed: _isUploading ? null : _uploadFile,
+                      onPressed: (_isUploading || _isReadingFiles) ? null : _uploadFile,
                       child: _isUploading
                           ? const CircularProgressIndicator(color: Colors.white)
                           : const Text(
