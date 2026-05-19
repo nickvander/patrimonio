@@ -86,8 +86,25 @@ pub async fn begin_enrollment(
     })
 }
 
-/// Verify a TOTP code against a user's stored secret. Used both during
-/// the confirm step of enrollment and during login when totp_enabled.
+/// Verify a TOTP code against a user's stored secret WITHOUT advancing
+/// the replay marker. Used by the enrollment-confirm flow: the user
+/// has just typed their code from a freshly-shown QR, then their next
+/// action is to log in (potentially in the same TOTP step). Advancing
+/// the replay marker here would lock them out of login for up to 30s.
+/// The confirm endpoint sits behind require_auth, so an attacker
+/// capturing the confirm code already has the session it would log in
+/// with — replay protection adds nothing here.
+pub async fn verify_no_advance(
+    db: &PgPool,
+    enc_key: &str,
+    user_id: Uuid,
+    code: &str,
+) -> Result<bool> {
+    verify_inner(db, enc_key, user_id, code, false).await
+}
+
+/// Verify a TOTP code against a user's stored secret. Used during
+/// login (totp_verify endpoint) when totp_enabled is true.
 ///
 /// Replay protection: every successful verify atomically advances
 /// `totp_last_used_step` so the same 6-digit code can't be reused
@@ -99,6 +116,16 @@ pub async fn verify(
     enc_key: &str,
     user_id: Uuid,
     code: &str,
+) -> Result<bool> {
+    verify_inner(db, enc_key, user_id, code, true).await
+}
+
+async fn verify_inner(
+    db: &PgPool,
+    enc_key: &str,
+    user_id: Uuid,
+    code: &str,
+    advance_replay: bool,
 ) -> Result<bool> {
     let row: Option<(Option<Vec<u8>>, String, Option<i64>)> = sqlx::query_as(
         "SELECT totp_secret_enc, username, totp_last_used_step FROM users WHERE id = $1",
@@ -130,6 +157,12 @@ pub async fn verify(
         .map_err(|e| anyhow!("check totp: {}", e))?;
     if !ok {
         return Ok(false);
+    }
+
+    // Replay protection only applies when the caller wants it
+    // (login-verify, not enrollment-confirm — see verify_no_advance).
+    if !advance_replay {
+        return Ok(true);
     }
 
     // Compute the current step (`unix_seconds / 30`). The library

@@ -798,7 +798,12 @@ async fn totp_confirm(
             "ENCRYPTION_KEY is not configured.",
         ))?;
 
-    let ok = totp::verify(&state.db, enc_key, ctx.user_id, &body.code)
+    // Use the no-advance variant: a valid confirm code MUST also work
+    // on the immediately-following login if the user enrols + logs in
+    // inside one 30s TOTP step (the most common case in onboarding
+    // walkthroughs and tests). Advancing the replay marker here would
+    // block that login until the next step rotates.
+    let ok = totp::verify_no_advance(&state.db, enc_key, ctx.user_id, &body.code)
         .await
         .map_err(internal)?;
     if !ok {
