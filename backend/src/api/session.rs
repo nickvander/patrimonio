@@ -249,8 +249,7 @@ async fn bootstrap(
         .map(|e| e.trim().to_string())
         .filter(|e| !e.is_empty());
 
-    password::validate_password_policy(&body.password)
-        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, &e.to_string()))?;
+    enforce_password_policy(&state, &body.password).await?;
 
     let hash = password::hash_password(&body.password).map_err(internal)?;
 
@@ -333,8 +332,7 @@ async fn register(
         .map(|e| e.trim().to_string())
         .filter(|e| !e.is_empty());
 
-    password::validate_password_policy(&body.password)
-        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, &e.to_string()))?;
+    enforce_password_policy(&state, &body.password).await?;
 
     let hash = password::hash_password(&body.password).map_err(internal)?;
     let ua = user_agent(&headers);
@@ -639,8 +637,7 @@ async fn change_password(
     headers: HeaderMap,
     Json(body): Json<ChangePasswordRequest>,
 ) -> Result<StatusCode, ApiError> {
-    password::validate_password_policy(&body.new_password)
-        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, &e.to_string()))?;
+    enforce_password_policy(&state, &body.new_password).await?;
 
     let hash: String = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = $1")
         .bind(ctx.user_id)
@@ -693,8 +690,7 @@ async fn recover(
     let ua = user_agent(&headers);
     let ip = client_ip(&headers);
 
-    password::validate_password_policy(&body.new_password)
-        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, &e.to_string()))?;
+    enforce_password_policy(&state, &body.new_password).await?;
 
     if rate_limited(&state.db, &username, ip.as_deref()).await {
         record_audit(&state.db, "recover", Some(&username), None, ip.as_deref(), ua.as_deref(), false, Some("rate_limited")).await;
@@ -1392,6 +1388,35 @@ fn cookie_secure(config: &crate::config::AppConfig) -> bool {
 
 fn invalid_credentials() -> ApiError {
     ApiError::new(StatusCode::UNAUTHORIZED, "Invalid username or password.")
+}
+
+/// Local policy (length + embedded breach-list) PLUS the HIBP
+/// k-anonymity check against the live corpus. Used on every path that
+/// sets a user-chosen password (bootstrap, register, change_password,
+/// recover). HIBP is fail-open — a network error here never blocks
+/// signup; the embedded list still catches the embarrassingly-common
+/// picks regardless.
+async fn enforce_password_policy(
+    state: &AppState,
+    password: &str,
+) -> Result<(), ApiError> {
+    password::validate_password_policy(password)
+        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, &e.to_string()))?;
+    let count = password::check_hibp_breached(password, &state.config.hibp_api_base)
+        .await
+        .map_err(internal)?;
+    if count > 0 {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            &format!(
+                "This password has appeared in {} known data breaches. \
+                 Pick a new one — a passphrase of four unrelated words \
+                 is a good default.",
+                count
+            ),
+        ));
+    }
+    Ok(())
 }
 
 pub(crate) fn internal<E: std::fmt::Display>(e: E) -> ApiError {

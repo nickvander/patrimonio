@@ -87,6 +87,101 @@ pub fn validate_password_policy(password: &str) -> Result<()> {
     Ok(())
 }
 
+/// HIBP k-anonymity password breach lookup.
+///
+/// Hashes the password with SHA-1 (the legacy hash HIBP's corpus is
+/// indexed on — used here as a corpus index, not a security primitive),
+/// sends the first 5 hex chars to `${api_base}/range/${prefix}`, and
+/// scans the response for the suffix. When found, returns the
+/// breach count from HIBP's corpus; absent = `0`.
+///
+/// `api_base` empty → check skipped, returns `Ok(0)`. This lets tests
+/// + air-gapped deployments bypass the network call without code
+/// changes (the config-level `HIBP_API_BASE` is the off-switch).
+///
+/// On any network error we return `Ok(0)` (fail-open) and log a
+/// warning. The decision is deliberate: HIBP being down should NOT
+/// block a legitimate registration, and the embedded breach-list
+/// (`common_passwords`) still catches the most embarrassing picks
+/// regardless. A persistent HIBP outage is visible in the warn logs.
+///
+/// Timeout: hard 3s ceiling. Hot path is signup / change-password
+/// where the user is already waiting on Argon2; an extra 3s worst-case
+/// is acceptable, but unbounded would tank the UX if HIBP hangs.
+pub async fn check_hibp_breached(password: &str, api_base: &str) -> Result<u64> {
+    if api_base.trim().is_empty() {
+        return Ok(0);
+    }
+    use sha1::{Digest, Sha1};
+    let mut hasher = Sha1::new();
+    hasher.update(password.as_bytes());
+    // HIBP corpus is UPPERCASE hex — match exactly so the suffix
+    // comparison is byte-equal.
+    let digest = hasher.finalize();
+    let hex_full = digest
+        .iter()
+        .map(|b| format!("{:02X}", b))
+        .collect::<String>();
+    let (prefix, suffix) = hex_full.split_at(5);
+
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!("HIBP: client build failed ({}); skipping check", e);
+            return Ok(0);
+        }
+    };
+
+    let url = format!("{}/range/{}", api_base.trim_end_matches('/'), prefix);
+    let resp = match client
+        .get(&url)
+        // "Add-Padding" makes HIBP return a fixed-size response so a
+        // network observer can't infer the prefix from response size.
+        // Free, no auth, recommended in their docs.
+        .header("Add-Padding", "true")
+        .header("User-Agent", "patrimonio/0.1")
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("HIBP: request failed ({}); failing open", e);
+            return Ok(0);
+        }
+    };
+    if !resp.status().is_success() {
+        tracing::warn!(
+            "HIBP: unexpected status {} from {}; failing open",
+            resp.status(),
+            url
+        );
+        return Ok(0);
+    }
+    let body = match resp.text().await {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!("HIBP: body read failed ({}); failing open", e);
+            return Ok(0);
+        }
+    };
+
+    for line in body.lines() {
+        // Line shape: `SUFFIX:count` (35 hex chars + colon + integer).
+        // Padding rows (count == 0) are inserted by Add-Padding and
+        // safely match nothing since real entries have non-zero counts.
+        if let Some((s, c)) = line.split_once(':') {
+            if s.eq_ignore_ascii_case(suffix) {
+                let count: u64 = c.trim().parse().unwrap_or(0);
+                return Ok(count);
+            }
+        }
+    }
+    Ok(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,5 +212,30 @@ mod tests {
         // The recommended pattern from the rejection message.
         assert!(validate_password_policy("aurora-fjord-pelican-cordon").is_ok());
         assert!(validate_password_policy("correct horse battery staple").is_ok());
+    }
+
+    #[tokio::test]
+    async fn hibp_disabled_returns_zero() {
+        // Empty api_base is the documented "skip the check" knob.
+        // The test passes if no network call is made (a 0 return).
+        let count = check_hibp_breached("anything-you-like", "")
+            .await
+            .expect("disabled hibp lookup should succeed");
+        assert_eq!(count, 0);
+    }
+
+    #[tokio::test]
+    async fn hibp_network_failure_fails_open() {
+        // A bogus host is the cheapest way to exercise the
+        // network-error path without depending on the live HIBP
+        // endpoint. Either DNS resolution or the connect attempt
+        // will fail; the helper must return 0 (fail-open).
+        let count = check_hibp_breached(
+            "anything-you-like",
+            "http://hibp-does-not-resolve.invalid.test",
+        )
+        .await
+        .expect("failed-open hibp lookup should still return Ok");
+        assert_eq!(count, 0);
     }
 }

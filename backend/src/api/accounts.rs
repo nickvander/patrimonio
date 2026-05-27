@@ -58,7 +58,16 @@ async fn update_account_nickname(
     .execute(&state.db)
     .await;
     match result {
-        Ok(r) if r.rows_affected() == 1 => StatusCode::OK.into_response(),
+        Ok(r) if r.rows_affected() == 1 => {
+            state
+                .realtime
+                .publish(
+                    ctx.user_id,
+                    crate::services::realtime::RealtimeEvent::AccountsChanged,
+                )
+                .await;
+            StatusCode::OK.into_response()
+        }
         Ok(_) => StatusCode::NOT_FOUND.into_response(),
         Err(e) => {
             error!("Failed to update account nickname: {}", e);
@@ -70,6 +79,13 @@ async fn update_account_nickname(
 #[derive(Deserialize)]
 struct UpdateBalanceRequest {
     current_balance: rust_decimal::Decimal,
+    /// Optional free-form note about this valuation — written to
+    /// the resulting balance_snapshots row. Used by manual-asset
+    /// flows (real estate, private equity) to capture "why" each
+    /// revaluation moved the number. None / empty leaves the
+    /// snapshot's notes column NULL.
+    #[serde(default)]
+    notes: Option<String>,
 }
 
 async fn update_account_balance(
@@ -135,12 +151,23 @@ async fn update_account_balance(
             balance_usd = payload.current_balance;
         }
 
+        // Normalize blank notes to NULL so the column reflects
+        // intent ("no note") rather than empty-string trash.
+        let notes: Option<String> = payload
+            .notes
+            .as_ref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
         let _ = sqlx::query(
             r#"
-            INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd, user_id)
-            VALUES ($1, $2, CURRENT_DATE, $3, $4, $5)
+            INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd, user_id, valuation_notes)
+            VALUES ($1, $2, CURRENT_DATE, $3, $4, $5, $6)
             ON CONFLICT (account_id, as_of_date)
-            DO UPDATE SET balance = EXCLUDED.balance, balance_usd = EXCLUDED.balance_usd, created_at = NOW()
+            DO UPDATE SET balance = EXCLUDED.balance,
+                          balance_usd = EXCLUDED.balance_usd,
+                          valuation_notes = COALESCE(EXCLUDED.valuation_notes, balance_snapshots.valuation_notes),
+                          created_at = NOW()
             "#
         )
         .bind(id)
@@ -148,10 +175,18 @@ async fn update_account_balance(
         .bind(currency)
         .bind(balance_usd)
         .bind(ctx.user_id)
+        .bind(notes)
         .execute(&state.db)
         .await;
     }
 
+    state
+        .realtime
+        .publish(
+            ctx.user_id,
+            crate::services::realtime::RealtimeEvent::AccountsChanged,
+        )
+        .await;
     StatusCode::OK.into_response()
 }
 
@@ -364,6 +399,13 @@ async fn create_account(
     .execute(&state.db)
     .await;
 
+    state
+        .realtime
+        .publish(
+            ctx.user_id,
+            crate::services::realtime::RealtimeEvent::AccountsChanged,
+        )
+        .await;
     StatusCode::CREATED.into_response()
 }
 
@@ -586,7 +628,16 @@ async fn update_transaction(
 
     match result {
         Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
-        Ok(_) => StatusCode::OK.into_response(),
+        Ok(_) => {
+            state
+                .realtime
+                .publish(
+                    ctx.user_id,
+                    crate::services::realtime::RealtimeEvent::TransactionsChanged,
+                )
+                .await;
+            StatusCode::OK.into_response()
+        }
         Err(e) => {
             error!("Failed to update transaction: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
@@ -609,7 +660,16 @@ async fn delete_transaction(
             .await;
     match result {
         Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Ok(_) => {
+            state
+                .realtime
+                .publish(
+                    ctx.user_id,
+                    crate::services::realtime::RealtimeEvent::TransactionsChanged,
+                )
+                .await;
+            StatusCode::NO_CONTENT.into_response()
+        }
         Err(e) => {
             error!("Failed to delete transaction: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
@@ -634,7 +694,16 @@ async fn delete_account(
 
     match result {
         Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Ok(_) => {
+            state
+                .realtime
+                .publish(
+                    ctx.user_id,
+                    crate::services::realtime::RealtimeEvent::AccountsChanged,
+                )
+                .await;
+            StatusCode::NO_CONTENT.into_response()
+        }
         Err(e) => {
             error!("Failed to delete account: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
@@ -827,6 +896,13 @@ async fn split_transaction(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
+    state
+        .realtime
+        .publish(
+            ctx.user_id,
+            crate::services::realtime::RealtimeEvent::TransactionsChanged,
+        )
+        .await;
     (
         StatusCode::CREATED,
         Json(serde_json::json!({
@@ -862,7 +938,16 @@ async fn unsplit_transaction(
     .await;
     match result {
         Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
-        Ok(r) => Json(serde_json::json!({"removed": r.rows_affected()})).into_response(),
+        Ok(r) => {
+            state
+                .realtime
+                .publish(
+                    ctx.user_id,
+                    crate::services::realtime::RealtimeEvent::TransactionsChanged,
+                )
+                .await;
+            Json(serde_json::json!({"removed": r.rows_affected()})).into_response()
+        }
         Err(e) => {
             error!("unsplit_transaction failed: {e}");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
@@ -1034,6 +1119,13 @@ async fn replace_splits(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
+    state
+        .realtime
+        .publish(
+            ctx.user_id,
+            crate::services::realtime::RealtimeEvent::TransactionsChanged,
+        )
+        .await;
     (
         StatusCode::OK,
         Json(serde_json::json!({

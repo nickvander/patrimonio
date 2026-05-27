@@ -1369,6 +1369,27 @@ class _DashboardScreenState extends State<DashboardScreen>
                 );
               }
             },
+            onRevalueAccount: (id, bal, notes) async {
+              try {
+                await _apiService.updateAccountBalance(id, bal, notes: notes);
+                _loadAllData();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      notes == null || notes.isEmpty
+                          ? 'Revalued'
+                          : 'Revalued · note saved',
+                    ),
+                  ),
+                );
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Revalue failed: $e')),
+                );
+              }
+            },
           ),
           const SizedBox(height: 24),
           CreditUtilizationCard(

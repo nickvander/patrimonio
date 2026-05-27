@@ -62,6 +62,11 @@ ipnet = "2"
 rand = "0.8"
 hmac = "0.12"
 sha2 = "0.10"
+# SHA-1 is used ONLY for the HIBP k-anonymity password breach check —
+# we send the first 5 hex chars of the SHA-1 prefix to api.pwnedpasswords.com
+# and search the returned suffix list. SHA-1 here is a corpus index, not
+# a security primitive; the legacy hash is dictated by the HIBP protocol.
+sha1 = "0.10"
 
 # Password hashing (user login)
 argon2 = "0.5"

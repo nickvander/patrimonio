@@ -14,6 +14,12 @@ class AccountsListWidget extends StatelessWidget {
   final Function(String, double)? onBalanceUpdate;
   final Function(String)? onDeleteAccount;
   final Function(String accountId, String nickname)? onRenameAccount;
+  /// Optional callback for the "Revalue" affordance on manual-asset rows
+  /// (real estate / private equity / vehicles / etc). Receives the
+  /// account id, the new balance, and an optional note about why the
+  /// value moved. When null the popup menu entry is hidden.
+  final Function(String accountId, double balance, String? notes)?
+      onRevalueAccount;
   /// Optional callback used by the empty state's "Add an account" button
   /// to jump to the Management tab.
   final VoidCallback? onGoToManagement;
@@ -28,6 +34,7 @@ class AccountsListWidget extends StatelessWidget {
     this.onBalanceUpdate,
     this.onDeleteAccount,
     this.onRenameAccount,
+    this.onRevalueAccount,
     this.onGoToManagement,
   });
 
@@ -604,6 +611,22 @@ class AccountsListWidget extends StatelessWidget {
       );
     }
 
+    // Manual assets (real estate, private equity, vehicles, etc.) don't
+    // auto-sync — they need a periodic "Revalue" affordance so the user
+    // can mark the asset to the current market. The set must match the
+    // "Real assets" group in add_account_dialog.dart's _typeGroups.
+    final accountTypeRaw = (acc['account_type'] ?? '').toString().toLowerCase();
+    final isManualAsset = const {
+      'real estate',
+      'real_estate',
+      'vehicle',
+      'private equity',
+      'private_equity',
+      'collectibles',
+      'other asset',
+      'other_asset',
+    }.contains(accountTypeRaw);
+
     Widget menuButton = PopupMenuButton<String>(
       icon: Icon(Icons.more_vert, size: 18, color: context.textFaint),
       padding: EdgeInsets.zero,
@@ -611,6 +634,8 @@ class AccountsListWidget extends StatelessWidget {
       onSelected: (value) {
         if (value == 'rename') {
           _showRenameDialog(context, acc);
+        } else if (value == 'revalue') {
+          _showRevalueDialog(context, acc);
         } else if (value == 'delete') {
           showDialog(
             context: context,
@@ -647,6 +672,18 @@ class AccountsListWidget extends StatelessWidget {
                     size: 18, color: context.textMuted),
                 const SizedBox(width: 8),
                 const Text('Rename'),
+              ],
+            ),
+          ),
+        if (isManualAsset && onRevalueAccount != null)
+          PopupMenuItem(
+            value: 'revalue',
+            child: Row(
+              children: [
+                Icon(Icons.price_change_outlined,
+                    size: 18, color: context.textMuted),
+                const SizedBox(width: 8),
+                const Text('Revalue'),
               ],
             ),
           ),
@@ -738,6 +775,98 @@ class AccountsListWidget extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+
+  /// Modal for the "Revalue" affordance on a manual-asset row. Pre-fills
+  /// the current balance, takes a new balance + optional note about
+  /// what changed (a Zillow comp, a new appraisal, an unrealized
+  /// share-class round, etc.). On Save the parent widget owns the API
+  /// call + list refresh via [onRevalueAccount].
+  void _showRevalueDialog(BuildContext context, dynamic acc) {
+    final currentBalance =
+        ((acc['current_balance'] ?? 0.0) as num).toDouble();
+    final balanceCtrl =
+        TextEditingController(text: currentBalance.toStringAsFixed(2));
+    final notesCtrl = TextEditingController();
+    final currency =
+        (acc['currency'] ?? 'USD').toString().toUpperCase();
+    final name = (acc['nickname']?.toString().trim().isNotEmpty == true
+        ? acc['nickname']
+        : acc['name']) ?? 'asset';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(ctx).colorScheme.surface,
+        title: Text('Revalue $name'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Current: ${currentBalance.toStringAsFixed(2)} $currency',
+              style: TextStyle(fontSize: 12, color: context.textSubtle),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: balanceCtrl,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true, signed: true),
+              decoration: InputDecoration(
+                labelText: 'New balance',
+                prefixText: r'$ ',
+                suffixText: currency,
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: notesCtrl,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Notes (optional)',
+                hintText: 'e.g. Zillow estimate, 2026 appraisal, last round',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'A new history point is recorded with today\'s date.',
+              style: TextStyle(fontSize: 11, color: context.textFaint),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final parsed = double.tryParse(balanceCtrl.text.trim());
+              if (parsed == null) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(
+                      content: Text('Enter a numeric balance')),
+                );
+                return;
+              }
+              final note = notesCtrl.text.trim();
+              Navigator.pop(ctx);
+              onRevalueAccount?.call(
+                acc['id'].toString(),
+                parsed,
+                note.isEmpty ? null : note,
+              );
+            },
+            child: const Text('Save'),
+          ),
+        ],
       ),
     );
   }

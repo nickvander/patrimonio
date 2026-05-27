@@ -46,6 +46,13 @@ pub struct AppConfig {
     /// cookie is also marked Secure automatically when
     /// `frontend_base_url` is https.
     pub cookie_secure: bool,
+    /// Base URL for the HIBP k-anonymity password lookup. Default
+    /// `https://api.pwnedpasswords.com` — set empty to disable the
+    /// check entirely (tests + air-gapped deployments). Only the
+    /// first 5 hex chars of the password's SHA-1 are sent, so the
+    /// k-anonymity protocol gives the server only ~20 bits of
+    /// information about the password.
+    pub hibp_api_base: String,
 }
 
 impl AppConfig {
@@ -110,6 +117,8 @@ impl AppConfig {
             cookie_secure: std::env::var("COOKIE_SECURE")
                 .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes" | "on"))
                 .unwrap_or(true),
+            hibp_api_base: std::env::var("HIBP_API_BASE")
+                .unwrap_or_else(|_| "https://api.pwnedpasswords.com".to_string()),
         })
     }
 }

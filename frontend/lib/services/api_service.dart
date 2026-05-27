@@ -920,11 +920,23 @@ class ApiService {
     }
   }
 
-  Future<void> updateAccountBalance(String accountId, double balance) async {
+  /// Bump an account's `current_balance` and write a `balance_snapshots`
+  /// row. `notes` (when set) is stored alongside the snapshot — used by
+  /// manual-asset revaluations to capture "why this value moved" without
+  /// stomping previous notes.
+  Future<void> updateAccountBalance(
+    String accountId,
+    double balance, {
+    String? notes,
+  }) async {
+    final body = <String, dynamic>{'current_balance': balance};
+    if (notes != null && notes.trim().isNotEmpty) {
+      body['notes'] = notes.trim();
+    }
     final response = await _patch(
       Uri.parse('$_baseUrl/accounts/$accountId/balance'),
       headers: _withCsrf({'Content-Type': 'application/json'}),
-      body: json.encode({'current_balance': balance}),
+      body: json.encode(body),
     );
     if (response.statusCode != 200) {
       throw Exception('Failed to update balance');

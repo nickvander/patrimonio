@@ -72,6 +72,9 @@ async fn try_setup() -> Option<(Router, PgPool)> {
         trusted_proxy_cidrs: vec![],
         allowed_origins: vec!["http://localhost:3000".to_string()],
         cookie_secure: false,
+        // Empty disables the HIBP network call entirely so the
+        // test suite stays offline.
+        hibp_api_base: String::new(),
     };
 
     let redis = redis::Client::open(config.redis_url.clone()).expect("redis client");

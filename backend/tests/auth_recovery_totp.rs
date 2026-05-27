@@ -63,6 +63,7 @@ async fn try_setup() -> Option<Router> {
         trusted_proxy_cidrs: vec![],
         allowed_origins: vec!["http://localhost:3000".to_string()],
         cookie_secure: false,
+        hibp_api_base: String::new(),
     };
 
     let redis = redis::Client::open(config.redis_url.clone()).expect("redis");

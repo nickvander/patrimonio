@@ -1,6 +1,6 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-05-18 (evening — post-Top-3 sprint)
+> **Last updated:** 2026-05-26 (post realtime-coverage + manual-assets + HIBP sprint)
 > **Branch:** feature branch with the latest sprint awaiting fast-forward merge to `main`.
 
 ## Where we are
@@ -39,6 +39,49 @@ have shipped. The app now does:
   untrusted peers at the edge.
 * `app_settings.user_id` (M7 leftover) — budgets / goals no longer
   leak across users.
+
+## Realtime coverage + manual assets + HIBP sprint (2026-05-26)
+
+Pickup-bundle from the next-tier follow-ups in `work/FUTURE.md`.
+
+* **Realtime emit coverage expanded.** The websocket hub now
+  receives publishes from every mutating handler the dashboard
+  cares about, not just sync + import. `update_transaction`
+  (rename / category / move), `delete_transaction`,
+  `update_account_balance`, `update_account_nickname`,
+  `create_account`, `delete_account`, all three split branches
+  (POST / PUT / DELETE), `create_manual_transaction`,
+  `confirm_fx_transfer`, `unlink_fx_transfer` each call
+  `state.realtime.publish(ctx.user_id, ...)` after the write
+  commits. Multi-tab consistency now matches every user-visible
+  mutation end-to-end. Event vocabulary unchanged
+  (TransactionsChanged / AccountsChanged) — the frontend collapses
+  every event onto `_loadAllData(silent: true)` so the routing is
+  uniform.
+* **Manual-asset revaluation (FUTURE.md 4).** New migration
+  `2026052601_valuation_notes.sql` adds a `valuation_notes TEXT`
+  column on `balance_snapshots`. `update_account_balance` accepts
+  an optional `notes` field; the snapshot upsert stores it and
+  preserves the existing note when the new payload omits one. The
+  add-account dialog already supported `Real Estate` / `Private
+  Equity` / `Vehicle` / `Collectibles` / `Other Asset` types; the
+  follow-on UI is a per-row "Revalue" popup menu item that opens
+  a dialog with the current balance pre-filled + a notes field.
+  Surfaced only when `account_type` is in the manual-asset set so
+  the menu stays clean for syncable accounts.
+* **HIBP breached-password check (audit L3).** New
+  `password::check_hibp_breached(password, api_base)` async
+  helper. SHA-1's the password, sends the first 5 hex chars to
+  `${api_base}/range/{prefix}` with `Add-Padding: true`, scans
+  the suffix list for a hit. Fail-open on any network error so
+  HIBP downtime never blocks signup; embedded 250-entry breach
+  list (`common_passwords`) still catches the obvious picks.
+  Wired through a new `enforce_password_policy(state, password)`
+  helper into `bootstrap`, `register`, `change_password`, and
+  `recover`. Config field `HIBP_API_BASE` defaults to
+  `https://api.pwnedpasswords.com`; tests + air-gapped
+  deployments set it to empty to skip the network call entirely.
+  Added `sha1 = "0.10"` as a direct dep (already transitive).
 
 ## Multi-user roles + realtime + upload-progress sprint (2026-05-19)
 

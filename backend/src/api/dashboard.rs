@@ -893,6 +893,13 @@ async fn create_manual_transaction(
                 .execute(&state.db)
                 .await;
             }
+            state
+                .realtime
+                .publish(
+                    ctx.user_id,
+                    crate::services::realtime::RealtimeEvent::TransactionsChanged,
+                )
+                .await;
             (StatusCode::CREATED, Json(serde_json::json!({"id": id.to_string()})))
                 .into_response()
         }
@@ -1979,7 +1986,16 @@ async fn confirm_fx_transfer(
     .execute(&state.db)
     .await;
     match result {
-        Ok(r) if r.rows_affected() == 1 => StatusCode::OK,
+        Ok(r) if r.rows_affected() == 1 => {
+            state
+                .realtime
+                .publish(
+                    ctx.user_id,
+                    crate::services::realtime::RealtimeEvent::TransactionsChanged,
+                )
+                .await;
+            StatusCode::OK
+        }
         Ok(_) => StatusCode::NOT_FOUND,
         Err(e) => {
             error!("confirm_fx_transfer failed for {}: {}", id, e);
@@ -2054,6 +2070,13 @@ async fn unlink_fx_transfer(
         return StatusCode::INTERNAL_SERVER_ERROR;
     }
 
+    state
+        .realtime
+        .publish(
+            ctx.user_id,
+            crate::services::realtime::RealtimeEvent::TransactionsChanged,
+        )
+        .await;
     StatusCode::NO_CONTENT
 }
 
