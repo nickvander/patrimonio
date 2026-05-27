@@ -6,7 +6,7 @@ description = "Cross-platform personal finance tracker"
 
 [dependencies]
 # Web framework
-axum = { version = "0.8", features = ["multipart"] }
+axum = { version = "0.8", features = ["multipart", "ws"] }
 axum-extra = { version = "0.10", features = ["cookie"] }
 tokio = { version = "1", features = ["full"] }
 tower = "0.5"

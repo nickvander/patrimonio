@@ -1,12 +1,16 @@
 use axum::{
-    extract::{DefaultBodyLimit, Extension, Multipart, State},
-    http::StatusCode,
+    extract::{DefaultBodyLimit, Extension, Multipart, Path, State},
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::{Arc, OnceLock};
+use tokio::sync::RwLock;
 use tracing::{error, info};
+use uuid::Uuid;
 
 use crate::api::session::AuthContext;
 use crate::services::parser;
@@ -33,7 +37,121 @@ pub fn router() -> Router<AppState> {
             // 100MB gives ~2× headroom over a normal year's worth.
             post(upload_handler).layer(DefaultBodyLimit::max(100 * 1024 * 1024)),
         )
+        // Per-file progress side-channel. The client generates a
+        // UUID, sends it as `X-Upload-Job-Id` on POST /upload, AND
+        // concurrently polls this endpoint every ~250 ms. The
+        // upload itself stays synchronous (the response is the
+        // legacy single-shot JSON) — progress is rendered from the
+        // separate poll. This avoids the bidirectional-stream RST
+        // that broke the first streaming attempt.
+        .route("/progress/{job_id}", get(progress_handler))
         .route("/confirm", post(confirm_handler))
+}
+
+/// Snapshot of one in-flight upload. `terminal` becomes true once
+/// the parse phase has produced a final state; the frontend uses
+/// that to stop polling.
+#[derive(Clone, Serialize)]
+pub struct ProgressSnapshot {
+    pub total: usize,
+    pub done: usize,
+    /// Most recently completed file name, if any.
+    pub last_file: Option<String>,
+    /// True iff the last file completed without an error. Drives the
+    /// "(skipped)" subtitle on failed rows.
+    pub last_ok: bool,
+    /// True after the upload finished (success, password, or all-
+    /// failed). Frontend stops polling once this flips.
+    pub terminal: bool,
+    /// Owner of the job. Set when the upload handler creates the
+    /// entry; the polling endpoint refuses to return progress for a
+    /// job owned by anyone other than the caller. Prevents one user
+    /// from probing another user's upload state by guessing UUIDs.
+    #[serde(skip_serializing)]
+    pub owner: Uuid,
+}
+
+/// Module-level progress store. Lives for the process lifetime —
+/// entries self-evict via a tokio::spawn at terminal-state time
+/// (see `mark_terminal`). On process restart all in-flight uploads
+/// would lose their progress entry; the upload itself would still
+/// finish because the synchronous POST holds the full result.
+fn progress_store() -> &'static Arc<RwLock<HashMap<Uuid, ProgressSnapshot>>> {
+    static STORE: OnceLock<Arc<RwLock<HashMap<Uuid, ProgressSnapshot>>>> = OnceLock::new();
+    STORE.get_or_init(|| Arc::new(RwLock::new(HashMap::new())))
+}
+
+/// Parse the optional `X-Upload-Job-Id` header. None means the
+/// client isn't asking for progress (older clients, curl). We still
+/// process the upload normally; the progress side-channel just
+/// stays quiet.
+fn parse_job_id(headers: &HeaderMap) -> Option<Uuid> {
+    headers
+        .get("x-upload-job-id")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| Uuid::parse_str(s.trim()).ok())
+}
+
+/// Register a fresh progress entry for the given job. Replaces any
+/// existing entry (a client re-using a job-id has either crashed
+/// and retried OR is deliberately overwriting — either way the
+/// fresh-state semantics are right).
+async fn register_job(job_id: Uuid, owner: Uuid, total: usize) {
+    let store = progress_store();
+    store.write().await.insert(
+        job_id,
+        ProgressSnapshot {
+            total,
+            done: 0,
+            last_file: None,
+            last_ok: true,
+            terminal: false,
+            owner,
+        },
+    );
+}
+
+/// Bump the done counter + record the most recently completed file.
+/// Silent no-op when the job_id isn't registered (older client).
+async fn note_file_done(job_id: Uuid, name: String, ok: bool) {
+    let store = progress_store();
+    if let Some(snap) = store.write().await.get_mut(&job_id) {
+        snap.done += 1;
+        snap.last_file = Some(name);
+        snap.last_ok = ok;
+    }
+}
+
+/// Flip terminal=true and schedule the entry's eviction after a 30 s
+/// grace window so the frontend's final poll still observes the
+/// terminal flag.
+async fn mark_terminal(job_id: Uuid) {
+    let store = progress_store();
+    if let Some(snap) = store.write().await.get_mut(&job_id) {
+        snap.terminal = true;
+    }
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        progress_store().write().await.remove(&job_id);
+    });
+}
+
+/// GET /api/imports/progress/{job_id} — current snapshot for the
+/// upload identified by `job_id`. 404 when the entry is missing
+/// (either the upload finished + the grace window expired, or the
+/// client polled with a bad id). 403 when the entry belongs to a
+/// different user.
+async fn progress_handler(
+    Extension(ctx): Extension<AuthContext>,
+    Path(job_id): Path<Uuid>,
+) -> Response {
+    let store = progress_store();
+    let guard = store.read().await;
+    match guard.get(&job_id) {
+        Some(snap) if snap.owner == ctx.user_id => Json(snap.clone()).into_response(),
+        Some(_) => StatusCode::FORBIDDEN.into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 async fn confirm_handler(
@@ -146,6 +264,16 @@ async fn confirm_handler(
         imported_count, duplicate_count, payload.account_id
     );
 
+    if imported_count > 0 {
+        state
+            .realtime
+            .publish(
+                ctx.user_id,
+                crate::services::realtime::RealtimeEvent::TransactionsChanged,
+            )
+            .await;
+    }
+
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -171,8 +299,11 @@ async fn confirm_handler(
 /// - Only 422 when every file failed (and at least one error was real).
 async fn upload_handler(
     State(_state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    headers: HeaderMap,
     mut multipart: Multipart,
 ) -> Response {
+    let job_id = parse_job_id(&headers);
     let mut files: Vec<(String, Vec<u8>)> = Vec::new();
     let mut password: Option<String> = None;
 
@@ -261,18 +392,17 @@ async fn upload_handler(
 
     let total_files = files.len();
 
-    // NB: an earlier revision tried to stream NDJSON events back to
-    // the client so the UI could render per-file progress. That
-    // worked in integration tests (which bypass real HTTP) but
-    // browsers reset the connection with ERR_CONNECTION_RESET when
-    // the upload was non-trivial — the response started sending
-    // headers + body chunks (the `started` event) before the
-    // request body had finished arriving, and at least Chromium
-    // aborts the in-flight POST in that scenario. Reverted to a
-    // single-shot Json response below. Live progress will come
-    // back via a separate channel (websocket or progress-poll
-    // endpoint) that doesn't share a TCP connection with the
-    // upload itself.
+    // Per-file progress side-channel: when the client sent an
+    // `X-Upload-Job-Id` header, register an entry in the progress
+    // store so the parallel poller on /imports/progress/{job_id}
+    // can report "N of M done · Last: foo.pdf" in real time. The
+    // upload itself stays a single-shot synchronous response — the
+    // earlier NDJSON streaming attempt caused ERR_CONNECTION_RESET
+    // because the response started flushing while the upload body
+    // was still arriving (Chromium aborts the POST in that case).
+    if let Some(id) = job_id {
+        register_job(id, ctx.user_id, total_files).await;
+    }
 
     let mut all_transactions: Vec<ParsedTransaction> = Vec::new();
     let mut success_files: Vec<String> = Vec::new();
@@ -317,12 +447,15 @@ async fn upload_handler(
                 continue;
             }
         };
+        let succeeded;
         match parse_result {
             Ok(mut txs) => {
-                success_files.push(file_name);
+                succeeded = true;
+                success_files.push(file_name.clone());
                 all_transactions.append(&mut txs);
             }
             Err(e) => {
+                succeeded = false;
                 let error_msg = e.to_string();
                 if error_msg.contains("INCORRECT_PASSWORD") {
                     password_state = Some("incorrect");
@@ -339,6 +472,9 @@ async fn upload_handler(
                 }
             }
         }
+        if let Some(id) = job_id {
+            note_file_done(id, file_name, succeeded).await;
+        }
     }
 
     // Any password-required result short-circuits with the legacy
@@ -350,6 +486,9 @@ async fn upload_handler(
         } else {
             "This statement is encrypted. Please enter your PDF password (e.g., your RFC) to unlock it."
         };
+        if let Some(id) = job_id {
+            mark_terminal(id).await;
+        }
         return (
             StatusCode::OK,
             Json(ImportResponse {
@@ -403,6 +542,10 @@ async fn upload_handler(
     } else {
         StatusCode::OK
     };
+
+    if let Some(id) = job_id {
+        mark_terminal(id).await;
+    }
 
     (
         status_code,

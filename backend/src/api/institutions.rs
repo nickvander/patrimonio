@@ -73,6 +73,17 @@ async fn trigger_sync(
             "details": e.to_string()
         }))).into_response();
     }
+    // Wake every open dashboard tab for this user. The event is
+    // coarse — the client refetches /dashboard/* on receipt rather
+    // than trying to apply a delta. Cheap because no tabs open ==
+    // no subscribers == no work.
+    state
+        .realtime
+        .publish(
+            ctx.user_id,
+            crate::services::realtime::RealtimeEvent::TransactionsChanged,
+        )
+        .await;
     Json(serde_json::json!({"status": "ok"})).into_response()
 }
 
@@ -105,6 +116,13 @@ async fn trigger_sync_one(
         )
             .into_response();
     }
+    state
+        .realtime
+        .publish(
+            ctx.user_id,
+            crate::services::realtime::RealtimeEvent::TransactionsChanged,
+        )
+        .await;
     Json(serde_json::json!({"status": "ok"})).into_response()
 }
 

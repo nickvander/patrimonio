@@ -102,6 +102,10 @@ pub struct ValidatedSession {
     pub session_id: Uuid,
     pub user_id: Uuid,
     pub pending_totp: bool,
+    /// 'owner' or 'read_only'. Threaded into `AuthContext` so
+    /// `require_owner` can 403 mutating requests from read-only
+    /// users without re-querying the DB per request.
+    pub role: String,
 }
 
 /// Look up and refresh a session by its raw cookie token. Returns None
@@ -114,19 +118,25 @@ pub struct ValidatedSession {
 pub async fn validate_and_touch(db: &PgPool, raw_token: &str) -> Result<Option<ValidatedSession>> {
     let hash = hash_token(raw_token);
 
-    let row: Option<(Uuid, Uuid, DateTime<Utc>, Option<DateTime<Utc>>, bool)> = sqlx::query_as(
-        r#"
-        SELECT id, user_id, expires_at, revoked_at, pending_totp
-        FROM user_sessions
-        WHERE token_hash = $1
-        "#,
-    )
-    .bind(&hash)
-    .fetch_optional(db)
-    .await
-    .map_err(|e| anyhow!("validate_and_touch lookup: {}", e))?;
+    // Join to users to pull the role out in the same round-trip.
+    // The role is needed by `require_owner` on every mutating
+    // request — fetching it here avoids a per-request lookup.
+    let row: Option<(Uuid, Uuid, DateTime<Utc>, Option<DateTime<Utc>>, bool, String)> =
+        sqlx::query_as(
+            r#"
+            SELECT s.id, s.user_id, s.expires_at, s.revoked_at, s.pending_totp,
+                   u.role
+            FROM user_sessions s
+            JOIN users u ON u.id = s.user_id
+            WHERE s.token_hash = $1
+            "#,
+        )
+        .bind(&hash)
+        .fetch_optional(db)
+        .await
+        .map_err(|e| anyhow!("validate_and_touch lookup: {}", e))?;
 
-    let Some((session_id, user_id, expires_at, revoked_at, pending_totp)) = row else {
+    let Some((session_id, user_id, expires_at, revoked_at, pending_totp, role)) = row else {
         return Ok(None);
     };
     if revoked_at.is_some() {
@@ -155,6 +165,7 @@ pub async fn validate_and_touch(db: &PgPool, raw_token: &str) -> Result<Option<V
         session_id,
         user_id,
         pending_totp,
+        role,
     }))
 }
 

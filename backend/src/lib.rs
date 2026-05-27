@@ -15,4 +15,9 @@ pub struct AppState {
     /// WebAuthn relying-party config. Built once at startup from
     /// `frontend_base_url`; passkey register/login handlers consume it.
     pub webauthn: Arc<webauthn_rs::Webauthn>,
+    /// Real-time event hub. Per-user broadcast channels held in a
+    /// shared map so any handler (sync, FX detector, Plaid webhook,
+    /// manual edits) can publish "data invalidated" events to every
+    /// websocket the user has open. See `services::realtime`.
+    pub realtime: services::realtime::Realtime,
 }

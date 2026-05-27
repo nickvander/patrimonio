@@ -84,6 +84,7 @@ async fn main() -> Result<()> {
         redis: redis_client,
         config: Arc::new(config.clone()),
         webauthn: Arc::new(webauthn),
+        realtime: patrimonio::services::realtime::Realtime::new(),
     };
     let cors = build_cors_layer(&config.allowed_origins);
 
@@ -144,7 +145,23 @@ async fn main() -> Result<()> {
         // institutions::plaid_webhook for the full guard.
         .nest("/api/institutions", patrimonio::api::institutions::webhook_router());
 
-    let protected = Router::new()
+    // Two-tier protected routing for multi-user roles.
+    //
+    // `business` routes touch financial / business data. Every
+    // mutating method (POST/PUT/PATCH/DELETE) on these routes is
+    // gated by `require_owner` so read-only users get 403 instead
+    // of silently corrupting state.
+    //
+    // `account_mgmt` routes are auth + own-session management:
+    // logout, change-password, passkeys for the current user,
+    // recovery codes, totp enroll/verify. Every authenticated user
+    // — owner or read-only — must be able to manage their own
+    // session, so `require_owner` does NOT apply here.
+    //
+    // Invite minting lives in `business` because creating an
+    // invite materialises a new user; a read-only user spinning
+    // up unlimited new accounts would defeat the role split.
+    let business = Router::new()
         .nest("/api/accounts", patrimonio::api::accounts::router())
         .nest("/api/institutions", patrimonio::api::institutions::router())
         .nest("/api/fx", patrimonio::api::exchange_rates::router())
@@ -153,28 +170,48 @@ async fn main() -> Result<()> {
         .nest("/api/projections", patrimonio::api::projections::router())
         .nest("/api/tax", patrimonio::api::tax::router())
         .nest("/api/settings", patrimonio::api::settings::router())
-        // Invitation-token mint / list / revoke — authenticated, so
-        // only existing users can create new ones.
         .nest("/api/auth/invites", patrimonio::api::invites::router())
-        // /api/auth/me, /logout, /change-password live here so that
-        // require_auth populates AuthContext for the handlers.
+        // Realtime WS lives here because GETs only — read-only
+        // users can subscribe to their own invalidations just like
+        // owners. require_owner lets GET/HEAD/OPTIONS through.
+        .nest("/api/realtime", patrimonio::api::realtime::router())
+        // require_owner sits INSIDE require_auth so AuthContext is
+        // populated; from_fn applies bottom-up, so this layer runs
+        // AFTER the auth layer set up below at the merge point.
+        .layer(axum::middleware::from_fn(
+            patrimonio::api::session::require_owner,
+        ));
+
+    let account_mgmt = Router::new()
+        // /api/auth/me, /logout, /change-password, /totp/*, /sessions/*
         .nest("/api/auth", patrimonio::api::session::protected_router())
-        // Passkey register/manage endpoints — authenticated.
+        // Passkey register/manage endpoints for the caller's own
+        // credentials. A read-only user managing their own passkey
+        // doesn't escalate them — they still get 403 from the
+        // business routes.
         .nest(
             "/api/auth/passkeys",
             patrimonio::api::passkeys::protected_router(),
         )
         // Coinbase OAuth lives under /api/auth/coinbase historically.
-        // Keep the existing URLs (registered with Coinbase) but require
-        // an authenticated session.
-        .nest("/api/auth", patrimonio::api::auth::router())
-        // Inner-to-outer: require_csrf_header runs first (rejects
-        // POST/PUT/PATCH/DELETE without X-Requested-With), then
-        // require_auth populates AuthContext. Order matters because
-        // axum applies layers in reverse, so the LAST .layer() is the
-        // OUTERMOST middleware. We want CSRF on the outside — auth
-        // bypass would still be 401 from the inner layer, but the
-        // outer CSRF check is cheaper and more obvious.
+        // Initiating an OAuth link MUTATES (writes the new
+        // institution row), so when roles ship this should arguably
+        // require_owner — but we keep it here because the existing
+        // OAuth redirect URI is publicly registered with Coinbase
+        // and rewiring is its own sprint. The eventual
+        // exchange-token write is on /api/institutions which IS
+        // owner-gated, so the worst a read-only user can do is
+        // start an OAuth dance that gets 403'd at the final
+        // callback. Worth revisiting.
+        .nest("/api/auth", patrimonio::api::auth::router());
+
+    let protected = business
+        .merge(account_mgmt)
+        // Inner-to-outer: require_owner runs FIRST per-route via
+        // business.layer above; then require_auth populates
+        // AuthContext; then require_csrf_header gates mutating
+        // methods. axum applies layers in reverse so the LAST
+        // .layer() is the OUTERMOST middleware.
         .layer(from_fn_with_state(
             state.clone(),
             patrimonio::api::session::require_auth,

@@ -42,6 +42,13 @@ struct CreateInviteRequest {
     expires_in_hours: Option<i64>,
     #[serde(default)]
     note: Option<String>,
+    /// 'owner' or 'read_only'. Default 'owner' preserves the
+    /// historical invite contract. The CHECK constraint on
+    /// `invite_tokens.role` enforces the enum at the DB level so
+    /// a typo here turns into a 500 rather than a silent
+    /// privilege.
+    #[serde(default)]
+    role: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -63,6 +70,10 @@ struct InviteSummary {
     used: bool,
     used_at: Option<String>,
     note: Option<String>,
+    /// Role the redeemer will get. Lets the inviter audit which
+    /// pending invites are read-only vs owner so they can revoke
+    /// the wrong ones before someone redeems.
+    role: String,
 }
 
 async fn create_invite(
@@ -86,10 +97,22 @@ async fn create_invite(
 
     let note = req.note.as_deref().filter(|n| !n.trim().is_empty());
 
+    // Validate role explicitly so a typo returns a useful 400
+    // instead of a CHECK-constraint 500 from the DB.
+    let role = req.role.as_deref().unwrap_or("owner");
+    if role != "owner" && role != "read_only" {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": format!("role must be 'owner' or 'read_only', got {:?}", role)
+            })),
+        ));
+    }
+
     let row = sqlx::query(
         r#"
-        INSERT INTO invite_tokens (token_hash, created_by_user_id, expires_at, note)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO invite_tokens (token_hash, created_by_user_id, expires_at, note, role)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING id, expires_at
         "#,
     )
@@ -97,6 +120,7 @@ async fn create_invite(
     .bind(ctx.user_id)
     .bind(expires_at)
     .bind(note)
+    .bind(role)
     .fetch_one(&state.db)
     .await
     .map_err(|e| {
@@ -134,7 +158,7 @@ async fn list_invites(
 ) -> Json<Vec<InviteSummary>> {
     let rows = sqlx::query(
         r#"
-        SELECT id, created_at, expires_at, used_at, note
+        SELECT id, created_at, expires_at, used_at, note, role
         FROM invite_tokens
         WHERE created_by_user_id = $1
         ORDER BY created_at DESC
@@ -160,6 +184,9 @@ async fn list_invites(
                     used: used_at.is_some(),
                     used_at: used_at.map(|t| t.to_rfc3339()),
                     note: r.try_get::<Option<String>, _>("note").ok().flatten(),
+                    role: r
+                        .try_get::<String, _>("role")
+                        .unwrap_or_else(|_| "owner".to_string()),
                 }
             })
             .collect(),
@@ -190,14 +217,16 @@ async fn revoke_invite(
     }
 }
 
-/// Verify an invite token + return the matching row id on success.
-/// Public — called by the registration handler in `session.rs`. Uses
-/// constant-time SHA-256 lookup (`token_hash` is the UNIQUE index).
+/// Verify + atomically consume an invite token. Returns the role
+/// the redeemer should inherit ('owner' or 'read_only') so the
+/// caller (register handler in `session.rs`) can stamp it onto the
+/// new user. Uses constant-time SHA-256 lookup (`token_hash` is the
+/// UNIQUE index).
 pub async fn consume_invite(
     db: &sqlx::PgPool,
     plaintext_token: &str,
     redeeming_user_id: Uuid,
-) -> Result<(), &'static str> {
+) -> Result<String, &'static str> {
     let token_hash = Sha256::digest(plaintext_token.as_bytes()).to_vec();
     let row = sqlx::query(
         r#"
@@ -206,7 +235,7 @@ pub async fn consume_invite(
         WHERE token_hash = $1
           AND used_at IS NULL
           AND expires_at > NOW()
-        RETURNING id
+        RETURNING id, role
         "#,
     )
     .bind(&token_hash)
@@ -217,8 +246,10 @@ pub async fn consume_invite(
         tracing::error!("invite consume db error: {}", e);
         "DB error"
     })?;
-    if row.is_none() {
-        return Err("Invalid, expired, or already-used invite token.");
-    }
-    Ok(())
+    let row = match row {
+        Some(r) => r,
+        None => return Err("Invalid, expired, or already-used invite token."),
+    };
+    let role: String = row.try_get("role").unwrap_or_else(|_| "owner".to_string());
+    Ok(role)
 }

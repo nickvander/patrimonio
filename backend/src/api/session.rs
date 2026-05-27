@@ -68,6 +68,10 @@ pub struct UserView {
     pub created_at: DateTime<Utc>,
     pub last_login_at: Option<DateTime<Utc>>,
     pub totp_enabled: bool,
+    /// 'owner' or 'read_only'. Lets the frontend hide write
+    /// affordances (rename, delete, sync) for read-only sessions
+    /// rather than letting the user click and discover a 403.
+    pub role: String,
 }
 
 #[derive(Serialize)]
@@ -175,6 +179,12 @@ pub struct ActiveSessionView {
     /// button so the user doesn't accidentally log themselves out
     /// from this very page.
     pub is_current: bool,
+    /// True when `created_at > users.previous_login_at` — i.e. the
+    /// session was minted AFTER the second-most-recent login. The
+    /// UI flags these with a "new since last visit" pill so the
+    /// user can spot a session they don't recognise without
+    /// having to scan the audit log.
+    pub new_since_last_visit: bool,
 }
 
 #[derive(Serialize)]
@@ -361,14 +371,42 @@ async fn register(
     // Now consume the invite. If it fails (token invalid / expired /
     // already used), roll back the just-created user — otherwise we'd
     // leave a user-shaped artifact behind for an invalid invite.
-    if let Err(reason) =
-        crate::api::invites::consume_invite(&state.db, body.token.trim(), user_id).await
-    {
-        let _ = sqlx::query("DELETE FROM users WHERE id = $1")
+    // Returns the role the new user should inherit, copied off the
+    // invite_tokens row.
+    let invite_role =
+        match crate::api::invites::consume_invite(&state.db, body.token.trim(), user_id).await {
+            Ok(role) => role,
+            Err(reason) => {
+                let _ = sqlx::query("DELETE FROM users WHERE id = $1")
+                    .bind(user_id)
+                    .execute(&state.db)
+                    .await;
+                return Err(ApiError::new(StatusCode::BAD_REQUEST, reason));
+            }
+        };
+
+    // Stamp the role onto the freshly-created user. Default for the
+    // INSERT above was 'owner'; this UPDATE downgrades read-only
+    // invites without leaving a privilege-escalation window
+    // (require_owner would still 403 read-only sessions before
+    // they could do anything destructive).
+    if invite_role != "owner" {
+        if let Err(e) = sqlx::query("UPDATE users SET role = $1 WHERE id = $2")
+            .bind(&invite_role)
             .bind(user_id)
             .execute(&state.db)
-            .await;
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, reason));
+            .await
+        {
+            // Best-effort rollback: an UPDATE failure here means the
+            // new user has the wrong role (owner instead of read-
+            // only). Tear them down rather than ship an owner
+            // session.
+            let _ = sqlx::query("DELETE FROM users WHERE id = $1")
+                .bind(user_id)
+                .execute(&state.db)
+                .await;
+            return Err(internal(e));
+        }
     }
 
     record_audit(
@@ -944,16 +982,37 @@ async fn list_sessions(
     let rows = sessions::list_active(&state.db, ctx.user_id)
         .await
         .map_err(internal)?;
+
+    // Anchor for the "new since last visit" badge. None on a fresh
+    // user (first login ever) means no session can be "new" yet —
+    // every session is the user's very first one. The current
+    // session itself is always excluded from the badge logic via
+    // `is_current` so the user doesn't see a flag on their own
+    // device.
+    let anchor: Option<DateTime<Utc>> =
+        sqlx::query_scalar("SELECT previous_login_at FROM users WHERE id = $1")
+            .bind(ctx.user_id)
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten();
+
     let view: Vec<ActiveSessionView> = rows
         .into_iter()
-        .map(|r| ActiveSessionView {
-            id: r.id,
-            created_at: r.created_at,
-            last_seen_at: r.last_seen_at,
-            expires_at: r.expires_at,
-            user_agent: r.user_agent,
-            ip_address: r.ip_address,
-            is_current: r.id == ctx.session_id,
+        .map(|r| {
+            let is_current = r.id == ctx.session_id;
+            let new_since_last_visit = !is_current
+                && anchor.is_some_and(|a| r.created_at > a);
+            ActiveSessionView {
+                id: r.id,
+                created_at: r.created_at,
+                last_seen_at: r.last_seen_at,
+                expires_at: r.expires_at,
+                user_agent: r.user_agent,
+                ip_address: r.ip_address,
+                is_current,
+                new_since_last_visit,
+            }
         })
         .collect();
     Ok(Json(view))
@@ -1030,10 +1089,22 @@ async fn revoke_other_sessions(
 
 // ----- middleware -----
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct AuthContext {
     pub user_id: Uuid,
     pub session_id: Uuid,
+    /// 'owner' or 'read_only'. Used by `require_owner` to gate
+    /// mutating endpoints. Read endpoints don't consult it — every
+    /// authenticated user can see their own data regardless of role.
+    pub role: String,
+}
+
+impl AuthContext {
+    /// Convenience for `require_owner` and any handler that wants
+    /// to short-circuit a mutation based on role.
+    pub fn is_owner(&self) -> bool {
+        self.role == "owner"
+    }
 }
 
 /// CSRF defence-in-depth.
@@ -1076,6 +1147,35 @@ pub async fn require_csrf_header(
     next.run(req).await
 }
 
+/// Gates mutating requests on `role == 'owner'`. Mounted INSIDE
+/// `require_auth` so `AuthContext` is populated; GET/HEAD/OPTIONS
+/// pass through untouched (read-only users can read anything they
+/// own). Apply only to the business sub-router — auth/session/
+/// password-management endpoints stay accessible to every
+/// authenticated user (a read-only user must be able to log out,
+/// change their own password, manage their own passkeys, regenerate
+/// their own recovery codes).
+pub async fn require_owner(
+    Extension(ctx): Extension<AuthContext>,
+    req: axum::extract::Request,
+    next: Next,
+) -> Response {
+    use axum::http::Method;
+    let m = req.method().clone();
+    if matches!(m, Method::GET | Method::HEAD | Method::OPTIONS) {
+        return next.run(req).await;
+    }
+    if ctx.is_owner() {
+        return next.run(req).await;
+    }
+    ApiError::new(
+        StatusCode::FORBIDDEN,
+        "This account is read-only and cannot modify data. \
+         Ask an owner to mint you an owner-role invite if you need write access.",
+    )
+    .into_response()
+}
+
 pub async fn require_auth(
     State(state): State<AppState>,
     jar: CookieJar,
@@ -1099,6 +1199,7 @@ pub async fn require_auth(
             req.extensions_mut().insert(AuthContext {
                 user_id: s.user_id,
                 session_id: s.session_id,
+                role: s.role,
             });
             next.run(req).await
         }
@@ -1132,9 +1233,10 @@ pub(crate) async fn load_user_view(db: &PgPool, user_id: Uuid) -> anyhow::Result
         DateTime<Utc>,
         Option<DateTime<Utc>>,
         bool,
+        String,
     ) = sqlx::query_as(
         r#"
-        SELECT id, username, email, created_at, last_login_at, totp_enabled
+        SELECT id, username, email, created_at, last_login_at, totp_enabled, role
         FROM users WHERE id = $1
         "#,
     )
@@ -1148,6 +1250,7 @@ pub(crate) async fn load_user_view(db: &PgPool, user_id: Uuid) -> anyhow::Result
         created_at: row.3,
         last_login_at: row.4,
         totp_enabled: row.5,
+        role: row.6,
     })
 }
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
@@ -671,19 +672,18 @@ class ApiService {
   /// returns one `ImportResponse` JSON object per request (the
   /// shape `{status, message, transactions_count, transactions}`).
   ///
-  /// `onProgress` is accepted but currently never fired — an earlier
-  /// revision streamed NDJSON events for per-file progress, but
-  /// the bidirectional flow (response chunks flushing while the
-  /// request body was still uploading) tripped browser TCP resets
-  /// with ERR_CONNECTION_RESET. Progress will come back via a
-  /// separate channel (websocket or progress-poll endpoint) that
-  /// doesn't share the TCP connection with the upload itself; the
-  /// signature stays so callers don't break when it lands.
+  /// Per-file progress: when `onProgress` is supplied, the client
+  /// generates a UUID and sends it as the `X-Upload-Job-Id` header.
+  /// While the upload POST is in flight, a parallel polling loop
+  /// hits `GET /imports/progress/{job_id}` every 250 ms; each
+  /// snapshot fires `onProgress`. The progress channel is fully
+  /// independent of the upload connection — that avoids the
+  /// ERR_CONNECTION_RESET the earlier bidirectional-stream design
+  /// caused (response chunks flushing while the upload body was
+  /// still arriving made Chromium abort).
   Future<Map<String, dynamic>> uploadStatements(
     List<PlatformFile> files, {
     String? password,
-    @Deprecated('Currently a no-op; progress channel will return on a '
-        'follow-up sprint via a non-shared connection.')
     ImportProgressCallback? onProgress,
   }) async {
     if (files.isEmpty) {
@@ -698,6 +698,16 @@ class ApiService {
     // attached by hand. Value matches `_csrfHeader` everywhere
     // else.
     request.headers['X-Requested-With'] = 'fetch';
+
+    // When a progress callback is supplied, tag the request with a
+    // UUID the server will key its progress entry on. We use a
+    // simple time+random scheme rather than pulling in `uuid`
+    // (the package is already a transitive dep but not surfaced).
+    final String? jobId = onProgress != null ? _generateJobId() : null;
+    if (jobId != null) {
+      request.headers['X-Upload-Job-Id'] = jobId;
+    }
+
     for (final f in files) {
       if (f.bytes == null) continue;
       request.files.add(
@@ -706,6 +716,19 @@ class ApiService {
     }
     if (password != null && password.isNotEmpty) {
       request.fields['password'] = password;
+    }
+
+    // Kick off the polling loop concurrently with the upload. It
+    // self-terminates when the server marks the job terminal OR
+    // when this scope completes (we cancel via the bool flag).
+    bool uploadComplete = false;
+    Future<void>? pollerFuture;
+    if (jobId != null && onProgress != null) {
+      pollerFuture = _pollUploadProgress(
+        jobId,
+        onProgress,
+        () => uploadComplete,
+      );
     }
 
     try {
@@ -757,6 +780,84 @@ class ApiService {
       throw Exception(
         'Network error during upload. Please check your connection and try again. ($e)',
       );
+    } finally {
+      // Stop the poller as soon as the upload returns. The poller
+      // also self-terminates on the next tick after we flip
+      // `uploadComplete = true`.
+      uploadComplete = true;
+      if (pollerFuture != null) {
+        // Don't await — the poller exits within ~250 ms; making
+        // the caller wait that long would be visible UX latency
+        // on top of an already-finished upload.
+        // ignore: unawaited_futures
+        pollerFuture;
+      }
+    }
+  }
+
+  /// Generate a job-id for the upload progress side-channel. Format
+  /// is a 36-char UUID-shaped string so the backend's `Uuid::parse_str`
+  /// accepts it cleanly. Not cryptographically random — the only
+  /// requirement is uniqueness across concurrent uploads from the
+  /// same browser tab.
+  String _generateJobId() {
+    final r = math.Random.secure();
+    String hex(int n) {
+      final buf = StringBuffer();
+      for (int i = 0; i < n; i++) {
+        buf.write(r.nextInt(16).toRadixString(16));
+      }
+      return buf.toString();
+    }
+
+    return '${hex(8)}-${hex(4)}-4${hex(3)}-'
+        '${(8 + r.nextInt(4)).toRadixString(16)}${hex(3)}-${hex(12)}';
+  }
+
+  /// Poll `/imports/progress/{jobId}` every 250 ms until the server
+  /// returns a terminal snapshot OR the upload completes (signalled
+  /// by `done()` returning true). Each snapshot fires `onProgress`.
+  /// Errors are swallowed — the upload itself is the authoritative
+  /// channel, so a transient 404/500 on the polling side shouldn't
+  /// surface as a user-visible failure.
+  Future<void> _pollUploadProgress(
+    String jobId,
+    ImportProgressCallback onProgress,
+    bool Function() done,
+  ) async {
+    const interval = Duration(milliseconds: 250);
+    int lastDone = -1;
+    while (!done()) {
+      await Future.delayed(interval);
+      try {
+        final res = await _get(
+          Uri.parse('$_baseUrl/imports/progress/$jobId'),
+        );
+        if (res.statusCode == 200) {
+          final snap = json.decode(res.body) as Map<String, dynamic>;
+          final d = (snap['done'] as num?)?.toInt() ?? 0;
+          final t = (snap['total'] as num?)?.toInt() ?? 0;
+          final terminal = snap['terminal'] as bool? ?? false;
+          // Only fire onProgress when the snapshot actually moved —
+          // saves the import screen from rebuilding 4× per second
+          // when nothing's changed.
+          if (d != lastDone || terminal) {
+            lastDone = d;
+            onProgress(
+              done: d,
+              total: t,
+              lastFile: snap['last_file']?.toString(),
+              lastFileOk: snap['last_ok'] as bool?,
+            );
+          }
+          if (terminal) return;
+        }
+        // 404 means the job entry hasn't been registered yet (we
+        // raced the upload handler) or has been evicted. Keep
+        // polling — eventually `done()` will flip.
+      } catch (_) {
+        // Best-effort. Continue.
+      }
     }
   }
 

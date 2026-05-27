@@ -84,6 +84,7 @@ async fn try_setup() -> Option<(Router, PgPool)> {
         redis,
         config: Arc::new(config),
         webauthn,
+        realtime: patrimonio::services::realtime::Realtime::new(),
     };
 
     // Mirror the public/protected split from main.rs so the middleware

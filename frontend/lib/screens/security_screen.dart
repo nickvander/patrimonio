@@ -866,6 +866,32 @@ class _SecurityScreenState extends State<SecurityScreen> {
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
+                          )
+                        else if (sessions[i].newSinceLastVisit)
+                          // Amber pill for any session created since
+                          // the user's previous-login anchor. Lets the
+                          // user spot "I don't remember logging in
+                          // from there" without diving into the audit
+                          // log.
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: context.warning.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: context.warning.withValues(alpha: 0.6),
+                                width: 1,
+                              ),
+                            ),
+                            child: Text(
+                              'New since last visit',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: context.warning,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
                       ],
                     ),

@@ -75,6 +75,7 @@ async fn try_setup() -> Option<Router> {
         redis,
         config: Arc::new(config),
         webauthn,
+        realtime: patrimonio::services::realtime::Realtime::new(),
     };
 
     let public = Router::new()

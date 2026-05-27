@@ -753,18 +753,33 @@ the user has a visual cue when they're hitting the test bank.
 Files: `frontend/lib/screens/dashboard_screen.dart` (AppBar actions
 list), maybe a new small widget under `widgets/`.
 
-## G. Real-time dashboard via websockets  ⏱️ ~1 day  🎯 elegant but deferred
+## G. Real-time dashboard via websockets — ✅ shipped 2026-05-19
 
-Plaid webhooks now trigger background syncs, but the frontend still
-finds out by polling (it just doesn't poll often). A websocket
-"dashboard data invalidated" channel would let the dashboard refresh
-the moment a sync completes — useful when a new transaction lands
-while the user is looking at the Overview.
+New `services::realtime::Realtime` hub: per-user
+`tokio::sync::broadcast::Sender` keyed in a
+`RwLock<HashMap<Uuid, Sender>>`. `GET /api/realtime/ws`
+upgrades to a websocket on the protected router (cookie auth
+inherited from the handshake), subscribes the user, fans every
+`RealtimeEvent` to all open tabs. Sync handlers + import
+confirm publish `TransactionsChanged`; the vocabulary is coarse
+("go refetch X") so payloads stay tiny.
 
-Significant scope: new websocket endpoint, broadcast plumbing,
-frontend reconnect logic, auth scoping (a user shouldn't see
-another user's invalidations). Park until polling actually feels
-slow.
+Frontend `RealtimeService` connects at dashboard boot with
+capped exponential-backoff reconnect (1 → 2 → 4 → 8 → 16 → 30 s).
+Disposed on logout. The dashboard routes every event into
+the existing `_loadAllData(silent: true)` path — multi-tab
+consistency + Plaid-webhook-driven refresh, free.
+
+Open follow-ups (defer until they bite):
+
+* Redis pub/sub backplane when a second API instance ships
+  (today's in-process map only fans events within one
+  process).
+* nginx config note for `Upgrade` + `Connection` headers in
+  the prod deployment runbook.
+* Wire more emit points — splits, rename, account create —
+  for full multi-tab consistency. Today only sync + import
+  publish.
 
 ## H. Net-worth aggregation in SQL — ✅ shipped 2026-05-18
 

@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:plaid_flutter/plaid_flutter.dart';
 import 'package:web/web.dart' as web;
+import 'dart:async';
 import '../services/api_service.dart';
 import '../main.dart' show themeModeNotifier;
 import '../services/preferences.dart';
+import '../services/realtime_service.dart';
 import '../widgets/net_worth_card.dart';
 import '../widgets/assets_liabilities_bar.dart';
 import '../widgets/monthly_cash_flow_card.dart';
@@ -94,6 +96,12 @@ class _DashboardScreenState extends State<DashboardScreen>
   static const int _txPageSize = 50;
   bool _transactionsHasMore = true;
 
+  /// Realtime push channel. Connected at boot, disposed on screen
+  /// teardown. Self-reconnects on drop; coarse server-pushed
+  /// events trigger a silent _loadAllData refresh.
+  final RealtimeService _realtime = RealtimeService();
+  StreamSubscription<RealtimeEvent>? _realtimeSub;
+
   @override
   void initState() {
     super.initState();
@@ -126,12 +134,31 @@ class _DashboardScreenState extends State<DashboardScreen>
     });
     _loadAllData();
     _checkRedirectStatus();
+    // Open the realtime channel and route server-pushed
+    // invalidations into the existing silent-reload path. The
+    // service self-reconnects on drop, so we connect once at boot
+    // and forget until logout.
+    _realtime.connect();
+    _realtimeSub = _realtime.events.listen(_handleRealtimeEvent);
   }
 
   @override
   void dispose() {
     _tabController?.dispose();
+    _realtimeSub?.cancel();
+    _realtime.dispose();
     super.dispose();
+  }
+
+  /// Server-pushed event handler. Every event maps to "refetch the
+  /// dashboard silently" today — the event payload is coarse on
+  /// purpose so we don't have to mirror every response shape over
+  /// the websocket. If the dashboard ever grows more refetch
+  /// granularity, branch on `e.type` here.
+  void _handleRealtimeEvent(RealtimeEvent e) {
+    if (!mounted) return;
+    debugPrint('realtime: received ${e.type}');
+    _loadAllData(silent: true);
   }
 
   String _loadSavedCurrency() {

@@ -109,6 +109,7 @@ async fn try_setup(
         redis,
         config: Arc::new(config),
         webauthn,
+        realtime: patrimonio::services::realtime::Realtime::new(),
     };
 
     // Mirror main.rs's mounting so middleware order matches prod.
@@ -116,12 +117,22 @@ async fn try_setup(
         .nest("/api/auth", patrimonio::api::session::public_router())
         .nest("/api/setup", patrimonio::api::setup::router());
 
-    let protected = Router::new()
+    // Two-tier protected router mirroring main.rs's split:
+    // `business` routes get `require_owner`, `account_mgmt`
+    // (auth/session) routes don't. Without this split the
+    // require_owner role gate isn't exercised by the test suite.
+    let business = Router::new()
         .nest("/api/accounts", patrimonio::api::accounts::router())
         .nest("/api/institutions", patrimonio::api::institutions::router())
         .nest("/api/dashboard", patrimonio::api::dashboard::router())
         .nest("/api/imports", patrimonio::api::imports::router())
-        .nest("/api/auth", patrimonio::api::session::protected_router())
+        .layer(axum::middleware::from_fn(
+            patrimonio::api::session::require_owner,
+        ));
+    let account_mgmt =
+        Router::new().nest("/api/auth", patrimonio::api::session::protected_router());
+    let protected = business
+        .merge(account_mgmt)
         .layer(from_fn_with_state(
             state.clone(),
             patrimonio::api::session::require_auth,
@@ -1284,4 +1295,328 @@ async fn net_worth_history_handles_liabilities() {
     assert!((row["net_worth"].as_f64().unwrap() - -500.0).abs() < 0.01);
     let by_inst = row["by_institution"].as_object().unwrap();
     assert!((by_inst["Plastic Co"].as_f64().unwrap() - -500.0).abs() < 0.01);
+}
+
+// =====================================================================
+// Multi-user roles — require_owner middleware
+// =====================================================================
+// The `require_owner` middleware sits on every business sub-router
+// in `main.rs` and 403's mutating requests from read-only users
+// while leaving GETs untouched.
+
+#[tokio::test]
+async fn read_only_user_can_get_but_not_mutate() {
+    let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    // Bootstrap the owner first (bootstrap path always creates an
+    // owner; the role split kicks in for invited users).
+    let (_owner_token, _owner_id) = bootstrap(&app, &pool).await;
+    // Hand-roll a read-only user.
+    let ro_user_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO users (username, email, password_hash, role) \
+         VALUES ('viewer', 'viewer@example.com', 'doesnt-matter', 'read_only') \
+         RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("seed read-only user");
+    let ro_token = patrimonio::services::sessions::create_session(&pool, ro_user_id, None, None)
+        .await
+        .expect("create read-only session")
+        .token;
+
+    // GET passes — read-only is allowed to read their own data.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/transactions",
+            None,
+            Some(&ro_token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // POST on a business route is rejected with 403.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            "/api/dashboard/subscriptions/ignore",
+            Some(&serde_json::json!({"merchant": "test"})),
+            Some(&ro_token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+    let body = body_json(res.into_body()).await;
+    assert!(body["error"]
+        .as_str()
+        .unwrap_or("")
+        .contains("read-only"));
+}
+
+#[tokio::test]
+async fn read_only_user_can_still_log_out() {
+    // require_owner does NOT apply to /api/auth/* — a read-only user
+    // must be able to manage their own session (logout, change
+    // password, manage their own passkeys).
+    let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (_owner_token, _owner_id) = bootstrap(&app, &pool).await;
+    let ro_user_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO users (username, email, password_hash, role) \
+         VALUES ('viewer2', 'viewer2@example.com', 'doesnt-matter', 'read_only') \
+         RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("seed read-only user");
+    let ro_token = patrimonio::services::sessions::create_session(&pool, ro_user_id, None, None)
+        .await
+        .expect("create read-only session")
+        .token;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::POST, "/api/auth/logout", None, Some(&ro_token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn owner_role_passes_require_owner() {
+    // Sanity check: the default owner role goes through every gate
+    // for a mutating request just like before role landed.
+    let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _owner_id) = bootstrap(&app, &pool).await;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            "/api/dashboard/subscriptions/ignore",
+            Some(&serde_json::json!({"merchant": "ok-path"})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+}
+
+// =====================================================================
+// Cross-tenant isolation
+// =====================================================================
+// The multi-user data model wires `user_id` predicates through ~60
+// queries. This block creates two users (owner Alice + owner Bob),
+// seeds account + transaction + ignored-subscription rows for each,
+// then asserts every read endpoint returns ONLY the caller's data.
+// Belt-and-suspenders for the predicate threading; catches any
+// future query that forgets the user_id filter.
+
+async fn seed_owner(
+    pool: &PgPool,
+    username: &str,
+) -> (uuid::Uuid, String) {
+    let user_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO users (username, email, password_hash, role) \
+         VALUES ($1, $2, 'doesnt-matter', 'owner') RETURNING id",
+    )
+    .bind(username)
+    .bind(format!("{username}@example.com"))
+    .fetch_one(pool)
+    .await
+    .expect("seed owner");
+    let token = patrimonio::services::sessions::create_session(pool, user_id, None, None)
+        .await
+        .expect("create owner session")
+        .token;
+    (user_id, token)
+}
+
+#[tokio::test]
+async fn cross_tenant_isolation_dashboard() {
+    let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    // Bootstrap so the first-user slot is filled, then hand-roll
+    // two independent owners.
+    let _ = bootstrap(&app, &pool).await;
+    let (alice_id, alice_token) = seed_owner(&pool, "alice").await;
+    let (bob_id, bob_token) = seed_owner(&pool, "bob").await;
+
+    // Seed one account + one transaction per user.
+    let (_a_inst, a_acct) = seed_account(&pool, alice_id).await;
+    let a_tx = seed_tx(&pool, alice_id, a_acct, "Alice-only payee", "-42.00").await;
+    let (_b_inst, b_acct) = seed_account(&pool, bob_id).await;
+    let b_tx = seed_tx(&pool, bob_id, b_acct, "Bob-only payee", "-77.00").await;
+
+    // /dashboard/transactions
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/transactions?limit=200",
+            None,
+            Some(&alice_token),
+        ))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    let ids: Vec<String> = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|r| r["id"].as_str().map(String::from))
+        .collect();
+    assert!(ids.contains(&a_tx.to_string()), "Alice should see her own tx");
+    assert!(
+        !ids.contains(&b_tx.to_string()),
+        "Alice MUST NOT see Bob's tx — predicate leak"
+    );
+
+    // /accounts
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/accounts", None, Some(&bob_token)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    let acct_ids: Vec<String> = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|r| r["id"].as_str().map(String::from))
+        .collect();
+    assert!(acct_ids.contains(&b_acct.to_string()), "Bob sees own account");
+    assert!(
+        !acct_ids.contains(&a_acct.to_string()),
+        "Bob MUST NOT see Alice's account"
+    );
+
+    // /dashboard/overview — totals must reflect only the caller's
+    // accounts. Each owner has one account with current_balance =
+    // 1000.00 (per seed_account); cross-tenant leakage would
+    // double that.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/overview",
+            None,
+            Some(&alice_token),
+        ))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    let accounts_in_overview = body["accounts"].as_array().unwrap();
+    assert_eq!(
+        accounts_in_overview.len(),
+        1,
+        "Alice's overview should show exactly 1 account, got {}",
+        accounts_in_overview.len()
+    );
+    assert!(
+        accounts_in_overview
+            .iter()
+            .all(|a| a["id"].as_str().unwrap() != b_acct.to_string()),
+        "Alice's overview leaked Bob's account"
+    );
+
+    // Mutating endpoint: Bob tries to PATCH Alice's account balance
+    // → 404 (predicate filter excludes foreign rows).
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PATCH,
+            &format!("/api/accounts/{a_acct}/balance"),
+            Some(&serde_json::json!({"current_balance": 999.99})),
+            Some(&bob_token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::NOT_FOUND,
+        "Bob MUST NOT be able to PATCH Alice's account"
+    );
+
+    // Seed an ignored subscription for Alice; Bob's /ignored list
+    // must NOT include it.
+    sqlx::query(
+        "INSERT INTO ignored_subscription_merchants (user_id, merchant_key) \
+         VALUES ($1, 'alice-private')",
+    )
+    .bind(alice_id)
+    .execute(&pool)
+    .await
+    .expect("seed alice's ignored sub");
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/subscriptions/ignored",
+            None,
+            Some(&bob_token),
+        ))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    let merchants: Vec<String> = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|r| r["merchant_key"].as_str().map(String::from))
+        .collect();
+    assert!(
+        !merchants.contains(&"alice-private".to_string()),
+        "Bob MUST NOT see Alice's ignored subscriptions"
+    );
+}
+
+#[tokio::test]
+async fn cross_tenant_isolation_sessions_list() {
+    // /api/auth/sessions must return only the caller's own sessions —
+    // an obvious place where a missing predicate would leak every
+    // user's sessions to anyone authenticated.
+    let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let _ = bootstrap(&app, &pool).await;
+    let (alice_id, alice_token) = seed_owner(&pool, "alice2").await;
+    let (_bob_id, bob_token) = seed_owner(&pool, "bob2").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/auth/sessions", None, Some(&alice_token)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    let arr = body.as_array().unwrap();
+    assert_eq!(arr.len(), 1, "Alice should see exactly her one session");
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/auth/sessions", None, Some(&bob_token)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    let arr = body.as_array().unwrap();
+    assert_eq!(arr.len(), 1, "Bob should see exactly his one session");
+
+    // And /me returns only the caller's view.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/auth/me", None, Some(&alice_token)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["id"].as_str().unwrap(), alice_id.to_string());
+    assert_eq!(body["username"].as_str().unwrap(), "alice2");
+    assert_eq!(body["role"].as_str().unwrap(), "owner");
 }

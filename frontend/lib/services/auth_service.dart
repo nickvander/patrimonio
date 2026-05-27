@@ -222,6 +222,11 @@ class ActiveSession {
   final String? userAgent;
   final String? ipAddress;
   final bool isCurrent;
+  /// True when `created_at > users.previous_login_at`. The Security
+  /// screen renders these with a "New since last visit" pill so the
+  /// user can spot a session they don't recognise at a glance.
+  /// Never true for the current session — would be noise.
+  final bool newSinceLastVisit;
 
   ActiveSession({
     required this.id,
@@ -231,6 +236,7 @@ class ActiveSession {
     this.userAgent,
     this.ipAddress,
     required this.isCurrent,
+    this.newSinceLastVisit = false,
   });
 
   factory ActiveSession.fromJson(Map<String, dynamic> json) => ActiveSession(
@@ -241,6 +247,7 @@ class ActiveSession {
         userAgent: json['user_agent'] as String?,
         ipAddress: json['ip_address'] as String?,
         isCurrent: json['is_current'] as bool? ?? false,
+        newSinceLastVisit: json['new_since_last_visit'] as bool? ?? false,
       );
 }
 

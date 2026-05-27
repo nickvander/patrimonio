@@ -40,6 +40,60 @@ have shipped. The app now does:
 * `app_settings.user_id` (M7 leftover) — budgets / goals no longer
   leak across users.
 
+## Multi-user roles + realtime + upload-progress sprint (2026-05-19)
+
+Massive bundle of Tier 1 + Tier 2 backlog. Five items in one
+batch — schema migration + middleware + RealtimeService + side-
+channel polling + cross-tenant tests.
+
+* **Multi-user roles (owner vs read-only).** New migration
+  `2026051901_user_roles.sql` adds `role TEXT NOT NULL DEFAULT
+  'owner'` to both `users` and `invite_tokens` (CHECK
+  constraint covers the enum). `validate_and_touch` joins
+  users to surface the role on every authenticated request;
+  `AuthContext` carries it. New `require_owner` middleware
+  403s mutating requests when role != 'owner'; mounted on the
+  business sub-router (NOT on /api/auth/* — every
+  authenticated user must be able to log out, change their
+  own password, manage their own passkeys). Invite mint
+  endpoint accepts a `role` field; redemption copies it onto
+  the new user. `/api/auth/me` exposes role so the frontend
+  can hide write affordances. Three new integration tests
+  cover the read-only path.
+* **Sessions "new since last visit" badge.** Active-sessions
+  list flags any session whose `created_at >
+  users.previous_login_at` with an amber pill. Backend
+  computes the diff per row in `list_sessions`; frontend
+  ActiveSession model carries the flag; Security screen
+  renders it next to the "This device" pill.
+* **Cross-tenant isolation integration tests.** Two new
+  tests (`cross_tenant_isolation_dashboard` +
+  `cross_tenant_isolation_sessions_list`) hand-roll two
+  owners with non-overlapping data, then assert every read
+  endpoint returns only the caller's slice and every
+  mutating endpoint 404s on a foreign id. Belt-and-suspenders
+  for the ~60 user_id predicates.
+* **Per-file upload progress (take 2).** Side-channel
+  polling design — the upload POST stays synchronous (no
+  bidirectional stream → no ERR_CONNECTION_RESET); when the
+  client sends `X-Upload-Job-Id`, the server registers a
+  progress entry in an in-memory `Arc<RwLock<HashMap>>`. The
+  frontend generates a UUID, sends the header, and polls
+  `GET /imports/progress/{job_id}` every 250 ms in parallel
+  with the upload. UI renders "Processing N of M files… ·
+  Last: foo.pdf" exactly like take 1, just over a
+  non-shared connection.
+* **Real-time dashboard via websockets.** New
+  `services::realtime::Realtime` hub holds a per-user
+  `tokio::sync::broadcast::Sender`. New `GET /api/realtime/ws`
+  endpoint on the protected router upgrades to a websocket,
+  subscribes the user, fans events over the wire. Sync +
+  import handlers publish `TransactionsChanged` events.
+  Frontend `RealtimeService` connects with capped
+  exponential-backoff reconnect (1→2→…→30 s); dashboard
+  subscribes once at boot and routes every event into the
+  existing `_loadAllData(silent: true)` path.
+
 ## CSV stream + upload progress + CORS + README sprint (2026-05-19)
 
 * **Streaming CSV export** (audit P4). `export_transactions_csv`
