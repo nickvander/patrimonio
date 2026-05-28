@@ -1,0 +1,57 @@
+//! Shared test helpers.
+//!
+//! Lives at `tests/common/mod.rs` (the `mod.rs` form, not
+//! `tests/common.rs`) so cargo treats it as a sub-module of every
+//! sibling `tests/*.rs` integration crate rather than as its own
+//! test binary. Each test file declares `mod common;` to pull it
+//! in.
+
+use sqlx::{Connection, PgConnection};
+
+/// Holds a Postgres advisory lock for the duration of one test.
+///
+/// Why this exists: the three integration test files
+/// (`auth_endpoints`, `auth_recovery_totp`, `dashboard_endpoints`)
+/// each compile into their own test binary. Cargo runs binaries in
+/// parallel by default — and within each binary, while
+/// `#[serial_test::serial]` serialises tests, that mutex is
+/// process-local and doesn't coordinate across binaries.
+///
+/// All three binaries share a single `patrimonio_test` database and
+/// TRUNCATE in setup. Without a cross-process lock, two binaries can
+/// race: binary A starts a test, seeds data, runs queries; binary B
+/// in parallel hits its own TRUNCATE and wipes A's seeded rows
+/// mid-flight, causing random 500s on A's bootstrap or empty result
+/// sets where seeded data was expected.
+///
+/// `pg_advisory_lock(N)` is session-scoped and global within a
+/// database. By holding it on a dedicated (non-pooled) connection
+/// for the lifetime of one test, every other test — regardless of
+/// which binary — blocks on the same lock until we're done. The
+/// connection's Drop closes the socket, Postgres detects the
+/// disconnect, and the lock releases. The next waiter wakes up.
+///
+/// Magic key 0x70617472696D6F is ASCII "patrimo" packed into i64 —
+/// deterministic and unlikely to collide with any other advisory
+/// lock the application code might one day use.
+pub struct TestLockGuard {
+    // Underscore-prefixed because the connection's purpose is to
+    // EXIST (and thus keep the PG session alive). We never run
+    // queries through it again after acquire().
+    _conn: PgConnection,
+}
+
+impl TestLockGuard {
+    /// Block until this caller holds the global test lock. Returns
+    /// `None` when the connect itself fails — the test should treat
+    /// that the same as "no test DB available" and skip.
+    pub async fn acquire(database_url: &str) -> Option<Self> {
+        let mut conn = PgConnection::connect(database_url).await.ok()?;
+        // 0x70617472696D6F = "patrimo" — see struct docs.
+        sqlx::query("SELECT pg_advisory_lock(0x70617472696D6F)")
+            .execute(&mut conn)
+            .await
+            .ok()?;
+        Some(Self { _conn: conn })
+    }
+}

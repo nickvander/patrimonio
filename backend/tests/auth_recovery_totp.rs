@@ -17,11 +17,17 @@ use tower::ServiceExt;
 use patrimonio::config::AppConfig;
 use patrimonio::AppState;
 
+mod common;
+use common::TestLockGuard;
+
 const TEST_DB_VAR: &str = "PATRIMONIO_TEST_DATABASE_URL";
 const SESSION_COOKIE: &str = "patrimonio_session";
 
-async fn try_setup() -> Option<Router> {
+async fn try_setup() -> Option<(Router, TestLockGuard)> {
     let database_url = std::env::var(TEST_DB_VAR).ok()?;
+    // Cross-binary serialisation against the shared test DB. See
+    // tests/common/mod.rs for the rationale.
+    let lock = TestLockGuard::acquire(&database_url).await?;
     let pool = PgPoolOptions::new()
         .max_connections(2)
         .connect(&database_url)
@@ -87,7 +93,7 @@ async fn try_setup() -> Option<Router> {
             state.clone(),
             patrimonio::api::session::require_auth,
         ));
-    Some(public.merge(protected).with_state(state))
+    Some((public.merge(protected).with_state(state), lock))
 }
 
 fn skip_if_no_db<T>(r: Option<T>) -> Option<T> {
@@ -173,7 +179,7 @@ async fn bootstrap_and_login(app: &Router) -> (String, Vec<String>) {
 #[tokio::test]
 #[serial_test::serial]
 async fn recovery_code_redeems_and_resets_password() {
-    let Some(app) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, _lock)) = skip_if_no_db(try_setup().await) else { return };
     let (_token, codes) = bootstrap_and_login(&app).await;
 
     // Wrong username + right code → 401.
@@ -274,7 +280,7 @@ async fn recovery_code_redeems_and_resets_password() {
 #[tokio::test]
 #[serial_test::serial]
 async fn regenerate_invalidates_old_codes() {
-    let Some(app) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, _lock)) = skip_if_no_db(try_setup().await) else { return };
     let (token, original_codes) = bootstrap_and_login(&app).await;
 
     // Regenerate via the authenticated endpoint.
@@ -363,7 +369,7 @@ fn current_totp_for(secret_b32: &str) -> String {
 #[tokio::test]
 #[serial_test::serial]
 async fn totp_enroll_confirm_then_login_requires_two_steps() {
-    let Some(app) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, _lock)) = skip_if_no_db(try_setup().await) else { return };
     let (token, _codes) = bootstrap_and_login(&app).await;
 
     // Start enrollment — get secret + provisioning URI.
@@ -506,7 +512,7 @@ async fn totp_enroll_confirm_then_login_requires_two_steps() {
 #[tokio::test]
 #[serial_test::serial]
 async fn totp_disable_requires_password() {
-    let Some(app) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, _lock)) = skip_if_no_db(try_setup().await) else { return };
     let (token, _codes) = bootstrap_and_login(&app).await;
 
     // Enroll + confirm so totp_enabled is true.

@@ -30,11 +30,18 @@ use tower::ServiceExt;
 use patrimonio::config::AppConfig;
 use patrimonio::AppState;
 
+mod common;
+use common::TestLockGuard;
+
 const TEST_DB_VAR: &str = "PATRIMONIO_TEST_DATABASE_URL";
 const SESSION_COOKIE: &str = "patrimonio_session";
 
-async fn try_setup() -> Option<(Router, PgPool)> {
+async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
     let database_url = std::env::var(TEST_DB_VAR).ok()?;
+    // Block here until no other test binary is mid-setup against
+    // the shared test DB. Lock holds until the guard drops at end
+    // of test. See tests/common/mod.rs for the rationale.
+    let lock = TestLockGuard::acquire(&database_url).await?;
     let pool = PgPoolOptions::new()
         .max_connections(2)
         .connect(&database_url)
@@ -104,7 +111,7 @@ async fn try_setup() -> Option<(Router, PgPool)> {
 
     let app = public.merge(protected).with_state(state);
 
-    Some((app, pool))
+    Some((app, pool, lock))
 }
 
 fn skip_if_no_db<T>(result: Option<T>) -> Option<T> {
@@ -160,7 +167,7 @@ fn get_request(uri: &str, cookie: Option<&str>) -> Request<Body> {
 #[tokio::test]
 #[serial_test::serial]
 async fn full_auth_lifecycle() {
-    let Some((app, pool)) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
 
     // Fresh DB reports needs_bootstrap.
     let res = app
@@ -365,7 +372,7 @@ async fn full_auth_lifecycle() {
 #[tokio::test]
 #[serial_test::serial]
 async fn session_management_endpoints() {
-    let Some((app, _pool)) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, _pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
 
     // Bootstrap to create the first session.
     let res = app
@@ -559,7 +566,7 @@ async fn session_management_endpoints() {
 #[tokio::test]
 #[serial_test::serial]
 async fn rate_limit_kicks_in_after_repeated_failures() {
-    let Some((app, _pool)) = skip_if_no_db(try_setup().await) else { return };
+    let Some((app, _pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
 
     // Bootstrap a user so the username exists (the limiter keys off
     // failures for that username).
