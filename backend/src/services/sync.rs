@@ -924,9 +924,20 @@ async fn process_investment_event(
         return Ok(()); // Already processed this sell.
     }
     let mut remaining = quantity.abs();
+    let sell_fx_rate = lookup_usd_fx_rate(db, &currency, acquired_at).await;
+    let sell_price = price.abs();
+    // Sell-side USD price-per-unit. For USD-denominated securities
+    // the FX is 1.0 so this is a no-op; for MXN it's the price
+    // divided by today's USD/MXN. Used to compute realized P&L per
+    // lot below.
+    let sell_usd_pps = if sell_fx_rate > 0.0 {
+        sell_price / sell_fx_rate
+    } else {
+        sell_price
+    };
     let lots = sqlx::query(
         r#"
-        SELECT id, qty
+        SELECT id, qty, cost_per_unit, currency, usd_fx_rate
         FROM holding_lots
         WHERE holding_id = $1 AND user_id = $2 AND qty > 0
         ORDER BY acquired_at ASC, id ASC
@@ -944,6 +955,20 @@ async fn process_investment_event(
             .ok()
             .map(|d| d.to_string().parse().unwrap_or(0.0))
             .unwrap_or(0.0);
+        let lot_cpu: f64 = lot
+            .try_get::<rust_decimal::Decimal, _>("cost_per_unit")
+            .ok()
+            .map(|d| d.to_string().parse().unwrap_or(0.0))
+            .unwrap_or(0.0);
+        // Currency from the lot is conceptually relevant but operationally
+        // unused — `lot_fx` already encodes the conversion. Read it for
+        // future per-currency logic; prefix _ silences unused warning.
+        let _lot_ccy: String = lot.try_get("currency").unwrap_or_else(|_| "USD".to_string());
+        let lot_fx: f64 = lot
+            .try_get::<rust_decimal::Decimal, _>("usd_fx_rate")
+            .ok()
+            .map(|d| d.to_string().parse().unwrap_or(1.0))
+            .unwrap_or(1.0);
         let consume = remaining.min(lot_qty);
         let new_qty = lot_qty - consume;
         sqlx::query("UPDATE holding_lots SET qty = $1 WHERE id = $2")
@@ -951,12 +976,52 @@ async fn process_investment_event(
             .bind(lot_id)
             .execute(db)
             .await?;
+        // Realized P&L per lot, in USD: (qty * sell_usd_pps) - (qty * cost_usd_pps).
+        // The cost side uses the lot's historical FX rate; the sell
+        // side uses today's. Matches the accounting convention where
+        // the gain is "what you got minus what you paid", both
+        // measured in USD at the time of each event.
+        let cost_usd_pps = if lot_fx > 0.0 { lot_cpu / lot_fx } else { lot_cpu };
+        let realized_pnl_usd = consume * (sell_usd_pps - cost_usd_pps);
+        // Idempotent insert: re-running this sell with the same
+        // (user_id, sell_source_id, lot_id) is a no-op. The
+        // sell-marker check above already short-circuits the depletion
+        // loop, but if THAT fails for some reason (DB hiccup mid-
+        // sync), this clause guarantees no double-counting.
+        let _ = sqlx::query(
+            r#"
+            INSERT INTO lot_disposals (
+                user_id, holding_id, account_id, lot_id,
+                sell_source_id, qty_sold, sell_price_per_unit,
+                sell_currency, sell_fx_rate, sell_date,
+                cost_per_unit, cost_fx_rate, realized_pnl_usd
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            ON CONFLICT (user_id, sell_source_id, lot_id) DO NOTHING
+            "#,
+        )
+        .bind(user_id)
+        .bind(holding_id)
+        .bind(account_id)
+        .bind(lot_id)
+        .bind(source_id)
+        .bind(consume)
+        .bind(sell_price)
+        .bind(&currency)
+        .bind(sell_fx_rate)
+        .bind(acquired_at)
+        .bind(lot_cpu)
+        .bind(lot_fx)
+        .bind(realized_pnl_usd)
+        .execute(db)
+        .await;
         remaining -= consume;
     }
     // Drop the sell marker so a re-sync doesn't double-deplete.
     // qty = 0 makes the marker invisible to the cost-basis read
     // path; we tag it with the same currency / fx for completeness.
-    let marker_fx = lookup_usd_fx_rate(db, &currency, acquired_at).await;
+    // Reuse sell_fx_rate so we don't redo the lookup.
+    let marker_fx = sell_fx_rate;
     sqlx::query(
         r#"
         INSERT INTO holding_lots (

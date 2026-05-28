@@ -228,9 +228,16 @@ async fn confirm_handler(
                 .collect::<String>()
         );
 
+        // The parser stashes the pre-polish raw line in
+        // `original_description` only when polish_description
+        // meaningfully changed it. Persist verbatim so the
+        // frontend's displayLabel ladder can fall back to it
+        // ("DEPOSITO BANAMEX MERCH XYZ" → "BANAMEX MERCH XYZ" with
+        // the original kept as the fallback). NULL when polishing
+        // was a no-op — saves a column-equal-column copy.
         let result = sqlx::query(
-            "INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, source, source_id, user_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 'csv', $8, $9)
+            "INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, source, source_id, user_id, original_description)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'csv', $8, $9, $10)
              ON CONFLICT (account_id, external_id) DO NOTHING",
         )
         .bind(payload.account_id)
@@ -242,6 +249,7 @@ async fn confirm_handler(
         .bind(tx.category)
         .bind("csv_import")
         .bind(ctx.user_id)
+        .bind(tx.original_description.as_deref())
         .execute(&state.db)
         .await;
 

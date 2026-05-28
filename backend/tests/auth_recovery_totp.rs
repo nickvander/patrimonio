@@ -171,6 +171,7 @@ async fn bootstrap_and_login(app: &Router) -> (String, Vec<String>) {
 // ---------- recovery codes ----------
 
 #[tokio::test]
+#[serial_test::serial]
 async fn recovery_code_redeems_and_resets_password() {
     let Some(app) = skip_if_no_db(try_setup().await) else { return };
     let (_token, codes) = bootstrap_and_login(&app).await;
@@ -271,6 +272,7 @@ async fn recovery_code_redeems_and_resets_password() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn regenerate_invalidates_old_codes() {
     let Some(app) = skip_if_no_db(try_setup().await) else { return };
     let (token, original_codes) = bootstrap_and_login(&app).await;
@@ -359,6 +361,7 @@ fn current_totp_for(secret_b32: &str) -> String {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn totp_enroll_confirm_then_login_requires_two_steps() {
     let Some(app) = skip_if_no_db(try_setup().await) else { return };
     let (token, _codes) = bootstrap_and_login(&app).await;
@@ -501,6 +504,7 @@ async fn totp_enroll_confirm_then_login_requires_two_steps() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn totp_disable_requires_password() {
     let Some(app) = skip_if_no_db(try_setup().await) else { return };
     let (token, _codes) = bootstrap_and_login(&app).await;

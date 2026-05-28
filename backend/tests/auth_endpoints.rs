@@ -158,6 +158,7 @@ fn get_request(uri: &str, cookie: Option<&str>) -> Request<Body> {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn full_auth_lifecycle() {
     let Some((app, pool)) = skip_if_no_db(try_setup().await) else { return };
 
@@ -362,6 +363,7 @@ async fn full_auth_lifecycle() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn session_management_endpoints() {
     let Some((app, _pool)) = skip_if_no_db(try_setup().await) else { return };
 
@@ -555,6 +557,7 @@ async fn session_management_endpoints() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn rate_limit_kicks_in_after_repeated_failures() {
     let Some((app, _pool)) = skip_if_no_db(try_setup().await) else { return };
 

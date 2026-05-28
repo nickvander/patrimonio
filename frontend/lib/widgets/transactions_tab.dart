@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 import 'package:web/web.dart' as web;
@@ -133,6 +134,18 @@ class _TransactionsTabState extends State<TransactionsTab> {
   // Local spinner state while widget.onLoadMore is in-flight so the "Load
   // more" button itself shows feedback without a full-page reload.
   bool _loadingMore = false;
+  // True inline rename: when set, the row with this tx id renders a
+  // TextField in place of the label. Double-click on the label or R
+  // while hovering opens the editor. Enter saves, Esc cancels (so
+  // does losing focus). Only one row at a time can be inline-edited.
+  String? _inlineEditingTxId;
+  final TextEditingController _inlineEditController = TextEditingController();
+  final FocusNode _inlineEditFocus = FocusNode();
+  // Tracks the most recently mouse-hovered row id so the R keyboard
+  // shortcut at the tab level knows which row to enter inline-edit on.
+  // Cleared on mouse exit so R does nothing when the cursor isn't
+  // over a row.
+  String? _hoveredTxId;
 
   @override
   void initState() {
@@ -187,7 +200,98 @@ class _TransactionsTabState extends State<TransactionsTab> {
   @override
   void dispose() {
     _searchController.dispose();
+    _inlineEditController.dispose();
+    _inlineEditFocus.dispose();
     super.dispose();
+  }
+
+  /// Enter inline-edit mode for one row. Pre-fills the controller
+  /// with the row's existing `user_description`, requests focus on
+  /// the field so the user can start typing immediately. No-op when
+  /// onUpdate isn't wired (the surface is read-only).
+  void _startInlineEdit(dynamic tx) {
+    if (widget.onUpdate == null) return;
+    final id = tx['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    setState(() {
+      _inlineEditingTxId = id;
+      _inlineEditController.text =
+          (tx['user_description'] ?? '').toString();
+    });
+    // requestFocus after the rebuild so the new TextField is mounted.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _inlineEditFocus.requestFocus();
+      _inlineEditController.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _inlineEditController.text.length,
+      );
+    });
+  }
+
+  /// Commit the inline-edit text via the parent widget's onUpdate
+  /// hook. Empty text clears the override (the rename endpoint
+  /// already treats '' as a clear directive). Always exits edit
+  /// mode, success or failure — the dialog flow is still available
+  /// for the bulk-apply-to-N case.
+  Future<void> _commitInlineEdit(dynamic tx) async {
+    final id = tx['id']?.toString();
+    if (id == null) {
+      _cancelInlineEdit();
+      return;
+    }
+    final text = _inlineEditController.text.trim();
+    final onUpdate = widget.onUpdate;
+    setState(() => _inlineEditingTxId = null);
+    if (onUpdate == null) return;
+    try {
+      await onUpdate(id, {'user_description': text});
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 2),
+          content: Text(text.isEmpty ? 'Override cleared' : 'Renamed'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Rename failed: $e')),
+      );
+    }
+  }
+
+  void _cancelInlineEdit() {
+    if (_inlineEditingTxId == null) return;
+    setState(() => _inlineEditingTxId = null);
+  }
+
+  /// Handler for the R keyboard shortcut at the tab level. Fires
+  /// inline edit on the most-recently hovered row. Bails when the
+  /// user is already typing in any TextField (so R inside the search
+  /// box doesn't trigger a rename).
+  KeyEventResult _onTabKey(FocusNode _, KeyEvent ev) {
+    if (ev is! KeyDownEvent) return KeyEventResult.ignored;
+    if (ev.logicalKey != LogicalKeyboardKey.keyR) {
+      return KeyEventResult.ignored;
+    }
+    // Don't hijack R when the focus is already inside an editable
+    // text widget. `primaryFocus` is the leaf — walk up looking for
+    // an EditableText ancestor.
+    final pf = FocusManager.instance.primaryFocus;
+    if (pf?.context?.findAncestorWidgetOfExactType<EditableText>() != null) {
+      return KeyEventResult.ignored;
+    }
+    final hovered = _hoveredTxId;
+    if (hovered == null) return KeyEventResult.ignored;
+    // Find the tx for this id and trigger.
+    final tx = widget.transactions.firstWhere(
+      (t) => (t['id']?.toString() ?? '') == hovered,
+      orElse: () => null,
+    );
+    if (tx == null) return KeyEventResult.ignored;
+    _startInlineEdit(tx);
+    return KeyEventResult.handled;
   }
 
   List<dynamic> get _filteredTransactions {
@@ -382,7 +486,14 @@ class _TransactionsTabState extends State<TransactionsTab> {
 
     final filtered = _filteredTransactions;
 
-    return Card(
+    return Focus(
+      // Tab-level R-key shortcut: opens inline rename on the most-
+      // recently hovered row. Skipped automatically when focus is
+      // inside any EditableText (search field, inline-edit field,
+      // etc.) so the key types normally in those contexts.
+      autofocus: false,
+      onKeyEvent: _onTabKey,
+      child: Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Padding(
@@ -438,6 +549,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
             ],
           );
         }),
+      ),
       ),
     );
   }
@@ -1199,7 +1311,18 @@ class _TransactionsTabState extends State<TransactionsTab> {
     final id = tx['id']?.toString();
     final isSelected = id != null && _selectedIds.contains(id);
 
-    return InkWell(
+    return MouseRegion(
+      // Tracks the currently-hovered row id so the R keyboard
+      // shortcut at the tab level knows which row to enter inline-
+      // edit on. Cleared on exit so R does nothing when the cursor
+      // sits in the empty space below the list.
+      onEnter: (_) {
+        if (id != null) _hoveredTxId = id;
+      },
+      onExit: (_) {
+        if (_hoveredTxId == id) _hoveredTxId = null;
+      },
+      child: InkWell(
       onTap: () {
         if (_selectionMode && id != null) {
           setState(() {
@@ -1300,16 +1423,66 @@ class _TransactionsTabState extends State<TransactionsTab> {
                   Row(
                     children: [
                       Flexible(
-                        child: Text(
-                          displayLabel(tx),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                            height: 1.2,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        // When this row is the inline-edit target, swap
+                        // the Text for a TextField bound to the
+                        // controller. Enter saves via _commitInlineEdit,
+                        // Esc cancels via the Focus key handler. Tapping
+                        // outside (TapRegion) also cancels — clicking
+                        // anywhere else in the list is a clearer "I
+                        // changed my mind" signal than implicit blur.
+                        child: _inlineEditingTxId == (tx['id']?.toString())
+                            ? Focus(
+                                onKeyEvent: (node, ev) {
+                                  if (ev is KeyDownEvent &&
+                                      ev.logicalKey ==
+                                          LogicalKeyboardKey.escape) {
+                                    _cancelInlineEdit();
+                                    return KeyEventResult.handled;
+                                  }
+                                  return KeyEventResult.ignored;
+                                },
+                                child: TapRegion(
+                                  onTapOutside: (_) => _cancelInlineEdit(),
+                                  child: TextField(
+                                    controller: _inlineEditController,
+                                    focusNode: _inlineEditFocus,
+                                    autofocus: true,
+                                    onSubmitted: (_) => _commitInlineEdit(tx),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                      height: 1.2,
+                                    ),
+                                    decoration: const InputDecoration(
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 4),
+                                      border: OutlineInputBorder(),
+                                      hintText: 'New label · Enter to save',
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : GestureDetector(
+                                // Double-click on the label drops into
+                                // inline-edit mode. Single-tap still
+                                // bubbles to the row's onTap (detail
+                                // modal) because GestureDetector only
+                                // intercepts the double-tap gesture.
+                                onDoubleTap: widget.onUpdate == null
+                                    ? null
+                                    : () => _startInlineEdit(tx),
+                                child: Text(
+                                  displayLabel(tx),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                    height: 1.2,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                       ),
                       // "Split" pill on rows that are a child of a split.
                       // Cheap visual cue so the user can tell the $50
@@ -1412,6 +1585,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

@@ -134,11 +134,28 @@ pub(crate) fn polish_description(raw: &str) -> String {
 /// Apply `polish_description` to every transaction in a parser result.
 /// Used by every Mexican-parser branch in `detect_and_parse` so the same
 /// cleanup runs regardless of which parser fired.
+///
+/// Captures the pre-polish text into `original_description` when
+/// polishing meaningfully changed the value. That's the raw bank line
+/// the frontend's `displayLabel` ladder can fall back to when the
+/// polished form turned out too terse for the row to be recognisable
+/// ("DEPOSITO" → empty after stripping the generic prefix is the
+/// extreme case; the helper guards against that, but plenty of rows
+/// land somewhere in between).
 fn polish_all(result: Result<Vec<ParsedTransaction>>) -> Result<Vec<ParsedTransaction>> {
     result.map(|txs| {
         txs.into_iter()
             .map(|mut t| {
-                t.description = polish_description(&t.description);
+                let raw = t.description.trim().to_string();
+                let polished = polish_description(&raw);
+                // Only stash the raw line when polishing actually
+                // changed it — no need to duplicate identical strings
+                // across two columns when the original was already
+                // clean.
+                if polished != raw && !raw.is_empty() {
+                    t.original_description = Some(raw);
+                }
+                t.description = polished;
                 t
             })
             .collect()

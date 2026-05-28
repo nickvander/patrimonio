@@ -67,7 +67,7 @@ async fn try_setup(
     sqlx::query(
         "TRUNCATE \
          cash_fx_transfers, ignored_subscription_merchants, \
-         exchange_rates, holding_lots, holdings, \
+         exchange_rates, lot_disposals, holding_lots, holdings, \
          auth_audit, user_sessions, app_settings, \
          transactions, balance_snapshots, accounts, institutions, \
          users RESTART IDENTITY CASCADE",
@@ -289,6 +289,7 @@ async fn seed_tx(
 // =====================================================================
 
 #[tokio::test]
+#[serial_test::serial]
 async fn update_webhook_503_when_plaid_creds_missing() {
     let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
         return;
@@ -311,6 +312,7 @@ async fn update_webhook_503_when_plaid_creds_missing() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn update_webhook_400_when_url_missing() {
     // Plaid creds set, but PLAID_WEBHOOK_URL is None → 400.
     let Some((app, pool)) = skip_if_no_db(try_setup(true, None).await) else {
@@ -334,6 +336,7 @@ async fn update_webhook_400_when_url_missing() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn update_webhook_200_with_zero_when_no_items_linked() {
     // Plaid creds + URL set, but user has no Plaid items → 200 with
     // updated=0, failed=0 (no Plaid API call attempted).
@@ -366,6 +369,7 @@ async fn update_webhook_200_with_zero_when_no_items_linked() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn update_webhook_unauthenticated_is_401() {
     let Some((app, _pool)) = skip_if_no_db(try_setup(true, Some("https://example.com")).await)
     else {
@@ -385,6 +389,7 @@ async fn update_webhook_unauthenticated_is_401() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn update_webhook_without_csrf_header_is_403() {
     let Some((app, pool)) = skip_if_no_db(try_setup(true, Some("https://example.com")).await)
     else {
@@ -418,6 +423,7 @@ async fn update_webhook_without_csrf_header_is_403() {
 // that class of regression even without a real PDF fixture.
 
 #[tokio::test]
+#[serial_test::serial]
 async fn upload_unauthenticated_is_401() {
     let Some((app, _pool)) = skip_if_no_db(try_setup(false, None).await) else {
         return;
@@ -439,6 +445,7 @@ async fn upload_unauthenticated_is_401() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn upload_without_csrf_is_403() {
     let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
         return;
@@ -463,6 +470,7 @@ async fn upload_without_csrf_is_403() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn upload_with_no_files_is_400() {
     // CSRF + auth pass; multipart parses zero files → 400 "No files
     // were found in the upload request." Single-shot JSON response
@@ -506,6 +514,7 @@ async fn upload_with_no_files_is_400() {
 // =====================================================================
 
 #[tokio::test]
+#[serial_test::serial]
 async fn split_creates_children_and_hides_parent_in_listing() {
     let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
         return;
@@ -558,6 +567,7 @@ async fn split_creates_children_and_hides_parent_in_listing() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn split_rejects_total_mismatch() {
     let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
         return;
@@ -585,6 +595,7 @@ async fn split_rejects_total_mismatch() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn split_rejects_sign_mismatch() {
     let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
         return;
@@ -612,6 +623,7 @@ async fn split_rejects_sign_mismatch() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn split_already_split_returns_422() {
     let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
         return;
@@ -662,6 +674,7 @@ async fn split_already_split_returns_422() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn put_replace_splits_atomic() {
     // The new PUT endpoint replaces children atomically — no window
     // where the parent appears un-split to a concurrent reader.
@@ -726,6 +739,7 @@ async fn put_replace_splits_atomic() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn put_replace_splits_rejects_total_mismatch() {
     let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
         return;
@@ -784,6 +798,7 @@ async fn put_replace_splits_rejects_total_mismatch() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn edit_split_via_unsplit_then_resplit() {
     // This mirrors what the frontend does for the "Edit split" button:
     // DELETE the children, then re-POST a new split set.
@@ -868,6 +883,7 @@ async fn edit_split_via_unsplit_then_resplit() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn unsplit_nonexistent_parent_is_404() {
     let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
         return;
@@ -888,6 +904,7 @@ async fn unsplit_nonexistent_parent_is_404() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn split_cross_user_is_404() {
     // User A's parent transaction should be invisible to user B.
     let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
@@ -955,6 +972,7 @@ async fn split_cross_user_is_404() {
 // =====================================================================
 
 #[tokio::test]
+#[serial_test::serial]
 async fn since_last_login_empty_when_no_previous_login() {
     let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
         return;
@@ -980,6 +998,7 @@ async fn since_last_login_empty_when_no_previous_login() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn since_last_login_counts_new_transactions() {
     let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
         return;
@@ -1035,6 +1054,7 @@ async fn since_last_login_counts_new_transactions() {
 // =====================================================================
 
 #[tokio::test]
+#[serial_test::serial]
 async fn subscription_ignore_then_unignore_roundtrip() {
     let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
         return;
@@ -1118,6 +1138,7 @@ async fn subscription_ignore_then_unignore_roundtrip() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn subscription_ignore_rejects_empty_key() {
     let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
         return;
@@ -1141,6 +1162,7 @@ async fn subscription_ignore_rejects_empty_key() {
 // =====================================================================
 
 #[tokio::test]
+#[serial_test::serial]
 async fn fx_transfers_listing_empty() {
     let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
         return;
@@ -1168,6 +1190,7 @@ async fn fx_transfers_listing_empty() {
 /// without a separate FX lookup per row. Locks in the per-date
 /// subquery rewrite added for the cross-currency cash-flow card.
 #[tokio::test]
+#[serial_test::serial]
 async fn fx_transfers_listing_populates_spot_rate() {
     let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
         return;
@@ -1232,6 +1255,7 @@ async fn fx_transfers_listing_populates_spot_rate() {
 // =====================================================================
 
 #[tokio::test]
+#[serial_test::serial]
 async fn net_worth_history_aggregates_per_date_and_institution() {
     // Seed snapshots across two institutions on two dates so we can
     // check the per-institution map. This exercises the SQL rewrite
@@ -1310,6 +1334,7 @@ async fn net_worth_history_aggregates_per_date_and_institution() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn net_worth_history_handles_liabilities() {
     // A credit-card liability should show up as a NEGATIVE in
     // by_institution AND reduce net_worth. Tests the is_liability
@@ -1372,6 +1397,7 @@ async fn net_worth_history_handles_liabilities() {
 // while leaving GETs untouched.
 
 #[tokio::test]
+#[serial_test::serial]
 async fn read_only_user_can_get_but_not_mutate() {
     let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
         return;
@@ -1426,6 +1452,7 @@ async fn read_only_user_can_get_but_not_mutate() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn read_only_user_can_still_log_out() {
     // require_owner does NOT apply to /api/auth/* — a read-only user
     // must be able to manage their own session (logout, change
@@ -1456,6 +1483,7 @@ async fn read_only_user_can_still_log_out() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn owner_role_passes_require_owner() {
     // Sanity check: the default owner role goes through every gate
     // for a mutating request just like before role landed.
@@ -1507,6 +1535,7 @@ async fn seed_owner(
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn cross_tenant_isolation_dashboard() {
     let Some((app, pool)) = skip_if_no_db(try_setup(false, None).await) else {
         return;
@@ -1647,6 +1676,7 @@ async fn cross_tenant_isolation_dashboard() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn cross_tenant_isolation_sessions_list() {
     // /api/auth/sessions must return only the caller's own sessions —
     // an obvious place where a missing predicate would leak every

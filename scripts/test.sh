@@ -6,9 +6,12 @@
 #   * The integration tests in tests/dashboard_endpoints.rs and
 #     tests/auth_endpoints.rs need a real Postgres reachable via
 #     PATRIMONIO_TEST_DATABASE_URL — they skip with a print otherwise.
-#   * The tests share a single DB and TRUNCATE on setup, so they MUST
-#     run with --test-threads=1 to avoid one test wiping another's
-#     data mid-flight (and surfacing as random 500s on bootstrap).
+#   * The tests share a single DB and TRUNCATE on setup. Every
+#     `#[tokio::test]` carries `#[serial_test::serial]` to serialise
+#     execution across threads, so plain `cargo test` Just Works
+#     without --test-threads=1. The flag stays pinned as belt-and-
+#     braces — if a new test gets added without the #[serial], the
+#     pin keeps the suite green until it's caught.
 #   * The rust:1.88-slim image doesn't bundle libssl-dev / pkg-config,
 #     so the linker fails without an apt-get install step first.
 #

@@ -40,6 +40,53 @@ have shipped. The app now does:
 * `app_settings.user_id` (M7 leftover) — budgets / goals no longer
   leak across users.
 
+## Backlog cleanup bundle sprint (2026-05-28)
+
+Five medium FUTURE.md items closed:
+
+* **serial_test crate annotated on every integration test.** The
+  `auth_endpoints` / `auth_recovery_totp` / `dashboard_endpoints`
+  trios share a Postgres + TRUNCATE in setup, which previously
+  required `--test-threads=1` pinned at the wrapper. Every
+  `#[tokio::test]` now also carries `#[serial_test::serial]`, so
+  plain `cargo test` Just Works regardless of thread count. The
+  wrapper still pins the flag belt-and-braces for new tests that
+  forget the annotation.
+* **PDF parser merchant_code/payee plumbing.** Added
+  `original_description: Option<String>` to `ParsedTransaction`
+  (with `#[serde(default)]` + a `Default` derive so existing
+  callers keep compiling). `polish_all` now stashes the raw
+  pre-polish line in `original_description` when polishing
+  meaningfully changed the value; the import-confirm handler
+  inserts both columns. The frontend's existing displayLabel ladder
+  (`user_description → counterparty → merchant →
+  original_description → description`) picks the verbatim line as
+  fallback. Two new unit tests cover the capture-when-changed and
+  skip-when-unchanged paths.
+* **True inline transaction rename.** Double-click on a transaction
+  row's label drops it into inline-edit mode — the label swaps for
+  a TextField pre-filled with the existing `user_description`. Enter
+  commits via the existing `onUpdate` callback (which already
+  understands `user_description: ''` as a clear-override directive),
+  Esc / blur cancels. The right-click → dialog flow stays as the
+  bulk-apply-to-N fallback.
+* **R keyboard shortcut.** A `Focus` widget at the TransactionsTab
+  level captures the R key and triggers inline-edit on the most-
+  recently mouse-hovered row. Safely no-ops when focus is inside
+  any EditableText (search box, inline-edit field) so R types
+  normally there. Mouse-tracking is via per-row MouseRegion that
+  updates `_hoveredTxId` on enter/exit.
+* **lot_disposals audit trail.** Migration
+  `2026052801_lot_disposals.sql` adds a per-lot, per-sell-event
+  table capturing the realized P&L crystallised at the moment of
+  sale. Sync's FIFO depletion loop now inserts one disposal row
+  per lot consumed (with the sell-side FX rate, the cost-side FX
+  rate from the depleted lot, the qty sold, and pre-computed
+  `realized_pnl_usd`). Idempotent via unique
+  `(user_id, sell_source_id, lot_id)`. The audit history is durable
+  even if the original lot row gets later deleted (lot_id is
+  `ON DELETE SET NULL`).
+
 ## Cross-currency + lots + webauthn-AEAD + chart hover sprint (2026-05-27)
 
 Four more pickup-bundle items from `work/FUTURE.md`.

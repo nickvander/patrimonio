@@ -100,3 +100,12 @@ jsonwebtoken = "9"
 tokio-cron-scheduler = "0.13"
 csv = "1.3"
 lopdf = "0.34"
+
+[dev-dependencies]
+# Per-test serialization. The integration tests under tests/ share a
+# Postgres + TRUNCATE in setup, so running them in parallel races and
+# wipes each other's data. Previously `--test-threads=1` was pinned at
+# the wrapper (scripts/test.sh) level; with #[serial_test::serial] on
+# every #[tokio::test] in the integration files, plain `cargo test`
+# Just Works regardless of thread count.
+serial_test = "3"

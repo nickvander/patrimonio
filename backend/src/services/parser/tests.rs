@@ -234,6 +234,43 @@ fn test_polish_description_collapses_whitespace() {
 }
 
 #[test]
+fn test_polish_all_captures_original_when_changed() {
+    // Polishing strips "COMPRA " + " 20260418" → "OXXO". The raw line
+    // should round-trip into original_description so the frontend's
+    // displayLabel ladder can fall back to it.
+    let raw = "COMPRA OXXO 20260418".to_string();
+    let parsed = vec![ParsedTransaction {
+        date: NaiveDate::from_ymd_opt(2026, 4, 18).unwrap(),
+        description: raw.clone(),
+        amount: Decimal::from_str("-50.00").unwrap(),
+        currency: "MXN".to_string(),
+        category: None,
+        original_description: None,
+    }];
+    let polished = polish_all(Ok(parsed)).unwrap();
+    assert_eq!(polished[0].description, "OXXO");
+    assert_eq!(polished[0].original_description.as_deref(), Some("COMPRA OXXO 20260418"));
+}
+
+#[test]
+fn test_polish_all_skips_original_when_unchanged() {
+    // No prefix and no trailing date — polish is a no-op. The
+    // original_description column stays NULL to avoid duplicating
+    // identical strings across two columns.
+    let parsed = vec![ParsedTransaction {
+        date: NaiveDate::from_ymd_opt(2026, 4, 18).unwrap(),
+        description: "UBER EATS MEXICO".to_string(),
+        amount: Decimal::from_str("-150.00").unwrap(),
+        currency: "MXN".to_string(),
+        category: None,
+        original_description: None,
+    }];
+    let polished = polish_all(Ok(parsed)).unwrap();
+    assert_eq!(polished[0].description, "UBER EATS MEXICO");
+    assert!(polished[0].original_description.is_none());
+}
+
+#[test]
 fn test_polish_description_idempotent() {
     let once = polish_description("COMPRA OXXO 20260418");
     let twice = polish_description(&once);
