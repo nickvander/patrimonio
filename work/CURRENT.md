@@ -1,6 +1,6 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-05-26 (post realtime-coverage + manual-assets + HIBP sprint)
+> **Last updated:** 2026-05-27 (post cross-currency + lots + webauthn-AEAD sprint)
 > **Branch:** feature branch with the latest sprint awaiting fast-forward merge to `main`.
 
 ## Where we are
@@ -39,6 +39,50 @@ have shipped. The app now does:
   untrusted peers at the edge.
 * `app_settings.user_id` (M7 leftover) — budgets / goals no longer
   leak across users.
+
+## Cross-currency + lots + webauthn-AEAD + chart hover sprint (2026-05-27)
+
+Four more pickup-bundle items from `work/FUTURE.md`.
+
+* **Cross-currency transfers in the cash-flow tab.** New widget
+  `widgets/cross_currency_transfers_card.dart` lists every linked
+  Wise / Remitly / wire pair with implied rate, day's spot rate,
+  and a +/- delta pill so the user can see at a glance whether the
+  remittance service paid out above or below market. Confirm and
+  Unlink inline (the same `/api/dashboard/fx-transfers/{id}` PATCH
+  and DELETE handlers the tx-detail modal already uses). Backend
+  endpoint enriched: each row now carries `spot_fx_rate` populated
+  by a per-date subquery against `exchange_rates` (USD↔MXN nearest
+  within ±7 days of the source date). New integration test
+  `fx_transfers_listing_populates_spot_rate` locks the shape in.
+* **Per-lot breakdown for holdings.** `/api/dashboard/holdings` now
+  returns a `lots[]` array per holding when `holding_lots` rows
+  exist (zero-qty depletion markers filtered out, FIFO ordered).
+  Frontend portfolio rows with lots get a click-to-expand modal
+  showing acquisition date, qty, native cost per unit, USD/native
+  FX at acquisition, and the resulting USD cost — answers the
+  recurring "why does my MXN P&L differ from a naive conversion"
+  question by showing the historical FX rate column explicitly.
+* **AEAD encryption of webauthn flow state in Redis.** The per-
+  flow PasskeyRegistration / PasskeyAuthentication state was
+  previously stored as plaintext JSON behind a 5-minute TTL. A
+  Redis snapshot leak inside that window would have let an
+  attacker replay an in-flight registration and bind their own
+  authenticator to a victim's account. New `store_state` /
+  `take_state` round-trip the state through AES-GCM using the
+  existing `ENCRYPTION_KEY`, prefixed `v2:` for format dispatch.
+  Falls back to `v1:` plaintext + a warn log when no encryption
+  key is configured so local dev keeps working without
+  re-configuration.
+* **Net-worth chart hover polish.** `touchSpotThreshold` was 24
+  (a 2× bump over fl_chart's default 10) — still required the
+  cursor to be near the line. Bumped to 100000 + a horizontal-
+  only `distanceCalculator` so the closest sample on the X axis
+  always wins, regardless of vertical distance. The vertical
+  guide + highlighted dot already in place now fires continuously
+  across the chart's full plot area — matches the Robinhood /
+  Mint / Personal Capital pattern. Same treatment applied to the
+  wealth-projection chart.
 
 ## Realtime coverage + manual assets + HIBP sprint (2026-05-26)
 

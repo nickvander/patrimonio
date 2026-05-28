@@ -363,11 +363,17 @@ async fn holdings(
     .unwrap_or_default();
 
     // Pull any lots for this user in one query, group by holding.
+    // Filter zero-qty rows here — those are FIFO-depletion markers
+    // (one per sell event) inserted to make re-syncs idempotent.
+    // They have no owned shares, so they shouldn't appear in the
+    // breakdown or contribute to cost basis.
     let lot_rows = sqlx::query(
         r#"
-        SELECT holding_id, qty, cost_per_unit, currency, usd_fx_rate
+        SELECT holding_id, qty, cost_per_unit, currency, usd_fx_rate,
+               acquired_at
         FROM holding_lots
-        WHERE user_id = $1
+        WHERE user_id = $1 AND qty > 0
+        ORDER BY acquired_at ASC, id ASC
         "#
     )
     .bind(ctx.user_id)
@@ -375,8 +381,12 @@ async fn holdings(
     .await
     .unwrap_or_default();
 
+    // Two parallel maps: one for the cost-basis computation (the
+    // tuple form was already in use downstream), one for the
+    // serialised lot breakdown surfaced to the frontend.
     let mut lots_by_holding: HashMap<uuid::Uuid, Vec<(f64, f64, String, f64)>> =
         HashMap::new();
+    let mut lot_details_by_holding: HashMap<uuid::Uuid, Vec<HoldingLot>> = HashMap::new();
     for r in &lot_rows {
         let hid: uuid::Uuid = match r.try_get("holding_id") { Ok(v) => v, Err(_) => continue };
         let qty: f64 = r.try_get::<rust_decimal::Decimal, _>("qty").ok()
@@ -386,7 +396,29 @@ async fn holdings(
         let ccy: String = r.try_get("currency").unwrap_or_else(|_| "USD".to_string());
         let fx: f64 = r.try_get::<rust_decimal::Decimal, _>("usd_fx_rate").ok()
             .map(|d| d.to_string().parse().unwrap_or(1.0)).unwrap_or(1.0);
-        lots_by_holding.entry(hid).or_default().push((qty, cpu, ccy, fx));
+        let acquired_at: String = r
+            .try_get::<chrono::NaiveDate, _>("acquired_at")
+            .map(|d| d.to_string())
+            .unwrap_or_default();
+        lots_by_holding
+            .entry(hid)
+            .or_default()
+            .push((qty, cpu, ccy.clone(), fx));
+        let native_cost = qty * cpu;
+        let usd_cost = match ccy.as_str() {
+            "USD" => native_cost,
+            "MXN" => if fx > 0.0 { native_cost / fx } else { native_cost },
+            _ => native_cost,
+        };
+        lot_details_by_holding.entry(hid).or_default().push(HoldingLot {
+            acquired_at,
+            qty,
+            cost_per_unit: cpu,
+            currency: ccy,
+            usd_fx_rate: fx,
+            native_cost,
+            usd_cost,
+        });
     }
 
     let to_usd = |amount: f64, ccy: &str| -> f64 {
@@ -454,6 +486,7 @@ async fn holdings(
                 holding_type: r.try_get::<String, _>("holding_type").unwrap_or_default(),
                 account_name: r.get("account_name"),
                 institution_name: r.get("institution_name"),
+                lots: lot_details_by_holding.remove(&id).unwrap_or_default(),
             }
         })
         .collect();
@@ -1168,6 +1201,39 @@ struct HoldingDetail {
     holding_type: String,
     account_name: String,
     institution_name: String,
+    /// Per-lot breakdown when `holding_lots` rows exist for this
+    /// holding. Lets power users see WHY the FX-aware cost basis
+    /// differs from the naive current-FX number — each lot carries
+    /// the historical FX rate at acquisition. Empty for holdings
+    /// that pre-date the lot-tracker (institutions not yet
+    /// re-synced) or for non-investment rows.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    lots: Vec<HoldingLot>,
+}
+
+#[derive(Serialize)]
+struct HoldingLot {
+    /// Acquisition date (YYYY-MM-DD) of the lot. FIFO order is
+    /// implied by the array order — the frontend renders them in
+    /// acquired-first order.
+    acquired_at: String,
+    /// Lot quantity. Always > 0 for active lots; depletion markers
+    /// (qty 0) are filtered out before this serialises.
+    qty: f64,
+    /// Native cost per unit (the share / unit price at acquisition).
+    cost_per_unit: f64,
+    /// Currency the cost is denominated in — same as the holding for
+    /// homogeneous brokerages, can differ for multi-currency accounts.
+    currency: String,
+    /// USD↔native FX rate that was in effect on `acquired_at`. We
+    /// snapshot this at lot creation so future FX moves don't
+    /// retroactively shift historical cost basis.
+    usd_fx_rate: f64,
+    /// Convenience: qty × cost_per_unit (native).
+    native_cost: f64,
+    /// Convenience: native_cost ÷ usd_fx_rate (or = native_cost when
+    /// the lot is already USD).
+    usd_cost: f64,
 }
 
 #[derive(Serialize)]
@@ -1854,6 +1920,13 @@ struct FxTransferEntry {
     /// to format a full timestamp.
     source_date: String,
     dest_date: String,
+    /// Best-effort spot USD→MXN rate near the source-date, so the
+    /// frontend can render "Wise gave you 19.40, market was 19.62"
+    /// without round-tripping back for a /fx/historical lookup per
+    /// row. Absent when no rate within ±7 days of the source date
+    /// is available (early-bootstrap cases).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    spot_fx_rate: Option<f64>,
 }
 
 /// List every detected (and user-confirmed) cross-currency cash
@@ -1863,6 +1936,12 @@ async fn list_fx_transfers(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Json<Vec<FxTransferEntry>> {
+    // We always denominate the "spot rate" as USD→MXN since that's
+    // the only currency pair the rates table currently tracks. The
+    // frontend handles the direction inversion when the transfer
+    // happens to be MXN→USD. Lookup window is ±7 days from the
+    // source date — daily rates can be missing on weekends/holidays
+    // and 7 days is well inside Wise's typical settlement variance.
     let rows = sqlx::query(
         r#"
         SELECT
@@ -1875,7 +1954,21 @@ async fn list_fx_transfers(
             COALESCE(ts.user_description, ts.counterparty_name, ts.merchant_name, ts.description) AS source_label,
             ts.date AS source_date,
             COALESCE(td.user_description, td.counterparty_name, td.merchant_name, td.description) AS dest_label,
-            td.date AS dest_date
+            td.date AS dest_date,
+            (
+                SELECT er.rate
+                FROM exchange_rates er
+                WHERE er.base_currency = 'USD'
+                  AND er.target_currency = 'MXN'
+                  AND er.recorded_at::date BETWEEN ts.date - INTEGER '7'
+                                              AND ts.date + INTEGER '7'
+                -- date - date is integer (days); ABS over that picks the
+                -- nearest row to ts.date without dragging EPOCH/INTERVAL
+                -- through type coercion (which silently turned the
+                -- subquery into a Postgres error for non-empty pairs).
+                ORDER BY ABS(er.recorded_at::date - ts.date) ASC
+                LIMIT 1
+            ) AS spot_fx_rate
         FROM cash_fx_transfers f
         JOIN transactions ts ON ts.id = f.source_tx_id
         JOIN transactions td ON td.id = f.dest_tx_id
@@ -1935,6 +2028,11 @@ async fn list_fx_transfers(
                     .try_get::<chrono::NaiveDate, _>("dest_date")
                     .map(|d| d.to_string())
                     .unwrap_or_default(),
+                spot_fx_rate: r
+                    .try_get::<Option<rust_decimal::Decimal>, _>("spot_fx_rate")
+                    .ok()
+                    .flatten()
+                    .and_then(|d| d.to_string().parse().ok()),
             })
             .collect(),
     )

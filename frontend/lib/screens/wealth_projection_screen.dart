@@ -629,10 +629,13 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             ),
         ],
         lineTouchData: LineTouchData(
-          // Match the net-worth chart's tactile hover: vertical guide line
-          // and a highlighted dot wherever the cursor lands along the X
-          // axis, not just within 10px of a sample.
-          touchSpotThreshold: 24,
+          // Match the net-worth chart's snap-to-nearest-x hover: an
+          // effectively unbounded threshold + horizontal-only
+          // distance metric means the closest sample always wins,
+          // regardless of how far the cursor sits from the line.
+          touchSpotThreshold: 100000,
+          distanceCalculator: (touchPoint, spotPixelCoordinates) =>
+              (touchPoint.dx - spotPixelCoordinates.dx).abs(),
           handleBuiltInTouches: true,
           getTouchedSpotIndicator: (barData, spotIndexes) {
             return spotIndexes.map((idx) {

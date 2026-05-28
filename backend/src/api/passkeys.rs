@@ -551,15 +551,51 @@ fn random_nonce() -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
+/// Serialise the per-flow `PasskeyRegistration` / `PasskeyAuthentication`
+/// state, AES-GCM-encrypt it under `ENCRYPTION_KEY`, then SETEX into
+/// Redis. The previous plaintext-JSON design meant a Redis snapshot
+/// leak (or the bind-to-0.0.0.0 misconfig we already plugged) would
+/// hand an attacker the in-flight challenge — they could resume the
+/// flow and bind their own authenticator to a victim's account inside
+/// the 5-minute TTL window.
+///
+/// With encryption, a Redis-only compromise yields ciphertext + a
+/// 12-byte nonce. Without `ENCRYPTION_KEY` the attacker can't replay
+/// the flow. The TTL stays at 5 min and the consume-on-use semantics
+/// stay intact (`take_state` still `DEL`s after read).
+///
+/// Fail-soft fallback: when `ENCRYPTION_KEY` is unset (local dev
+/// without an encryption config), we log a warning and store
+/// plaintext JSON behind a `v1:` prefix so `take_state` can tell
+/// the two formats apart. Production should always set the key —
+/// `/api/setup/status` already surfaces this check.
 async fn store_state<T: Serialize>(state: &AppState, key: &str, value: &T) -> Result<(), ApiError> {
     let json = serde_json::to_string(value).map_err(internal)?;
+    let payload = match state.config.encryption_key.as_deref() {
+        Some(enc_key) => {
+            let ct = crate::services::encryption::encrypt(enc_key, &json)
+                .map_err(internal)?;
+            // `v2:` prefix marks AEAD-encrypted base64 payloads so
+            // `take_state` can dispatch on the format. Base64 keeps
+            // the value 7-bit clean for the Redis text protocol.
+            format!("v2:{}", base64::engine::general_purpose::STANDARD.encode(ct))
+        }
+        None => {
+            tracing::warn!(
+                "passkeys: ENCRYPTION_KEY unset — passkey flow state will be \
+                 stored in Redis as plaintext JSON. Set ENCRYPTION_KEY in \
+                 production to harden against a Redis snapshot leak."
+            );
+            format!("v1:{}", json)
+        }
+    };
     let mut conn = state
         .redis
         .get_multiplexed_async_connection()
         .await
         .map_err(internal)?;
     let _: () = conn
-        .set_ex(key, json, CHALLENGE_TTL_SECONDS)
+        .set_ex(key, payload, CHALLENGE_TTL_SECONDS)
         .await
         .map_err(internal)?;
     Ok(())
@@ -583,5 +619,35 @@ async fn take_state<T: for<'de> Deserialize<'de>>(
     })?;
     // Consume the challenge — replay protection.
     let _: i64 = conn.del(key).await.map_err(internal)?;
-    serde_json::from_str(&raw).map_err(internal)
+
+    // Two acceptable on-wire formats:
+    //   v2:<base64>  — AES-GCM encrypted JSON, ENCRYPTION_KEY required
+    //   v1:<json>    — plaintext JSON (no encryption key configured)
+    //
+    // Anything else is rejected — it can only mean a stray key written
+    // by a different writer or a downgrade attack on the format.
+    let json = if let Some(rest) = raw.strip_prefix("v2:") {
+        let enc_key = state
+            .config
+            .encryption_key
+            .as_deref()
+            .ok_or_else(|| {
+                ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "Passkey flow state encrypted but ENCRYPTION_KEY is unset.",
+                )
+            })?;
+        let ct = base64::engine::general_purpose::STANDARD
+            .decode(rest)
+            .map_err(internal)?;
+        crate::services::encryption::decrypt(enc_key, &ct).map_err(internal)?
+    } else if let Some(rest) = raw.strip_prefix("v1:") {
+        rest.to_string()
+    } else {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "Passkey flow state in unknown format.",
+        ));
+    };
+    serde_json::from_str(&json).map_err(internal)
 }

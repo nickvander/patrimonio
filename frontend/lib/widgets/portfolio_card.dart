@@ -1581,20 +1581,217 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
       ),
     );
 
+    final lots = (h['lots'] as List?) ?? const [];
+    final hasLots = lots.isNotEmpty;
+
     return MouseRegion(
+      cursor: hasLots ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
-      child: Container(
-        color:
-            _hover ? context.tint(0.05) : Colors.transparent,
-        child: _tableRow(
-          asset: asset,
-          shares: shares,
-          price: priceCell,
-          value: valueCell,
-          costBasis: costBasisCell,
-          gain: gainCell,
-          returnPct: returnCell,
+      child: GestureDetector(
+        // Tap-to-expand: only fires when there's a lot breakdown to
+        // show. Securities synced before the lot tracker shipped, or
+        // non-investment holdings, show no clickable affordance.
+        onTap: hasLots ? () => _showLotBreakdown(context) : null,
+        child: Container(
+          color:
+              _hover ? context.tint(0.05) : Colors.transparent,
+          child: _tableRow(
+            asset: asset,
+            shares: shares,
+            price: priceCell,
+            value: valueCell,
+            costBasis: costBasisCell,
+            gain: gainCell,
+            returnPct: returnCell,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Modal showing the per-lot FIFO breakdown for this holding —
+  /// each lot's acquisition date, qty, native cost-per-unit, the
+  /// USD/MXN FX rate at acquisition, and the USD cost. Answers the
+  /// power-user question "why does my MXN P&L differ from a naive
+  /// current-FX conversion of my native cost basis?" — the FX rate
+  /// column shows exactly what's different.
+  void _showLotBreakdown(BuildContext context) {
+    final h = widget.holding;
+    final lots = ((h['lots'] as List?) ?? const []).cast<dynamic>();
+    final symbol = (h['symbol'] ?? '').toString();
+    final name = (h['name'] ?? '').toString();
+    final title = symbol.isNotEmpty ? symbol : (name.isNotEmpty ? name : 'Holding');
+
+    final dateFmt = DateFormat('MMM d, y');
+    final usdFmt = NumberFormat.currency(locale: 'en_US', symbol: r'$');
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Theme.of(ctx).colorScheme.surface,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720, maxHeight: 560),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 22, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Lot breakdown · $title',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                                color: context.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'FIFO order. Cost basis sums each lot at its '
+                              'historical USD/native FX rate, not today\'s.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: context.textSubtle,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Column header. Five columns, fixed grid so the body
+                  // rows align on a quick scan.
+                  Row(
+                    children: [
+                      _lotHeader(context, 'Acquired', flex: 3),
+                      _lotHeader(context, 'Qty', flex: 2, alignRight: true),
+                      _lotHeader(context, 'Cost / unit', flex: 3, alignRight: true),
+                      _lotHeader(context, 'FX at lot', flex: 2, alignRight: true),
+                      _lotHeader(context, 'USD cost', flex: 3, alignRight: true),
+                    ],
+                  ),
+                  Divider(height: 12, color: context.hairline),
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: lots.length,
+                      separatorBuilder: (_, __) =>
+                          Divider(height: 1, color: context.hairline.withValues(alpha: 0.5)),
+                      itemBuilder: (_, i) {
+                        final lot = lots[i] as Map;
+                        final acquired = (lot['acquired_at'] ?? '').toString();
+                        DateTime? date;
+                        if (acquired.isNotEmpty) {
+                          date = DateTime.tryParse(acquired);
+                        }
+                        final qty = (lot['qty'] as num?)?.toDouble() ?? 0.0;
+                        final cpu = (lot['cost_per_unit'] as num?)?.toDouble() ?? 0.0;
+                        final ccy = (lot['currency'] ?? 'USD').toString();
+                        final fx = (lot['usd_fx_rate'] as num?)?.toDouble() ?? 1.0;
+                        final usdCost = (lot['usd_cost'] as num?)?.toDouble() ?? 0.0;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
+                            children: [
+                              _lotCell(
+                                context,
+                                date != null ? dateFmt.format(date) : acquired,
+                                flex: 3,
+                              ),
+                              _lotCell(
+                                context,
+                                qty.toStringAsFixed(qty == qty.roundToDouble() ? 0 : 4),
+                                flex: 2,
+                                alignRight: true,
+                              ),
+                              _lotCell(
+                                context,
+                                '${formatCurrencyAmount(cpu, ccy)} $ccy',
+                                flex: 3,
+                                alignRight: true,
+                              ),
+                              _lotCell(
+                                context,
+                                ccy == 'USD' ? '—' : fx.toStringAsFixed(4),
+                                flex: 2,
+                                alignRight: true,
+                                muted: ccy == 'USD',
+                              ),
+                              _lotCell(
+                                context,
+                                usdFmt.format(usdCost),
+                                flex: 3,
+                                alignRight: true,
+                                bold: true,
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _lotHeader(BuildContext context, String text,
+      {int flex = 1, bool alignRight = false}) {
+    return Expanded(
+      flex: flex,
+      child: Align(
+        alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: context.textSubtle,
+            letterSpacing: 0.4,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _lotCell(BuildContext context, String text,
+      {int flex = 1,
+      bool alignRight = false,
+      bool bold = false,
+      bool muted = false}) {
+    return Expanded(
+      flex: flex,
+      child: Align(
+        alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+            color: muted ? context.textFaint : context.textPrimary,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
       ),
     );

@@ -18,6 +18,7 @@ import '../widgets/portfolio_card.dart';
 import '../widgets/fx_widget.dart';
 import '../widgets/credit_utilization_card.dart';
 import '../widgets/sync_status_card.dart';
+import '../widgets/cross_currency_transfers_card.dart';
 import '../widgets/accounts_list_widget.dart';
 import '../widgets/transactions_tab.dart';
 import '../widgets/add_account_dialog.dart';
@@ -1969,6 +1970,48 @@ class _DashboardScreenState extends State<DashboardScreen>
               },
             ),
           const SizedBox(height: 24),
+          // Cross-currency cash transfers (Wise / Remitly / wires).
+          // Lists each detected link with implied vs spot FX, plus
+          // Confirm/Unlink inline. Hidden when there are no detected
+          // pairs — keeps the cash-flow tab quiet for single-currency
+          // users.
+          if ((_fxTransfers ?? const []).isNotEmpty) ...[
+            CrossCurrencyTransfersCard(
+              transfers: _fxTransfers!,
+              currencyFormat: currencyFormat,
+              onConfirm: (id) async {
+                try {
+                  await _apiService.confirmFxTransfer(id);
+                  await _refreshData();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Link confirmed')),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Confirm failed: $e')),
+                  );
+                }
+              },
+              onUnlink: (id) async {
+                try {
+                  await _apiService.unlinkFxTransfer(id);
+                  await _refreshData();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Pair unlinked')),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Unlink failed: $e')),
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: 24),
+          ],
           // Hidden-from-subscriptions list. Surfaces only when there's
           // something to un-hide — keeps the cash-flow tab quiet for
           // users who never dismissed anything.

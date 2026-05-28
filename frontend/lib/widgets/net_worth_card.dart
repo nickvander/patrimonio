@@ -441,11 +441,17 @@ class _NetWorthCardState extends State<NetWorthCard> {
     return LineChart(
       LineChartData(
         lineTouchData: LineTouchData(
-          // The default touchSpotThreshold (10px) makes hovers feel
-          // mechanical — you have to land almost directly on a sample
-          // point. Bumping it to 24 widens the catch area so any
-          // hover within the column registers.
-          touchSpotThreshold: 24,
+          // Snap-to-nearest-x feel: a very large threshold makes the
+          // chart always pick the closest sample to the cursor's X
+          // regardless of vertical distance. That's the canonical
+          // Robinhood / Mint / Personal Capital interaction — the
+          // cursor doesn't have to land on the line for a tooltip
+          // to fire. Combined with the vertical guide drawn by
+          // `getTouchedSpotIndicator` below, hover now feels
+          // continuous instead of "you have to find the sample".
+          touchSpotThreshold: 100000,
+          distanceCalculator: (touchPoint, spotPixelCoordinates) =>
+              (touchPoint.dx - spotPixelCoordinates.dx).abs(),
           handleBuiltInTouches: true,
           getTouchedSpotIndicator: (barData, spotIndexes) {
             // Paint a vertical guide line and a ring-bordered dot at
