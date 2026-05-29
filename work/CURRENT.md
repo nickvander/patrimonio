@@ -40,6 +40,29 @@ have shipped. The app now does:
 * `app_settings.user_id` (M7 leftover) — budgets / goals no longer
   leak across users.
 
+## Pre-merge gate (`scripts/check.sh`) (2026-05-29)
+
+Follow-up to the perf sprint that revealed two recent bugs slipped
+through to commit + merge: a frontend `await onUpdate(id, {...map})`
+call against a named-arg callback (would crash at runtime on first
+double-click), and a `'\x00'` sentinel literal that turned the file
+into git-binary.
+
+* New `scripts/check.sh` runs the backend test suite AND
+  `flutter analyze` (errors + warnings parsed from output — Flutter's
+  exit code semantics for `--fatal-warnings` were version-dependent).
+  Info-level diagnostics are surfaced but don't fail the gate. Use
+  `--skip-backend` / `--skip-frontend` for fast iteration. Opt-in
+  pre-commit hook line documented in the script header.
+* Cleaned the 3 pre-existing warnings to make the baseline gate
+  green: dropped `_types` getter in `add_account_dialog.dart`
+  (replaced by the grouped DropdownMenuItem layout), removed unused
+  `transaction_description.dart` import in `transactions_tab.dart`,
+  removed dead `originalDescription` local at the detail-modal site.
+* New `.gitattributes` forces `*.dart` / `*.rs` / etc. to be treated
+  as text so a future stray control byte doesn't trip git's binary
+  heuristic again.
+
 ## Transactions list perf bundle (2026-05-29)
 
 Five compounding wins targeting the transactions tab at scale

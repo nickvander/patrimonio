@@ -7,7 +7,6 @@ import 'package:web/web.dart' as web;
 import '../services/api_service.dart';
 import '../utils/category.dart';
 import '../utils/currency.dart';
-import '../utils/transaction_description.dart';
 import '../utils/transaction_display.dart';
 import 'add_transaction_dialog.dart';
 import 'split_transaction_dialog.dart';
@@ -1857,7 +1856,6 @@ class _TransactionsTabState extends State<TransactionsTab> {
     final rawDescription = (tx['description'] ?? '').toString();
     final titleDescription = displayLabel(tx);
     final logoUrl = counterpartyLogo(tx);
-    final originalDescription = (tx['original_description'] ?? '').toString();
     final color = _getCategoryColor(
       tx['user_category'] ?? tx['category'],
       rawDescription,

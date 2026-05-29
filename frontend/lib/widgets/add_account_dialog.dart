@@ -37,8 +37,10 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
     ('Liabilities', ['Credit Card', 'Loan', 'Mortgage', 'Other Liability']),
   ];
 
-  static List<String> get _types =>
-      _typeGroups.expand((g) => g.$2).toList();
+  // (Previously exposed a flat List<String> via `_types`; dropped
+  // when the grouped DropdownMenuItem layout replaced the flat one.
+  // Left as a note rather than re-added — the grouped form is the
+  // current source of truth.)
 
   @override
   Widget build(BuildContext context) {

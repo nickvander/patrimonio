@@ -1,0 +1,15 @@
+# Force git to treat known text formats as text even when a stray
+# control byte (e.g. an accidental '\x00' literal in a source file)
+# trips its automatic binary heuristic. Without this, diffs of an
+# affected file show "Bin 110095 bytes" and code review stalls.
+*.dart text
+*.rs text
+*.toml text
+*.yaml text
+*.yml text
+*.json text
+*.md text
+*.sh text eol=lf
+*.sql text
+Dockerfile text
+.gitignore text
