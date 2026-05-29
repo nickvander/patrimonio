@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../utils/theme_colors.dart';
@@ -146,6 +147,34 @@ class _TransactionsTabState extends State<TransactionsTab> {
   // Cleared on mouse exit so R does nothing when the cursor isn't
   // over a row.
   String? _hoveredTxId;
+  // Index keyed on the lowercased-trimmed raw bank description.
+  // Built once in didUpdateWidget when widget.transactions changes
+  // identity, queried in O(1) by _similarTransactionIds. Without
+  // this every right-click on a "MISC DEBIT" cluster member did a
+  // full O(N) scan; with thousands of rows that's perceptible.
+  Map<String, List<String>>? _descIndex;
+  int _descIndexIdentity = 0;
+  // 120ms debounce on the search field. Every keystroke schedules
+  // (or replaces) a timer; only when the user stops typing for the
+  // debounce window do we commit to _searchQuery and trigger a
+  // filter rebuild. Without this, typing "rent" was 4 full re-
+  // filters of every row; with it, one.
+  Timer? _searchDebounce;
+  static const _searchDebounceMs = 120;
+  // Cache for `_filteredTransactions`. Identity-keyed on the
+  // underlying list plus the active search / filter state. As long
+  // as none of the three change, the getter returns the cached
+  // list without re-walking thousands of rows. The lowercased per-
+  // tx haystack is itself cached on _haystackCache so we don't
+  // re-lowercase 9 fields every keystroke either.
+  List<dynamic>? _filteredCache;
+  int _filteredCacheIdentity = 0;
+  // Sentinel that won't match a real search query (real ones are
+  // always lowercased + non-empty). Forces a first-run rebuild.
+  String _filteredCacheQuery = '__init__';
+  TxFilters _filteredCacheFilters = TxFilters.empty;
+  final Map<String, String> _haystackCache = {};
+  int _haystackCacheIdentity = 0;
 
   @override
   void initState() {
@@ -199,6 +228,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     _inlineEditController.dispose();
     _inlineEditFocus.dispose();
@@ -245,7 +275,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
     setState(() => _inlineEditingTxId = null);
     if (onUpdate == null) return;
     try {
-      await onUpdate(id, {'user_description': text});
+      await onUpdate(id, userDescription: text);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -295,41 +325,81 @@ class _TransactionsTabState extends State<TransactionsTab> {
   }
 
   List<dynamic> get _filteredTransactions {
+    final txs = widget.transactions;
+    final identity = identityHashCode(txs);
     final q = _searchQuery.toLowerCase();
+    // Cache check: same source list + same query + same filters →
+    // return the previous result. Avoids re-walking N rows + re-
+    // allocating a fresh List on every setState (hover, selection
+    // toggle, inline-edit state flip).
+    if (_filteredCache != null &&
+        identity == _filteredCacheIdentity &&
+        q == _filteredCacheQuery &&
+        _filters == _filteredCacheFilters) {
+      return _filteredCache!;
+    }
+    // Clear the per-tx haystack cache when the underlying list
+    // identity changes — different list, different tx instances,
+    // stale strings.
+    if (identity != _haystackCacheIdentity) {
+      _haystackCache.clear();
+      _haystackCacheIdentity = identity;
+    }
     final hasSearch = q.isNotEmpty;
     final hasFilters = _filters.isActive;
-    if (!hasSearch && !hasFilters) return widget.transactions;
-    return widget.transactions.where((tx) {
-      if (hasSearch) {
-        // Filter on the displayed label (post-rename, post-counterparty
-        // resolution) so a user-entered rename like "Costco" is searchable.
-        // Also matches the raw description so the bank's "AMAZON.COM*9F3B"
-        // still finds the row before the user renamed it.
-        final label = displayLabel(Map<String, dynamic>.from(tx as Map))
-            .toLowerCase();
-        final desc = (tx['description'] ?? '').toString().toLowerCase();
-        final orig = (tx['original_description'] ?? '').toString().toLowerCase();
-        final merchant = (tx['merchant_name'] ?? '').toString().toLowerCase();
-        final counterparty =
-            (tx['counterparty_name'] ?? '').toString().toLowerCase();
-        final payee = (tx['payment_payee'] ?? '').toString().toLowerCase();
-        final payer = (tx['payment_payer'] ?? '').toString().toLowerCase();
-        final acct = (tx['account_name'] ?? '').toString().toLowerCase();
-        final cat = (tx['category'] ?? '').toString().toLowerCase();
-        final matches = label.contains(q) ||
-            desc.contains(q) ||
-            orig.contains(q) ||
-            merchant.contains(q) ||
-            counterparty.contains(q) ||
-            payee.contains(q) ||
-            payer.contains(q) ||
-            acct.contains(q) ||
-            cat.contains(q);
-        if (!matches) return false;
+    List<dynamic> result;
+    if (!hasSearch && !hasFilters) {
+      result = txs;
+    } else {
+      result = <dynamic>[];
+      for (final tx in txs) {
+        if (hasSearch) {
+          final hay = _haystackFor(tx);
+          if (!hay.contains(q)) continue;
+        }
+        if (hasFilters && !_filters.matches(tx)) continue;
+        result.add(tx);
       }
-      if (hasFilters && !_filters.matches(tx)) return false;
-      return true;
-    }).toList();
+    }
+    _filteredCache = result;
+    _filteredCacheIdentity = identity;
+    _filteredCacheQuery = q;
+    _filteredCacheFilters = _filters;
+    return result;
+  }
+
+  /// Lowercased haystack for one tx: the searchable fields joined
+  /// with a separator + memoized. We previously re-lowercased 9
+  /// fields per row on every keystroke; now each row is lowercased
+  /// at most once per list-identity.
+  String _haystackFor(dynamic tx) {
+    if (tx is! Map) return '';
+    final id = tx['id']?.toString();
+    if (id != null) {
+      final cached = _haystackCache[id];
+      if (cached != null) return cached;
+    }
+    final label = displayLabel(Map<String, dynamic>.from(tx))
+        .toLowerCase();
+    final parts = <String>[
+      label,
+      (tx['description'] ?? '').toString().toLowerCase(),
+      (tx['original_description'] ?? '').toString().toLowerCase(),
+      (tx['merchant_name'] ?? '').toString().toLowerCase(),
+      (tx['counterparty_name'] ?? '').toString().toLowerCase(),
+      (tx['payment_payee'] ?? '').toString().toLowerCase(),
+      (tx['payment_payer'] ?? '').toString().toLowerCase(),
+      (tx['account_name'] ?? '').toString().toLowerCase(),
+      (tx['category'] ?? '').toString().toLowerCase(),
+    ];
+    // Single concatenated string — one .contains() call covers
+    // every field. Separator is a 4-char printable sequence that
+    // users virtually never type into a search field, so cross-
+    // field false positives are negligible while git keeps treating
+    // the file as plain text.
+    final hay = parts.join(' || ');
+    if (id != null) _haystackCache[id] = hay;
+    return hay;
   }
 
   Future<void> _openFilters() async {
@@ -513,13 +583,16 @@ class _TransactionsTabState extends State<TransactionsTab> {
               const SizedBox(height: 8),
               if (_selectionMode) _buildBulkActionBar(filtered),
               // Flat list of rows with inline date-group headers
-              // (Today / Yesterday / weekday name / "Month d"). Avoids
-              // ListView.separated so we can interleave headers between
-              // groups without inserting a divider above each header.
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: _buildGroupedRows(filtered, isNarrow),
-              ),
+              // (Today / Yesterday / weekday name / "Month d").
+              //
+              // Performance: for >50 rows, swap the eager `Column` for
+              // a bounded `ListView.builder` that virtualises out-of-
+              // view rows. The bounded SizedBox is the trade — the
+              // tx list scrolls inside the card rather than as part
+              // of the page — but it's the only way Flutter avoids
+              // building every row up front. Short lists keep the
+              // page-scroll feel.
+              _buildRowsRegion(filtered, isNarrow, constraints),
               if (widget.onLoadMore != null && widget.hasMore)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 16),
@@ -884,21 +957,41 @@ class _TransactionsTabState extends State<TransactionsTab> {
   /// itself). Same predicate the detail modal uses for the
   /// "also apply to N matching" bulk-rename checkbox.
   List<String> _similarTransactionIds(dynamic tx) {
-    final rawDescription = (tx['description'] ?? '').toString();
-    if (rawDescription.trim().isEmpty) return const [];
-    final selfId = tx['id'];
-    return widget.transactions
-        .where((other) {
-          if (other is! Map) return false;
-          if (other['id'] == selfId) return false;
-          return (other['description'] ?? '')
-                  .toString()
-                  .trim()
-                  .toLowerCase() ==
-              rawDescription.trim().toLowerCase();
-        })
-        .map((m) => (m as Map)['id'].toString())
-        .toList();
+    final rawDescription = (tx['description'] ?? '').toString().trim();
+    if (rawDescription.isEmpty) return const [];
+    final key = rawDescription.toLowerCase();
+    final index = _ensureDescIndex();
+    final cluster = index[key];
+    if (cluster == null || cluster.isEmpty) return const [];
+    final selfId = tx['id']?.toString();
+    // Exclude the row itself from the cluster — the rename dialog's
+    // "also apply to N matching" count and the bulk-apply loop both
+    // expect "other" rows only.
+    if (selfId == null) return cluster;
+    return cluster.where((id) => id != selfId).toList(growable: false);
+  }
+
+  /// Build (or rebuild) the description→ids index when the
+  /// underlying list changes identity. Identity-keyed so a parent
+  /// rebuild that hands us the SAME List instance is free.
+  Map<String, List<String>> _ensureDescIndex() {
+    final txs = widget.transactions;
+    final identity = identityHashCode(txs);
+    if (_descIndex != null && identity == _descIndexIdentity) {
+      return _descIndex!;
+    }
+    final next = <String, List<String>>{};
+    for (final tx in txs) {
+      if (tx is! Map) continue;
+      final raw = (tx['description'] ?? '').toString().trim();
+      if (raw.isEmpty) continue;
+      final id = tx['id']?.toString();
+      if (id == null) continue;
+      next.putIfAbsent(raw.toLowerCase(), () => <String>[]).add(id);
+    }
+    _descIndex = next;
+    _descIndexIdentity = identity;
+    return next;
   }
 
   Future<void> _renameTransaction(
@@ -1070,10 +1163,17 @@ class _TransactionsTabState extends State<TransactionsTab> {
           Expanded(child: _searchField()),
           const SizedBox(width: 8),
           IconButton(
-            onPressed: () => setState(() {
-              _searchOpenOnNarrow = false;
-              _searchQuery = '';
-            }),
+            onPressed: () {
+              // Synchronous flush — cancel a pending debounce so the
+              // close button doesn't get a stray re-filter fired
+              // after the panel has already collapsed.
+              _searchDebounce?.cancel();
+              setState(() {
+                _searchOpenOnNarrow = false;
+                _searchQuery = '';
+                _searchController.clear();
+              });
+            },
             icon: const Icon(Icons.close, size: 20),
             tooltip: 'Close search',
           ),
@@ -1188,7 +1288,19 @@ class _TransactionsTabState extends State<TransactionsTab> {
     return TextField(
       autofocus: _searchOpenOnNarrow,
       controller: _searchController,
-      onChanged: (v) => setState(() => _searchQuery = v),
+      // Debounced. See _searchDebounce field comment for rationale.
+      // When the user clears via the X button below we flush
+      // synchronously instead of waiting for the timer.
+      onChanged: (v) {
+        _searchDebounce?.cancel();
+        _searchDebounce = Timer(
+          const Duration(milliseconds: _searchDebounceMs),
+          () {
+            if (!mounted) return;
+            if (v != _searchQuery) setState(() => _searchQuery = v);
+          },
+        );
+      },
       decoration: InputDecoration(
         hintText: 'Search transactions…',
         hintStyle: TextStyle(color: context.textFaint, fontSize: 13),
@@ -1211,6 +1323,62 @@ class _TransactionsTabState extends State<TransactionsTab> {
   /// "Month d" sections so a long scroll is scannable. Hairline dividers
   /// sit *between* rows within a group but not above the header — that's
   /// why we hand-roll the list instead of using ListView.separated.
+  /// Dispatch between eager `Column` (≤50 rows, page scrolls
+  /// naturally) and a bounded `ListView.builder` (the virtualised
+  /// path, used at scale). The threshold isn't tuned hard — under
+  /// ~50 rows the Column's allocations are negligible and the
+  /// page-scroll UX is friendlier; above that, the build cost of
+  /// every row dominates and inner-list scrolling is the lesser
+  /// evil.
+  Widget _buildRowsRegion(
+    List<dynamic> txs,
+    bool isNarrow,
+    BoxConstraints constraints,
+  ) {
+    const eagerThreshold = 50;
+    if (txs.length <= eagerThreshold) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: _buildGroupedRows(txs, isNarrow),
+      );
+    }
+    final items = _ensureItemPlan(txs, isNarrow);
+    // Viewport-relative height so the inner list always shows a
+    // few screenfuls without dominating the page. The minimum
+    // floor prevents a degenerate tiny window on short viewports.
+    final h = MediaQuery.sizeOf(context).height;
+    final listHeight = (h - 280).clamp(400.0, h * 0.78);
+    return SizedBox(
+      height: listHeight,
+      child: Scrollbar(
+        thumbVisibility: true,
+        child: ListView.builder(
+          // No itemExtent — rows can be one or two lines depending
+          // on the override / notes presence. Flutter still
+          // virtualises by viewport visibility; we just lose the
+          // O(1) scroll-to-index optimisation, which we don't need.
+          itemCount: items.length,
+          itemBuilder: (context, i) {
+            final item = items[i];
+            switch (item.kind) {
+              case 0:
+                return _dateGroupHeader(item.date!, isFirst: item.isFirst);
+              case 2:
+                return Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: context.hairline,
+                  indent: 44,
+                );
+              default:
+                return _buildTransactionRow(item.tx, isNarrow);
+            }
+          },
+        ),
+      ),
+    );
+  }
+
   List<Widget> _buildGroupedRows(List<dynamic> txs, bool isNarrow) {
     final out = <Widget>[];
     String? lastGroup;
@@ -1233,6 +1401,48 @@ class _TransactionsTabState extends State<TransactionsTab> {
       }
       out.add(_buildTransactionRow(tx, isNarrow));
     }
+    return out;
+  }
+
+  /// Flat index→item plan for the virtualised ListView.builder.
+  /// Each item is one of:
+  ///   • `_HeaderItem(date)` — a date-group heading ("Today", etc.)
+  ///   • `_RowItem(tx)`      — one transaction
+  ///   • `_DividerItem()`    — separator between rows in the same group
+  ///
+  /// Precomputed once per (filtered list identity, isNarrow) so the
+  /// builder can return one widget per index in O(1) without re-
+  /// scanning the date groups.
+  List<_TxListItem>? _itemPlanCache;
+  int _itemPlanCacheFilteredId = 0;
+  bool _itemPlanCacheNarrow = false;
+
+  List<_TxListItem> _ensureItemPlan(List<dynamic> txs, bool isNarrow) {
+    final identity = identityHashCode(txs);
+    if (_itemPlanCache != null &&
+        _itemPlanCacheFilteredId == identity &&
+        _itemPlanCacheNarrow == isNarrow) {
+      return _itemPlanCache!;
+    }
+    final out = <_TxListItem>[];
+    String? lastGroup;
+    for (var i = 0; i < txs.length; i++) {
+      final tx = txs[i];
+      final dateStr = tx['date'] as String?;
+      if (dateStr == null) continue;
+      final date = DateTime.parse(dateStr);
+      final key = _dateGroupKey(date);
+      if (key != lastGroup) {
+        out.add(_TxListItem.header(date: date, isFirst: lastGroup == null));
+        lastGroup = key;
+      } else {
+        out.add(const _TxListItem.divider());
+      }
+      out.add(_TxListItem.row(tx: tx));
+    }
+    _itemPlanCache = out;
+    _itemPlanCacheFilteredId = identity;
+    _itemPlanCacheNarrow = isNarrow;
     return out;
   }
 
@@ -2501,6 +2711,23 @@ class _TransactionsTabState extends State<TransactionsTab> {
     }
     return Colors.grey;
   }
+}
+
+/// Sealed-style discriminated union for the flat virtualised list.
+/// Three shapes; the fields that aren't relevant for a given kind
+/// are null. Plain class instead of a Dart 3 sealed/sum because
+/// we want it to compile against older analyzer pin-pointing.
+class _TxListItem {
+  /// 0 = header, 1 = row, 2 = divider. Indexed for cheap == checks.
+  final int kind;
+  final DateTime? date;
+  final bool isFirst;
+  final dynamic tx;
+  const _TxListItem._(this.kind, {this.date, this.isFirst = false, this.tx});
+  const _TxListItem.header({required DateTime date, required bool isFirst})
+      : this._(0, date: date, isFirst: isFirst);
+  const _TxListItem.row({required dynamic tx}) : this._(1, tx: tx);
+  const _TxListItem.divider() : this._(2);
 }
 
 /// Small inline picker: shows a dropdown of accounts and reassigns the

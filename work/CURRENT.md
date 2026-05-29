@@ -1,6 +1,6 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-05-27 (post cross-currency + lots + webauthn-AEAD sprint)
+> **Last updated:** 2026-05-29 (post transactions-list perf bundle)
 > **Branch:** feature branch with the latest sprint awaiting fast-forward merge to `main`.
 
 ## Where we are
@@ -39,6 +39,42 @@ have shipped. The app now does:
   untrusted peers at the edge.
 * `app_settings.user_id` (M7 leftover) — budgets / goals no longer
   leak across users.
+
+## Transactions list perf bundle (2026-05-29)
+
+Five compounding wins targeting the transactions tab at scale
+(~5000+ rows). Before: typing in the search field re-filtered the
+full list per keystroke and re-rendered every row offscreen. After:
+the list virtualises, search debounces, and the filter is cached.
+
+* **Silent post-mutation reloads.** Every `_loadAllData()` call
+  after a rename / delete / balance update / institution delete /
+  return-from-import passes `silent: true` so the dashboard's
+  in-place state (scroll position, drilled-in filter, currency
+  toggle) doesn't get nuked behind a full skeleton flash. Reserve
+  loud loads for initial mount + explicit Retry.
+* **Description→ids index in transactions_tab.** `_similarTransactionIds`
+  was O(N) per call — right-click on a "MISC DEBIT" cluster of 50
+  rows did 50×N scans. New `_descIndex` is a `Map<lcRaw, List<id>>`
+  built once when `widget.transactions` identity changes; the
+  lookup is O(1).
+* **120ms search debounce.** Typing "rent" was 4 full re-filters;
+  now it's one. Cancelled + flushed synchronously on the X close
+  button so the panel doesn't get a stray re-filter mid-collapse.
+* **Filter result cache + per-tx haystack cache.** `_filteredTransactions`
+  was a getter that re-walked + re-lowercased 9 fields per row on
+  every setState (hover, selection toggle, inline-edit flip). Now
+  keyed on `(identityHashCode(txs), _searchQuery, _filters)` with
+  per-tx lowercased haystack memoized on `_haystackCache`. Search
+  becomes one `.contains()` per row against a pre-joined haystack
+  string instead of 9 separate calls.
+* **Virtualised list region.** For >50 rows the eager `Column` of
+  every row gives way to a bounded `ListView.builder` (viewport-
+  relative height with a 400px floor) feeding off a flat
+  `_TxListItem` plan that interleaves headers/rows/dividers. Off-
+  screen rows no longer build at all. UX trade: the tx list now
+  scrolls inside the card rather than as part of the page, but it
+  matches the Gmail / Notion pattern for huge lists.
 
 ## Backlog cleanup bundle sprint (2026-05-28)
 

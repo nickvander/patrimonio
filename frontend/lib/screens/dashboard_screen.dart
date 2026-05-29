@@ -239,13 +239,13 @@ class _DashboardScreenState extends State<DashboardScreen>
           onBalanceUpdate: (id, bal) async {
             try {
               await _apiService.updateAccountBalance(id, bal);
-              _loadAllData();
+              _loadAllData(silent: true);
             } catch (_) {}
           },
           onRenameAccount: (id, nickname) async {
             try {
               await _apiService.renameAccount(id, nickname);
-              _loadAllData();
+              _loadAllData(silent: true);
             } catch (_) {}
           },
         ),
@@ -748,7 +748,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                                 MaterialPageRoute(
                                   builder: (context) => const ConnectBankScreen(),
                                 ),
-                              ).then((_) => _loadAllData());
+                              ).then((_) => _loadAllData(silent: true));
                             }
                           : null,
                       disabledHint:
@@ -766,7 +766,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                           MaterialPageRoute(
                             builder: (context) => const ImportScreen(),
                           ),
-                        ).then((_) => _loadAllData());
+                        ).then((_) => _loadAllData(silent: true));
                       },
                     ),
                     actionTile(
@@ -1326,7 +1326,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             onBalanceUpdate: (id, bal) async {
               try {
                 await _apiService.updateAccountBalance(id, bal);
-                _loadAllData();
+                _loadAllData(silent: true);
               } catch (e) {
                 if (!mounted) return;
                 ScaffoldMessenger.of(
@@ -1337,7 +1337,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             onDeleteAccount: (id) async {
               try {
                 await _apiService.deleteAccount(id);
-                _loadAllData();
+                _loadAllData(silent: true);
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Account deleted')),
@@ -1352,7 +1352,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             onRenameAccount: (id, nickname) async {
               try {
                 await _apiService.renameAccount(id, nickname);
-                _loadAllData();
+                _loadAllData(silent: true);
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -1373,7 +1373,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             onRevalueAccount: (id, bal, notes) async {
               try {
                 await _apiService.updateAccountBalance(id, bal, notes: notes);
-                _loadAllData();
+                _loadAllData(silent: true);
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
@@ -1505,7 +1505,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         });
         PlaidLink.onExit.listen((event) {
           debugPrint("Plaid Reconnect Exit");
-          _loadAllData();
+          _loadAllData(silent: true);
         });
 
         PlaidLink.create(configuration: linkTokenConfiguration);
@@ -2143,7 +2143,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 if (confirm == true) {
                   try {
                     await _apiService.deleteInstitution(id);
-                    _loadAllData();
+                    _loadAllData(silent: true);
                   } catch (e) {
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -2251,7 +2251,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                             MaterialPageRoute(
                               builder: (context) => const ConnectBankScreen(),
                             ),
-                          ).then((_) => _loadAllData());
+                          ).then((_) => _loadAllData(silent: true));
                         }
                       : null,
                 ),
@@ -2263,7 +2263,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                         MaterialPageRoute(
                           builder: (context) => const ImportScreen(),
                         ),
-                      ).then((_) => _loadAllData());
+                      ).then((_) => _loadAllData(silent: true));
                     }),
                 tile(Icons.add_circle_outline, 'Add manual account',
                     bg: context.hairline,
