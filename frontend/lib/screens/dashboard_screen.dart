@@ -2558,6 +2558,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       LendingTab(
         apiService: _apiService,
         targetCurrency: _targetCurrency,
+        // USD→MXN spot, so the summary card can convert mixed-currency
+        // loans into the active display currency.
+        usdMxnRate: fxRate,
         // A loan mutation links/unlinks transactions that are excluded
         // from cash flow — refresh silently so the Cash flow tab + net
         // worth reflect it without a full reload flash.

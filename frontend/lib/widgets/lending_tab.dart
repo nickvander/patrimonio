@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:web/web.dart' as web;
 import '../services/api_service.dart';
+import '../utils/lending_summary.dart';
 import '../utils/theme_colors.dart';
 
 /// Personal lending tab — only mounted when the user enables the
@@ -16,12 +17,17 @@ import '../utils/theme_colors.dart';
 class LendingTab extends StatefulWidget {
   final ApiService apiService;
   final String targetCurrency;
+  /// USD→MXN spot rate, used to convert each loan from its native
+  /// currency into [targetCurrency] for the summary totals. Defaults to
+  /// 1.0 (no conversion) when the rate hasn't loaded.
+  final double usdMxnRate;
   final VoidCallback? onChanged;
 
   const LendingTab({
     super.key,
     required this.apiService,
     required this.targetCurrency,
+    this.usdMxnRate = 1.0,
     this.onChanged,
   });
 
@@ -33,8 +39,6 @@ class _LendingTabState extends State<LendingTab> {
   List<dynamic> _loans = [];
   List<dynamic> _people = [];
   Map<String, dynamic> _summary = {};
-  // All-time interest-income report (total_interest + total_principal).
-  Map<String, dynamic> _interestIncome = {};
   bool _loading = true;
   String? _error;
 
@@ -63,7 +67,6 @@ class _LendingTabState extends State<LendingTab> {
         _loans = results[0] as List<dynamic>;
         _people = results[1] as List<dynamic>;
         _summary = results[2] as Map<String, dynamic>;
-        _interestIncome = results[3] as Map<String, dynamic>;
         _loading = false;
       });
     } catch (e) {
@@ -121,11 +124,19 @@ class _LendingTabState extends State<LendingTab> {
   }
 
   Widget _buildHeader() {
-    final totalLent = (_summary['total_lent'] as num?)?.toDouble() ?? 0;
-    final totalOut = (_summary['total_outstanding'] as num?)?.toDouble() ?? 0;
+    final displayCur = widget.targetCurrency;
+    // Convert each loan from its own currency into the display currency
+    // before summing, so a mixed USD + MXN portfolio shows a coherent
+    // total. (The backend /summary sums naively across currencies —
+    // correct only for the single-currency case.) outstanding,
+    // principal, and interest_earned all ride along on the loan list.
+    final totalLent =
+        sumLoansConverted(_loans, 'principal', displayCur, widget.usdMxnRate);
+    final totalOut = sumLoansConverted(
+        _loans, 'outstanding', displayCur, widget.usdMxnRate);
+    final interestEarned = sumLoansConverted(
+        _loans, 'interest_earned', displayCur, widget.usdMxnRate);
     final active = (_summary['active_count'] as num?)?.toInt() ?? 0;
-    final interestEarned =
-        (_interestIncome['total_interest'] as num?)?.toDouble() ?? 0;
     // Summary is denominated in each loan's own currency, summed
     // naively — fine for the common single-currency case. A mixed-
     // currency lender sees the caveat in the subtitle.
@@ -184,15 +195,27 @@ class _LendingTabState extends State<LendingTab> {
               ],
             ),
             const SizedBox(height: 16),
+            // Mixed-currency lenders see the totals converted to their
+            // active display currency at the current spot rate.
+            if (loansAreMixedCurrency(_loans))
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'Totals converted to $displayCur at the current spot rate',
+                  style: TextStyle(fontSize: 11, color: context.textSubtle),
+                ),
+              ),
             Wrap(
               spacing: 24,
               runSpacing: 12,
               children: [
-                _stat('Outstanding', _money(totalOut, 'USD'), context.warning),
-                _stat('Total lent', _money(totalLent, 'USD'), context.textPrimary),
+                _stat('Outstanding', _money(totalOut, displayCur),
+                    context.warning),
+                _stat('Total lent', _money(totalLent, displayCur),
+                    context.textPrimary),
                 _stat('Active', '$active', context.tealAccent),
                 // Interest income — the headline of this feature.
-                _stat('Interest earned', _money(interestEarned, 'USD'),
+                _stat('Interest earned', _money(interestEarned, displayCur),
                     context.positive),
               ],
             ),
@@ -1128,6 +1151,15 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
           icon: const Icon(Icons.description_outlined, size: 16),
           label: const Text('Agreement', style: TextStyle(fontSize: 12)),
         ),
+        // Early/full payoff: close the loan + void remaining installments.
+        // Only meaningful while the loan is still active.
+        if (status == 'active')
+          OutlinedButton.icon(
+            onPressed: _confirmPayoff,
+            icon: Icon(Icons.task_alt, size: 16, color: context.positive),
+            label: Text('Pay off in full',
+                style: TextStyle(fontSize: 12, color: context.positive)),
+          ),
         if (status != 'defaulted')
           OutlinedButton.icon(
             onPressed: () => _setStatus('defaulted'),
@@ -1175,6 +1207,43 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
       if (mounted) setState(() {});
     } catch (e) {
       _toast('Couldn\'t update status');
+    }
+  }
+
+  Future<void> _confirmPayoff() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Pay off in full?'),
+        content: const Text(
+            'Marks the loan as paid off and clears any remaining scheduled '
+            'installments. This does not create a repayment — link the actual '
+            'final transaction from the Repayments list so interest income '
+            'stays accurate.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Pay off'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await widget.apiService.payoffLoan(_loanId);
+      widget.loan['status'] = 'paid_off';
+      await _load();
+      widget.onMutated();
+      if (mounted) setState(() {});
+      _toast('Loan paid off');
+    } catch (e) {
+      // 409 if the loan isn't active anymore (e.g. raced with another tab).
+      _toast(e.toString().contains('not active')
+          ? 'Loan is no longer active'
+          : 'Couldn\'t pay off loan');
     }
   }
 

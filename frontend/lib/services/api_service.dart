@@ -1393,6 +1393,25 @@ class ApiService {
     }
   }
 
+  /// Administrative early/full payoff: closes the loan (status →
+  /// paid_off) and voids the remaining unpaid scheduled installments.
+  /// Does NOT create a payment — the user reconciles the real final
+  /// transaction through the normal repayment flow (cash-basis interest
+  /// income only counts money that actually arrived). 409 if the loan
+  /// isn't active.
+  Future<void> payoffLoan(String loanId) async {
+    final response = await _post(
+      Uri.parse('$_baseUrl/loans/$loanId/payoff'),
+      headers: _withCsrf({'Content-Type': 'application/json'}),
+      body: json.encode({}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(response.body.isNotEmpty
+          ? response.body
+          : 'Failed to pay off loan (${response.statusCode})');
+    }
+  }
+
   /// Interest-income report (cash basis). `year` optional. Returns
   /// {year, total_interest, total_principal, by_loan[], by_month[]}.
   Future<Map<String, dynamic>> getInterestIncome({int? year}) async {

@@ -50,6 +50,7 @@ pub fn router() -> Router<AppState> {
         )
         .route("/{id}/payments", get(list_payments).post(record_payment))
         .route("/{id}/schedule", post(generate_schedule))
+        .route("/{id}/payoff", post(payoff_loan))
         .route("/{id}/suggestions/disbursement", get(suggest_disbursement))
         .route("/{id}/suggestions/repayment", get(suggest_repayment))
         // Printable promissory-note / agreement (HTML → browser PDF).
@@ -1316,6 +1317,80 @@ async fn generate_schedule(
         Json(serde_json::json!({"installments": rows.len()})),
     )
         .into_response()
+}
+
+/// Administrative early/full payoff: close an active loan and void any
+/// remaining unpaid scheduled installments.
+///
+/// Deliberately does NOT fabricate a payment row — cash-basis interest
+/// income only counts money that actually arrived, so the user still
+/// reconciles the real final transaction through the normal repayment
+/// flow. This endpoint is the "mark it settled" administrative action:
+/// it flips the loan to `paid_off` (which makes `outstanding` read 0 in
+/// loan_view) and marks the unpaid scheduled rows `skipped` so the
+/// schedule table stops showing pending installments on a closed loan.
+/// Already-reconciled installments are left untouched.
+async fn payoff_loan(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path(id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    // Only an active loan can be paid off — written_off / cancelled /
+    // already-paid_off are terminal and shouldn't be silently flipped.
+    let result = sqlx::query(
+        "UPDATE loans SET status = 'paid_off', updated_at = NOW() \
+         WHERE id = $1 AND user_id = $2 AND status = 'active'",
+    )
+    .bind(id)
+    .bind(ctx.user_id)
+    .execute(&state.db)
+    .await;
+    match result {
+        Ok(r) if r.rows_affected() == 0 => {
+            // Either the loan doesn't belong to the caller, or it isn't
+            // active. Disambiguate so the client can message correctly.
+            let exists: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM loans WHERE id = $1 AND user_id = $2)",
+            )
+            .bind(id)
+            .bind(ctx.user_id)
+            .fetch_one(&state.db)
+            .await
+            .unwrap_or(false);
+            if exists {
+                (StatusCode::CONFLICT, "loan is not active").into_response()
+            } else {
+                StatusCode::NOT_FOUND.into_response()
+            }
+        }
+        Ok(_) => {
+            // Void the still-pending scheduled installments. Leave any
+            // reconciled rows (actual_tx_id IS NOT NULL) as the audit
+            // trail of what was actually paid.
+            let _ = sqlx::query(
+                "UPDATE loan_payments SET status = 'skipped' \
+                 WHERE loan_id = $1 AND user_id = $2 \
+                   AND actual_tx_id IS NULL AND scheduled_principal > 0 \
+                   AND status NOT IN ('paid', 'skipped')",
+            )
+            .bind(id)
+            .bind(ctx.user_id)
+            .execute(&state.db)
+            .await;
+            state
+                .realtime
+                .publish(
+                    ctx.user_id,
+                    crate::services::realtime::RealtimeEvent::TransactionsChanged,
+                )
+                .await;
+            StatusCode::OK.into_response()
+        }
+        Err(e) => {
+            error!("payoff_loan failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
 
 // ---------- reminders ----------
