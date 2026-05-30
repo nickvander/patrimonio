@@ -1041,10 +1041,32 @@ async fn cash_flow_trends(
 ) -> Json<Vec<CashFlowPoint>> {
     let rows = sqlx::query(
         r#"
+        WITH latest_fx AS (
+            SELECT rate
+            FROM exchange_rates
+            WHERE base_currency = 'USD' AND target_currency = 'MXN'
+            ORDER BY recorded_at DESC
+            LIMIT 1
+        )
         SELECT TO_CHAR(t.date, 'YYYY-MM') as month,
-               SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END) as income,
-               SUM(CASE WHEN t.amount < 0 THEN ABS(t.amount) ELSE 0 END) as spending
+               -- Convert every amount to USD before summing.
+               -- Without this, a MX$20,000 paycheck would be counted
+               -- as 20,000 alongside USD amounts, making the income
+               -- and spending bars look 15-20x too large for users
+               -- with MXN accounts. Fallback rate 20.0 matches the
+               -- convention used throughout the dashboard.
+               SUM(CASE WHEN t.amount > 0 THEN
+                       CASE WHEN a.currency = 'MXN'
+                            THEN t.amount / COALESCE((SELECT rate FROM latest_fx), 20.0)
+                            ELSE t.amount END
+                   ELSE 0 END) as income,
+               SUM(CASE WHEN t.amount < 0 THEN
+                       CASE WHEN a.currency = 'MXN'
+                            THEN ABS(t.amount) / COALESCE((SELECT rate FROM latest_fx), 20.0)
+                            ELSE ABS(t.amount) END
+                   ELSE 0 END) as spending
         FROM transactions t
+        JOIN accounts a ON a.id = t.account_id
         WHERE t.date >= CURRENT_DATE - INTERVAL '12 months'
           AND t.user_id = $1
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)

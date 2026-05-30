@@ -1177,16 +1177,10 @@ class _DashboardScreenState extends State<DashboardScreen>
             // out and theme cycle stay so the user can always escape
             // or change brightness.
             if (!firstRun) ...[
-              // Sandbox / Development indicator — Plaid Production
-              // is the silent default (no chip), but any test
-              // environment gets a small amber pill so the user
-              // doesn't accidentally type real bank credentials
-              // into a sandbox instance.
+              // Sandbox / Development indicator.
               if (!isCompact) _buildEnvChip(),
               if (!isCompact) const SizedBox(width: 4),
-              // Compact FX pill on wide; phones drop it entirely
-              // because the Management tab still surfaces the rate
-              // and the AppBar gets squeezed once tabs scroll.
+              // FX pill — wide screens only.
               if (!isCompact) _buildFxBadge(compact: true),
               if (!isCompact) const SizedBox(width: 4),
               NotificationsBell(
@@ -1205,36 +1199,56 @@ class _DashboardScreenState extends State<DashboardScreen>
                 onSwap: () => _setTargetCurrency(
                     _targetCurrency == 'USD' ? 'MXN' : 'USD'),
               ),
-            IconButton(
-              tooltip: 'Hidden items',
-              icon: const Icon(Icons.visibility_off_outlined),
-              onPressed: () => Navigator.of(context)
-                  .push(
-                    MaterialPageRoute(
-                      builder: (_) => const HiddenItemsScreen(),
-                    ),
-                  )
-                  // Returning from the panel may have un-ignored some
-                  // subscriptions. Refresh silently so the dashboard's
-                  // detected-subscriptions card surfaces them again
-                  // without making the user pull-to-refresh.
-                  .then((_) {
-                if (mounted) _loadAllData(silent: true);
-              }),
-            ),
-            IconButton(
-              tooltip: 'Security',
-              icon: const Icon(Icons.shield_outlined),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SecurityScreen()),
-              ),
-            ),
-            IconButton(
-              tooltip: 'Sign out',
-              icon: const Icon(Icons.logout),
-              onPressed: () async {
-                await AuthService.instance.logout();
+            // Hidden Items, Security, and Sign Out are grouped into a
+            // single popup so the AppBar doesn't overflow — at typical
+            // browser widths 8+ action widgets get clipped silently.
+            PopupMenuButton<_AppBarAction>(
+              tooltip: 'More',
+              icon: const Icon(Icons.more_vert),
+              onSelected: (action) async {
+                switch (action) {
+                  case _AppBarAction.hiddenItems:
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (_) => const HiddenItemsScreen()),
+                    );
+                    if (mounted) _loadAllData(silent: true);
+                  case _AppBarAction.security:
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (_) => const SecurityScreen()),
+                    );
+                  case _AppBarAction.signOut:
+                    await AuthService.instance.logout();
+                }
               },
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: _AppBarAction.hiddenItems,
+                  child: ListTile(
+                    leading: Icon(Icons.visibility_off_outlined),
+                    title: Text('Hidden items'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                PopupMenuItem(
+                  value: _AppBarAction.security,
+                  child: ListTile(
+                    leading: Icon(Icons.shield_outlined),
+                    title: Text('Security'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                PopupMenuDivider(),
+                PopupMenuItem(
+                  value: _AppBarAction.signOut,
+                  child: ListTile(
+                    leading: Icon(Icons.logout),
+                    title: Text('Sign out'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(width: 4),
           ],
@@ -2663,3 +2677,6 @@ class _ThemeCycleButton extends StatelessWidget {
     );
   }
 }
+
+/// Actions available from the AppBar "More" popup.
+enum _AppBarAction { hiddenItems, security, signOut }
