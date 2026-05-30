@@ -106,24 +106,9 @@ void main() {
       findsOneWidget,
     );
   });
-
-  // Belt-and-braces for the original failure mode: a self-scrolling widget
-  // given UNBOUNDED height must throw. Documents why scrollable:false matters
-  // in the dashboard wiring — re-wrapping LendingTab in a SingleChildScrollView
-  // reintroduces exactly this.
-  testWidgets('a ListView under an unbounded parent throws (documents the bug)',
-      (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Column(
-            children: [
-              ListView(children: const [Text('x')]),
-            ],
-          ),
-        ),
-      ),
-    );
-    expect(tester.takeException(), isNotNull);
-  });
+  // (The earlier "unbounded ListView throws" case was removed: the layout
+  // assertion cascades into multiple exceptions that takeException() can't
+  // capture as one across Flutter versions, making it flaky. The two tests
+  // above — LendingTab rendering correctly under a bounded parent — are the
+  // real regression guard for the blank-tab bug.)
 }

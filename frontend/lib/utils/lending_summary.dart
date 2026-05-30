@@ -49,7 +49,10 @@ double sumLoansConverted(
   var total = 0.0;
   for (final raw in loans) {
     if (raw is! Map) continue;
-    final value = (raw[field] as num?)?.toDouble() ?? 0.0;
+    // Tolerate non-numeric field values (a stray String must not throw a
+    // failed cast) — only a real num counts, anything else is 0.
+    final field0 = raw[field];
+    final value = field0 is num ? field0.toDouble() : 0.0;
     if (value == 0.0) continue;
     final currency = (raw['currency'] ?? 'USD').toString();
     total += convertCurrency(value, currency, targetCurrency, usdMxnRate);
