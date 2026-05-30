@@ -174,11 +174,32 @@ a committed reconcile/record/unlink (balances + cash-flow shift).
 **Phase 2 — deferred to Phase 3:** custom (irregular) schedule dates;
 penalty interest on default.
 
-**Phase 3 (power-user):**
-- Interest-only + balloon, compound interest.
-- Principal/interest split on each repayment + interest-income tracking.
-- Promissory-note PDF export; multi-currency; re-amortization on
-  irregular payment.
+**Phase 3 — partially SHIPPED 2026-05-30:**
+- ✅ **Bug fix**: `/api/loans/` (trailing slash) 404'd under axum 0.8
+  nest — the frontend used the slash form → "couldn't load loans".
+  Standardized the client on the no-slash collection path; guard test
+  `loan_list_collection_path_contract` pins it.
+- ✅ **Flexible rate period** (`rate_period` annual|monthly, migration
+  `2026052804`): the user enters "% per year" OR "% per month" and it's
+  stored + amortized faithfully (Decimal, no lossy reconversion). For a
+  monthly schedule, "1%/month" yields exactly 1% periodic. Year/month
+  selector in the add-loan dialog + a live total-interest estimate.
+- ✅ **interest_only** schedule type: each installment pays only the
+  period interest; principal balloons on the final row.
+- ✅ **Click-through**: Cmd-K palette "Jump to Lending" entry (when the
+  module is on), alongside the notifications-bell reminders → Lending
+  jump shipped in Phase 2.
+- 3 new schedule unit tests (interest-only balloon, monthly-rate
+  preservation + annual-equivalence, monthly simple) + 1 integration
+  test (interest-only + monthly rate end-to-end). 110 backend tests.
+
+**Phase 3 — still deferred:**
+- Compound interest (distinct from amortized's declining-balance
+  compounding); discounted balloon target.
+- Principal/interest split recorded on each actual repayment +
+  interest-income reporting.
+- Promissory-note PDF export; multi-currency loans; re-amortization on
+  an irregular/partial payment.
 
 ## Open questions for the user
 1. Is the borrower just a free-text name, or do you want a reusable

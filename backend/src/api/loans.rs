@@ -61,6 +61,8 @@ struct LoanView {
     currency: String,
     interest_rate: f64,
     interest_type: String,
+    /// 'annual' or 'monthly' — the period interest_rate is expressed in.
+    rate_period: String,
     origination_date: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     term_months: Option<i32>,
@@ -133,6 +135,10 @@ struct CreateLoanRequest {
     interest_rate: f64,
     #[serde(default = "default_interest_type")]
     interest_type: String,
+    /// 'annual' (default) or 'monthly' — the period the interest_rate
+    /// is expressed in, stored faithfully so "1%/month" stays exact.
+    #[serde(default = "default_rate_period")]
+    rate_period: String,
     origination_date: chrono::NaiveDate,
     #[serde(default)]
     term_months: Option<i32>,
@@ -144,6 +150,14 @@ struct CreateLoanRequest {
 
 fn default_interest_type() -> String {
     "none".to_string()
+}
+
+fn default_rate_period() -> String {
+    "annual".to_string()
+}
+
+fn valid_interest_type(t: &str) -> bool {
+    matches!(t, "none" | "simple" | "amortized" | "interest_only")
 }
 
 #[derive(Deserialize)]
@@ -258,6 +272,10 @@ fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
     let principal = dec_to_f64(r.try_get("principal").ok());
     let rate = dec_to_f64(r.try_get("interest_rate").ok());
     let interest_type: String = r.try_get("interest_type").unwrap_or_else(|_| "none".to_string());
+    let rate_period: String = r.try_get("rate_period").unwrap_or_else(|_| "annual".to_string());
+    // Effective annual rate for the schedule-less simple-interest
+    // approximation — a stored monthly rate is ×12.
+    let effective_annual = if rate_period == "monthly" { rate * 12.0 } else { rate };
     let origination: chrono::NaiveDate = r
         .try_get("origination_date")
         .unwrap_or_else(|_| today);
@@ -280,7 +298,8 @@ fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
     } else if has_schedule {
         (principal - principal_paid).max(0.0)
     } else {
-        let accrued = accrued_interest(principal, rate, &interest_type, origination, today);
+        let accrued =
+            accrued_interest(principal, effective_annual, &interest_type, origination, today);
         (principal + accrued - total_repaid).max(0.0)
     };
     // Paid-ahead: borrower has repaid more than what's been billed so
@@ -299,6 +318,7 @@ fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
         currency: r.try_get("currency").unwrap_or_default(),
         interest_rate: rate,
         interest_type,
+        rate_period,
         origination_date: origination.to_string(),
         term_months: r.try_get("term_months").ok().flatten(),
         payment_frequency: r.try_get("payment_frequency").ok().flatten(),
@@ -356,8 +376,11 @@ async fn create_loan(
     if payload.principal <= 0.0 {
         return (StatusCode::BAD_REQUEST, "principal must be positive").into_response();
     }
-    if !matches!(payload.interest_type.as_str(), "none" | "simple" | "amortized") {
+    if !valid_interest_type(&payload.interest_type) {
         return (StatusCode::BAD_REQUEST, "invalid interest_type").into_response();
+    }
+    if !matches!(payload.rate_period.as_str(), "annual" | "monthly") {
+        return (StatusCode::BAD_REQUEST, "invalid rate_period").into_response();
     }
 
     // Find-or-create the person. If person_id is supplied, verify it
@@ -395,9 +418,9 @@ async fn create_loan(
     let id: Result<uuid::Uuid, _> = sqlx::query_scalar(
         r#"
         INSERT INTO loans (user_id, person_id, borrower_name, principal, currency,
-                           interest_rate, interest_type, origination_date,
+                           interest_rate, interest_type, rate_period, origination_date,
                            term_months, payment_frequency, notes)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING id
         "#,
     )
@@ -408,6 +431,7 @@ async fn create_loan(
     .bind(&payload.currency)
     .bind(rust_decimal::Decimal::from_f64_retain(payload.interest_rate).unwrap_or_default())
     .bind(&payload.interest_type)
+    .bind(&payload.rate_period)
     .bind(payload.origination_date)
     .bind(payload.term_months)
     .bind(&payload.payment_frequency)
@@ -435,7 +459,7 @@ async fn update_loan(
     Json(payload): Json<UpdateLoanRequest>,
 ) -> impl IntoResponse {
     if let Some(it) = &payload.interest_type {
-        if !matches!(it.as_str(), "none" | "simple" | "amortized") {
+        if !valid_interest_type(it) {
             return (StatusCode::BAD_REQUEST, "invalid interest_type").into_response();
         }
     }
@@ -1027,7 +1051,7 @@ async fn generate_schedule(
     Path(id): Path<uuid::Uuid>,
 ) -> impl IntoResponse {
     let loan = sqlx::query(
-        "SELECT principal, interest_rate, interest_type, origination_date, \
+        "SELECT principal, interest_rate, interest_type, rate_period, origination_date, \
                 term_months, payment_frequency \
          FROM loans WHERE id = $1 AND user_id = $2",
     )
@@ -1061,6 +1085,8 @@ async fn generate_schedule(
         l.try_get("interest_rate").unwrap_or_default();
     let interest_type: String =
         l.try_get("interest_type").unwrap_or_else(|_| "none".to_string());
+    let rate_period: String =
+        l.try_get("rate_period").unwrap_or_else(|_| "annual".to_string());
     let origination: chrono::NaiveDate = match l.try_get("origination_date") {
         Ok(d) => d,
         Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
@@ -1071,6 +1097,7 @@ async fn generate_schedule(
     let rows = match crate::services::loan_schedule::generate(
         principal,
         rate,
+        &rate_period,
         &interest_type,
         origination,
         term_months,

@@ -2313,3 +2313,91 @@ async fn loan_reminders_cross_tenant_isolated() {
     assert_eq!(body_json(res.into_body()).await.as_array().unwrap().len(), 0,
         "Bob must not see Alice's reminders");
 }
+
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_list_collection_path_contract() {
+    // Regression guard for the "couldn't load loans" bug: axum 0.8's
+    // nest("/api/loans") + inner "/" route matches /api/loans but
+    // 404s /api/loans/ (trailing slash). The frontend MUST call the
+    // no-slash form — this pins that contract so a future client
+    // change back to the slash form is caught here.
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+    // The path the frontend uses → must be 200.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/loans", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK, "GET /api/loans must be 200");
+    // POST collection (createLoan) → must be 201.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            "/api/loans",
+            Some(&serde_json::json!({
+                "borrower_name": "Slash Test", "principal": 100.0,
+                "currency": "USD", "origination_date": "2026-01-01"
+            })),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED, "POST /api/loans must 201");
+    // Documented axum behavior: the trailing-slash form does NOT match.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/loans/", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND,
+        "trailing-slash /api/loans/ 404s under axum nest — clients use the no-slash form");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_interest_only_and_monthly_rate_schedule() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+    // 1% per MONTH, interest-only, 6 months on $10,000.
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 10000.0, "currency": "USD",
+        "origination_date": "2026-01-15", "interest_type": "interest_only",
+        "interest_rate": 0.01, "rate_period": "monthly",
+        "term_months": 6, "payment_frequency": "monthly"
+    })).await;
+
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{loan_id}/payments"), None, Some(&token),
+    )).await.unwrap();
+    let rows = body_json(res.into_body()).await;
+    let arr = rows.as_array().unwrap();
+    assert_eq!(arr.len(), 6);
+    // First five rows: interest only, $100 each (1% of 10k), no principal.
+    for r in &arr[..5] {
+        assert!((r["scheduled_interest"].as_f64().unwrap() - 100.0).abs() < 0.01);
+        assert!(r["scheduled_principal"].as_f64().unwrap().abs() < 0.01);
+    }
+    // Final row: full principal balloon.
+    assert!((arr[5]["scheduled_principal"].as_f64().unwrap() - 10000.0).abs() < 0.01,
+        "interest-only balloon should return full principal, got {}", arr[5]["scheduled_principal"]);
+
+    // The loan echoes back rate_period for the UI.
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
+    )).await.unwrap();
+    let l = body_json(res.into_body()).await;
+    assert_eq!(l["rate_period"], "monthly");
+    assert_eq!(l["interest_type"], "interest_only");
+}

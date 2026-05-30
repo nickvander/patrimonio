@@ -251,6 +251,16 @@ class _DashboardScreenState extends State<DashboardScreen>
         onSelected: () => jumpTab(idx),
       ));
     }
+    // Lending tab is conditional — appended at _baseTabCount when on.
+    if (_lendingEnabled) {
+      items.add(PaletteItem(
+        label: 'Jump to Lending',
+        subtitle: 'Tab · money you\'ve lent',
+        icon: Icons.handshake_outlined,
+        accent: const Color(0xFF1DE9B6),
+        onSelected: () => jumpTab(_baseTabCount),
+      ));
+    }
 
     final allAccounts = (_overview?['accounts'] as List?) ?? const [];
     for (final raw in allAccounts) {

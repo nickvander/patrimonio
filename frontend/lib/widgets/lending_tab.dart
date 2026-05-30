@@ -381,8 +381,36 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   String _borrowerText = '';
   String _currency = 'USD';
   String _interestType = 'none';
+  // 'annual' or 'monthly' — the period the entered rate is in. Stored
+  // faithfully so "1% / month" stays exact end-to-end.
+  String _ratePeriod = 'annual';
+  String _paymentFrequency = 'monthly';
   DateTime _originationDate = DateTime.now();
   bool _submitting = false;
+
+  /// Quick, clearly-labeled total-interest ESTIMATE for instant
+  /// feedback as the user tunes the rate. Not authoritative — the
+  /// exact penny-accurate schedule is generated server-side in Decimal.
+  String? _rateEstimate() {
+    final principal = double.tryParse(_principalCtrl.text.trim());
+    final ratePct = double.tryParse(_rateCtrl.text.trim());
+    final term = int.tryParse(_termCtrl.text.trim());
+    if (principal == null || principal <= 0 || ratePct == null || ratePct <= 0) {
+      return null;
+    }
+    // Normalize to an annual fraction.
+    final annual = (_ratePeriod == 'monthly' ? ratePct * 12 : ratePct) / 100.0;
+    final months = term ?? 12;
+    final years = months / 12.0;
+    final totalInterest = _interestType == 'interest_only'
+        ? principal * annual * years // interest accrues on full balance
+        : _interestType == 'simple'
+            ? principal * annual * years
+            : principal * annual * years * 0.55; // amortized ≈ half (declining)
+    final cur = _currency == 'MXN' ? r'MX$' : r'$';
+    return '≈ $cur${totalInterest.toStringAsFixed(0)} total interest over '
+        '$months mo (estimate)';
+  }
 
   @override
   void initState() {
@@ -480,37 +508,93 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                 DropdownMenuItem(value: 'none', child: Text('No interest')),
                 DropdownMenuItem(
                     value: 'simple', child: Text('Simple interest')),
+                DropdownMenuItem(
+                    value: 'amortized', child: Text('Amortized (level payments)')),
+                DropdownMenuItem(
+                    value: 'interest_only',
+                    child: Text('Interest-only (balloon)')),
               ],
               onChanged: (v) => setState(() => _interestType = v ?? 'none'),
             ),
             if (_interestType != 'none') ...[
               const SizedBox(height: 12),
+              // Rate + per-year/per-month selector. The period is stored
+              // faithfully, so "1 % / month" is amortized as exactly 1%
+              // monthly — no lossy reconversion to an annual figure.
               Row(
                 children: [
                   Expanded(
+                    flex: 2,
                     child: TextField(
                       controller: _rateCtrl,
                       keyboardType:
                           const TextInputType.numberWithOptions(decimal: true),
                       decoration: const InputDecoration(
-                        labelText: 'Annual rate %',
+                        labelText: 'Rate %',
                         hintText: 'e.g. 5',
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _ratePeriod,
+                      decoration: const InputDecoration(labelText: 'per'),
+                      items: const [
+                        DropdownMenuItem(value: 'annual', child: Text('year')),
+                        DropdownMenuItem(value: 'monthly', child: Text('month')),
+                      ],
+                      onChanged: (v) =>
+                          setState(() => _ratePeriod = v ?? 'annual'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
                   Expanded(
                     child: TextField(
                       controller: _termCtrl,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
                         labelText: 'Term (months)',
-                        hintText: 'optional',
+                        hintText: 'e.g. 12',
                       ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: 'monthly',
+                      decoration:
+                          const InputDecoration(labelText: 'Payments'),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'monthly', child: Text('Monthly')),
+                        DropdownMenuItem(
+                            value: 'weekly', child: Text('Weekly')),
+                        DropdownMenuItem(
+                            value: 'lump_sum', child: Text('Lump sum')),
+                      ],
+                      onChanged: (v) =>
+                          setState(() => _paymentFrequency = v ?? 'monthly'),
                     ),
                   ),
                 ],
               ),
+              // Live, clearly-labeled estimate so the user gets instant
+              // feedback as they tune the rate. Exact schedule is
+              // generated server-side from the loan's detail view.
+              if (_rateEstimate() != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    _rateEstimate()!,
+                    style: TextStyle(fontSize: 12, color: context.textSubtle),
+                  ),
+                ),
             ],
           ],
         ),
@@ -556,17 +640,21 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     }
     setState(() => _submitting = true);
     try {
-      // Rate entered as a percent; backend wants a fraction.
+      // Rate entered as a percent; backend wants a fraction. The period
+      // (year/month) is passed through verbatim so it's stored exactly.
       final ratePct = double.tryParse(_rateCtrl.text.trim()) ?? 0;
       final term = int.tryParse(_termCtrl.text.trim());
+      final interestBearing = _interestType != 'none';
       await widget.apiService.createLoan(
         borrowerName: borrower,
         principal: principal,
         currency: _currency,
         originationDate: _originationDate,
-        interestRate: _interestType == 'none' ? 0 : ratePct / 100.0,
+        interestRate: interestBearing ? ratePct / 100.0 : 0,
         interestType: _interestType,
-        termMonths: _interestType == 'none' ? null : term,
+        ratePeriod: _ratePeriod,
+        termMonths: interestBearing ? term : null,
+        paymentFrequency: interestBearing ? _paymentFrequency : null,
       );
       if (!mounted) return;
       Navigator.pop(context, true);

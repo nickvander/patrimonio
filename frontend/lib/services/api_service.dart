@@ -1266,7 +1266,9 @@ class ApiService {
   // ---------- Personal lending ----------
 
   Future<List<dynamic>> getLoans() async {
-    final response = await _get(Uri.parse('$_baseUrl/loans/'));
+    // No trailing slash: axum 0.8 nest("/api/loans") + inner "/" route
+    // matches /api/loans but NOT /api/loans/ (the latter 404s).
+    final response = await _get(Uri.parse('$_baseUrl/loans'));
     if (response.statusCode == 200) return json.decode(response.body);
     throw Exception('Failed to load loans');
   }
@@ -1292,6 +1294,7 @@ class ApiService {
     required DateTime originationDate,
     double interestRate = 0,
     String interestType = 'none',
+    String ratePeriod = 'annual',
     int? termMonths,
     String? paymentFrequency,
     String? notes,
@@ -1304,13 +1307,15 @@ class ApiService {
       'origination_date': _isoDate(originationDate),
       'interest_rate': interestRate,
       'interest_type': interestType,
+      'rate_period': ratePeriod,
       if (termMonths != null) 'term_months': termMonths,
       if (paymentFrequency != null) 'payment_frequency': paymentFrequency,
       if (notes != null && notes.isNotEmpty) 'notes': notes,
       if (personId != null) 'person_id': personId,
     };
     final response = await _post(
-      Uri.parse('$_baseUrl/loans/'),
+      // No trailing slash — see getLoans (axum nest routing).
+      Uri.parse('$_baseUrl/loans'),
       headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode(body),
     );
