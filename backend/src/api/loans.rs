@@ -14,9 +14,9 @@
 //! (the linked rows shift balances + the cash-flow view).
 
 use axum::{
-    extract::{Extension, Path, State},
-    http::StatusCode,
-    response::IntoResponse,
+    extract::{Extension, Path, Query, State},
+    http::{header, StatusCode},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
@@ -35,6 +35,9 @@ pub fn router() -> Router<AppState> {
         .route("/people", get(list_people))
         // Upcoming + overdue installments for the notifications bell.
         .route("/reminders", get(list_reminders))
+        // Interest-income report + its CSV export (static before /{id}).
+        .route("/interest-income", get(interest_income))
+        .route("/interest-income/export", get(export_interest_income))
         // Static segments before dynamic /{id} so the matcher prefers
         // them (same ordering discipline as dashboard.rs fx-transfers).
         .route("/payments/{payment_id}", axum::routing::delete(unreconcile_payment))
@@ -92,6 +95,9 @@ struct LoanView {
     overdue: bool,
     /// Borrower has paid more than what's been billed to date.
     paid_ahead: bool,
+    /// Cumulative interest income realized on this loan (Σ
+    /// interest_portion of reconciled repayments). Cash basis.
+    interest_earned: f64,
 }
 
 #[derive(Serialize)]
@@ -199,9 +205,9 @@ fn dec_to_f64(d: Option<rust_decimal::Decimal>) -> f64 {
 }
 
 /// Simple interest accrued from origination to today: P · r · t(years).
-/// 'none' accrues nothing; 'amortized' is computed from its schedule in
-/// v2 — for MVP it falls back to simple so the number is never wrong-
-/// signed, just approximate until the schedule generator ships.
+/// No longer used for `outstanding` (which is now the running principal
+/// balance). Kept for the deferred "accrued interest owed" view.
+#[allow(dead_code)]
 fn accrued_interest(
     principal: f64,
     rate: f64,
@@ -215,6 +221,45 @@ fn accrued_interest(
     let days = (today - origination).num_days().max(0) as f64;
     let years = days / 365.0;
     principal * rate * years
+}
+
+/// Interest portion of one repayment (cash-basis interest income),
+/// allocated INTEREST-FIRST per the US Rule — no compounding of unpaid
+/// interest into principal.
+///
+///   * Scheduled installment (we know its `scheduled_interest`): the
+///     interest portion is min(scheduled_interest, amount) — a full
+///     payment realizes the planned interest; a partial payment counts
+///     toward interest first.
+///   * Open-ended / ad-hoc (no schedule): accrue interest on the
+///     outstanding balance at the loan's rate over the days since the
+///     last payment, then allocate interest-first. 'none' / 0% → 0.
+#[allow(clippy::too_many_arguments)]
+fn split_interest_portion(
+    amount: f64,
+    balance_before: f64,
+    scheduled_interest: Option<f64>,
+    rate: f64,
+    rate_period: &str,
+    interest_type: &str,
+    last_date: chrono::NaiveDate,
+    paid_date: chrono::NaiveDate,
+) -> f64 {
+    if let Some(si) = scheduled_interest {
+        // Interest-first cap: never attribute more interest than was
+        // scheduled, nor more than the amount actually paid.
+        return si.min(amount).max(0.0);
+    }
+    if interest_type == "none" || rate <= 0.0 {
+        return 0.0;
+    }
+    // Open-ended accrual: convert to an effective annual rate, accrue
+    // simple interest over elapsed days on the outstanding balance.
+    let annual = if rate_period == "monthly" { rate * 12.0 } else { rate };
+    let days = (paid_date - last_date).num_days().max(0) as f64;
+    let accrued = balance_before * annual * (days / 365.0);
+    // Allocate interest-first, capped at the payment.
+    accrued.min(amount).max(0.0)
 }
 
 // ---------- loans CRUD ----------
@@ -234,11 +279,13 @@ const LOAN_AGGREGATES: &str = r#"
     -- principal − repaid path instead.
     EXISTS(SELECT 1 FROM loan_payments p
            WHERE p.loan_id = l.id AND p.scheduled_principal > 0) AS has_schedule,
-    -- Σ scheduled_principal of FULLY-paid installments → drives the
-    -- schedule-aware outstanding (principal − this).
-    COALESCE((SELECT SUM(p.scheduled_principal) FROM loan_payments p
-              WHERE p.loan_id = l.id AND p.actual_tx_id IS NOT NULL
-                AND p.paid_amount >= p.scheduled_amount), 0) AS principal_paid,
+    -- Σ principal_portion of every RECONCILED payment → the running
+    -- principal balance is principal − this (= balance_after of the
+    -- last payment). Falls back to the full paid_amount for legacy
+    -- rows recorded before the principal/interest split shipped.
+    COALESCE((SELECT SUM(COALESCE(p.principal_portion, p.paid_amount, 0))
+              FROM loan_payments p
+              WHERE p.loan_id = l.id AND p.actual_tx_id IS NOT NULL), 0) AS principal_paid,
     (SELECT MIN(p.due_date) FROM loan_payments p
      WHERE p.loan_id = l.id
        AND (p.actual_tx_id IS NULL OR p.paid_amount < p.scheduled_amount)) AS next_due,
@@ -247,7 +294,10 @@ const LOAN_AGGREGATES: &str = r#"
              AND (p.actual_tx_id IS NULL OR p.paid_amount < p.scheduled_amount)) AS overdue,
     -- Σ scheduled_amount billed on or before today (for paid-ahead).
     COALESCE((SELECT SUM(p.scheduled_amount) FROM loan_payments p
-              WHERE p.loan_id = l.id AND p.due_date <= CURRENT_DATE), 0) AS cumulative_due
+              WHERE p.loan_id = l.id AND p.due_date <= CURRENT_DATE), 0) AS cumulative_due,
+    -- Cumulative realized interest income (cash basis).
+    COALESCE((SELECT SUM(p.interest_portion) FROM loan_payments p
+              WHERE p.loan_id = l.id AND p.interest_portion IS NOT NULL), 0) AS interest_earned
 "#;
 
 async fn list_loans(
@@ -288,19 +338,18 @@ fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
     let next_due: Option<chrono::NaiveDate> = r.try_get("next_due").ok().flatten();
     let overdue: bool = r.try_get("overdue").unwrap_or(false);
 
-    // Outstanding:
+    // Outstanding = remaining PRINCIPAL balance:
     //   * written_off / cancelled / paid_off → 0 (settled).
-    //   * has a schedule → principal − Σ paid scheduled_principal.
-    //   * else (open-ended / no schedule) → the simple-interest
-    //     approximation: principal + accrued − repaid.
+    //   * else → principal − Σ principal_portion of reconciled payments
+    //     (the running balance, == balance_after of the last payment).
+    // Accrued-but-unpaid interest is deliberately NOT added here — it's
+    // not part of the principal owed and (cash basis) isn't income
+    // until received. A separate "interest accrued" figure is deferred.
+    let _ = (effective_annual, origination, today, total_repaid); // (kept for future accrual view)
     let outstanding = if matches!(status.as_str(), "written_off" | "cancelled" | "paid_off") {
         0.0
-    } else if has_schedule {
-        (principal - principal_paid).max(0.0)
     } else {
-        let accrued =
-            accrued_interest(principal, effective_annual, &interest_type, origination, today);
-        (principal + accrued - total_repaid).max(0.0)
+        (principal - principal_paid).max(0.0)
     };
     // Paid-ahead: borrower has repaid more than what's been billed so
     // far (only meaningful with a schedule + something billed).
@@ -336,6 +385,7 @@ fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
         next_due: next_due.map(|d| d.to_string()),
         overdue,
         paid_ahead,
+        interest_earned: dec_to_f64(r.try_get("interest_earned").ok()),
     }
 }
 
@@ -795,13 +845,47 @@ async fn record_payment(
     let amount_dec = rust_decimal::Decimal::from_f64_retain(amount).unwrap_or_default();
     let paid_date = payload.paid_date.unwrap_or(tx_date);
 
+    // Loan terms + running state needed to split this payment into
+    // principal vs interest (cash-basis interest income).
+    let loan = sqlx::query(
+        r#"
+        SELECT l.principal, l.interest_rate, l.interest_type, l.rate_period,
+               l.origination_date,
+               COALESCE((SELECT SUM(p.principal_portion) FROM loan_payments p
+                         WHERE p.loan_id = l.id AND p.principal_portion IS NOT NULL), 0)
+                   AS principal_paid,
+               (SELECT MAX(p.paid_date) FROM loan_payments p
+                WHERE p.loan_id = l.id AND p.paid_date IS NOT NULL) AS last_paid
+        FROM loans l WHERE l.id = $1 AND l.user_id = $2
+        "#,
+    )
+    .bind(id)
+    .bind(ctx.user_id)
+    .fetch_one(&state.db)
+    .await;
+    let Ok(loan) = loan else {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+    let principal = dec_to_f64(loan.try_get("principal").ok());
+    let rate = dec_to_f64(loan.try_get("interest_rate").ok());
+    let interest_type: String =
+        loan.try_get("interest_type").unwrap_or_else(|_| "none".to_string());
+    let rate_period: String =
+        loan.try_get("rate_period").unwrap_or_else(|_| "annual".to_string());
+    let origination: chrono::NaiveDate = loan
+        .try_get("origination_date")
+        .unwrap_or(paid_date);
+    let principal_paid = dec_to_f64(loan.try_get("principal_paid").ok());
+    let last_paid: Option<chrono::NaiveDate> = loan.try_get("last_paid").ok().flatten();
+    let balance_before = (principal - principal_paid).max(0.0);
+
     // If a GENERATED schedule exists (rows with scheduled_principal > 0),
     // fill the earliest UNPAID scheduled installment rather than
     // appending a new row — that's what makes the schedule-aware
     // outstanding (principal − Σ paid scheduled_principal) decrease.
     // Otherwise (MVP / open-ended loan) append a new installment.
-    let next_scheduled: Option<uuid::Uuid> = sqlx::query_scalar(
-        "SELECT id FROM loan_payments \
+    let next_scheduled: Option<(uuid::Uuid, f64)> = sqlx::query(
+        "SELECT id, scheduled_interest FROM loan_payments \
          WHERE loan_id = $1 AND actual_tx_id IS NULL AND scheduled_principal > 0 \
          ORDER BY installment_number ASC LIMIT 1",
     )
@@ -809,20 +893,52 @@ async fn record_payment(
     .fetch_optional(&state.db)
     .await
     .ok()
-    .flatten();
+    .flatten()
+    .map(|r| {
+        (
+            r.get::<uuid::Uuid, _>("id"),
+            dec_to_f64(r.try_get("scheduled_interest").ok()),
+        )
+    });
 
-    let result = if let Some(payment_id) = next_scheduled {
+    // Compute the principal/interest split (interest-first, US Rule —
+    // see services/loan_schedule + the interest-income research).
+    let scheduled_interest = next_scheduled.map(|(_, si)| si);
+    let interest_portion = split_interest_portion(
+        amount,
+        balance_before,
+        scheduled_interest,
+        rate,
+        &rate_period,
+        &interest_type,
+        last_paid.unwrap_or(origination),
+        paid_date,
+    );
+    let principal_portion = (amount - interest_portion).max(0.0);
+    let balance_after = (balance_before - principal_portion).max(0.0);
+    let interest_dec =
+        rust_decimal::Decimal::from_f64_retain(interest_portion).unwrap_or_default();
+    let principal_dec =
+        rust_decimal::Decimal::from_f64_retain(principal_portion).unwrap_or_default();
+    let balance_after_dec =
+        rust_decimal::Decimal::from_f64_retain(balance_after).unwrap_or_default();
+
+    let result = if let Some((payment_id, _)) = next_scheduled {
         sqlx::query(
             r#"
             UPDATE loan_payments
             SET actual_tx_id = $1, paid_amount = $2, paid_date = $3,
+                principal_portion = $4, interest_portion = $5, balance_after = $6,
                 status = CASE WHEN $2 >= scheduled_amount THEN 'paid' ELSE 'partial' END
-            WHERE id = $4 AND user_id = $5
+            WHERE id = $7 AND user_id = $8
             "#,
         )
         .bind(payload.transaction_id)
         .bind(amount_dec)
         .bind(paid_date)
+        .bind(principal_dec)
+        .bind(interest_dec)
+        .bind(balance_after_dec)
         .bind(payment_id)
         .bind(ctx.user_id)
         .execute(&state.db)
@@ -839,8 +955,9 @@ async fn record_payment(
             r#"
             INSERT INTO loan_payments
                 (user_id, loan_id, installment_number, scheduled_amount,
-                 actual_tx_id, paid_amount, paid_date, status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, 'paid')
+                 actual_tx_id, paid_amount, paid_date,
+                 principal_portion, interest_portion, balance_after, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'paid')
             "#,
         )
         .bind(ctx.user_id)
@@ -850,6 +967,9 @@ async fn record_payment(
         .bind(payload.transaction_id)
         .bind(amount_dec)
         .bind(paid_date)
+        .bind(principal_dec)
+        .bind(interest_dec)
+        .bind(balance_after_dec)
         .execute(&state.db)
         .await
     };
@@ -1258,4 +1378,184 @@ async fn list_reminders(
             })
             .collect(),
     )
+}
+
+// ---------- interest income (cash basis) ----------
+
+#[derive(Deserialize)]
+struct InterestQuery {
+    /// Optional calendar-year filter (cash basis: by paid_date). When
+    /// absent, all-time.
+    #[serde(default)]
+    year: Option<i32>,
+}
+
+#[derive(Serialize)]
+struct InterestByLoan {
+    loan_id: String,
+    borrower_name: String,
+    currency: String,
+    interest_received: f64,
+    principal_received: f64,
+    payments_count: i64,
+}
+
+#[derive(Serialize)]
+struct InterestByMonth {
+    /// YYYY-MM.
+    month: String,
+    interest_received: f64,
+}
+
+/// Interest-income report. Cash basis — interest is recognized in the
+/// month/year the repayment was RECEIVED (paid_date), per IRS Topic 403
+/// for an individual cash-method lender. Per-loan rows are grouped by
+/// borrower-style (one row per loan), plus per-month series + grand
+/// total. Tax content is structural only, not advice.
+async fn interest_income(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Query(q): Query<InterestQuery>,
+) -> Json<serde_json::Value> {
+    // Year filter applied on paid_date. NULL year → all-time (the
+    // `$2::int IS NULL OR ...` form keeps one query for both paths).
+    let by_loan = sqlx::query(
+        r#"
+        SELECT l.id AS loan_id, l.borrower_name, l.currency,
+               COALESCE(SUM(p.interest_portion), 0) AS interest_received,
+               COALESCE(SUM(p.principal_portion), 0) AS principal_received,
+               COUNT(p.id) AS payments_count
+        FROM loans l
+        JOIN loan_payments p ON p.loan_id = l.id AND p.user_id = l.user_id
+        WHERE l.user_id = $1
+          AND p.interest_portion IS NOT NULL
+          AND p.paid_date IS NOT NULL
+          AND ($2::int IS NULL OR EXTRACT(YEAR FROM p.paid_date) = $2)
+        GROUP BY l.id, l.borrower_name, l.currency
+        HAVING COALESCE(SUM(p.interest_portion), 0) <> 0
+            OR COALESCE(SUM(p.principal_portion), 0) <> 0
+        ORDER BY interest_received DESC
+        "#,
+    )
+    .bind(ctx.user_id)
+    .bind(q.year)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let by_month = sqlx::query(
+        r#"
+        SELECT TO_CHAR(p.paid_date, 'YYYY-MM') AS month,
+               COALESCE(SUM(p.interest_portion), 0) AS interest_received
+        FROM loan_payments p
+        WHERE p.user_id = $1
+          AND p.interest_portion IS NOT NULL
+          AND p.paid_date IS NOT NULL
+          AND ($2::int IS NULL OR EXTRACT(YEAR FROM p.paid_date) = $2)
+        GROUP BY month
+        ORDER BY month ASC
+        "#,
+    )
+    .bind(ctx.user_id)
+    .bind(q.year)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let loans: Vec<InterestByLoan> = by_loan
+        .iter()
+        .map(|r| InterestByLoan {
+            loan_id: r.get::<uuid::Uuid, _>("loan_id").to_string(),
+            borrower_name: r.try_get("borrower_name").unwrap_or_default(),
+            currency: r.try_get("currency").unwrap_or_default(),
+            interest_received: dec_to_f64(r.try_get("interest_received").ok()),
+            principal_received: dec_to_f64(r.try_get("principal_received").ok()),
+            payments_count: r.try_get("payments_count").unwrap_or(0),
+        })
+        .collect();
+    let months: Vec<InterestByMonth> = by_month
+        .iter()
+        .map(|r| InterestByMonth {
+            month: r.try_get("month").unwrap_or_default(),
+            interest_received: dec_to_f64(r.try_get("interest_received").ok()),
+        })
+        .collect();
+    let total_interest: f64 = loans.iter().map(|l| l.interest_received).sum();
+    let total_principal: f64 = loans.iter().map(|l| l.principal_received).sum();
+
+    Json(serde_json::json!({
+        "year": q.year,
+        "total_interest": total_interest,
+        "total_principal": total_principal,
+        "by_loan": loans,
+        "by_month": months,
+    }))
+}
+
+/// CSV export of every reconciled repayment with its principal/interest
+/// split — a separate file from the transactions export so that stays
+/// clean. Columns: date, borrower, payment, principal, interest,
+/// balance_after, currency. Small dataset → built in memory.
+async fn export_interest_income(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Query(q): Query<InterestQuery>,
+) -> Response {
+    let rows = sqlx::query(
+        r#"
+        SELECT p.paid_date, l.borrower_name, l.currency,
+               p.paid_amount, p.principal_portion, p.interest_portion, p.balance_after
+        FROM loan_payments p
+        JOIN loans l ON l.id = p.loan_id AND l.user_id = p.user_id
+        WHERE p.user_id = $1
+          AND p.interest_portion IS NOT NULL
+          AND p.paid_date IS NOT NULL
+          AND ($2::int IS NULL OR EXTRACT(YEAR FROM p.paid_date) = $2)
+        ORDER BY p.paid_date ASC, l.borrower_name ASC
+        "#,
+    )
+    .bind(ctx.user_id)
+    .bind(q.year)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    fn esc(s: &str) -> String {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    }
+    let mut csv = String::from(
+        "date,borrower,currency,payment_amount,principal_portion,interest_portion,balance_after\n",
+    );
+    for r in &rows {
+        let date = r
+            .try_get::<chrono::NaiveDate, _>("paid_date")
+            .map(|d| d.to_string())
+            .unwrap_or_default();
+        let borrower: String = r.try_get("borrower_name").unwrap_or_default();
+        let currency: String = r.try_get("currency").unwrap_or_default();
+        let pay = dec_to_f64(r.try_get("paid_amount").ok());
+        let principal = dec_to_f64(r.try_get("principal_portion").ok());
+        let interest = dec_to_f64(r.try_get("interest_portion").ok());
+        let bal = dec_to_f64(r.try_get("balance_after").ok());
+        csv.push_str(&format!(
+            "{date},{},{currency},{pay:.2},{principal:.2},{interest:.2},{bal:.2}\n",
+            esc(&borrower)
+        ));
+    }
+
+    let filename = match q.year {
+        Some(y) => format!("patrimonio-loan-interest-{y}.csv"),
+        None => "patrimonio-loan-interest.csv".to_string(),
+    };
+    (
+        [
+            (header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{filename}\""),
+            ),
+        ],
+        csv,
+    )
+        .into_response()
 }

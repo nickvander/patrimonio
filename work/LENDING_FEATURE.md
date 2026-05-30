@@ -193,6 +193,34 @@ penalty interest on default.
   preservation + annual-equivalence, monthly simple) + 1 integration
   test (interest-only + monthly rate end-to-end). 110 backend tests.
 
+**Interest-income accounting — SHIPPED 2026-05-30** (researched against
+IRS Topic 403 / §7872 / Schedule B / GnuCash / US Rule):
+- Migration `2026052805` adds `principal_portion` / `interest_portion`
+  / `balance_after` to loan_payments — the split is STORED at
+  reconciliation (immutable cash-basis fact), not derived.
+- `record_payment` computes the split INTEREST-FIRST (US Rule, no
+  compounding): a scheduled installment uses its `scheduled_interest`;
+  an open-ended/ad-hoc payment accrues interest on the outstanding
+  balance at the loan rate over days-since-last-payment; 0%/none → all
+  principal.
+- `outstanding` unified to the running principal balance
+  (principal − Σ principal_portion = balance_after of the last
+  payment), consistent for scheduled + open-ended loans.
+- `GET /loans/interest-income?year=` → per-loan + per-month + grand
+  totals (cash basis on paid_date). `GET /loans/interest-income/export`
+  → a SEPARATE loan-interest.csv (date, borrower, payment, principal,
+  interest, balance_after) so the transactions export stays clean.
+  `LoanView.interest_earned` surfaces per-loan cumulative interest.
+- Frontend: "Interest earned" stat + CSV export button in the Lending
+  header; per-loan interest-earned line on each card.
+- 5 integration tests (scheduled split, open-ended US-rule
+  interest-first, 0%=all-principal, CSV shape, cross-tenant). 115
+  backend tests total.
+
+**Interest income — deferred:** per-borrower Schedule-B-formatted
+year-end summary CSV; "accrued interest owed" (non-income) view;
+§7872 below-market-loan informational flag.
+
 **Phase 3 — still deferred:**
 - Compound interest (distinct from amortized's declining-balance
   compounding); discounted balloon target.

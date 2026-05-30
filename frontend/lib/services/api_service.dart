@@ -1393,6 +1393,25 @@ class ApiService {
     }
   }
 
+  /// Interest-income report (cash basis). `year` optional. Returns
+  /// {year, total_interest, total_principal, by_loan[], by_month[]}.
+  Future<Map<String, dynamic>> getInterestIncome({int? year}) async {
+    final q = year != null ? '?year=$year' : '';
+    final response =
+        await _get(Uri.parse('$_baseUrl/loans/interest-income$q'));
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to load interest income');
+  }
+
+  /// Direct download URL for the loan-interest CSV (opened in the
+  /// browser so the cookie auth rides along, like the tx export).
+  String interestIncomeCsvUrl({int? year}) {
+    final q = year != null ? '?year=$year' : '';
+    return '$_baseUrl/loans/interest-income/export$q';
+  }
+
   /// Upcoming + overdue installments for the notifications bell. Each
   /// item: {loan_id, payment_id, borrower_name, amount, currency,
   /// due_date, installment_number, days_until, days_overdue}.

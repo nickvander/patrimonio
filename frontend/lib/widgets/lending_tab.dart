@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:web/web.dart' as web;
 import '../services/api_service.dart';
 import '../utils/theme_colors.dart';
 
@@ -32,6 +33,8 @@ class _LendingTabState extends State<LendingTab> {
   List<dynamic> _loans = [];
   List<dynamic> _people = [];
   Map<String, dynamic> _summary = {};
+  // All-time interest-income report (total_interest + total_principal).
+  Map<String, dynamic> _interestIncome = {};
   bool _loading = true;
   String? _error;
 
@@ -51,12 +54,16 @@ class _LendingTabState extends State<LendingTab> {
         widget.apiService.getLoans(),
         widget.apiService.getLoanPeople(),
         widget.apiService.getLoansSummary(),
+        widget.apiService
+            .getInterestIncome()
+            .catchError((_) => <String, dynamic>{}),
       ]);
       if (!mounted) return;
       setState(() {
         _loans = results[0] as List<dynamic>;
         _people = results[1] as List<dynamic>;
         _summary = results[2] as Map<String, dynamic>;
+        _interestIncome = results[3] as Map<String, dynamic>;
         _loading = false;
       });
     } catch (e) {
@@ -114,6 +121,8 @@ class _LendingTabState extends State<LendingTab> {
     final totalLent = (_summary['total_lent'] as num?)?.toDouble() ?? 0;
     final totalOut = (_summary['total_outstanding'] as num?)?.toDouble() ?? 0;
     final active = (_summary['active_count'] as num?)?.toInt() ?? 0;
+    final interestEarned =
+        (_interestIncome['total_interest'] as num?)?.toDouble() ?? 0;
     // Summary is denominated in each loan's own currency, summed
     // naively — fine for the common single-currency case. A mixed-
     // currency lender sees the caveat in the subtitle.
@@ -141,6 +150,15 @@ class _LendingTabState extends State<LendingTab> {
                   ),
                 ),
                 const Spacer(),
+                // Export the loan-interest CSV (cash-basis interest
+                // income — hand to an accountant at tax time).
+                if (interestEarned > 0)
+                  IconButton(
+                    tooltip: 'Export interest income (CSV)',
+                    icon: const Icon(Icons.download_outlined),
+                    onPressed: () => web.window.open(
+                        widget.apiService.interestIncomeCsvUrl(), '_self'),
+                  ),
                 FilledButton.icon(
                   onPressed: _openAddLoanDialog,
                   icon: const Icon(Icons.add, size: 18),
@@ -149,13 +167,16 @@ class _LendingTabState extends State<LendingTab> {
               ],
             ),
             const SizedBox(height: 16),
-            Row(
+            Wrap(
+              spacing: 24,
+              runSpacing: 12,
               children: [
                 _stat('Outstanding', _money(totalOut, 'USD'), context.warning),
-                const SizedBox(width: 24),
                 _stat('Total lent', _money(totalLent, 'USD'), context.textPrimary),
-                const SizedBox(width: 24),
                 _stat('Active', '$active', context.tealAccent),
+                // Interest income — the headline of this feature.
+                _stat('Interest earned', _money(interestEarned, 'USD'),
+                    context.positive),
               ],
             ),
           ],
@@ -278,6 +299,18 @@ class _LendingTabState extends State<LendingTab> {
                       )),
                 ],
               ),
+              // Interest income realized on this loan, when any.
+              if (((loan['interest_earned'] as num?)?.toDouble() ?? 0) > 0) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Interest earned ${_money((loan['interest_earned'] as num).toDouble(), currency)}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: context.positive,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
