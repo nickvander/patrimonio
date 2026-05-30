@@ -2789,6 +2789,10 @@ async fn loan_agreement_html_renders_and_is_scoped() {
     let html = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(html.contains("Promissory Note"));
     assert!(html.contains("Jose Ramirez"));
+    // Sectioned layout (the output redesign).
+    assert!(html.contains("<h2>Parties</h2>"), "Parties section present");
+    assert!(html.contains("<h2>Loan terms</h2>"), "Loan terms section present");
+    assert!(html.contains("Status as of"), "Status section present");
 
     // Cross-tenant: a different owner can't fetch it.
     let (_bob, bob_token) = seed_owner(&pool, "bob").await;
