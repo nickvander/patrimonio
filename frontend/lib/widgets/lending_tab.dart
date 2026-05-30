@@ -460,6 +460,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   final _principalCtrl = TextEditingController();
   final _rateCtrl = TextEditingController();
   final _termCtrl = TextEditingController();
+  final _notesCtrl = TextEditingController();
   // Latest borrower text, fed by the Autocomplete field's onChanged /
   // onSelected (avoids attaching a controller listener on every
   // fieldViewBuilder rebuild).
@@ -517,173 +518,201 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
         .map((p) => (p as Map)['name']?.toString() ?? '')
         .where((n) => n.isNotEmpty)
         .toList();
+    final media = MediaQuery.of(context);
+    final narrow = media.size.width < 380;
 
     return AlertDialog(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      title: const Text('Add loan'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Borrower with autocomplete from the people directory.
-            Autocomplete<String>(
-              optionsBuilder: (value) {
-                if (value.text.isEmpty) return peopleNames;
-                return peopleNames.where((n) =>
-                    n.toLowerCase().contains(value.text.toLowerCase()));
-              },
-              onSelected: (s) => _borrowerText = s,
-              fieldViewBuilder: (ctx, ctrl, focus, _) {
-                return TextField(
-                  controller: ctrl,
-                  focusNode: focus,
-                  onChanged: (v) => _borrowerText = v,
-                  decoration: const InputDecoration(
-                    labelText: 'Borrower name',
-                    hintText: 'e.g. Jose Ramirez',
-                  ),
-                );
-              },
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+      contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: context.accentSoft(context.tealAccent),
+              borderRadius: BorderRadius.circular(10),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _principalCtrl,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(
-                labelText: 'Amount lent',
-                prefixText: _currency == 'MXN' ? r'MX$ ' : r'$ ',
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
+            child: Icon(Icons.volunteer_activism_outlined,
+                color: context.tealAccent, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _currency,
-                    decoration: const InputDecoration(labelText: 'Currency'),
+                Text('Add loan',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: context.textPrimary)),
+                Text('Record money you lent and track repayment',
+                    style: TextStyle(fontSize: 12, color: context.textMuted)),
+              ],
+            ),
+          ),
+        ],
+      ),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 460,
+          maxHeight: media.size.height * 0.78,
+        ),
+        child: SizedBox(
+          width: 460,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _section('Borrower & amount', [
+                  Autocomplete<String>(
+                    optionsBuilder: (value) {
+                      if (value.text.isEmpty) return peopleNames;
+                      return peopleNames.where((n) =>
+                          n.toLowerCase().contains(value.text.toLowerCase()));
+                    },
+                    onSelected: (s) => _borrowerText = s,
+                    fieldViewBuilder: (ctx, ctrl, focus, _) => TextField(
+                      controller: ctrl,
+                      focusNode: focus,
+                      onChanged: (v) => _borrowerText = v,
+                      decoration: _decoration('Borrower name',
+                          hint: 'e.g. Jose Ramirez',
+                          icon: Icons.person_outline),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _principalCtrl,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (_) => setState(() {}),
+                    decoration: _decoration('Amount lent',
+                        prefixText: '$_sym ',
+                        icon: Icons.payments_outlined),
+                  ),
+                  const SizedBox(height: 12),
+                  _twoUp(
+                    narrow,
+                    DropdownButtonFormField<String>(
+                      initialValue: _currency,
+                      isExpanded: true,
+                      decoration: _decoration('Currency'),
+                      items: const [
+                        DropdownMenuItem(value: 'USD', child: Text('USD')),
+                        DropdownMenuItem(value: 'MXN', child: Text('MXN')),
+                      ],
+                      onChanged: (v) =>
+                          setState(() => _currency = v ?? 'USD'),
+                    ),
+                    InkWell(
+                      onTap: _pickDate,
+                      borderRadius: BorderRadius.circular(10),
+                      child: InputDecorator(
+                        decoration: _decoration('Lent on',
+                            icon: Icons.event_outlined),
+                        child: Text(
+                          DateFormat('MMM d, y').format(_originationDate),
+                          style: TextStyle(color: context.textPrimary),
+                        ),
+                      ),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 16),
+                _section('Interest terms', [
+                  DropdownButtonFormField<String>(
+                    initialValue: _interestType,
+                    isExpanded: true,
+                    decoration: _decoration('Interest type'),
                     items: const [
-                      DropdownMenuItem(value: 'USD', child: Text('USD')),
-                      DropdownMenuItem(value: 'MXN', child: Text('MXN')),
+                      DropdownMenuItem(
+                          value: 'none', child: Text('No interest')),
+                      DropdownMenuItem(
+                          value: 'simple', child: Text('Simple interest')),
+                      DropdownMenuItem(
+                          value: 'amortized', child: Text('Amortized')),
+                      DropdownMenuItem(
+                          value: 'interest_only',
+                          child: Text('Interest-only')),
+                      DropdownMenuItem(
+                          value: 'compound', child: Text('Compound')),
                     ],
-                    onChanged: (v) => setState(() => _currency = v ?? 'USD'),
+                    onChanged: (v) =>
+                        setState(() => _interestType = v ?? 'none'),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: InkWell(
-                    onTap: _pickDate,
-                    child: InputDecorator(
-                      decoration:
-                          const InputDecoration(labelText: 'Lent on'),
-                      child: Text(
-                        DateFormat('MMM d, y').format(_originationDate),
-                        style: TextStyle(color: context.textPrimary),
+                  if (_interestType != 'none') ...[
+                    const SizedBox(height: 12),
+                    _twoUp(
+                      narrow,
+                      TextField(
+                        controller: _rateCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        onChanged: (_) => setState(() {}),
+                        decoration: _decoration('Rate %',
+                            hint: 'e.g. 5', icon: Icons.percent),
+                      ),
+                      DropdownButtonFormField<String>(
+                        initialValue: _ratePeriod,
+                        isExpanded: true,
+                        decoration: _decoration('per'),
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'annual', child: Text('year')),
+                          DropdownMenuItem(
+                              value: 'monthly', child: Text('month')),
+                        ],
+                        onChanged: (v) =>
+                            setState(() => _ratePeriod = v ?? 'annual'),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    _twoUp(
+                      narrow,
+                      TextField(
+                        controller: _termCtrl,
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => setState(() {}),
+                        decoration: _decoration('Term (months)',
+                            hint: 'e.g. 12',
+                            icon: Icons.schedule_outlined),
+                      ),
+                      DropdownButtonFormField<String>(
+                        initialValue: _paymentFrequency,
+                        isExpanded: true,
+                        decoration: _decoration('Payments'),
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'monthly', child: Text('Monthly')),
+                          DropdownMenuItem(
+                              value: 'weekly', child: Text('Weekly')),
+                          DropdownMenuItem(
+                              value: 'lump_sum', child: Text('Lump sum')),
+                        ],
+                        onChanged: (v) => setState(
+                            () => _paymentFrequency = v ?? 'monthly'),
+                      ),
+                    ),
+                  ],
+                ]),
+                const SizedBox(height: 16),
+                _section('Notes', [
+                  TextField(
+                    controller: _notesCtrl,
+                    maxLines: 2,
+                    decoration: _decoration('Optional',
+                        hint: 'e.g. for the car deposit',
+                        icon: Icons.notes_outlined),
                   ),
-                ),
+                ]),
+                const SizedBox(height: 16),
+                _buildPreviewCard(),
               ],
             ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _interestType,
-              decoration: const InputDecoration(labelText: 'Interest'),
-              items: const [
-                DropdownMenuItem(value: 'none', child: Text('No interest')),
-                DropdownMenuItem(
-                    value: 'simple', child: Text('Simple interest')),
-                DropdownMenuItem(
-                    value: 'amortized', child: Text('Amortized (level payments)')),
-                DropdownMenuItem(
-                    value: 'interest_only',
-                    child: Text('Interest-only (balloon)')),
-                DropdownMenuItem(
-                    value: 'compound', child: Text('Compound (balloon at maturity)')),
-              ],
-              onChanged: (v) => setState(() => _interestType = v ?? 'none'),
-            ),
-            if (_interestType != 'none') ...[
-              const SizedBox(height: 12),
-              // Rate + per-year/per-month selector. The period is stored
-              // faithfully, so "1 % / month" is amortized as exactly 1%
-              // monthly — no lossy reconversion to an annual figure.
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: TextField(
-                      controller: _rateCtrl,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Rate %',
-                        hintText: 'e.g. 5',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 2,
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _ratePeriod,
-                      decoration: const InputDecoration(labelText: 'per'),
-                      items: const [
-                        DropdownMenuItem(value: 'annual', child: Text('year')),
-                        DropdownMenuItem(value: 'monthly', child: Text('month')),
-                      ],
-                      onChanged: (v) =>
-                          setState(() => _ratePeriod = v ?? 'annual'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _termCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Term (months)',
-                        hintText: 'e.g. 12',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: 'monthly',
-                      decoration:
-                          const InputDecoration(labelText: 'Payments'),
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'monthly', child: Text('Monthly')),
-                        DropdownMenuItem(
-                            value: 'weekly', child: Text('Weekly')),
-                        DropdownMenuItem(
-                            value: 'lump_sum', child: Text('Lump sum')),
-                      ],
-                      onChanged: (v) =>
-                          setState(() => _paymentFrequency = v ?? 'monthly'),
-                    ),
-                  ),
-                ],
-              ),
-              // Live, clearly-labeled estimate so the user gets instant
-              // feedback as they tune the rate. Exact schedule is
-              // generated server-side from the loan's detail view.
-              if (_rateEstimate() != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    _rateEstimate()!,
-                    style: TextStyle(fontSize: 12, color: context.textSubtle),
-                  ),
-                ),
-            ],
-          ],
+          ),
         ),
       ),
       actions: [
@@ -691,14 +720,190 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
           onPressed: _submitting ? null : () => Navigator.pop(context, false),
           child: const Text('Cancel'),
         ),
-        FilledButton(
+        FilledButton.icon(
           onPressed: _submitting ? null : _submit,
-          child: _submitting
+          icon: _submitting
               ? const SizedBox(
-                  width: 18,
-                  height: 18,
+                  width: 16,
+                  height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Add'),
+              : const Icon(Icons.add, size: 18),
+          label: const Text('Add loan'),
+        ),
+      ],
+    );
+  }
+
+  /// A titled group of fields in a soft card, for visual structure.
+  Widget _section(String title, List<Widget> children) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 8),
+          child: Text(
+            title.toUpperCase(),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+              color: context.textSubtle,
+            ),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: context.tileSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: context.hairline),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Two fields side-by-side on wide screens, stacked on narrow ones.
+  Widget _twoUp(bool narrow, Widget a, Widget b) {
+    if (narrow) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [a, const SizedBox(height: 12), b],
+      );
+    }
+    return Row(
+      children: [
+        Expanded(child: a),
+        const SizedBox(width: 12),
+        Expanded(child: b),
+      ],
+    );
+  }
+
+  /// Shared filled, rounded input styling for the dialog.
+  InputDecoration _decoration(String label,
+      {String? hint, String? prefixText, IconData? icon}) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixText: prefixText,
+      prefixIcon: icon == null ? null : Icon(icon, size: 18),
+      isDense: true,
+      filled: true,
+      fillColor: context.tint(0.03),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: context.hairline),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: context.hairline),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: context.tealAccent, width: 1.5),
+      ),
+    );
+  }
+
+  /// Always-visible projection so the user sees the finances before
+  /// saving — including no-interest loans, where it shows the total to
+  /// repay. Native currency only (never the converted display value).
+  Widget _buildPreviewCard() {
+    final proj = _projection();
+    final accent = context.tealAccent;
+
+    final List<Widget> rows;
+    if (proj == null) {
+      rows = [
+        Text('Enter an amount to see the projection',
+            style: TextStyle(fontSize: 13, color: context.textSubtle)),
+      ];
+    } else {
+      final cadenceLabel = switch (proj.cadence) {
+        'monthly' => '/mo',
+        'weekly' => '/wk',
+        _ => '',
+      };
+      rows = [
+        _previewRow('Total to repay', _fmtMoney(proj.totalRepayment),
+            bold: true),
+        const SizedBox(height: 6),
+        if (proj.totalInterest > 0.005)
+          _previewRow('Projected interest', _fmtMoney(proj.totalInterest),
+              color: accent)
+        else
+          Text('No interest on this loan',
+              style: TextStyle(fontSize: 12, color: context.textMuted)),
+        if (proj.perPayment != null) ...[
+          const SizedBox(height: 6),
+          _previewRow(
+            proj.cadence == 'balloon' ? 'Single payment' : 'Payment',
+            proj.cadence == 'balloon'
+                ? _fmtMoney(proj.perPayment!)
+                : '${_fmtMoney(proj.perPayment!)}$cadenceLabel'
+                    '${proj.periods != null ? '  ·  ${proj.periods} payments' : ''}',
+          ),
+        ] else ...[
+          const SizedBox(height: 6),
+          Text('Open-ended — repay anytime, no fixed schedule',
+              style: TextStyle(fontSize: 12, color: context.textSubtle)),
+        ],
+      ];
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.accentSoft(accent),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: context.accentBorder(accent)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.insights_outlined, size: 16, color: accent),
+              const SizedBox(width: 6),
+              Text('Loan preview',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: accent)),
+              const Spacer(),
+              Text('estimate',
+                  style: TextStyle(fontSize: 10, color: context.textSubtle)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ...rows,
+        ],
+      ),
+    );
+  }
+
+  Widget _previewRow(String label, String value,
+      {bool bold = false, Color? color}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: TextStyle(fontSize: 13, color: context.textMuted)),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+              color: color ?? context.textPrimary,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
         ),
       ],
     );
@@ -742,6 +947,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
         ratePeriod: _ratePeriod,
         termMonths: interestBearing ? term : null,
         paymentFrequency: interestBearing ? _paymentFrequency : null,
+        notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
       );
       if (!mounted) return;
       Navigator.pop(context, true);
