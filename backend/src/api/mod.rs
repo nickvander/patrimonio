@@ -12,3 +12,4 @@ pub mod setup;
 pub mod settings;
 pub mod invites;
 pub mod realtime;
+pub mod loans;

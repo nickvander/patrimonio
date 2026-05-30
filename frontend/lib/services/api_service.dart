@@ -1262,4 +1262,137 @@ class ApiService {
           'Failed to save setting $key (${response.statusCode})');
     }
   }
+
+  // ---------- Personal lending ----------
+
+  Future<List<dynamic>> getLoans() async {
+    final response = await _get(Uri.parse('$_baseUrl/loans/'));
+    if (response.statusCode == 200) return json.decode(response.body);
+    throw Exception('Failed to load loans');
+  }
+
+  Future<Map<String, dynamic>> getLoansSummary() async {
+    final response = await _get(Uri.parse('$_baseUrl/loans/summary'));
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to load loans summary');
+  }
+
+  Future<List<dynamic>> getLoanPeople() async {
+    final response = await _get(Uri.parse('$_baseUrl/loans/people'));
+    if (response.statusCode == 200) return json.decode(response.body);
+    throw Exception('Failed to load people');
+  }
+
+  Future<Map<String, dynamic>> createLoan({
+    required String borrowerName,
+    required double principal,
+    required String currency,
+    required DateTime originationDate,
+    double interestRate = 0,
+    String interestType = 'none',
+    int? termMonths,
+    String? paymentFrequency,
+    String? notes,
+    String? personId,
+  }) async {
+    final body = <String, dynamic>{
+      'borrower_name': borrowerName,
+      'principal': principal,
+      'currency': currency,
+      'origination_date': _isoDate(originationDate),
+      'interest_rate': interestRate,
+      'interest_type': interestType,
+      if (termMonths != null) 'term_months': termMonths,
+      if (paymentFrequency != null) 'payment_frequency': paymentFrequency,
+      if (notes != null && notes.isNotEmpty) 'notes': notes,
+      if (personId != null) 'person_id': personId,
+    };
+    final response = await _post(
+      Uri.parse('$_baseUrl/loans/'),
+      headers: _withCsrf({'Content-Type': 'application/json'}),
+      body: json.encode(body),
+    );
+    if (response.statusCode == 201) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception('Failed to create loan (${response.statusCode})');
+  }
+
+  Future<void> updateLoan(String id, Map<String, dynamic> changes) async {
+    final response = await _patch(
+      Uri.parse('$_baseUrl/loans/$id'),
+      headers: _withCsrf({'Content-Type': 'application/json'}),
+      body: json.encode(changes),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update loan (${response.statusCode})');
+    }
+  }
+
+  Future<void> deleteLoan(String id) async {
+    final response = await _delete(Uri.parse('$_baseUrl/loans/$id'));
+    if (response.statusCode != 204) {
+      throw Exception('Failed to delete loan (${response.statusCode})');
+    }
+  }
+
+  Future<List<dynamic>> getLoanPayments(String loanId) async {
+    final response = await _get(Uri.parse('$_baseUrl/loans/$loanId/payments'));
+    if (response.statusCode == 200) return json.decode(response.body);
+    throw Exception('Failed to load loan payments');
+  }
+
+  Future<void> linkDisbursement(String loanId, String transactionId) async {
+    final response = await _post(
+      Uri.parse('$_baseUrl/loans/$loanId/disbursement'),
+      headers: _withCsrf({'Content-Type': 'application/json'}),
+      body: json.encode({'transaction_id': transactionId}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to link disbursement (${response.statusCode})');
+    }
+  }
+
+  Future<void> recordRepayment(
+    String loanId,
+    String transactionId, {
+    double? amount,
+  }) async {
+    final body = <String, dynamic>{'transaction_id': transactionId};
+    if (amount != null) body['amount'] = amount;
+    final response = await _post(
+      Uri.parse('$_baseUrl/loans/$loanId/payments'),
+      headers: _withCsrf({'Content-Type': 'application/json'}),
+      body: json.encode(body),
+    );
+    if (response.statusCode != 201) {
+      throw Exception('Failed to record repayment (${response.statusCode})');
+    }
+  }
+
+  /// Unlink (un-reconcile) a recorded repayment. The bank transaction
+  /// itself is untouched; only the loan_payments row is removed.
+  Future<void> deleteLoanPayment(String paymentId) async {
+    final response =
+        await _delete(Uri.parse('$_baseUrl/loans/payments/$paymentId'));
+    if (response.statusCode != 204) {
+      throw Exception('Failed to unlink payment (${response.statusCode})');
+    }
+  }
+
+  /// Auto-suggest reconciliation candidates. `kind` is 'disbursement'
+  /// or 'repayment'. Each item: {transaction_id, date, amount, currency,
+  /// description, confidence, name_matched}.
+  Future<List<dynamic>> getLoanSuggestions(String loanId, String kind) async {
+    final response =
+        await _get(Uri.parse('$_baseUrl/loans/$loanId/suggestions/$kind'));
+    if (response.statusCode == 200) return json.decode(response.body);
+    throw Exception('Failed to load suggestions');
+  }
+
+  /// Date as YYYY-MM-DD (the backend's NaiveDate format).
+  String _isoDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }

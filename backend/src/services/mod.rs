@@ -17,3 +17,4 @@ pub mod plaid_webhook_verify;
 pub mod fx_transfer_link;
 pub mod common_passwords;
 pub mod realtime;
+pub mod loan_match;

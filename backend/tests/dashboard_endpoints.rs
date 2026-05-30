@@ -74,6 +74,7 @@ async fn try_setup(
     // accounts via the institutions foreign keys.
     sqlx::query(
         "TRUNCATE \
+         loan_payments, loans, people, \
          cash_fx_transfers, ignored_subscription_merchants, \
          exchange_rates, lot_disposals, holding_lots, holdings, \
          auth_audit, user_sessions, app_settings, \
@@ -136,6 +137,7 @@ async fn try_setup(
         .nest("/api/institutions", patrimonio::api::institutions::router())
         .nest("/api/dashboard", patrimonio::api::dashboard::router())
         .nest("/api/imports", patrimonio::api::imports::router())
+        .nest("/api/loans", patrimonio::api::loans::router())
         .layer(axum::middleware::from_fn(
             patrimonio::api::session::require_owner,
         ));
@@ -1724,4 +1726,355 @@ async fn cross_tenant_isolation_sessions_list() {
     assert_eq!(body["id"].as_str().unwrap(), alice_id.to_string());
     assert_eq!(body["username"].as_str().unwrap(), "alice2");
     assert_eq!(body["role"].as_str().unwrap(), "owner");
+}
+
+// =====================================================================
+// /api/loans — personal lending MVP
+// =====================================================================
+
+/// Seed a transaction with an explicit date + amount + description.
+/// Amount sign convention: negative = outflow, positive = inflow.
+async fn seed_tx_dated(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    description: &str,
+    amount: &str,
+    date: &str,
+) -> uuid::Uuid {
+    sqlx::query_scalar(
+        "INSERT INTO transactions (account_id, date, description, amount, currency, source, user_id) \
+         VALUES ($1, $2::date, $3, $4, 'USD', 'manual', $5) RETURNING id",
+    )
+    .bind(account_id)
+    .bind(date)
+    .bind(description)
+    .bind(Decimal::from_str(amount).unwrap())
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .expect("seed dated tx")
+}
+
+/// Create a loan via the API, returning its id.
+async fn create_loan(app: &Router, token: &str, body: &Value) -> uuid::Uuid {
+    let res = app
+        .clone()
+        .oneshot(req(Method::POST, "/api/loans", Some(body), Some(token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED, "create_loan should 201");
+    let b = body_json(res.into_body()).await;
+    uuid::Uuid::parse_str(b["id"].as_str().unwrap()).unwrap()
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_create_list_summary_roundtrip() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose Ramirez",
+            "principal": 5000.0,
+            "currency": "USD",
+            "origination_date": "2026-01-15"
+        }),
+    )
+    .await;
+
+    // List shows it with outstanding = principal (no repayments yet).
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/loans", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let arr = body_json(res.into_body()).await;
+    let loans = arr.as_array().unwrap();
+    assert_eq!(loans.len(), 1);
+    assert_eq!(loans[0]["borrower_name"], "Jose Ramirez");
+    assert!((loans[0]["outstanding"].as_f64().unwrap() - 5000.0).abs() < 0.01);
+
+    // A person row was auto-created.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/loans/people", None, Some(&token)))
+        .await
+        .unwrap();
+    let people = body_json(res.into_body()).await;
+    assert_eq!(people.as_array().unwrap().len(), 1);
+    assert_eq!(people[0]["name"], "Jose Ramirez");
+
+    // Summary math.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/loans/summary", None, Some(&token)))
+        .await
+        .unwrap();
+    let s = body_json(res.into_body()).await;
+    assert_eq!(s["loan_count"].as_i64().unwrap(), 1);
+    assert!((s["total_lent"].as_f64().unwrap() - 5000.0).abs() < 0.01);
+    assert!((s["total_outstanding"].as_f64().unwrap() - 5000.0).abs() < 0.01);
+
+    let _ = loan_id;
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_record_payment_reduces_outstanding_and_is_idempotent() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose Ramirez",
+            "principal": 1000.0,
+            "currency": "USD",
+            "origination_date": "2026-01-15"
+        }),
+    )
+    .await;
+
+    // An incoming repayment of 400.
+    let repay_tx = seed_tx_dated(&pool, user_id, acct, "Zelle from Jose", "400.00", "2026-02-15").await;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"transaction_id": repay_tx.to_string()})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // Outstanding is now 600.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token)))
+        .await
+        .unwrap();
+    let l = body_json(res.into_body()).await;
+    assert!((l["outstanding"].as_f64().unwrap() - 600.0).abs() < 0.01,
+        "expected 600 outstanding, got {}", l["outstanding"]);
+    assert!((l["total_repaid"].as_f64().unwrap() - 400.0).abs() < 0.01);
+
+    // Linking the SAME transaction again is rejected (409) — a
+    // repayment can only apply to one installment.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"transaction_id": repay_tx.to_string()})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CONFLICT, "double-link must 409");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_disbursement_and_repayment_excluded_from_cash_flow() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+
+    // The disbursement outflow + a normal expense in the same month.
+    let disb_tx = seed_tx_dated(&pool, user_id, acct, "Wire to Jose", "-1000.00", "2026-03-10").await;
+    let _grocery = seed_tx_dated(&pool, user_id, acct, "Supermarket", "-200.00", "2026-03-11").await;
+    // A repayment inflow + a normal paycheck inflow in another month.
+    let repay_tx = seed_tx_dated(&pool, user_id, acct, "Zelle from Jose", "500.00", "2026-04-10").await;
+    let _paycheck = seed_tx_dated(&pool, user_id, acct, "ACME Payroll", "3000.00", "2026-04-15").await;
+
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose",
+            "principal": 1000.0,
+            "currency": "USD",
+            "origination_date": "2026-03-10"
+        }),
+    )
+    .await;
+
+    // Baseline cash flow BEFORE linking: March spending includes the
+    // 1000 disbursement + 200 grocery = 1200; April income includes
+    // 500 + 3000 = 3500.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/trends", None, Some(&token)))
+        .await
+        .unwrap();
+    let trends = body_json(res.into_body()).await;
+    let march = trends.as_array().unwrap().iter()
+        .find(|p| p["month"] == "2026-03").cloned().unwrap();
+    assert!((march["spending"].as_f64().unwrap() - 1200.0).abs() < 0.01,
+        "pre-link March spending should be 1200, got {}", march["spending"]);
+
+    // Link disbursement + record repayment.
+    let res = app.clone().oneshot(req(
+        Method::POST,
+        &format!("/api/loans/{loan_id}/disbursement"),
+        Some(&serde_json::json!({"transaction_id": disb_tx.to_string()})),
+        Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let res = app.clone().oneshot(req(
+        Method::POST,
+        &format!("/api/loans/{loan_id}/payments"),
+        Some(&serde_json::json!({"transaction_id": repay_tx.to_string()})),
+        Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // AFTER linking: the disbursement drops out of March spending
+    // (1200 → 200) and the repayment drops out of April income
+    // (3500 → 3000).
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/trends", None, Some(&token)))
+        .await
+        .unwrap();
+    let trends = body_json(res.into_body()).await;
+    let arr = trends.as_array().unwrap();
+    let march = arr.iter().find(|p| p["month"] == "2026-03").cloned().unwrap();
+    let april = arr.iter().find(|p| p["month"] == "2026-04").cloned().unwrap();
+    assert!((march["spending"].as_f64().unwrap() - 200.0).abs() < 0.01,
+        "post-link March spending should exclude the disbursement (200), got {}", march["spending"]);
+    assert!((april["income"].as_f64().unwrap() - 3000.0).abs() < 0.01,
+        "post-link April income should exclude the repayment (3000), got {}", april["income"]);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_suggest_disbursement_matches_and_rejects() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+
+    // Case 1 (TP): exact -5000 on origination date, name in description.
+    let good = seed_tx_dated(&pool, user_id, acct, "ZELLE TO JOSE RAMIREZ", "-5000.00", "2026-01-15").await;
+    // Case 4 (TN): wrong amount, same day.
+    let _wrong_amount = seed_tx_dated(&pool, user_id, acct, "Coffee", "-250.00", "2026-01-15").await;
+    // Case 8 (TN): right amount, far date (59 days out → outside ±7).
+    let _far = seed_tx_dated(&pool, user_id, acct, "Other", "-5000.00", "2026-03-15").await;
+    // Case 9 (TN): an INFLOW of the right magnitude can't be a disbursement.
+    let _inflow = seed_tx_dated(&pool, user_id, acct, "Deposit", "5000.00", "2026-01-15").await;
+
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Jose Ramirez",
+            "principal": 5000.0,
+            "currency": "USD",
+            "origination_date": "2026-01-15"
+        }),
+    )
+    .await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/loans/{loan_id}/suggestions/disbursement"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let suggestions = body_json(res.into_body()).await;
+    let arr = suggestions.as_array().unwrap();
+    // Only the exact-amount same-day outflow should be suggested.
+    assert_eq!(arr.len(), 1, "exactly one disbursement suggestion expected, got {arr:?}");
+    assert_eq!(arr[0]["transaction_id"].as_str().unwrap(), good.to_string());
+    assert!(arr[0]["confidence"].as_i64().unwrap() >= 80, "exact+name should be high confidence");
+    assert_eq!(arr[0]["name_matched"], true);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_suggest_excludes_already_linked_disbursement() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+    let tx = seed_tx_dated(&pool, user_id, acct, "Wire to Jose", "-5000.00", "2026-01-15").await;
+
+    // Loan A links the tx as its disbursement.
+    let loan_a = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 5000.0, "currency": "USD", "origination_date": "2026-01-15"
+    })).await;
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_a}/disbursement"),
+        Some(&serde_json::json!({"transaction_id": tx.to_string()})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // Loan B (same borrower/amount) must NOT see that tx suggested —
+    // it's already linked (Case 7 / Case 19 disambiguation).
+    let loan_b = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 5000.0, "currency": "USD", "origination_date": "2026-01-15"
+    })).await;
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{loan_b}/suggestions/disbursement"), None, Some(&token),
+    )).await.unwrap();
+    let suggestions = body_json(res.into_body()).await;
+    assert_eq!(suggestions.as_array().unwrap().len(), 0,
+        "an already-linked disbursement must not be suggested for another loan");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_cross_tenant_isolation() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (alice_token, _alice) = bootstrap(&app, &pool).await;
+    let loan_id = create_loan(&app, &alice_token, &serde_json::json!({
+        "borrower_name": "Alice Friend", "principal": 2000.0, "currency": "USD", "origination_date": "2026-01-01"
+    })).await;
+
+    // Bob, a second hand-rolled owner.
+    let (_bob_id, bob_token) = seed_owner(&pool, "bob").await;
+
+    // Bob cannot GET Alice's loan.
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&bob_token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND, "Bob must not read Alice's loan");
+
+    // Bob cannot DELETE Alice's loan.
+    let res = app.clone().oneshot(req(
+        Method::DELETE, &format!("/api/loans/{loan_id}"), None, Some(&bob_token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND, "Bob must not delete Alice's loan");
+
+    // Bob's own loan list is empty.
+    let res = app.clone().oneshot(req(
+        Method::GET, "/api/loans", None, Some(&bob_token),
+    )).await.unwrap();
+    let arr = body_json(res.into_body()).await;
+    assert_eq!(arr.as_array().unwrap().len(), 0, "Bob sees none of Alice's loans");
 }

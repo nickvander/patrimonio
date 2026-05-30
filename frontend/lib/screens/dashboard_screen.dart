@@ -21,6 +21,7 @@ import '../widgets/sync_status_card.dart';
 import '../widgets/cross_currency_transfers_card.dart';
 import '../widgets/accounts_list_widget.dart';
 import '../widgets/transactions_tab.dart';
+import '../widgets/lending_tab.dart';
 import '../widgets/add_account_dialog.dart';
 import '../widgets/add_crypto_dialog.dart';
 import '../widgets/command_palette.dart';
@@ -71,6 +72,11 @@ class _DashboardScreenState extends State<DashboardScreen>
   Map<String, dynamic>? _sinceLastLogin;
   List<dynamic>? _subscriptions;
   List<dynamic>? _ignoredSubscriptions;
+  // Opt-in personal-lending module. Server-side per-user setting
+  // (app_settings 'lending_enabled'), fetched in _loadAllData. When
+  // true, a "Lending" tab is appended (index 7) and the TabController
+  // is rebuilt to length 8.
+  bool _lendingEnabled = false;
   List<dynamic>? _fxTransfers;
   // Pending date-window seed from a chart-bar tap. When non-null, the
   // TransactionsTab seeds its filters with a custom date range covering
@@ -118,21 +124,10 @@ class _DashboardScreenState extends State<DashboardScreen>
         }
       }
     }
+    // Lending tab unknown until the setting loads, so start with the
+    // 7 base tabs; _applyLendingSetting rebuilds to 8 if enabled.
     final savedTab = Preferences.getLastTab().clamp(0, 6);
-    _tabController = TabController(
-      length: 7,
-      vsync: this,
-      initialIndex: savedTab,
-      // 300ms (the Material default) makes the transition feel sluggish on a
-      // dense desktop dashboard; 180ms is short enough to feel near-instant
-      // while still smoothing the slide.
-      animationDuration: const Duration(milliseconds: 180),
-    );
-    _tabController!.addListener(() {
-      if (!_tabController!.indexIsChanging) {
-        Preferences.setLastTab(_tabController!.index);
-      }
-    });
+    _buildTabController(_baseTabCount, savedTab);
     _loadAllData();
     _checkRedirectStatus();
     // Open the realtime channel and route server-pushed
@@ -149,6 +144,42 @@ class _DashboardScreenState extends State<DashboardScreen>
     _realtimeSub?.cancel();
     _realtime.dispose();
     super.dispose();
+  }
+
+  /// Base (always-on) tab count. The Lending tab is appended on top
+  /// when enabled.
+  static const int _baseTabCount = 7;
+  int get _tabCount => _baseTabCount + (_lendingEnabled ? 1 : 0);
+
+  /// (Re)create the TabController at a given length, preserving the
+  /// current tab index (clamped). TabController.length is fixed at
+  /// construction, so toggling the Lending module means disposing and
+  /// rebuilding — the only safe way to change tab count at runtime.
+  void _buildTabController(int length, int initialIndex) {
+    _tabController?.dispose();
+    _tabController = TabController(
+      length: length,
+      vsync: this,
+      initialIndex: initialIndex.clamp(0, length - 1),
+      // 300ms (the Material default) feels sluggish on a dense desktop
+      // dashboard; 180ms is near-instant while still smoothing the slide.
+      animationDuration: const Duration(milliseconds: 180),
+    );
+    _tabController!.addListener(() {
+      if (!_tabController!.indexIsChanging) {
+        Preferences.setLastTab(_tabController!.index);
+      }
+    });
+  }
+
+  /// Apply a freshly-loaded lending_enabled value. Rebuilds the
+  /// TabController only when the flag actually flips, so a normal
+  /// refresh doesn't churn it (and lose the user's current tab).
+  void _applyLendingSetting(bool enabled) {
+    if (enabled == _lendingEnabled && _tabController != null) return;
+    final current = _tabController?.index ?? 0;
+    _lendingEnabled = enabled;
+    _buildTabController(_tabCount, current);
   }
 
   /// Server-pushed event handler. Every event maps to "refetch the
@@ -554,6 +585,51 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   /// Plaid-environment indicator. Returns an empty SizedBox in
   /// production (no chrome to distract), an amber pill labelled
+  /// "Modules" card in the Management tab — opt-in feature toggles.
+  /// Today just the personal-lending module; the switch persists
+  /// server-side (app_settings 'lending_enabled') so it follows the
+  /// user across devices, and flipping it adds/removes the Lending tab.
+  Widget _buildModulesCard() {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: context.hairline),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: SwitchListTile(
+          value: _lendingEnabled,
+          onChanged: _toggleLending,
+          secondary: Icon(Icons.handshake_outlined, color: context.tealAccent),
+          title: Text('Personal lending',
+              style: TextStyle(
+                  fontWeight: FontWeight.w600, color: context.textPrimary)),
+          subtitle: Text(
+            'Track money you lend to friends — designate the bank '
+            'transactions that fund and repay each loan. Adds a Lending tab.',
+            style: TextStyle(fontSize: 12, color: context.textSubtle),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleLending(bool enabled) async {
+    // Optimistically flip the tab + controller, then persist. On
+    // failure, revert so the UI doesn't lie about the saved state.
+    setState(() => _applyLendingSetting(enabled));
+    try {
+      await _apiService.putSetting('lending_enabled', enabled);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _applyLendingSetting(!enabled));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Couldn\'t save that setting')),
+      );
+    }
+  }
+
   /// `Sandbox` / `Development` otherwise. Reads `plaid_environment`
   /// from `/api/setup/status` (already loaded into _setupStatus).
   Widget _buildEnvChip() {
@@ -1051,6 +1127,9 @@ class _DashboardScreenState extends State<DashboardScreen>
         _apiService
             .getIgnoredSubscriptions()
             .catchError((_) => <dynamic>[]),
+        // Best-effort: a settings failure shouldn't take the dashboard
+        // down — just default the module off.
+        _apiService.getSetting('lending_enabled').catchError((_) => null),
       ]);
 
       debugPrint("All data loaded successfully");
@@ -1104,6 +1183,10 @@ class _DashboardScreenState extends State<DashboardScreen>
         _subscriptions = results[11] as List<dynamic>;
         _fxTransfers = results[12] as List<dynamic>;
         _ignoredSubscriptions = results[13] as List<dynamic>;
+        // Lending module toggle (server-side). The setting stores a
+        // raw bool; absent/null = off. Rebuilds the TabController only
+        // when the flag actually flips.
+        _applyLendingSetting(results[14] == true);
         _isLoading = false;
       });
 
@@ -1169,6 +1252,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                     Tab(text: isCompact ? 'Proj.' : 'Projections'),
                     Tab(text: isCompact ? 'Tax' : 'Tax planning'),
                     Tab(text: isCompact ? 'Manage' : 'Management'),
+                    // Appended only when the module is enabled — the
+                    // TabController length is kept in lockstep via
+                    // _applyLendingSetting.
+                    if (_lendingEnabled)
+                      Tab(text: isCompact ? 'Loans' : 'Lending'),
                   ],
                 ),
           actions: [
@@ -2103,6 +2191,8 @@ class _DashboardScreenState extends State<DashboardScreen>
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
+          _buildModulesCard(),
+          const SizedBox(height: 24),
           LayoutBuilder(builder: (ctx, c) {
             // Below ~720px the SyncStatusCard + FxWidget pair gets squeezed
             // into unreadability when forced side-by-side. Stack them.
@@ -2369,6 +2459,17 @@ class _DashboardScreenState extends State<DashboardScreen>
       ),
     );
 
+    final lendingTab = buildTabContainer(
+      LendingTab(
+        apiService: _apiService,
+        targetCurrency: _targetCurrency,
+        // A loan mutation links/unlinks transactions that are excluded
+        // from cash flow — refresh silently so the Cash flow tab + net
+        // worth reflect it without a full reload flash.
+        onChanged: () => _loadAllData(silent: true),
+      ),
+    );
+
     return TabBarView(
       controller: _tabController,
       children: [
@@ -2379,6 +2480,8 @@ class _DashboardScreenState extends State<DashboardScreen>
         _KeepAliveTab(child: projectionsTab),
         _KeepAliveTab(child: taxPlanningTab),
         _KeepAliveTab(child: managementTab),
+        // Kept in lockstep with the TabBar tab + controller length.
+        if (_lendingEnabled) _KeepAliveTab(child: lendingTab),
       ],
     );
   }

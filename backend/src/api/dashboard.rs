@@ -1087,6 +1087,13 @@ async fn cash_flow_trends(
           --     necessarily tracked.
           AND COALESCE(t.category, '') NOT IN ('TRANSFER_IN', 'TRANSFER_OUT')
           AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
+          -- Exclude personal-lending legs: a loan disbursement isn't
+          -- spending (it's a receivable) and a repayment isn't income
+          -- (it's the money coming back). Counting either would
+          -- double-distort the cash-flow bars. The partial unique
+          -- indexes on these columns make the anti-joins index probes.
+          AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
+          AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
         GROUP BY month
         ORDER BY month ASC
         "#

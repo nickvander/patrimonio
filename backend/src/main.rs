@@ -170,6 +170,7 @@ async fn main() -> Result<()> {
         .nest("/api/projections", patrimonio::api::projections::router())
         .nest("/api/tax", patrimonio::api::tax::router())
         .nest("/api/settings", patrimonio::api::settings::router())
+        .nest("/api/loans", patrimonio::api::loans::router())
         .nest("/api/auth/invites", patrimonio::api::invites::router())
         // Realtime WS lives here because GETs only — read-only
         // users can subscribe to their own invalidations just like
