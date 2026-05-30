@@ -2078,3 +2078,238 @@ async fn loan_cross_tenant_isolation() {
     let arr = body_json(res.into_body()).await;
     assert_eq!(arr.as_array().unwrap().len(), 0, "Bob sees none of Alice's loans");
 }
+
+// =====================================================================
+// /api/loans Phase 2 — schedules, status, reminders
+// =====================================================================
+
+/// Set an app_settings key for the bootstrap user (used to drive the
+/// reminder lead-days from the test).
+async fn set_setting(pool: &PgPool, user_id: uuid::Uuid, key: &str, value: Value) {
+    sqlx::query(
+        "INSERT INTO app_settings (user_id, key, value, updated_at) \
+         VALUES ($1, $2, $3, NOW()) \
+         ON CONFLICT (user_id, key) DO UPDATE SET value = EXCLUDED.value",
+    )
+    .bind(user_id)
+    .bind(key)
+    .bind(value)
+    .execute(pool)
+    .await
+    .expect("set setting");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_schedule_generates_and_sums_to_principal() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+        "origination_date": "2026-01-15", "interest_type": "simple",
+        "interest_rate": 0.06, "term_months": 12, "payment_frequency": "monthly"
+    })).await;
+
+    // Generate the schedule.
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["installments"].as_i64().unwrap(), 12);
+
+    // Payments list shows 12 rows; scheduled_principal sums to 1200.
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{loan_id}/payments"), None, Some(&token),
+    )).await.unwrap();
+    let payments = body_json(res.into_body()).await;
+    let rows = payments.as_array().unwrap();
+    assert_eq!(rows.len(), 12);
+    let sum_principal: f64 = rows.iter()
+        .map(|r| r["scheduled_principal"].as_f64().unwrap()).sum();
+    assert!((sum_principal - 1200.0).abs() < 0.001,
+        "scheduled principal must sum to 1200, got {sum_principal}");
+    // Simple 6% → total interest 72.
+    let sum_interest: f64 = rows.iter()
+        .map(|r| r["scheduled_interest"].as_f64().unwrap()).sum();
+    assert!((sum_interest - 72.0).abs() < 0.01, "interest should be 72, got {sum_interest}");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_schedule_regen_refused_when_payment_reconciled() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+        "origination_date": "2026-01-15", "interest_type": "none",
+        "term_months": 12, "payment_frequency": "monthly"
+    })).await;
+    // Generate, then reconcile a repayment.
+    let _ = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
+    )).await.unwrap();
+    let repay = seed_tx_dated(&pool, user_id, acct, "Zelle from Jose", "100.00", "2026-02-15").await;
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/payments"),
+        Some(&serde_json::json!({"transaction_id": repay.to_string()})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // Regen must now be refused with 409.
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CONFLICT, "regen with a reconciled payment must 409");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_schedule_open_ended_rejected() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+    // No term_months / payment_frequency → open-ended.
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 500.0, "currency": "USD",
+        "origination_date": "2026-01-15"
+    })).await;
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_write_off_zeroes_outstanding_default_keeps_it() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 1000.0, "currency": "USD",
+        "origination_date": "2026-01-15"
+    })).await;
+
+    // Default keeps outstanding.
+    let res = app.clone().oneshot(req(
+        Method::PATCH, &format!("/api/loans/{loan_id}"),
+        Some(&serde_json::json!({"status": "defaulted"})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
+    )).await.unwrap();
+    let l = body_json(res.into_body()).await;
+    assert!((l["outstanding"].as_f64().unwrap() - 1000.0).abs() < 0.01,
+        "defaulted keeps outstanding, got {}", l["outstanding"]);
+
+    // Write-off zeroes it.
+    let res = app.clone().oneshot(req(
+        Method::PATCH, &format!("/api/loans/{loan_id}"),
+        Some(&serde_json::json!({"status": "written_off"})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
+    )).await.unwrap();
+    let l = body_json(res.into_body()).await;
+    assert!(l["outstanding"].as_f64().unwrap().abs() < 0.01,
+        "written_off zeroes outstanding, got {}", l["outstanding"]);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_reminders_upcoming_overdue_and_exclusions() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 300.0, "currency": "USD",
+        "origination_date": "2026-01-15", "interest_type": "none",
+        "term_months": 3, "payment_frequency": "monthly"
+    })).await;
+
+    // Hand-place three installments with controlled due dates relative
+    // to CURRENT_DATE: one in 3 days (upcoming), one in 40 days (outside
+    // default lead 7 → excluded), one 2 days ago (overdue).
+    sqlx::query("DELETE FROM loan_payments WHERE loan_id = $1").bind(loan_id).execute(&pool).await.unwrap();
+    for (n, offset) in [(1i32, 3i64), (2, 40), (3, -2)] {
+        sqlx::query(
+            "INSERT INTO loan_payments (user_id, loan_id, installment_number, due_date, \
+             scheduled_amount, scheduled_principal, status) \
+             VALUES ($1, $2, $3, CURRENT_DATE + ($4)::int, 100.00, 100.00, 'scheduled')",
+        )
+        .bind(user_id).bind(loan_id).bind(n).bind(offset as i32)
+        .execute(&pool).await.unwrap();
+    }
+
+    // Default lead 7: expect installment 1 (upcoming) + installment 3
+    // (overdue); installment 2 (40d out) excluded.
+    let res = app.clone().oneshot(req(
+        Method::GET, "/api/loans/reminders", None, Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let reminders = body_json(res.into_body()).await;
+    let arr = reminders.as_array().unwrap();
+    assert_eq!(arr.len(), 2, "expected upcoming + overdue, got {arr:?}");
+    let has_upcoming = arr.iter().any(|r| r["days_until"].as_i64().unwrap() > 0);
+    let has_overdue = arr.iter().any(|r| r["days_overdue"].as_i64().unwrap() > 0);
+    assert!(has_upcoming && has_overdue, "both an upcoming and an overdue reminder");
+
+    // Widen lead to 60 → installment 2 now appears too (3 total).
+    set_setting(&pool, user_id, "lending_reminder_lead_days", serde_json::json!(60)).await;
+    let res = app.clone().oneshot(req(
+        Method::GET, "/api/loans/reminders", None, Some(&token),
+    )).await.unwrap();
+    let reminders = body_json(res.into_body()).await;
+    assert_eq!(reminders.as_array().unwrap().len(), 3, "lead 60 surfaces the 40-day-out installment");
+
+    // Write off the loan → no reminders (loan not active).
+    let _ = app.clone().oneshot(req(
+        Method::PATCH, &format!("/api/loans/{loan_id}"),
+        Some(&serde_json::json!({"status": "written_off"})), Some(&token),
+    )).await.unwrap();
+    let res = app.clone().oneshot(req(
+        Method::GET, "/api/loans/reminders", None, Some(&token),
+    )).await.unwrap();
+    let reminders = body_json(res.into_body()).await;
+    assert_eq!(reminders.as_array().unwrap().len(), 0, "written-off loan yields no reminders");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_reminders_cross_tenant_isolated() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let _ = bootstrap(&app, &pool).await;
+    let (alice_id, alice_token) = seed_owner(&pool, "alice").await;
+    let (_bob_id, bob_token) = seed_owner(&pool, "bob").await;
+
+    // Alice has a loan + an overdue installment.
+    let loan_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO loans (user_id, borrower_name, principal, currency, origination_date, status) \
+         VALUES ($1, 'Friend', 500.00, 'USD', CURRENT_DATE - 60, 'active') RETURNING id",
+    ).bind(alice_id).fetch_one(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO loan_payments (user_id, loan_id, installment_number, due_date, \
+         scheduled_amount, scheduled_principal, status) \
+         VALUES ($1, $2, 1, CURRENT_DATE - 2, 100.00, 100.00, 'scheduled')",
+    ).bind(alice_id).bind(loan_id).execute(&pool).await.unwrap();
+
+    // Alice sees 1 reminder; Bob sees none.
+    let res = app.clone().oneshot(req(Method::GET, "/api/loans/reminders", None, Some(&alice_token))).await.unwrap();
+    assert_eq!(body_json(res.into_body()).await.as_array().unwrap().len(), 1);
+    let res = app.clone().oneshot(req(Method::GET, "/api/loans/reminders", None, Some(&bob_token))).await.unwrap();
+    assert_eq!(body_json(res.into_body()).await.as_array().unwrap().len(), 0,
+        "Bob must not see Alice's reminders");
+}

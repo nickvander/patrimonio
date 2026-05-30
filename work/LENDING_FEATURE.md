@@ -135,13 +135,44 @@ a committed reconcile/record/unlink (balances + cash-flow shift).
   an "Add loan" dialog, a per-loan detail view that lets you designate
   an existing transaction as disbursement / repayment.
 
-**Phase 2:**
-- Amortizing interest + generated amortization schedule table.
-- Schedule types (monthly/weekly/lump/custom); next-due + overdue +
-  paid-ahead.
-- Auto-suggest reconciliation (amount±tolerance, date proximity).
-- Reminders surfaced in the existing notifications bell.
-- `written_off` / `defaulted` statuses.
+**Phase 2 — SHIPPED 2026-05-30:**
+- ✅ Amortizing interest + generated schedule. `services/loan_schedule.rs`
+  generates the installment rows in `Decimal` (never f64): amortized
+  (level payment M with final-row residual absorption — `Σprincipal ==
+  principal` to the cent), simple (flat equal split), none (equal
+  principal). Frequencies monthly / weekly / lump_sum. 11 unit tests.
+- ✅ `POST /loans/{id}/schedule` (re)generates; 409 if any payment is
+  reconciled (regen would break the principal invariant), 422 if
+  open-ended. Idempotent upsert on (loan_id, installment_number).
+- ✅ Derived status logic in `LoanView`: `next_due`, `overdue`,
+  `paid_ahead`, `total_scheduled`, `has_schedule`. Outstanding switches
+  to `principal − Σ paid scheduled_principal` for scheduled loans;
+  schedule-less loans keep the simple-interest path. `PaymentView`
+  gains `scheduled_principal` / `scheduled_interest`.
+- ✅ `record_payment` now FILLS the next unpaid scheduled installment
+  (not append) when a generated schedule exists, so reconciliation
+  drives the schedule-aware outstanding down correctly. MVP append
+  behaviour preserved for open-ended loans.
+- ✅ Migration `2026052803_personal_loans_v2.sql` adds `'defaulted'`
+  status. Write-off / cancelled / paid_off force outstanding to 0;
+  defaulted keeps it (flagged). Status set via `PATCH /loans/{id}`.
+- ✅ Reminders: `GET /loans/reminders` returns upcoming + overdue
+  installments (reading lead-days server-side from app_settings
+  `lending_reminder_lead_days`, default 7). Surfaced in the existing
+  notifications bell (overdue=red, upcoming=amber, tap → Lending tab).
+  Configurable lead-time stepper in the Management Modules card.
+- ✅ Auto-suggest repayment now uses the next unpaid installment's
+  scheduled_amount (exact) instead of the principal/term approximation.
+- ✅ Frontend: amortization schedule table + Generate/Regenerate
+  button + status actions (mark defaulted / write off / reactivate) in
+  the loan detail sheet.
+- 6 Phase-2 integration tests (schedule sum, regen-refuse-409,
+  open-ended-422, write-off/default outstanding, reminders
+  upcoming/overdue/lead-days/exclusions, cross-tenant). Backend total
+  now 100 tests.
+
+**Phase 2 — deferred to Phase 3:** custom (irregular) schedule dates;
+penalty interest on default.
 
 **Phase 3 (power-user):**
 - Interest-only + balloon, compound interest.

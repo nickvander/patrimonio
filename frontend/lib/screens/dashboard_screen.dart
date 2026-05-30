@@ -77,6 +77,12 @@ class _DashboardScreenState extends State<DashboardScreen>
   // true, a "Lending" tab is appended (index 7) and the TabController
   // is rebuilt to length 8.
   bool _lendingEnabled = false;
+  // Upcoming + overdue loan installments for the notifications bell.
+  List<dynamic> _loanReminders = const [];
+  // Configurable reminder lead time (days before due). Server-stored
+  // (app_settings 'lending_reminder_lead_days'), surfaced in the
+  // Management-tab Modules card.
+  int _lendingReminderLeadDays = 7;
   List<dynamic>? _fxTransfers;
   // Pending date-window seed from a chart-bar tap. When non-null, the
   // TransactionsTab seeds its filters with a custom date range covering
@@ -598,21 +604,84 @@ class _DashboardScreenState extends State<DashboardScreen>
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: SwitchListTile(
-          value: _lendingEnabled,
-          onChanged: _toggleLending,
-          secondary: Icon(Icons.handshake_outlined, color: context.tealAccent),
-          title: Text('Personal lending',
-              style: TextStyle(
-                  fontWeight: FontWeight.w600, color: context.textPrimary)),
-          subtitle: Text(
-            'Track money you lend to friends — designate the bank '
-            'transactions that fund and repay each loan. Adds a Lending tab.',
-            style: TextStyle(fontSize: 12, color: context.textSubtle),
-          ),
+        child: Column(
+          children: [
+            SwitchListTile(
+              value: _lendingEnabled,
+              onChanged: _toggleLending,
+              secondary:
+                  Icon(Icons.handshake_outlined, color: context.tealAccent),
+              title: Text('Personal lending',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600, color: context.textPrimary)),
+              subtitle: Text(
+                'Track money you lend to friends — designate the bank '
+                'transactions that fund and repay each loan. Adds a Lending tab.',
+                style: TextStyle(fontSize: 12, color: context.textSubtle),
+              ),
+            ),
+            // Reminder lead-time stepper — only when lending is on.
+            if (_lendingEnabled)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.notifications_active_outlined,
+                        size: 18, color: context.textMuted),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Remind me before a repayment is due',
+                        style: TextStyle(
+                            fontSize: 13, color: context.textPrimary),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.remove_circle_outline, size: 20),
+                      tooltip: 'Fewer days',
+                      onPressed: _lendingReminderLeadDays <= 0
+                          ? null
+                          : () => _setReminderLeadDays(
+                              _lendingReminderLeadDays - 1),
+                    ),
+                    Text('$_lendingReminderLeadDays d',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: context.textPrimary,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        )),
+                    IconButton(
+                      icon: const Icon(Icons.add_circle_outline, size: 20),
+                      tooltip: 'More days',
+                      onPressed: _lendingReminderLeadDays >= 60
+                          ? null
+                          : () => _setReminderLeadDays(
+                              _lendingReminderLeadDays + 1),
+                    ),
+                  ],
+                ),
+              ),
+          ],
         ),
       ),
     );
+  }
+
+  Future<void> _setReminderLeadDays(int days) async {
+    final clamped = days.clamp(0, 60);
+    final prev = _lendingReminderLeadDays;
+    setState(() => _lendingReminderLeadDays = clamped);
+    try {
+      await _apiService.putSetting('lending_reminder_lead_days', clamped);
+      // Refresh reminders so the bell reflects the new window.
+      if (mounted) _loadAllData(silent: true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _lendingReminderLeadDays = prev);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Couldn\'t save reminder setting')),
+      );
+    }
   }
 
   Future<void> _toggleLending(bool enabled) async {
@@ -1130,6 +1199,12 @@ class _DashboardScreenState extends State<DashboardScreen>
         // Best-effort: a settings failure shouldn't take the dashboard
         // down — just default the module off.
         _apiService.getSetting('lending_enabled').catchError((_) => null),
+        // Loan reminders + lead-time setting. Both defensive — empty /
+        // default when lending is off or the call fails.
+        _apiService.getLoanReminders().catchError((_) => <dynamic>[]),
+        _apiService
+            .getSetting('lending_reminder_lead_days')
+            .catchError((_) => null),
       ]);
 
       debugPrint("All data loaded successfully");
@@ -1187,6 +1262,11 @@ class _DashboardScreenState extends State<DashboardScreen>
         // raw bool; absent/null = off. Rebuilds the TabController only
         // when the flag actually flips.
         _applyLendingSetting(results[14] == true);
+        _loanReminders = results[15] as List<dynamic>;
+        final leadRaw = results[16];
+        if (leadRaw is num) {
+          _lendingReminderLeadDays = leadRaw.toInt().clamp(0, 60);
+        }
         _isLoading = false;
       });
 
@@ -1277,6 +1357,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                   netWorthHistory: _netWorthHistory ?? const [],
                   onJumpToManagement: () =>
                       _tabController?.animateTo(6),
+                  loanReminders: _loanReminders,
+                  // Lending is appended last; its index == _baseTabCount
+                  // (7). Only present when reminders exist (lending on).
+                  onJumpToLending: () =>
+                      _tabController?.animateTo(_baseTabCount),
                 ),
               ),
             ],

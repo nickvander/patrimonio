@@ -28,8 +28,52 @@ List<AppNotification> deriveNotifications({
   required List<dynamic> syncData,
   required List<dynamic> netWorthHistory,
   required VoidCallback onJumpToManagement,
+  /// Upcoming + overdue loan installments from GET /api/loans/reminders.
+  /// Empty when lending is off (the endpoint returns []). Each item:
+  /// {borrower_name, amount, currency, due_date, installment_number,
+  /// days_until, days_overdue}.
+  List<dynamic> loanReminders = const [],
+  /// Jump to the Lending tab when a loan reminder is tapped.
+  VoidCallback? onJumpToLending,
 }) {
   final out = <AppNotification>[];
+
+  // 0) Loan reminders — overdue first (red), then upcoming (amber).
+  //    The server sends exactly one of days_overdue / days_until > 0
+  //    per row, so each installment yields at most one notification.
+  String money(num v, String cur) => NumberFormat.currency(
+        symbol: cur == 'MXN' ? r'MX$' : r'$',
+        decimalDigits: 2,
+      ).format(v);
+  for (final raw in loanReminders) {
+    if (raw is! Map) continue;
+    final borrower = (raw['borrower_name'] ?? 'Borrower').toString();
+    final amount = (raw['amount'] as num?)?.toDouble() ?? 0;
+    final cur = (raw['currency'] ?? 'USD').toString();
+    final n = (raw['installment_number'] as num?)?.toInt() ?? 0;
+    final overdue = (raw['days_overdue'] as num?)?.toInt() ?? 0;
+    final until = (raw['days_until'] as num?)?.toInt() ?? 0;
+    final due = DateTime.tryParse(raw['due_date']?.toString() ?? '');
+    final dueStr = due != null ? DateFormat('MMM d').format(due) : '';
+    if (overdue > 0) {
+      out.add(AppNotification(
+        icon: Icons.event_busy,
+        accent: Colors.redAccent,
+        title: '$borrower repayment overdue',
+        detail:
+            'Installment #$n of ${money(amount, cur)} was due $dueStr (${overdue}d ago).',
+        onTap: onJumpToLending,
+      ));
+    } else if (until > 0) {
+      out.add(AppNotification(
+        icon: Icons.event,
+        accent: Colors.amber,
+        title: '$borrower repayment due in ${until}d',
+        detail: 'Installment #$n of ${money(amount, cur)} due $dueStr.',
+        onTap: onJumpToLending,
+      ));
+    }
+  }
 
   // 1) Sync issues — anything not "synced" or "manual" earns a row.
   for (final raw in syncData) {

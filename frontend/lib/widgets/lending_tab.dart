@@ -699,8 +699,12 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
               else ...[
                 _buildDisbursementSection(),
                 const SizedBox(height: 24),
+                _buildScheduleSection(),
+                const SizedBox(height: 24),
                 _buildRepaymentsSection(),
                 const SizedBox(height: 24),
+                _buildStatusActions(),
+                const SizedBox(height: 8),
                 _buildDangerZone(),
               ],
             ],
@@ -859,6 +863,172 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
         ],
       ),
     );
+  }
+
+  /// Amortization schedule: the generated installments with their
+  /// principal/interest split. Distinguished from the Repayments
+  /// section (which is about reconciliation) — this is the PLAN.
+  Widget _buildScheduleSection() {
+    // Scheduled rows = those with a principal split (generated), as
+    // opposed to manually-recorded MVP repayments (principal 0).
+    final scheduled = _payments
+        .where((p) => ((p as Map)['scheduled_principal'] as num? ?? 0) > 0)
+        .toList();
+    final hasTerms = widget.loan['term_months'] != null &&
+        widget.loan['payment_frequency'] != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _sectionTitle('Payment schedule')),
+            if (hasTerms)
+              TextButton.icon(
+                onPressed: _generateSchedule,
+                icon: Icon(scheduled.isEmpty ? Icons.add_chart : Icons.refresh,
+                    size: 16),
+                label: Text(scheduled.isEmpty ? 'Generate' : 'Regenerate',
+                    style: const TextStyle(fontSize: 12)),
+              ),
+          ],
+        ),
+        if (scheduled.isEmpty)
+          Text(
+            hasTerms
+                ? 'No schedule yet. Generate one to see the amortization '
+                    'plan (principal + interest per installment).'
+                : 'This loan has no term / payment frequency, so there\'s '
+                    'no fixed schedule — record repayments as they come in.',
+            style: TextStyle(fontSize: 12, color: context.textSubtle),
+          )
+        else
+          _buildScheduleTable(scheduled),
+      ],
+    );
+  }
+
+  Widget _buildScheduleTable(List<dynamic> rows) {
+    return Column(
+      children: [
+        // Header.
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              _schCell('#', flex: 1),
+              _schCell('Due', flex: 3),
+              _schCell('Principal', flex: 3, alignRight: true),
+              _schCell('Interest', flex: 3, alignRight: true),
+              _schCell('', flex: 2, alignRight: true),
+            ],
+          ),
+        ),
+        Divider(height: 1, color: context.hairline),
+        ...rows.map((p) {
+          final m = p as Map<String, dynamic>;
+          final paid = (m['status'] == 'paid');
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                _schCell('${m['installment_number']}', flex: 1),
+                _schCell((m['due_date'] ?? '').toString(), flex: 3),
+                _schCell(_money((m['scheduled_principal'] as num?) ?? 0),
+                    flex: 3, alignRight: true),
+                _schCell(_money((m['scheduled_interest'] as num?) ?? 0),
+                    flex: 3, alignRight: true),
+                Expanded(
+                  flex: 2,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Icon(
+                      paid ? Icons.check_circle : Icons.circle_outlined,
+                      size: 15,
+                      color: paid ? context.positive : context.textFaint,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _schCell(String text,
+      {int flex = 1, bool alignRight = false}) {
+    return Expanded(
+      flex: flex,
+      child: Align(
+        alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
+        child: Text(text,
+            style: TextStyle(
+              fontSize: 12,
+              color: context.textMuted,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis),
+      ),
+    );
+  }
+
+  /// Status actions: mark defaulted / written-off / back to active.
+  Widget _buildStatusActions() {
+    final status = (widget.loan['status'] ?? 'active').toString();
+    return Wrap(
+      spacing: 8,
+      children: [
+        if (status != 'defaulted')
+          OutlinedButton.icon(
+            onPressed: () => _setStatus('defaulted'),
+            icon: const Icon(Icons.warning_amber_outlined, size: 16),
+            label: const Text('Mark defaulted', style: TextStyle(fontSize: 12)),
+          ),
+        if (status != 'written_off')
+          OutlinedButton.icon(
+            onPressed: () => _setStatus('written_off'),
+            icon: const Icon(Icons.money_off, size: 16),
+            label: const Text('Write off', style: TextStyle(fontSize: 12)),
+          ),
+        if (status != 'active')
+          OutlinedButton.icon(
+            onPressed: () => _setStatus('active'),
+            icon: const Icon(Icons.restart_alt, size: 16),
+            label: const Text('Reactivate', style: TextStyle(fontSize: 12)),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _generateSchedule() async {
+    try {
+      await widget.apiService.generateLoanSchedule(_loanId);
+      await _load();
+      widget.onMutated();
+      _toast('Schedule generated');
+    } catch (e) {
+      // Server messages (409 reconciled / 422 open-ended) come through
+      // the exception body.
+      final msg = e.toString();
+      _toast(msg.contains('reconciled')
+          ? 'Unreconcile payments first to regenerate'
+          : 'Couldn\'t generate schedule');
+    }
+  }
+
+  Future<void> _setStatus(String status) async {
+    try {
+      await widget.apiService.updateLoan(_loanId, {'status': status});
+      widget.loan['status'] = status;
+      await _load();
+      widget.onMutated();
+      if (mounted) setState(() {});
+    } catch (e) {
+      _toast('Couldn\'t update status');
+    }
   }
 
   Widget _buildDangerZone() {

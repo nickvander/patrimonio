@@ -1372,6 +1372,31 @@ class ApiService {
     }
   }
 
+  /// (Re)generate a loan's amortization schedule. 409 if any payment is
+  /// already reconciled; 422 if the loan is open-ended (no term/freq).
+  Future<void> generateLoanSchedule(String loanId) async {
+    final response = await _post(
+      Uri.parse('$_baseUrl/loans/$loanId/schedule'),
+      headers: _withCsrf({'Content-Type': 'application/json'}),
+      body: json.encode({}),
+    );
+    if (response.statusCode != 201 && response.statusCode != 200) {
+      // Surface the server's human message (409/422 carry useful text).
+      throw Exception(response.body.isNotEmpty
+          ? response.body
+          : 'Failed to generate schedule (${response.statusCode})');
+    }
+  }
+
+  /// Upcoming + overdue installments for the notifications bell. Each
+  /// item: {loan_id, payment_id, borrower_name, amount, currency,
+  /// due_date, installment_number, days_until, days_overdue}.
+  Future<List<dynamic>> getLoanReminders() async {
+    final response = await _get(Uri.parse('$_baseUrl/loans/reminders'));
+    if (response.statusCode == 200) return json.decode(response.body);
+    throw Exception('Failed to load loan reminders');
+  }
+
   /// Unlink (un-reconcile) a recorded repayment. The bank transaction
   /// itself is untouched; only the loan_payments row is removed.
   Future<void> deleteLoanPayment(String paymentId) async {

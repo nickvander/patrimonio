@@ -33,6 +33,8 @@ pub fn router() -> Router<AppState> {
         .route("/", get(list_loans).post(create_loan))
         .route("/summary", get(loans_summary))
         .route("/people", get(list_people))
+        // Upcoming + overdue installments for the notifications bell.
+        .route("/reminders", get(list_reminders))
         // Static segments before dynamic /{id} so the matcher prefers
         // them (same ordering discipline as dashboard.rs fx-transfers).
         .route("/payments/{payment_id}", axum::routing::delete(unreconcile_payment))
@@ -42,6 +44,7 @@ pub fn router() -> Router<AppState> {
             post(link_disbursement).delete(unlink_disbursement),
         )
         .route("/{id}/payments", get(list_payments).post(record_payment))
+        .route("/{id}/schedule", post(generate_schedule))
         .route("/{id}/suggestions/disbursement", get(suggest_disbursement))
         .route("/{id}/suggestions/repayment", get(suggest_repayment))
 }
@@ -70,9 +73,23 @@ struct LoanView {
     notes: Option<String>,
     /// Sum of reconciled repayments (paid_amount) in loan currency.
     total_repaid: f64,
-    /// Derived: principal + simple interest accrued to today − repaid.
-    /// Never stored. For interest_type 'none' this is principal − repaid.
+    /// Derived, never stored. For a loan WITH a generated schedule:
+    /// principal − Σ scheduled_principal of fully-paid installments.
+    /// For a schedule-less loan: principal + simple interest accrued
+    /// to today − repaid. Forced to 0 for written_off / cancelled /
+    /// paid_off.
     outstanding: f64,
+    /// Sum of every installment's scheduled_amount (0 when no schedule).
+    total_scheduled: f64,
+    /// True once a payment schedule has been generated.
+    has_schedule: bool,
+    /// Earliest unpaid installment due date (YYYY-MM-DD), if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    next_due: Option<String>,
+    /// Any past-due unpaid installment exists.
+    overdue: bool,
+    /// Borrower has paid more than what's been billed to date.
+    paid_ahead: bool,
 }
 
 #[derive(Serialize)]
@@ -93,6 +110,8 @@ struct PaymentView {
     #[serde(skip_serializing_if = "Option::is_none")]
     due_date: Option<String>,
     scheduled_amount: f64,
+    scheduled_principal: f64,
+    scheduled_interest: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     actual_tx_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -186,24 +205,50 @@ fn accrued_interest(
 
 // ---------- loans CRUD ----------
 
+/// Shared SELECT-list of per-loan aggregates computed in SQL so a
+/// single query yields everything `loan_view` needs (no N+1). Splice
+/// this after `SELECT l.*,` in any loan query. CURRENT_DATE is the
+/// reference "today".
+const LOAN_AGGREGATES: &str = r#"
+    COALESCE((SELECT SUM(p.paid_amount) FROM loan_payments p
+              WHERE p.loan_id = l.id AND p.paid_amount IS NOT NULL), 0) AS total_repaid,
+    COALESCE((SELECT SUM(p.scheduled_amount) FROM loan_payments p
+              WHERE p.loan_id = l.id), 0) AS total_scheduled,
+    -- A GENERATED amortization schedule sets scheduled_principal > 0.
+    -- Manually-recorded repayments (the MVP path) leave it 0, so they
+    -- don't count as a schedule — outstanding for those loans uses the
+    -- principal − repaid path instead.
+    EXISTS(SELECT 1 FROM loan_payments p
+           WHERE p.loan_id = l.id AND p.scheduled_principal > 0) AS has_schedule,
+    -- Σ scheduled_principal of FULLY-paid installments → drives the
+    -- schedule-aware outstanding (principal − this).
+    COALESCE((SELECT SUM(p.scheduled_principal) FROM loan_payments p
+              WHERE p.loan_id = l.id AND p.actual_tx_id IS NOT NULL
+                AND p.paid_amount >= p.scheduled_amount), 0) AS principal_paid,
+    (SELECT MIN(p.due_date) FROM loan_payments p
+     WHERE p.loan_id = l.id
+       AND (p.actual_tx_id IS NULL OR p.paid_amount < p.scheduled_amount)) AS next_due,
+    EXISTS(SELECT 1 FROM loan_payments p
+           WHERE p.loan_id = l.id AND p.due_date < CURRENT_DATE
+             AND (p.actual_tx_id IS NULL OR p.paid_amount < p.scheduled_amount)) AS overdue,
+    -- Σ scheduled_amount billed on or before today (for paid-ahead).
+    COALESCE((SELECT SUM(p.scheduled_amount) FROM loan_payments p
+              WHERE p.loan_id = l.id AND p.due_date <= CURRENT_DATE), 0) AS cumulative_due
+"#;
+
 async fn list_loans(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Json<Vec<LoanView>> {
-    let rows = sqlx::query(
-        r#"
-        SELECT l.*,
-               COALESCE((SELECT SUM(p.paid_amount) FROM loan_payments p
-                         WHERE p.loan_id = l.id AND p.paid_amount IS NOT NULL), 0) AS total_repaid
-        FROM loans l
-        WHERE l.user_id = $1
-        ORDER BY l.origination_date DESC, l.created_at DESC
-        "#,
-    )
-    .bind(ctx.user_id)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+    let sql = format!(
+        "SELECT l.*, {LOAN_AGGREGATES} FROM loans l WHERE l.user_id = $1 \
+         ORDER BY l.origination_date DESC, l.created_at DESC"
+    );
+    let rows = sqlx::query(&sql)
+        .bind(ctx.user_id)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
 
     let today = chrono::Utc::now().date_naive();
     Json(rows.iter().map(|r| loan_view(r, today)).collect())
@@ -216,9 +261,32 @@ fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
     let origination: chrono::NaiveDate = r
         .try_get("origination_date")
         .unwrap_or_else(|_| today);
+    let status: String = r.try_get("status").unwrap_or_else(|_| "active".to_string());
     let total_repaid = dec_to_f64(r.try_get("total_repaid").ok());
-    let accrued = accrued_interest(principal, rate, &interest_type, origination, today);
-    let outstanding = (principal + accrued - total_repaid).max(0.0);
+    let total_scheduled = dec_to_f64(r.try_get("total_scheduled").ok());
+    let has_schedule: bool = r.try_get("has_schedule").unwrap_or(false);
+    let principal_paid = dec_to_f64(r.try_get("principal_paid").ok());
+    let cumulative_due = dec_to_f64(r.try_get("cumulative_due").ok());
+    let next_due: Option<chrono::NaiveDate> = r.try_get("next_due").ok().flatten();
+    let overdue: bool = r.try_get("overdue").unwrap_or(false);
+
+    // Outstanding:
+    //   * written_off / cancelled / paid_off → 0 (settled).
+    //   * has a schedule → principal − Σ paid scheduled_principal.
+    //   * else (open-ended / no schedule) → the simple-interest
+    //     approximation: principal + accrued − repaid.
+    let outstanding = if matches!(status.as_str(), "written_off" | "cancelled" | "paid_off") {
+        0.0
+    } else if has_schedule {
+        (principal - principal_paid).max(0.0)
+    } else {
+        let accrued = accrued_interest(principal, rate, &interest_type, origination, today);
+        (principal + accrued - total_repaid).max(0.0)
+    };
+    // Paid-ahead: borrower has repaid more than what's been billed so
+    // far (only meaningful with a schedule + something billed).
+    let paid_ahead = has_schedule && cumulative_due > 0.0 && total_repaid >= cumulative_due;
+
     LoanView {
         id: r.get::<uuid::Uuid, _>("id").to_string(),
         person_id: r
@@ -239,10 +307,15 @@ fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
             .ok()
             .flatten()
             .map(|u| u.to_string()),
-        status: r.try_get("status").unwrap_or_else(|_| "active".to_string()),
+        status,
         notes: r.try_get("notes").ok().flatten(),
         total_repaid,
         outstanding,
+        total_scheduled,
+        has_schedule,
+        next_due: next_due.map(|d| d.to_string()),
+        overdue,
+        paid_ahead,
     }
 }
 
@@ -251,19 +324,14 @@ async fn get_loan(
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
 ) -> impl IntoResponse {
-    let row = sqlx::query(
-        r#"
-        SELECT l.*,
-               COALESCE((SELECT SUM(p.paid_amount) FROM loan_payments p
-                         WHERE p.loan_id = l.id AND p.paid_amount IS NOT NULL), 0) AS total_repaid
-        FROM loans l
-        WHERE l.id = $1 AND l.user_id = $2
-        "#,
-    )
-    .bind(id)
-    .bind(ctx.user_id)
-    .fetch_optional(&state.db)
-    .await;
+    let sql = format!(
+        "SELECT l.*, {LOAN_AGGREGATES} FROM loans l WHERE l.id = $1 AND l.user_id = $2"
+    );
+    let row = sqlx::query(&sql)
+        .bind(id)
+        .bind(ctx.user_id)
+        .fetch_optional(&state.db)
+        .await;
     match row {
         Ok(Some(r)) => {
             let today = chrono::Utc::now().date_naive();
@@ -372,7 +440,10 @@ async fn update_loan(
         }
     }
     if let Some(s) = &payload.status {
-        if !matches!(s.as_str(), "active" | "paid_off" | "written_off" | "cancelled") {
+        if !matches!(
+            s.as_str(),
+            "active" | "paid_off" | "written_off" | "cancelled" | "defaulted"
+        ) {
             return (StatusCode::BAD_REQUEST, "invalid status").into_response();
         }
     }
@@ -448,35 +519,24 @@ async fn loans_summary(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Json<serde_json::Value> {
-    let rows = sqlx::query(
-        r#"
-        SELECT l.principal, l.interest_rate, l.interest_type, l.origination_date, l.status,
-               COALESCE((SELECT SUM(p.paid_amount) FROM loan_payments p
-                         WHERE p.loan_id = l.id AND p.paid_amount IS NOT NULL), 0) AS total_repaid
-        FROM loans l
-        WHERE l.user_id = $1
-        "#,
-    )
-    .bind(ctx.user_id)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+    // Reuse the same enriched aggregates + outstanding logic as the
+    // list view so the summary can't drift from the per-loan numbers.
+    let sql = format!("SELECT l.*, {LOAN_AGGREGATES} FROM loans l WHERE l.user_id = $1");
+    let rows = sqlx::query(&sql)
+        .bind(ctx.user_id)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
 
     let today = chrono::Utc::now().date_naive();
     let mut total_lent = 0.0;
     let mut total_outstanding = 0.0;
     let mut active = 0i64;
     for r in &rows {
-        let principal = dec_to_f64(r.try_get("principal").ok());
-        let rate = dec_to_f64(r.try_get("interest_rate").ok());
-        let it: String = r.try_get("interest_type").unwrap_or_else(|_| "none".to_string());
-        let orig: chrono::NaiveDate = r.try_get("origination_date").unwrap_or(today);
-        let repaid = dec_to_f64(r.try_get("total_repaid").ok());
-        let status: String = r.try_get("status").unwrap_or_default();
-        total_lent += principal;
-        let accrued = accrued_interest(principal, rate, &it, orig, today);
-        total_outstanding += (principal + accrued - repaid).max(0.0);
-        if status == "active" {
+        let v = loan_view(r, today);
+        total_lent += v.principal;
+        total_outstanding += v.outstanding;
+        if v.status == "active" {
             active += 1;
         }
     }
@@ -660,6 +720,8 @@ async fn list_payments(
                     .flatten()
                     .map(|d| d.to_string()),
                 scheduled_amount: dec_to_f64(r.try_get("scheduled_amount").ok()),
+                scheduled_principal: dec_to_f64(r.try_get("scheduled_principal").ok()),
+                scheduled_interest: dec_to_f64(r.try_get("scheduled_interest").ok()),
                 actual_tx_id: r
                     .try_get::<Option<uuid::Uuid>, _>("actual_tx_id")
                     .ok()
@@ -706,34 +768,67 @@ async fn record_payment(
     };
     // Default the applied amount to the transaction's magnitude.
     let amount = payload.amount.unwrap_or(tx_amount.abs());
+    let amount_dec = rust_decimal::Decimal::from_f64_retain(amount).unwrap_or_default();
     let paid_date = payload.paid_date.unwrap_or(tx_date);
 
-    // Next installment number for this loan.
-    let next: i32 = sqlx::query_scalar(
-        "SELECT COALESCE(MAX(installment_number), 0) + 1 FROM loan_payments WHERE loan_id = $1",
+    // If a GENERATED schedule exists (rows with scheduled_principal > 0),
+    // fill the earliest UNPAID scheduled installment rather than
+    // appending a new row — that's what makes the schedule-aware
+    // outstanding (principal − Σ paid scheduled_principal) decrease.
+    // Otherwise (MVP / open-ended loan) append a new installment.
+    let next_scheduled: Option<uuid::Uuid> = sqlx::query_scalar(
+        "SELECT id FROM loan_payments \
+         WHERE loan_id = $1 AND actual_tx_id IS NULL AND scheduled_principal > 0 \
+         ORDER BY installment_number ASC LIMIT 1",
     )
     .bind(id)
-    .fetch_one(&state.db)
+    .fetch_optional(&state.db)
     .await
-    .unwrap_or(1);
+    .ok()
+    .flatten();
 
-    let result = sqlx::query(
-        r#"
-        INSERT INTO loan_payments
-            (user_id, loan_id, installment_number, scheduled_amount,
-             actual_tx_id, paid_amount, paid_date, status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, 'paid')
-        "#,
-    )
-    .bind(ctx.user_id)
-    .bind(id)
-    .bind(next)
-    .bind(rust_decimal::Decimal::from_f64_retain(amount).unwrap_or_default())
-    .bind(payload.transaction_id)
-    .bind(rust_decimal::Decimal::from_f64_retain(amount).unwrap_or_default())
-    .bind(paid_date)
-    .execute(&state.db)
-    .await;
+    let result = if let Some(payment_id) = next_scheduled {
+        sqlx::query(
+            r#"
+            UPDATE loan_payments
+            SET actual_tx_id = $1, paid_amount = $2, paid_date = $3,
+                status = CASE WHEN $2 >= scheduled_amount THEN 'paid' ELSE 'partial' END
+            WHERE id = $4 AND user_id = $5
+            "#,
+        )
+        .bind(payload.transaction_id)
+        .bind(amount_dec)
+        .bind(paid_date)
+        .bind(payment_id)
+        .bind(ctx.user_id)
+        .execute(&state.db)
+        .await
+    } else {
+        let next: i32 = sqlx::query_scalar(
+            "SELECT COALESCE(MAX(installment_number), 0) + 1 FROM loan_payments WHERE loan_id = $1",
+        )
+        .bind(id)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(1);
+        sqlx::query(
+            r#"
+            INSERT INTO loan_payments
+                (user_id, loan_id, installment_number, scheduled_amount,
+                 actual_tx_id, paid_amount, paid_date, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'paid')
+            "#,
+        )
+        .bind(ctx.user_id)
+        .bind(id)
+        .bind(next)
+        .bind(amount_dec)
+        .bind(payload.transaction_id)
+        .bind(amount_dec)
+        .bind(paid_date)
+        .execute(&state.db)
+        .await
+    };
 
     match result {
         Ok(_) => {
@@ -881,12 +976,24 @@ async fn suggest_repayment(
     let horizon_months = term_months.unwrap_or(18).max(1) as i64;
     let horizon = disbursement_date + chrono::Duration::days(horizon_months * 31 + 30);
 
-    // Expected installment: for a fixed-term loan, principal/term (MVP
-    // approximation — v2's amortization will refine this). None → no-
-    // schedule mode in the matcher.
-    let installment = term_months
-        .filter(|t| *t > 0)
-        .map(|t| principal / t as f64);
+    // Expected installment: prefer the next unpaid installment's
+    // scheduled_amount from the generated schedule (exact). Fall back to
+    // principal/term when no schedule exists, and to None (no-schedule
+    // matcher mode) when there's no term either.
+    let next_scheduled: Option<rust_decimal::Decimal> = sqlx::query_scalar(
+        "SELECT scheduled_amount FROM loan_payments \
+         WHERE loan_id = $1 AND actual_tx_id IS NULL AND scheduled_amount > 0 \
+         ORDER BY installment_number ASC LIMIT 1",
+    )
+    .bind(id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
+    let installment = next_scheduled
+        .map(|d| d.to_string().parse::<f64>().unwrap_or(0.0))
+        .filter(|a| *a > 0.0)
+        .or_else(|| term_months.filter(|t| *t > 0).map(|t| principal / t as f64));
 
     match loan_match::suggest_repayments(
         &state.db,
@@ -905,4 +1012,223 @@ async fn suggest_repayment(
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
+}
+
+// ---------- schedule generation ----------
+
+/// (Re)generate the amortization schedule for a loan. Refuses (409) if
+/// any installment is already reconciled — regen with changed terms
+/// would produce a different per-row split and leave paid rows
+/// belonging to the old schedule, breaking the Σprincipal == principal
+/// invariant. 422 if the loan is open-ended (no term / frequency).
+async fn generate_schedule(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path(id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    let loan = sqlx::query(
+        "SELECT principal, interest_rate, interest_type, origination_date, \
+                term_months, payment_frequency \
+         FROM loans WHERE id = $1 AND user_id = $2",
+    )
+    .bind(id)
+    .bind(ctx.user_id)
+    .fetch_optional(&state.db)
+    .await;
+    let Ok(Some(l)) = loan else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+
+    // Refuse if any payment is already reconciled.
+    let reconciled: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM loan_payments WHERE loan_id = $1 AND actual_tx_id IS NOT NULL",
+    )
+    .bind(id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(0);
+    if reconciled > 0 {
+        return (
+            StatusCode::CONFLICT,
+            "cannot regenerate schedule: payments already reconciled — unreconcile them first",
+        )
+            .into_response();
+    }
+
+    let principal: rust_decimal::Decimal =
+        l.try_get("principal").unwrap_or_default();
+    let rate: rust_decimal::Decimal =
+        l.try_get("interest_rate").unwrap_or_default();
+    let interest_type: String =
+        l.try_get("interest_type").unwrap_or_else(|_| "none".to_string());
+    let origination: chrono::NaiveDate = match l.try_get("origination_date") {
+        Ok(d) => d,
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+    let term_months: Option<i32> = l.try_get("term_months").ok().flatten();
+    let payment_frequency: Option<String> = l.try_get("payment_frequency").ok().flatten();
+
+    let rows = match crate::services::loan_schedule::generate(
+        principal,
+        rate,
+        &interest_type,
+        origination,
+        term_months,
+        payment_frequency.as_deref(),
+    ) {
+        Ok(r) => r,
+        Err(crate::services::loan_schedule::ScheduleError::OpenEnded) => {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "loan has no term / payment frequency — set both to generate a schedule",
+            )
+                .into_response();
+        }
+        Err(crate::services::loan_schedule::ScheduleError::BadFrequency) => {
+            return (StatusCode::UNPROCESSABLE_ENTITY, "invalid payment frequency").into_response();
+        }
+    };
+
+    // One transaction: delete any unpaid rows beyond the new length,
+    // then upsert each generated row. (No reconciled rows exist — we
+    // checked above — so a blanket delete of unpaid rows is safe and
+    // simplest.)
+    let mut tx = match state.db.begin().await {
+        Ok(t) => t,
+        Err(e) => {
+            error!("generate_schedule begin failed: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+    if let Err(e) = sqlx::query(
+        "DELETE FROM loan_payments WHERE loan_id = $1 AND actual_tx_id IS NULL",
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await
+    {
+        error!("generate_schedule clear failed: {e}");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+    for row in &rows {
+        let res = sqlx::query(
+            r#"
+            INSERT INTO loan_payments
+                (user_id, loan_id, installment_number, due_date,
+                 scheduled_amount, scheduled_principal, scheduled_interest, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'scheduled')
+            ON CONFLICT (loan_id, installment_number) DO UPDATE SET
+                due_date = EXCLUDED.due_date,
+                scheduled_amount = EXCLUDED.scheduled_amount,
+                scheduled_principal = EXCLUDED.scheduled_principal,
+                scheduled_interest = EXCLUDED.scheduled_interest,
+                status = 'scheduled'
+            "#,
+        )
+        .bind(ctx.user_id)
+        .bind(id)
+        .bind(row.installment_number)
+        .bind(row.due_date)
+        .bind(row.amount)
+        .bind(row.principal)
+        .bind(row.interest)
+        .execute(&mut *tx)
+        .await;
+        if let Err(e) = res {
+            error!("generate_schedule insert failed: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    }
+    if let Err(e) = tx.commit().await {
+        error!("generate_schedule commit failed: {e}");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    (
+        StatusCode::CREATED,
+        Json(serde_json::json!({"installments": rows.len()})),
+    )
+        .into_response()
+}
+
+// ---------- reminders ----------
+
+#[derive(Serialize)]
+struct ReminderView {
+    loan_id: String,
+    payment_id: String,
+    borrower_name: String,
+    amount: f64,
+    currency: String,
+    due_date: String,
+    installment_number: i32,
+    /// Days until due (>0 = upcoming). 0 when overdue.
+    days_until: i64,
+    /// Days past due (>0 = overdue). 0 when upcoming.
+    days_overdue: i64,
+}
+
+/// Upcoming + overdue installments for the notifications bell. Reads
+/// the user's configured lead-time (app_settings 'lending_reminder_lead_days',
+/// default 7) server-side so the window can't be widened by the client.
+/// Only active loans; only unpaid, unreconciled, scheduled installments.
+async fn list_reminders(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<Vec<ReminderView>> {
+    // Lead days from settings (JSON number); default 7, clamp 0..=60.
+    let lead_days: i64 = sqlx::query_scalar::<_, serde_json::Value>(
+        "SELECT value FROM app_settings WHERE key = 'lending_reminder_lead_days' AND user_id = $1",
+    )
+    .bind(ctx.user_id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()
+    .and_then(|v| v.as_i64())
+    .unwrap_or(7)
+    .clamp(0, 60);
+
+    let rows = sqlx::query(
+        r#"
+        SELECT p.id AS payment_id, p.loan_id, l.borrower_name, l.currency,
+               p.due_date, p.installment_number,
+               COALESCE(p.scheduled_amount, 0) AS amount,
+               GREATEST((p.due_date - CURRENT_DATE), 0) AS days_until,
+               GREATEST((CURRENT_DATE - p.due_date), 0) AS days_overdue
+        FROM loan_payments p
+        JOIN loans l ON l.id = p.loan_id AND l.user_id = p.user_id
+        WHERE p.user_id = $1
+          AND p.status NOT IN ('paid', 'skipped')
+          AND p.actual_tx_id IS NULL
+          AND p.due_date IS NOT NULL
+          AND l.status = 'active'
+          AND p.due_date <= CURRENT_DATE + ($2)::int
+        ORDER BY p.due_date ASC
+        "#,
+    )
+    .bind(ctx.user_id)
+    .bind(lead_days as i32)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    Json(
+        rows.iter()
+            .map(|r| ReminderView {
+                loan_id: r.get::<uuid::Uuid, _>("loan_id").to_string(),
+                payment_id: r.get::<uuid::Uuid, _>("payment_id").to_string(),
+                borrower_name: r.try_get("borrower_name").unwrap_or_default(),
+                amount: dec_to_f64(r.try_get("amount").ok()),
+                currency: r.try_get("currency").unwrap_or_default(),
+                due_date: r
+                    .try_get::<chrono::NaiveDate, _>("due_date")
+                    .map(|d| d.to_string())
+                    .unwrap_or_default(),
+                installment_number: r.try_get("installment_number").unwrap_or(0),
+                days_until: r.try_get::<i32, _>("days_until").unwrap_or(0) as i64,
+                days_overdue: r.try_get::<i32, _>("days_overdue").unwrap_or(0) as i64,
+            })
+            .collect(),
+    )
 }
