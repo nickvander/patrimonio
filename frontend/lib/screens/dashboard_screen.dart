@@ -2563,6 +2563,11 @@ class _DashboardScreenState extends State<DashboardScreen>
         // worth reflect it without a full reload flash.
         onChanged: () => _loadAllData(silent: true),
       ),
+      // LendingTab owns its scrolling (RefreshIndicator → ListView), so it
+      // must NOT be wrapped in the default SingleChildScrollView — a
+      // ListView given unbounded height throws a layout error and the whole
+      // tab renders blank. Same reason projections/tax-planning opt out.
+      scrollable: false,
     );
 
     return TabBarView(

@@ -80,7 +80,10 @@ class _LendingTabState extends State<LendingTab> {
       symbol: currency == 'MXN' ? r'MX$' : r'$',
       decimalDigits: 2,
     );
-    return fmt.format(v);
+    // Anything whose magnitude rounds below half a cent is zero for display.
+    // Without this, a negative zero (-0.0) or sub-cent residue formats as an
+    // ugly "-$0.00" — e.g. the "Interest earned" stat with no payments yet.
+    return fmt.format(v.abs() < 0.005 ? 0 : v);
   }
 
   @override
