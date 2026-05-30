@@ -520,6 +520,14 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
         .toList();
     final media = MediaQuery.of(context);
     final narrow = media.size.width < 380;
+    // Height the scrollable content may take. AlertDialog stacks the
+    // title (~88) + actions (~64) + inset padding (48) on top of the
+    // content, plus any keyboard inset — leave room for all of it so the
+    // dialog never runs off a short viewport. Floor keeps it usable on
+    // very small screens (content scrolls within this box).
+    final contentMaxHeight =
+        (media.size.height - media.viewInsets.bottom - 220)
+            .clamp(220.0, 620.0);
 
     return AlertDialog(
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -557,7 +565,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
       content: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: 460,
-          maxHeight: media.size.height * 0.78,
+          maxHeight: contentMaxHeight,
         ),
         child: SizedBox(
           width: 460,
