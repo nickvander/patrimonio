@@ -123,23 +123,35 @@ class _LendingTabState extends State<LendingTab> {
     );
   }
 
+  /// Currency to denominate the summary stats in. When every loan shares
+  /// one currency we show that native currency (no FX conversion) so a
+  /// single MX$30,000 loan reads "MX$30,000", not its USD equivalent.
+  /// Only a genuinely mixed portfolio falls back to the display currency.
+  String _summaryCurrency() {
+    if (_loans.isEmpty) return widget.targetCurrency;
+    final first = _loans.first;
+    if (first is Map) {
+      return (first['currency'] ?? widget.targetCurrency).toString();
+    }
+    return widget.targetCurrency;
+  }
+
   Widget _buildHeader() {
-    final displayCur = widget.targetCurrency;
-    // Convert each loan from its own currency into the display currency
-    // before summing, so a mixed USD + MXN portfolio shows a coherent
-    // total. (The backend /summary sums naively across currencies —
-    // correct only for the single-currency case.) outstanding,
-    // principal, and interest_earned all ride along on the loan list.
+    // Single-currency portfolios show their native currency untouched;
+    // only a genuinely mixed (USD + MXN) portfolio is converted to the
+    // display currency at the spot rate (with the caveat note below).
+    // When summaryCur equals a loan's own currency, sumLoansConverted's
+    // convertCurrency hits its from==to early-return and leaves the
+    // amount unchanged — so the header matches the per-loan cards.
+    final mixed = loansAreMixedCurrency(_loans);
+    final summaryCur = mixed ? widget.targetCurrency : _summaryCurrency();
     final totalLent =
-        sumLoansConverted(_loans, 'principal', displayCur, widget.usdMxnRate);
+        sumLoansConverted(_loans, 'principal', summaryCur, widget.usdMxnRate);
     final totalOut = sumLoansConverted(
-        _loans, 'outstanding', displayCur, widget.usdMxnRate);
+        _loans, 'outstanding', summaryCur, widget.usdMxnRate);
     final interestEarned = sumLoansConverted(
-        _loans, 'interest_earned', displayCur, widget.usdMxnRate);
+        _loans, 'interest_earned', summaryCur, widget.usdMxnRate);
     final active = (_summary['active_count'] as num?)?.toInt() ?? 0;
-    // Summary is denominated in each loan's own currency, summed
-    // naively — fine for the common single-currency case. A mixed-
-    // currency lender sees the caveat in the subtitle.
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -196,13 +208,12 @@ class _LendingTabState extends State<LendingTab> {
               ],
             ),
             const SizedBox(height: 16),
-            // Mixed-currency lenders see the totals converted to their
-            // active display currency at the current spot rate.
-            if (loansAreMixedCurrency(_loans))
+            // Only a genuinely mixed portfolio is converted — explain it.
+            if (mixed)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Text(
-                  'Totals converted to $displayCur at the current spot rate',
+                  'Totals converted to $summaryCur at the current spot rate',
                   style: TextStyle(fontSize: 11, color: context.textSubtle),
                 ),
               ),
@@ -210,13 +221,13 @@ class _LendingTabState extends State<LendingTab> {
               spacing: 24,
               runSpacing: 12,
               children: [
-                _stat('Outstanding', _money(totalOut, displayCur),
+                _stat('Outstanding', _money(totalOut, summaryCur),
                     context.warning),
-                _stat('Total lent', _money(totalLent, displayCur),
+                _stat('Total lent', _money(totalLent, summaryCur),
                     context.textPrimary),
                 _stat('Active', '$active', context.tealAccent),
                 // Interest income — the headline of this feature.
-                _stat('Interest earned', _money(interestEarned, displayCur),
+                _stat('Interest earned', _money(interestEarned, summaryCur),
                     context.positive),
               ],
             ),
@@ -462,28 +473,27 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   DateTime _originationDate = DateTime.now();
   bool _submitting = false;
 
-  /// Quick, clearly-labeled total-interest ESTIMATE for instant
-  /// feedback as the user tunes the rate. Not authoritative — the
-  /// exact penny-accurate schedule is generated server-side in Decimal.
-  String? _rateEstimate() {
-    final principal = double.tryParse(_principalCtrl.text.trim());
-    final ratePct = double.tryParse(_rateCtrl.text.trim());
-    final term = int.tryParse(_termCtrl.text.trim());
-    if (principal == null || principal <= 0 || ratePct == null || ratePct <= 0) {
-      return null;
-    }
-    // Normalize to an annual fraction.
-    final annual = (_ratePeriod == 'monthly' ? ratePct * 12 : ratePct) / 100.0;
-    final months = term ?? 12;
-    final years = months / 12.0;
-    final totalInterest = _interestType == 'interest_only'
-        ? principal * annual * years // interest accrues on full balance
-        : _interestType == 'simple'
-            ? principal * annual * years
-            : principal * annual * years * 0.55; // amortized ≈ half (declining)
-    final cur = _currency == 'MXN' ? r'MX$' : r'$';
-    return '≈ $cur${totalInterest.toStringAsFixed(0)} total interest over '
-        '$months mo (estimate)';
+  /// Native-currency symbol for the loan being entered (never the
+  /// converted display currency — the preview always speaks the loan's
+  /// own money).
+  String get _sym => _currency == 'MXN' ? r'MX$' : r'$';
+
+  /// Live, approximate projection of this loan's finances for the preview
+  /// card. Mirrors the backend schedule formulas (see lending_summary
+  /// `projectLoan`); the penny-accurate schedule is still generated
+  /// server-side in Decimal once the loan is saved.
+  LoanProjection? _projection() => projectLoan(
+        principal: double.tryParse(_principalCtrl.text.trim()),
+        interestType: _interestType,
+        ratePercent: double.tryParse(_rateCtrl.text.trim()),
+        ratePeriod: _ratePeriod,
+        termMonths: int.tryParse(_termCtrl.text.trim()),
+        paymentFrequency: _paymentFrequency,
+      );
+
+  String _fmtMoney(double v) {
+    final f = NumberFormat.currency(symbol: '$_sym ', decimalDigits: 2);
+    return f.format(v);
   }
 
   @override
@@ -497,6 +507,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     _principalCtrl.dispose();
     _rateCtrl.dispose();
     _termCtrl.dispose();
+    _notesCtrl.dispose();
     super.dispose();
   }
 
