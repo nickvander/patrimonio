@@ -1653,6 +1653,9 @@ async fn export_interest_income(
     Extension(ctx): Extension<AuthContext>,
     Query(q): Query<InterestQuery>,
 ) -> Response {
+    // Ordered borrower-first so every payer's history is contiguous, then
+    // by date within each borrower — far easier to scan or pivot than a
+    // single date-sorted stream that interleaves everyone.
     let rows = sqlx::query(
         r#"
         SELECT p.paid_date, l.borrower_name, l.currency,
@@ -1663,7 +1666,7 @@ async fn export_interest_income(
           AND p.interest_portion IS NOT NULL
           AND p.paid_date IS NOT NULL
           AND ($2::int IS NULL OR EXTRACT(YEAR FROM p.paid_date) = $2)
-        ORDER BY p.paid_date ASC, l.borrower_name ASC
+        ORDER BY l.borrower_name ASC, p.paid_date ASC
         "#,
     )
     .bind(ctx.user_id)
@@ -1675,8 +1678,12 @@ async fn export_interest_income(
     fn esc(s: &str) -> String {
         format!("\"{}\"", s.replace('"', "\"\""))
     }
+    // Clean rectangular table (no inline subtotal rows, so it imports into
+    // any spreadsheet). Borrower + currency lead; the two split columns are
+    // named plainly; running_balance is the principal still owed after the
+    // payment.
     let mut csv = String::from(
-        "date,borrower,currency,payment_amount,principal_portion,interest_portion,balance_after\n",
+        "borrower,currency,date,amount_paid,principal,interest,running_balance\n",
     );
     for r in &rows {
         let date = r
@@ -1690,7 +1697,7 @@ async fn export_interest_income(
         let interest = dec_to_f64(r.try_get("interest_portion").ok());
         let bal = dec_to_f64(r.try_get("balance_after").ok());
         csv.push_str(&format!(
-            "{date},{},{currency},{pay:.2},{principal:.2},{interest:.2},{bal:.2}\n",
+            "{},{currency},{date},{pay:.2},{principal:.2},{interest:.2},{bal:.2}\n",
             esc(&borrower)
         ));
     }
@@ -1731,7 +1738,7 @@ async fn export_interest_summary(
           AND p.paid_date IS NOT NULL
         GROUP BY l.borrower_name, l.currency, EXTRACT(YEAR FROM p.paid_date)
         HAVING COALESCE(SUM(p.interest_portion), 0) <> 0
-        ORDER BY year DESC, interest_total DESC
+        ORDER BY l.borrower_name ASC, year DESC
         "#,
     )
     .bind(ctx.user_id)
@@ -1742,7 +1749,9 @@ async fn export_interest_summary(
     fn esc(s: &str) -> String {
         format!("\"{}\"", s.replace('"', "\"\""))
     }
-    let mut csv = String::from("year,borrower,currency,interest_received,principal_received\n");
+    // Borrower-first to match the detail CSV: all of a payer's years sit
+    // together, newest year first within each.
+    let mut csv = String::from("borrower,currency,year,interest_received,principal_received\n");
     for r in &rows {
         let year: i32 = r.try_get("year").unwrap_or(0);
         let borrower: String = r.try_get("borrower_name").unwrap_or_default();
@@ -1750,7 +1759,7 @@ async fn export_interest_summary(
         let interest = dec_to_f64(r.try_get("interest_total").ok());
         let principal = dec_to_f64(r.try_get("principal_total").ok());
         csv.push_str(&format!(
-            "{year},{},{currency},{interest:.2},{principal:.2}\n",
+            "{},{currency},{year},{interest:.2},{principal:.2}\n",
             esc(&borrower)
         ));
     }

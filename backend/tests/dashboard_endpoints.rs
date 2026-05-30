@@ -2609,7 +2609,7 @@ async fn loan_interest_income_csv_export() {
     assert!(ct.contains("text/csv"), "expected CSV content-type, got {ct}");
     let bytes = axum::body::to_bytes(res.into_body(), 1024 * 64).await.unwrap();
     let csv = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(csv.starts_with("date,borrower,currency,payment_amount,principal_portion,interest_portion,balance_after"));
+    assert!(csv.starts_with("borrower,currency,date,amount_paid,principal,interest,running_balance"));
     assert!(csv.contains("Jose Ramirez"), "borrower row present");
     assert!(csv.contains("300.00"), "payment amount present");
 }
@@ -2760,7 +2760,7 @@ async fn loan_interest_summary_csv_by_borrower_year() {
     assert!(ct.contains("text/csv"));
     let bytes = axum::body::to_bytes(res.into_body(), 1024 * 64).await.unwrap();
     let csv = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(csv.starts_with("year,borrower,currency,interest_received,principal_received"));
+    assert!(csv.starts_with("borrower,currency,year,interest_received,principal_received"));
     assert!(csv.contains("2026"));
     assert!(csv.contains("Jose Ramirez"));
     assert!(csv.contains("50.00"));
