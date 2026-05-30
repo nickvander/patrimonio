@@ -4,8 +4,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
-import 'package:http/browser_client.dart';
-import 'package:web/web.dart' as web;
+import 'api_platform.dart';
 import 'auth_service.dart';
 
 /// Thrown when the server returns 401. The auth gate listens for this
@@ -33,10 +32,7 @@ typedef ImportProgressCallback = void Function({
 
 class ApiService {
   String get _baseUrl {
-    final host = web.window.location.hostname.isEmpty
-        ? 'localhost'
-        : web.window.location.hostname;
-    return 'http://$host:8080/api';
+    return 'http://${currentHost()}:8080/api';
   }
 
   String get baseUrl => _baseUrl;
@@ -44,7 +40,7 @@ class ApiService {
   /// Shared credentialed HTTP client. `withCredentials` is required for
   /// the browser to send (and accept) the session cookie on cross-origin
   /// XHRs in development, and is harmless in same-origin production.
-  static final BrowserClient _client = BrowserClient()..withCredentials = true;
+  static final http.Client _client = createApiClient();
 
   /// X-Requested-With sentinel. The backend's `require_csrf_header`
   /// middleware rejects mutating requests without this header — a

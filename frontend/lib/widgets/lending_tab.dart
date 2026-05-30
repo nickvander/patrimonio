@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:web/web.dart' as web;
+import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import '../utils/lending_summary.dart';
 import '../utils/theme_colors.dart';
@@ -174,7 +174,8 @@ class _LendingTabState extends State<LendingTab> {
                       final url = which == 'summary'
                           ? widget.apiService.interestSummaryCsvUrl()
                           : widget.apiService.interestIncomeCsvUrl();
-                      web.window.open(url, '_self');
+                      launchUrl(Uri.parse(url),
+                          webOnlyWindowName: '_self');
                     },
                     itemBuilder: (_) => const [
                       PopupMenuItem(
@@ -1146,8 +1147,9 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
       children: [
         // Printable promissory-note / agreement (HTML → browser PDF).
         OutlinedButton.icon(
-          onPressed: () => web.window
-              .open(widget.apiService.loanAgreementUrl(_loanId), '_blank'),
+          onPressed: () => launchUrl(
+              Uri.parse(widget.apiService.loanAgreementUrl(_loanId)),
+              webOnlyWindowName: '_blank'),
           icon: const Icon(Icons.description_outlined, size: 16),
           label: const Text('Agreement', style: TextStyle(fontSize: 12)),
         ),
