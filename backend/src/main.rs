@@ -6,7 +6,7 @@ use axum::{
         header::{AUTHORIZATION, CONTENT_TYPE, COOKIE, SET_COOKIE},
         HeaderValue, Method,
     },
-    middleware::{from_fn, from_fn_with_state, Next},
+    middleware::{from_fn_with_state, Next},
     response::{Json, Response},
     routing::get,
     Router,

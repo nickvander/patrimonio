@@ -12,7 +12,7 @@
 use axum::{
     extract::{Extension, Path, State},
     http::StatusCode,
-    routing::{delete, get, post},
+    routing::{delete, get},
     Json, Router,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};

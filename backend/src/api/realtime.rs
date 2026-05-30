@@ -26,7 +26,6 @@ use axum::{
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::api::session::AuthContext;
-use crate::services::realtime::RealtimeEvent;
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {
