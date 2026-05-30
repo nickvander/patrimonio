@@ -2584,3 +2584,158 @@ async fn loan_interest_income_cross_tenant_isolated() {
     let r = body_json(res.into_body()).await;
     assert!(r["total_interest"].as_f64().unwrap().abs() < 0.01, "Bob must not see Alice's interest income");
 }
+
+// =====================================================================
+// Phase 3 completion — compound, accrued, summary CSV, agreement, flag
+// =====================================================================
+
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_compound_single_balloon_schedule() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 1000.0, "currency": "USD",
+        "origination_date": "2026-01-15", "interest_type": "compound",
+        "interest_rate": 0.10, "rate_period": "annual",
+        "term_months": 24, "payment_frequency": "monthly"
+    })).await;
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{loan_id}/payments"), None, Some(&token),
+    )).await.unwrap();
+    let rows = body_json(res.into_body()).await;
+    let arr = rows.as_array().unwrap();
+    assert_eq!(arr.len(), 1, "compound is a single balloon");
+    // ~$220 compound interest over 2y monthly-compounded at 10%.
+    assert!((arr[0]["scheduled_interest"].as_f64().unwrap() - 220.0).abs() < 2.0);
+    assert!((arr[0]["scheduled_principal"].as_f64().unwrap() - 1000.0).abs() < 0.01);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_interest_accrued_is_informational() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+    // 12% annual simple, open-ended, originated ~today minus enough to
+    // accrue. Use a clearly-past origination so accrual is non-trivial.
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 1000.0, "currency": "USD",
+        "origination_date": "2026-01-01", "interest_type": "simple",
+        "interest_rate": 0.12, "rate_period": "annual"
+    })).await;
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
+    )).await.unwrap();
+    let l = body_json(res.into_body()).await;
+    // interest_accrued is present and >= 0 (exact value depends on
+    // today's date relative to origination).
+    assert!(l["interest_accrued"].as_f64().unwrap() >= 0.0);
+    // A 0% loan accrues nothing.
+    let zero = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Ana", "principal": 500.0, "currency": "USD",
+        "origination_date": "2026-01-01"
+    })).await;
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{zero}"), None, Some(&token),
+    )).await.unwrap();
+    let l = body_json(res.into_body()).await;
+    assert!(l["interest_accrued"].as_f64().unwrap().abs() < 0.01);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_below_market_flag_over_threshold() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+    // 0% loan over the $10k de-minimis → flagged.
+    let _big = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "BigFriend", "principal": 25000.0, "currency": "USD",
+        "origination_date": "2026-01-01"
+    })).await;
+    // 0% loan under the threshold → not flagged.
+    let _small = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "SmallFriend", "principal": 500.0, "currency": "USD",
+        "origination_date": "2026-01-01"
+    })).await;
+    let res = app.clone().oneshot(req(
+        Method::GET, "/api/loans/interest-income", None, Some(&token),
+    )).await.unwrap();
+    let report = body_json(res.into_body()).await;
+    let flagged = report["below_market_loans"].as_array().unwrap();
+    assert_eq!(flagged.len(), 1, "only the >$10k 0% loan is flagged");
+    assert_eq!(flagged[0]["borrower_name"], "BigFriend");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_interest_summary_csv_by_borrower_year() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    // Seed a loan + a reconciled interest-bearing payment directly.
+    let loan_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO loans (user_id, borrower_name, principal, currency, origination_date, status, interest_type, interest_rate) \
+         VALUES ($1, 'Jose Ramirez', 1000.00, 'USD', '2026-01-01', 'active', 'simple', 0.10) RETURNING id",
+    ).bind(user_id).fetch_one(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO loan_payments (user_id, loan_id, installment_number, paid_amount, paid_date, \
+         principal_portion, interest_portion, balance_after, status) \
+         VALUES ($1, $2, 1, 200.00, '2026-06-01', 150.00, 50.00, 850.00, 'paid')",
+    ).bind(user_id).bind(loan_id).execute(&pool).await.unwrap();
+
+    let res = app.clone().oneshot(req(
+        Method::GET, "/api/loans/interest-income/summary", None, Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let ct = res.headers().get("content-type").unwrap().to_str().unwrap().to_string();
+    assert!(ct.contains("text/csv"));
+    let bytes = axum::body::to_bytes(res.into_body(), 1024 * 64).await.unwrap();
+    let csv = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(csv.starts_with("year,borrower,currency,interest_received,principal_received"));
+    assert!(csv.contains("2026"));
+    assert!(csv.contains("Jose Ramirez"));
+    assert!(csv.contains("50.00"));
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_agreement_html_renders_and_is_scoped() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose Ramirez", "principal": 5000.0, "currency": "USD",
+        "origination_date": "2026-01-15", "interest_type": "simple",
+        "interest_rate": 0.06, "rate_period": "annual",
+        "term_months": 12, "payment_frequency": "monthly"
+    })).await;
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{loan_id}/agreement"), None, Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let ct = res.headers().get("content-type").unwrap().to_str().unwrap().to_string();
+    assert!(ct.contains("text/html"), "agreement is HTML, got {ct}");
+    let bytes = axum::body::to_bytes(res.into_body(), 1024 * 64).await.unwrap();
+    let html = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(html.contains("Promissory Note"));
+    assert!(html.contains("Jose Ramirez"));
+
+    // Cross-tenant: a different owner can't fetch it.
+    let (_bob, bob_token) = seed_owner(&pool, "bob").await;
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{loan_id}/agreement"), None, Some(&bob_token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND, "agreement must be owner-scoped");
+}

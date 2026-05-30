@@ -35,9 +35,11 @@ pub fn router() -> Router<AppState> {
         .route("/people", get(list_people))
         // Upcoming + overdue installments for the notifications bell.
         .route("/reminders", get(list_reminders))
-        // Interest-income report + its CSV export (static before /{id}).
+        // Interest-income report + its CSV exports (static before /{id}).
         .route("/interest-income", get(interest_income))
         .route("/interest-income/export", get(export_interest_income))
+        // Per-borrower per-year totals (Schedule-B style) CSV.
+        .route("/interest-income/summary", get(export_interest_summary))
         // Static segments before dynamic /{id} so the matcher prefers
         // them (same ordering discipline as dashboard.rs fx-transfers).
         .route("/payments/{payment_id}", axum::routing::delete(unreconcile_payment))
@@ -50,6 +52,8 @@ pub fn router() -> Router<AppState> {
         .route("/{id}/schedule", post(generate_schedule))
         .route("/{id}/suggestions/disbursement", get(suggest_disbursement))
         .route("/{id}/suggestions/repayment", get(suggest_repayment))
+        // Printable promissory-note / agreement (HTML → browser PDF).
+        .route("/{id}/agreement", get(loan_agreement))
 }
 
 // ---------- shapes ----------
@@ -98,6 +102,11 @@ struct LoanView {
     /// Cumulative interest income realized on this loan (Σ
     /// interest_portion of reconciled repayments). Cash basis.
     interest_earned: f64,
+    /// Simple interest accrued on the current outstanding balance from
+    /// origination to today, MINUS interest already received. A
+    /// non-income, informational "interest owed so far" figure (cash
+    /// basis means it isn't income until paid). 0 for none/0% loans.
+    interest_accrued: f64,
 }
 
 #[derive(Serialize)]
@@ -163,7 +172,7 @@ fn default_rate_period() -> String {
 }
 
 fn valid_interest_type(t: &str) -> bool {
-    matches!(t, "none" | "simple" | "amortized" | "interest_only")
+    matches!(t, "none" | "simple" | "amortized" | "interest_only" | "compound")
 }
 
 #[derive(Deserialize)]
@@ -205,9 +214,8 @@ fn dec_to_f64(d: Option<rust_decimal::Decimal>) -> f64 {
 }
 
 /// Simple interest accrued from origination to today: P · r · t(years).
-/// No longer used for `outstanding` (which is now the running principal
-/// balance). Kept for the deferred "accrued interest owed" view.
-#[allow(dead_code)]
+/// Used for the informational `interest_accrued` ("interest owed so
+/// far") figure — NOT for `outstanding`, which is the running principal.
 fn accrued_interest(
     principal: f64,
     rate: f64,
@@ -344,8 +352,7 @@ fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
     //     (the running balance, == balance_after of the last payment).
     // Accrued-but-unpaid interest is deliberately NOT added here — it's
     // not part of the principal owed and (cash basis) isn't income
-    // until received. A separate "interest accrued" figure is deferred.
-    let _ = (effective_annual, origination, today, total_repaid); // (kept for future accrual view)
+    // until received. It's surfaced separately as `interest_accrued`.
     let outstanding = if matches!(status.as_str(), "written_off" | "cancelled" | "paid_off") {
         0.0
     } else {
@@ -354,6 +361,18 @@ fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
     // Paid-ahead: borrower has repaid more than what's been billed so
     // far (only meaningful with a schedule + something billed).
     let paid_ahead = has_schedule && cumulative_due > 0.0 && total_repaid >= cumulative_due;
+
+    // Accrued-but-unpaid interest (informational, non-income). Simple
+    // accrual on the current outstanding balance from origination to
+    // today, net of interest already received. Settled loans owe none.
+    let interest_earned = dec_to_f64(r.try_get("interest_earned").ok());
+    let interest_accrued = if matches!(status.as_str(), "written_off" | "cancelled" | "paid_off")
+    {
+        0.0
+    } else {
+        let gross = accrued_interest(outstanding, effective_annual, &interest_type, origination, today);
+        (gross - interest_earned).max(0.0)
+    };
 
     LoanView {
         id: r.get::<uuid::Uuid, _>("id").to_string(),
@@ -385,7 +404,8 @@ fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
         next_due: next_due.map(|d| d.to_string()),
         overdue,
         paid_ahead,
-        interest_earned: dec_to_f64(r.try_get("interest_earned").ok()),
+        interest_earned,
+        interest_accrued,
     }
 }
 
@@ -1483,12 +1503,42 @@ async fn interest_income(
     let total_interest: f64 = loans.iter().map(|l| l.interest_received).sum();
     let total_principal: f64 = loans.iter().map(|l| l.principal_received).sum();
 
+    // Informational (NOT tax advice): IRS §7872 can impute interest on
+    // a below-market (0% / very-low-rate) loan, but only once aggregate
+    // loans between two individuals exceed the $10,000 gift-loan
+    // de-minimis. Surface active 0%-rate loans whose principal clears
+    // that threshold so the user can raise it with an accountant.
+    let below_market = sqlx::query(
+        r#"
+        SELECT borrower_name, principal, currency
+        FROM loans
+        WHERE user_id = $1 AND status = 'active'
+          AND interest_rate = 0 AND principal > 10000
+        ORDER BY principal DESC
+        "#,
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+    let below_market: Vec<serde_json::Value> = below_market
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "borrower_name": r.try_get::<String, _>("borrower_name").unwrap_or_default(),
+                "principal": dec_to_f64(r.try_get("principal").ok()),
+                "currency": r.try_get::<String, _>("currency").unwrap_or_default(),
+            })
+        })
+        .collect();
+
     Json(serde_json::json!({
         "year": q.year,
         "total_interest": total_interest,
         "total_principal": total_principal,
         "by_loan": loans,
         "by_month": months,
+        "below_market_loans": below_market,
     }))
 }
 
@@ -1556,6 +1606,205 @@ async fn export_interest_income(
             ),
         ],
         csv,
+    )
+        .into_response()
+}
+
+/// Per-borrower, per-year interest-income totals as CSV (Schedule-B
+/// style: one line per payer per tax year). Hand to an accountant.
+async fn export_interest_summary(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Response {
+    let rows = sqlx::query(
+        r#"
+        SELECT l.borrower_name, l.currency,
+               EXTRACT(YEAR FROM p.paid_date)::int AS year,
+               COALESCE(SUM(p.interest_portion), 0) AS interest_total,
+               COALESCE(SUM(p.principal_portion), 0) AS principal_total
+        FROM loans l
+        JOIN loan_payments p ON p.loan_id = l.id AND p.user_id = l.user_id
+        WHERE l.user_id = $1
+          AND p.interest_portion IS NOT NULL
+          AND p.paid_date IS NOT NULL
+        GROUP BY l.borrower_name, l.currency, EXTRACT(YEAR FROM p.paid_date)
+        HAVING COALESCE(SUM(p.interest_portion), 0) <> 0
+        ORDER BY year DESC, interest_total DESC
+        "#,
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    fn esc(s: &str) -> String {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    }
+    let mut csv = String::from("year,borrower,currency,interest_received,principal_received\n");
+    for r in &rows {
+        let year: i32 = r.try_get("year").unwrap_or(0);
+        let borrower: String = r.try_get("borrower_name").unwrap_or_default();
+        let currency: String = r.try_get("currency").unwrap_or_default();
+        let interest = dec_to_f64(r.try_get("interest_total").ok());
+        let principal = dec_to_f64(r.try_get("principal_total").ok());
+        csv.push_str(&format!(
+            "{year},{},{currency},{interest:.2},{principal:.2}\n",
+            esc(&borrower)
+        ));
+    }
+    (
+        [
+            (header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                "attachment; filename=\"patrimonio-loan-interest-summary.csv\"".to_string(),
+            ),
+        ],
+        csv,
+    )
+        .into_response()
+}
+
+/// Printable promissory-note / loan agreement as a self-contained HTML
+/// document. Opened in a browser tab; the user prints to PDF (the
+/// standard web approach — no server-side PDF dependency). Includes the
+/// parties, terms, and the amortization schedule when one exists. This
+/// is a record-keeping convenience, NOT legal advice.
+async fn loan_agreement(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path(id): Path<uuid::Uuid>,
+) -> Response {
+    let sql = format!("SELECT l.*, {LOAN_AGGREGATES} FROM loans l WHERE l.id = $1 AND l.user_id = $2");
+    let row = sqlx::query(&sql)
+        .bind(id)
+        .bind(ctx.user_id)
+        .fetch_optional(&state.db)
+        .await;
+    let Ok(Some(r)) = row else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let today = chrono::Utc::now().date_naive();
+    let v = loan_view(&r, today);
+
+    // Lender display name (the account owner's username).
+    let lender: String =
+        sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
+            .bind(ctx.user_id)
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "Lender".to_string());
+
+    // Schedule rows for the table (if generated).
+    let payments = sqlx::query(
+        "SELECT installment_number, due_date, scheduled_amount, scheduled_principal, \
+                scheduled_interest, status \
+         FROM loan_payments WHERE loan_id = $1 AND scheduled_principal > 0 \
+         ORDER BY installment_number ASC",
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    fn esc_html(s: &str) -> String {
+        s.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+    }
+    let sym = if v.currency == "MXN" { "MX$" } else { "$" };
+    let money = |x: f64| format!("{sym}{x:.2}");
+    let interest_desc = match v.interest_type.as_str() {
+        "none" => "no interest".to_string(),
+        "simple" => format!("simple interest at {:.3}% per {}", v.interest_rate * 100.0, v.rate_period.trim_end_matches("ly").replace("annual", "year").replace("month", "month")),
+        "amortized" => format!("amortized at {:.3}% per {}", v.interest_rate * 100.0, if v.rate_period == "monthly" { "month" } else { "year" }),
+        "interest_only" => format!("interest-only at {:.3}% per {} (principal due at maturity)", v.interest_rate * 100.0, if v.rate_period == "monthly" { "month" } else { "year" }),
+        "compound" => format!("compound interest at {:.3}% per {} (due at maturity)", v.interest_rate * 100.0, if v.rate_period == "monthly" { "month" } else { "year" }),
+        _ => format!("{:.3}%", v.interest_rate * 100.0),
+    };
+
+    let mut schedule_html = String::new();
+    if !payments.is_empty() {
+        schedule_html.push_str(
+            "<h2>Repayment schedule</h2><table><thead><tr>\
+             <th>#</th><th>Due</th><th>Payment</th><th>Principal</th><th>Interest</th></tr></thead><tbody>",
+        );
+        for p in &payments {
+            let n: i32 = p.try_get("installment_number").unwrap_or(0);
+            let due = p
+                .try_get::<chrono::NaiveDate, _>("due_date")
+                .map(|d| d.to_string())
+                .unwrap_or_default();
+            let amt = dec_to_f64(p.try_get("scheduled_amount").ok());
+            let prin = dec_to_f64(p.try_get("scheduled_principal").ok());
+            let int = dec_to_f64(p.try_get("scheduled_interest").ok());
+            schedule_html.push_str(&format!(
+                "<tr><td>{n}</td><td>{due}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+                money(amt), money(prin), money(int)
+            ));
+        }
+        schedule_html.push_str("</tbody></table>");
+    }
+
+    let term_line = match (v.term_months, v.payment_frequency.as_deref()) {
+        (Some(t), Some(f)) => format!("Term: {t} months, {f} payments."),
+        _ => "Term: open-ended (no fixed schedule).".to_string(),
+    };
+
+    let html = format!(
+        r#"<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<title>Loan agreement — {borrower}</title>
+<style>
+  body {{ font-family: Georgia, 'Times New Roman', serif; max-width: 720px; margin: 40px auto; color: #1a1a1a; line-height: 1.6; padding: 0 20px; }}
+  h1 {{ font-size: 22px; border-bottom: 2px solid #1a1a1a; padding-bottom: 8px; }}
+  h2 {{ font-size: 16px; margin-top: 28px; }}
+  table {{ width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }}
+  th, td {{ border: 1px solid #999; padding: 4px 8px; text-align: right; }}
+  th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) {{ text-align: left; }}
+  .terms td {{ border: none; padding: 2px 0; text-align: left; }}
+  .terms td:first-child {{ font-weight: bold; width: 160px; }}
+  .sig {{ margin-top: 48px; display: flex; justify-content: space-between; }}
+  .sig div {{ width: 45%; border-top: 1px solid #1a1a1a; padding-top: 6px; font-size: 13px; }}
+  .note {{ margin-top: 32px; font-size: 11px; color: #666; font-style: italic; }}
+  @media print {{ body {{ margin: 0; }} button {{ display: none; }} }}
+</style></head><body>
+<button onclick="window.print()" style="float:right;padding:6px 12px;">Print / Save as PDF</button>
+<h1>Promissory Note &amp; Loan Agreement</h1>
+<table class="terms">
+  <tr><td>Lender</td><td>{lender}</td></tr>
+  <tr><td>Borrower</td><td>{borrower}</td></tr>
+  <tr><td>Principal</td><td>{principal} {currency}</td></tr>
+  <tr><td>Date of loan</td><td>{origination}</td></tr>
+  <tr><td>Interest</td><td>{interest_desc}</td></tr>
+  <tr><td>{term_line_label}</td><td>{term_line_val}</td></tr>
+  <tr><td>Outstanding today</td><td>{outstanding}</td></tr>
+</table>
+<p>For value received, the Borrower named above promises to pay the Lender
+the principal sum of <strong>{principal} {currency}</strong>, together with
+{interest_desc}, according to the terms set out herein.</p>
+{schedule_html}
+<div class="sig"><div>Lender signature / date</div><div>Borrower signature / date</div></div>
+<p class="note">Generated by Patrimonio as a personal record-keeping convenience.
+This document is not legal advice; consult a qualified professional for an
+enforceable agreement.</p>
+</body></html>"#,
+        borrower = esc_html(&v.borrower_name),
+        lender = esc_html(&lender),
+        principal = format!("{:.2}", v.principal),
+        currency = esc_html(&v.currency),
+        origination = v.origination_date,
+        interest_desc = esc_html(&interest_desc),
+        term_line_label = "Schedule",
+        term_line_val = esc_html(&term_line),
+        outstanding = money(v.outstanding),
+        schedule_html = schedule_html,
+    );
+
+    (
+        [(header::CONTENT_TYPE, "text/html; charset=utf-8".to_string())],
+        html,
     )
         .into_response()
 }

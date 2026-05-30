@@ -19,6 +19,16 @@ Coinbase · Bitso
 ### Mexico (via CSV/PDF upload)
 Nu Bank Mexico · Banamex · Cetesdirecto
 
+## Personal lending (opt-in)
+
+Track money you lend to friends and family. Enable the module from
+**Management → Modules** to reveal a Lending tab. Each loan supports
+no/simple/amortized/interest-only/compound interest at a per-year or
+per-month rate, auto-suggest reconciliation against your real bank
+transactions (disbursement out, repayments in), generated payment
+schedules with due-date reminders, and interest-income reporting with
+CSV exports plus a printable promissory-note agreement.
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -244,6 +254,7 @@ patrimonio/
 - [x] Mexico imports: Nu, Banamex, Cetesdirecto CSV/PDF parsing
 - [x] Crypto: Coinbase OAuth and Bitso API support
 - [x] Tax planning: US/Mexico estimates and taxable exports
+- [x] Personal lending (opt-in): loans, reconciliation, schedules, interest-income reporting
 - [x] Local launch hardening: Dockerized frontend and smoke tests
 - [ ] Production deployment: hosted frontend/API, backups, monitoring, real credentials
 

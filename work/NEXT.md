@@ -1,6 +1,6 @@
 # Next session — handoff
 
-> **Last updated:** 2026-05-18 (after FX-dismissal + inline-rename + rate-limit sprint)
+> **Last updated:** 2026-05-30 (after the personal-lending feature shipped)
 > **Purpose:** Pickup-ready priorities for the next agent. Each item
 > has a why, scope sketch, and where to look in code. Ordered by
 > impact-per-effort.
@@ -15,6 +15,16 @@ This file has been refreshed; the previous Top-3 (SQL net-worth,
 integration tests, Manage hidden things) all shipped. Highlights
 from the trailing 4–5 sprints (all on `main`):
 
+* **Personal lending (opt-in module):** complete — MVP + Phase 2 +
+  Phase 3 + interest-income accounting. Loans + reusable people
+  directory + reconciled repayments (auto-suggest matcher),
+  amortization schedules + reminders, write-off/defaulted statuses,
+  per-year/per-month rates, interest_only + compound types, printable
+  promissory-note agreement, interest-income report + CSV exports +
+  §7872 below-market flag. Gated behind `lending_enabled`. Full detail
+  in `work/LENDING_FEATURE.md`. Remaining deferred follow-ups
+  (multi-currency reporting-currency conversion, mid-stream
+  re-amortization, Schedule-B-formatted year-end doc) are NOT next.
 * **Auth:** TOTP confirm replay-marker fix (was blocking login for
   up to 30 s after enrollment); rate-limit hardening with per-user
   exponential backoff (1→2→4→8→16→30 s capped) on the 429 path +

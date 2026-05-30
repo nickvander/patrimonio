@@ -1,6 +1,6 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-05-29 (post transactions-list perf bundle)
+> **Last updated:** 2026-05-30 (personal-lending feature complete — MVP + P2 + P3 + interest income)
 > **Branch:** feature branch with the latest sprint awaiting fast-forward merge to `main`.
 
 ## Where we are
@@ -39,6 +39,48 @@ have shipped. The app now does:
   untrusted peers at the edge.
 * `app_settings.user_id` (M7 leftover) — budgets / goals no longer
   leak across users.
+
+## Personal lending — feature complete (2026-05-30)
+
+Opt-in lending module shipped end-to-end across MVP + Phase 2 +
+Phase 3 + interest-income accounting. Full design + per-phase
+breakdown in `work/LENDING_FEATURE.md`. Migrations 2026052802 →
+2026052806; ~115+ backend tests; frontend `widgets/lending_tab.dart`.
+
+* **MVP.** Per-user `lending_enabled` toggle in the Management →
+  Modules card gates a conditional "Lending" tab. New `loans` +
+  `people` (reusable borrower directory) + `loan_payments` tables;
+  full CRUD; link a real bank transaction as the disbursement;
+  record/reconcile repayments. Auto-suggest matcher
+  (`services/loan_match.rs`, ±2% disbursement / ±5% repayment
+  tolerance + a borrower-name bonus). Loan-linked transactions are
+  excluded from cash-flow (receivable, not spending — GnuCash model).
+* **Phase 2.** Amortization schedule generation
+  (`services/loan_schedule.rs`, all `Decimal`, final-row residual
+  absorption so `Σprincipal == principal`). `POST /loans/{id}/schedule`
+  (409 if any payment is reconciled, 422 if open-ended). Derived
+  `next_due` / `overdue` / `paid_ahead`; `'defaulted'` + `'written_off'`
+  statuses. `GET /loans/reminders` surfaced in the notifications bell
+  with a configurable lead-time stepper.
+* **Phase 3.** Fixed a trailing-slash 404 (`GET /api/loans/` 404'd
+  under axum nest → "couldn't load loans"; client now uses the
+  no-slash collection path + a guard test). Flexible per-year /
+  per-month interest via a `rate_period` column (stored faithfully,
+  no lossy reconversion); `interest_only` + `compound` interest types;
+  a Cmd-K "Jump to Lending" palette entry.
+* **Interest-income accounting.** Principal/interest split stored per
+  repayment (US Rule, interest-first) at reconciliation.
+  `GET /loans/interest-income` per-loan + per-month + grand-total
+  report (cash basis); a separate loan-interest CSV + per-borrower
+  year-end summary CSV (keeps the transactions export clean);
+  printable promissory-note HTML at `/loans/{id}/agreement`;
+  `interest_accrued` informational figure; §7872 below-market flag for
+  0% loans > $10k. Tax content is structural/factual (IRS Topic 403,
+  §7872, Schedule B), surfaced as data — not advice.
+
+**Deferred follow-ups** (see `work/LENDING_FEATURE.md`): multi-currency
+loan reporting-currency conversion; mid-stream re-amortization after a
+partial payment; Schedule-B-*formatted* (vs raw CSV) year-end document.
 
 ## Pre-merge gate (`scripts/check.sh`) (2026-05-29)
 

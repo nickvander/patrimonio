@@ -42,10 +42,6 @@ fn money(d: Decimal) -> Decimal {
     d.round_dp(2)
 }
 
-fn cents(n: i64) -> Decimal {
-    Decimal::new(n, 2)
-}
-
 /// Number of periods + periodic rate + a due-date function, derived
 /// from the loan's frequency. annual_rate is a fraction (0.05 = 5%).
 fn period_params(
@@ -122,17 +118,23 @@ pub fn generate(
         }
         // Each period pays interest only; principal balloons at the end.
         "interest_only" => interest_only(principal, i, n),
+        // Interest compounds over the term; nothing is paid until a
+        // single balloon at maturity = P(1+i)^n.
+        "compound" => compound(principal, i, n),
         // 0% amortized is just equal-principal; simple/none share the
         // flat split shape.
         "simple" => simple(principal, annual_rate, term, n),
         _ => none(principal, n),
     };
 
-    // Stamp due dates.
+    // Stamp due dates. Compound is a single balloon at maturity, so it
+    // borrows the lump-sum due-date rule (origination + term) rather
+    // than the per-period stepping.
+    let due_freq = if interest_type == "compound" { "lump_sum" } else { freq };
     Ok(rows
         .into_iter()
         .map(|mut r| {
-            r.due_date = due_date_for(origination, r.installment_number, term, freq);
+            r.due_date = due_date_for(origination, r.installment_number, term, due_freq);
             r
         })
         .collect())
@@ -223,6 +225,21 @@ fn interest_only(principal: Decimal, i: Decimal, n: i32) -> Vec<ScheduleRow> {
         });
     }
     rows
+}
+
+/// Compound: interest compounds each period over the term; nothing is
+/// paid until a single balloon at maturity. Total interest =
+/// P·((1+i)^n − 1). One row, due at term end.
+fn compound(principal: Decimal, i: Decimal, n: i32) -> Vec<ScheduleRow> {
+    let grown = principal * (Decimal::ONE + i).powu(n.max(1) as u64);
+    let interest = money(grown - principal);
+    vec![ScheduleRow {
+        installment_number: 1,
+        due_date: NaiveDate::default(),
+        amount: money(principal + interest),
+        principal,
+        interest,
+    }]
 }
 
 /// No interest: equal principal slices, final row absorbs the residual.
@@ -397,11 +414,6 @@ mod tests {
     }
 
     #[test]
-    fn cents_helper_sanity() {
-        assert_eq!(cents(1), d("0.01"));
-    }
-
-    #[test]
     fn interest_only_balloon() {
         // $10,000 @ 12% annual, 6 months monthly, interest-only.
         // Monthly periodic = 1% → interest $100 every month; principal
@@ -444,6 +456,25 @@ mod tests {
         .unwrap();
         assert_eq!(monthly[0].amount, annual[0].amount,
             "1%/month and 12%/annual must produce the same monthly payment");
+    }
+
+    #[test]
+    fn compound_single_balloon() {
+        // $1,000 @ 10% annual, 2 years monthly-compounded → one balloon
+        // at maturity. (1 + 0.10/12)^24 ≈ 1.22039 → interest ≈ $220.39.
+        let rows = generate(
+            d("1000"), d("0.10"), "annual", "compound", orig(), Some(24), Some("monthly"),
+        )
+        .unwrap();
+        assert_eq!(rows.len(), 1, "compound is a single balloon");
+        assert_eq!(rows[0].principal, d("1000.00"));
+        assert!((rows[0].interest - d("220.39")).abs() < d("0.50"),
+            "compound interest ~220.39, got {}", rows[0].interest);
+        assert_eq!(rows[0].amount, rows[0].principal + rows[0].interest);
+        // Due at maturity (origination + 24 months), not period 1.
+        assert_eq!(rows[0].due_date, NaiveDate::from_ymd_opt(2028, 1, 15).unwrap());
+        // Compound > simple over the same terms (10%·2 = $200 simple).
+        assert!(rows[0].interest > d("200.00"));
     }
 
     #[test]

@@ -115,6 +115,35 @@ The migration is staged so each step has its own commit. The riskiest one is ste
 
 ---
 
+## Personal lending  ✅ shipped (2026-05-30)
+
+**Status:** Done — MVP + Phase 2 + Phase 3 + interest-income
+accounting all shipped. Full design + per-phase breakdown in
+[work/LENDING_FEATURE.md](LENDING_FEATURE.md). Opt-in via the
+`lending_enabled` toggle (Management → Modules); migrations
+2026052802 → 2026052806; ~115+ backend tests;
+`frontend/lib/widgets/lending_tab.dart`.
+
+What landed: reusable people directory + loans + reconciled
+repayments (auto-suggest matcher), amortization schedules with
+reminders, write-off/defaulted statuses, flexible per-year/per-month
+rates, interest_only + compound interest types, printable
+promissory-note agreement, and full interest-income accounting
+(principal/interest split, per-year report, CSV exports, §7872
+below-market flag). Now-DONE items that were once deferred: compound
+interest, interest_only, agreement export, below-market flag.
+
+**Remaining deferred follow-ups:**
+
+* **Multi-currency loan reporting-currency conversion** — loans store
+  their native currency; a reporting-currency rollup across
+  mixed-currency loans isn't converted yet.
+* **Mid-stream re-amortization** after a partial/irregular payment —
+  regenerate the remaining schedule from the new balance.
+* **Schedule-B-formatted** (vs raw CSV) year-end document.
+
+---
+
 # Backlog handoff — May 2026
 
 > Added by the auth/sessions session that landed `6772561`. The items below are pickup-ready for a fresh agent — each is scoped, has acceptance criteria, and points at the right files. Ordered by impact-per-effort, not by hard dependency. `work/NEXT.md` is stale (dated 2026-05-12, predates everything since auth shipped); refresh it once the next 1–2 of these land.

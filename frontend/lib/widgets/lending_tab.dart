@@ -153,11 +153,25 @@ class _LendingTabState extends State<LendingTab> {
                 // Export the loan-interest CSV (cash-basis interest
                 // income — hand to an accountant at tax time).
                 if (interestEarned > 0)
-                  IconButton(
-                    tooltip: 'Export interest income (CSV)',
+                  PopupMenuButton<String>(
+                    tooltip: 'Export interest income',
                     icon: const Icon(Icons.download_outlined),
-                    onPressed: () => web.window.open(
-                        widget.apiService.interestIncomeCsvUrl(), '_self'),
+                    onSelected: (which) {
+                      final url = which == 'summary'
+                          ? widget.apiService.interestSummaryCsvUrl()
+                          : widget.apiService.interestIncomeCsvUrl();
+                      web.window.open(url, '_self');
+                    },
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: 'detail',
+                        child: Text('Interest payments (CSV)'),
+                      ),
+                      PopupMenuItem(
+                        value: 'summary',
+                        child: Text('Year-end summary by borrower (CSV)'),
+                      ),
+                    ],
                   ),
                 FilledButton.icon(
                   onPressed: _openAddLoanDialog,
@@ -546,6 +560,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                 DropdownMenuItem(
                     value: 'interest_only',
                     child: Text('Interest-only (balloon)')),
+                DropdownMenuItem(
+                    value: 'compound', child: Text('Compound (balloon at maturity)')),
               ],
               onChanged: (v) => setState(() => _interestType = v ?? 'none'),
             ),
@@ -1102,6 +1118,13 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
     return Wrap(
       spacing: 8,
       children: [
+        // Printable promissory-note / agreement (HTML → browser PDF).
+        OutlinedButton.icon(
+          onPressed: () => web.window
+              .open(widget.apiService.loanAgreementUrl(_loanId), '_blank'),
+          icon: const Icon(Icons.description_outlined, size: 16),
+          label: const Text('Agreement', style: TextStyle(fontSize: 12)),
+        ),
         if (status != 'defaulted')
           OutlinedButton.icon(
             onPressed: () => _setStatus('defaulted'),

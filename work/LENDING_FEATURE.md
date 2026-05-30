@@ -1,8 +1,9 @@
 # Personal Lending module — design + phased plan
 
-> **Status:** Phase 1 MVP SHIPPED (2026-05-29). Researched against
-> GnuCash / YNAB / Copilot / Pigeon / Zirtue / Splitwise + mapped onto
-> Patrimonio's existing patterns by subagents.
+> **Status:** MVP + Phase 2 + Phase 3 + interest income — all shipped
+> (2026-05-30). Researched against GnuCash / YNAB / Copilot / Pigeon /
+> Zirtue / Splitwise + mapped onto Patrimonio's existing patterns by
+> subagents.
 >
 > **Decisions taken:** reusable people directory (not free-text);
 > auto-suggest reconciliation (researched matcher + 23 test cases, O(window)
@@ -217,17 +218,31 @@ IRS Topic 403 / §7872 / Schedule B / GnuCash / US Rule):
   interest-first, 0%=all-principal, CSV shape, cross-tenant). 115
   backend tests total.
 
-**Interest income — deferred:** per-borrower Schedule-B-formatted
-year-end summary CSV; "accrued interest owed" (non-income) view;
-§7872 below-market-loan informational flag.
+**Interest income — also SHIPPED 2026-05-30:** principal/interest
+split recorded on each actual repayment + interest-income reporting;
+`interest_accrued` informational ("accrued interest owed") figure;
+§7872 below-market-loan informational flag (0% loans > $10k);
+per-borrower year-end summary CSV.
 
-**Phase 3 — still deferred:**
-- Compound interest (distinct from amortized's declining-balance
-  compounding); discounted balloon target.
-- Principal/interest split recorded on each actual repayment +
-  interest-income reporting.
-- Promissory-note PDF export; multi-currency loans; re-amortization on
-  an irregular/partial payment.
+**Phase 3 — also SHIPPED 2026-05-30:** compound interest type
+(distinct from amortized's declining-balance compounding);
+interest_only schedule type; printable promissory-note HTML at
+`/loans/{id}/agreement`.
+
+## Deferred follow-ups (remaining)
+
+These three are all that's left; everything else above is shipped:
+
+- **Multi-currency loan reporting-currency conversion** — loans store
+  their native currency; a reporting-currency rollup across
+  mixed-currency loans is not yet converted.
+- **Mid-stream re-amortization** after an irregular/partial payment —
+  regenerate the remaining schedule from the new balance.
+- **Schedule-B-formatted year-end document** (vs the current raw CSV
+  export).
+
+Tax content stays structural/factual (IRS Topic 403, §7872,
+Schedule B) — surfaced as data, NOT advice.
 
 ## Open questions for the user
 1. Is the borrower just a free-text name, or do you want a reusable

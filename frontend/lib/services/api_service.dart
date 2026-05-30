@@ -1412,6 +1412,15 @@ class ApiService {
     return '$_baseUrl/loans/interest-income/export$q';
   }
 
+  /// Per-borrower per-year interest totals CSV (Schedule-B style).
+  String interestSummaryCsvUrl() =>
+      '$_baseUrl/loans/interest-income/summary';
+
+  /// Printable promissory-note / agreement HTML for a loan (opened in
+  /// a new tab; the user prints to PDF from the browser).
+  String loanAgreementUrl(String loanId) =>
+      '$_baseUrl/loans/$loanId/agreement';
+
   /// Upcoming + overdue installments for the notifications bell. Each
   /// item: {loan_id, payment_id, borrower_name, amount, currency,
   /// due_date, installment_number, days_until, days_overdue}.
