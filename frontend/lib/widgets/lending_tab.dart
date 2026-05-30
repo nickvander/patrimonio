@@ -89,6 +89,18 @@ class _LendingTabState extends State<LendingTab> {
     return fmt.format(v.abs() < 0.005 ? 0 : v);
   }
 
+  /// "≈ $1,729.18 USD" — the [amount] (in [fromCurrency]) converted to the
+  /// active display currency at the spot rate. Returns null when no
+  /// conversion is needed (same currency) or the rate isn't loaded, so the
+  /// caller can omit the line entirely.
+  String? _convertedLine(num amount, String fromCurrency) {
+    final target = widget.targetCurrency;
+    if (fromCurrency == target || widget.usdMxnRate <= 0) return null;
+    final converted = convertCurrency(
+        amount.toDouble(), fromCurrency, target, widget.usdMxnRate);
+    return '≈ ${_money(converted, target)} $target';
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -325,6 +337,17 @@ class _LendingTabState extends State<LendingTab> {
                 '${linked ? '' : ' · disbursement not linked'}',
                 style: TextStyle(fontSize: 12, color: context.textSubtle),
               ),
+              // When the loan is in a different currency than the display
+              // toggle, show the converted equivalent at the spot rate —
+              // same idea as the Transactions tab's "≈" line.
+              if (_convertedLine(principal, currency) != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    _convertedLine(principal, currency)!,
+                    style: TextStyle(fontSize: 11, color: context.textFaint),
+                  ),
+                ),
               const SizedBox(height: 12),
               ClipRRect(
                 borderRadius: BorderRadius.circular(4),
@@ -1126,23 +1149,57 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
                   style: TextStyle(fontSize: 13, color: context.textMuted)),
             ],
           )
-        else if (_disbSuggestions.isEmpty)
-          Text(
-            'No matching outflow found near the loan date. You can link '
-            'one manually from the Transactions tab later.',
-            style: TextStyle(fontSize: 12, color: context.textSubtle),
-          )
         else ...[
-          Text('Which transaction funded this loan?',
-              style: TextStyle(fontSize: 12, color: context.textSubtle)),
+          if (_disbSuggestions.isEmpty)
+            Text(
+              'No matching outflow found near the loan date — pick one '
+              'manually below.',
+              style: TextStyle(fontSize: 12, color: context.textSubtle),
+            )
+          else ...[
+            Text('Which transaction funded this loan?',
+                style: TextStyle(fontSize: 12, color: context.textSubtle)),
+            const SizedBox(height: 8),
+            ..._disbSuggestions.map((s) => _suggestionTile(
+                  s as Map<String, dynamic>,
+                  onConfirm: () => _confirmDisbursement(s),
+                )),
+          ],
           const SizedBox(height: 8),
-          ..._disbSuggestions.map((s) => _suggestionTile(
-                s as Map<String, dynamic>,
-                onConfirm: () => _confirmDisbursement(s),
-              )),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: _openLinkDisbursement,
+              icon: const Icon(Icons.link, size: 16),
+              label: const Text('Link a transaction',
+                  style: TextStyle(fontSize: 12)),
+            ),
+          ),
         ],
       ],
     );
+  }
+
+  Future<void> _openLinkDisbursement() async {
+    final linked = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _RecordPaymentSheet(
+        apiService: widget.apiService,
+        loanId: _loanId,
+        currency: _currency,
+        mode: _RecordMode.disbursement,
+      ),
+    );
+    if (linked == true) {
+      widget.loan['disbursement_tx_id'] = 'linked';
+      await _load();
+      widget.onMutated();
+    }
   }
 
   Widget _buildRepaymentsSection() {
@@ -1188,9 +1245,44 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
                 s as Map<String, dynamic>,
                 onConfirm: () => _confirmRepayment(s),
               )),
+          const SizedBox(height: 8),
         ],
+        // Always offer an explicit way to record a payment — pick any
+        // bank inflow, or enter a cash/off-bank payment — independent of
+        // whether the matcher suggested anything.
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: _openRecordPayment,
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('Record a payment',
+                style: TextStyle(fontSize: 12)),
+          ),
+        ),
       ],
     );
+  }
+
+  Future<void> _openRecordPayment() async {
+    final recorded = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => _RecordPaymentSheet(
+        apiService: widget.apiService,
+        loanId: _loanId,
+        currency: _currency,
+        // Designate an inflow for repayment, or a cash payment.
+        mode: _RecordMode.repayment,
+      ),
+    );
+    if (recorded == true) {
+      await _load();
+      widget.onMutated();
+    }
   }
 
   Widget _suggestionTile(Map<String, dynamic> s,
@@ -1501,8 +1593,8 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
 
   Future<void> _confirmRepayment(Map<String, dynamic> s) async {
     try {
-      await widget.apiService
-          .recordRepayment(_loanId, s['transaction_id'].toString());
+      await widget.apiService.recordRepayment(_loanId,
+          transactionId: s['transaction_id'].toString());
       await _load();
       widget.onMutated();
     } catch (e) {
@@ -1554,5 +1646,327 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
   void _toast(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+}
+
+// =====================================================================
+// Record-payment / link-transaction sheet
+// =====================================================================
+
+enum _RecordMode { repayment, disbursement }
+
+/// A bottom sheet to either designate an existing bank transaction
+/// (repayment inflow / disbursement outflow) or — for repayments —
+/// record a cash/off-bank payment by amount + date.
+///
+/// Pops `true` when something was recorded so the caller can refresh.
+class _RecordPaymentSheet extends StatefulWidget {
+  final ApiService apiService;
+  final String loanId;
+  final String currency;
+  final _RecordMode mode;
+
+  const _RecordPaymentSheet({
+    required this.apiService,
+    required this.loanId,
+    required this.currency,
+    required this.mode,
+  });
+
+  @override
+  State<_RecordPaymentSheet> createState() => _RecordPaymentSheetState();
+}
+
+class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
+  // Tab 0 = pick a bank transaction; tab 1 = cash (repayment only).
+  int _tab = 0;
+  List<dynamic> _txs = [];
+  bool _loading = true;
+  bool _submitting = false;
+  final _searchCtrl = TextEditingController();
+  final _cashAmountCtrl = TextEditingController();
+  DateTime _cashDate = DateTime.now();
+
+  bool get _isRepayment => widget.mode == _RecordMode.repayment;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _cashAmountCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      // A generous recent window; we filter client-side by sign + search.
+      final txs = await widget.apiService.getTransactions(limit: 200);
+      if (!mounted) return;
+      setState(() {
+        _txs = txs;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  String _money(num v) {
+    final fmt = NumberFormat.currency(
+        symbol: widget.currency == 'MXN' ? r'MX$' : r'$', decimalDigits: 2);
+    return fmt.format(v);
+  }
+
+  /// Candidate transactions: inflows (amount > 0) for a repayment,
+  /// outflows (amount < 0) for a disbursement — matching the backend's
+  /// sign convention — narrowed by the search box.
+  List<Map<String, dynamic>> get _candidates {
+    final q = _searchCtrl.text.trim().toLowerCase();
+    return _txs.whereType<Map<String, dynamic>>().where((t) {
+      final amt = (t['amount'] as num?)?.toDouble() ?? 0;
+      final signOk = _isRepayment ? amt > 0 : amt < 0;
+      if (!signOk) return false;
+      if (q.isEmpty) return true;
+      final hay =
+          '${t['description'] ?? ''} ${t['merchant'] ?? ''} ${t['category'] ?? ''}'
+              .toLowerCase();
+      return hay.contains(q);
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = _isRepayment ? 'Record a payment' : 'Link the disbursement';
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.7,
+      maxChildSize: 0.95,
+      builder: (ctx, scroll) {
+        return Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: context.hairline,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Row(
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: context.textPrimary)),
+                ],
+              ),
+            ),
+            // Mode switch (cash is repayment-only).
+            if (_isRepayment)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: SegmentedButton<int>(
+                  segments: const [
+                    ButtonSegment(value: 0, label: Text('Bank transaction')),
+                    ButtonSegment(value: 1, label: Text('Cash')),
+                  ],
+                  selected: {_tab},
+                  onSelectionChanged: (s) => setState(() => _tab = s.first),
+                ),
+              ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: _tab == 1 && _isRepayment
+                  ? _buildCashForm(scroll)
+                  : _buildTxPicker(scroll),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildTxPicker(ScrollController scroll) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    final items = _candidates;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+          child: TextField(
+            controller: _searchCtrl,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: _isRepayment
+                  ? 'Search inflows (money received)'
+                  : 'Search outflows (money sent)',
+              prefixIcon: const Icon(Icons.search, size: 18),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ),
+        if (items.isEmpty)
+          Expanded(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  _isRepayment
+                      ? 'No incoming transactions found. Try the Cash tab '
+                          'to record an off-bank repayment.'
+                      : 'No outgoing transactions found.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: context.textSubtle),
+                ),
+              ),
+            ),
+          )
+        else
+          Expanded(
+            child: ListView.builder(
+              controller: scroll,
+              itemCount: items.length,
+              itemBuilder: (_, i) {
+                final t = items[i];
+                final amt = (t['amount'] as num?)?.toDouble() ?? 0;
+                return ListTile(
+                  dense: true,
+                  title: Text(
+                    (t['description'] ?? t['merchant'] ?? 'Transaction')
+                        .toString(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text('${t['date'] ?? ''} · ${_money(amt.abs())}'),
+                  trailing: _submitting
+                      ? null
+                      : const Icon(Icons.add_circle_outline),
+                  onTap: _submitting
+                      ? null
+                      : () => _submitTx(t['id'].toString()),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildCashForm(ScrollController scroll) {
+    return ListView(
+      controller: scroll,
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      children: [
+        Text(
+          'Record a repayment that didn\'t come through a linked bank '
+          'account (e.g. cash). It reduces the outstanding balance but '
+          'isn\'t tied to a transaction.',
+          style: TextStyle(fontSize: 12, color: context.textSubtle),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _cashAmountCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: 'Amount received',
+            prefixText: widget.currency == 'MXN' ? r'MX$ ' : r'$ ',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        ),
+        const SizedBox(height: 12),
+        InkWell(
+          onTap: _pickCashDate,
+          borderRadius: BorderRadius.circular(10),
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: 'Received on',
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text(DateFormat('MMM d, y').format(_cashDate),
+                style: TextStyle(color: context.textPrimary)),
+          ),
+        ),
+        const SizedBox(height: 20),
+        FilledButton(
+          onPressed: _submitting ? null : _submitCash,
+          child: _submitting
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Record cash payment'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickCashDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _cashDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+    );
+    if (picked != null) setState(() => _cashDate = picked);
+  }
+
+  Future<void> _submitTx(String txId) async {
+    setState(() => _submitting = true);
+    try {
+      if (_isRepayment) {
+        await widget.apiService.recordRepayment(widget.loanId,
+            transactionId: txId);
+      } else {
+        await widget.apiService.linkDisbursement(widget.loanId, txId);
+      }
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString().contains('already')
+              ? 'That transaction is already linked'
+              : 'Couldn\'t record that')));
+    }
+  }
+
+  Future<void> _submitCash() async {
+    final amount = double.tryParse(_cashAmountCtrl.text.trim());
+    if (amount == null || amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enter a valid amount')));
+      return;
+    }
+    setState(() => _submitting = true);
+    try {
+      final iso = DateFormat('yyyy-MM-dd').format(_cashDate);
+      await widget.apiService
+          .recordRepayment(widget.loanId, amount: amount, paidDate: iso);
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Couldn\'t record cash payment')));
+    }
   }
 }

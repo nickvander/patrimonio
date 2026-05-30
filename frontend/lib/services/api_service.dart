@@ -1356,20 +1356,29 @@ class ApiService {
     }
   }
 
+  /// Record a repayment. Pass [transactionId] to designate a bank inflow,
+  /// or omit it for a cash/off-bank payment (then [amount] is required).
+  /// [paidDate] is an ISO yyyy-MM-dd string; defaults server-side to the
+  /// tx date (linked) or today (cash).
   Future<void> recordRepayment(
-    String loanId,
-    String transactionId, {
+    String loanId, {
+    String? transactionId,
     double? amount,
+    String? paidDate,
   }) async {
-    final body = <String, dynamic>{'transaction_id': transactionId};
+    final body = <String, dynamic>{};
+    if (transactionId != null) body['transaction_id'] = transactionId;
     if (amount != null) body['amount'] = amount;
+    if (paidDate != null) body['paid_date'] = paidDate;
     final response = await _post(
       Uri.parse('$_baseUrl/loans/$loanId/payments'),
       headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode(body),
     );
     if (response.statusCode != 201) {
-      throw Exception('Failed to record repayment (${response.statusCode})');
+      throw Exception(response.body.isNotEmpty
+          ? response.body
+          : 'Failed to record repayment (${response.statusCode})');
     }
   }
 

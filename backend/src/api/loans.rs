@@ -199,9 +199,13 @@ struct LinkTxRequest {
 
 #[derive(Deserialize)]
 struct RecordPaymentRequest {
-    /// The inflow transaction being designated as a repayment.
-    transaction_id: uuid::Uuid,
-    /// Amount applied to the loan (defaults to the tx's amount).
+    /// The inflow transaction designated as a repayment. Optional: when
+    /// omitted the payment is a cash/off-bank repayment and `amount` is
+    /// required (actual_tx_id stays NULL).
+    #[serde(default)]
+    transaction_id: Option<uuid::Uuid>,
+    /// Amount applied to the loan. Defaults to the tx's amount when a
+    /// transaction is linked; required for a cash payment.
     #[serde(default)]
     amount: Option<f64>,
     #[serde(default)]
@@ -288,13 +292,16 @@ const LOAN_AGGREGATES: &str = r#"
     -- principal − repaid path instead.
     EXISTS(SELECT 1 FROM loan_payments p
            WHERE p.loan_id = l.id AND p.scheduled_principal > 0) AS has_schedule,
-    -- Σ principal_portion of every RECONCILED payment → the running
-    -- principal balance is principal − this (= balance_after of the
-    -- last payment). Falls back to the full paid_amount for legacy
-    -- rows recorded before the principal/interest split shipped.
+    -- Σ principal_portion of every PAID payment → the running principal
+    -- balance is principal − this (= balance_after of the last payment).
+    -- Falls back to the full paid_amount for legacy rows recorded before
+    -- the principal/interest split shipped. Keyed on paid_amount (not
+    -- actual_tx_id) so cash/off-bank payments — which have no linked
+    -- transaction — still reduce the balance; scheduled-but-unpaid rows
+    -- have paid_amount NULL and are correctly excluded.
     COALESCE((SELECT SUM(COALESCE(p.principal_portion, p.paid_amount, 0))
               FROM loan_payments p
-              WHERE p.loan_id = l.id AND p.actual_tx_id IS NOT NULL), 0) AS principal_paid,
+              WHERE p.loan_id = l.id AND p.paid_amount IS NOT NULL), 0) AS principal_paid,
     (SELECT MIN(p.due_date) FROM loan_payments p
      WHERE p.loan_id = l.id
        AND (p.actual_tx_id IS NULL OR p.paid_amount < p.scheduled_amount)) AS next_due,
@@ -857,14 +864,34 @@ async fn record_payment(
     if !matches!(owns, Ok(Some(_))) {
         return StatusCode::NOT_FOUND.into_response();
     }
-    let tx = owned_tx(&state, ctx.user_id, payload.transaction_id).await;
-    let Some((_currency, tx_date, tx_amount)) = tx else {
-        return StatusCode::NOT_FOUND.into_response();
+    let today = chrono::Utc::now().date_naive();
+    // Two modes: link a real bank inflow, or record a cash/off-bank
+    // payment (no tx). The amount defaults to the linked tx's magnitude;
+    // a cash payment must state its amount.
+    let (amount, paid_date) = match payload.transaction_id {
+        Some(tx_id) => {
+            let Some((_currency, tx_date, tx_amount)) =
+                owned_tx(&state, ctx.user_id, tx_id).await
+            else {
+                return StatusCode::NOT_FOUND.into_response();
+            };
+            (
+                payload.amount.unwrap_or(tx_amount.abs()),
+                payload.paid_date.unwrap_or(tx_date),
+            )
+        }
+        None => {
+            let Some(amt) = payload.amount.filter(|a| *a > 0.0) else {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    "a cash payment requires a positive amount",
+                )
+                    .into_response();
+            };
+            (amt, payload.paid_date.unwrap_or(today))
+        }
     };
-    // Default the applied amount to the transaction's magnitude.
-    let amount = payload.amount.unwrap_or(tx_amount.abs());
     let amount_dec = rust_decimal::Decimal::from_f64_retain(amount).unwrap_or_default();
-    let paid_date = payload.paid_date.unwrap_or(tx_date);
 
     // Loan terms + running state needed to split this payment into
     // principal vs interest (cash-basis interest income).

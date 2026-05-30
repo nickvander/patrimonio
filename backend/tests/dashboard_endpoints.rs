@@ -1888,6 +1888,64 @@ async fn loan_record_payment_reduces_outstanding_and_is_idempotent() {
 
 #[tokio::test]
 #[serial_test::serial]
+async fn loan_cash_payment_without_transaction() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+    let loan_id = create_loan(
+        &app,
+        &token,
+        &serde_json::json!({
+            "borrower_name": "Cash Friend",
+            "principal": 1000.0,
+            "currency": "USD",
+            "origination_date": "2026-01-15"
+        }),
+    )
+    .await;
+
+    // Record a cash repayment of 250 with NO transaction_id.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({"amount": 250.0, "paid_date": "2026-02-01"})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED, "cash payment must succeed");
+
+    // Outstanding drops to 750.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token)))
+        .await
+        .unwrap();
+    let l = body_json(res.into_body()).await;
+    assert!((l["outstanding"].as_f64().unwrap() - 750.0).abs() < 0.01,
+        "expected 750 outstanding after cash payment, got {}", l["outstanding"]);
+    assert!((l["total_repaid"].as_f64().unwrap() - 250.0).abs() < 0.01);
+
+    // A cash payment with no amount is rejected (400).
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/loans/{loan_id}/payments"),
+            Some(&serde_json::json!({})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST,
+        "a cash payment with no amount must 400");
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn loan_disbursement_and_repayment_excluded_from_cash_flow() {
     let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
         return;
