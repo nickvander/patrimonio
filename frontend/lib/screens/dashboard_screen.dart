@@ -31,6 +31,7 @@ import '../widgets/since_last_login_banner.dart';
 import '../widgets/subscriptions_card.dart';
 import '../widgets/notifications_panel.dart';
 import '../theme/palette.dart';
+import '../theme/typography.dart';
 import '../utils/account_category.dart';
 import '../utils/currency.dart';
 import '../utils/supported_banks.dart';
@@ -2758,12 +2759,13 @@ class _StatTile extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 value,
-                style: TextStyle(
+                // IBM Plex Mono "ledger" figures — same treatment as the
+                // net-worth hero so the dashboard's big numbers share one
+                // consistent identity (Plex Mono tops out at Bold/w700).
+                style: brandDisplayStyle(
                   fontSize: isHero ? 22 : 18,
-                  fontWeight:
-                      isHero ? FontWeight.w900 : FontWeight.w700,
+                  fontWeight: FontWeight.w700,
                   color: context.textPrimary,
-                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

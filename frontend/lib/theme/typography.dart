@@ -1,49 +1,49 @@
 import 'package:flutter/material.dart';
 
-/// Brand typography: Inter for body/UI, Fraunces for display/headlines.
+/// Brand typography: Inter for ALL UI/text, IBM Plex Mono for the big
+/// "feature" figures (the net-worth hero + the overview stat strip).
 ///
-/// Why Fraunces: market_research §3 calls for a warm, "old-style" serif on
-/// the hero/section titles — the 2026 "reads like a well-made tax report"
-/// signal and the heritage/estate feel — while keeping Inter (performant,
-/// great ES diacritics) for everything else. We apply Fraunces only to the
-/// display/headline slots so the rest of the UI keeps Inter's neutral
-/// legibility and we avoid re-layout risk.
+/// Why this split: a single workhorse sans (Inter — legible at every size,
+/// great ES diacritics, real tabular figures) keeps the interface clean and
+/// modern, while a monospace on the signature big numbers gives a distinctive,
+/// precise "ledger" identity that reads as financial data. The mono is scoped
+/// to large display figures only — inline/table numbers stay Inter (with
+/// tabular figures) so lists don't turn heavy.
 ///
 /// Both families are bundled locally (see pubspec.yaml `fonts:` and
 /// assets/fonts/). We deliberately do NOT use the google_fonts package: it
 /// fetches font files from an external CDN at runtime, which breaks the
 /// privacy / self-hosting promise and adds a first-paint network dependency.
 const String _interFamily = 'Inter';
-const String _frauncesFamily = 'Fraunces';
+const String _monoFamily = 'IBMPlexMono';
 
-TextTheme buildBrandTextTheme(TextTheme base) {
-  // Inter for the full theme, then Fraunces overlaid on the display +
-  // headline slots. `apply(fontFamily: ...)` swaps the family while keeping
-  // the incoming sizes/weights/colors.
-  final inter = base.apply(fontFamily: _interFamily);
-  return inter.copyWith(
-    displayLarge: inter.displayLarge?.copyWith(fontFamily: _frauncesFamily),
-    displayMedium: inter.displayMedium?.copyWith(fontFamily: _frauncesFamily),
-    displaySmall: inter.displaySmall?.copyWith(fontFamily: _frauncesFamily),
-    headlineLarge: inter.headlineLarge?.copyWith(fontFamily: _frauncesFamily),
-    headlineMedium: inter.headlineMedium?.copyWith(fontFamily: _frauncesFamily),
-  );
-}
+/// The whole text theme is Inter. (We no longer overlay a display serif on the
+/// `display*`/`headline*` slots — the app styles its headers with explicit
+/// Inter TextStyles, so that overlay never actually rendered and only made one
+/// card look inconsistent. Big numbers get the mono treatment explicitly via
+/// [brandDisplayStyle] instead.)
+TextTheme buildBrandTextTheme(TextTheme base) =>
+    base.apply(fontFamily: _interFamily);
 
-/// The display (Fraunces) font for the net-worth hero number and other
-/// signature "big number" moments. Tabular lining figures keep digit
-/// columns aligned as the value animates/changes — the "ledger precision"
-/// brand signal. Callers pass size/weight/color.
+/// The display style for signature big numbers — the net-worth hero and the
+/// overview stat-strip values. Monospace + tabular lining figures keep digit
+/// columns aligned as values change (the "ledger precision" cue). Callers pass
+/// size/weight/color. NOTE: IBM Plex Mono tops out at Bold (w700); callers
+/// should not request heavier weights or the engine synthesises a faux bold
+/// that looks muddy on a mono.
 TextStyle brandDisplayStyle({
   required double fontSize,
   FontWeight fontWeight = FontWeight.w700,
   Color? color,
 }) {
   return TextStyle(
-    fontFamily: _frauncesFamily,
+    fontFamily: _monoFamily,
     fontSize: fontSize,
     fontWeight: fontWeight,
     color: color,
+    // Slightly negative tracking tightens the mono's wide default spacing so
+    // big figures read as one number rather than spaced-out glyphs.
+    letterSpacing: -0.5,
     fontFeatures: const [
       FontFeature.tabularFigures(),
       FontFeature.liningFigures(),
@@ -51,15 +51,16 @@ TextStyle brandDisplayStyle({
   );
 }
 
-/// Section/heading style in Fraunces for major card titles. Smaller and
-/// lighter than the hero; used sparingly so the serif stays a signal.
+/// Small section label that sits above a hero number (e.g. "Total net worth").
+/// Plain Inter now — it's supporting text, not a display figure, so it matches
+/// the rest of the UI. Callers pass size/weight/color.
 TextStyle brandSectionTitleStyle({
   double fontSize = 18,
   FontWeight fontWeight = FontWeight.w600,
   Color? color,
 }) {
   return TextStyle(
-    fontFamily: _frauncesFamily,
+    fontFamily: _interFamily,
     fontSize: fontSize,
     fontWeight: fontWeight,
     color: color,

@@ -79,9 +79,8 @@ flutter:
   # Brand fonts are bundled locally (vendored from official OFL upstreams) so
   # the app never fetches from an external CDN at runtime — a hard requirement
   # for a privacy-respecting, self-hostable product. See assets/fonts/OFL-*.txt
-  # for license texts. Inter ships as static instances (one file per weight);
-  # Fraunces ships as a single variable font (wght axis), so every weight entry
-  # below points at the same file and Flutter clamps the axis to `weight:`.
+  # for license texts. Both Inter (UI) and IBMPlexMono (big "ledger" figures)
+  # ship as static instances — one file per weight.
   fonts:
     - family: Inter
       fonts:
@@ -93,11 +92,16 @@ flutter:
           weight: 600
         - asset: assets/fonts/Inter-Bold.ttf
           weight: 700
-    - family: Fraunces
+    # Monospace for the big "feature" figures (net-worth hero + the overview
+    # stat strip) — a distinctive, precise "ledger" identity scoped to numbers.
+    # Everything else is Inter. Bundled locally (no google_fonts CDN).
+    - family: IBMPlexMono
       fonts:
-        - asset: assets/fonts/Fraunces-VariableFont.ttf
+        - asset: assets/fonts/IBMPlexMono-Regular.ttf
           weight: 400
-        - asset: assets/fonts/Fraunces-VariableFont.ttf
+        - asset: assets/fonts/IBMPlexMono-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/IBMPlexMono-SemiBold.ttf
           weight: 600
-        - asset: assets/fonts/Fraunces-VariableFont.ttf
+        - asset: assets/fonts/IBMPlexMono-Bold.ttf
           weight: 700

@@ -178,8 +178,8 @@ class _NetWorthCardState extends State<NetWorthCard> {
       children: [
         Text(
           'Total net worth ($reportingCurrency)',
-          // Fraunces section label — the small heritage/estate cue above
-          // the hero number, kept understated (the big number is the star).
+          // Inter label above the hero number, kept understated — the big
+          // mono number is the star.
           style: brandSectionTitleStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
@@ -195,12 +195,13 @@ class _NetWorthCardState extends State<NetWorthCard> {
           alignment: Alignment.centerLeft,
           child: Text(
             currencyFormat.format(netWorth),
-            // Fraunces display face with tabular lining figures — the
-            // signature "ledger" hero number. Tabular figures keep digit
-            // columns aligned as the value changes.
+            // IBM Plex Mono with tabular lining figures — the signature
+            // "ledger" hero number. Tabular figures keep digit columns
+            // aligned as the value changes.
             style: brandDisplayStyle(
               fontSize: isCompact ? 32 : 42,
-              fontWeight: FontWeight.w900,
+              // Plex Mono tops out at Bold; w900 would faux-bold (muddy).
+              fontWeight: FontWeight.w700,
               color: context.textPrimary,
             ),
             maxLines: 1,
