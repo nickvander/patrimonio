@@ -1105,11 +1105,13 @@ class ApiService {
     List<String> ids, {
     String? category,
     String? accountId,
+    String? description,
   }) async {
     final body = <String, dynamic>{
       'ids': ids,
       if (category != null) 'user_category': category,
       if (accountId != null) 'account_id': accountId,
+      if (description != null) 'user_description': description,
     };
     final response = await _patch(
       Uri.parse('$_baseUrl/accounts/transactions/batch'),

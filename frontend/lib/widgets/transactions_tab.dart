@@ -30,7 +30,12 @@ class TransactionsTab extends StatefulWidget {
   /// selecting N rows fired N writes × a full refetch each. Falls back to
   /// the per-id loop when null. Returns the number actually updated.
   final Future<int> Function(List<String> ids,
-      {String? userCategory, String? accountId})? onBulkUpdate;
+      {String? userCategory,
+      String? accountId,
+      String? userDescription})? onBulkUpdate;
+  /// Bulk delete: deletes every id then refreshes the dashboard once.
+  /// Wired by the dashboard; null disables the bulk-delete action.
+  final Future<void> Function(List<String> ids)? onBulkDelete;
   final Future<void> Function(String id)? onDelete;
   /// Opens the Add-account dialog directly (used by the no-data empty
   /// state's "Add an account" button) so a fresh user isn't bounced to
@@ -103,6 +108,7 @@ class TransactionsTab extends StatefulWidget {
     required this.usdMxnRate,
     this.onUpdate,
     this.onBulkUpdate,
+    this.onBulkDelete,
     this.onDelete,
     this.onAddAccount,
     this.apiService,
@@ -691,6 +697,20 @@ class _TransactionsTabState extends State<TransactionsTab> {
           label: const Text('Move account'),
         );
 
+        final rename = FilledButton.tonalIcon(
+          onPressed: selectedCount == 0 ? null : () => _bulkRename(),
+          icon: const Icon(Icons.edit_outlined, size: 18),
+          label: const Text('Rename'),
+        );
+
+        final delete = FilledButton.tonalIcon(
+          onPressed: (selectedCount == 0 || widget.onBulkDelete == null)
+              ? null
+              : () => _bulkDelete(),
+          icon: Icon(Icons.delete_outline, size: 18, color: context.negative),
+          label: Text('Delete', style: TextStyle(color: context.negative)),
+        );
+
         final clear = TextButton(
           onPressed: () => setState(() {
             _selectionMode = false;
@@ -715,6 +735,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 selectToggle,
                 categorize,
                 moveAccount,
+                rename,
+                delete,
                 clear,
               ]),
             ],
@@ -730,6 +752,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
             const SizedBox(width: 8),
             moveAccount,
             const SizedBox(width: 8),
+            rename,
+            const SizedBox(width: 8),
+            delete,
+            const SizedBox(width: 8),
             clear,
           ],
         );
@@ -738,32 +764,128 @@ class _TransactionsTabState extends State<TransactionsTab> {
   }
 
   Future<void> _bulkCategorize() async {
-    final controller = TextEditingController();
+    final suggestions = _distinctCategories();
+    var typed = '';
     final cat = await showDialog<String>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: const Text('Set category'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'e.g. Restaurants',
-          ),
-          onSubmitted: (v) => Navigator.pop(context, v.trim()),
+        content: Autocomplete<String>(
+          // Suggest from the categories already in use so the user
+          // doesn't fragment them ("Restaurant" vs "Restaurants"); a
+          // free-typed value not in the list is still accepted.
+          optionsBuilder: (value) {
+            final q = value.text.trim().toLowerCase();
+            if (q.isEmpty) return suggestions;
+            return suggestions
+                .where((s) => s.toLowerCase().contains(q));
+          },
+          onSelected: (s) => typed = s,
+          fieldViewBuilder: (ctx, controller, focusNode, onSubmit) {
+            return TextField(
+              controller: controller,
+              focusNode: focusNode,
+              autofocus: true,
+              decoration: const InputDecoration(hintText: 'e.g. Restaurants'),
+              onChanged: (v) => typed = v,
+              onSubmitted: (v) => Navigator.pop(dialogCtx, v.trim()),
+            );
+          },
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(dialogCtx),
               child: const Text('Cancel')),
           FilledButton(
-              onPressed: () =>
-                  Navigator.pop(context, controller.text.trim()),
+              onPressed: () => Navigator.pop(dialogCtx, typed.trim()),
               child: const Text('Apply')),
         ],
       ),
     );
     if (cat == null || cat.isEmpty) return;
     await _applyBulkUpdate(userCategory: cat);
+  }
+
+  Future<void> _bulkRename() async {
+    final controller = TextEditingController();
+    final count = _selectedIds.length;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: Text('Rename $count transactions'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'New description',
+            hintText: 'e.g. Rent — March',
+          ),
+          onSubmitted: (v) => Navigator.pop(dialogCtx, v.trim()),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () =>
+                  Navigator.pop(dialogCtx, controller.text.trim()),
+              child: const Text('Apply')),
+        ],
+      ),
+    );
+    if (name == null || name.isEmpty) return;
+    await _applyBulkUpdate(userDescription: name);
+  }
+
+  Future<void> _bulkDelete() async {
+    final onBulkDelete = widget.onBulkDelete;
+    if (onBulkDelete == null) return;
+    final ids = _selectedIds.toList();
+    if (ids.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: Text('Delete ${ids.length} transactions?'),
+        content: const Text(
+          'They\'ll be removed from your lists and totals. A future sync '
+          'may re-import bank-linked transactions.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogCtx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: context.negative),
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      SnackBar(content: Text('Deleting ${ids.length} transactions…')),
+    );
+    var ok = true;
+    try {
+      await onBulkDelete(ids);
+    } catch (_) {
+      ok = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      _selectedIds.clear();
+      _selectionMode = false;
+    });
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(ok
+            ? 'Deleted ${ids.length} transactions'
+            : 'Couldn\'t delete some transactions'),
+      ),
+    );
   }
 
   Future<void> _bulkMoveAccount() async {
@@ -1127,7 +1249,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
   // selection); falls back to looping the per-id onUpdate only if no bulk
   // handler is wired.
   Future<void> _applyBulkUpdate(
-      {String? userCategory, String? accountId}) async {
+      {String? userCategory, String? accountId, String? userDescription}) async {
     final ids = _selectedIds.toList();
     if (ids.isEmpty) return;
     final messenger = ScaffoldMessenger.of(context);
@@ -1142,7 +1264,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
       // One batched request → one dashboard refresh.
       try {
         updated = await onBulk(ids,
-            userCategory: userCategory, accountId: accountId);
+            userCategory: userCategory,
+            accountId: accountId,
+            userDescription: userDescription);
         failed = ids.length - updated;
       } catch (_) {
         failed = ids.length;
@@ -1153,7 +1277,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
       for (final id in ids) {
         try {
           await onUpdate(id,
-              userCategory: userCategory, accountId: accountId);
+              userCategory: userCategory,
+              accountId: accountId,
+              userDescription: userDescription);
           updated++;
         } catch (_) {
           failed++;
@@ -1299,6 +1425,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
         accounts: widget.accounts,
         apiService: widget.apiService!,
         onCreated: () => widget.onTransactionAdded?.call(),
+        categorySuggestions: _distinctCategories(),
       ),
     );
   }
@@ -1966,8 +2093,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
                       icon: const Icon(Icons.close, size: 20),
                       onPressed: () => Navigator.pop(context),
                       tooltip: 'Close',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                      // Keep a ≥48px touch target (a11y) instead of the
+                      // zero-padding/empty-constraints ~20px hit area.
+                      constraints: const BoxConstraints(
+                          minWidth: 48, minHeight: 48),
                     ),
                   ),
                   Row(

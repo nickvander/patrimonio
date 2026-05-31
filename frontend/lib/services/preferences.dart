@@ -32,6 +32,15 @@ class Preferences {
   static String getCurrency() => _read('currency') ?? 'USD';
   static void setCurrency(String code) => _write('currency', code);
 
+  /// UI language as a locale code ('en' / 'es'). Null/empty = follow the
+  /// device locale (among the app's supported locales).
+  static String? getLocale() {
+    final v = _read('locale');
+    return (v == null || v.isEmpty) ? null : v;
+  }
+
+  static void setLocale(String? code) => _write('locale', code ?? '');
+
   /// Last-active navigation section, stored as the NavId's `name` so it
   /// survives section reordering and the conditional Lending section
   /// (mirrors how the date-range pref is stored). Null when unset — the

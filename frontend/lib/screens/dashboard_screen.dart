@@ -5,7 +5,8 @@ import 'package:plaid_flutter/plaid_flutter.dart';
 import 'package:web/web.dart' as web;
 import 'dart:async';
 import '../services/api_service.dart';
-import '../main.dart' show themeModeNotifier;
+import '../main.dart' show themeModeNotifier, localeNotifier;
+import '../l10n/app_localizations.dart';
 import '../services/preferences.dart';
 import '../services/realtime_service.dart';
 import '../widgets/net_worth_card.dart';
@@ -239,6 +240,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (d.id != NavId.lending || _lendingEnabled) d,
       ];
 
+  /// Localized full label for a section (rail, More sheet, palette).
+  String _navLabel(AppLocalizations l, NavId id) {
+    switch (id) {
+      case NavId.overview:
+        return l.navOverview;
+      case NavId.portfolio:
+        return l.navPortfolio;
+      case NavId.transactions:
+        return l.navTransactions;
+      case NavId.cashFlow:
+        return l.navCashFlow;
+      case NavId.projections:
+        return l.navProjections;
+      case NavId.tax:
+        return l.navTaxPlanning;
+      case NavId.lending:
+        return l.navLending;
+      case NavId.settings:
+        return l.navSettings;
+    }
+  }
+
+  /// Localized compact label for the bottom navigation bar.
+  String _navShortLabel(AppLocalizations l, NavId id) {
+    switch (id) {
+      case NavId.overview:
+        return l.navShortOverview;
+      case NavId.portfolio:
+        return l.navShortPortfolio;
+      case NavId.transactions:
+        return l.navShortTransactions;
+      case NavId.cashFlow:
+        return l.navShortCashFlow;
+      case NavId.projections:
+        return l.navShortProjections;
+      case NavId.tax:
+        return l.navShortTaxPlanning;
+      case NavId.lending:
+        return l.navShortLending;
+      case NavId.settings:
+        return l.navShortSettings;
+    }
+  }
+
   static NavId? _navIdFromName(String? name) {
     if (name == null) return null;
     for (final v in NavId.values) {
@@ -432,9 +477,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // Jump-to-section items, driven by the live destination list so the
     // conditional Lending section appears here exactly when it's visible.
+    final l10n = AppLocalizations.of(context);
     for (final d in _destinations) {
       items.add(PaletteItem(
-        label: 'Jump to ${d.label}',
+        label: 'Jump to ${_navLabel(l10n, d.id)}',
         subtitle: d.id == NavId.lending
             ? 'Section · money you\'ve lent'
             : 'Section',
@@ -1647,6 +1693,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: Text('Security'),
                       ),
                     ),
+                    // Language toggle (EN ⇄ ES). Shows the language you'd
+                    // switch TO, in its own name (autonym). Persists + flips
+                    // the app locale live via localeNotifier.
+                    MenuItemButton(
+                      leadingIcon: const Icon(Icons.translate, size: 20),
+                      onPressed: () {
+                        final next =
+                            Localizations.localeOf(context).languageCode == 'es'
+                                ? 'en'
+                                : 'es';
+                        Preferences.setLocale(next);
+                        localeNotifier.value = Locale(next);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 16),
+                        child: Text(
+                          Localizations.localeOf(context).languageCode == 'es'
+                              ? 'English'
+                              : 'Español',
+                        ),
+                      ),
+                    ),
                     const Divider(height: 8, indent: 12, endIndent: 12),
                     MenuItemButton(
                       leadingIcon:
@@ -2370,14 +2438,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
         },
         // Batch bulk edits into ONE request + ONE refresh (instead of N
         // per-row PATCHes each force-refreshing the whole dashboard).
-        onBulkUpdate: (ids, {userCategory, accountId}) async {
+        onBulkUpdate: (ids, {userCategory, accountId, userDescription}) async {
           final n = await _apiService.batchUpdateTransactions(
             ids,
             category: userCategory,
             accountId: accountId,
+            description: userDescription,
           );
           await _refreshData();
           return n;
+        },
+        // Bulk delete: N deletes then ONE refresh (no per-row reload).
+        onBulkDelete: (ids) async {
+          for (final id in ids) {
+            await _apiService.deleteTransaction(id);
+          }
+          await _refreshData();
         },
         onDelete: (id) async {
           await _apiService.deleteTransaction(id);
@@ -2893,7 +2969,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   for (final d in primary)
                     _railTile(d, d.id == selectedId),
-                  if (secondary.isNotEmpty) _railGroupLabel('More'),
+                  if (secondary.isNotEmpty)
+                    _railGroupLabel(AppLocalizations.of(context).navMoreGroup),
                   for (final d in secondary)
                     _railTile(d, d.id == selectedId),
                 ],
@@ -2932,13 +3009,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _railTile(_NavDest d, bool selected) {
     final scheme = Theme.of(context).colorScheme;
+    final label = _navLabel(AppLocalizations.of(context), d.id);
     // Expose selection to assistive tech — color/weight alone don't tell a
     // screen-reader user which section is current (the NavigationBar path
     // gets this for free; the hand-rolled rail must opt in).
     return Semantics(
       selected: selected,
       button: true,
-      label: d.label,
+      label: label,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         child: Material(
@@ -2960,7 +3038,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      d.label,
+                      label,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 14,
@@ -2984,6 +3062,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// Narrow-screen bottom navigation: the primary sections plus a "More"
   /// entry that opens a sheet with the secondary sections + Settings.
   Widget _buildBottomBar() {
+    final l = AppLocalizations.of(context);
     final dests = _destinations;
     final primary = dests.where((d) => d.tier == NavTier.primary).toList();
     final current =
@@ -3003,14 +3082,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       },
       destinations: [
         for (final d in primary)
-          NavigationDestination(icon: Icon(d.icon), label: d.shortLabel),
-        const NavigationDestination(
-            icon: Icon(Icons.more_horiz), label: 'More'),
+          NavigationDestination(
+              icon: Icon(d.icon), label: _navShortLabel(l, d.id)),
+        NavigationDestination(icon: const Icon(Icons.more_horiz), label: l.navMore),
       ],
     );
   }
 
   void _openMoreSheet() {
+    final l = AppLocalizations.of(context);
     final secondary =
         _destinations.where((d) => d.tier == NavTier.secondary).toList();
     showModalBottomSheet<void>(
@@ -3023,7 +3103,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             for (final d in secondary)
               ListTile(
                 leading: Icon(d.icon, color: d.accent),
-                title: Text(d.label),
+                title: Text(_navLabel(l, d.id)),
                 onTap: () {
                   Navigator.of(sheetCtx).pop();
                   _goToNav(d.id);

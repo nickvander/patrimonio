@@ -1,0 +1,39 @@
+{
+  "@@locale": "en",
+  "appTitle": "Patrimonio",
+  "navOverview": "Overview",
+  "navPortfolio": "Portfolio",
+  "navTransactions": "Transactions",
+  "navCashFlow": "Cash flow",
+  "navProjections": "Projections",
+  "navTaxPlanning": "Tax planning",
+  "navLending": "Lending",
+  "navSettings": "Settings",
+  "navShortOverview": "Home",
+  "navShortPortfolio": "Invest",
+  "navShortTransactions": "Activity",
+  "navShortCashFlow": "Cash",
+  "navShortProjections": "Proj.",
+  "navShortTaxPlanning": "Tax",
+  "navShortLending": "Loans",
+  "navShortSettings": "Settings",
+  "navMore": "More",
+  "navMoreGroup": "MORE",
+  "actionAdd": "Add",
+  "actionCancel": "Cancel",
+  "actionSave": "Save",
+  "actionApply": "Apply",
+  "actionDelete": "Delete",
+  "actionClose": "Close",
+  "searchTransactionsHint": "Search transactions…",
+  "languageLabel": "Language",
+  "languageEnglish": "English",
+  "languageSpanish": "Español",
+  "currencyToggleTooltip": "Reporting in {code} · tap to swap",
+  "@currencyToggleTooltip": {
+    "description": "Tooltip on the reporting-currency toggle button",
+    "placeholders": {
+      "code": { "type": "String", "example": "MXN" }
+    }
+  }
+}

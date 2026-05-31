@@ -15,11 +15,18 @@ class AddTransactionDialog extends StatefulWidget {
   final ApiService apiService;
   final VoidCallback onCreated;
 
+  /// Category suggestions surfaced via autocomplete on the Category field.
+  /// These are hints only — a free-typed value not in the list is still
+  /// accepted. The call site supplies the list; defaults to empty so the
+  /// dialog compiles/renders fine when no suggestions are wired.
+  final List<String> categorySuggestions;
+
   const AddTransactionDialog({
     super.key,
     required this.accounts,
     required this.apiService,
     required this.onCreated,
+    this.categorySuggestions = const [],
   });
 
   @override
@@ -27,9 +34,11 @@ class AddTransactionDialog extends StatefulWidget {
 }
 
 class _AddTransactionDialogState extends State<AddTransactionDialog> {
+  final _formKey = GlobalKey<FormState>();
   final _descController = TextEditingController();
   final _amountController = TextEditingController();
   final _categoryController = TextEditingController();
+  final _categoryFocus = FocusNode();
   final _notesController = TextEditingController();
   DateTime _date = DateTime.now();
   bool _isExpense = true;
@@ -55,6 +64,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     _descController.dispose();
     _amountController.dispose();
     _categoryController.dispose();
+    _categoryFocus.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -72,20 +82,10 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   Future<void> _submit() async {
     final account = _selectedAccount();
     if (account == null) return;
+    // Inline validation lives on the TextFormFields now; gate submit on it.
+    if (!(_formKey.currentState?.validate() ?? false)) return;
     final desc = _descController.text.trim();
-    if (desc.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Description is required')),
-      );
-      return;
-    }
-    final raw = double.tryParse(_amountController.text.trim());
-    if (raw == null || raw <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a positive amount')),
-      );
-      return;
-    }
+    final raw = double.parse(_amountController.text.trim());
     // App convention: expense = negative, income = positive.
     final signed = _isExpense ? -raw : raw;
     final currency =
@@ -133,7 +133,9 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
         child: SingleChildScrollView(
-          child: Column(
+          child: Form(
+            key: _formKey,
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -189,7 +191,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                 children: [
                   Expanded(
                     flex: 2,
-                    child: TextField(
+                    child: TextFormField(
                       controller: _amountController,
                       keyboardType: const TextInputType.numberWithOptions(
                           decimal: true),
@@ -203,6 +205,12 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                         border: const OutlineInputBorder(),
                         isDense: true,
                       ),
+                      validator: (v) {
+                        final raw = double.tryParse((v ?? '').trim());
+                        if (raw == null) return 'Enter an amount';
+                        if (raw <= 0) return 'Enter a positive amount';
+                        return null;
+                      },
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -232,7 +240,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                 ],
               ),
               const SizedBox(height: 12),
-              TextField(
+              TextFormField(
                 controller: _descController,
                 decoration: const InputDecoration(
                   labelText: 'Description',
@@ -241,17 +249,11 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                   isDense: true,
                 ),
                 textCapitalization: TextCapitalization.sentences,
+                validator: (v) =>
+                    (v ?? '').trim().isEmpty ? 'Description is required' : null,
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: _categoryController,
-                decoration: const InputDecoration(
-                  labelText: 'Category (optional)',
-                  hintText: 'e.g. Restaurants',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
+              _buildCategoryField(),
               const SizedBox(height: 12),
               TextField(
                 controller: _notesController,
@@ -263,6 +265,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                 maxLines: 2,
               ),
             ],
+          ),
           ),
         ),
       ),
@@ -283,6 +286,67 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
               : const Text('Add'),
         ),
       ],
+    );
+  }
+
+  /// Category input with type-ahead suggestions. Backed by
+  /// [RawAutocomplete] so we can keep the existing [InputDecoration]/
+  /// validator and reuse [_categoryController] — the same controller the
+  /// submit path reads — as the field's text source. Suggestions are hints
+  /// only: a free-typed value not in the list is still accepted.
+  Widget _buildCategoryField() {
+    return RawAutocomplete<String>(
+      textEditingController: _categoryController,
+      focusNode: _categoryFocus,
+      optionsBuilder: (TextEditingValue value) {
+        final query = value.text.trim().toLowerCase();
+        if (query.isEmpty) return widget.categorySuggestions;
+        return widget.categorySuggestions.where(
+          (s) => s.toLowerCase().contains(query),
+        );
+      },
+      fieldViewBuilder:
+          (context, controller, focusNode, onFieldSubmitted) {
+        return TextFormField(
+          controller: controller,
+          focusNode: focusNode,
+          decoration: const InputDecoration(
+            labelText: 'Category (optional)',
+            hintText: 'e.g. Restaurants',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+          onFieldSubmitted: (_) => onFieldSubmitted(),
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        final opts = options.toList();
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 200, maxWidth: 420),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: opts.length,
+                itemBuilder: (context, index) {
+                  final option = opts[index];
+                  return InkWell(
+                    onTap: () => onSelected(option),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
+                      child: Text(option),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

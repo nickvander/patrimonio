@@ -1,6 +1,7 @@
 import 'dart:js_interop';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'l10n/app_localizations.dart';
 import 'screens/auth_gate.dart';
 import 'services/preferences.dart';
 import 'theme/palette.dart';
@@ -11,6 +12,17 @@ import 'theme/typography.dart';
 /// anywhere without threading a callback through every screen.
 final ValueNotifier<ThemeMode> themeModeNotifier =
     ValueNotifier(_loadInitialThemeMode());
+
+/// Notifies the app when the user changes language. Null = follow the
+/// device locale (among supported locales). Same module-scope pattern as
+/// [themeModeNotifier] so a toggle anywhere can set it.
+final ValueNotifier<Locale?> localeNotifier =
+    ValueNotifier(_loadInitialLocale());
+
+Locale? _loadInitialLocale() {
+  final code = Preferences.getLocale();
+  return code == null ? null : Locale(code);
+}
 
 ThemeMode _loadInitialThemeMode() {
   switch (Preferences.getThemeMode()) {
@@ -75,19 +87,27 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: themeModeNotifier,
       builder: (ctx, mode, _) {
-        return MaterialApp(
-          title: 'Patrimonio',
-          debugShowCheckedModeBanner: false,
-          themeMode: mode,
-          theme: _buildLightTheme(),
-          darkTheme: _buildDarkTheme(),
-          // Material animates ThemeData chrome over 200ms by default;
-          // 360ms with easeInOutCubic feels less jarring when the user
-          // flips brightness and gives non-themed widgets time to fade
-          // out (see _ThemeCrossFade in dashboard_screen.dart).
-          themeAnimationDuration: const Duration(milliseconds: 360),
-          themeAnimationCurve: Curves.easeInOutCubic,
-          home: const AuthGate(),
+        return ValueListenableBuilder<Locale?>(
+          valueListenable: localeNotifier,
+          builder: (ctx2, locale, __) {
+            return MaterialApp(
+              title: 'Patrimonio',
+              debugShowCheckedModeBanner: false,
+              themeMode: mode,
+              theme: _buildLightTheme(),
+              darkTheme: _buildDarkTheme(),
+              // Material animates ThemeData chrome over 200ms by default;
+              // 360ms with easeInOutCubic feels less jarring when the user
+              // flips brightness and gives non-themed widgets time to fade
+              // out (see _ThemeCrossFade in dashboard_screen.dart).
+              themeAnimationDuration: const Duration(milliseconds: 360),
+              themeAnimationCurve: Curves.easeInOutCubic,
+              locale: locale,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: const AuthGate(),
+            );
+          },
         );
       },
     );
