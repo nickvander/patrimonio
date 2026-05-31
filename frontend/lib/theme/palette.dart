@@ -21,18 +21,49 @@ class BrandPalette {
   const BrandPalette._();
 
   // ---------------------------------------------------------------------------
-  // Brand seed
+  // Brand seed — agave / Oaxacan jade
+  //
+  // The brand moved off the generic Rocket-Money neon emerald (#00E676 /
+  // #00A352) onto a deeper "agave jade" that reads as money/growth AND
+  // Mexican-craft heritage. The field names keep the historical
+  // `emerald*` spelling so the ~165 call sites don't churn, but the values
+  // are now jade. See work/ux/market_research.md §3.
   // ---------------------------------------------------------------------------
 
-  /// Vivid neon emerald — the brand signature in dark mode.
-  static const Color emeraldDark = Color(0xFF00E676);
+  /// Bright agave jade — the brand signature in dark mode. ~8.8:1 on the
+  /// dark card surface.
+  static const Color emeraldDark = Color(0xFF3FD3AE);
 
-  /// Darker variant for foreground use on white. ~4.66:1 on #FFFFFF.
-  static const Color emeraldLight = Color(0xFF00A352);
+  /// Deep agave jade for foreground use on white. Darkened from the
+  /// research #0E7C66 (5.13:1 on white but only 3.97:1 on the light
+  /// tooltip surface used in dark mode) to #0C6A56 — 6.54:1 on white,
+  /// 5.06:1 on the tooltip bg — so it clears AA in both placements.
+  static const Color emeraldLight = Color(0xFF0C6A56);
 
   /// Seed used to derive the Material 3 ColorScheme for each brightness.
   static Color seed(Brightness brightness) =>
       brightness == Brightness.dark ? emeraldDark : emeraldLight;
+
+  // ---------------------------------------------------------------------------
+  // Heritage accents (secondary / tertiary)
+  //
+  // Warm terracotta (bicultural craft, MX-side, CTAs) and heritage gold
+  // (totals/milestones, used sparingly). Set as ColorScheme
+  // secondary/tertiary in main.dart. The light variants are darkened from
+  // the raw research hexes so they clear AA as foreground text if used that
+  // way — see the changelog for the before/after.
+  // ---------------------------------------------------------------------------
+
+  /// Warm terracotta accent. Light is darkened from the research #C2683C
+  /// (3.93:1, below AA) to #A8542C (5.29:1) so it's safe as a foreground.
+  static Color terracotta(Brightness b) =>
+      b == Brightness.dark ? const Color(0xFFE08A57) : const Color(0xFFA8542C);
+
+  /// Heritage gold — patrimony/milestone accent, used sparingly. Light is
+  /// darkened from the research #C79A3A (2.59:1, far below AA) to #8C6A1C
+  /// (5.01:1) so totals rendered in gold stay readable on white.
+  static Color gold(Brightness b) =>
+      b == Brightness.dark ? const Color(0xFFE3B85A) : const Color(0xFF8C6A1C);
 
   // ---------------------------------------------------------------------------
   // Semantic accents
@@ -42,24 +73,25 @@ class BrandPalette {
   // The dark variant keeps the neon character that the app already had.
   // ---------------------------------------------------------------------------
 
-  /// Positive / gain / income / "go" colour.
-  ///
-  /// Light variant is darker so it passes AA on white AND on the dark
-  /// tooltip surface (used in dark mode for tooltip text).
+  /// Positive / gain / income / "go" colour. Gains *are* the brand, so this
+  /// is the jade seed itself — bright jade in dark, deep agave in light.
+  /// Light variant passes AA on white AND on the dark tooltip surface.
   static Color positive(Brightness b) =>
-      b == Brightness.dark ? const Color(0xFF00E676) : const Color(0xFF006B38);
+      b == Brightness.dark ? const Color(0xFF3FD3AE) : const Color(0xFF0C6A56);
 
-  /// Negative / loss / spending / "stop" colour.
+  /// Negative / loss / spending / "stop" colour. Warm brick red (not pure
+  /// neon red) so losses sit in the heritage family.
   static Color negative(Brightness b) =>
-      b == Brightness.dark ? const Color(0xFFFF5252) : const Color(0xFFA32614);
+      b == Brightness.dark ? const Color(0xFFFF6B5C) : const Color(0xFFB23A2E);
 
-  /// Warning / over-budget / amber.
+  /// Warning / over-budget / amber. Light darkened from research #B5701A
+  /// (3.96:1, below AA) to #9A5F12 (5.22:1) to clear AA on white.
   static Color warning(Brightness b) =>
-      b == Brightness.dark ? const Color(0xFFFFB300) : const Color(0xFF8F5600);
+      b == Brightness.dark ? const Color(0xFFF2B544) : const Color(0xFF9A5F12);
 
-  /// Info / blue / cash.
+  /// Info / blue / cash — muted lake blue.
   static Color info(Brightness b) =>
-      b == Brightness.dark ? const Color(0xFF00B0FF) : const Color(0xFF006FBA);
+      b == Brightness.dark ? const Color(0xFF5BB4E8) : const Color(0xFF2A6F9E);
 
   /// Teal — secondary positive (cash flow income, stocks chip).
   static Color teal(Brightness b) =>
@@ -116,18 +148,21 @@ class BrandPalette {
   // Surfaces (M3 tonal layers, hand-picked to match the existing theme)
   // ---------------------------------------------------------------------------
 
-  /// Card surface — pure white in light, charcoal in dark.
+  /// Card surface — pure white in light; a charcoal with a green undertone
+  /// in dark (#1A201E) rather than the old cool blue-gray #1A1A24, so cards
+  /// sit in the warm green-black neutral ramp.
   static Color cardSurface(Brightness b) =>
-      b == Brightness.dark ? const Color(0xFF1A1A24) : Colors.white;
+      b == Brightness.dark ? const Color(0xFF1A201E) : Colors.white;
 
-  /// Slightly raised tonal layer (used for menus, inputs, sub-cards).
+  /// Slightly raised tonal layer (menus, inputs, sub-cards). Light moves to
+  /// "warm bone" (#F2EFE9) — the paper/ledger signal — instead of cool gray.
   static Color elevatedSurface(Brightness b) =>
-      b == Brightness.dark ? const Color(0xFF2A2A35) : const Color(0xFFEEF0F4);
+      b == Brightness.dark ? const Color(0xFF262E2B) : const Color(0xFFF2EFE9);
 
-  /// Scaffold background. Light has a hint of cool chroma so the white
-  /// cards have somewhere to "sit"; pure white-on-white merges everything.
+  /// Scaffold background. Light is warm parchment (#F6F3EC) so the white
+  /// cards sit on warmth; dark is a near-black warm green-black (#10140F).
   static Color scaffoldBackground(Brightness b) =>
-      b == Brightness.dark ? const Color(0xFF101016) : const Color(0xFFEFF1F5);
+      b == Brightness.dark ? const Color(0xFF10140F) : const Color(0xFFF6F3EC);
 }
 
 // =============================================================================

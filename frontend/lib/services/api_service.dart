@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'api_platform.dart';
 import 'auth_service.dart';
+import 'response_cache.dart';
 
 /// Thrown when the server returns 401. The auth gate listens for this
 /// indirectly via AuthService.handleUnauthorized().
@@ -58,6 +59,44 @@ class ApiService {
     return {..._csrfHeader, ...extra};
   }
 
+  /// Short-TTL stale-while-revalidate cache for the heavy idempotent GET
+  /// dashboard reads. Shared across every ApiService instance (the app
+  /// constructs more than one) so a refresh from any caller benefits the
+  /// rest. See `response_cache.dart` for the correctness model.
+  ///
+  /// WHY a cache: `dashboard_screen._loadAllData()` fires a ~15-endpoint
+  /// `Future.wait` on EVERY reload (sub-screen return, realtime event,
+  /// post-mutation refresh). Without caching, a single transaction rename
+  /// re-pulled holdings, net-worth history, allocation, trends, etc. The
+  /// cache collapses redundant reads inside the TTL window and de-dupes
+  /// concurrent identical GETs into one network call.
+  static final ResponseCache _cache = ResponseCache();
+
+  /// Cache-key namespace prefix. `clearDashboardCache` / mutation
+  /// invalidation operate on this whole family.
+  static const String _dashKeyPrefix = 'dash:';
+
+  /// Drop every cached dashboard read. Called by ANY mutation in this
+  /// service — the simplest provably-safe invalidation strategy for a
+  /// finance app: after a write we never want to serve a pre-write value.
+  static void clearDashboardCache() => _cache.clear();
+
+  /// Run a GET through the cache. [key] is namespaced under
+  /// [_dashKeyPrefix]. [forceRefresh] bypasses any cached value and
+  /// awaits a fresh fetch (used by realtime-triggered + explicit
+  /// user-initiated refreshes so they never serve stale finance data).
+  Future<T> _cachedGet<T>(
+    String key,
+    Future<T> Function() fetch, {
+    bool forceRefresh = false,
+  }) {
+    return _cache.getOrFetch<T>(
+      '$_dashKeyPrefix$key',
+      fetch,
+      forceRefresh: forceRefresh,
+    );
+  }
+
   Future<http.Response> _get(Uri uri) async {
     final res = await _client.get(uri);
     _maybeUnauthorized(res);
@@ -67,25 +106,41 @@ class ApiService {
   Future<http.Response> _post(Uri uri, {Object? body, Map<String, String>? headers}) async {
     final res = await _client.post(uri, body: body, headers: _withCsrf(headers));
     _maybeUnauthorized(res);
+    _invalidateAfterMutation(res);
     return res;
   }
 
   Future<http.Response> _patch(Uri uri, {Object? body, Map<String, String>? headers}) async {
     final res = await _client.patch(uri, body: body, headers: _withCsrf(headers));
     _maybeUnauthorized(res);
+    _invalidateAfterMutation(res);
     return res;
   }
 
   Future<http.Response> _put(Uri uri, {Object? body, Map<String, String>? headers}) async {
     final res = await _client.put(uri, body: body, headers: _withCsrf(headers));
     _maybeUnauthorized(res);
+    _invalidateAfterMutation(res);
     return res;
   }
 
   Future<http.Response> _delete(Uri uri) async {
     final res = await _client.delete(uri, headers: _csrfHeader);
     _maybeUnauthorized(res);
+    _invalidateAfterMutation(res);
     return res;
+  }
+
+  /// Clear the dashboard cache after any non-error mutation. Centralising
+  /// the invalidation in the verb wrappers (rather than sprinkling it
+  /// through ~30 call sites) is what makes "every mutation invalidates"
+  /// provable: a POST/PUT/PATCH/DELETE that succeeded cannot leave a
+  /// pre-write value cached. We skip 4xx/5xx so a rejected request (which
+  /// changed nothing) doesn't needlessly blow away warm cache entries.
+  void _invalidateAfterMutation(http.Response res) {
+    if (res.statusCode >= 200 && res.statusCode < 400) {
+      clearDashboardCache();
+    }
   }
 
   void _maybeUnauthorized(http.Response res) {
@@ -204,13 +259,20 @@ class ApiService {
   /// Mint a new invite token. Authenticated. Returns the plaintext
   /// token + a shareable URL (`<frontend>/?invite=<token>`) + the
   /// absolute expiry time in ISO 8601.
-  Future<InviteMint> createInvite({int? expiresInHours, String? note}) async {
+  Future<InviteMint> createInvite({
+    int? expiresInHours,
+    String? note,
+    String? role,
+  }) async {
     final res = await _client.post(
       Uri.parse('$_baseUrl/auth/invites'),
       headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({
         if (expiresInHours != null) 'expires_in_hours': expiresInHours,
         if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+        // 'owner' or 'read_only'. Omitted → backend defaults to 'owner',
+        // preserving the historical invite contract.
+        if (role != null) 'role': role,
       }),
     );
     _maybeUnauthorized(res);
@@ -401,90 +463,112 @@ class ApiService {
 
   // ----- existing endpoints (now credentialed) -----
 
-  Future<Map<String, dynamic>> getDashboardOverview() async {
-    final response = await _get(Uri.parse('$_baseUrl/dashboard/overview'));
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    }
-    throw Exception('Failed to load dashboard overview');
+  Future<Map<String, dynamic>> getDashboardOverview({
+    bool forceRefresh = false,
+  }) {
+    return _cachedGet('overview', () async {
+      final response = await _get(Uri.parse('$_baseUrl/dashboard/overview'));
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+      throw Exception('Failed to load dashboard overview');
+    }, forceRefresh: forceRefresh);
   }
 
-  Future<List<dynamic>> getNetWorthHistory() async {
-    final response = await _get(
-      Uri.parse('$_baseUrl/dashboard/net-worth-history'),
-    );
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    }
-    throw Exception('Failed to load net worth history');
+  Future<List<dynamic>> getNetWorthHistory({bool forceRefresh = false}) {
+    return _cachedGet('net-worth-history', () async {
+      final response = await _get(
+        Uri.parse('$_baseUrl/dashboard/net-worth-history'),
+      );
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as List<dynamic>;
+      }
+      throw Exception('Failed to load net worth history');
+    }, forceRefresh: forceRefresh);
   }
 
-  Future<List<dynamic>> getAllocationData() async {
-    final response = await _get(Uri.parse('$_baseUrl/dashboard/allocation'));
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    }
-    throw Exception('Failed to load allocation data');
+  Future<List<dynamic>> getAllocationData({bool forceRefresh = false}) {
+    return _cachedGet('allocation', () async {
+      final response = await _get(Uri.parse('$_baseUrl/dashboard/allocation'));
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as List<dynamic>;
+      }
+      throw Exception('Failed to load allocation data');
+    }, forceRefresh: forceRefresh);
   }
 
-  Future<List<dynamic>> getTrendData() async {
-    final response = await _get(Uri.parse('$_baseUrl/dashboard/trends'));
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    }
-    throw Exception('Failed to load trend data');
+  Future<List<dynamic>> getTrendData({bool forceRefresh = false}) {
+    return _cachedGet('trends', () async {
+      final response = await _get(Uri.parse('$_baseUrl/dashboard/trends'));
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as List<dynamic>;
+      }
+      throw Exception('Failed to load trend data');
+    }, forceRefresh: forceRefresh);
   }
 
-  Future<Map<String, dynamic>> getHoldings() async {
-    final response = await _get(Uri.parse('$_baseUrl/dashboard/holdings'));
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    }
-    throw Exception('Failed to load holdings');
+  Future<Map<String, dynamic>> getHoldings({bool forceRefresh = false}) {
+    return _cachedGet('holdings', () async {
+      final response = await _get(Uri.parse('$_baseUrl/dashboard/holdings'));
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+      throw Exception('Failed to load holdings');
+    }, forceRefresh: forceRefresh);
   }
 
-  Future<List<dynamic>> getCreditUtilization() async {
-    final response = await _get(
-      Uri.parse('$_baseUrl/dashboard/credit-utilization'),
-    );
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    }
-    throw Exception('Failed to load credit utilization');
+  Future<List<dynamic>> getCreditUtilization({bool forceRefresh = false}) {
+    return _cachedGet('credit-utilization', () async {
+      final response = await _get(
+        Uri.parse('$_baseUrl/dashboard/credit-utilization'),
+      );
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as List<dynamic>;
+      }
+      throw Exception('Failed to load credit utilization');
+    }, forceRefresh: forceRefresh);
   }
 
-  Future<List<dynamic>> getSyncStatus() async {
-    final response = await _get(Uri.parse('$_baseUrl/dashboard/sync-status'));
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    }
-    throw Exception('Failed to load sync status');
+  Future<List<dynamic>> getSyncStatus({bool forceRefresh = false}) {
+    return _cachedGet('sync-status', () async {
+      final response = await _get(Uri.parse('$_baseUrl/dashboard/sync-status'));
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as List<dynamic>;
+      }
+      throw Exception('Failed to load sync status');
+    }, forceRefresh: forceRefresh);
   }
 
   /// Summary of "what changed since your previous login" — used by the
   /// dismissible Overview banner. Returns null when the user has no
   /// previous login (first session ever), so the caller can skip rendering.
-  Future<Map<String, dynamic>?> getSinceLastLogin() async {
-    final response = await _get(
-      Uri.parse('$_baseUrl/dashboard/since-last-login'),
-    );
-    if (response.statusCode != 200) return null;
-    final body = json.decode(response.body) as Map<String, dynamic>;
-    // Backend signals "no previous login" by omitting `previous_login_at`.
-    if (body['previous_login_at'] == null) return null;
-    return body;
+  Future<Map<String, dynamic>?> getSinceLastLogin({
+    bool forceRefresh = false,
+  }) {
+    return _cachedGet('since-last-login', () async {
+      final response = await _get(
+        Uri.parse('$_baseUrl/dashboard/since-last-login'),
+      );
+      if (response.statusCode != 200) return null;
+      final body = json.decode(response.body) as Map<String, dynamic>;
+      // Backend signals "no previous login" by omitting `previous_login_at`.
+      if (body['previous_login_at'] == null) return null;
+      return body;
+    }, forceRefresh: forceRefresh);
   }
 
   /// List every dismissed subscription merchant. Returned shape:
   /// `[{merchant_key, ignored_at}, ...]`.
-  Future<List<dynamic>> getIgnoredSubscriptions() async {
-    final response = await _get(
-      Uri.parse('$_baseUrl/dashboard/subscriptions/ignored'),
-    );
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    }
-    throw Exception('Failed to load ignored subscriptions');
+  Future<List<dynamic>> getIgnoredSubscriptions({bool forceRefresh = false}) {
+    return _cachedGet('subscriptions/ignored', () async {
+      final response = await _get(
+        Uri.parse('$_baseUrl/dashboard/subscriptions/ignored'),
+      );
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as List<dynamic>;
+      }
+      throw Exception('Failed to load ignored subscriptions');
+    }, forceRefresh: forceRefresh);
   }
 
   /// Un-ignore: lets the detector resurface this merchant on the
@@ -515,27 +599,31 @@ class ApiService {
 
   /// Detected recurring outflows (subscriptions, bills, gym, etc.).
   /// See `dashboard.rs::detected_subscriptions` for the heuristic.
-  Future<List<dynamic>> getSubscriptions() async {
-    final response = await _get(
-      Uri.parse('$_baseUrl/dashboard/subscriptions'),
-    );
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    }
-    throw Exception('Failed to load subscriptions');
+  Future<List<dynamic>> getSubscriptions({bool forceRefresh = false}) {
+    return _cachedGet('subscriptions', () async {
+      final response = await _get(
+        Uri.parse('$_baseUrl/dashboard/subscriptions'),
+      );
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as List<dynamic>;
+      }
+      throw Exception('Failed to load subscriptions');
+    }, forceRefresh: forceRefresh);
   }
 
   /// Linked cross-currency cash transfers. Each row pairs a USD-out
   /// with an MXN-in (or reverse) plus the implied FX rate Wise/Remitly
   /// gave the user.
-  Future<List<dynamic>> getFxTransfers() async {
-    final response = await _get(
-      Uri.parse('$_baseUrl/dashboard/fx-transfers'),
-    );
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    }
-    throw Exception('Failed to load FX transfers');
+  Future<List<dynamic>> getFxTransfers({bool forceRefresh = false}) {
+    return _cachedGet('fx-transfers', () async {
+      final response = await _get(
+        Uri.parse('$_baseUrl/dashboard/fx-transfers'),
+      );
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as List<dynamic>;
+      }
+      throw Exception('Failed to load FX transfers');
+    }, forceRefresh: forceRefresh);
   }
 
   /// Run a detection pass on the server. Returns
@@ -741,6 +829,10 @@ class ApiService {
 
       final response = await http.Response.fromStream(streamedResponse);
       if (response.statusCode == 200) {
+        // Multipart upload bypasses the _post/_patch verb wrappers, so the
+        // central post-mutation invalidation doesn't fire here — clear by
+        // hand. A successful import changes balances, holdings, txns, etc.
+        clearDashboardCache();
         return json.decode(response.body) as Map<String, dynamic>;
       }
       // Payload-too-large surfaces as a real 413 OR (more often
@@ -881,6 +973,8 @@ class ApiService {
       _maybeUnauthorized(response);
 
       if (response.statusCode == 200) {
+        // See uploadStatements: multipart bypasses the verb wrappers.
+        clearDashboardCache();
         return json.decode(response.body) as Map<String, dynamic>;
       } else {
         throw Exception(
@@ -1269,12 +1363,14 @@ class ApiService {
     throw Exception('Failed to load loans');
   }
 
-  Future<Map<String, dynamic>> getLoansSummary() async {
-    final response = await _get(Uri.parse('$_baseUrl/loans/summary'));
-    if (response.statusCode == 200) {
-      return json.decode(response.body) as Map<String, dynamic>;
-    }
-    throw Exception('Failed to load loans summary');
+  Future<Map<String, dynamic>> getLoansSummary({bool forceRefresh = false}) {
+    return _cachedGet('loans/summary', () async {
+      final response = await _get(Uri.parse('$_baseUrl/loans/summary'));
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+      throw Exception('Failed to load loans summary');
+    }, forceRefresh: forceRefresh);
   }
 
   Future<List<dynamic>> getLoanPeople() async {
@@ -1448,10 +1544,14 @@ class ApiService {
   /// Upcoming + overdue installments for the notifications bell. Each
   /// item: {loan_id, payment_id, borrower_name, amount, currency,
   /// due_date, installment_number, days_until, days_overdue}.
-  Future<List<dynamic>> getLoanReminders() async {
-    final response = await _get(Uri.parse('$_baseUrl/loans/reminders'));
-    if (response.statusCode == 200) return json.decode(response.body);
-    throw Exception('Failed to load loan reminders');
+  Future<List<dynamic>> getLoanReminders({bool forceRefresh = false}) {
+    return _cachedGet('loans/reminders', () async {
+      final response = await _get(Uri.parse('$_baseUrl/loans/reminders'));
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as List<dynamic>;
+      }
+      throw Exception('Failed to load loan reminders');
+    }, forceRefresh: forceRefresh);
   }
 
   /// Unlink (un-reconcile) a recorded repayment. The bank transaction

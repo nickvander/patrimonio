@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import '../utils/supported_banks.dart';
 import '../utils/theme_colors.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/api_service.dart';
@@ -221,8 +222,54 @@ class _ImportScreenState extends State<ImportScreen> {
     }
   }
 
+  /// Backend caps the multipart body at 100 MB (DefaultBodyLimit in
+  /// api/imports.rs). Preflight against that here so a too-large batch
+  /// fails instantly with a clear message instead of streaming the
+  /// whole payload up to a 413. Headroom left for multipart framing.
+  static const int _maxUploadBytes = 100 * 1024 * 1024;
+  static const int _uploadWarnBytes = 90 * 1024 * 1024;
+
   Future<void> _uploadFile() async {
     if (_selectedFiles.isEmpty) return;
+
+    // Preflight: total payload size. PlatformFile.size is the byte
+    // length read by the picker/drop reader.
+    final totalBytes =
+        _selectedFiles.fold<int>(0, (sum, f) => sum + f.size);
+    if (totalBytes > _maxUploadBytes) {
+      final totalMb = (totalBytes / (1024 * 1024)).toStringAsFixed(1);
+      setState(() {
+        _message =
+            'These ${_selectedFiles.length} files total $totalMb MB, over the '
+            '100 MB upload limit. Remove some files and import them in '
+            'separate batches.';
+      });
+      return;
+    }
+    if (totalBytes > _uploadWarnBytes && mounted) {
+      final totalMb = (totalBytes / (1024 * 1024)).toStringAsFixed(1);
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Large upload'),
+          content: Text(
+            'This batch is $totalMb MB — close to the 100 MB limit. Large '
+            'uploads can be slow and may be rejected. Import anyway?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Import anyway'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true) return;
+    }
 
     setState(() {
       _isUploading = true;
@@ -359,9 +406,10 @@ class _ImportScreenState extends State<ImportScreen> {
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Upload CSV or PDF statements from Nu Mexico, Banamex, or Cetesdirecto. We will automatically detect the format.',
-              style: TextStyle(color: Colors.grey),
+            Text(
+              'Upload CSV or PDF statements from ${supportedMxBanksSentence()}. '
+              'We will automatically detect the format.',
+              style: const TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 32),
             if (_previewTransactions == null)

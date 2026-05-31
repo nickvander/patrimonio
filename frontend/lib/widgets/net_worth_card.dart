@@ -3,6 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../components/date_range_selector.dart';
 import '../services/preferences.dart';
+import '../theme/typography.dart';
 import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
@@ -177,12 +178,13 @@ class _NetWorthCardState extends State<NetWorthCard> {
       children: [
         Text(
           'Total net worth ($reportingCurrency)',
-          style: TextStyle(
-            color: context.textMuted,
+          // Fraunces section label — the small heritage/estate cue above
+          // the hero number, kept understated (the big number is the star).
+          style: brandSectionTitleStyle(
             fontSize: 14,
-            fontWeight: FontWeight.w500,
-            letterSpacing: 0.5,
-          ),
+            fontWeight: FontWeight.w600,
+            color: context.textMuted,
+          ).copyWith(letterSpacing: 0.3),
         ),
         const SizedBox(height: 4),
         // FittedBox shrinks the hero number down rather than ellipsing
@@ -193,11 +195,13 @@ class _NetWorthCardState extends State<NetWorthCard> {
           alignment: Alignment.centerLeft,
           child: Text(
             currencyFormat.format(netWorth),
-            style: TextStyle(
+            // Fraunces display face with tabular lining figures — the
+            // signature "ledger" hero number. Tabular figures keep digit
+            // columns aligned as the value changes.
+            style: brandDisplayStyle(
               fontSize: isCompact ? 32 : 42,
               fontWeight: FontWeight.w900,
               color: context.textPrimary,
-              fontFeatures: const [FontFeature.tabularFigures()],
             ),
             maxLines: 1,
           ),
@@ -227,9 +231,17 @@ class _NetWorthCardState extends State<NetWorthCard> {
             children: sourceBreakdown.map((item) {
               final currency = (item['currency'] ?? '').toString();
               final net = ((item['net'] ?? 0.0) as num).toDouble();
+              // Each chip is one currency's net held in native units (e.g.
+              // "$12,400.00" of USD-denominated holdings, "MX$80,000.00"
+              // of MXN). The symbol already names the currency, so no
+              // trailing label is needed.
               return Text(
-                '${formatCurrencyAmount(net, currency)} source',
-                style: TextStyle(color: context.textSubtle, fontSize: 11),
+                formatCurrencyAmount(net, currency),
+                style: TextStyle(
+                  color: context.textSubtle,
+                  fontSize: 11,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               );

@@ -1,6 +1,37 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../utils/theme_colors.dart';
 import '../services/api_service.dart';
+
+/// Per-exchange copy for the credential dialog. Keyed by the integration
+/// type string the dialog is opened with. Keeping label, docs URL, and the
+/// example display-name together here means adding Coinbase (or any future
+/// exchange) is a one-entry change instead of hunting hardcoded "Bitso"
+/// strings through the build method.
+class _ExchangeInfo {
+  final String label;
+  final Uri apiDocsUrl;
+  final String exampleName;
+  const _ExchangeInfo({
+    required this.label,
+    required this.apiDocsUrl,
+    required this.exampleName,
+  });
+}
+
+final Map<String, _ExchangeInfo> _exchangeInfo = {
+  'bitso': _ExchangeInfo(
+    label: 'Bitso',
+    apiDocsUrl: Uri.parse('https://bitso.com/api_info'),
+    exampleName: 'My Bitso',
+  ),
+  'coinbase': _ExchangeInfo(
+    label: 'Coinbase',
+    apiDocsUrl:
+        Uri.parse('https://docs.cdp.coinbase.com/coinbase-app/docs/auth/api-key-authentication'),
+    exampleName: 'My Coinbase',
+  ),
+};
 
 class AddCryptoDialog extends StatefulWidget {
   final String exchange; // 'coinbase' or 'bitso'
@@ -27,10 +58,54 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
 
   bool _isLoading = false;
 
+  // Falls back to Bitso's copy for an unknown exchange so the dialog never
+  // renders blank labels; today only bitso/coinbase are wired.
+  _ExchangeInfo get _info => _exchangeInfo[widget.exchange] ?? _exchangeInfo['bitso']!;
+
   @override
   void initState() {
     super.initState();
-    _nameController.text = widget.exchange == 'coinbase' ? 'Coinbase' : 'Bitso';
+    _nameController.text = _info.label;
+  }
+
+  Future<void> _openApiDocs() async {
+    final url = _info.apiDocsUrl;
+    // launchUrl can throw if no handler is registered; surface a hint with
+    // the URL as selectable text rather than failing silently — the whole
+    // point of this link is to be trustworthy on a credential screen.
+    try {
+      final ok = await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (!ok) throw Exception('no handler');
+    } catch (_) {
+      if (!mounted) return;
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text('${_info.label} API keys'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Generate a Read-Only API key in your ${_info.label} '
+                'settings, then paste it here. Open:',
+              ),
+              const SizedBox(height: 8),
+              SelectableText(
+                url.toString(),
+                style: TextStyle(color: context.info),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Future<void> _submit() async {
@@ -87,7 +162,7 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
             color: accentColor,
           ),
           const SizedBox(width: 12),
-          Text('Link ${isCoinbase ? 'Coinbase' : 'Bitso'}'),
+          Text('Link ${_info.label}'),
         ],
       ),
       content: Form(
@@ -97,15 +172,12 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Generate a "Read-Only" API key in Bitso settings. We only use this to fetch balances and estimate their value.',
+                'Generate a "Read-Only" API key in ${_info.label} settings. We only use this to fetch balances and estimate their value.',
                 style: TextStyle(fontSize: 12, color: context.textMuted),
               ),
               const SizedBox(height: 8),
               InkWell(
-                onTap: () {
-                  // In a real browser, this would open the link
-                  // web.window.open('https://bitso.com/api_info', '_blank');
-                },
+                onTap: _openApiDocs,
                 child: Text(
                   'Where do I find my API keys? ↗',
                   style: TextStyle(
@@ -118,9 +190,9 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Display Name (e.g. My Bitso)',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: 'Display Name (e.g. ${_info.exampleName})',
+                  border: const OutlineInputBorder(),
                 ),
                 validator: (v) => v!.isEmpty ? 'Required' : null,
               ),

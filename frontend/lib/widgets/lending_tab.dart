@@ -876,9 +876,22 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
             proj.cadence == 'balloon' ? 'Single payment' : 'Payment',
             proj.cadence == 'balloon'
                 ? _fmtMoney(proj.perPayment!)
+                // Interest-only loans pay interest periodically, so label the
+                // recurring figure as such — otherwise "$125/mo · 12 payments"
+                // reads as the whole obligation when it's just the interest.
                 : '${_fmtMoney(proj.perPayment!)}$cadenceLabel'
+                    '${proj.balloonPayment != null ? ' interest' : ''}'
                     '${proj.periods != null ? '  ·  ${proj.periods} payments' : ''}',
           ),
+          // Interest-only: the principal balloons on the final installment,
+          // so the borrower's last payment is the interest PLUS this amount.
+          if (proj.balloonPayment != null && proj.balloonPayment! > 0.005) ...[
+            const SizedBox(height: 6),
+            _previewRow(
+              'Principal at maturity',
+              '${_fmtMoney(proj.balloonPayment!)}  ·  due with final payment',
+            ),
+          ],
         ] else ...[
           const SizedBox(height: 6),
           Text('Open-ended — repay anytime, no fixed schedule',

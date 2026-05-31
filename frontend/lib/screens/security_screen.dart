@@ -481,23 +481,38 @@ class _SecurityScreenState extends State<SecurityScreen> {
   /// mint response, so we show it in a dialog the user can re-copy
   /// before dismissing.
   Future<void> _mintInvite() async {
+    // Ask owner vs read-only BEFORE minting so the role is baked into
+    // the token. A read-only redeemer can view everything but every
+    // mutating request is 403'd by the backend's require_owner gate.
+    final role = await showDialog<String>(
+      context: context,
+      builder: (_) => const _InviteRoleDialog(),
+    );
+    if (role == null || !mounted) return;
     try {
-      final invite = await _api.createInvite();
+      final invite = await _api.createInvite(role: role);
       if (!mounted) return;
       await Clipboard.setData(ClipboardData(text: invite.url));
       final expires = DateFormat.yMMMd().add_jm().format(invite.expiresAt.toLocal());
+      final isReadOnly = role == 'read_only';
       await showDialog<void>(
         context: context,
         builder: (ctx) {
           return AlertDialog(
-            title: const Text('Invite link ready'),
+            title: Text(isReadOnly
+                ? 'Read-only invite link ready'
+                : 'Invite link ready'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Share this URL with the new user. It works for one '
-                  'account creation and expires on:',
+                Text(
+                  isReadOnly
+                      ? 'Share this URL with the new user. They will be able '
+                          'to view your data but not change anything. It works '
+                          'for one account creation and expires on:'
+                      : 'Share this URL with the new user. It works for one '
+                          'account creation and expires on:',
                 ),
                 const SizedBox(height: 6),
                 Text(expires,
@@ -630,12 +645,23 @@ class _SecurityScreenState extends State<SecurityScreen> {
                               ? Icons.history_toggle_off
                               : Icons.link,
                     ),
-                    title: Text(
-                      invites[i].used
-                          ? 'Redeemed'
-                          : invites[i].expiresAt.isBefore(now)
-                              ? 'Expired'
-                              : 'Active',
+                    title: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            invites[i].used
+                                ? 'Redeemed'
+                                : invites[i].expiresAt.isBefore(now)
+                                    ? 'Expired'
+                                    : 'Active',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (invites[i].isReadOnly) ...[
+                          const SizedBox(width: 8),
+                          _roleChip('Read-only'),
+                        ],
+                      ],
                     ),
                     subtitle: Text(
                       invites[i].used && invites[i].usedAt != null
@@ -932,6 +958,23 @@ class _SecurityScreenState extends State<SecurityScreen> {
     }
     return Icons.devices_other;
   }
+
+  /// Small outlined pill used to flag a read-only invite in the list.
+  Widget _roleChip(String label) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.secondaryContainer,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Theme.of(context).colorScheme.onSecondaryContainer,
+          ),
+        ),
+      );
 
   Widget _section(String label) => Padding(
         padding: const EdgeInsets.only(top: 8, bottom: 8),
@@ -1315,6 +1358,67 @@ class _PasskeyRow extends StatelessWidget {
         tooltip: 'Remove passkey',
         onPressed: onRemove,
       ),
+    );
+  }
+}
+
+/// Lets the inviter pick whether a new invite grants full (owner)
+/// access or read-only access before the token is minted. Pops the
+/// chosen role string ('owner' | 'read_only'), or null on cancel.
+class _InviteRoleDialog extends StatefulWidget {
+  const _InviteRoleDialog();
+
+  @override
+  State<_InviteRoleDialog> createState() => _InviteRoleDialogState();
+}
+
+class _InviteRoleDialogState extends State<_InviteRoleDialog> {
+  String _role = 'owner';
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('New invite link'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('What level of access should this invite grant?'),
+          const SizedBox(height: 8),
+          RadioListTile<String>(
+            value: 'owner',
+            groupValue: _role,
+            onChanged: (v) => setState(() => _role = v!),
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Full access'),
+            subtitle: const Text(
+              'Can view and change everything — link accounts, edit '
+              'transactions, run syncs.',
+            ),
+          ),
+          RadioListTile<String>(
+            value: 'read_only',
+            groupValue: _role,
+            onChanged: (v) => setState(() => _role = v!),
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Read-only'),
+            subtitle: const Text(
+              'Can view everything but cannot make changes. Good for a '
+              'spouse, advisor, or accountant.',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_role),
+          child: const Text('Create link'),
+        ),
+      ],
     );
   }
 }

@@ -76,46 +76,39 @@ from the trailing 4–5 sprints (all on `main`):
 * **README auth section:** documents TOTP enroll / recovery
   codes / passkey register flows + the hardening defaults.
 
-## Top 3 for the next session
+## Top 3 for the next session — ALL SHIPPED (2026-05-30)
 
-### 1. Multi-user roles (`owner` vs `read-only`)  ⏱️ ~half day  🎯 advisor / spouse access
+The previous Top-3 are done. Verified green: backend 126 tests
+(`./scripts/test.sh`), frontend 94 tests (`flutter test`).
 
-Single-household deployments don't need it, but the moment someone
-wants to grant a family member view-only access this becomes
-real. Schema: add `role` TEXT to `users` defaulting to `'owner'`.
-Middleware: a `require_owner` guard on every mutating endpoint
-(POST/PUT/PATCH/DELETE). Invite mint endpoint gains a `role`
-field so the inviter can pick.
+### 1. Multi-user roles (`owner` vs `read-only`)  ✅ DONE
 
-**Acceptance:** create a read-only invite, redeem it, log in,
-confirm GET endpoints return data + every mutating endpoint
-returns 403.
+Backend shipped earlier (migration `2026051901_user_roles.sql`,
+`require_owner` middleware in `api/session.rs`, `role` on the invite
+mint endpoint) with tests (`read_only_user_can_get_but_not_mutate`,
+`read_only_user_can_still_log_out`, `owner_role_passes_require_owner`).
+**Frontend gap closed this session:** the invite-mint UI now offers
+a Full-access / Read-only picker (`_InviteRoleDialog` in
+`security_screen.dart`), `ApiService.createInvite` sends `role`,
+`InviteSummary` parses+displays it (read-only chip in the invites
+list). Unit test: `test/services/invite_summary_test.dart`.
 
-### 2. Real-time dashboard via websockets  ⏱️ ~1 day  🎯 elegant; can defer further
+### 2. Real-time dashboard via websockets  ✅ DONE
 
-Plaid webhooks trigger background syncs; the frontend still
-finds out by polling on tab switch. A websocket "dashboard data
-invalidated" channel would make new transactions surface
-immediately. Significant scope: new ws endpoint, broadcast
-plumbing, frontend reconnect logic, auth scoping (a user
-shouldn't see another user's invalidations). Tracked in
-`work/FUTURE.md` section G.
+Shipped: per-user broadcast hub (`services/realtime.rs`), WS endpoint
+(`api/realtime.rs`), `RealtimeEvent` vocabulary, frontend
+`services/realtime_service.dart`. Auth-scoped per `user_id`. Covered
+by the dashboard integration suite.
 
-Park unless polling actually starts to feel slow — the rest of
-Tier 2 is higher impact-per-effort.
+### 3. `Sessions "new since last visit"` badge + upload preflight  ✅ DONE
 
-### 3. Streaming "upload preflight" / `Sessions "new since last visit"` badge
-
-Two ~1-hour items worth bundling:
-
-* `users.last_login_at` exists; the Security screen's active-sessions
-  list could flag sessions created since that anchor with a small
-  pill ("new since 5d ago"). Improves the "is someone else logged in"
-  glance without a separate audit-log dive.
-* When the file picker / drop reader is slow on a low-end machine,
-  the "Reading N files…" status now shows it. A "preflight" check
-  before upload that sanity-checks total size + warns ahead of the
-  413 cliff would be polish on top.
+* Session badge shipped: amber "New since last visit" pill on the
+  Security screen's active-sessions list (`newSinceLastVisit`,
+  driven by `created_at > users.previous_login_at`).
+* **Upload preflight closed this session:** `import_screen.dart`
+  now sums `PlatformFile.size` before upload — blocks over the
+  100 MB body limit with a clear message, warns past 90 MB —
+  instead of streaming a doomed payload to a 413.
 
 ## Quick wins (≤ 2 hours each)
 

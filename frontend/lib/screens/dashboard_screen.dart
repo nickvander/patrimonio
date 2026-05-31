@@ -32,6 +32,8 @@ import '../widgets/subscriptions_card.dart';
 import '../widgets/notifications_panel.dart';
 import '../theme/palette.dart';
 import '../utils/account_category.dart';
+import '../utils/currency.dart';
+import '../utils/supported_banks.dart';
 import '../utils/theme_colors.dart';
 import '../utils/transaction_display.dart';
 import 'account_transactions_screen.dart';
@@ -196,7 +198,10 @@ class _DashboardScreenState extends State<DashboardScreen>
   void _handleRealtimeEvent(RealtimeEvent e) {
     if (!mounted) return;
     debugPrint('realtime: received ${e.type}');
-    _loadAllData(silent: true);
+    // A realtime event means the server-side data just changed; the
+    // client cache must NOT win here. Force a cache-bypassing reload so
+    // we never paint stale numbers in response to a push.
+    _loadAllData(silent: true, forceRefresh: true);
   }
 
   String _loadSavedCurrency() {
@@ -228,10 +233,9 @@ class _DashboardScreenState extends State<DashboardScreen>
     // panel that opens from the palette uses the same reporting context.
     final fxRate = (_fxRate?['rate'] as num?)?.toDouble() ?? 1.0;
     final conversionFactor = _targetCurrency == 'MXN' ? fxRate : 1.0;
-    final currencyFormat = NumberFormat.currency(
-      name: _targetCurrency,
-      symbol: '$_targetCurrency ',
-    );
+    // Idiomatic symbol ($/MX$) via the shared helper so the hero number and
+    // every card fed this formatter read "$1,234.00" not "USD 1,234.00".
+    final currencyFormat = moneyFormat(_targetCurrency);
 
     const tabs = [
       ('Overview', 0, Icons.dashboard_outlined, Color(0xFF00E676)),
@@ -913,7 +917,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       icon: Icons.upload_file,
                       title: 'Import Mexico CSV or PDF',
                       subtitle:
-                          'Drop a statement from Bancomer, Banamex, Santander or Banorte.',
+                          'Drop a statement from ${supportedMxBanksSentence()}.',
                       accent: context.info,
                       onPressed: () {
                         Navigator.push(
@@ -1024,7 +1028,10 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  Future<void> _refreshData() => _loadAllData(silent: true);
+  /// Explicit user-initiated refresh (pull-to-refresh, "sync everything",
+  /// post-mutation reloads). Bypasses the response cache so the user who
+  /// just asked for fresh data gets exactly that.
+  Future<void> _refreshData() => _loadAllData(silent: true, forceRefresh: true);
 
   Future<void> _loadMoreTransactions() async {
     final offset = _transactions?.length ?? 0;
@@ -1167,7 +1174,16 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  Future<void> _loadAllData({bool silent = false}) async {
+  /// [forceRefresh] bypasses the ApiService response cache for the heavy
+  /// dashboard GETs. We set it on realtime-driven reloads and explicit
+  /// user-initiated refreshes (pull-to-refresh) so those paths never serve
+  /// stale finance numbers. Ordinary reloads (sub-screen return) ride the
+  /// cache; post-mutation reloads are already fresh because every mutation
+  /// clears the cache in ApiService.
+  Future<void> _loadAllData({
+    bool silent = false,
+    bool forceRefresh = false,
+  }) async {
     if (!silent) {
       setState(() {
         _isLoading = true;
@@ -1186,32 +1202,38 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     try {
       final results = await Future.wait([
-        _apiService.getDashboardOverview(),
-        _apiService.getNetWorthHistory(),
-        _apiService.getHoldings(),
-        _apiService.getCreditUtilization(),
-        _apiService.getSyncStatus(),
+        _apiService.getDashboardOverview(forceRefresh: forceRefresh),
+        _apiService.getNetWorthHistory(forceRefresh: forceRefresh),
+        _apiService.getHoldings(forceRefresh: forceRefresh),
+        _apiService.getCreditUtilization(forceRefresh: forceRefresh),
+        _apiService.getSyncStatus(forceRefresh: forceRefresh),
         _apiService.getSetupStatus(),
         _apiService.getExchangeRate('USD', 'MXN'),
         _apiService.getTransactions(limit: _txPageSize),
-        _apiService.getAllocationData(),
-        _apiService.getTrendData(),
+        _apiService.getAllocationData(forceRefresh: forceRefresh),
+        _apiService.getTrendData(forceRefresh: forceRefresh),
         // These two are non-blocking — a failure shouldn't take the
         // whole dashboard down. Wrap each Future so it can't propagate.
-        _apiService.getSinceLastLogin().catchError((_) => null),
         _apiService
-            .getSubscriptions()
+            .getSinceLastLogin(forceRefresh: forceRefresh)
+            .catchError((_) => null),
+        _apiService
+            .getSubscriptions(forceRefresh: forceRefresh)
             .catchError((_) => <dynamic>[]),
-        _apiService.getFxTransfers().catchError((_) => <dynamic>[]),
         _apiService
-            .getIgnoredSubscriptions()
+            .getFxTransfers(forceRefresh: forceRefresh)
+            .catchError((_) => <dynamic>[]),
+        _apiService
+            .getIgnoredSubscriptions(forceRefresh: forceRefresh)
             .catchError((_) => <dynamic>[]),
         // Best-effort: a settings failure shouldn't take the dashboard
         // down — just default the module off.
         _apiService.getSetting('lending_enabled').catchError((_) => null),
         // Loan reminders + lead-time setting. Both defensive — empty /
         // default when lending is off or the call fails.
-        _apiService.getLoanReminders().catchError((_) => <dynamic>[]),
+        _apiService
+            .getLoanReminders(forceRefresh: forceRefresh)
+            .catchError((_) => <dynamic>[]),
         _apiService
             .getSetting('lending_reminder_lead_days')
             .catchError((_) => null),
@@ -1489,10 +1511,9 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     final fxRate = (_fxRate?['rate'] as num?)?.toDouble() ?? 1.0;
     final conversionFactor = _targetCurrency == 'MXN' ? fxRate : 1.0;
-    final currencyFormat = NumberFormat.currency(
-      name: _targetCurrency,
-      symbol: '$_targetCurrency ',
-    );
+    // Idiomatic symbol ($/MX$) via the shared helper so the hero number and
+    // every card fed this formatter read "$1,234.00" not "USD 1,234.00".
+    final currencyFormat = moneyFormat(_targetCurrency);
     Widget buildTabContainer(Widget child, {bool scrollable = true}) {
       final padding = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
       final content = Center(

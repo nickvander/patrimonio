@@ -19,7 +19,8 @@ class _FakeApiService extends ApiService {
   Future<List<dynamic>> getLoanPeople() async => const [];
 
   @override
-  Future<Map<String, dynamic>> getLoansSummary() async => const {
+  Future<Map<String, dynamic>> getLoansSummary({bool forceRefresh = false}) async =>
+      const {
         'active_count': 0,
         'total_lent': 0,
         'total_outstanding': 0,

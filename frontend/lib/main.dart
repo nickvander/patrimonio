@@ -1,9 +1,10 @@
 import 'dart:js_interop';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'screens/auth_gate.dart';
 import 'services/preferences.dart';
+import 'theme/palette.dart';
+import 'theme/typography.dart';
 
 /// Notifies the app when the user flips the theme. Held at module scope so
 /// the AppBar toggle can call `themeModeNotifier.value = ...` from
@@ -96,17 +97,23 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
   // hardcode `Colors.white` so this ColorScheme is what they were tuned
   // against; preserving it avoids visual regressions.
   ThemeData _buildDarkTheme() {
+    const b = Brightness.dark;
     return ThemeData(
-      brightness: Brightness.dark,
+      brightness: b,
       colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xFF00E676),
-        brightness: Brightness.dark,
-        surface: const Color(0xFF1A1A24),
+        // Agave jade seed + heritage terracotta/gold overrides, per
+        // market_research §4. BrandPalette is the single source of truth.
+        seedColor: BrandPalette.seed(b),
+        brightness: b,
+        surface: BrandPalette.cardSurface(b),
+        secondary: BrandPalette.terracotta(b),
+        tertiary: BrandPalette.gold(b),
       ),
       useMaterial3: true,
-      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
+      scaffoldBackgroundColor: BrandPalette.scaffoldBackground(b),
+      textTheme: buildBrandTextTheme(ThemeData.dark().textTheme),
       cardTheme: CardThemeData(
-        color: const Color(0xFF1A1A24),
+        color: BrandPalette.cardSurface(b),
         elevation: 4,
         shadowColor: Colors.black26,
         shape: RoundedRectangleBorder(
@@ -120,12 +127,14 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
       // palette on top of the custom dark surface — were rendering the
       // Security and Sign-out icons close to the AppBar background.
       appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFF101016),
-        foregroundColor: Color(0xFFEDEFF3),
+        // Warm green-black scaffold colour + warm off-white foreground so
+        // the AppBar sits in the same neutral ramp as the body.
+        backgroundColor: Color(0xFF10140F),
+        foregroundColor: Color(0xFFECEFEA),
         elevation: 0,
         centerTitle: false,
-        iconTheme: IconThemeData(color: Color(0xFFEDEFF3)),
-        actionsIconTheme: IconThemeData(color: Color(0xFFEDEFF3)),
+        iconTheme: IconThemeData(color: Color(0xFFECEFEA)),
+        actionsIconTheme: IconThemeData(color: Color(0xFFECEFEA)),
       ),
       dataTableTheme: DataTableThemeData(
         headingRowColor: WidgetStateProperty.all(Colors.black12),
@@ -140,20 +149,25 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
   // so cards read as discrete surfaces rather than blending into the
   // background.
   ThemeData _buildLightTheme() {
+    const b = Brightness.light;
     final scheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF00A352),
-      brightness: Brightness.light,
-      surface: Colors.white,
-      surfaceContainerHighest: const Color(0xFFEEF0F4),
+      // Agave jade seed + heritage terracotta/gold, warm-bone raised
+      // surface. Per market_research §4; BrandPalette is the source of truth.
+      seedColor: BrandPalette.seed(b),
+      brightness: b,
+      surface: BrandPalette.cardSurface(b),
+      surfaceContainerHighest: BrandPalette.elevatedSurface(b),
+      secondary: BrandPalette.terracotta(b),
+      tertiary: BrandPalette.gold(b),
     );
     return ThemeData(
-      brightness: Brightness.light,
+      brightness: b,
       colorScheme: scheme,
       useMaterial3: true,
-      // Off-white scaffold gives the white cards somewhere to "sit"
-      // visually. Pure white-on-white merges them with the AppBar.
-      scaffoldBackgroundColor: const Color(0xFFEDEFF3),
-      textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme),
+      // Warm parchment scaffold so the white cards sit on warmth (not the
+      // old cool off-white). Pure white-on-white would merge with cards.
+      scaffoldBackgroundColor: BrandPalette.scaffoldBackground(b),
+      textTheme: buildBrandTextTheme(ThemeData.light().textTheme),
       cardTheme: CardThemeData(
         color: Colors.white,
         // elevation 2 + a slightly stronger shadow gives cards real
@@ -170,15 +184,18 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
       // IconButtons sitting in the actions slot under M3.
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.white,
-        foregroundColor: Color(0xFF101016),
+        // Near-black with a green undertone (#1C2421) — the heritage text
+        // primary — instead of the old cool near-black.
+        foregroundColor: Color(0xFF1C2421),
         elevation: 0,
         centerTitle: false,
         scrolledUnderElevation: 0,
-        iconTheme: IconThemeData(color: Color(0xFF101016)),
-        actionsIconTheme: IconThemeData(color: Color(0xFF101016)),
+        iconTheme: IconThemeData(color: Color(0xFF1C2421)),
+        actionsIconTheme: IconThemeData(color: Color(0xFF1C2421)),
       ),
       dataTableTheme: DataTableThemeData(
-        headingRowColor: WidgetStateProperty.all(const Color(0xFFEEF0F4)),
+        headingRowColor:
+            WidgetStateProperty.all(BrandPalette.elevatedSurface(b)),
         dataRowColor: WidgetStateProperty.all(Colors.transparent),
       ),
     );

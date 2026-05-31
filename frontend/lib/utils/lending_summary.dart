@@ -99,6 +99,14 @@ class LoanProjection {
   /// 'balloon' (single payment at maturity), or null when open-ended.
   final String? cadence;
 
+  /// Extra lump principal due at maturity ON TOP of the recurring
+  /// [perPayment] — set only for interest-only loans, where the periodic
+  /// payment is interest alone and the full principal balloons on the
+  /// final installment. Null for every other type (their principal is
+  /// already folded into [perPayment] or the single balloon). When set,
+  /// the final payment is effectively [perPayment] + [balloonPayment].
+  final double? balloonPayment;
+
   const LoanProjection({
     required this.principal,
     required this.totalInterest,
@@ -106,6 +114,7 @@ class LoanProjection {
     this.perPayment,
     this.periods,
     this.cadence,
+    this.balloonPayment,
   });
 }
 
@@ -218,7 +227,11 @@ LoanProjection? projectLoan({
           totalRepayment: p + interest,
           perPayment: p * perMonthRate,
           periods: n,
-          cadence: 'monthly');
+          cadence: 'monthly',
+          // The recurring payment is interest only; the principal comes
+          // back as a balloon on the final installment. Surfacing it keeps
+          // the preview honest (n × interest + principal == total to repay).
+          balloonPayment: p);
 
     case 'compound':
       // Backend: single balloon = P(1+i)^n at maturity, compounded monthly

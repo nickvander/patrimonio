@@ -190,6 +190,11 @@ class InviteSummary {
   final bool used;
   final DateTime? usedAt;
   final String? note;
+  /// 'owner' or 'read_only'. The role the redeemer inherits. Lets the
+  /// Security screen flag read-only invites so the inviter can audit
+  /// (and revoke) the wrong ones before someone redeems. Defaults to
+  /// 'owner' for older backends that predate the roles column.
+  final String role;
   const InviteSummary({
     required this.id,
     required this.createdAt,
@@ -197,7 +202,9 @@ class InviteSummary {
     required this.used,
     required this.usedAt,
     required this.note,
+    this.role = 'owner',
   });
+  bool get isReadOnly => role == 'read_only';
   factory InviteSummary.fromJson(Map<String, dynamic> json) {
     return InviteSummary(
       id: json['id'] as String,
@@ -208,6 +215,7 @@ class InviteSummary {
           ? null
           : DateTime.parse(json['used_at'] as String),
       note: json['note'] as String?,
+      role: json['role'] as String? ?? 'owner',
     );
   }
 }
