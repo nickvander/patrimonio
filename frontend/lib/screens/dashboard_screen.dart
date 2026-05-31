@@ -49,6 +49,43 @@ import '../services/auth_service.dart';
 import 'hidden_items_screen.dart';
 import 'security_screen.dart';
 
+/// Stable identity for each top-level section. Navigation, persistence,
+/// deep-jumps and the command palette all key off these ids rather than a
+/// raw index, so reordering sections or toggling the conditional Lending
+/// section can never send the user to the wrong place.
+enum NavId {
+  overview,
+  portfolio,
+  transactions,
+  cashFlow,
+  projections,
+  tax,
+  lending,
+  settings,
+}
+
+/// Primary = daily-use, shown directly in the rail / bottom bar.
+/// Secondary = occasional, grouped under "More" (and in the rail's lower
+/// group). Settings is secondary but always pinned last.
+enum NavTier { primary, secondary }
+
+class _NavDest {
+  final NavId id;
+  final String label; // full label (rail, palette, More sheet)
+  final String shortLabel; // compact label for the bottom bar
+  final IconData icon;
+  final Color accent;
+  final NavTier tier;
+  const _NavDest(
+    this.id,
+    this.label,
+    this.shortLabel,
+    this.icon,
+    this.accent,
+    this.tier,
+  );
+}
+
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -56,8 +93,7 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen>
-    with SingleTickerProviderStateMixin {
+class _DashboardScreenState extends State<DashboardScreen> {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
   String? _error;
@@ -77,8 +113,9 @@ class _DashboardScreenState extends State<DashboardScreen>
   List<dynamic>? _ignoredSubscriptions;
   // Opt-in personal-lending module. Server-side per-user setting
   // (app_settings 'lending_enabled'), fetched in _loadAllData. When
-  // true, a "Lending" tab is appended (index 7) and the TabController
-  // is rebuilt to length 8.
+  // true, a "Lending" section is inserted into [_destinations] (between
+  // Tax planning and Settings). No controller juggling — the section
+  // list is just recomputed.
   bool _lendingEnabled = false;
   // Upcoming + overdue loan installments for the notifications bell.
   List<dynamic> _loanReminders = const [];
@@ -94,7 +131,15 @@ class _DashboardScreenState extends State<DashboardScreen>
   ({DateTime start, DateTime end})? _txDateSeed;
   DateRange _selectedRange = DateRange.oneYear;
   String _targetCurrency = 'USD'; // Master currency state
-  TabController? _tabController;
+  // Active section: an index into [_destinations]. Replaces the old
+  // TabController/TabBar. Persisted by NavId name (see _selectSection /
+  // initState) so it survives reorders and the conditional Lending
+  // section, the same way the date-range pref is stored.
+  int _section = 0;
+  // Saved section to restore once the lending flag is known (the first
+  // _loadAllData resolves it, since Lending may not be in _destinations
+  // until then). Cleared after the first apply.
+  NavId? _pendingRestore;
   // Category that the AllocationHeatmap is currently drilled into. When
   // non-null, the PortfolioCard's holdings table filters to that category.
   String? _portfolioCategoryFilter;
@@ -133,10 +178,11 @@ class _DashboardScreenState extends State<DashboardScreen>
         }
       }
     }
-    // Lending tab unknown until the setting loads, so start with the
-    // 7 base tabs; _applyLendingSetting rebuilds to 8 if enabled.
-    final savedTab = Preferences.getLastTab().clamp(0, 6);
-    _buildTabController(_baseTabCount, savedTab);
+    // Lending section is unknown until the setting loads. Remember the
+    // saved section id; the first _loadAllData resolves it to an index
+    // once _destinations is final (so a saved "Lending" lands correctly).
+    _pendingRestore = _navIdFromName(Preferences.getLastSection());
+    _section = _indexOfNav(_pendingRestore) ?? 0;
     _loadAllData();
     _checkRedirectStatus();
     // Open the realtime channel and route server-pushed
@@ -149,46 +195,83 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   @override
   void dispose() {
-    _tabController?.dispose();
     _realtimeSub?.cancel();
     _realtime.dispose();
     super.dispose();
   }
 
-  /// Base (always-on) tab count. The Lending tab is appended on top
-  /// when enabled.
-  static const int _baseTabCount = 7;
-  int get _tabCount => _baseTabCount + (_lendingEnabled ? 1 : 0);
+  /// Canonical section catalog, in display order. Lending sits between
+  /// Tax planning and Settings; Settings is always last. The accents are
+  /// the same brand hues the old tab list + palette used.
+  static const List<_NavDest> _allDestinations = [
+    _NavDest(NavId.overview, 'Overview', 'Home', Icons.dashboard_outlined,
+        Color(0xFF00E676), NavTier.primary),
+    _NavDest(NavId.portfolio, 'Portfolio', 'Invest', Icons.pie_chart_outline,
+        Color(0xFF1DE9B6), NavTier.primary),
+    _NavDest(NavId.transactions, 'Transactions', 'Activity',
+        Icons.receipt_long_outlined, Color(0xFF00B0FF), NavTier.primary),
+    _NavDest(NavId.cashFlow, 'Cash flow', 'Cash',
+        Icons.account_balance_wallet_outlined, Color(0xFF1DE9B6),
+        NavTier.primary),
+    _NavDest(NavId.projections, 'Projections', 'Proj.',
+        Icons.trending_up_outlined, Color(0xFFFFB300), NavTier.secondary),
+    _NavDest(NavId.tax, 'Tax planning', 'Tax', Icons.account_balance_outlined,
+        Color(0xFFAB47BC), NavTier.secondary),
+    _NavDest(NavId.lending, 'Lending', 'Loans', Icons.handshake_outlined,
+        Color(0xFF1DE9B6), NavTier.secondary),
+    _NavDest(NavId.settings, 'Settings', 'Settings', Icons.settings_outlined,
+        Color(0xFF90A4AE), NavTier.secondary),
+  ];
 
-  /// (Re)create the TabController at a given length, preserving the
-  /// current tab index (clamped). TabController.length is fixed at
-  /// construction, so toggling the Lending module means disposing and
-  /// rebuilding — the only safe way to change tab count at runtime.
-  void _buildTabController(int length, int initialIndex) {
-    _tabController?.dispose();
-    _tabController = TabController(
-      length: length,
-      vsync: this,
-      initialIndex: initialIndex.clamp(0, length - 1),
-      // 300ms (the Material default) feels sluggish on a dense desktop
-      // dashboard; 180ms is near-instant while still smoothing the slide.
-      animationDuration: const Duration(milliseconds: 180),
-    );
-    _tabController!.addListener(() {
-      if (!_tabController!.indexIsChanging) {
-        Preferences.setLastTab(_tabController!.index);
-      }
-    });
+  /// The currently-visible sections. Lending is filtered out unless the
+  /// module is enabled; everything else is always present.
+  List<_NavDest> get _destinations => [
+        for (final d in _allDestinations)
+          if (d.id != NavId.lending || _lendingEnabled) d,
+      ];
+
+  static NavId? _navIdFromName(String? name) {
+    if (name == null) return null;
+    for (final v in NavId.values) {
+      if (v.name == name) return v;
+    }
+    return null;
   }
 
-  /// Apply a freshly-loaded lending_enabled value. Rebuilds the
-  /// TabController only when the flag actually flips, so a normal
-  /// refresh doesn't churn it (and lose the user's current tab).
+  /// Index of [id] in the live [_destinations], or null if not visible.
+  int? _indexOfNav(NavId? id) {
+    if (id == null) return null;
+    final i = _destinations.indexWhere((d) => d.id == id);
+    return i < 0 ? null : i;
+  }
+
+  /// Navigate to a section by stable id — robust to reordering and to the
+  /// conditional Lending section. No-op if the target isn't visible.
+  void _goToNav(NavId id) {
+    final i = _indexOfNav(id);
+    if (i != null) _selectSection(i);
+  }
+
+  /// Select a section by index into [_destinations] and persist it.
+  void _selectSection(int i) {
+    if (i < 0 || i >= _destinations.length) return;
+    if (i == _section) return;
+    setState(() => _section = i);
+    Preferences.setLastSection(_destinations[i].id.name);
+  }
+
+  /// Apply a freshly-loaded lending_enabled value. Keeps the user on the
+  /// same section by id across the flip; if Lending is turning off while
+  /// it's the active section, falls back to Overview. Must NOT call
+  /// setState itself — callers (_loadAllData, _toggleLending) already wrap
+  /// this in their own setState.
   void _applyLendingSetting(bool enabled) {
-    if (enabled == _lendingEnabled && _tabController != null) return;
-    final current = _tabController?.index ?? 0;
+    if (enabled == _lendingEnabled) return;
+    final currentId = (_section >= 0 && _section < _destinations.length)
+        ? _destinations[_section].id
+        : NavId.overview;
     _lendingEnabled = enabled;
-    _buildTabController(_tabCount, current);
+    _section = _indexOfNav(currentId) ?? 0;
   }
 
   /// Server-pushed event handler. Every event maps to "refetch the
@@ -228,8 +311,6 @@ class _DashboardScreenState extends State<DashboardScreen>
   List<PaletteItem> _buildPaletteItems() {
     final items = <PaletteItem>[];
 
-    void jumpTab(int i) => _tabController?.animateTo(i);
-
     // Mirror the currency / FX setup _buildBody does so the account
     // panel that opens from the palette uses the same reporting context.
     final fxRate = (_fxRate?['rate'] as num?)?.toDouble() ?? 1.0;
@@ -238,32 +319,17 @@ class _DashboardScreenState extends State<DashboardScreen>
     // every card fed this formatter read "$1,234.00" not "USD 1,234.00".
     final currencyFormat = moneyFormat(_targetCurrency);
 
-    const tabs = [
-      ('Overview', 0, Icons.dashboard_outlined, Color(0xFF00E676)),
-      ('Portfolio', 1, Icons.pie_chart_outline, Color(0xFF1DE9B6)),
-      ('Transactions', 2, Icons.receipt_long_outlined, Color(0xFF00B0FF)),
-      ('Cash flow', 3, Icons.account_balance_wallet_outlined, Color(0xFF1DE9B6)),
-      ('Projections', 4, Icons.trending_up_outlined, Color(0xFFFFB300)),
-      ('Tax planning', 5, Icons.account_balance_outlined, Color(0xFFAB47BC)),
-      ('Management', 6, Icons.settings_outlined, Color(0xFF90A4AE)),
-    ];
-    for (final (label, idx, icon, color) in tabs) {
+    // Jump-to-section items, driven by the live destination list so the
+    // conditional Lending section appears here exactly when it's visible.
+    for (final d in _destinations) {
       items.add(PaletteItem(
-        label: 'Jump to $label',
-        subtitle: 'Tab',
-        icon: icon,
-        accent: color,
-        onSelected: () => jumpTab(idx),
-      ));
-    }
-    // Lending tab is conditional — appended at _baseTabCount when on.
-    if (_lendingEnabled) {
-      items.add(PaletteItem(
-        label: 'Jump to Lending',
-        subtitle: 'Tab · money you\'ve lent',
-        icon: Icons.handshake_outlined,
-        accent: const Color(0xFF1DE9B6),
-        onSelected: () => jumpTab(_baseTabCount),
+        label: 'Jump to ${d.label}',
+        subtitle: d.id == NavId.lending
+            ? 'Section · money you\'ve lent'
+            : 'Section',
+        icon: d.icon,
+        accent: d.accent,
+        onSelected: () => _goToNav(d.id),
       ));
     }
 
@@ -318,7 +384,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         accent: context.info,
         onSelected: () {
           setState(() => _portfolioSearchOverride = seed);
-          jumpTab(1);
+          _goToNav(NavId.portfolio);
         },
       ));
     }
@@ -345,7 +411,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             _transactionsSearchOverride = desc;
             _highlightedTxId = id;
           });
-          jumpTab(2);
+          _goToNav(NavId.transactions);
           // Clear the pulse after ~2.4s so the row holds for ~1.3s after
           // the 550ms fade-in completes, then takes 550ms to fade back
           // out. Subsequent palette picks can pulse fresh because we
@@ -631,7 +697,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       fontWeight: FontWeight.w600, color: context.textPrimary)),
               subtitle: Text(
                 'Track money you lend to friends — designate the bank '
-                'transactions that fund and repay each loan. Adds a Lending tab.',
+                'transactions that fund and repay each loan. Adds a Lending section.',
                 style: TextStyle(fontSize: 12, color: context.textSubtle),
               ),
             ),
@@ -1292,9 +1358,16 @@ class _DashboardScreenState extends State<DashboardScreen>
         _fxTransfers = results[12] as List<dynamic>;
         _ignoredSubscriptions = results[13] as List<dynamic>;
         // Lending module toggle (server-side). The setting stores a
-        // raw bool; absent/null = off. Rebuilds the TabController only
+        // raw bool; absent/null = off. Recomputes the section list only
         // when the flag actually flips.
         _applyLendingSetting(results[14] == true);
+        // First load: now that the lending flag (and thus the full
+        // section list) is known, resolve the saved section. A saved
+        // "Lending" that wasn't yet in _destinations lands correctly here.
+        if (_pendingRestore != null) {
+          _section = _indexOfNav(_pendingRestore) ?? _section;
+          _pendingRestore = null;
+        }
         _loanReminders = results[15] as List<dynamic>;
         final leadRaw = results[16];
         if (leadRaw is num) {
@@ -1347,31 +1420,6 @@ class _DashboardScreenState extends State<DashboardScreen>
             'Patrimonio',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
-          bottom: firstRun
-              ? null
-              : TabBar(
-                  controller: _tabController,
-                  isScrollable: isCompact,
-                  tabAlignment:
-                      isCompact ? TabAlignment.start : TabAlignment.fill,
-                  indicatorColor: context.positive,
-                  labelColor: context.positive,
-                  unselectedLabelColor: context.textMuted,
-                  tabs: [
-                    const Tab(text: 'Overview'),
-                    const Tab(text: 'Portfolio'),
-                    const Tab(text: 'Transactions'),
-                    Tab(text: isCompact ? 'Cash' : 'Cash flow'),
-                    Tab(text: isCompact ? 'Proj.' : 'Projections'),
-                    Tab(text: isCompact ? 'Tax' : 'Tax planning'),
-                    Tab(text: isCompact ? 'Manage' : 'Management'),
-                    // Appended only when the module is enabled — the
-                    // TabController length is kept in lockstep via
-                    // _applyLendingSetting.
-                    if (_lendingEnabled)
-                      Tab(text: isCompact ? 'Loans' : 'Lending'),
-                  ],
-                ),
           actions: [
             // First-run hides the dashboard chrome (FX, notifications,
             // currency toggle) because none of it has data yet. Sign
@@ -1388,13 +1436,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                 notifications: deriveNotifications(
                   syncData: _syncData ?? const [],
                   netWorthHistory: _netWorthHistory ?? const [],
-                  onJumpToManagement: () =>
-                      _tabController?.animateTo(6),
+                  onJumpToManagement: () => _goToNav(NavId.settings),
                   loanReminders: _loanReminders,
-                  // Lending is appended last; its index == _baseTabCount
-                  // (7). Only present when reminders exist (lending on).
-                  onJumpToLending: () =>
-                      _tabController?.animateTo(_baseTabCount),
+                  // No-op when lending is off (the section isn't visible);
+                  // the bell only surfaces loan reminders when it's on.
+                  onJumpToLending: () => _goToNav(NavId.lending),
                 ),
               ),
             ],
@@ -1484,19 +1530,33 @@ class _DashboardScreenState extends State<DashboardScreen>
             const SizedBox(width: 4),
           ],
         ),
+              // Narrow screens get a Material 3 bottom nav bar; wide
+              // screens get a left rail (built into the body Row below).
+              bottomNavigationBar:
+                  (!firstRun && isCompact) ? _buildBottomBar() : null,
               body: Column(
                 children: [
                   if (!firstRun)
                     SyncErrorBanner(
                       syncData: _syncData ?? const [],
-                      onJumpToManagement: () =>
-                          _tabController?.animateTo(6),
+                      onJumpToManagement: () => _goToNav(NavId.settings),
                       // Open Plaid Link directly so a "Chase needs
                       // reconnecting" banner is one click to resolve,
-                      // not three (banner → Management → row button).
+                      // not three (banner → Settings → row button).
                       onReconnect: _handleReconnect,
                     ),
-                  Expanded(child: _buildBody()),
+                  Expanded(
+                    child: (!firstRun && !isCompact)
+                        ? Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildNavRail(),
+                              const VerticalDivider(width: 1, thickness: 1),
+                              Expanded(child: _buildBody()),
+                            ],
+                          )
+                        : _buildBody(),
+                  ),
                 ],
               ),
             ),
@@ -1566,7 +1626,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             currencyFormat: currencyFormat,
             targetCurrency: _targetCurrency,
             usdMxnRate: fxRate,
-            onGoToManagement: () => _tabController?.animateTo(6),
+            onGoToManagement: () => _goToNav(NavId.settings),
             onBalanceUpdate: (id, bal) async {
               try {
                 await _apiService.updateAccountBalance(id, bal);
@@ -2010,9 +2070,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                     start: DateTime(anchor.year, anchor.month, anchor.day),
                     end: DateTime.now(),
                   ));
-                  _tabController?.animateTo(2);
+                  _goToNav(NavId.transactions);
                 },
-                onJumpToManagement: () => _tabController?.animateTo(6),
+                onJumpToManagement: () => _goToNav(NavId.settings),
               ),
               if (_sinceLastLogin != null) const SizedBox(height: 12),
               stats,
@@ -2084,7 +2144,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         currencyFormat: currencyFormat,
         targetCurrency: _targetCurrency,
         usdMxnRate: fxRate,
-        onGoToManagement: () => _tabController?.animateTo(6),
+        onGoToManagement: () => _goToNav(NavId.settings),
         apiService: _apiService,
         onTransactionAdded: () => _refreshData(),
         onLoadMore: _loadMoreTransactions,
@@ -2213,7 +2273,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 final start = DateTime(year, month, 1);
                 final end = DateTime(year, month + 1, 0); // last of month
                 setState(() => _txDateSeed = (start: start, end: end));
-                _tabController?.animateTo(2);
+                _goToNav(NavId.transactions);
               },
             ),
           const SizedBox(height: 24),
@@ -2278,7 +2338,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               targetCurrency: _targetCurrency,
               onTapMerchant: (m) {
                 setState(() => _transactionsSearchOverride = m);
-                _tabController?.animateTo(2);
+                _goToNav(NavId.transactions);
               },
               onIgnoreMerchant: (m) async {
                 try {
@@ -2623,27 +2683,200 @@ class _DashboardScreenState extends State<DashboardScreen>
       scrollable: false,
     );
 
-    return TabBarView(
-      controller: _tabController,
+    // Map each section id to its built body, then render only the
+    // visible sections (Lending excluded when off) in _destinations order.
+    // IndexedStack keeps every child mounted, so section state + one-shot
+    // initState fetches survive switching — same guarantee the old
+    // TabBarView + _KeepAliveTab gave, without a controller.
+    final sectionBodies = <NavId, Widget>{
+      NavId.overview: overviewTab,
+      NavId.portfolio: portfolioTab,
+      NavId.transactions: transactionsTab,
+      NavId.cashFlow: cashFlowTab,
+      NavId.projections: projectionsTab,
+      NavId.tax: taxPlanningTab,
+      NavId.settings: managementTab,
+      NavId.lending: lendingTab,
+    };
+    final dests = _destinations;
+    final index = _section.clamp(0, dests.length - 1);
+    return IndexedStack(
+      index: index,
+      // Expand so non-scrolling sections (Projections / Tax / Lending,
+      // which own their scroll) get a bounded height, like the old
+      // TabBarView viewport did.
+      sizing: StackFit.expand,
       children: [
-        _KeepAliveTab(child: overviewTab),
-        _KeepAliveTab(child: portfolioTab),
-        _KeepAliveTab(child: transactionsTab),
-        _KeepAliveTab(child: cashFlowTab),
-        _KeepAliveTab(child: projectionsTab),
-        _KeepAliveTab(child: taxPlanningTab),
-        _KeepAliveTab(child: managementTab),
-        // Kept in lockstep with the TabBar tab + controller length.
-        if (_lendingEnabled) _KeepAliveTab(child: lendingTab),
+        for (final d in dests) _KeepAliveTab(child: sectionBodies[d.id]!),
       ],
+    );
+  }
+
+  /// Wide-screen left navigation rail. Primary sections on top, a "More"
+  /// group of secondary sections below, and Settings pinned to the
+  /// bottom. Selection + persistence go through [_goToNav].
+  Widget _buildNavRail() {
+    final scheme = Theme.of(context).colorScheme;
+    final dests = _destinations;
+    final primary = dests.where((d) => d.tier == NavTier.primary).toList();
+    final secondary = dests
+        .where((d) => d.tier == NavTier.secondary && d.id != NavId.settings)
+        .toList();
+    final settings = dests.firstWhere((d) => d.id == NavId.settings);
+    return Container(
+      width: 188,
+      color: scheme.surface,
+      child: Column(
+        children: [
+          const SizedBox(height: 8),
+          // Scrollable middle so a short window never overflows; Settings
+          // stays pinned below the scroll area.
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final d in primary) _railTile(d),
+                  if (secondary.isNotEmpty) _railGroupLabel('More'),
+                  for (final d in secondary) _railTile(d),
+                ],
+              ),
+            ),
+          ),
+          Divider(height: 1, color: scheme.outlineVariant),
+          _railTile(settings),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  Widget _railGroupLabel(String label) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 12, 6),
+      child: Row(
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 11,
+              letterSpacing: 0.8,
+              fontWeight: FontWeight.w600,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Divider(height: 1, color: scheme.outlineVariant)),
+        ],
+      ),
+    );
+  }
+
+  Widget _railTile(_NavDest d) {
+    final scheme = Theme.of(context).colorScheme;
+    final dests = _destinations;
+    final selected =
+        _section >= 0 && _section < dests.length && dests[_section].id == d.id;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Material(
+        color: selected
+            ? d.accent.withValues(alpha: 0.14)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => _goToNav(d.id),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            child: Row(
+              children: [
+                Icon(d.icon,
+                    size: 20,
+                    color: selected ? d.accent : scheme.onSurfaceVariant),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    d.label,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight:
+                          selected ? FontWeight.w600 : FontWeight.w500,
+                      color:
+                          selected ? scheme.onSurface : scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Narrow-screen bottom navigation: the primary sections plus a "More"
+  /// entry that opens a sheet with the secondary sections + Settings.
+  Widget _buildBottomBar() {
+    final dests = _destinations;
+    final primary = dests.where((d) => d.tier == NavTier.primary).toList();
+    final current =
+        (_section >= 0 && _section < dests.length) ? dests[_section] : dests.first;
+    // Highlight the active primary, or "More" (last slot) when a secondary
+    // section is showing.
+    final primaryIdx = primary.indexWhere((d) => d.id == current.id);
+    final selectedIndex = primaryIdx >= 0 ? primaryIdx : primary.length;
+    return NavigationBar(
+      selectedIndex: selectedIndex,
+      onDestinationSelected: (i) {
+        if (i < primary.length) {
+          _goToNav(primary[i].id);
+        } else {
+          _openMoreSheet();
+        }
+      },
+      destinations: [
+        for (final d in primary)
+          NavigationDestination(icon: Icon(d.icon), label: d.shortLabel),
+        const NavigationDestination(
+            icon: Icon(Icons.more_horiz), label: 'More'),
+      ],
+    );
+  }
+
+  void _openMoreSheet() {
+    final secondary =
+        _destinations.where((d) => d.tier == NavTier.secondary).toList();
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final d in secondary)
+              ListTile(
+                leading: Icon(d.icon, color: d.accent),
+                title: Text(d.label),
+                onTap: () {
+                  Navigator.of(sheetCtx).pop();
+                  _goToNav(d.id);
+                },
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
 
-/// Keeps a TabBarView child alive across tab switches so its State (and any
-/// initState API calls — projections, tax planning, etc.) only fires once.
-/// Without this, every click of Projections or Tax planning re-fetched its
-/// data, which the user perceives as a sluggish tab switch.
+/// Keeps an IndexedStack child alive across section switches so its State
+/// (and any initState API calls — projections, tax planning, etc.) only
+/// fires once. IndexedStack already keeps children mounted, but the
+/// AutomaticKeepAlive wrapper is retained so nested scroll/keep-alive
+/// behaviour is unchanged from the old TabBarView.
 class _KeepAliveTab extends StatefulWidget {
   final Widget child;
   const _KeepAliveTab({required this.child});

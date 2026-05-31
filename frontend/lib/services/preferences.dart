@@ -32,15 +32,12 @@ class Preferences {
   static String getCurrency() => _read('currency') ?? 'USD';
   static void setCurrency(String code) => _write('currency', code);
 
-  /// Last-active tab index (0..5). Defaults to Overview (0) if unset
-  /// or out of range — callers should clamp before using.
-  static int getLastTab() {
-    final raw = _read('lastTab');
-    final n = int.tryParse(raw ?? '');
-    return n ?? 0;
-  }
-
-  static void setLastTab(int index) => _write('lastTab', index.toString());
+  /// Last-active navigation section, stored as the NavId's `name` so it
+  /// survives section reordering and the conditional Lending section
+  /// (mirrors how the date-range pref is stored). Null when unset — the
+  /// caller resolves it to an index and defaults to Overview.
+  static String? getLastSection() => _read('lastSection');
+  static void setLastSection(String id) => _write('lastSection', id);
 
   /// The DateRange enum value the user last selected on the net-worth
   /// chart. Stored as the enum's `name` so it survives across reorders.
