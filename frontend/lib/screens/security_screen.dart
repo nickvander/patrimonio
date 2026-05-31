@@ -1343,7 +1343,10 @@ class _PasskeyRow extends StatelessWidget {
     // biometric ("This iPhone") apart from a roaming key ("YubiKey on
     // keychain") at a glance.
     final icon = passkey.isHardwareKey ? Icons.key : Icons.fingerprint;
-    final kind = passkey.isHardwareKey ? 'Hardware key' : 'Platform biometric';
+    // "Platform passkey" rather than "Platform biometric" — a platform
+    // credential isn't necessarily a biometric (it may be a device PIN), and
+    // overclaiming "biometric" read as wrong for keys the browser mislabeled.
+    final kind = passkey.isHardwareKey ? 'Hardware security key' : 'Platform passkey';
     final subtitleParts = <String>[
       kind,
       _registered(passkey.createdAt),

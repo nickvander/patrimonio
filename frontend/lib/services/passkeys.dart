@@ -123,6 +123,10 @@ class PasskeyService {
         _coerceCreationOptions(options['publicKey'] as Map<String, dynamic>);
     final cred = await _callCredentialsCreate(publicKey);
     final credJson = _encodeAttestationCredential(cred);
+    // Lift transports OUT of the credential object before sending — it's a
+    // non-standard field on RegisterPublicKeyCredential and rides as its own
+    // top-level request field instead.
+    final transports = credJson.remove('transports');
 
     // 3. Send the result + the nickname + attachment hint back to the
     //    server. The attachment lives inside credJson but webauthn-rs
@@ -141,6 +145,7 @@ class PasskeyService {
           'nickname': nickname.trim(),
         if (credJson['authenticatorAttachment'] != null)
           'authenticator_attachment': credJson['authenticatorAttachment'],
+        if (transports != null) 'transports': transports,
       }),
     );
     if (finishRes.statusCode != 200) {
@@ -324,9 +329,12 @@ PasskeyException _mapCredentialError(Object e, {required bool registering}) {
   final verb = registering ? 'enrolment' : 'sign-in';
   if (probe.contains('InvalidStateError')) {
     return PasskeyException(registering
-        ? 'This device or security key is already registered on your '
-            'account. To re-enrol it, remove the existing passkey on this '
-            'screen first.'
+        ? 'A passkey for this account already exists on the authenticator you '
+            'used. If you\'re adding a DIFFERENT security key, your browser is '
+            'likely offering a saved/synced passkey instead of the new key — '
+            'in the prompt choose "Use a different device" (or insert the key '
+            'and pick the security-key / USB option). To replace the existing '
+            'passkey, remove it on this screen first.'
         : 'This passkey isn\'t recognised for this account.');
   }
   if (probe.contains('NotAllowedError') || probe.contains('AbortError')) {
@@ -483,6 +491,21 @@ Map<String, dynamic> _encodeAttestationCredential(JSObject cred) {
     if (attachment != null) {
       out['authenticatorAttachment'] = (attachment as JSString).toDart;
     }
+  }
+  // Transports (usb/nfc/ble/hybrid/internal) are a far more reliable signal
+  // for "roaming hardware key vs on-device passkey" than the attachment
+  // hint, which browsers often misreport (e.g. a YubiKey surfacing as
+  // "platform"). getTransports() lives on the attestation response and isn't
+  // universal, so probe defensively.
+  try {
+    final t = response.callMethod<JSArray<JSString>?>('getTransports'.toJS);
+    if (t != null) {
+      final list = t.toDart.map((s) => s.toDart).toList();
+      if (list.isNotEmpty) out['transports'] = list;
+    }
+  } catch (_) {
+    // Authenticator/browser doesn't expose getTransports — fine, the server
+    // falls back to the attachment hint.
   }
   // Optional extensions block — empty object is the safe default.
   out['extensions'] = <String, dynamic>{};

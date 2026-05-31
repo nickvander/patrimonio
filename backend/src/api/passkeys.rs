@@ -127,6 +127,13 @@ pub struct RegisterFinishRequest {
     /// Touch ID / Windows Hello) or "cross-platform" (USB / NFC
     /// hardware key). Display hint only — server never branches on it.
     pub authenticator_attachment: Option<String>,
+    /// Transports the credential advertises (usb/nfc/ble/hybrid/internal),
+    /// from `AuthenticatorAttestationResponse.getTransports()`. A much more
+    /// reliable signal than `authenticator_attachment`, which browsers
+    /// routinely misreport (a YubiKey often surfaces as "platform"). Used
+    /// only to derive the display attachment below.
+    #[serde(default)]
+    pub transports: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]
@@ -237,15 +244,34 @@ async fn register_finish(
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .map(|s| s.chars().take(64).collect::<String>());
-    // Whitelist to known spec values so a malicious client can't seed
-    // arbitrary strings into the column the UI renders.
-    let attachment = body
-        .authenticator_attachment
-        .as_deref()
-        .and_then(|s| match s {
-            "platform" | "cross-platform" => Some(s.to_string()),
-            _ => None,
-        });
+    // Decide the display class. Transports are authoritative when present:
+    // any roaming transport (usb/nfc/ble/hybrid) means a hardware/cross-
+    // platform key regardless of what `authenticator_attachment` claimed
+    // (browsers frequently mislabel a YubiKey as "platform"). Only when
+    // transports are absent do we fall back to the browser's attachment
+    // hint, whitelisted to known spec values.
+    let attachment = match body.transports.as_deref() {
+        Some(transports) if !transports.is_empty() => {
+            let roaming = transports
+                .iter()
+                .any(|t| matches!(t.as_str(), "usb" | "nfc" | "ble" | "hybrid"));
+            // "internal" (and nothing else) is the only true platform signal.
+            if roaming {
+                Some("cross-platform".to_string())
+            } else if transports.iter().any(|t| t == "internal") {
+                Some("platform".to_string())
+            } else {
+                None
+            }
+        }
+        _ => body
+            .authenticator_attachment
+            .as_deref()
+            .and_then(|s| match s {
+                "platform" | "cross-platform" => Some(s.to_string()),
+                _ => None,
+            }),
+    };
 
     // DO NOTHING (not DO UPDATE) so we can tell a brand-new credential
     // apart from one we already hold. `fetch_optional` returns None on

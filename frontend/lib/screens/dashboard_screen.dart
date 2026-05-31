@@ -1404,56 +1404,81 @@ class _DashboardScreenState extends State<DashboardScreen>
                 onSwap: () => _setTargetCurrency(
                     _targetCurrency == 'USD' ? 'MXN' : 'USD'),
               ),
-            // Hidden Items, Security, and Sign Out are grouped into a
-            // single popup so the AppBar doesn't overflow — at typical
-            // browser widths 8+ action widgets get clipped silently.
-            PopupMenuButton<_AppBarAction>(
-              tooltip: 'More',
-              icon: const Icon(Icons.more_vert),
-              onSelected: (action) async {
-                switch (action) {
-                  case _AppBarAction.hiddenItems:
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (_) => const HiddenItemsScreen()),
-                    );
-                    if (mounted) _loadAllData(silent: true);
-                  case _AppBarAction.security:
-                    await Navigator.of(context).push(
-                      MaterialPageRoute(
-                          builder: (_) => const SecurityScreen()),
-                    );
-                  case _AppBarAction.signOut:
-                    await AuthService.instance.logout();
-                }
+            // Hidden Items, Security, and Sign Out live in a single overflow
+            // menu so the AppBar doesn't clip at typical widths. Material 3
+            // MenuAnchor anchors the menu to the button and opens it directly
+            // beneath (end-aligned for this right-side trigger), with a
+            // rounded, elevated M3 surface — cleaner than the old tap-anchored
+            // PopupMenuButton.
+            Builder(
+              builder: (menuCtx) {
+                final scheme = Theme.of(menuCtx).colorScheme;
+                return MenuAnchor(
+                  alignmentOffset: const Offset(0, 6),
+                  style: MenuStyle(
+                    alignment: AlignmentDirectional.bottomEnd,
+                    elevation: const WidgetStatePropertyAll(3),
+                    backgroundColor:
+                        WidgetStatePropertyAll(scheme.surfaceContainerHigh),
+                    surfaceTintColor:
+                        WidgetStatePropertyAll(scheme.surfaceTint),
+                    shape: WidgetStatePropertyAll(
+                      RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    padding: const WidgetStatePropertyAll(
+                      EdgeInsets.symmetric(vertical: 6),
+                    ),
+                  ),
+                  builder: (context, controller, _) => IconButton(
+                    tooltip: 'More',
+                    icon: const Icon(Icons.more_vert),
+                    onPressed: () => controller.isOpen
+                        ? controller.close()
+                        : controller.open(),
+                  ),
+                  menuChildren: [
+                    MenuItemButton(
+                      leadingIcon:
+                          const Icon(Icons.visibility_off_outlined, size: 20),
+                      onPressed: () async {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (_) => const HiddenItemsScreen()),
+                        );
+                        if (mounted) _loadAllData(silent: true);
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.only(right: 16),
+                        child: Text('Hidden items'),
+                      ),
+                    ),
+                    MenuItemButton(
+                      leadingIcon: const Icon(Icons.shield_outlined, size: 20),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                            builder: (_) => const SecurityScreen()),
+                      ),
+                      child: const Padding(
+                        padding: EdgeInsets.only(right: 16),
+                        child: Text('Security'),
+                      ),
+                    ),
+                    const Divider(height: 8, indent: 12, endIndent: 12),
+                    MenuItemButton(
+                      leadingIcon:
+                          Icon(Icons.logout, size: 20, color: scheme.error),
+                      onPressed: () => AuthService.instance.logout(),
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 16),
+                        child: Text('Sign out',
+                            style: TextStyle(color: scheme.error)),
+                      ),
+                    ),
+                  ],
+                );
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(
-                  value: _AppBarAction.hiddenItems,
-                  child: ListTile(
-                    leading: Icon(Icons.visibility_off_outlined),
-                    title: Text('Hidden items'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-                PopupMenuItem(
-                  value: _AppBarAction.security,
-                  child: ListTile(
-                    leading: Icon(Icons.shield_outlined),
-                    title: Text('Security'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-                PopupMenuDivider(),
-                PopupMenuItem(
-                  value: _AppBarAction.signOut,
-                  child: ListTile(
-                    leading: Icon(Icons.logout),
-                    title: Text('Sign out'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-              ],
             ),
             const SizedBox(width: 4),
           ],
@@ -2904,6 +2929,3 @@ class _ThemeCycleButton extends StatelessWidget {
     );
   }
 }
-
-/// Actions available from the AppBar "More" popup.
-enum _AppBarAction { hiddenItems, security, signOut }
