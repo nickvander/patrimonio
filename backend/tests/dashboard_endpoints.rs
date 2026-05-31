@@ -2666,6 +2666,122 @@ async fn loan_update_terms_rejected_after_reconcile() {
     assert_eq!(res.status(), StatusCode::OK, "non-schedule edit stays allowed after reconcile");
 }
 
+/// Regression for the spurious-409 bug: the edit dialog re-sends
+/// principal/interest_rate/interest_type on EVERY save (pre-filled,
+/// unchanged). Editing only the borrower name on a reconciled loan —
+/// while the payload still carries the unchanged principal — must NOT be
+/// treated as a term change, so it must 200, not 409. (Presence-based
+/// detection would wrongly reject this and drop the legitimate edit.)
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_update_unchanged_principal_after_reconcile_ok() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+        "origination_date": "2026-01-15", "interest_type": "none",
+        "term_months": 12, "payment_frequency": "monthly"
+    })).await;
+    let _ = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
+    )).await.unwrap();
+    let repay = seed_tx_dated(&pool, user_id, acct, "Zelle from Jose", "100.00", "2026-02-15").await;
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/payments"),
+        Some(&serde_json::json!({"transaction_id": repay.to_string()})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // Edit ONLY the borrower name, but resend the unchanged principal /
+    // interest_type exactly as the dialog does. Must succeed.
+    let res = app.clone().oneshot(req(
+        Method::PATCH, &format!("/api/loans/{loan_id}"),
+        Some(&serde_json::json!({
+            "borrower_name": "Jose Ramirez",
+            "principal": 1200.0,
+            "interest_type": "none"
+        })), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK,
+        "resending an UNCHANGED principal must not 409 a reconciled loan");
+
+    // The name change actually persisted.
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
+    )).await.unwrap();
+    let l = body_json(res.into_body()).await;
+    assert_eq!(l["borrower_name"], "Jose Ramirez", "borrower rename must persist");
+}
+
+/// B1, the real (tx-linked) bug path: a PARTIAL payment that is
+/// reconciled against a bank transaction sets actual_tx_id on the row.
+/// The old `actual_tx_id IS NULL` selector skipped such a row, so the
+/// next payment stranded the remainder on installment 2. The remainder
+/// must top up the SAME installment instead.
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_tx_linked_partial_tops_up_same_installment() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+        "origination_date": "2026-01-15", "interest_type": "none",
+        "term_months": 12, "payment_frequency": "monthly"
+    })).await;
+    let _ = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
+    )).await.unwrap();
+
+    // Partial of $40 reconciled against a real $40 transaction → the row
+    // now carries a non-NULL actual_tx_id (the case the old selector
+    // skipped).
+    let tx40 = seed_tx_dated(&pool, user_id, acct, "Zelle from Jose", "40.00", "2026-02-15").await;
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/payments"),
+        Some(&serde_json::json!({"transaction_id": tx40.to_string()})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let rows = loan_payments(&app, &token, loan_id).await;
+    assert_eq!(rows[0]["status"], "partial", "installment 1 should be partial after the $40 tx");
+
+    // Remainder $60 (cash). Must top up installment 1, not spill to 2.
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/payments"),
+        Some(&serde_json::json!({"amount": 60.0, "paid_date": "2026-02-20"})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    let rows = loan_payments(&app, &token, loan_id).await;
+    assert_eq!(rows[0]["status"], "paid", "installment 1 must be paid after the remainder");
+    assert!((rows[0]["paid_amount"].as_f64().unwrap() - 100.0).abs() < 0.01,
+        "installment 1 should total $100, got {}", rows[0]["paid_amount"]);
+    assert!(rows[1]["paid_amount"].is_null(),
+        "remainder must NOT spill into installment 2 — got {}", rows[1]["paid_amount"]);
+}
+
+/// POST /schedule on a loan id that doesn't exist (or isn't ours) must
+/// 404, not 500 (the shared regenerate_schedule helper must distinguish
+/// not-found from a real DB error).
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_generate_schedule_unknown_id_is_404() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+    let bogus = uuid::Uuid::new_v4();
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{bogus}/schedule"), Some(&serde_json::json!({})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND, "schedule on an unknown loan must 404, not 500");
+}
+
 // =====================================================================
 // Interest income (cash basis) — principal/interest split + report
 // =====================================================================

@@ -564,6 +564,13 @@ async fn update_loan(
     // interest / reminders / agreement). We regenerate AFTER the UPDATE
     // below, from the loan's new terms.
     //
+    // "Changed" is detected by VALUE, not mere payload presence: the edit
+    // dialog re-sends principal/interest_rate/interest_type on every save
+    // (pre-filled, unchanged), so a presence-based check would spuriously
+    // treat a borrower-name-only edit as a term change — and on a
+    // reconciled loan that wrongly 409s and drops the legitimate edit.
+    // We compare each submitted value against the stored row instead.
+    //
     // Policy for a schedule WITH reconciled payments: REJECT the
     // schedule-affecting edit with 409 (do not silently regenerate, do
     // not leave a stale schedule). This is the safest, least-surprising
@@ -571,8 +578,41 @@ async fn update_loan(
     // the Σprincipal == principal invariant intact. The user unreconciles
     // first, edits terms, then re-reconciles. Non-schedule fields
     // (borrower_name, status, notes) are unaffected and always editable.
-    let schedule_affecting =
-        payload.principal.is_some() || payload.interest_rate.is_some() || payload.interest_type.is_some();
+    let current: Option<(rust_decimal::Decimal, rust_decimal::Decimal, String)> =
+        match sqlx::query_as(
+            "SELECT principal, interest_rate, interest_type FROM loans \
+             WHERE id = $1 AND user_id = $2",
+        )
+        .bind(id)
+        .bind(ctx.user_id)
+        .fetch_optional(&state.db)
+        .await
+        {
+            Ok(c) => c,
+            Err(e) => {
+                error!("update_loan term load failed: {e}");
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        };
+    let Some((cur_principal, cur_rate, cur_type)) = current else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    // Decimal equality is by numeric value (scale-insensitive), and both
+    // create_loan and the value below go through from_f64_retain on the
+    // same f64, so an unchanged resend compares equal.
+    let principal_changed = payload
+        .principal
+        .and_then(rust_decimal::Decimal::from_f64_retain)
+        .is_some_and(|p| p != cur_principal);
+    let rate_changed = payload
+        .interest_rate
+        .and_then(rust_decimal::Decimal::from_f64_retain)
+        .is_some_and(|r| r != cur_rate);
+    let type_changed = payload
+        .interest_type
+        .as_deref()
+        .is_some_and(|t| t != cur_type);
+    let schedule_affecting = principal_changed || rate_changed || type_changed;
     if schedule_affecting {
         let reconciled: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM loan_payments \
@@ -634,6 +674,9 @@ async fn update_loan(
                         )
                             .into_response();
                     }
+                    // The UPDATE above already changed this loan's row, so
+                    // NotFound can't happen here; fold it in defensively.
+                    RegenOutcome::NotFound => return StatusCode::NOT_FOUND.into_response(),
                     // The loan still has a schedule but the new terms make
                     // it open-ended / invalid — shouldn't happen via this
                     // path (term/frequency aren't editable here), so log
@@ -1070,6 +1113,13 @@ async fn record_payment(
     );
     let principal_portion = (amount - interest_portion).max(0.0);
     let balance_after = (balance_before - principal_portion).max(0.0);
+    // Known limitation: a single payment that EXCEEDS the current
+    // installment's remaining scheduled_amount is not spilled onto the
+    // next installment — the whole amount tops up this one row, so it can
+    // show paid_amount > scheduled_amount. The running balance
+    // (principal − Σ principal_portion) stays correct either way; only the
+    // per-row schedule view is affected. True multi-installment spill is a
+    // future enhancement (it needs a per-row loop inside the write tx).
     let interest_dec =
         rust_decimal::Decimal::from_f64_retain(interest_portion).unwrap_or_default();
     let principal_dec =
@@ -1338,6 +1388,9 @@ enum RegenOutcome {
     OpenEnded,
     /// payment_frequency is set but invalid.
     BadFrequency,
+    /// The loan doesn't exist (or isn't this user's) — maps to 404, not
+    /// 500, so POST /schedule on a bad id behaves like the other handlers.
+    NotFound,
     /// A DB error occurred.
     DbError,
 }
@@ -1369,8 +1422,13 @@ async fn regenerate_schedule(
     .bind(user_id)
     .fetch_optional(db)
     .await;
-    let Ok(Some(l)) = loan else {
-        return RegenOutcome::DbError;
+    let l = match loan {
+        Ok(Some(l)) => l,
+        Ok(None) => return RegenOutcome::NotFound,
+        Err(e) => {
+            error!("regenerate_schedule loan load failed: {e}");
+            return RegenOutcome::DbError;
+        }
     };
 
     if require_existing {
@@ -1518,6 +1576,7 @@ async fn generate_schedule(
         RegenOutcome::BadFrequency => {
             (StatusCode::UNPROCESSABLE_ENTITY, "invalid payment frequency").into_response()
         }
+        RegenOutcome::NotFound => StatusCode::NOT_FOUND.into_response(),
         RegenOutcome::DbError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
