@@ -1008,6 +1008,364 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
 }
 
 // =====================================================================
+// Edit-loan dialog — correct borrower / principal / rate / type / notes
+// =====================================================================
+
+/// Mirrors the add-loan dialog's look (same _section / _twoUp / filled
+/// inputs) but only exposes the fields the backend PATCH accepts:
+/// borrower_name, principal, interest_rate, interest_type, notes.
+/// rate_period / term / payment frequency are NOT in UpdateLoanRequest,
+/// so they're shown read-only for context. Pops a map of the changed
+/// fields (display shape — `principal`/`interest_rate` as numbers,
+/// `interest_rate` still a fraction) on success, or null on cancel.
+class _EditLoanDialog extends StatefulWidget {
+  final ApiService apiService;
+  final Map<String, dynamic> loan;
+
+  const _EditLoanDialog({
+    required this.apiService,
+    required this.loan,
+  });
+
+  @override
+  State<_EditLoanDialog> createState() => _EditLoanDialogState();
+}
+
+class _EditLoanDialogState extends State<_EditLoanDialog> {
+  late final TextEditingController _borrowerCtrl;
+  late final TextEditingController _principalCtrl;
+  late final TextEditingController _rateCtrl;
+  late final TextEditingController _notesCtrl;
+  late String _interestType;
+  bool _submitting = false;
+
+  String get _currency =>
+      (widget.loan['currency'] ?? 'USD').toString();
+  String get _sym => _currency == 'MXN' ? r'MX$' : r'$';
+  String get _ratePeriod =>
+      (widget.loan['rate_period'] ?? 'annual').toString();
+
+  @override
+  void initState() {
+    super.initState();
+    _borrowerCtrl = TextEditingController(
+        text: (widget.loan['borrower_name'] ?? '').toString());
+    final principal = (widget.loan['principal'] as num?)?.toDouble() ?? 0;
+    _principalCtrl = TextEditingController(
+        text: principal == 0 ? '' : _trimZeros(principal));
+    // Stored as a fraction; show as a percent (×100), mirroring add-loan.
+    final rateFraction =
+        (widget.loan['interest_rate'] as num?)?.toDouble() ?? 0;
+    _rateCtrl = TextEditingController(
+        text: rateFraction == 0 ? '' : _trimZeros(rateFraction * 100));
+    _notesCtrl = TextEditingController(
+        text: (widget.loan['notes'] ?? '').toString());
+    _interestType = (widget.loan['interest_type'] ?? 'none').toString();
+  }
+
+  /// Format a double for an editable field without a trailing ".0".
+  String _trimZeros(double v) {
+    final s = v.toStringAsFixed(2);
+    return s.endsWith('.00')
+        ? s.substring(0, s.length - 3)
+        : (s.endsWith('0') ? s.substring(0, s.length - 1) : s);
+  }
+
+  @override
+  void dispose() {
+    _borrowerCtrl.dispose();
+    _principalCtrl.dispose();
+    _rateCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final contentMaxHeight =
+        (media.size.height - media.viewInsets.bottom - 220)
+            .clamp(220.0, 620.0);
+    final readOnlyTerms = _termsSummary();
+
+    return AlertDialog(
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+      contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: context.accentSoft(context.tealAccent),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.edit_outlined,
+                color: context.tealAccent, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Edit loan',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: context.textPrimary)),
+                Text('Correct the borrower, amount, or interest terms',
+                    style: TextStyle(fontSize: 12, color: context.textMuted)),
+              ],
+            ),
+          ),
+        ],
+      ),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 460,
+          maxHeight: contentMaxHeight,
+        ),
+        child: SizedBox(
+          width: 460,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _section('Borrower & amount', [
+                  TextField(
+                    controller: _borrowerCtrl,
+                    decoration: _decoration('Borrower name',
+                        icon: Icons.person_outline),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _principalCtrl,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: _decoration('Amount lent',
+                        prefixText: '$_sym ',
+                        icon: Icons.payments_outlined),
+                  ),
+                ]),
+                const SizedBox(height: 16),
+                _section('Interest terms', [
+                  DropdownButtonFormField<String>(
+                    initialValue: _interestType,
+                    isExpanded: true,
+                    decoration: _decoration('Interest type'),
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'none', child: Text('No interest')),
+                      DropdownMenuItem(
+                          value: 'simple', child: Text('Simple interest')),
+                      DropdownMenuItem(
+                          value: 'amortized', child: Text('Amortized')),
+                      DropdownMenuItem(
+                          value: 'interest_only',
+                          child: Text('Interest-only')),
+                      DropdownMenuItem(
+                          value: 'compound', child: Text('Compound')),
+                    ],
+                    onChanged: (v) =>
+                        setState(() => _interestType = v ?? 'none'),
+                  ),
+                  if (_interestType != 'none') ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _rateCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      decoration: _decoration(
+                          'Rate % per ${_ratePeriod == 'monthly' ? 'month' : 'year'}',
+                          hint: 'e.g. 5',
+                          icon: Icons.percent),
+                    ),
+                  ],
+                  if (readOnlyTerms != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      readOnlyTerms,
+                      style:
+                          TextStyle(fontSize: 11, color: context.textSubtle),
+                    ),
+                  ],
+                ]),
+                const SizedBox(height: 16),
+                _section('Notes', [
+                  TextField(
+                    controller: _notesCtrl,
+                    maxLines: 2,
+                    decoration: _decoration('Optional',
+                        hint: 'e.g. for the car deposit',
+                        icon: Icons.notes_outlined),
+                  ),
+                ]),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
+          onPressed: _submitting ? null : _submit,
+          icon: _submitting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.check, size: 18),
+          label: const Text('Save changes'),
+        ),
+      ],
+    );
+  }
+
+  /// Read-only summary of the term / payment-frequency fields the PATCH
+  /// endpoint doesn't accept, so the user understands why they're not
+  /// editable here. Null when the loan is open-ended (nothing to show).
+  String? _termsSummary() {
+    final term = (widget.loan['term_months'] as num?)?.toInt();
+    final freq = widget.loan['payment_frequency']?.toString();
+    if (term == null && (freq == null || freq.isEmpty)) return null;
+    final parts = <String>[];
+    if (term != null) parts.add('$term-month term');
+    if (freq != null && freq.isNotEmpty) {
+      parts.add(switch (freq) {
+        'monthly' => 'monthly payments',
+        'weekly' => 'weekly payments',
+        'lump_sum' => 'single lump-sum payment',
+        _ => '$freq payments',
+      });
+    }
+    return 'Term & schedule (${parts.join(' · ')}) are fixed — '
+        'delete and re-add to change them.';
+  }
+
+  /// A titled group of fields in a soft card (mirrors _AddLoanDialog).
+  Widget _section(String title, List<Widget> children) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 8),
+          child: Text(
+            title.toUpperCase(),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+              color: context.textSubtle,
+            ),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: context.tileSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: context.hairline),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Shared filled, rounded input styling (mirrors _AddLoanDialog).
+  InputDecoration _decoration(String label,
+      {String? hint, String? prefixText, IconData? icon}) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixText: prefixText,
+      prefixIcon: icon == null ? null : Icon(icon, size: 18),
+      isDense: true,
+      filled: true,
+      fillColor: context.tint(0.03),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: context.hairline),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: context.hairline),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: context.tealAccent, width: 1.5),
+      ),
+    );
+  }
+
+  Future<void> _submit() async {
+    final borrower = _borrowerCtrl.text.trim();
+    final principal = double.tryParse(_principalCtrl.text.trim());
+    if (borrower.isEmpty) {
+      _toast('Enter a borrower name');
+      return;
+    }
+    if (principal == null || principal <= 0) {
+      _toast('Enter a valid amount');
+      return;
+    }
+    final interestBearing = _interestType != 'none';
+    // Rate entered as a percent; backend wants a fraction (mirrors
+    // add-loan). A non-interest loan stores a 0 rate.
+    final ratePct =
+        interestBearing ? (double.tryParse(_rateCtrl.text.trim()) ?? 0) : 0.0;
+    final rateFraction = ratePct / 100.0;
+    final notes = _notesCtrl.text.trim();
+
+    setState(() => _submitting = true);
+    try {
+      await widget.apiService.updateLoan(
+        widget.loan['id'].toString(),
+        const <String, dynamic>{},
+        borrowerName: borrower,
+        principal: principal,
+        interestRate: rateFraction,
+        interestType: _interestType,
+        // Empty clears the note (COALESCE keeps the old value only on
+        // null; we send an explicit empty string to allow clearing).
+        notes: notes,
+      );
+      if (!mounted) return;
+      // Hand the edited values back in the loan's display shape so the
+      // detail sheet can update its header optimistically.
+      Navigator.pop(context, <String, dynamic>{
+        'borrower_name': borrower,
+        'principal': principal,
+        'interest_rate': rateFraction,
+        'interest_type': _interestType,
+        'notes': notes,
+      });
+    } on LoanTermsLockedException catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      _toast(e.message);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      _toast('Couldn\'t save changes');
+    }
+  }
+
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+}
+
+// =====================================================================
 // Loan detail sheet — reconcile disbursement + repayments
 // =====================================================================
 
@@ -1363,11 +1721,21 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
   /// principal/interest split. Distinguished from the Repayments
   /// section (which is about reconciliation) — this is the PLAN.
   Widget _buildScheduleSection() {
-    // Scheduled rows = those with a principal split (generated), as
-    // opposed to manually-recorded MVP repayments (principal 0).
-    final scheduled = _payments
-        .where((p) => ((p as Map)['scheduled_principal'] as num? ?? 0) > 0)
-        .toList();
+    // Scheduled rows = GENERATED installments, as opposed to
+    // manually-recorded MVP repayments (which carry NO scheduled split —
+    // both scheduled_principal and scheduled_interest are 0). Keep any
+    // row that has a principal OR interest split: interest-only loans
+    // emit scheduled_principal = 0 for every period except the final
+    // balloon, so filtering on principal>0 alone collapses a 6-month
+    // interest-only plan to a single row. Compound / lump_sum schedules
+    // are genuinely a single row and stay that way (their one row has
+    // both splits > 0).
+    final scheduled = _payments.where((p) {
+      final m = p as Map;
+      final sp = (m['scheduled_principal'] as num?)?.toDouble() ?? 0;
+      final si = (m['scheduled_interest'] as num?)?.toDouble() ?? 0;
+      return sp > 0 || si > 0;
+    }).toList();
     final hasTerms = widget.loan['term_months'] != null &&
         widget.loan['payment_frequency'] != null;
 
@@ -1475,6 +1843,13 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
     return Wrap(
       spacing: 8,
       children: [
+        // Correct a fat-fingered borrower / principal / rate / interest
+        // type without delete-and-recreate.
+        OutlinedButton.icon(
+          onPressed: _openEditLoan,
+          icon: const Icon(Icons.edit_outlined, size: 16),
+          label: const Text('Edit', style: TextStyle(fontSize: 12)),
+        ),
         // Printable promissory-note / agreement (HTML → browser PDF).
         OutlinedButton.icon(
           onPressed: () => launchUrl(
@@ -1528,6 +1903,25 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
           ? 'Unreconcile payments first to regenerate'
           : 'Couldn\'t generate schedule');
     }
+  }
+
+  Future<void> _openEditLoan() async {
+    final saved = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => _EditLoanDialog(
+        apiService: widget.apiService,
+        loan: widget.loan,
+      ),
+    );
+    if (saved == null) return;
+    // Reflect the edited fields locally so the sheet header updates
+    // without waiting for the parent reload, then refresh both this
+    // sheet (schedule may have been regenerated) and the dashboard.
+    widget.loan.addAll(saved);
+    await _load();
+    widget.onMutated();
+    if (mounted) setState(() {});
+    _toast('Loan updated');
   }
 
   Future<void> _setStatus(String status) async {

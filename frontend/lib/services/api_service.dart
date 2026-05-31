@@ -17,6 +17,18 @@ class UnauthorizedException implements Exception {
   String toString() => message;
 }
 
+/// Thrown when a loan PATCH is rejected with 409 — the backend refuses
+/// to change terms (principal / rate / interest type) after payments
+/// have been reconciled, because a re-derived schedule would orphan the
+/// already-paid rows. Carries the server's human-readable reason so the
+/// edit dialog can surface it verbatim.
+class LoanTermsLockedException implements Exception {
+  final String message;
+  LoanTermsLockedException(this.message);
+  @override
+  String toString() => message;
+}
+
 /// Per-file progress tick from the streaming upload handler.
 /// `done` is the count of files that have finished parsing
 /// (regardless of success/failure); `total` is the batch size from
@@ -1417,15 +1429,63 @@ class ApiService {
     throw Exception('Failed to create loan (${response.statusCode})');
   }
 
-  Future<void> updateLoan(String id, Map<String, dynamic> changes) async {
+  /// Patch a loan. The status-only call sites pass `{'status': ...}`
+  /// positionally; the edit dialog passes the full editable field set
+  /// (borrower_name / principal / interest_rate / interest_type / notes)
+  /// in [changes], and may additionally set any of the optional named
+  /// params, which are merged into the body when non-null (taking
+  /// precedence over the same key in [changes]). interest_rate must
+  /// already be a fraction (percent ÷ 100), mirroring createLoan.
+  ///
+  /// A parallel backend change may now regenerate the schedule when
+  /// principal/rate/interest_type change and reject term changes on a
+  /// reconciled loan with 409 — surfaced here as [LoanTermsLockedException]
+  /// so the caller can show the server's message instead of crashing.
+  Future<void> updateLoan(
+    String id,
+    Map<String, dynamic> changes, {
+    String? borrowerName,
+    double? principal,
+    double? interestRate,
+    String? interestType,
+    String? notes,
+  }) async {
+    final body = <String, dynamic>{
+      ...changes,
+      if (borrowerName != null) 'borrower_name': borrowerName,
+      if (principal != null) 'principal': principal,
+      if (interestRate != null) 'interest_rate': interestRate,
+      if (interestType != null) 'interest_type': interestType,
+      if (notes != null) 'notes': notes,
+    };
     final response = await _patch(
       Uri.parse('$_baseUrl/loans/$id'),
       headers: _withCsrf({'Content-Type': 'application/json'}),
-      body: json.encode(changes),
+      body: json.encode(body),
     );
+    if (response.statusCode == 409) {
+      throw LoanTermsLockedException(_loanErrorText(response));
+    }
     if (response.statusCode != 200) {
       throw Exception('Failed to update loan (${response.statusCode})');
     }
+  }
+
+  /// Pull a human-readable message out of a loan error response: the
+  /// backend returns either a bare string body or a `{error: "..."}`
+  /// JSON object depending on the path. Falls back to a generic message.
+  String _loanErrorText(http.Response res) {
+    final body = res.body.trim();
+    if (body.isEmpty) return 'This change isn\'t allowed.';
+    try {
+      final decoded = json.decode(body);
+      if (decoded is Map && decoded['error'] is String) {
+        return decoded['error'] as String;
+      }
+    } catch (_) {
+      // Not JSON — the backend often returns a plain-text reason.
+    }
+    return body;
   }
 
   Future<void> deleteLoan(String id) async {
