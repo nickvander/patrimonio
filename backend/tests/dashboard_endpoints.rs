@@ -3355,3 +3355,226 @@ async fn loan_agreement_html_renders_and_is_scoped() {
     )).await.unwrap();
     assert_eq!(res.status(), StatusCode::NOT_FOUND, "agreement must be owner-scoped");
 }
+
+// =====================================================================
+// Overpay-spill — a payment exceeding one installment spills onto later
+// installments (in installment_number order), inside one write tx.
+// =====================================================================
+
+/// A single $250 cash payment on a $1,200/12mo interest-free schedule
+/// ($100/installment) must FULLY pay installments 1 & 2 and leave
+/// installment 3 partial ($50), with 4-12 untouched. Outstanding drops by
+/// exactly the principal applied; total_repaid == 250.
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_overpay_spills_across_installments() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, _acct) = seed_account(&pool, user_id).await;
+
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+        "origination_date": "2026-01-15", "interest_type": "none",
+        "term_months": 12, "payment_frequency": "monthly"
+    })).await;
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // One $250 cash payment → spills 100 + 100 + 50.
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/payments"),
+        Some(&serde_json::json!({"amount": 250.0, "paid_date": "2026-02-15"})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    let rows = loan_payments(&app, &token, loan_id).await;
+    assert_eq!(rows[0]["status"], "paid", "installment 1 fully paid");
+    assert!((rows[0]["paid_amount"].as_f64().unwrap() - 100.0).abs() < 0.01);
+    assert_eq!(rows[1]["status"], "paid", "installment 2 fully paid");
+    assert!((rows[1]["paid_amount"].as_f64().unwrap() - 100.0).abs() < 0.01);
+    assert_eq!(rows[2]["status"], "partial", "installment 3 partial");
+    assert!((rows[2]["paid_amount"].as_f64().unwrap() - 50.0).abs() < 0.01,
+        "installment 3 should hold the $50 remainder, got {}", rows[2]["paid_amount"]);
+    // 4-12 untouched.
+    for r in rows.as_array().unwrap().iter().skip(3) {
+        assert!(r["paid_amount"].is_null(),
+            "installment {} must be untouched, got {}", r["installment_number"], r["paid_amount"]);
+        assert_eq!(r["status"], "scheduled");
+    }
+
+    // No double-count on paid_amount: every touched row's paid_amount is
+    // bounded by its scheduled_amount (the spill never overfills a row).
+    for r in rows.as_array().unwrap().iter() {
+        if let Some(p) = r["paid_amount"].as_f64() {
+            assert!(p <= r["scheduled_amount"].as_f64().unwrap() + 0.01,
+                "paid_amount must never exceed scheduled_amount, row {}", r["installment_number"]);
+        }
+    }
+
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
+    )).await.unwrap();
+    let l = body_json(res.into_body()).await;
+    assert!((l["outstanding"].as_f64().unwrap() - 950.0).abs() < 0.01,
+        "outstanding should be 950 after $250 spill, got {}", l["outstanding"]);
+    assert!((l["total_repaid"].as_f64().unwrap() - 250.0).abs() < 0.01,
+        "total_repaid should be 250, got {}", l["total_repaid"]);
+}
+
+/// A tx-linked overpay: the bank tx attaches to the FIRST touched
+/// installment only; spilled installments carry NULL actual_tx_id.
+/// DELETE-ing that first row then unreconciles cleanly — only the
+/// tx-bearing row is removed, the spilled cash-style top-up stays.
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_overpay_tx_attaches_to_first_row_and_unreconciles() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+        "origination_date": "2026-01-15", "interest_type": "none",
+        "term_months": 12, "payment_frequency": "monthly"
+    })).await;
+    let _ = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
+    )).await.unwrap();
+
+    // $250 inflow reconciled → spills 100 + 100 + 50.
+    let tx = seed_tx_dated(&pool, user_id, acct, "Zelle from Jose", "250.00", "2026-02-15").await;
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/payments"),
+        Some(&serde_json::json!({"transaction_id": tx.to_string()})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    let rows = loan_payments(&app, &token, loan_id).await;
+    // First touched row carries the tx; rows 2 & 3 do not.
+    assert_eq!(rows[0]["actual_tx_id"].as_str(), Some(tx.to_string().as_str()),
+        "first installment must carry the bank tx");
+    assert!(rows[1]["actual_tx_id"].is_null(),
+        "spilled installment 2 must have NULL actual_tx_id");
+    assert!(rows[2]["actual_tx_id"].is_null(),
+        "spilled installment 3 must have NULL actual_tx_id");
+    let first_row_id = rows[0]["id"].as_str().unwrap().to_string();
+
+    // Unreconcile: DELETE the first (tx-bearing) row. It removes exactly
+    // that row's $100 principal; the spilled $150 stays recorded.
+    let res = app.clone().oneshot(req(
+        Method::DELETE, &format!("/api/loans/payments/{first_row_id}"), None, Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT, "unreconcile deletes the row");
+
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
+    )).await.unwrap();
+    let l = body_json(res.into_body()).await;
+    // 250 repaid − 100 removed = 150 still repaid → outstanding 1050.
+    assert!((l["total_repaid"].as_f64().unwrap() - 150.0).abs() < 0.01,
+        "after unreconcile total_repaid should be 150, got {}", l["total_repaid"]);
+    assert!((l["outstanding"].as_f64().unwrap() - 1050.0).abs() < 0.01,
+        "after unreconcile outstanding should be 1050, got {}", l["outstanding"]);
+}
+
+/// Regression: an EXACT-FIT single payment ($100) still fully pays just
+/// installment 1, and an UNDER-FILL ($30) still leaves it partial — the
+/// spill loop must not change single-installment behaviour.
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_exact_fit_and_underfill_single_installment() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, _acct) = seed_account(&pool, user_id).await;
+
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+        "origination_date": "2026-01-15", "interest_type": "none",
+        "term_months": 12, "payment_frequency": "monthly"
+    })).await;
+    let _ = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
+    )).await.unwrap();
+
+    // Exact fit: $100 → installment 1 paid, installment 2 untouched.
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/payments"),
+        Some(&serde_json::json!({"amount": 100.0, "paid_date": "2026-02-15"})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let rows = loan_payments(&app, &token, loan_id).await;
+    assert_eq!(rows[0]["status"], "paid");
+    assert!((rows[0]["paid_amount"].as_f64().unwrap() - 100.0).abs() < 0.01);
+    assert!(rows[1]["paid_amount"].is_null(), "exact fit must not spill");
+
+    // Under-fill: $30 → installment 2 partial, installment 3 untouched.
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/payments"),
+        Some(&serde_json::json!({"amount": 30.0, "paid_date": "2026-03-15"})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let rows = loan_payments(&app, &token, loan_id).await;
+    assert_eq!(rows[1]["status"], "partial");
+    assert!((rows[1]["paid_amount"].as_f64().unwrap() - 30.0).abs() < 0.01);
+    assert!(rows[2]["paid_amount"].is_null(), "under-fill must not spill");
+}
+
+/// Overpay BEYOND the whole schedule: $1,300 on a $1,200 schedule pays
+/// all 12 installments and appends a manual 'paid' row for the $100
+/// surplus. Outstanding hits 0 (principal fully repaid; the surplus is
+/// all principal on an interest-free loan).
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_overpay_beyond_schedule_appends_surplus_row() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, _acct) = seed_account(&pool, user_id).await;
+
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+        "origination_date": "2026-01-15", "interest_type": "none",
+        "term_months": 12, "payment_frequency": "monthly"
+    })).await;
+    let _ = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
+    )).await.unwrap();
+
+    // $1,300 → 12 × $100 + a $100 surplus row.
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/payments"),
+        Some(&serde_json::json!({"amount": 1300.0, "paid_date": "2026-02-15"})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    let rows = loan_payments(&app, &token, loan_id).await;
+    // All 12 scheduled installments paid.
+    for r in rows.as_array().unwrap().iter().take(12) {
+        assert_eq!(r["status"], "paid",
+            "installment {} must be paid", r["installment_number"]);
+        assert!((r["paid_amount"].as_f64().unwrap() - 100.0).abs() < 0.01);
+    }
+    // A 13th appended manual row holds the $100 surplus.
+    assert_eq!(rows.as_array().unwrap().len(), 13, "a surplus row is appended");
+    assert_eq!(rows[12]["status"], "paid");
+    assert!((rows[12]["paid_amount"].as_f64().unwrap() - 100.0).abs() < 0.01,
+        "surplus row should hold $100, got {}", rows[12]["paid_amount"]);
+
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
+    )).await.unwrap();
+    let l = body_json(res.into_body()).await;
+    assert!(l["outstanding"].as_f64().unwrap().abs() < 0.01,
+        "outstanding must be 0 after over-payoff, got {}", l["outstanding"]);
+    assert!((l["total_repaid"].as_f64().unwrap() - 1300.0).abs() < 0.01,
+        "total_repaid should be 1300, got {}", l["total_repaid"]);
+}

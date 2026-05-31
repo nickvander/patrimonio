@@ -1007,7 +1007,6 @@ async fn record_payment(
             (amt, payload.paid_date.unwrap_or(today))
         }
     };
-    let amount_dec = rust_decimal::Decimal::from_f64_retain(amount).unwrap_or_default();
 
     // Loan terms + running state needed to split this payment into
     // principal vs interest (cash-basis interest income).
@@ -1067,7 +1066,25 @@ async fn record_payment(
     // thus "the first reconciled tx"; the running balance stays correct
     // regardless. (A future schema with a child loan_payment_txs table
     // could store every tx — out of scope here.)
-    let next_scheduled: Option<(uuid::Uuid, f64, f64, f64, f64, bool)> = sqlx::query(
+    //
+    // Overpay-spill (this loop): a payment that EXCEEDS the current
+    // installment's remaining scheduled_amount now SPILLS the surplus
+    // onto the next not-fully-paid installment(s), in installment_number
+    // order, inside ONE write transaction. We walk the schedule applying
+    // min(remaining, installment_remaining) to each row, splitting each
+    // slice interest-first against THAT row's remaining scheduled
+    // interest, flipping it paid/partial, until the money runs out or the
+    // schedule is exhausted. Any surplus beyond the whole schedule falls
+    // back to the no-schedule branch (append a manual 'paid' repayment
+    // row). tx-id placement: the linked bank tx attaches to the FIRST
+    // installment this payment touches; spilled slices on later rows
+    // carry NO actual_tx_id (cash-style top-ups). That keeps the
+    // one-tx-per-row + whole-row-delete model intact — DELETE-ing the
+    // first row unreconciles exactly the bank tx, as today.
+    // Every not-fully-paid scheduled installment, earliest first. We walk
+    // this list spilling the payment across rows. (Same predicate as the
+    // old single-row selector, just without LIMIT 1.)
+    let scheduled_rows: Vec<(uuid::Uuid, f64, f64, f64, f64, bool)> = sqlx::query(
         "SELECT id, scheduled_amount, scheduled_interest, \
                 COALESCE(paid_amount, 0) AS paid_so_far, \
                 COALESCE(interest_portion, 0) AS interest_so_far, \
@@ -1076,114 +1093,179 @@ async fn record_payment(
          WHERE loan_id = $1 AND scheduled_principal > 0 \
            AND (paid_amount IS NULL OR paid_amount < scheduled_amount) \
            AND status <> 'skipped' \
-         ORDER BY installment_number ASC LIMIT 1",
+         ORDER BY installment_number ASC",
     )
     .bind(id)
-    .fetch_optional(&state.db)
+    .fetch_all(&state.db)
     .await
-    .ok()
-    .flatten()
-    .map(|r| {
-        (
-            r.get::<uuid::Uuid, _>("id"),
-            dec_to_f64(r.try_get("scheduled_amount").ok()),
-            dec_to_f64(r.try_get("scheduled_interest").ok()),
-            dec_to_f64(r.try_get("paid_so_far").ok()),
-            dec_to_f64(r.try_get("interest_so_far").ok()),
-            r.try_get::<Option<uuid::Uuid>, _>("actual_tx_id").ok().flatten().is_some(),
-        )
-    });
+    .map(|rows| {
+        rows.into_iter()
+            .map(|r| {
+                (
+                    r.get::<uuid::Uuid, _>("id"),
+                    dec_to_f64(r.try_get("scheduled_amount").ok()),
+                    dec_to_f64(r.try_get("scheduled_interest").ok()),
+                    dec_to_f64(r.try_get("paid_so_far").ok()),
+                    dec_to_f64(r.try_get("interest_so_far").ok()),
+                    r.try_get::<Option<uuid::Uuid>, _>("actual_tx_id")
+                        .ok()
+                        .flatten()
+                        .is_some(),
+                )
+            })
+            .collect()
+    })
+    .unwrap_or_default();
 
-    // Compute the principal/interest split (interest-first, US Rule —
-    // see services/loan_schedule + the interest-income research). When
-    // topping up a 'partial' row we split against the REMAINING scheduled
-    // interest (scheduled_interest already realized on prior payments)
-    // and ADD to the existing portions, so the row never double-counts.
-    let scheduled_interest =
-        next_scheduled.map(|(_, _, si, _, interest_so_far, _)| (si - interest_so_far).max(0.0));
-    let interest_portion = split_interest_portion(
-        amount,
-        balance_before,
-        scheduled_interest,
-        rate,
-        &rate_period,
-        &interest_type,
-        last_paid.unwrap_or(origination),
-        paid_date,
-    );
-    let principal_portion = (amount - interest_portion).max(0.0);
-    let balance_after = (balance_before - principal_portion).max(0.0);
-    // Known limitation: a single payment that EXCEEDS the current
-    // installment's remaining scheduled_amount is not spilled onto the
-    // next installment — the whole amount tops up this one row, so it can
-    // show paid_amount > scheduled_amount. The running balance
-    // (principal − Σ principal_portion) stays correct either way; only the
-    // per-row schedule view is affected. True multi-installment spill is a
-    // future enhancement (it needs a per-row loop inside the write tx).
-    let interest_dec =
-        rust_decimal::Decimal::from_f64_retain(interest_portion).unwrap_or_default();
-    let principal_dec =
-        rust_decimal::Decimal::from_f64_retain(principal_portion).unwrap_or_default();
-    let balance_after_dec =
-        rust_decimal::Decimal::from_f64_retain(balance_after).unwrap_or_default();
+    // Apply the whole payment in ONE transaction so a mid-spill failure
+    // rolls back cleanly. `remaining` is the still-unallocated cash;
+    // `running_balance` is the loan's running principal (principal − Σ
+    // principal_portion), threaded through each slice so balance_after on
+    // every touched row is exact. `tx_used` tracks whether the bank tx has
+    // already been attached — it lands on the FIRST row we touch only.
+    let mut tx_conn = match state.db.begin().await {
+        Ok(t) => t,
+        Err(e) => {
+            error!("record_payment begin failed: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+    let mut remaining = amount;
+    let mut running_balance = balance_before;
+    let mut tx_used = false;
+    let mut last_interest_date = last_paid.unwrap_or(origination);
 
-    let result = if let Some((payment_id, _, _, _, _, has_tx)) = next_scheduled {
-        // Adopt the incoming tx_id only if the row has none yet (see the
-        // multi-tx constraint comment above); otherwise keep the first.
-        let tx_for_row = if has_tx { None } else { payload.transaction_id };
-        sqlx::query(
-            r#"
-            UPDATE loan_payments
-            SET actual_tx_id = COALESCE(actual_tx_id, $1),
-                paid_amount = COALESCE(paid_amount, 0) + $2,
-                paid_date = $3,
-                principal_portion = COALESCE(principal_portion, 0) + $4,
-                interest_portion = COALESCE(interest_portion, 0) + $5,
-                balance_after = $6,
-                status = CASE WHEN COALESCE(paid_amount, 0) + $2 >= scheduled_amount
-                              THEN 'paid' ELSE 'partial' END
-            WHERE id = $7 AND user_id = $8
-            "#,
-        )
-        .bind(tx_for_row)
-        .bind(amount_dec)
-        .bind(paid_date)
-        .bind(principal_dec)
-        .bind(interest_dec)
-        .bind(balance_after_dec)
-        .bind(payment_id)
-        .bind(ctx.user_id)
-        .execute(&state.db)
-        .await
-    } else {
-        let next: i32 = sqlx::query_scalar(
-            "SELECT COALESCE(MAX(installment_number), 0) + 1 FROM loan_payments WHERE loan_id = $1",
-        )
-        .bind(id)
-        .fetch_one(&state.db)
-        .await
-        .unwrap_or(1);
-        sqlx::query(
-            r#"
-            INSERT INTO loan_payments
-                (user_id, loan_id, installment_number, scheduled_amount,
-                 actual_tx_id, paid_amount, paid_date,
-                 principal_portion, interest_portion, balance_after, status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'paid')
-            "#,
-        )
-        .bind(ctx.user_id)
-        .bind(id)
-        .bind(next)
-        .bind(amount_dec)
-        .bind(payload.transaction_id)
-        .bind(amount_dec)
-        .bind(paid_date)
-        .bind(principal_dec)
-        .bind(interest_dec)
-        .bind(balance_after_dec)
-        .execute(&state.db)
-        .await
+    let result: Result<(), sqlx::Error> = async {
+        for (row_id, sched_amount, sched_interest, paid_so_far, interest_so_far, has_tx) in
+            scheduled_rows
+        {
+            if remaining <= 0.0 {
+                break;
+            }
+            // How much of THIS installment is still owed, and the slice of
+            // the payment we apply to it.
+            let row_remaining = (sched_amount - paid_so_far).max(0.0);
+            if row_remaining <= 0.0 {
+                continue;
+            }
+            let slice = remaining.min(row_remaining);
+
+            // Interest-first split against THIS row's REMAINING scheduled
+            // interest (scheduled_interest already realized on prior
+            // top-ups of the same row), then ADD to its existing portions.
+            let row_scheduled_interest = (sched_interest - interest_so_far).max(0.0);
+            let interest_portion = split_interest_portion(
+                slice,
+                running_balance,
+                Some(row_scheduled_interest),
+                rate,
+                &rate_period,
+                &interest_type,
+                last_interest_date,
+                paid_date,
+            );
+            let principal_portion = (slice - interest_portion).max(0.0);
+            running_balance = (running_balance - principal_portion).max(0.0);
+
+            // The bank tx attaches to the FIRST row only; later (spilled)
+            // rows that don't already carry a tx stay NULL (cash-style).
+            let tx_for_row = if has_tx {
+                None
+            } else if !tx_used {
+                tx_used = true;
+                payload.transaction_id
+            } else {
+                None
+            };
+
+            sqlx::query(
+                r#"
+                UPDATE loan_payments
+                SET actual_tx_id = COALESCE(actual_tx_id, $1),
+                    paid_amount = COALESCE(paid_amount, 0) + $2,
+                    paid_date = $3,
+                    principal_portion = COALESCE(principal_portion, 0) + $4,
+                    interest_portion = COALESCE(interest_portion, 0) + $5,
+                    balance_after = $6,
+                    status = CASE WHEN COALESCE(paid_amount, 0) + $2 >= scheduled_amount
+                                  THEN 'paid' ELSE 'partial' END
+                WHERE id = $7 AND user_id = $8
+                "#,
+            )
+            .bind(tx_for_row)
+            .bind(rust_decimal::Decimal::from_f64_retain(slice).unwrap_or_default())
+            .bind(paid_date)
+            .bind(rust_decimal::Decimal::from_f64_retain(principal_portion).unwrap_or_default())
+            .bind(rust_decimal::Decimal::from_f64_retain(interest_portion).unwrap_or_default())
+            .bind(rust_decimal::Decimal::from_f64_retain(running_balance).unwrap_or_default())
+            .bind(row_id)
+            .bind(ctx.user_id)
+            .execute(&mut *tx_conn)
+            .await?;
+
+            remaining -= slice;
+            last_interest_date = paid_date;
+        }
+
+        // Surplus beyond the whole schedule (or a loan with no generated
+        // schedule at all): append a manual 'paid' repayment row for the
+        // leftover, exactly as the old no-schedule branch did. Open-ended
+        // accrual (no scheduled_interest) handles its own interest-first
+        // split here.
+        if remaining > 0.0 {
+            let interest_portion = split_interest_portion(
+                remaining,
+                running_balance,
+                None,
+                rate,
+                &rate_period,
+                &interest_type,
+                last_interest_date,
+                paid_date,
+            );
+            let principal_portion = (remaining - interest_portion).max(0.0);
+            running_balance = (running_balance - principal_portion).max(0.0);
+            let tx_for_row = if tx_used { None } else { payload.transaction_id };
+
+            let next: i32 = sqlx::query_scalar(
+                "SELECT COALESCE(MAX(installment_number), 0) + 1 FROM loan_payments WHERE loan_id = $1",
+            )
+            .bind(id)
+            .fetch_one(&mut *tx_conn)
+            .await
+            .unwrap_or(1);
+            sqlx::query(
+                r#"
+                INSERT INTO loan_payments
+                    (user_id, loan_id, installment_number, scheduled_amount,
+                     actual_tx_id, paid_amount, paid_date,
+                     principal_portion, interest_portion, balance_after, status)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'paid')
+                "#,
+            )
+            .bind(ctx.user_id)
+            .bind(id)
+            .bind(next)
+            .bind(rust_decimal::Decimal::from_f64_retain(remaining).unwrap_or_default())
+            .bind(tx_for_row)
+            .bind(rust_decimal::Decimal::from_f64_retain(remaining).unwrap_or_default())
+            .bind(paid_date)
+            .bind(rust_decimal::Decimal::from_f64_retain(principal_portion).unwrap_or_default())
+            .bind(rust_decimal::Decimal::from_f64_retain(interest_portion).unwrap_or_default())
+            .bind(rust_decimal::Decimal::from_f64_retain(running_balance).unwrap_or_default())
+            .execute(&mut *tx_conn)
+            .await?;
+        }
+        Ok(())
+    }
+    .await;
+
+    let result = match result {
+        Ok(()) => tx_conn.commit().await.map(|_| ()),
+        Err(e) => {
+            let _ = tx_conn.rollback().await;
+            Err(e)
+        }
     };
 
     match result {
