@@ -403,51 +403,110 @@ class AccountsListWidget extends StatelessWidget {
         widgets.add(_buildAccountRow(context, cluster.first));
         continue;
       }
-      // Pick the parent. The vaults (e.g. SoFi "Emergency", "Car", "Rent")
-      // are nicknames the user attached to allocations inside their main
-      // account — the main account itself is named after the bank product
-      // ("SoFi Savings"). So we prefer:
-      //   1. account whose name contains the account_type token
-      //      (e.g. "Savings" in "SoFi Savings")
-      //   2. otherwise an account whose name contains the institution name
-      //   3. otherwise the largest-balance account
-      cluster.sort((a, b) {
-        final aName = (a['name'] ?? '').toString().toLowerCase();
-        final bName = (b['name'] ?? '').toString().toLowerCase();
-        final typeToken =
-            (a['account_type'] ?? '').toString().toLowerCase();
-        final instToken =
-            (a['institution_name'] ?? '').toString().toLowerCase();
+      // Decide whether this cluster has a genuine "parent" account or is
+      // just a set of sibling sub-accounts. A real parent is named after the
+      // bank product — its name contains the account_type token (e.g.
+      // "Savings" in "SoFi Savings") or the institution name. The vaults
+      // (SoFi "Emergency", "Car", "Rent", "Cards", …) are user nicknames that
+      // match neither.
+      final typeToken =
+          (cluster.first['account_type'] ?? '').toString().toLowerCase();
+      final instToken =
+          (cluster.first['institution_name'] ?? '').toString().toLowerCase();
+      int rank(dynamic acc) {
+        final name = (acc['name'] ?? '').toString().toLowerCase();
+        if (typeToken.isNotEmpty && name.contains(typeToken)) return 0;
+        if (instToken.isNotEmpty && name.contains(instToken)) return 1;
+        return 2;
+      }
 
-        int rank(String name) {
-          if (typeToken.isNotEmpty && name.contains(typeToken)) return 0;
-          if (instToken.isNotEmpty && name.contains(instToken)) return 1;
-          return 2;
-        }
+      final hasRealParent = cluster.any((a) => rank(a) < 2);
 
-        final ra = rank(aName);
-        final rb = rank(bName);
-        if (ra != rb) return ra.compareTo(rb);
-
-        final ba = ((a['current_balance'] ?? 0.0) as num).toDouble().abs();
-        final bb = ((b['current_balance'] ?? 0.0) as num).toDouble().abs();
-        return bb.compareTo(ba);
-      });
-      final parent = cluster.first;
-      final vaults = cluster.skip(1).toList();
-      widgets.add(_buildAccountRow(context, parent));
-      widgets.add(
-        Padding(
-          padding: const EdgeInsets.fromLTRB(40, 0, 12, 8),
-          child: Column(
-            children: vaults
-                .map((v) => _buildVaultRow(context, v))
-                .toList(),
-          ),
-        ),
-      );
+      if (hasRealParent) {
+        // Parent + nested vaults (e.g. "SoFi Savings" with Car/Rent/… under).
+        cluster.sort((a, b) {
+          final ra = rank(a);
+          final rb = rank(b);
+          if (ra != rb) return ra.compareTo(rb);
+          final ba = ((a['current_balance'] ?? 0.0) as num).toDouble().abs();
+          final bb = ((b['current_balance'] ?? 0.0) as num).toDouble().abs();
+          return bb.compareTo(ba);
+        });
+        widgets.add(_buildAccountRow(context, cluster.first));
+        widgets.add(_buildVaultColumn(context, cluster.skip(1).toList()));
+      } else {
+        // No real parent — these are all sibling vaults (e.g. SoFi's six
+        // "cash management" vaults). Don't promote the biggest-balance one to
+        // a parent (that's what mislabeled the whole group "Cards"). Render an
+        // institution-scoped header + every vault beneath it.
+        cluster.sort((a, b) {
+          final ba = ((a['current_balance'] ?? 0.0) as num).toDouble().abs();
+          final bb = ((b['current_balance'] ?? 0.0) as num).toDouble().abs();
+          return bb.compareTo(ba);
+        });
+        widgets.add(_buildVaultClusterHeader(context, cluster));
+        widgets.add(_buildVaultColumn(context, cluster));
+      }
     }
     return widgets;
+  }
+
+  /// Indented column of vault sub-rows shared by both grouping paths.
+  Widget _buildVaultColumn(BuildContext context, List<dynamic> vaults) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(40, 0, 12, 8),
+      child: Column(
+        children: vaults.map((v) => _buildVaultRow(context, v)).toList(),
+      ),
+    );
+  }
+
+  /// Header for a cluster of sibling vaults that has no real parent account.
+  /// Labels the group by institution + a generic "Vaults" descriptor (SoFi /
+  /// Ally-style sub-accounts) with the combined total — instead of borrowing
+  /// one vault's name (which read as a credit-card account).
+  Widget _buildVaultClusterHeader(BuildContext context, List<dynamic> cluster) {
+    final inst = (cluster.first['institution_name'] ?? '').toString();
+    final type = (cluster.first['account_type'] ?? '').toString().toLowerCase();
+    final descriptor = type.contains('cash management') ? 'Vaults' : 'Accounts';
+    final total = cluster.fold<double>(0.0, (sum, acc) {
+      final bal = ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
+      final cur = (acc['currency'] ?? targetCurrency).toString();
+      return sum +
+          convertCurrency(bal,
+              from: cur, to: targetCurrency, usdMxnRate: usdMxnRate);
+    });
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 12, 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              inst.isEmpty ? descriptor : '$inst · $descriptor',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: context.textPrimary,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            currencyFormat.format(total),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: context.textMuted,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
   }
 
   /// Compact sub-row for SoFi-style "vaults". Smaller type, no institution

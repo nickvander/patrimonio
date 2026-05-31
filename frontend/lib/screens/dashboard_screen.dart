@@ -1982,9 +1982,12 @@ class _DashboardScreenState extends State<DashboardScreen>
               : Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Accounts column gets ~1/3 (was 1/4) so account names,
+                    // balances and nested vault rows aren't squished — the
+                    // charts still have the larger 2/3 share.
                     Expanded(flex: 1, child: buildAccountsColumn()),
                     const SizedBox(width: 24),
-                    Expanded(flex: 3, child: buildChartsColumn(false)),
+                    Expanded(flex: 2, child: buildChartsColumn(false)),
                   ],
                 );
 
