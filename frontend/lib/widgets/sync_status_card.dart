@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/theme_colors.dart';
+import '../l10n/app_localizations.dart';
 import 'package:intl/intl.dart';
 
 class SyncStatusCard extends StatelessWidget {
@@ -50,6 +51,7 @@ class SyncStatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final failed = _failedCount;
     return Card(
       elevation: 4,
@@ -63,7 +65,7 @@ class SyncStatusCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    'INSTITUTIONS',
+                    l.lwSyncInstitutionsHeader,
                     style: TextStyle(
                       fontSize: 11,
                       color: context.textSubtle,
@@ -97,7 +99,7 @@ class SyncStatusCard extends StatelessWidget {
                       }
                     },
                     icon: const Icon(Icons.refresh, size: 16),
-                    label: Text('Retry $failed failed'),
+                    label: Text(l.lwSyncRetryFailed(failed)),
                     style: TextButton.styleFrom(
                       foregroundColor: Colors.orangeAccent,
                     ),
@@ -114,7 +116,7 @@ class SyncStatusCard extends StatelessWidget {
                         size: 32, color: context.textFaint),
                     const SizedBox(height: 8),
                     Text(
-                      'No institutions linked yet',
+                      l.lwSyncNoInstitutions,
                       style: TextStyle(
                         color: context.textMuted,
                         fontWeight: FontWeight.w600,
@@ -122,7 +124,7 @@ class SyncStatusCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Use the buttons below to connect a bank, import a\nstatement, or add a manual account.',
+                      l.lwSyncNoInstitutionsHint,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.grey.shade500,
@@ -136,21 +138,23 @@ class SyncStatusCard extends StatelessWidget {
                 ),
               )
             else
-              ...syncData.map((inst) => _buildSyncRow(inst)),
+              ...syncData.map((inst) => _buildSyncRow(context, inst)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSyncRow(Map<String, dynamic> inst) {
+  Widget _buildSyncRow(BuildContext context, Map<String, dynamic> inst) {
     return LayoutBuilder(builder: (ctx, c) {
       final isNarrow = c.maxWidth < 420;
-      return _buildSyncRowBody(inst, isNarrow);
+      return _buildSyncRowBody(context, inst, isNarrow);
     });
   }
 
-  Widget _buildSyncRowBody(Map<String, dynamic> inst, bool isNarrow) {
+  Widget _buildSyncRowBody(
+      BuildContext context, Map<String, dynamic> inst, bool isNarrow) {
+    final l = AppLocalizations.of(context);
     final status = inst['sync_status'] ?? 'unknown';
 
     IconData statusIcon;
@@ -192,7 +196,7 @@ class SyncStatusCard extends StatelessWidget {
         statusColor = Colors.grey;
     }
 
-    String lastSyncText = 'Never';
+    String lastSyncText = l.lwSyncNever;
     if (inst['last_synced_at'] != null) {
       final dt = DateTime.parse(inst['last_synced_at']).toLocal();
       lastSyncText = DateFormat('MMM d, h:mm a').format(dt);
@@ -213,11 +217,11 @@ class SyncStatusCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        inst['name'] ?? 'Unknown',
+                        inst['name'] ?? l.lwSyncUnknownInstitution,
                         style: const TextStyle(fontWeight: FontWeight.w500),
                       ),
                       Text(
-                        _statusDetail(inst, status, lastSyncText),
+                        _statusDetail(context, inst, status, lastSyncText),
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade400,
@@ -236,11 +240,11 @@ class SyncStatusCard extends StatelessWidget {
                           ),
                         )
                       else if (status == 'error' || status == 'failed')
-                        const Padding(
-                          padding: EdgeInsets.only(top: 4.0),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
                           child: Text(
-                            'Sync failed. Reason unknown — try Retry or Reconnect.',
-                            style: TextStyle(
+                            l.lwSyncFailedUnknownReason,
+                            style: const TextStyle(
                               fontSize: 11,
                               color: Colors.redAccent,
                               fontStyle: FontStyle.italic,
@@ -262,14 +266,14 @@ class SyncStatusCard extends StatelessWidget {
                         onPressed: () => onReconnect?.call(inst['id']),
                         icon: const Icon(Icons.link,
                             color: Colors.deepOrangeAccent, size: 20),
-                        tooltip: 'Reconnect',
+                        tooltip: l.lwSyncReconnect,
                         padding: const EdgeInsets.all(6),
                         constraints: const BoxConstraints(),
                       )
                     : TextButton.icon(
                         onPressed: () => onReconnect?.call(inst['id']),
                         icon: const Icon(Icons.link, size: 16),
-                        label: const Text('Reconnect'),
+                        label: Text(l.lwSyncReconnect),
                         style: TextButton.styleFrom(
                           foregroundColor: Colors.deepOrangeAccent,
                           padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -283,7 +287,7 @@ class SyncStatusCard extends StatelessWidget {
                 IconButton(
                   icon: const Icon(Icons.refresh, color: Colors.teal, size: 20),
                   onPressed: onRetrySync,
-                  tooltip: 'Retry sync',
+                  tooltip: l.lwSyncRetrySync,
                   padding: const EdgeInsets.all(6),
                   constraints: const BoxConstraints(),
                 ),
@@ -291,7 +295,7 @@ class SyncStatusCard extends StatelessWidget {
                 icon: const Icon(Icons.delete_outline,
                     color: Colors.redAccent, size: 20),
                 onPressed: () => onDelete?.call(inst['id']),
-                tooltip: 'Delete institution',
+                tooltip: l.lwSyncDeleteInstitution,
                 padding: const EdgeInsets.all(6),
                 constraints: const BoxConstraints(),
               ),
@@ -303,29 +307,31 @@ class SyncStatusCard extends StatelessWidget {
   }
 
   String _statusDetail(
+    BuildContext context,
     Map<String, dynamic> inst,
     String status,
     String lastSyncText,
   ) {
-    final source = 'Via ${inst['integration_type']}';
+    final l = AppLocalizations.of(context);
+    final source = l.lwSyncVia(inst['integration_type'].toString());
     switch (status) {
       case 'syncing':
-        return '$source • Syncing now';
+        return '$source • ${l.lwSyncDetailSyncingNow}';
       case 'setup_required':
-        return '$source • Setup required before sync';
+        return '$source • ${l.lwSyncDetailSetupRequired}';
       case 'reconnect_required':
-        return '$source • Reconnect required';
+        return '$source • ${l.lwSyncDetailReconnectRequired}';
       case 'pending':
-        return '$source • Waiting for first sync';
+        return '$source • ${l.lwSyncDetailWaitingFirstSync}';
       case 'manual':
-        return '$source • Manual/offline source';
+        return '$source • ${l.lwSyncDetailManualSource}';
       default:
         bool isStale = false;
         if (inst['last_synced_at'] != null) {
           final dt = DateTime.parse(inst['last_synced_at']);
           isStale = DateTime.now().difference(dt).inHours > 24;
         }
-        return '$source • $lastSyncText${isStale ? " (Stale)" : ""}';
+        return '$source • $lastSyncText${isStale ? " ${l.lwSyncStaleSuffix}" : ""}';
     }
   }
 }

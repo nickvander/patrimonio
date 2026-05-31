@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import '../utils/currency.dart';
+import '../l10n/app_localizations.dart';
 
 class TaxPlanningScreen extends StatefulWidget {
   final double conversionFactor;
@@ -61,9 +62,22 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       });
     } catch (e) {
       setState(() {
-        _error = "Error loading tax data: $e";
+        _error = e.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  String _filingStatusLabel(AppLocalizations l, String value) {
+    switch (value) {
+      case 'Single':
+        return l.taxFilingSingle;
+      case 'Married':
+        return l.taxFilingMarried;
+      case 'Head of Household':
+        return l.taxFilingHeadOfHousehold;
+      default:
+        return value;
     }
   }
 
@@ -74,8 +88,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       await launchUrl(url);
     } else {
       if (mounted) {
+        final l = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not launch CSV export.')),
+          SnackBar(content: Text(l.taxCsvLaunchFailed)),
         );
       }
     }
@@ -90,8 +105,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       await launchUrl(url);
     } else {
       if (mounted) {
+        final l = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not launch PDF export.')),
+          SnackBar(content: Text(l.taxPdfLaunchFailed)),
         );
       }
     }
@@ -208,6 +224,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -219,9 +236,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           children: [
             const Icon(Icons.error_outline, size: 60, color: Colors.redAccent),
             const SizedBox(height: 16),
-            Text(_error!),
+            Text(l.taxLoadError(_error!)),
             const SizedBox(height: 16),
-            ElevatedButton(onPressed: _loadTaxData, child: const Text('Retry')),
+            ElevatedButton(onPressed: _loadTaxData, child: Text(l.taxRetry)),
           ],
         ),
       );
@@ -254,9 +271,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
-              'Tax planning',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            Text(
+              l.taxTitle,
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             Row(
               children: [
@@ -266,7 +283,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                     (String value) {
                       return DropdownMenuItem<String>(
                         value: value,
-                        child: Text(value),
+                        child: Text(_filingStatusLabel(l, value)),
                       );
                     },
                   ).toList(),
@@ -305,7 +322,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                 ElevatedButton.icon(
                   onPressed: _exportCsv,
                   icon: const Icon(Icons.download),
-                  label: const Text('Export CSV'),
+                  label: Text(l.taxExportCsv),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: context.positive,
                     foregroundColor: Colors.white,
@@ -315,7 +332,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                 ElevatedButton.icon(
                   onPressed: _exportPdf,
                   icon: const Icon(Icons.picture_as_pdf),
-                  label: const Text('PDF'),
+                  label: Text(l.taxExportPdf),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blueAccent,
                     foregroundColor: context.textPrimary,
@@ -336,7 +353,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Total taxable income',
+                        l.taxTotalTaxableIncome,
                         style: TextStyle(color: context.textMuted),
                       ),
                       const SizedBox(height: 8),
@@ -352,14 +369,16 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Ordinary income: ${widget.currencyFormat.format(ordinaryIncome)}',
+                            l.taxOrdinaryIncome(
+                                widget.currencyFormat.format(ordinaryIncome)),
                             style: TextStyle(
                               fontSize: 12,
                               color: context.textSubtle,
                             ),
                           ),
                           Text(
-                            'Capital gains: ${widget.currencyFormat.format(capitalGains)}',
+                            l.taxCapitalGains(
+                                widget.currencyFormat.format(capitalGains)),
                             style: TextStyle(
                               fontSize: 12,
                               color: context.textSubtle,
@@ -381,7 +400,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'US estimated liability (IRS)',
+                        l.taxUsEstimatedLiability,
                         style: TextStyle(color: context.textMuted),
                       ),
                       const SizedBox(height: 8),
@@ -395,7 +414,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'Effective rate: ${rateUs.toStringAsFixed(2)}%',
+                        l.taxEffectiveRate(rateUs.toStringAsFixed(2)),
                         style: TextStyle(
                           fontSize: 12,
                           color: context.textSubtle,
@@ -415,7 +434,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'MX estimated liability (SAT)',
+                        l.taxMxEstimatedLiability,
                         style: TextStyle(color: context.textMuted),
                       ),
                       const SizedBox(height: 8),
@@ -429,7 +448,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'Effective Rate: ${rateMx.toStringAsFixed(2)}%',
+                        l.taxEffectiveRate(rateMx.toStringAsFixed(2)),
                         style: TextStyle(
                           fontSize: 12,
                           color: context.textSubtle,
@@ -443,9 +462,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           ],
         ),
         const SizedBox(height: 24),
-        const Text(
-          'Taxable events',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        Text(
+          l.taxTaxableEvents,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 16),
         Expanded(
@@ -462,12 +481,12 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'No taxable events found for this year.',
+                          l.taxNoEventsTitle,
                           style: TextStyle(color: context.textSubtle, fontSize: 16),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Income, salary, interest, and investment sale transactions will appear here.',
+                          l.taxNoEventsBody,
                           style: TextStyle(color: context.textFaint, fontSize: 12),
                           textAlign: TextAlign.center,
                         ),
@@ -497,7 +516,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         ),
         const SizedBox(height: 12),
         Text(
-          'Disclaimer: Tax estimates are approximations using 2026 IRS/SAT brackets. Consult a qualified tax professional for filing.',
+          l.taxDisclaimer,
           style: TextStyle(
             color: context.textFaint,
             fontSize: 10,

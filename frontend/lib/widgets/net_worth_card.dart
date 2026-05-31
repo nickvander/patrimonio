@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../components/date_range_selector.dart';
+import '../l10n/app_localizations.dart';
 import '../services/preferences.dart';
 import '../theme/typography.dart';
 import '../utils/currency.dart';
@@ -148,10 +149,9 @@ class _NetWorthCardState extends State<NetWorthCard> {
       );
     }
 
+    final l = AppLocalizations.of(context);
     return Tooltip(
-      message: _detailed
-          ? 'Showing per-institution bands'
-          : 'Showing only the net worth line',
+      message: _detailed ? l.pfShowingBands : l.pfShowingLine,
       child: Container(
         padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(
@@ -162,13 +162,13 @@ class _NetWorthCardState extends State<NetWorthCard> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            seg('Simple', !_detailed, () {
+            seg(l.pfSimple, !_detailed, () {
               if (_detailed) {
                 setState(() => _detailed = false);
                 Preferences.setNetWorthDetailed(false);
               }
             }),
-            seg('Detailed', _detailed, () {
+            seg(l.pfDetailed, _detailed, () {
               if (!_detailed) {
                 setState(() => _detailed = true);
                 Preferences.setNetWorthDetailed(true);
@@ -186,7 +186,8 @@ class _NetWorthCardState extends State<NetWorthCard> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Total net worth ($reportingCurrency)',
+          AppLocalizations.of(context)
+              .pfTotalNetWorthCurrency(reportingCurrency),
           // Inter label above the hero number, kept understated — the big
           // mono number is the star.
           style: brandSectionTitleStyle(
@@ -330,7 +331,8 @@ class _NetWorthCardState extends State<NetWorthCard> {
       spacing: 12,
       runSpacing: 8,
       children: [
-        _legendItem('Total net worth', context.positive),
+        _legendItem(AppLocalizations.of(context).pfTotalNetWorth,
+            context.positive),
         ...institutions.map((e) => _legendItem(e.key, e.value)),
       ],
     );
@@ -546,7 +548,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                   ),
                   TextSpan(
                     text:
-                        'Net worth: ${currencyFormat.format((nw as num).toDouble() * conversionFactor)}\n',
+                        '${AppLocalizations.of(context).pfTooltipNetWorth(currencyFormat.format((nw as num).toDouble() * conversionFactor))}\n',
                     style: TextStyle(
                       color: context.tooltipOnSurface,
                       fontWeight: FontWeight.bold,
@@ -567,7 +569,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                     // background. See ThemeColorsExt.tooltipPositive.
                     TextSpan(
                       text:
-                          'Assets: ${currencyFormat.format((ta as num).toDouble() * conversionFactor)}\n',
+                          '${AppLocalizations.of(context).pfTooltipAssets(currencyFormat.format((ta as num).toDouble() * conversionFactor))}\n',
                       style: TextStyle(
                         color: context.tooltipPositive,
                         fontSize: 12,
@@ -576,7 +578,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                     ),
                     TextSpan(
                       text:
-                          'Liabilities: ${currencyFormat.format((tl as num).toDouble() * conversionFactor)}\n',
+                          '${AppLocalizations.of(context).pfTooltipLiabilities(currencyFormat.format((tl as num).toDouble() * conversionFactor))}\n',
                       style: TextStyle(
                         color: context.tooltipNegative,
                         fontSize: 12,
@@ -851,7 +853,8 @@ class _DeltaChip extends StatelessWidget {
           Flexible(
             child: Text(
               '${isUp ? '+' : '−'}${currencyFormat.format(amount.abs())} '
-              '(${isUp ? '+' : ''}${percentage.toStringAsFixed(2)}%) vs $label ago',
+              '(${isUp ? '+' : ''}${percentage.toStringAsFixed(2)}%) '
+              '${AppLocalizations.of(context).pfDeltaVsAgo(label)}',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,

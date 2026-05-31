@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/theme_colors.dart';
+import '../l10n/app_localizations.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 
@@ -23,6 +24,7 @@ class CashFlowTrendsChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -44,8 +46,10 @@ class CashFlowTrendsChart extends StatelessWidget {
                   spacing: 16,
                   runSpacing: 8,
                   children: [
-                    _buildLegendItem(context, context.tealAccent, 'Income'),
-                    _buildLegendItem(context, context.pinkAccent, 'Spending'),
+                    _buildLegendItem(
+                        context, context.tealAccent, l.lwTrendsIncome),
+                    _buildLegendItem(
+                        context, context.pinkAccent, l.lwTrendsSpending),
                   ],
                 );
 
@@ -53,9 +57,9 @@ class CashFlowTrendsChart extends StatelessWidget {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Cash flow trends',
-                        style: TextStyle(
+                      Text(
+                        l.lwTrendsTitle,
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
@@ -72,20 +76,16 @@ class CashFlowTrendsChart extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text(
-                          'Cash flow trends',
-                          style: TextStyle(
+                        Text(
+                          l.lwTrendsTitle,
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         const SizedBox(width: 6),
                         Tooltip(
-                          message:
-                              'Internal transfers (between your accounts) and '
-                              'credit-card bill payments are excluded so the '
-                              'bars reflect actual external income and '
-                              'spending.',
+                          message: l.lwTrendsInfoTooltip,
                           child: Icon(
                             Icons.info_outline,
                             size: 14,
@@ -126,11 +126,12 @@ class CashFlowTrendsChart extends StatelessWidget {
                         // Add a "tap to filter" hint to the bottom of the
                         // tooltip so the click affordance is discoverable —
                         // most users don't expect chart bars to be tappable.
-                        final headerLine = rodIndex == 0 ? 'Income' : 'Spending';
+                        final headerLine =
+                            rodIndex == 0 ? l.lwTrendsIncome : l.lwTrendsSpending;
                         final amountLine = currencyFormat.format(rod.toY * conversionFactor);
                         final hint = onMonthSelected == null
                             ? ''
-                            : '\nTap to view transactions';
+                            : '\n${l.lwTrendsTapToView}';
                         return BarTooltipItem(
                           '$headerLine\n$amountLine$hint',
                           TextStyle(color: context.tooltipOnSurface),
@@ -321,21 +322,25 @@ class CashFlowTrendsChart extends StatelessWidget {
   /// One-line summary spoken for the whole chart: span + latest month's
   /// income and spending.
   String _semanticSummary(BuildContext context) {
-    if (trends.isEmpty) return 'Cash flow trends chart, no data';
+    final l = AppLocalizations.of(context);
+    if (trends.isEmpty) return l.lwTrendsSemanticNoData;
     final last = trends.last;
     final month = (last['month'] ?? '').toString();
     final income = (last['income'] as num?) ?? 0;
     final spending = (last['spending'] as num?) ?? 0;
-    return 'Cash flow trends, ${trends.length} '
-        '${trends.length == 1 ? 'month' : 'months'}. '
-        'Latest ${_monthLabel(month)}: income ${_money(income)}, '
-        'spending ${_money(spending)}.';
+    return l.lwTrendsSemanticSummary(
+      trends.length,
+      _monthLabel(month),
+      _money(income),
+      _money(spending),
+    );
   }
 
   /// Per-month rows that are visually invisible (zero-opacity, ignored by
   /// pointers) but still laid out and therefore present in the semantics
   /// tree — so a screen reader can walk each bar's income/spending values.
   Widget _buildSemanticBars(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return IgnorePointer(
       child: Opacity(
         opacity: 0.0,
@@ -347,8 +352,8 @@ class CashFlowTrendsChart extends StatelessWidget {
             final income = (t['income'] as num?) ?? 0;
             final spending = (t['spending'] as num?) ?? 0;
             return Semantics(
-              label: '${_monthLabel(month)}: '
-                  'income ${_money(income)}, spending ${_money(spending)}',
+              label: l.lwTrendsSemanticMonth(
+                  _monthLabel(month), _money(income), _money(spending)),
               child: const SizedBox(height: 1, width: 1),
             );
           }).toList(),

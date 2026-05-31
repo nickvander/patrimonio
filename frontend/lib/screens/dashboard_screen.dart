@@ -1623,6 +1623,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(width: 4),
               NotificationsBell(
                 notifications: deriveNotifications(
+                  l: AppLocalizations.of(context),
                   syncData: _syncData ?? const [],
                   netWorthHistory: _netWorthHistory ?? const [],
                   onJumpToManagement: () => _goToNav(NavId.settings),

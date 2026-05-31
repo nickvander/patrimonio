@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/theme_colors.dart';
+import '../l10n/app_localizations.dart';
 
 /// Sticky banner shown above the dashboard body whenever one or more
 /// institutions are in `error` or `reconnect_required` state. Toast
@@ -19,6 +20,7 @@ class SyncErrorBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final problems = syncData.where((raw) {
       if (raw is! Map) return false;
       final status = raw['sync_status']?.toString();
@@ -51,8 +53,8 @@ class SyncErrorBanner extends StatelessWidget {
             .where((s) => s.isNotEmpty)
             .toList();
         final summary = problems.length == 1
-            ? '${names.first} needs attention'
-            : '${problems.length} institutions need attention';
+            ? l.lwSyncBannerOneNeedsAttention(names.first)
+            : l.lwSyncBannerManyNeedAttention(problems.length);
 
         final detail = names.length == 1
             ? names.first
@@ -70,8 +72,10 @@ class SyncErrorBanner extends StatelessWidget {
           final target = reconnectOnly.first;
           final targetName = (target['name'] ?? '').toString();
           final label = reconnectOnly.length == 1
-              ? (targetName.isEmpty ? 'Reconnect' : 'Reconnect $targetName')
-              : 'Reconnect ${reconnectOnly.length}…';
+              ? (targetName.isEmpty
+                  ? l.lwSyncBannerReconnect
+                  : l.lwSyncBannerReconnectName(targetName))
+              : l.lwSyncBannerReconnectCount(reconnectOnly.length);
           reconnectButton = FilledButton.icon(
             onPressed: () =>
                 onReconnect!(target['id'].toString()),
@@ -87,7 +91,7 @@ class SyncErrorBanner extends StatelessWidget {
             TextButton.icon(
               onPressed: onJumpToManagement,
               icon: const Icon(Icons.settings, size: 16),
-              label: const Text('Open settings'),
+              label: Text(l.lwSyncBannerOpenSettings),
             ),
           ],
         );

@@ -3265,6 +3265,1910 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{label} · tap to cycle, long-press to pick'**
   String dashThemeTooltip(Object label);
+
+  /// No description provided for @projTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Wealth projection'**
+  String get projTitle;
+
+  /// No description provided for @projSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Project your financial future based on current assets and savings strategy.'**
+  String get projSubtitle;
+
+  /// No description provided for @projMonthlySavings.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly savings'**
+  String get projMonthlySavings;
+
+  /// No description provided for @projExpectedReturn.
+  ///
+  /// In en, this message translates to:
+  /// **'Expected return'**
+  String get projExpectedReturn;
+
+  /// No description provided for @projAnnualExpenses.
+  ///
+  /// In en, this message translates to:
+  /// **'Annual expenses'**
+  String get projAnnualExpenses;
+
+  /// No description provided for @projSafeWithdrawalRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Safe withdrawal rate'**
+  String get projSafeWithdrawalRate;
+
+  /// No description provided for @projProjectionYears.
+  ///
+  /// In en, this message translates to:
+  /// **'Projection years'**
+  String get projProjectionYears;
+
+  /// No description provided for @projGoal.
+  ///
+  /// In en, this message translates to:
+  /// **'Goal'**
+  String get projGoal;
+
+  /// No description provided for @projClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get projClear;
+
+  /// No description provided for @projGoalHitBy.
+  ///
+  /// In en, this message translates to:
+  /// **'Hit {amount} by {year}'**
+  String projGoalHitBy(Object amount, Object year);
+
+  /// No description provided for @projGoalSetTarget.
+  ///
+  /// In en, this message translates to:
+  /// **'Set a target — e.g. \$1M by 2030'**
+  String get projGoalSetTarget;
+
+  /// No description provided for @projSetTargetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Set a target'**
+  String get projSetTargetTitle;
+
+  /// No description provided for @projTargetNetWorth.
+  ///
+  /// In en, this message translates to:
+  /// **'Target net worth'**
+  String get projTargetNetWorth;
+
+  /// No description provided for @projTargetYear.
+  ///
+  /// In en, this message translates to:
+  /// **'Target year'**
+  String get projTargetYear;
+
+  /// No description provided for @projNetWorthProjection.
+  ///
+  /// In en, this message translates to:
+  /// **'Net worth projection'**
+  String get projNetWorthProjection;
+
+  /// No description provided for @projScenarios.
+  ///
+  /// In en, this message translates to:
+  /// **'Scenarios'**
+  String get projScenarios;
+
+  /// No description provided for @projYearAxisLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Yr {year}'**
+  String projYearAxisLabel(Object year);
+
+  /// No description provided for @projTooltipYearAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Year {year}\n{amount}'**
+  String projTooltipYearAmount(Object amount, Object year);
+
+  /// No description provided for @projFiNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'FI number'**
+  String get projFiNumber;
+
+  /// No description provided for @projProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Progress'**
+  String get projProgress;
+
+  /// No description provided for @projTowardFire.
+  ///
+  /// In en, this message translates to:
+  /// **'Toward FIRE'**
+  String get projTowardFire;
+
+  /// No description provided for @projYearsToFi.
+  ///
+  /// In en, this message translates to:
+  /// **'Years to FI'**
+  String get projYearsToFi;
+
+  /// No description provided for @projEstimate.
+  ///
+  /// In en, this message translates to:
+  /// **'Estimate'**
+  String get projEstimate;
+
+  /// No description provided for @projFiIncome.
+  ///
+  /// In en, this message translates to:
+  /// **'FI income'**
+  String get projFiIncome;
+
+  /// No description provided for @projMonthlyAtWithdrawalRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly @ withdrawal rate'**
+  String get projMonthlyAtWithdrawalRate;
+
+  /// No description provided for @taxTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tax planning'**
+  String get taxTitle;
+
+  /// No description provided for @taxFilingSingle.
+  ///
+  /// In en, this message translates to:
+  /// **'Single'**
+  String get taxFilingSingle;
+
+  /// No description provided for @taxFilingMarried.
+  ///
+  /// In en, this message translates to:
+  /// **'Married'**
+  String get taxFilingMarried;
+
+  /// No description provided for @taxFilingHeadOfHousehold.
+  ///
+  /// In en, this message translates to:
+  /// **'Head of Household'**
+  String get taxFilingHeadOfHousehold;
+
+  /// No description provided for @taxCsvLaunchFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not launch CSV export.'**
+  String get taxCsvLaunchFailed;
+
+  /// No description provided for @taxPdfLaunchFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not launch PDF export.'**
+  String get taxPdfLaunchFailed;
+
+  /// No description provided for @taxLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error loading tax data: {error}'**
+  String taxLoadError(Object error);
+
+  /// No description provided for @taxRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get taxRetry;
+
+  /// No description provided for @taxExportCsv.
+  ///
+  /// In en, this message translates to:
+  /// **'Export CSV'**
+  String get taxExportCsv;
+
+  /// No description provided for @taxExportPdf.
+  ///
+  /// In en, this message translates to:
+  /// **'PDF'**
+  String get taxExportPdf;
+
+  /// No description provided for @taxTotalTaxableIncome.
+  ///
+  /// In en, this message translates to:
+  /// **'Total taxable income'**
+  String get taxTotalTaxableIncome;
+
+  /// No description provided for @taxOrdinaryIncome.
+  ///
+  /// In en, this message translates to:
+  /// **'Ordinary income: {amount}'**
+  String taxOrdinaryIncome(Object amount);
+
+  /// No description provided for @taxCapitalGains.
+  ///
+  /// In en, this message translates to:
+  /// **'Capital gains: {amount}'**
+  String taxCapitalGains(Object amount);
+
+  /// No description provided for @taxUsEstimatedLiability.
+  ///
+  /// In en, this message translates to:
+  /// **'US estimated liability (IRS)'**
+  String get taxUsEstimatedLiability;
+
+  /// No description provided for @taxMxEstimatedLiability.
+  ///
+  /// In en, this message translates to:
+  /// **'MX estimated liability (SAT)'**
+  String get taxMxEstimatedLiability;
+
+  /// No description provided for @taxEffectiveRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Effective rate: {rate}%'**
+  String taxEffectiveRate(Object rate);
+
+  /// No description provided for @taxTaxableEvents.
+  ///
+  /// In en, this message translates to:
+  /// **'Taxable events'**
+  String get taxTaxableEvents;
+
+  /// No description provided for @taxNoEventsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No taxable events found for this year.'**
+  String get taxNoEventsTitle;
+
+  /// No description provided for @taxNoEventsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Income, salary, interest, and investment sale transactions will appear here.'**
+  String get taxNoEventsBody;
+
+  /// No description provided for @taxDisclaimer.
+  ///
+  /// In en, this message translates to:
+  /// **'Disclaimer: Tax estimates are approximations using 2026 IRS/SAT brackets. Consult a qualified tax professional for filing.'**
+  String get taxDisclaimer;
+
+  /// No description provided for @acctxRenameAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename account'**
+  String get acctxRenameAccount;
+
+  /// No description provided for @acctxNickname.
+  ///
+  /// In en, this message translates to:
+  /// **'Nickname'**
+  String get acctxNickname;
+
+  /// No description provided for @acctxAccountFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get acctxAccountFallback;
+
+  /// No description provided for @acctxUpdateBalanceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update {account} balance'**
+  String acctxUpdateBalanceTitle(Object account);
+
+  /// No description provided for @acctxCurrentBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'Current balance'**
+  String get acctxCurrentBalance;
+
+  /// No description provided for @acctxAccountActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Account actions'**
+  String get acctxAccountActions;
+
+  /// No description provided for @acctxUpdateBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'Update balance'**
+  String get acctxUpdateBalance;
+
+  /// No description provided for @acctxLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error loading transactions: {error}'**
+  String acctxLoadError(Object error);
+
+  /// No description provided for @acctxRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get acctxRetry;
+
+  /// No description provided for @acctxNoTransactionsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No transactions yet'**
+  String get acctxNoTransactionsTitle;
+
+  /// No description provided for @acctxNoTransactionsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Records might just be starting, or offline accounts have no history.'**
+  String get acctxNoTransactionsBody;
+
+  /// No description provided for @acctxUpdateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to update transaction: {error}'**
+  String acctxUpdateFailed(Object error);
+
+  /// No description provided for @acctxDismissBarrier.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get acctxDismissBarrier;
+
+  /// No description provided for @hiddenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Hidden items'**
+  String get hiddenTitle;
+
+  /// No description provided for @hiddenRestoredMerchant.
+  ///
+  /// In en, this message translates to:
+  /// **'Restored \"{merchant}\"'**
+  String hiddenRestoredMerchant(Object merchant);
+
+  /// No description provided for @hiddenRestoreFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to restore: {error}'**
+  String hiddenRestoreFailed(Object error);
+
+  /// No description provided for @hiddenBannerWillReappear.
+  ///
+  /// In en, this message translates to:
+  /// **'Since-last-login banner will reappear.'**
+  String get hiddenBannerWillReappear;
+
+  /// No description provided for @hiddenFxPairRestored.
+  ///
+  /// In en, this message translates to:
+  /// **'Restored — the detector may re-propose {summary} on the next sync.'**
+  String hiddenFxPairRestored(Object summary);
+
+  /// No description provided for @hiddenIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Things you told Patrimonio to stop showing. Restoring a row brings it back where it normally lives.'**
+  String get hiddenIntro;
+
+  /// No description provided for @hiddenRecurringCharges.
+  ///
+  /// In en, this message translates to:
+  /// **'Recurring charges'**
+  String get hiddenRecurringCharges;
+
+  /// No description provided for @hiddenNoSubscriptions.
+  ///
+  /// In en, this message translates to:
+  /// **'No subscriptions are currently hidden. When you dismiss a row with × on the Recurring charges card it shows up here.'**
+  String get hiddenNoSubscriptions;
+
+  /// No description provided for @hiddenBanners.
+  ///
+  /// In en, this message translates to:
+  /// **'Banners'**
+  String get hiddenBanners;
+
+  /// No description provided for @hiddenNoBanners.
+  ///
+  /// In en, this message translates to:
+  /// **'No banners are currently dismissed.'**
+  String get hiddenNoBanners;
+
+  /// No description provided for @hiddenSinceLastLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Since last login'**
+  String get hiddenSinceLastLogin;
+
+  /// No description provided for @hiddenHiddenForVisit.
+  ///
+  /// In en, this message translates to:
+  /// **'Hidden for the visit starting {date}'**
+  String hiddenHiddenForVisit(Object date);
+
+  /// No description provided for @hiddenShowAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Show again'**
+  String get hiddenShowAgain;
+
+  /// No description provided for @hiddenFxTransferPairs.
+  ///
+  /// In en, this message translates to:
+  /// **'FX-transfer pairs'**
+  String get hiddenFxTransferPairs;
+
+  /// No description provided for @hiddenNoFxPairs.
+  ///
+  /// In en, this message translates to:
+  /// **'No FX pairs are currently dismissed. When you unlink a detected Wise / Remitly / Xoom transfer on the Transactions tab, it lands here so the detector won\'t re-propose it.'**
+  String get hiddenNoFxPairs;
+
+  /// No description provided for @hiddenDismissedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismissed {date}'**
+  String hiddenDismissedAt(Object date);
+
+  /// No description provided for @hiddenRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get hiddenRestore;
+
+  /// No description provided for @cbTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect bank'**
+  String get cbTitle;
+
+  /// No description provided for @cbSetupIncompleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Plaid setup is incomplete.'**
+  String get cbSetupIncompleteTitle;
+
+  /// No description provided for @cbSetupIncompleteBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Set Plaid credentials and ENCRYPTION_KEY before linking real bank accounts.'**
+  String get cbSetupIncompleteBody;
+
+  /// No description provided for @cbConnectWithPlaid.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect with Plaid'**
+  String get cbConnectWithPlaid;
+
+  /// No description provided for @cbEnvSandbox.
+  ///
+  /// In en, this message translates to:
+  /// **'Plaid Sandbox Mode — Mock data only'**
+  String get cbEnvSandbox;
+
+  /// No description provided for @cbEnvDevelopment.
+  ///
+  /// In en, this message translates to:
+  /// **'Plaid Development Mode — Real account data (test items)'**
+  String get cbEnvDevelopment;
+
+  /// No description provided for @cbEnvProduction.
+  ///
+  /// In en, this message translates to:
+  /// **'Plaid Production Mode — Real account data'**
+  String get cbEnvProduction;
+
+  /// No description provided for @cbEnvUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Plaid Environment: {env}'**
+  String cbEnvUnknown(Object env);
+
+  /// No description provided for @cbConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Bank connected. Initial sync has started.'**
+  String get cbConnected;
+
+  /// No description provided for @cbExchangeTokenFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to exchange token'**
+  String get cbExchangeTokenFailed;
+
+  /// No description provided for @cbBackendCommError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error communicating with backend: {error}'**
+  String cbBackendCommError(Object error);
+
+  /// No description provided for @cbLinkTokenFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to retrieve link token'**
+  String get cbLinkTokenFailed;
+
+  /// No description provided for @cbBackendConnectError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error connecting to backend: {error}'**
+  String cbBackendConnectError(Object error);
+
+  /// No description provided for @cbHttpError.
+  ///
+  /// In en, this message translates to:
+  /// **'{fallback}: HTTP {status}'**
+  String cbHttpError(Object fallback, Object status);
+
+  /// No description provided for @cbPlaidError.
+  ///
+  /// In en, this message translates to:
+  /// **'Plaid Error: {message}'**
+  String cbPlaidError(Object message);
+
+  /// No description provided for @pfAssetBreakdown.
+  ///
+  /// In en, this message translates to:
+  /// **'Asset breakdown'**
+  String get pfAssetBreakdown;
+
+  /// No description provided for @pfByType.
+  ///
+  /// In en, this message translates to:
+  /// **'By type'**
+  String get pfByType;
+
+  /// No description provided for @pfByInstitution.
+  ///
+  /// In en, this message translates to:
+  /// **'By institution'**
+  String get pfByInstitution;
+
+  /// No description provided for @pfOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get pfOther;
+
+  /// No description provided for @pfBank.
+  ///
+  /// In en, this message translates to:
+  /// **'Bank'**
+  String get pfBank;
+
+  /// No description provided for @pfNetWorthGoal.
+  ///
+  /// In en, this message translates to:
+  /// **'Net-worth goal'**
+  String get pfNetWorthGoal;
+
+  /// No description provided for @pfGoalDueNow.
+  ///
+  /// In en, this message translates to:
+  /// **'due now'**
+  String get pfGoalDueNow;
+
+  /// No description provided for @pfGoalYearsLeft.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 year left} other{{count} years left}}'**
+  String pfGoalYearsLeft(int count);
+
+  /// No description provided for @pfGoalHitBy.
+  ///
+  /// In en, this message translates to:
+  /// **'Hit {amount} by {year} · {remaining}'**
+  String pfGoalHitBy(Object amount, Object remaining, Object year);
+
+  /// No description provided for @pfGoalCurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'Current: {amount}'**
+  String pfGoalCurrent(Object amount);
+
+  /// No description provided for @pfShowingBands.
+  ///
+  /// In en, this message translates to:
+  /// **'Showing per-institution bands'**
+  String get pfShowingBands;
+
+  /// No description provided for @pfShowingLine.
+  ///
+  /// In en, this message translates to:
+  /// **'Showing only the net worth line'**
+  String get pfShowingLine;
+
+  /// No description provided for @pfSimple.
+  ///
+  /// In en, this message translates to:
+  /// **'Simple'**
+  String get pfSimple;
+
+  /// No description provided for @pfDetailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Detailed'**
+  String get pfDetailed;
+
+  /// No description provided for @pfTotalNetWorthCurrency.
+  ///
+  /// In en, this message translates to:
+  /// **'Total net worth ({currency})'**
+  String pfTotalNetWorthCurrency(Object currency);
+
+  /// No description provided for @pfTotalNetWorth.
+  ///
+  /// In en, this message translates to:
+  /// **'Total net worth'**
+  String get pfTotalNetWorth;
+
+  /// No description provided for @pfTooltipNetWorth.
+  ///
+  /// In en, this message translates to:
+  /// **'Net worth: {value}'**
+  String pfTooltipNetWorth(Object value);
+
+  /// No description provided for @pfTooltipAssets.
+  ///
+  /// In en, this message translates to:
+  /// **'Assets: {value}'**
+  String pfTooltipAssets(Object value);
+
+  /// No description provided for @pfTooltipLiabilities.
+  ///
+  /// In en, this message translates to:
+  /// **'Liabilities: {value}'**
+  String pfTooltipLiabilities(Object value);
+
+  /// No description provided for @pfDeltaVsAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'vs {window} ago'**
+  String pfDeltaVsAgo(Object window);
+
+  /// No description provided for @pfNoAccountsYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No accounts yet'**
+  String get pfNoAccountsYet;
+
+  /// No description provided for @pfNoAccountsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Link a bank, import a CSV, or add a manual account to\nget started.'**
+  String get pfNoAccountsBody;
+
+  /// No description provided for @pfAddAnAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Add an account'**
+  String get pfAddAnAccount;
+
+  /// No description provided for @pfAccountsHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'ACCOUNTS'**
+  String get pfAccountsHeader;
+
+  /// No description provided for @pfGroupCash.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash'**
+  String get pfGroupCash;
+
+  /// No description provided for @pfGroupInvestments.
+  ///
+  /// In en, this message translates to:
+  /// **'Investments'**
+  String get pfGroupInvestments;
+
+  /// No description provided for @pfGroupCrypto.
+  ///
+  /// In en, this message translates to:
+  /// **'Crypto'**
+  String get pfGroupCrypto;
+
+  /// No description provided for @pfGroupCreditCards.
+  ///
+  /// In en, this message translates to:
+  /// **'Credit cards'**
+  String get pfGroupCreditCards;
+
+  /// No description provided for @pfGroupLoans.
+  ///
+  /// In en, this message translates to:
+  /// **'Loans & mortgages'**
+  String get pfGroupLoans;
+
+  /// No description provided for @pfGroupRealAssets.
+  ///
+  /// In en, this message translates to:
+  /// **'Real assets'**
+  String get pfGroupRealAssets;
+
+  /// No description provided for @pfGroupOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get pfGroupOther;
+
+  /// No description provided for @pfUnknownSubtypes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Unknown subtype: {list}} other{Unknown subtypes: {list}}}'**
+  String pfUnknownSubtypes(int count, Object list);
+
+  /// No description provided for @pfVaults.
+  ///
+  /// In en, this message translates to:
+  /// **'Vaults'**
+  String get pfVaults;
+
+  /// No description provided for @pfAccountsDescriptor.
+  ///
+  /// In en, this message translates to:
+  /// **'Accounts'**
+  String get pfAccountsDescriptor;
+
+  /// No description provided for @pfInstDescriptor.
+  ///
+  /// In en, this message translates to:
+  /// **'{inst} · {descriptor}'**
+  String pfInstDescriptor(Object descriptor, Object inst);
+
+  /// No description provided for @pfVault.
+  ///
+  /// In en, this message translates to:
+  /// **'Vault'**
+  String get pfVault;
+
+  /// No description provided for @pfUnknownAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown account'**
+  String get pfUnknownAccount;
+
+  /// No description provided for @pfAccountActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Account actions'**
+  String get pfAccountActions;
+
+  /// No description provided for @pfRename.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get pfRename;
+
+  /// No description provided for @pfRevalue.
+  ///
+  /// In en, this message translates to:
+  /// **'Revalue'**
+  String get pfRevalue;
+
+  /// No description provided for @pfDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get pfDelete;
+
+  /// No description provided for @pfDeleteAccountTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete account'**
+  String get pfDeleteAccountTitle;
+
+  /// No description provided for @pfDeleteAccountConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete \"{name}\"? This will remove all its history.'**
+  String pfDeleteAccountConfirm(Object name);
+
+  /// No description provided for @pfRevalueTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Revalue {name}'**
+  String pfRevalueTitle(Object name);
+
+  /// No description provided for @pfRevalueCurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'Current: {amount} {currency}'**
+  String pfRevalueCurrent(Object amount, Object currency);
+
+  /// No description provided for @pfNewBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'New balance'**
+  String get pfNewBalance;
+
+  /// No description provided for @pfNotesOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes (optional)'**
+  String get pfNotesOptional;
+
+  /// No description provided for @pfNotesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. Zillow estimate, 2026 appraisal, last round'**
+  String get pfNotesHint;
+
+  /// No description provided for @pfHistoryPointNote.
+  ///
+  /// In en, this message translates to:
+  /// **'A new history point is recorded with today\'s date.'**
+  String get pfHistoryPointNote;
+
+  /// No description provided for @pfEnterNumericBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a numeric balance'**
+  String get pfEnterNumericBalance;
+
+  /// No description provided for @pfAssetFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'asset'**
+  String get pfAssetFallback;
+
+  /// No description provided for @pfRenameAccountTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename account'**
+  String get pfRenameAccountTitle;
+
+  /// No description provided for @pfRenameOriginal.
+  ///
+  /// In en, this message translates to:
+  /// **'Original: {name}'**
+  String pfRenameOriginal(Object name);
+
+  /// No description provided for @pfNickname.
+  ///
+  /// In en, this message translates to:
+  /// **'Nickname'**
+  String get pfNickname;
+
+  /// No description provided for @pfNicknameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. Joint checking'**
+  String get pfNicknameHint;
+
+  /// No description provided for @pfRenameBlankHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave blank to clear and use the bank name.'**
+  String get pfRenameBlankHint;
+
+  /// No description provided for @pfInvestmentPortfolio.
+  ///
+  /// In en, this message translates to:
+  /// **'Investment portfolio'**
+  String get pfInvestmentPortfolio;
+
+  /// No description provided for @pfTotalValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Total value'**
+  String get pfTotalValue;
+
+  /// No description provided for @pfProfitLoss.
+  ///
+  /// In en, this message translates to:
+  /// **'Profit / Loss'**
+  String get pfProfitLoss;
+
+  /// No description provided for @pfUsDollar.
+  ///
+  /// In en, this message translates to:
+  /// **'US Dollar'**
+  String get pfUsDollar;
+
+  /// No description provided for @pfMexicanPeso.
+  ///
+  /// In en, this message translates to:
+  /// **'Mexican Peso'**
+  String get pfMexicanPeso;
+
+  /// No description provided for @pfHoldings.
+  ///
+  /// In en, this message translates to:
+  /// **'Holdings'**
+  String get pfHoldings;
+
+  /// No description provided for @pfAccountsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 account} other{{count} accounts}}'**
+  String pfAccountsCount(int count);
+
+  /// No description provided for @pfTopPosition.
+  ///
+  /// In en, this message translates to:
+  /// **'Top position'**
+  String get pfTopPosition;
+
+  /// No description provided for @pfBiggestGainer.
+  ///
+  /// In en, this message translates to:
+  /// **'Biggest gainer'**
+  String get pfBiggestGainer;
+
+  /// No description provided for @pfBiggestLoser.
+  ///
+  /// In en, this message translates to:
+  /// **'Biggest loser'**
+  String get pfBiggestLoser;
+
+  /// No description provided for @pfUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get pfUnknown;
+
+  /// No description provided for @pfInstPositions.
+  ///
+  /// In en, this message translates to:
+  /// **'{inst} · {count, plural, =1{1 position} other{{count} positions}}'**
+  String pfInstPositions(Object inst, int count);
+
+  /// No description provided for @pfSharesSuffix.
+  ///
+  /// In en, this message translates to:
+  /// **'{qty} sh'**
+  String pfSharesSuffix(Object qty);
+
+  /// No description provided for @pfCategoryFilter.
+  ///
+  /// In en, this message translates to:
+  /// **'Category: {category}'**
+  String pfCategoryFilter(Object category);
+
+  /// No description provided for @pfSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search ticker, name, account, or institution…'**
+  String get pfSearchHint;
+
+  /// No description provided for @pfHoldingsAccountsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{holdings, plural, =1{1 holding} other{{holdings} holdings}} · {accounts, plural, =1{1 account} other{{accounts} accounts}}'**
+  String pfHoldingsAccountsCount(int accounts, int holdings);
+
+  /// No description provided for @pfShownOfTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'{shown} of {total}'**
+  String pfShownOfTotal(Object shown, Object total);
+
+  /// No description provided for @pfFlat.
+  ///
+  /// In en, this message translates to:
+  /// **'Flat'**
+  String get pfFlat;
+
+  /// No description provided for @pfByAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'By account'**
+  String get pfByAccount;
+
+  /// No description provided for @pfNoHoldingsYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No holdings yet'**
+  String get pfNoHoldingsYet;
+
+  /// No description provided for @pfNoHoldingsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Once you link a brokerage with Plaid (or import a CSV) your\npositions will appear here.'**
+  String get pfNoHoldingsBody;
+
+  /// No description provided for @pfColAsset.
+  ///
+  /// In en, this message translates to:
+  /// **'Asset'**
+  String get pfColAsset;
+
+  /// No description provided for @pfColShares.
+  ///
+  /// In en, this message translates to:
+  /// **'Shares'**
+  String get pfColShares;
+
+  /// No description provided for @pfColPrice.
+  ///
+  /// In en, this message translates to:
+  /// **'Price'**
+  String get pfColPrice;
+
+  /// No description provided for @pfColValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Value'**
+  String get pfColValue;
+
+  /// No description provided for @pfColCostBasis.
+  ///
+  /// In en, this message translates to:
+  /// **'Cost basis'**
+  String get pfColCostBasis;
+
+  /// No description provided for @pfColGain.
+  ///
+  /// In en, this message translates to:
+  /// **'Gain'**
+  String get pfColGain;
+
+  /// No description provided for @pfColReturn.
+  ///
+  /// In en, this message translates to:
+  /// **'Return'**
+  String get pfColReturn;
+
+  /// No description provided for @pfShares.
+  ///
+  /// In en, this message translates to:
+  /// **'sh'**
+  String get pfShares;
+
+  /// No description provided for @pfHolding.
+  ///
+  /// In en, this message translates to:
+  /// **'Holding'**
+  String get pfHolding;
+
+  /// No description provided for @pfLotBreakdownTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Lot breakdown · {title}'**
+  String pfLotBreakdownTitle(Object title);
+
+  /// No description provided for @pfLotBreakdownSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'FIFO order. Cost basis sums each lot at its historical USD/native FX rate, not today\'s.'**
+  String get pfLotBreakdownSubtitle;
+
+  /// No description provided for @pfLotAcquired.
+  ///
+  /// In en, this message translates to:
+  /// **'Acquired'**
+  String get pfLotAcquired;
+
+  /// No description provided for @pfLotQty.
+  ///
+  /// In en, this message translates to:
+  /// **'Qty'**
+  String get pfLotQty;
+
+  /// No description provided for @pfLotCostPerUnit.
+  ///
+  /// In en, this message translates to:
+  /// **'Cost / unit'**
+  String get pfLotCostPerUnit;
+
+  /// No description provided for @pfLotFxAtLot.
+  ///
+  /// In en, this message translates to:
+  /// **'FX at lot'**
+  String get pfLotFxAtLot;
+
+  /// No description provided for @pfLotUsdCost.
+  ///
+  /// In en, this message translates to:
+  /// **'USD cost'**
+  String get pfLotUsdCost;
+
+  /// No description provided for @dlgAccountTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add manual account'**
+  String get dlgAccountTitle;
+
+  /// No description provided for @dlgAccountName.
+  ///
+  /// In en, this message translates to:
+  /// **'Account name'**
+  String get dlgAccountName;
+
+  /// No description provided for @dlgAccountNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. My savings, Rental property'**
+  String get dlgAccountNameHint;
+
+  /// No description provided for @dlgAccountType.
+  ///
+  /// In en, this message translates to:
+  /// **'Account type'**
+  String get dlgAccountType;
+
+  /// No description provided for @dlgAccountCurrency.
+  ///
+  /// In en, this message translates to:
+  /// **'Currency'**
+  String get dlgAccountCurrency;
+
+  /// No description provided for @dlgAccountInitialBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'Initial balance'**
+  String get dlgAccountInitialBalance;
+
+  /// No description provided for @dlgAccountBalanceHelper.
+  ///
+  /// In en, this message translates to:
+  /// **'For credit cards / loans, enter the amount owed as a positive number.'**
+  String get dlgAccountBalanceHelper;
+
+  /// No description provided for @dlgAccountBalanceInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a numeric amount'**
+  String get dlgAccountBalanceInvalid;
+
+  /// No description provided for @dlgAccountCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'Create account'**
+  String get dlgAccountCreate;
+
+  /// No description provided for @dlgAccountGroupCashBanking.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash & banking'**
+  String get dlgAccountGroupCashBanking;
+
+  /// No description provided for @dlgAccountGroupInvestments.
+  ///
+  /// In en, this message translates to:
+  /// **'Investments'**
+  String get dlgAccountGroupInvestments;
+
+  /// No description provided for @dlgAccountGroupCrypto.
+  ///
+  /// In en, this message translates to:
+  /// **'Crypto'**
+  String get dlgAccountGroupCrypto;
+
+  /// No description provided for @dlgAccountGroupRealAssets.
+  ///
+  /// In en, this message translates to:
+  /// **'Real assets'**
+  String get dlgAccountGroupRealAssets;
+
+  /// No description provided for @dlgAccountGroupLiabilities.
+  ///
+  /// In en, this message translates to:
+  /// **'Liabilities'**
+  String get dlgAccountGroupLiabilities;
+
+  /// No description provided for @dlgAccountCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'Account \"{name}\" created!'**
+  String dlgAccountCreated(Object name);
+
+  /// No description provided for @dlgAccountCreateError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not add account: {error}'**
+  String dlgAccountCreateError(Object error);
+
+  /// No description provided for @dlgCryptoLinkTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Link {exchange}'**
+  String dlgCryptoLinkTitle(Object exchange);
+
+  /// No description provided for @dlgCryptoIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Generate a \"Read-Only\" API key in {exchange} settings. We only use this to fetch balances and estimate their value.'**
+  String dlgCryptoIntro(Object exchange);
+
+  /// No description provided for @dlgCryptoWhereApiKeys.
+  ///
+  /// In en, this message translates to:
+  /// **'Where do I find my API keys? ↗'**
+  String get dlgCryptoWhereApiKeys;
+
+  /// No description provided for @dlgCryptoDisplayName.
+  ///
+  /// In en, this message translates to:
+  /// **'Display Name (e.g. {example})'**
+  String dlgCryptoDisplayName(Object example);
+
+  /// No description provided for @dlgCryptoApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'API Key'**
+  String get dlgCryptoApiKey;
+
+  /// No description provided for @dlgCryptoApiSecret.
+  ///
+  /// In en, this message translates to:
+  /// **'API Secret'**
+  String get dlgCryptoApiSecret;
+
+  /// No description provided for @dlgCryptoLinkAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Link account'**
+  String get dlgCryptoLinkAccount;
+
+  /// No description provided for @dlgCryptoApiKeysTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{exchange} API keys'**
+  String dlgCryptoApiKeysTitle(Object exchange);
+
+  /// No description provided for @dlgCryptoApiKeysFallbackBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Generate a Read-Only API key in your {exchange} settings, then paste it here. Open:'**
+  String dlgCryptoApiKeysFallbackBody(Object exchange);
+
+  /// No description provided for @dlgCryptoLinkSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Successfully linked {exchange}!'**
+  String dlgCryptoLinkSuccess(Object exchange);
+
+  /// No description provided for @dlgCryptoLinkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error linking: {error}'**
+  String dlgCryptoLinkError(Object error);
+
+  /// No description provided for @dlgTxTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add transaction'**
+  String get dlgTxTitle;
+
+  /// No description provided for @dlgTxAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Transaction added'**
+  String get dlgTxAdded;
+
+  /// No description provided for @dlgTxNoAccounts.
+  ///
+  /// In en, this message translates to:
+  /// **'You need at least one account before you can add a transaction.'**
+  String get dlgTxNoAccounts;
+
+  /// No description provided for @dlgTxAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get dlgTxAccount;
+
+  /// No description provided for @dlgTxExpense.
+  ///
+  /// In en, this message translates to:
+  /// **'Expense'**
+  String get dlgTxExpense;
+
+  /// No description provided for @dlgTxIncome.
+  ///
+  /// In en, this message translates to:
+  /// **'Income'**
+  String get dlgTxIncome;
+
+  /// No description provided for @dlgTxAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount'**
+  String get dlgTxAmount;
+
+  /// No description provided for @dlgTxAmountRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an amount'**
+  String get dlgTxAmountRequired;
+
+  /// No description provided for @dlgTxAmountPositive.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a positive amount'**
+  String get dlgTxAmountPositive;
+
+  /// No description provided for @dlgTxDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Date'**
+  String get dlgTxDate;
+
+  /// No description provided for @dlgTxDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Description'**
+  String get dlgTxDescription;
+
+  /// No description provided for @dlgTxDescriptionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. Coffee with Sam'**
+  String get dlgTxDescriptionHint;
+
+  /// No description provided for @dlgTxDescriptionRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Description is required'**
+  String get dlgTxDescriptionRequired;
+
+  /// No description provided for @dlgTxCategory.
+  ///
+  /// In en, this message translates to:
+  /// **'Category (optional)'**
+  String get dlgTxCategory;
+
+  /// No description provided for @dlgTxCategoryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. Restaurants'**
+  String get dlgTxCategoryHint;
+
+  /// No description provided for @dlgTxNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes (optional)'**
+  String get dlgTxNotes;
+
+  /// No description provided for @dlgRecoveryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Save your recovery codes'**
+  String get dlgRecoveryTitle;
+
+  /// No description provided for @dlgRecoveryWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'These codes will NOT be shown again. Each is single-use; use one if you lose your password.'**
+  String get dlgRecoveryWarning;
+
+  /// No description provided for @dlgRecoveryCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied'**
+  String get dlgRecoveryCopied;
+
+  /// No description provided for @dlgRecoveryCopyAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy all'**
+  String get dlgRecoveryCopyAll;
+
+  /// No description provided for @dlgRecoverySavedConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ve saved these codes somewhere safe'**
+  String get dlgRecoverySavedConfirm;
+
+  /// No description provided for @dlgRecoveryContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get dlgRecoveryContinue;
+
+  /// No description provided for @lwFxExchangeRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Exchange rate'**
+  String get lwFxExchangeRate;
+
+  /// No description provided for @lwFxRefreshNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh rate now'**
+  String get lwFxRefreshNow;
+
+  /// No description provided for @lwFxSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Source: {source}'**
+  String lwFxSource(Object source);
+
+  /// No description provided for @lwFxUpdatedUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated: unknown'**
+  String get lwFxUpdatedUnknown;
+
+  /// No description provided for @lwFxStalePrefix.
+  ///
+  /// In en, this message translates to:
+  /// **'Stale · {age}'**
+  String lwFxStalePrefix(Object age);
+
+  /// No description provided for @lwFxUpdatedJustNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated just now'**
+  String get lwFxUpdatedJustNow;
+
+  /// No description provided for @lwFxUpdatedMinutesAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated {minutes}m ago'**
+  String lwFxUpdatedMinutesAgo(Object minutes);
+
+  /// No description provided for @lwFxUpdatedHoursAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated {hours}h ago'**
+  String lwFxUpdatedHoursAgo(Object hours);
+
+  /// No description provided for @lwFxUpdatedDaysAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, one{Updated {days} day ago} other{Updated {days} days ago}}'**
+  String lwFxUpdatedDaysAgo(int days);
+
+  /// No description provided for @lwSyncInstitutionsHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'INSTITUTIONS'**
+  String get lwSyncInstitutionsHeader;
+
+  /// No description provided for @lwSyncRetryFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry {count} failed'**
+  String lwSyncRetryFailed(Object count);
+
+  /// No description provided for @lwSyncNoInstitutions.
+  ///
+  /// In en, this message translates to:
+  /// **'No institutions linked yet'**
+  String get lwSyncNoInstitutions;
+
+  /// No description provided for @lwSyncNoInstitutionsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Use the buttons below to connect a bank, import a\nstatement, or add a manual account.'**
+  String get lwSyncNoInstitutionsHint;
+
+  /// No description provided for @lwSyncNever.
+  ///
+  /// In en, this message translates to:
+  /// **'Never'**
+  String get lwSyncNever;
+
+  /// No description provided for @lwSyncUnknownInstitution.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get lwSyncUnknownInstitution;
+
+  /// No description provided for @lwSyncFailedUnknownReason.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync failed. Reason unknown — try Retry or Reconnect.'**
+  String get lwSyncFailedUnknownReason;
+
+  /// No description provided for @lwSyncReconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnect'**
+  String get lwSyncReconnect;
+
+  /// No description provided for @lwSyncRetrySync.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry sync'**
+  String get lwSyncRetrySync;
+
+  /// No description provided for @lwSyncDeleteInstitution.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete institution'**
+  String get lwSyncDeleteInstitution;
+
+  /// No description provided for @lwSyncVia.
+  ///
+  /// In en, this message translates to:
+  /// **'Via {source}'**
+  String lwSyncVia(Object source);
+
+  /// No description provided for @lwSyncDetailSyncingNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing now'**
+  String get lwSyncDetailSyncingNow;
+
+  /// No description provided for @lwSyncDetailSetupRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Setup required before sync'**
+  String get lwSyncDetailSetupRequired;
+
+  /// No description provided for @lwSyncDetailReconnectRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnect required'**
+  String get lwSyncDetailReconnectRequired;
+
+  /// No description provided for @lwSyncDetailWaitingFirstSync.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for first sync'**
+  String get lwSyncDetailWaitingFirstSync;
+
+  /// No description provided for @lwSyncDetailManualSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual/offline source'**
+  String get lwSyncDetailManualSource;
+
+  /// No description provided for @lwSyncStaleSuffix.
+  ///
+  /// In en, this message translates to:
+  /// **'(Stale)'**
+  String get lwSyncStaleSuffix;
+
+  /// No description provided for @lwSyncBannerOneNeedsAttention.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} needs attention'**
+  String lwSyncBannerOneNeedsAttention(Object name);
+
+  /// No description provided for @lwSyncBannerManyNeedAttention.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} institutions need attention'**
+  String lwSyncBannerManyNeedAttention(Object count);
+
+  /// No description provided for @lwSyncBannerReconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnect'**
+  String get lwSyncBannerReconnect;
+
+  /// No description provided for @lwSyncBannerReconnectName.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnect {name}'**
+  String lwSyncBannerReconnectName(Object name);
+
+  /// No description provided for @lwSyncBannerReconnectCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnect {count}…'**
+  String lwSyncBannerReconnectCount(Object count);
+
+  /// No description provided for @lwSyncBannerOpenSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Open settings'**
+  String get lwSyncBannerOpenSettings;
+
+  /// No description provided for @lwSinceNewTransactions.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} new transaction} other{{count} new transactions}}'**
+  String lwSinceNewTransactions(int count);
+
+  /// No description provided for @lwSinceLargestMove.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} on {account}'**
+  String lwSinceLargestMove(Object account, Object amount);
+
+  /// No description provided for @lwSinceSyncErrors.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} sync error} other{{count} sync errors}}'**
+  String lwSinceSyncErrors(int count);
+
+  /// No description provided for @lwSinceLastVisit.
+  ///
+  /// In en, this message translates to:
+  /// **'Since your last visit'**
+  String get lwSinceLastVisit;
+
+  /// No description provided for @lwSinceDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Since {date}'**
+  String lwSinceDate(Object date);
+
+  /// No description provided for @lwSinceViewAction.
+  ///
+  /// In en, this message translates to:
+  /// **'View'**
+  String get lwSinceViewAction;
+
+  /// No description provided for @lwSinceFixAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Fix'**
+  String get lwSinceFixAction;
+
+  /// No description provided for @lwSinceDismiss.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get lwSinceDismiss;
+
+  /// No description provided for @lwNotifBorrowerFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Borrower'**
+  String get lwNotifBorrowerFallback;
+
+  /// No description provided for @lwNotifInstitutionFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Institution'**
+  String get lwNotifInstitutionFallback;
+
+  /// No description provided for @lwNotifRepaymentOverdueTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{borrower} repayment overdue'**
+  String lwNotifRepaymentOverdueTitle(Object borrower);
+
+  /// No description provided for @lwNotifRepaymentOverdueDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Installment #{number} of {amount} was due {dueDate} ({daysOverdue}d ago).'**
+  String lwNotifRepaymentOverdueDetail(
+    Object amount,
+    Object daysOverdue,
+    Object dueDate,
+    Object number,
+  );
+
+  /// No description provided for @lwNotifRepaymentDueTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{borrower} repayment due in {days}d'**
+  String lwNotifRepaymentDueTitle(Object borrower, Object days);
+
+  /// No description provided for @lwNotifRepaymentDueDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Installment #{number} of {amount} due {dueDate}.'**
+  String lwNotifRepaymentDueDetail(
+    Object amount,
+    Object dueDate,
+    Object number,
+  );
+
+  /// No description provided for @lwNotifNeedsReconnectTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} needs reconnect'**
+  String lwNotifNeedsReconnectTitle(Object name);
+
+  /// No description provided for @lwNotifNeedsReconnectDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Plaid token expired — reconnect to resume sync.'**
+  String get lwNotifNeedsReconnectDetail;
+
+  /// No description provided for @lwNotifSyncFailedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} sync failed'**
+  String lwNotifSyncFailedTitle(Object name);
+
+  /// No description provided for @lwNotifUnknownSyncError.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown sync error'**
+  String get lwNotifUnknownSyncError;
+
+  /// No description provided for @lwNotifStaleSyncTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} last synced {days}d ago'**
+  String lwNotifStaleSyncTitle(Object days, Object name);
+
+  /// No description provided for @lwNotifStaleSyncDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Trigger a sync to pull in transactions and balance updates.'**
+  String get lwNotifStaleSyncDetail;
+
+  /// No description provided for @lwNotifNetWorthDropTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Net worth dropped {pct} in 30 days'**
+  String lwNotifNetWorthDropTitle(Object pct);
+
+  /// No description provided for @lwNotifNetWorthDropDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest {latest} vs {reference}.'**
+  String lwNotifNetWorthDropDetail(Object latest, Object reference);
+
+  /// No description provided for @lwNotifTooltipNone.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications'**
+  String get lwNotifTooltipNone;
+
+  /// No description provided for @lwNotifTooltipCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} alert} other{{count} alerts}}'**
+  String lwNotifTooltipCount(int count);
+
+  /// No description provided for @lwNotifAllClear.
+  ///
+  /// In en, this message translates to:
+  /// **'All clear'**
+  String get lwNotifAllClear;
+
+  /// No description provided for @lwNotifNoAlerts.
+  ///
+  /// In en, this message translates to:
+  /// **'No alerts right now.'**
+  String get lwNotifNoAlerts;
+
+  /// No description provided for @lwPaletteSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search accounts, holdings, transactions, or jump to a tab…'**
+  String get lwPaletteSearchHint;
+
+  /// No description provided for @lwPaletteNoMatches.
+  ///
+  /// In en, this message translates to:
+  /// **'No matches.'**
+  String get lwPaletteNoMatches;
+
+  /// No description provided for @lwPaletteHintNavigate.
+  ///
+  /// In en, this message translates to:
+  /// **'navigate'**
+  String get lwPaletteHintNavigate;
+
+  /// No description provided for @lwPaletteHintSelect.
+  ///
+  /// In en, this message translates to:
+  /// **'select'**
+  String get lwPaletteHintSelect;
+
+  /// No description provided for @lwPaletteHintClose.
+  ///
+  /// In en, this message translates to:
+  /// **'close'**
+  String get lwPaletteHintClose;
+
+  /// No description provided for @lwTrendsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash flow trends'**
+  String get lwTrendsTitle;
+
+  /// No description provided for @lwTrendsIncome.
+  ///
+  /// In en, this message translates to:
+  /// **'Income'**
+  String get lwTrendsIncome;
+
+  /// No description provided for @lwTrendsSpending.
+  ///
+  /// In en, this message translates to:
+  /// **'Spending'**
+  String get lwTrendsSpending;
+
+  /// No description provided for @lwTrendsTapToView.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to view transactions'**
+  String get lwTrendsTapToView;
+
+  /// No description provided for @lwTrendsInfoTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Internal transfers (between your accounts) and credit-card bill payments are excluded so the bars reflect actual external income and spending.'**
+  String get lwTrendsInfoTooltip;
+
+  /// No description provided for @lwTrendsSemanticNoData.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash flow trends chart, no data'**
+  String get lwTrendsSemanticNoData;
+
+  /// No description provided for @lwTrendsSemanticSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Cash flow trends, {count} month. Latest {month}: income {income}, spending {spending}.} other{Cash flow trends, {count} months. Latest {month}: income {income}, spending {spending}.}}'**
+  String lwTrendsSemanticSummary(
+    int count,
+    Object income,
+    Object month,
+    Object spending,
+  );
+
+  /// No description provided for @lwTrendsSemanticMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'{month}: income {income}, spending {spending}'**
+  String lwTrendsSemanticMonth(Object income, Object month, Object spending);
+
+  /// No description provided for @lwAllocTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Asset distribution'**
+  String get lwAllocTitle;
+
+  /// No description provided for @lwAllocTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'Total: {amount}'**
+  String lwAllocTotal(Object amount);
+
+  /// No description provided for @lwAllocOtherCategory.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get lwAllocOtherCategory;
+
+  /// No description provided for @lwAllocHoldingsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} holding} other{{count} holdings}}'**
+  String lwAllocHoldingsCount(int count);
+
+  /// No description provided for @lwAllocSharesSuffix.
+  ///
+  /// In en, this message translates to:
+  /// **'{qty} sh'**
+  String lwAllocSharesSuffix(Object qty);
+
+  /// No description provided for @lwAllocFilteringHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Filtering holdings to this category — tap again to clear'**
+  String get lwAllocFilteringHint;
+
+  /// No description provided for @lwAllocSemanticLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{category}, {pct} of portfolio, {count} holding} other{{category}, {pct} of portfolio, {count} holdings}}'**
+  String lwAllocSemanticLabel(Object category, Object pct, int count);
+
+  /// No description provided for @lwRangeOneMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'1M'**
+  String get lwRangeOneMonth;
+
+  /// No description provided for @lwRangeYearToDate.
+  ///
+  /// In en, this message translates to:
+  /// **'YTD'**
+  String get lwRangeYearToDate;
+
+  /// No description provided for @lwRangeOneYear.
+  ///
+  /// In en, this message translates to:
+  /// **'1Y'**
+  String get lwRangeOneYear;
+
+  /// No description provided for @lwRangeFiveYears.
+  ///
+  /// In en, this message translates to:
+  /// **'5Y'**
+  String get lwRangeFiveYears;
+
+  /// No description provided for @lwRangeAll.
+  ///
+  /// In en, this message translates to:
+  /// **'ALL'**
+  String get lwRangeAll;
 }
 
 class _AppLocalizationsDelegate

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/theme_colors.dart';
+import '../l10n/app_localizations.dart';
 import 'package:intl/intl.dart';
 
 /// Trim trailing zeros and pick a sensible precision based on the
@@ -59,8 +60,8 @@ class AllocationHeatmap extends StatelessWidget {
 
   /// Render raw backend categories ("mutual fund", "fixed income") as
   /// sentence-cased labels with common acronyms preserved (ETF, REIT).
-  static String _displayCategory(String raw) {
-    if (raw.isEmpty) return 'Other';
+  static String _displayCategory(String raw, AppLocalizations l) {
+    if (raw.isEmpty) return l.lwAllocOtherCategory;
     const acronyms = {'etf', 'reit', 'cd', 'ira'};
     return raw
         .split(' ')
@@ -85,6 +86,7 @@ class AllocationHeatmap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     if (data.isEmpty) return const SizedBox.shrink();
 
     final totalValue = data.fold<double>(0, (sum, item) => sum + item.value);
@@ -123,10 +125,10 @@ class AllocationHeatmap extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Flexible(
+                Flexible(
                   child: Text(
-                    'Asset distribution',
-                    style: TextStyle(
+                    l.lwAllocTitle,
+                    style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w800,
                       letterSpacing: -0.5,
@@ -138,7 +140,8 @@ class AllocationHeatmap extends StatelessWidget {
                 const SizedBox(width: 12),
                 Flexible(
                   child: Text(
-                    'Total: ${currencyFormat.format(totalValue * conversionFactor)}',
+                    l.lwAllocTotal(
+                        currencyFormat.format(totalValue * conversionFactor)),
                     style: const TextStyle(
                       fontSize: 14,
                       color: Colors.grey,
@@ -191,7 +194,7 @@ class AllocationHeatmap extends StatelessWidget {
                               const SizedBox(width: 12),
                               Flexible(
                                 child: Text(
-                                  _displayCategory(cat),
+                                  _displayCategory(cat, l),
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
@@ -203,7 +206,7 @@ class AllocationHeatmap extends StatelessWidget {
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                '${items.length} ${items.length == 1 ? "holding" : "holdings"}',
+                                l.lwAllocHoldingsCount(items.length),
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: context.textFaint,
@@ -265,7 +268,7 @@ class AllocationHeatmap extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Text(
-                          'Filtering holdings to this category — tap again to clear',
+                          l.lwAllocFilteringHint,
                           style: TextStyle(
                             fontSize: 10,
                             color: color,
@@ -300,7 +303,7 @@ class AllocationHeatmap extends StatelessWidget {
                             if (item.quantity > 0) ...[
                               const SizedBox(width: 4),
                               Text(
-                                '· ${_formatQty(item.quantity)} sh',
+                                '· ${l.lwAllocSharesSuffix(_formatQty(item.quantity))}',
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: context.textFaint,
@@ -333,10 +336,11 @@ class AllocationHeatmap extends StatelessWidget {
               // Screen-reader label for the category band: name + share of
               // total + holding count. Applied whether or not the band is
               // tappable so non-interactive views are still announced.
-              final semanticLabel =
-                  '${_displayCategory(cat)}, '
-                  '${(catPercentage * 100).toStringAsFixed(1)}% of portfolio, '
-                  '${items.length} ${items.length == 1 ? "holding" : "holdings"}';
+              final semanticLabel = l.lwAllocSemanticLabel(
+                _displayCategory(cat, l),
+                '${(catPercentage * 100).toStringAsFixed(1)}%',
+                items.length,
+              );
 
               if (!canTap) {
                 return Semantics(label: semanticLabel, child: inner);

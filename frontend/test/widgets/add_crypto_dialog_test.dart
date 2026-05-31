@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/widgets/add_crypto_dialog.dart';
 
 // We construct AddCryptoDialog directly (it builds an ApiService internally,
 // which is VM-safe via the conditional api_platform export) but never call
 // the network. Per MEMORY we do NOT subclass ApiService. These tests only
 // assert rendered copy + that the help link is tappable without throwing.
-Widget _host(Widget child) => MaterialApp(home: Scaffold(body: child));
+Widget _host(Widget child) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: child),
+    );
 
 void main() {
   testWidgets('Bitso dialog renders Bitso-named copy + tappable help link',

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../l10n/app_localizations.dart';
 import '../screens/account_transactions_screen.dart';
 import '../utils/account_category.dart';
 import '../utils/currency.dart';
@@ -40,6 +41,7 @@ class AccountsListWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     if (accounts.isEmpty) {
       return Card(
         child: Padding(
@@ -52,7 +54,7 @@ class AccountsListWidget extends StatelessWidget {
                     size: 56, color: Colors.grey.shade700),
                 const SizedBox(height: 14),
                 Text(
-                  'No accounts yet',
+                  l.pfNoAccountsYet,
                   style: TextStyle(
                     color: context.textMuted,
                     fontSize: 16,
@@ -61,7 +63,7 @@ class AccountsListWidget extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Link a bank, import a CSV, or add a manual account to\nget started.',
+                  l.pfNoAccountsBody,
                   textAlign: TextAlign.center,
                   style:
                       TextStyle(color: Colors.grey.shade500, fontSize: 12),
@@ -70,7 +72,7 @@ class AccountsListWidget extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: onAddAccount,
                   icon: const Icon(Icons.add_link, size: 18),
-                  label: const Text('Add an account'),
+                  label: Text(l.pfAddAnAccount),
                   style: FilledButton.styleFrom(
                     backgroundColor: context.positive,
                     foregroundColor: Colors.black,
@@ -140,7 +142,7 @@ class AccountsListWidget extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'ACCOUNTS',
+              l.pfAccountsHeader,
               style: TextStyle(
                 fontSize: 11,
                 color: context.textSubtle,
@@ -156,7 +158,7 @@ class AccountsListWidget extends StatelessWidget {
                 if (cashAccounts.isNotEmpty)
                   _buildAccountGroup(
                     context,
-                    'Cash',
+                    l.pfGroupCash,
                     cashAccounts,
                     Icons.wallet_rounded,
                     false,
@@ -165,7 +167,7 @@ class AccountsListWidget extends StatelessWidget {
                 if (investmentAccounts.isNotEmpty)
                   _buildAccountGroup(
                     context,
-                    'Investments',
+                    l.pfGroupInvestments,
                     investmentAccounts,
                     Icons.show_chart_rounded,
                     false,
@@ -174,7 +176,7 @@ class AccountsListWidget extends StatelessWidget {
                 if (cryptoAccounts.isNotEmpty)
                   _buildAccountGroup(
                     context,
-                    'Crypto',
+                    l.pfGroupCrypto,
                     cryptoAccounts,
                     Icons.currency_bitcoin_rounded,
                     false,
@@ -183,7 +185,7 @@ class AccountsListWidget extends StatelessWidget {
                 if (creditAccounts.isNotEmpty)
                   _buildAccountGroup(
                     context,
-                    'Credit cards',
+                    l.pfGroupCreditCards,
                     creditAccounts,
                     Icons.credit_card_rounded,
                     true,
@@ -192,7 +194,7 @@ class AccountsListWidget extends StatelessWidget {
                 if (loanAccounts.isNotEmpty)
                   _buildAccountGroup(
                     context,
-                    'Loans & mortgages',
+                    l.pfGroupLoans,
                     loanAccounts,
                     Icons.home_rounded,
                     true,
@@ -201,7 +203,7 @@ class AccountsListWidget extends StatelessWidget {
                 if (realAssetAccounts.isNotEmpty)
                   _buildAccountGroup(
                     context,
-                    'Real assets',
+                    l.pfGroupRealAssets,
                     realAssetAccounts,
                     Icons.maps_home_work_rounded,
                     false,
@@ -210,7 +212,7 @@ class AccountsListWidget extends StatelessWidget {
                 if (otherAccounts.isNotEmpty)
                   _buildAccountGroup(
                     context,
-                    'Other',
+                    l.pfGroupOther,
                     otherAccounts,
                     Icons.category_outlined,
                     false,
@@ -220,8 +222,10 @@ class AccountsListWidget extends StatelessWidget {
                     // self-reports its own classifier gaps.
                     subtitle: unknownTypes.isEmpty
                         ? null
-                        : 'Unknown subtype${unknownTypes.length == 1 ? "" : "s"}: '
-                            '${(unknownTypes.toList()..sort()).join(", ")}',
+                        : l.pfUnknownSubtypes(
+                            unknownTypes.length,
+                            (unknownTypes.toList()..sort()).join(", "),
+                          ),
                   ),
               ],
             ),
@@ -468,7 +472,10 @@ class AccountsListWidget extends StatelessWidget {
   Widget _buildVaultClusterHeader(BuildContext context, List<dynamic> cluster) {
     final inst = (cluster.first['institution_name'] ?? '').toString();
     final type = (cluster.first['account_type'] ?? '').toString().toLowerCase();
-    final descriptor = type.contains('cash management') ? 'Vaults' : 'Accounts';
+    final l = AppLocalizations.of(context);
+    final descriptor = type.contains('cash management')
+        ? l.pfVaults
+        : l.pfAccountsDescriptor;
     final total = cluster.fold<double>(0.0, (sum, acc) {
       final bal = ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
       final cur = (acc['currency'] ?? targetCurrency).toString();
@@ -482,7 +489,7 @@ class AccountsListWidget extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              inst.isEmpty ? descriptor : '$inst · $descriptor',
+              inst.isEmpty ? descriptor : l.pfInstDescriptor(inst, descriptor),
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -515,7 +522,8 @@ class AccountsListWidget extends StatelessWidget {
     final balance =
         ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
     final sourceCurrency = (acc['currency'] ?? targetCurrency).toString();
-    final name = (acc['name'] ?? 'Vault').toString();
+    final name =
+        (acc['name'] ?? AppLocalizations.of(context).pfVault).toString();
 
     return InkWell(
       onTap: () {
@@ -575,13 +583,16 @@ class AccountsListWidget extends StatelessWidget {
   ///   wide  : name+inst — — — — — — balance + companion + menu
   ///   narrow: name+inst stacked, balance below on its own line
   Widget _buildAccountRow(BuildContext context, dynamic acc) {
+    final l = AppLocalizations.of(context);
     final balance =
         ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
     final sourceCurrency = (acc['currency'] ?? targetCurrency).toString();
     // Prefer the user's nickname over the bank-supplied name so a Plaid
     // default like "PLAID CHECKING 0001" can read as "Joint checking".
     final nickname = (acc['nickname'] ?? '').toString().trim();
-    final rawName = (acc['name'] ?? 'Unknown account').toString();
+    final rawNameValue = (acc['name'] ?? '').toString();
+    final rawName =
+        rawNameValue.isEmpty ? l.pfUnknownAccount : rawNameValue;
     final name = nickname.isNotEmpty ? nickname : rawName;
     final inst = (acc['institution_name'] ?? '').toString();
     final hasCrypto =
@@ -689,7 +700,7 @@ class AccountsListWidget extends StatelessWidget {
     Widget menuButton = PopupMenuButton<String>(
       icon: Icon(Icons.more_vert, size: 18, color: context.textFaint),
       padding: EdgeInsets.zero,
-      tooltip: 'Account actions',
+      tooltip: l.pfAccountActions,
       onSelected: (value) {
         if (value == 'rename') {
           _showRenameDialog(context, acc);
@@ -699,13 +710,12 @@ class AccountsListWidget extends StatelessWidget {
           showDialog(
             context: context,
             builder: (context) => AlertDialog(
-              title: const Text('Delete account'),
-              content: Text(
-                  'Are you sure you want to delete "$name"? This will remove all its history.'),
+              title: Text(l.pfDeleteAccountTitle),
+              content: Text(l.pfDeleteAccountConfirm(name)),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
+                  child: Text(l.actionCancel),
                 ),
                 TextButton(
                   onPressed: () {
@@ -714,7 +724,7 @@ class AccountsListWidget extends StatelessWidget {
                   },
                   style: TextButton.styleFrom(
                       foregroundColor: Colors.redAccent),
-                  child: const Text('Delete'),
+                  child: Text(l.pfDelete),
                 ),
               ],
             ),
@@ -730,7 +740,7 @@ class AccountsListWidget extends StatelessWidget {
                 Icon(Icons.drive_file_rename_outline,
                     size: 18, color: context.textMuted),
                 const SizedBox(width: 8),
-                const Text('Rename'),
+                Text(l.pfRename),
               ],
             ),
           ),
@@ -742,17 +752,19 @@ class AccountsListWidget extends StatelessWidget {
                 Icon(Icons.price_change_outlined,
                     size: 18, color: context.textMuted),
                 const SizedBox(width: 8),
-                const Text('Revalue'),
+                Text(l.pfRevalue),
               ],
             ),
           ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'delete',
           child: Row(
             children: [
-              Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
-              SizedBox(width: 8),
-              Text('Delete', style: TextStyle(color: Colors.redAccent)),
+              const Icon(Icons.delete_outline,
+                  size: 18, color: Colors.redAccent),
+              const SizedBox(width: 8),
+              Text(l.pfDelete,
+                  style: const TextStyle(color: Colors.redAccent)),
             ],
           ),
         ),
@@ -844,6 +856,7 @@ class AccountsListWidget extends StatelessWidget {
   /// share-class round, etc.). On Save the parent widget owns the API
   /// call + list refresh via [onRevalueAccount].
   void _showRevalueDialog(BuildContext context, dynamic acc) {
+    final l = AppLocalizations.of(context);
     final currentBalance =
         ((acc['current_balance'] ?? 0.0) as num).toDouble();
     final balanceCtrl =
@@ -853,19 +866,20 @@ class AccountsListWidget extends StatelessWidget {
         (acc['currency'] ?? 'USD').toString().toUpperCase();
     final name = (acc['nickname']?.toString().trim().isNotEmpty == true
         ? acc['nickname']
-        : acc['name']) ?? 'asset';
+        : acc['name']) ?? l.pfAssetFallback;
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Theme.of(ctx).colorScheme.surface,
-        title: Text('Revalue $name'),
+        title: Text(l.pfRevalueTitle(name)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Current: ${currentBalance.toStringAsFixed(2)} $currency',
+              l.pfRevalueCurrent(
+                  currentBalance.toStringAsFixed(2), currency),
               style: TextStyle(fontSize: 12, color: context.textSubtle),
             ),
             const SizedBox(height: 12),
@@ -875,7 +889,7 @@ class AccountsListWidget extends StatelessWidget {
               keyboardType: const TextInputType.numberWithOptions(
                   decimal: true, signed: true),
               decoration: InputDecoration(
-                labelText: 'New balance',
+                labelText: l.pfNewBalance,
                 prefixText: r'$ ',
                 suffixText: currency,
                 border: const OutlineInputBorder(),
@@ -886,16 +900,16 @@ class AccountsListWidget extends StatelessWidget {
             TextField(
               controller: notesCtrl,
               maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Notes (optional)',
-                hintText: 'e.g. Zillow estimate, 2026 appraisal, last round',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l.pfNotesOptional,
+                hintText: l.pfNotesHint,
+                border: const OutlineInputBorder(),
                 isDense: true,
               ),
             ),
             const SizedBox(height: 4),
             Text(
-              'A new history point is recorded with today\'s date.',
+              l.pfHistoryPointNote,
               style: TextStyle(fontSize: 11, color: context.textFaint),
             ),
           ],
@@ -903,15 +917,15 @@ class AccountsListWidget extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: Text(l.actionCancel),
           ),
           FilledButton(
             onPressed: () {
               final parsed = double.tryParse(balanceCtrl.text.trim());
               if (parsed == null) {
                 ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(
-                      content: Text('Enter a numeric balance')),
+                  SnackBar(
+                      content: Text(l.pfEnterNumericBalance)),
                 );
                 return;
               }
@@ -923,7 +937,7 @@ class AccountsListWidget extends StatelessWidget {
                 note.isEmpty ? null : note,
               );
             },
-            child: const Text('Save'),
+            child: Text(l.actionSave),
           ),
         ],
       ),
@@ -933,6 +947,7 @@ class AccountsListWidget extends StatelessWidget {
   /// Modal for setting a user-defined nickname on an account. Empty input
   /// clears the nickname (display falls back to the bank-supplied name).
   void _showRenameDialog(BuildContext context, dynamic acc) {
+    final l = AppLocalizations.of(context);
     final currentNickname = (acc['nickname'] ?? '').toString();
     final controller = TextEditingController(text: currentNickname);
     final rawName = (acc['name'] ?? '').toString();
@@ -940,30 +955,30 @@ class AccountsListWidget extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Rename account'),
+        title: Text(l.pfRenameAccountTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Original: $rawName',
+              l.pfRenameOriginal(rawName),
               style: TextStyle(fontSize: 12, color: context.textSubtle),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: controller,
               autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'Nickname',
-                hintText: 'e.g. Joint checking',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l.pfNickname,
+                hintText: l.pfNicknameHint,
+                border: const OutlineInputBorder(),
                 isDense: true,
               ),
               maxLength: 80,
               textInputAction: TextInputAction.done,
             ),
             Text(
-              'Leave blank to clear and use the bank name.',
+              l.pfRenameBlankHint,
               style: TextStyle(fontSize: 11, color: context.textFaint),
             ),
           ],
@@ -971,7 +986,7 @@ class AccountsListWidget extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: Text(l.actionCancel),
           ),
           FilledButton(
             onPressed: () {
@@ -981,7 +996,7 @@ class AccountsListWidget extends StatelessWidget {
                 controller.text.trim(),
               );
             },
-            child: const Text('Save'),
+            child: Text(l.actionSave),
           ),
         ],
       ),

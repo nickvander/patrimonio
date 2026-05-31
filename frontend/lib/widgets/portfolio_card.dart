@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import '../l10n/app_localizations.dart';
 import '../services/preferences.dart';
 import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
@@ -186,6 +187,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final totalValue =
         ((widget.portfolioData['total_value'] as num?)?.toDouble() ?? 0.0) *
         widget.conversionFactor;
@@ -221,7 +223,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Investment portfolio',
+                    l.pfInvestmentPortfolio,
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w700,
@@ -233,7 +235,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                   ),
                   const SizedBox(height: 20),
                   Text(
-                    'Total value',
+                    l.pfTotalValue,
                     style: TextStyle(
                       color: context.textSubtle,
                       fontSize: 12,
@@ -361,6 +363,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
   ///   MXN = Mexican Peso
   ///   P/L = Profit or Loss (also written as "Gain / Loss")
   Widget _buildDualCurrencyPanel() {
+    final l = AppLocalizations.of(context);
     final data = widget.portfolioData;
     // Backend exposes these alongside the legacy `total_value` /
     // `total_gain_loss` (which are sums in native currency and don't
@@ -431,7 +434,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Total value',
+                l.pfTotalValue,
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
@@ -453,7 +456,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Profit / Loss',
+                l.pfProfitLoss,
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
@@ -493,7 +496,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
     final usdTile = tile(
       currencyTitle: 'USD',
-      currencySubtitle: 'US Dollar',
+      currencySubtitle: l.pfUsDollar,
       totalValueStr: usdFmt.format(valUsd),
       gainLoss: glUsd ?? 0,
       gainLossStr: usdFmt.format((glUsd ?? 0).abs()),
@@ -501,7 +504,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
     );
     final mxnTile = tile(
       currencyTitle: 'MXN',
-      currencySubtitle: 'Mexican Peso',
+      currencySubtitle: l.pfMexicanPeso,
       totalValueStr: mxnFmt.format(valMxn),
       gainLoss: glMxn ?? 0,
       gainLossStr: mxnFmt.format((glMxn ?? 0).abs()),
@@ -540,6 +543,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
   Widget _buildKpiStrip() {
     if (_allHoldings.isEmpty) return const SizedBox.shrink();
 
+    final l = AppLocalizations.of(context);
     final cf = widget.conversionFactor;
     Map<String, dynamic>? top;
     Map<String, dynamic>? gainer;
@@ -572,14 +576,17 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
     final tiles = <_KpiTile>[
       _KpiTile(
-        label: 'Holdings',
+        label: l.pfHoldings,
         value: '${_allHoldings.length}',
-        sub:
-            '${_allHoldings.map((h) => (h['account_name'] ?? '').toString()).toSet().where((s) => s.isNotEmpty).length} accounts',
+        sub: l.pfAccountsCount(_allHoldings
+            .map((h) => (h['account_name'] ?? '').toString())
+            .toSet()
+            .where((s) => s.isNotEmpty)
+            .length),
       ),
       if (top != null)
         _KpiTile(
-          label: 'Top position',
+          label: l.pfTopPosition,
           value: displayTicker(top),
           sub: widget.currencyFormat
               .format(((top['value'] as num).toDouble()) * cf),
@@ -588,7 +595,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
       if (gainer != null &&
           ((gainer['gain_loss_pct'] as num?)?.toDouble() ?? 0) > 0)
         _KpiTile(
-          label: 'Biggest gainer',
+          label: l.pfBiggestGainer,
           value: displayTicker(gainer),
           sub:
               '+${((gainer['gain_loss_pct'] as num).toDouble()).toStringAsFixed(2)}%',
@@ -597,7 +604,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
       if (loser != null &&
           ((loser['gain_loss_pct'] as num?)?.toDouble() ?? 0) < 0)
         _KpiTile(
-          label: 'Biggest loser',
+          label: l.pfBiggestLoser,
           value: displayTicker(loser),
           sub:
               '${((loser['gain_loss_pct'] as num).toDouble()).toStringAsFixed(2)}%',
@@ -631,9 +638,10 @@ class _PortfolioCardState extends State<PortfolioCard> {
     if (_holdings.isEmpty) {
       return _buildHoldingsTable(); // reuse empty state
     }
+    final l = AppLocalizations.of(context);
     final byAccount = <String, List<dynamic>>{};
     for (final h in _holdings) {
-      final acct = (h['account_name'] ?? 'Unknown').toString();
+      final acct = (h['account_name'] ?? l.pfUnknown).toString();
       byAccount.putIfAbsent(acct, () => []).add(h);
     }
     final entries = byAccount.entries.toList()
@@ -699,7 +707,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                             ),
                             if (inst.isNotEmpty)
                               Text(
-                                '$inst · ${list.length} ${list.length == 1 ? "position" : "positions"}',
+                                l.pfInstPositions(inst, list.length),
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: context.textSubtle,
@@ -736,6 +744,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
   /// Compact row used by the grouped-by-account view. Single line, no
   /// table chrome — just ticker, qty, value, return.
   Widget _buildCompactHoldingRow(dynamic h) {
+    final l = AppLocalizations.of(context);
     final cf = widget.conversionFactor;
     final qty = (h['quantity'] as num?)?.toDouble() ?? 0.0;
     final value = ((h['value'] as num?)?.toDouble() ?? 0.0) * cf;
@@ -773,7 +782,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
           Expanded(
             flex: 2,
             child: Text(
-              '${_formatQuantity(qty)} sh',
+              l.pfSharesSuffix(_formatQuantity(qty)),
               textAlign: TextAlign.right,
               style: TextStyle(
                 fontSize: 12,
@@ -816,6 +825,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
   /// Search field + group/flat toggle. Used by both renderers.
   Widget _buildSearchAndToolbar() {
+    final l = AppLocalizations.of(context);
     final totalHoldings = _allHoldings.length;
     final shownHoldings = _holdings.length;
     final accountCount = _allHoldings
@@ -837,7 +847,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 child: InputChip(
                   avatar: const Icon(Icons.filter_alt, size: 16),
                   label: Text(
-                      'Category: ${widget.categoryFilter}',
+                      l.pfCategoryFilter(widget.categoryFilter ?? ''),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                   onDeleted: widget.onClearCategoryFilter,
@@ -858,8 +868,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                   _sort(_sortColumnIndex ?? 3, _isAscending);
                 }),
                 decoration: InputDecoration(
-                  hintText:
-                      'Search ticker, name, account, or institution…',
+                  hintText: l.pfSearchHint,
                   hintStyle: TextStyle(
                       color: context.textSubtle, fontSize: 13),
                   prefixIcon: Icon(
@@ -883,22 +892,22 @@ class _PortfolioCardState extends State<PortfolioCard> {
           const SizedBox(width: 12),
           Text(
             _searchQuery.isEmpty
-                ? '$totalHoldings ${totalHoldings == 1 ? "holding" : "holdings"} · $accountCount ${accountCount == 1 ? "account" : "accounts"}'
-                : '$shownHoldings of $totalHoldings',
+                ? l.pfHoldingsAccountsCount(totalHoldings, accountCount)
+                : l.pfShownOfTotal(shownHoldings, totalHoldings),
             style: TextStyle(fontSize: 12, color: context.textSubtle),
           ),
           const SizedBox(width: 12),
           SegmentedButton<bool>(
-            segments: const [
+            segments: [
               ButtonSegment(
                 value: false,
-                icon: Icon(Icons.list_alt, size: 14),
-                label: Text('Flat'),
+                icon: const Icon(Icons.list_alt, size: 14),
+                label: Text(l.pfFlat),
               ),
               ButtonSegment(
                 value: true,
-                icon: Icon(Icons.account_tree_outlined, size: 14),
-                label: Text('By account'),
+                icon: const Icon(Icons.account_tree_outlined, size: 14),
+                label: Text(l.pfByAccount),
               ),
             ],
             selected: {_groupByAccount},
@@ -920,6 +929,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
   }
 
   Widget _buildHoldingsTable() {
+    final l = AppLocalizations.of(context);
     if (_holdings.isEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -935,7 +945,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                   Icon(Icons.show_chart, size: 56, color: Colors.grey.shade700),
                   const SizedBox(height: 16),
                   Text(
-                    'No holdings yet',
+                    l.pfNoHoldingsYet,
                     style: TextStyle(
                       fontSize: 16,
                       color: context.textMuted,
@@ -944,7 +954,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Once you link a brokerage with Plaid (or import a CSV) your\npositions will appear here.',
+                    l.pfNoHoldingsBody,
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                   ),
@@ -1025,6 +1035,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
   /// Click-to-sort header row. First click on a new column sorts ascending,
   /// subsequent clicks toggle direction. Matches PaginatedDataTable behavior.
   Widget _buildTableHeader() {
+    final l = AppLocalizations.of(context);
     Widget label(String text, int colIndex, {bool numeric = true}) {
       final active = _sortColumnIndex == colIndex;
       return InkWell(
@@ -1067,13 +1078,13 @@ class _PortfolioCardState extends State<PortfolioCard> {
     }
 
     return _tableRow(
-      asset: label('Asset', 0, numeric: false),
-      shares: label('Shares', 1),
-      price: label('Price', 2),
-      value: label('Value', 3),
-      costBasis: label('Cost basis', 4),
-      gain: label('Gain', 5),
-      returnPct: label('Return', 6),
+      asset: label(l.pfColAsset, 0, numeric: false),
+      shares: label(l.pfColShares, 1),
+      price: label(l.pfColPrice, 2),
+      value: label(l.pfColValue, 3),
+      costBasis: label(l.pfColCostBasis, 4),
+      gain: label(l.pfColGain, 5),
+      returnPct: label(l.pfColReturn, 6),
     );
   }
 
@@ -1174,7 +1185,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
         ),
       );
       legendItems.add(
-        _buildLegendItem(Colors.grey.shade700, 'Other', percentage, isTouched),
+        _buildLegendItem(Colors.grey.shade700,
+            AppLocalizations.of(context).pfOther, percentage, isTouched),
       );
     }
 
@@ -1478,7 +1490,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
         ),
         const SizedBox(width: 4),
         Text(
-          'sh',
+          AppLocalizations.of(context).pfShares,
           style: TextStyle(fontSize: 11, color: context.textFaint),
         ),
       ],
@@ -1619,11 +1631,13 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
   /// current-FX conversion of my native cost basis?" — the FX rate
   /// column shows exactly what's different.
   void _showLotBreakdown(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final h = widget.holding;
     final lots = ((h['lots'] as List?) ?? const []).cast<dynamic>();
     final symbol = (h['symbol'] ?? '').toString();
     final name = (h['name'] ?? '').toString();
-    final title = symbol.isNotEmpty ? symbol : (name.isNotEmpty ? name : 'Holding');
+    final title =
+        symbol.isNotEmpty ? symbol : (name.isNotEmpty ? name : l.pfHolding);
 
     final dateFmt = DateFormat('MMM d, y');
     final usdFmt = NumberFormat.currency(locale: 'en_US', symbol: r'$');
@@ -1650,7 +1664,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Lot breakdown · $title',
+                              l.pfLotBreakdownTitle(title),
                               style: TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w700,
@@ -1659,8 +1673,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'FIFO order. Cost basis sums each lot at its '
-                              'historical USD/native FX rate, not today\'s.',
+                              l.pfLotBreakdownSubtitle,
                               style: TextStyle(
                                 fontSize: 12,
                                 color: context.textSubtle,
@@ -1671,7 +1684,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.close),
-                        tooltip: 'Close',
+                        tooltip: l.actionClose,
                         onPressed: () => Navigator.pop(ctx),
                       ),
                     ],
@@ -1681,11 +1694,15 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
                   // rows align on a quick scan.
                   Row(
                     children: [
-                      _lotHeader(context, 'Acquired', flex: 3),
-                      _lotHeader(context, 'Qty', flex: 2, alignRight: true),
-                      _lotHeader(context, 'Cost / unit', flex: 3, alignRight: true),
-                      _lotHeader(context, 'FX at lot', flex: 2, alignRight: true),
-                      _lotHeader(context, 'USD cost', flex: 3, alignRight: true),
+                      _lotHeader(context, l.pfLotAcquired, flex: 3),
+                      _lotHeader(context, l.pfLotQty,
+                          flex: 2, alignRight: true),
+                      _lotHeader(context, l.pfLotCostPerUnit,
+                          flex: 3, alignRight: true),
+                      _lotHeader(context, l.pfLotFxAtLot,
+                          flex: 2, alignRight: true),
+                      _lotHeader(context, l.pfLotUsdCost,
+                          flex: 3, alignRight: true),
                     ],
                   ),
                   Divider(height: 12, color: context.hairline),

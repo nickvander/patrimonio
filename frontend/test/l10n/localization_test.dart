@@ -90,6 +90,16 @@ void main() {
         '5 cargos');
   });
 
+  testWidgets('tranche-4 strings localize (proj / fx / portfolio / tax)',
+      (tester) async {
+    String quad(AppLocalizations l) =>
+        '${l.projTitle}|${l.lwFxExchangeRate}|${l.pfInvestmentPortfolio}|${l.taxTitle}';
+    expect(await readKeys(tester, const Locale('en'), quad),
+        'Wealth projection|Exchange rate|Investment portfolio|Tax planning');
+    expect(await readKeys(tester, const Locale('es'), quad),
+        'Proyección de patrimonio|Tipo de cambio|Portafolio de inversión|Planeación fiscal');
+  });
+
   test('both locales are supported', () {
     final codes =
         AppLocalizations.supportedLocales.map((l) => l.languageCode).toSet();

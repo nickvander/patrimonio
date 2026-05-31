@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import '../utils/theme_colors.dart';
 import '../services/api_service.dart';
 
@@ -22,20 +23,40 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
 
   // Grouped type list. Section labels are rendered as disabled
   // entries so the user sees the structure (Cash / Investments / …)
-  // without scanning 14 flat items.
+  // without scanning 14 flat items. The first element of each tuple is a
+  // stable group key; the human label is resolved per-build via
+  // [_groupLabel] so the section headers can be localized while the
+  // account-type VALUES (which are data sent to the API) stay fixed.
   static const _typeGroups = <(String, List<String>)>[
-    ('Cash & banking', ['Checking', 'Savings', 'CD']),
-    ('Investments', ['Brokerage', 'Investment', 'IRA', '401k']),
-    ('Crypto', ['Crypto']),
-    ('Real assets', [
+    ('cashBanking', ['Checking', 'Savings', 'CD']),
+    ('investments', ['Brokerage', 'Investment', 'IRA', '401k']),
+    ('crypto', ['Crypto']),
+    ('realAssets', [
       'Real Estate',
       'Vehicle',
       'Private Equity',
       'Collectibles',
       'Other Asset',
     ]),
-    ('Liabilities', ['Credit Card', 'Loan', 'Mortgage', 'Other Liability']),
+    ('liabilities', ['Credit Card', 'Loan', 'Mortgage', 'Other Liability']),
   ];
+
+  String _groupLabel(AppLocalizations l, String key) {
+    switch (key) {
+      case 'cashBanking':
+        return l.dlgAccountGroupCashBanking;
+      case 'investments':
+        return l.dlgAccountGroupInvestments;
+      case 'crypto':
+        return l.dlgAccountGroupCrypto;
+      case 'realAssets':
+        return l.dlgAccountGroupRealAssets;
+      case 'liabilities':
+        return l.dlgAccountGroupLiabilities;
+      default:
+        return key;
+    }
+  }
 
   // (Previously exposed a flat List<String> via `_types`; dropped
   // when the grouped DropdownMenuItem layout replaced the flat one.
@@ -44,11 +65,12 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return AlertDialog(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      title: const Text(
-        'Add manual account',
-        style: TextStyle(fontWeight: FontWeight.bold),
+      title: Text(
+        l.dlgAccountTitle,
+        style: const TextStyle(fontWeight: FontWeight.bold),
       ),
       content: SingleChildScrollView(
         child: Form(
@@ -60,19 +82,19 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                 controller: _nameController,
                 style: TextStyle(color: context.textPrimary),
                 autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'Account name',
-                  hintText: 'e.g. My savings, Rental property',
+                decoration: InputDecoration(
+                  labelText: l.dlgAccountName,
+                  hintText: l.dlgAccountNameHint,
                 ),
-                validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                validator: (v) => v?.isEmpty ?? true ? l.commonRequired : null,
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: _type,
                 dropdownColor: Theme.of(context).colorScheme.surface,
-                decoration: const InputDecoration(labelText: 'Account type'),
+                decoration: InputDecoration(labelText: l.dlgAccountType),
                 items: [
-                  for (final (label, types) in _typeGroups) ...[
+                  for (final (groupKey, types) in _typeGroups) ...[
                     // Group header — disabled so it can't be picked but
                     // visually separates the list. Material's
                     // DropdownMenuItem doesn't natively support disabled
@@ -81,7 +103,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                       enabled: false,
                       value: null,
                       child: Text(
-                        label.toUpperCase(),
+                        _groupLabel(l, groupKey).toUpperCase(),
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
@@ -107,7 +129,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
               DropdownButtonFormField<String>(
                 initialValue: _currency,
                 dropdownColor: Theme.of(context).colorScheme.surface,
-                decoration: const InputDecoration(labelText: 'Currency'),
+                decoration: InputDecoration(labelText: l.dlgAccountCurrency),
                 items: ['USD', 'MXN']
                     .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                     .toList(),
@@ -122,18 +144,17 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                   signed: true,
                 ),
                 decoration: InputDecoration(
-                  labelText: 'Initial balance',
+                  labelText: l.dlgAccountInitialBalance,
                   // Currency-aware prefix: don't hardcode `$` regardless of
                   // the selected currency.
                   prefixText: _currency == 'MXN' ? r'MX$ ' : r'$ ',
                   suffixText: _currency,
-                  helperText:
-                      'For credit cards / loans, enter the amount owed as a positive number.',
+                  helperText: l.dlgAccountBalanceHelper,
                   helperMaxLines: 2,
                 ),
                 validator: (v) {
                   final val = double.tryParse(v ?? '');
-                  if (val == null) return 'Enter a numeric amount';
+                  if (val == null) return l.dlgAccountBalanceInvalid;
                   return null;
                 },
               ),
@@ -144,7 +165,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
       actions: [
         TextButton(
           onPressed: _isSubmitting ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(l.actionCancel),
         ),
         ElevatedButton(
           onPressed: _isSubmitting ? null : _submit,
@@ -154,7 +175,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Create account'),
+              : Text(l.dlgAccountCreate),
         ),
       ],
     );
@@ -176,14 +197,17 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
 
       widget.onAccountCreated();
       if (!mounted) return;
+      final l = AppLocalizations.of(context);
       Navigator.pop(context);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Account "${_nameController.text}" created!')),
+        SnackBar(content: Text(l.dlgAccountCreated(_nameController.text))),
       );
     } catch (e) {
+      if (!mounted) return;
+      final l = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not add account: ${e.toString().replaceFirst('Exception: ', '')}'), backgroundColor: Colors.red),
+        SnackBar(content: Text(l.dlgAccountCreateError(e.toString().replaceFirst('Exception: ', ''))), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);

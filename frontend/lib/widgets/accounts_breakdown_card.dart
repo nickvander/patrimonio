@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 
@@ -18,6 +19,7 @@ class AccountsBreakdownCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -26,9 +28,9 @@ class AccountsBreakdownCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Asset breakdown',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Text(
+              l.pfAssetBreakdown,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 24),
             LayoutBuilder(
@@ -68,8 +70,8 @@ class AccountsBreakdownCard extends StatelessWidget {
 
   /// Convert raw account_type strings like "checking" / "credit_card" /
   /// "investment" into a clean sentence-case display value.
-  String _prettyType(String raw) {
-    if (raw.isEmpty) return 'Other';
+  String _prettyType(BuildContext context, String raw) {
+    if (raw.isEmpty) return AppLocalizations.of(context).pfOther;
     final normalised = raw.replaceAll('_', ' ').replaceAll('-', ' ').trim();
     return normalised
         .split(' ')
@@ -127,13 +129,13 @@ class AccountsBreakdownCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionLabel(context, 'By type'),
+        _sectionLabel(context, AppLocalizations.of(context).pfByType),
         const SizedBox(height: 16),
         ...typeBreakdown.map((item) {
           final total = ((item['total_usd'] ?? item['total'] ?? 0.0) as num)
               .toDouble();
-          final type = (item['account_type'] ?? 'Other').toString();
-          return _breakdownRow(context, _prettyType(type), total);
+          final type = (item['account_type'] ?? '').toString();
+          return _breakdownRow(context, _prettyType(context, type), total);
         }),
       ],
     );
@@ -143,12 +145,15 @@ class AccountsBreakdownCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionLabel(context, 'By institution'),
+        _sectionLabel(context, AppLocalizations.of(context).pfByInstitution),
         const SizedBox(height: 16),
         ...institutionBreakdown.map((item) {
           final total = ((item['total_usd'] ?? item['total'] ?? 0.0) as num)
               .toDouble();
-          final name = (item['name'] ?? 'Bank').toString();
+          final rawName = (item['name'] ?? '').toString();
+          final name = rawName.isEmpty
+              ? AppLocalizations.of(context).pfBank
+              : rawName;
           return _breakdownRow(context, name, total);
         }),
       ],

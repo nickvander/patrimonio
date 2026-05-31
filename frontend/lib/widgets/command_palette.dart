@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/theme_colors.dart';
+import '../l10n/app_localizations.dart';
 import 'package:flutter/services.dart';
 
 /// One row in the command-palette results.
@@ -94,6 +95,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final visible = _visible;
 
     return Dialog(
@@ -113,10 +115,10 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                   controller: _controller,
                   focusNode: _focusNode,
                   autofocus: true,
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search),
-                    hintText: 'Search accounts, holdings, transactions, or jump to a tab…',
-                    border: OutlineInputBorder(
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search),
+                    hintText: l.lwPaletteSearchHint,
+                    border: const OutlineInputBorder(
                       borderRadius: BorderRadius.all(Radius.circular(12)),
                     ),
                   ),
@@ -133,7 +135,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                     ? Padding(
                         padding: const EdgeInsets.all(24),
                         child: Text(
-                          'No matches.',
+                          l.lwPaletteNoMatches,
                           style: TextStyle(color: context.textSubtle),
                         ),
                       )
@@ -196,13 +198,13 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                     bottomRight: Radius.circular(20),
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    _Hint(label: '↑↓', text: 'navigate'),
-                    SizedBox(width: 12),
-                    _Hint(label: '↵', text: 'select'),
-                    SizedBox(width: 12),
-                    _Hint(label: 'Esc', text: 'close'),
+                    _Hint(label: '↑↓', text: l.lwPaletteHintNavigate),
+                    const SizedBox(width: 12),
+                    _Hint(label: '↵', text: l.lwPaletteHintSelect),
+                    const SizedBox(width: 12),
+                    _Hint(label: 'Esc', text: l.lwPaletteHintClose),
                   ],
                 ),
               ),

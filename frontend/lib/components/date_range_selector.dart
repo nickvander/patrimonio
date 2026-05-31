@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/theme_colors.dart';
+import '../l10n/app_localizations.dart';
 
 enum DateRange { oneMonth, yearToDate, oneYear, fiveYears, all }
 
@@ -15,6 +16,7 @@ class DateRangeSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final width = MediaQuery.sizeOf(context).width;
     final horizontalPadding = width < 420 ? 10.0 : 16.0;
 
@@ -27,11 +29,15 @@ class DateRangeSelector extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildSegment(context, '1M', DateRange.oneMonth, horizontalPadding),
-          _buildSegment(context, 'YTD', DateRange.yearToDate, horizontalPadding),
-          _buildSegment(context, '1Y', DateRange.oneYear, horizontalPadding),
-          _buildSegment(context, '5Y', DateRange.fiveYears, horizontalPadding),
-          _buildSegment(context, 'ALL', DateRange.all, horizontalPadding),
+          _buildSegment(
+              context, l.lwRangeOneMonth, DateRange.oneMonth, horizontalPadding),
+          _buildSegment(context, l.lwRangeYearToDate, DateRange.yearToDate,
+              horizontalPadding),
+          _buildSegment(
+              context, l.lwRangeOneYear, DateRange.oneYear, horizontalPadding),
+          _buildSegment(
+              context, l.lwRangeFiveYears, DateRange.fiveYears, horizontalPadding),
+          _buildSegment(context, l.lwRangeAll, DateRange.all, horizontalPadding),
         ],
       ),
     );

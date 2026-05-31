@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 
 /// Dialog for manually entering a transaction — for cash spend, gifts,
@@ -107,10 +108,11 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
             : _notesController.text.trim(),
       );
       if (!mounted) return;
+      final l = AppLocalizations.of(context);
       Navigator.pop(context);
       widget.onCreated();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Transaction added')),
+        SnackBar(content: Text(l.dlgTxAdded)),
       );
     } catch (e) {
       if (!mounted) return;
@@ -124,12 +126,13 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final selectedAcct = _selectedAccount();
     final currency =
         (selectedAcct?['currency'] ?? 'USD').toString().toUpperCase();
 
     return AlertDialog(
-      title: const Text('Add transaction'),
+      title: Text(l.dlgTxTitle),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
         child: SingleChildScrollView(
@@ -140,20 +143,19 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (widget.accounts.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 12),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
                   child: Text(
-                    'You need at least one account before you can add a '
-                    'transaction.',
-                    style: TextStyle(color: Colors.orangeAccent),
+                    l.dlgTxNoAccounts,
+                    style: const TextStyle(color: Colors.orangeAccent),
                   ),
                 ),
               DropdownButtonFormField<String>(
                 initialValue: _accountId,
                 isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Account',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l.dlgTxAccount,
+                  border: const OutlineInputBorder(),
                   isDense: true,
                 ),
                 items: widget.accounts.map<DropdownMenuItem<String>>((a) {
@@ -170,16 +172,16 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
               ),
               const SizedBox(height: 12),
               SegmentedButton<bool>(
-                segments: const [
+                segments: [
                   ButtonSegment(
                     value: true,
-                    icon: Icon(Icons.arrow_upward, size: 14),
-                    label: Text('Expense'),
+                    icon: const Icon(Icons.arrow_upward, size: 14),
+                    label: Text(l.dlgTxExpense),
                   ),
                   ButtonSegment(
                     value: false,
-                    icon: Icon(Icons.arrow_downward, size: 14),
-                    label: Text('Income'),
+                    icon: const Icon(Icons.arrow_downward, size: 14),
+                    label: Text(l.dlgTxIncome),
                   ),
                 ],
                 selected: {_isExpense},
@@ -200,15 +202,15 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                             RegExp(r'^[0-9]*\.?[0-9]{0,2}')),
                       ],
                       decoration: InputDecoration(
-                        labelText: 'Amount',
+                        labelText: l.dlgTxAmount,
                         prefixText: '$currency ',
                         border: const OutlineInputBorder(),
                         isDense: true,
                       ),
                       validator: (v) {
                         final raw = double.tryParse((v ?? '').trim());
-                        if (raw == null) return 'Enter an amount';
-                        if (raw <= 0) return 'Enter a positive amount';
+                        if (raw == null) return l.dlgTxAmountRequired;
+                        if (raw <= 0) return l.dlgTxAmountPositive;
                         return null;
                       },
                     ),
@@ -228,9 +230,9 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                         if (picked != null) setState(() => _date = picked);
                       },
                       child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Date',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: l.dlgTxDate,
+                          border: const OutlineInputBorder(),
                           isDense: true,
                         ),
                         child: Text(DateFormat('MMM d, y').format(_date)),
@@ -242,24 +244,24 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _descController,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  hintText: 'e.g. Coffee with Sam',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l.dlgTxDescription,
+                  hintText: l.dlgTxDescriptionHint,
+                  border: const OutlineInputBorder(),
                   isDense: true,
                 ),
                 textCapitalization: TextCapitalization.sentences,
                 validator: (v) =>
-                    (v ?? '').trim().isEmpty ? 'Description is required' : null,
+                    (v ?? '').trim().isEmpty ? l.dlgTxDescriptionRequired : null,
               ),
               const SizedBox(height: 12),
-              _buildCategoryField(),
+              _buildCategoryField(l),
               const SizedBox(height: 12),
               TextField(
                 controller: _notesController,
-                decoration: const InputDecoration(
-                  labelText: 'Notes (optional)',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l.dlgTxNotes,
+                  border: const OutlineInputBorder(),
                   isDense: true,
                 ),
                 maxLines: 2,
@@ -272,7 +274,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       actions: [
         TextButton(
           onPressed: _saving ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(l.actionCancel),
         ),
         FilledButton(
           onPressed:
@@ -283,7 +285,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Add'),
+              : Text(l.actionAdd),
         ),
       ],
     );
@@ -294,7 +296,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   /// validator and reuse [_categoryController] — the same controller the
   /// submit path reads — as the field's text source. Suggestions are hints
   /// only: a free-typed value not in the list is still accepted.
-  Widget _buildCategoryField() {
+  Widget _buildCategoryField(AppLocalizations l) {
     return RawAutocomplete<String>(
       textEditingController: _categoryController,
       focusNode: _categoryFocus,
@@ -310,10 +312,10 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         return TextFormField(
           controller: controller,
           focusNode: focusNode,
-          decoration: const InputDecoration(
-            labelText: 'Category (optional)',
-            hintText: 'e.g. Restaurants',
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            labelText: l.dlgTxCategory,
+            hintText: l.dlgTxCategoryHint,
+            border: const OutlineInputBorder(),
             isDense: true,
           ),
           onFieldSubmitted: (_) => onFieldSubmitted(),

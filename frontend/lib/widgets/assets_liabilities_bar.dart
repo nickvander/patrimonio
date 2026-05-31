@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../utils/theme_colors.dart';
 
 /// Thin horizontal split-bar showing the ratio of assets to liabilities
@@ -24,6 +25,7 @@ class AssetsLiabilitiesBar extends StatelessWidget {
   Widget build(BuildContext context) {
     if (typeBreakdown.isEmpty) return const SizedBox.shrink();
 
+    final l = AppLocalizations.of(context);
     final assetColor = context.positive;
     final liabilityColor = context.negative;
 
@@ -97,13 +99,13 @@ class AssetsLiabilitiesBar extends StatelessWidget {
         Row(
           children: [
             _LegendDot(
-              label: 'Assets',
+              label: l.statAssets,
               color: assetColor,
               pct: assetPct,
             ),
             const SizedBox(width: 16),
             _LegendDot(
-              label: 'Liabilities',
+              label: l.statLiabilities,
               color: liabilityColor,
               pct: liabilityPct,
             ),

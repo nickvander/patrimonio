@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/theme_colors.dart';
+import '../l10n/app_localizations.dart';
 import 'package:intl/intl.dart';
 
 class FxWidget extends StatefulWidget {
@@ -20,6 +21,7 @@ class _FxWidgetState extends State<FxWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final latestRate = widget.latestRate;
     final rate = latestRate['rate'] ?? 0.0;
     final source = (latestRate['source'] ?? '').toString();
@@ -41,9 +43,10 @@ class _FxWidgetState extends State<FxWidget> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Exchange rate',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                Text(
+                  l.lwFxExchangeRate,
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 if (widget.onRefresh != null)
                   IconButton(
@@ -70,7 +73,7 @@ class _FxWidgetState extends State<FxWidget> {
                             ),
                           )
                         : const Icon(Icons.refresh, size: 20),
-                    tooltip: 'Refresh rate now',
+                    tooltip: l.lwFxRefreshNow,
                     color: context.textMuted,
                   ),
               ],
@@ -107,12 +110,13 @@ class _FxWidgetState extends State<FxWidget> {
                       ),
                       if (latestRate['recorded_at'] != null) ...[
                         const SizedBox(height: 12),
-                        _buildTimestampBlock(latestRate['recorded_at']),
+                        _buildTimestampBlock(
+                            context, latestRate['recorded_at']),
                       ],
                       if (source.isNotEmpty) ...[
                         const SizedBox(height: 8),
                         Text(
-                          'Source: $source',
+                          l.lwFxSource(source),
                           style: TextStyle(
                             fontSize: 11,
                             color: context.textFaint,
@@ -142,19 +146,20 @@ class _FxWidgetState extends State<FxWidget> {
     );
   }
 
-  Widget _buildTimestampBlock(dynamic recordedAt) {
+  Widget _buildTimestampBlock(BuildContext context, dynamic recordedAt) {
+    final l = AppLocalizations.of(context);
     final parsed = DateTime.tryParse(recordedAt.toString());
     if (parsed == null) {
-      return const Text(
-        'Updated: unknown',
-        style: TextStyle(fontSize: 11, color: Colors.grey),
+      return Text(
+        l.lwFxUpdatedUnknown,
+        style: const TextStyle(fontSize: 11, color: Colors.grey),
       );
     }
     final local = parsed.toLocal();
     final isStale = DateTime.now().difference(local).inHours > 24;
     final fullStamp = DateFormat('MMM d, y · h:mm a').format(local);
     final tz = _shortTimezone(local);
-    final age = _humanAge(local);
+    final age = _humanAge(context, local);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -183,7 +188,7 @@ class _FxWidgetState extends State<FxWidget> {
         ),
         const SizedBox(height: 2),
         Text(
-          isStale ? 'Stale · $age' : age,
+          isStale ? l.lwFxStalePrefix(age) : age,
           style: TextStyle(
             fontSize: 10,
             color: isStale ? context.warning : context.textFaint,
@@ -211,12 +216,12 @@ class _FxWidgetState extends State<FxWidget> {
     return '$name ($offset)';
   }
 
-  String _humanAge(DateTime local) {
+  String _humanAge(BuildContext context, DateTime local) {
+    final l = AppLocalizations.of(context);
     final diff = DateTime.now().difference(local);
-    if (diff.inMinutes < 1) return 'Updated just now';
-    if (diff.inHours < 1) return 'Updated ${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return 'Updated ${diff.inHours}h ago';
-    final days = diff.inDays;
-    return 'Updated $days day${days == 1 ? '' : 's'} ago';
+    if (diff.inMinutes < 1) return l.lwFxUpdatedJustNow;
+    if (diff.inHours < 1) return l.lwFxUpdatedMinutesAgo(diff.inMinutes);
+    if (diff.inHours < 24) return l.lwFxUpdatedHoursAgo(diff.inHours);
+    return l.lwFxUpdatedDaysAgo(diff.inDays);
   }
 }

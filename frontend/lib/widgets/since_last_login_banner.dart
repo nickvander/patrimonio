@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/preferences.dart';
 import '../utils/theme_colors.dart';
+import '../l10n/app_localizations.dart';
 
 /// "What changed since your last visit" banner. Pinned above
 /// NetWorthCard on the Overview tab when the server has anything to
@@ -73,6 +74,7 @@ class _SinceLastLoginBannerState extends State<SinceLastLoginBanner> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final s = widget.summary;
     if (s == null || _dismissed) return const SizedBox.shrink();
 
@@ -93,7 +95,7 @@ class _SinceLastLoginBannerState extends State<SinceLastLoginBanner> {
     // Compose a short headline.
     final pieces = <String>[];
     if (newTx > 0) {
-      pieces.add('$newTx new transaction${newTx == 1 ? '' : 's'}');
+      pieces.add(l.lwSinceNewTransactions(newTx));
     }
     if (largestMove != null) {
       final delta =
@@ -102,19 +104,20 @@ class _SinceLastLoginBannerState extends State<SinceLastLoginBanner> {
       final name = (largestMove['account_name'] ?? '').toString();
       final sign = delta >= 0 ? '+' : '−';
       pieces.add(
-        '$sign${widget.currencyFormat.format(delta.abs())} on $name',
+        l.lwSinceLargestMove(
+          '$sign${widget.currencyFormat.format(delta.abs())}',
+          name,
+        ),
       );
     }
     if (syncErrors.isNotEmpty) {
-      pieces.add(
-        '${syncErrors.length} sync error${syncErrors.length == 1 ? '' : 's'}',
-      );
+      pieces.add(l.lwSinceSyncErrors(syncErrors.length));
     }
     final summary = pieces.join(' · ');
 
     final subtitle = anchor == null
-        ? 'Since your last visit'
-        : 'Since ${DateFormat('MMM d, h:mm a').format(anchor.toLocal())}';
+        ? l.lwSinceLastVisit
+        : l.lwSinceDate(DateFormat('MMM d, h:mm a').format(anchor.toLocal()));
 
     return Container(
       margin: const EdgeInsets.fromLTRB(24, 16, 24, 0),
@@ -158,15 +161,15 @@ class _SinceLastLoginBannerState extends State<SinceLastLoginBanner> {
           if (newTx > 0 && widget.onJumpToTransactions != null && anchor != null)
             TextButton(
               onPressed: () => widget.onJumpToTransactions!(anchor),
-              child: const Text('View'),
+              child: Text(l.lwSinceViewAction),
             ),
           if (syncErrors.isNotEmpty && widget.onJumpToManagement != null)
             TextButton(
               onPressed: widget.onJumpToManagement,
-              child: const Text('Fix'),
+              child: Text(l.lwSinceFixAction),
             ),
           IconButton(
-            tooltip: 'Dismiss',
+            tooltip: l.lwSinceDismiss,
             iconSize: 18,
             visualDensity: VisualDensity.compact,
             icon: const Icon(Icons.close),

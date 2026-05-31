@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../l10n/app_localizations.dart';
 
 /// One-time display of recovery codes. Shown after bootstrap and when
 /// the user regenerates codes from the Security page. The dialog is
@@ -27,6 +28,7 @@ class _RecoveryCodesDialogState extends State<RecoveryCodesDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
     return AlertDialog(
       title: Row(
@@ -35,7 +37,7 @@ class _RecoveryCodesDialogState extends State<RecoveryCodesDialog> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Save your recovery codes',
+              l.dlgRecoveryTitle,
               style: Theme.of(context).textTheme.titleLarge,
             ),
           ),
@@ -57,11 +59,10 @@ class _RecoveryCodesDialogState extends State<RecoveryCodesDialog> {
                 children: [
                   Icon(Icons.warning_amber_rounded, color: scheme.error),
                   const SizedBox(width: 8),
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'These codes will NOT be shown again. Each is single-use; '
-                      'use one if you lose your password.',
-                      style: TextStyle(fontWeight: FontWeight.w500),
+                      l.dlgRecoveryWarning,
+                      style: const TextStyle(fontWeight: FontWeight.w500),
                     ),
                   ),
                 ],
@@ -98,7 +99,7 @@ class _RecoveryCodesDialogState extends State<RecoveryCodesDialog> {
                 TextButton.icon(
                   onPressed: _copy,
                   icon: Icon(_copied ? Icons.check : Icons.copy, size: 18),
-                  label: Text(_copied ? 'Copied' : 'Copy all'),
+                  label: Text(_copied ? l.dlgRecoveryCopied : l.dlgRecoveryCopyAll),
                 ),
               ],
             ),
@@ -109,9 +110,7 @@ class _RecoveryCodesDialogState extends State<RecoveryCodesDialog> {
               controlAffinity: ListTileControlAffinity.leading,
               value: _confirmed,
               onChanged: (v) => setState(() => _confirmed = v ?? false),
-              title: const Text(
-                "I've saved these codes somewhere safe",
-              ),
+              title: Text(l.dlgRecoverySavedConfirm),
             ),
           ],
         ),
@@ -119,7 +118,7 @@ class _RecoveryCodesDialogState extends State<RecoveryCodesDialog> {
       actions: [
         FilledButton(
           onPressed: _confirmed ? () => Navigator.of(context).pop() : null,
-          child: const Text('Continue'),
+          child: Text(l.dlgRecoveryContinue),
         ),
       ],
     );

@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:web/web.dart' as web;
 
 import '../utils/theme_colors.dart';
+import '../l10n/app_localizations.dart';
 
 class ConnectBankScreen extends StatefulWidget {
   const ConnectBankScreen({super.key});
@@ -67,12 +68,15 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
         PlaidLink.create(configuration: linkTokenConfiguration);
         PlaidLink.open();
       } else {
-        _showError(_responseError(response, 'Failed to retrieve link token'));
+        if (!mounted) return;
+        _showError(_responseError(
+            response, AppLocalizations.of(context).cbLinkTokenFailed));
       }
     } catch (e) {
-      _showError('Error connecting to backend: $e');
+      if (!mounted) return;
+      _showError(AppLocalizations.of(context).cbBackendConnectError(e.toString()));
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -103,18 +107,21 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
       if (response.statusCode == 200) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Bank connected. Initial sync has started.'),
+            SnackBar(
+              content: Text(AppLocalizations.of(context).cbConnected),
               backgroundColor: Colors.green,
             ),
           );
           Navigator.pop(context);
         }
       } else {
-        _showError(_responseError(response, 'Failed to exchange token'));
+        if (!mounted) return;
+        _showError(_responseError(
+            response, AppLocalizations.of(context).cbExchangeTokenFailed));
       }
     } catch (e) {
-      _showError('Error communicating with backend: $e');
+      if (!mounted) return;
+      _showError(AppLocalizations.of(context).cbBackendCommError(e.toString()));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -130,6 +137,10 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
     } catch (_) {
       // Keep fallback below.
     }
+    if (mounted) {
+      return AppLocalizations.of(context)
+          .cbHttpError(fallback, response.statusCode);
+    }
     return '$fallback: HTTP ${response.statusCode}';
   }
 
@@ -139,8 +150,9 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
 
   void _onExit(LinkExit event) {
     debugPrint("Plaid Exit status: ${event.metadata.status}");
-    if (event.error != null) {
-      _showError('Plaid Error: ${event.error?.message}');
+    if (event.error != null && mounted) {
+      _showError(AppLocalizations.of(context)
+          .cbPlaidError(event.error?.message ?? ''));
     }
   }
 
@@ -154,8 +166,9 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Connect bank'), centerTitle: true),
+      appBar: AppBar(title: Text(l.cbTitle), centerTitle: true),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
@@ -165,7 +178,7 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (_setupStatus != null) ...[
-                  _buildEnvBanner(_setupStatus!['plaid_environment']),
+                  _buildEnvBanner(l, _setupStatus!['plaid_environment']),
                   const SizedBox(height: 24),
                 ],
                 if (_setupStatus?['ready_for_plaid_linking'] == false) ...[
@@ -175,13 +188,14 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
                     color: Colors.orangeAccent,
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'Plaid setup is incomplete.',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  Text(
+                    l.cbSetupIncompleteTitle,
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Set Plaid credentials and ENCRYPTION_KEY before linking real bank accounts.',
+                    l.cbSetupIncompleteBody,
                     textAlign: TextAlign.center,
                     style: TextStyle(color: context.textMuted),
                   ),
@@ -191,7 +205,7 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
                     ? const CircularProgressIndicator()
                     : ElevatedButton.icon(
                         icon: const Icon(Icons.account_balance),
-                        label: const Text('Connect with Plaid'),
+                        label: Text(l.cbConnectWithPlaid),
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 24,
@@ -212,7 +226,7 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
     );
   }
 
-  Widget _buildEnvBanner(String env) {
+  Widget _buildEnvBanner(AppLocalizations l, String env) {
     Color color;
     String text;
     IconData icon;
@@ -220,22 +234,22 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
     switch (env) {
       case 'sandbox':
         color = Colors.blueGrey;
-        text = 'Plaid Sandbox Mode — Mock data only';
+        text = l.cbEnvSandbox;
         icon = Icons.science;
         break;
       case 'development':
         color = Colors.indigo;
-        text = 'Plaid Development Mode — Real account data (test items)';
+        text = l.cbEnvDevelopment;
         icon = Icons.developer_mode;
         break;
       case 'production':
         color = Colors.teal;
-        text = 'Plaid Production Mode — Real account data';
+        text = l.cbEnvProduction;
         icon = Icons.verified_user;
         break;
       default:
         color = Colors.grey;
-        text = 'Plaid Environment: $env';
+        text = l.cbEnvUnknown(env);
         icon = Icons.info_outline;
     }
 

@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../services/preferences.dart';
+import '../l10n/app_localizations.dart';
 
 class WealthProjectionScreen extends StatefulWidget {
   final double currentNetWorth;
@@ -154,11 +155,12 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   }
 
   Widget _buildHeader() {
+    final l = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Wealth projection',
+          l.projTitle,
           style: TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.bold,
@@ -167,7 +169,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Project your financial future based on current assets and savings strategy.',
+          l.projSubtitle,
           style: TextStyle(fontSize: 16, color: context.textMuted),
         ),
       ],
@@ -175,11 +177,12 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   }
 
   Widget _buildControls({bool scrollable = true}) {
+    final l = AppLocalizations.of(context);
     final body = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildSliderControl(
-                label: 'Monthly savings',
+                label: l.projMonthlySavings,
                 value: _monthlyContribution,
                 min: 0,
                 max: 10000,
@@ -189,7 +192,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               ),
               Divider(height: 32, color: context.hairline),
               _buildSliderControl(
-                label: 'Expected return',
+                label: l.projExpectedReturn,
                 value: _annualReturnRate,
                 min: 0,
                 max: 0.15,
@@ -199,7 +202,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               ),
               Divider(height: 32, color: context.hairline),
               _buildSliderControl(
-                label: 'Annual expenses',
+                label: l.projAnnualExpenses,
                 value: _annualExpenses,
                 min: 10000,
                 max: 200000,
@@ -209,7 +212,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               ),
               Divider(height: 32, color: context.hairline),
               _buildSliderControl(
-                label: 'Safe withdrawal rate',
+                label: l.projSafeWithdrawalRate,
                 value: _withdrawalRate,
                 min: 0.02,
                 max: 0.06,
@@ -219,7 +222,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               ),
               Divider(height: 32, color: context.hairline),
               _buildSliderControl(
-                label: 'Projection years',
+                label: l.projProjectionYears,
                 value: _projectionYears.toDouble(),
                 min: 5,
                 max: 50,
@@ -303,6 +306,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   // Preferences so the goal survives a refresh. Clears reset both
   // fields and remove the chart overlay.
   Widget _buildGoalEditor() {
+    final l = AppLocalizations.of(context);
     final hasGoal = _goalAmountUsd != null && _goalYear != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -312,7 +316,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             Icon(Icons.flag_outlined, color: context.yellowAccent, size: 18),
             const SizedBox(width: 8),
             Text(
-              'Goal',
+              l.projGoal,
               style: TextStyle(
                 color: context.textPrimary,
                 fontWeight: FontWeight.w700,
@@ -332,7 +336,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                       .putSetting('net_worth_goal', null)
                       .catchError((_) {});
                 },
-                child: const Text('Clear'),
+                child: Text(l.projClear),
               ),
           ],
         ),
@@ -342,8 +346,12 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           icon: const Icon(Icons.edit_outlined, size: 16),
           label: Text(
             hasGoal
-                ? 'Hit ${widget.currencyFormat.format(_goalAmountUsd! * widget.conversionFactor)} by $_goalYear'
-                : 'Set a target — e.g. \$1M by 2030',
+                ? l.projGoalHitBy(
+                    widget.currencyFormat
+                        .format(_goalAmountUsd! * widget.conversionFactor),
+                    _goalYear!,
+                  )
+                : l.projGoalSetTarget,
           ),
         ),
       ],
@@ -360,10 +368,11 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     final yearCtrl = TextEditingController(
       text: (_goalYear ?? nowYear + 10).toString(),
     );
+    final l = AppLocalizations.of(context);
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Set a target'),
+        title: Text(l.projSetTargetTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -371,7 +380,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               controller: amountCtrl,
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
-                labelText: 'Target net worth',
+                labelText: l.projTargetNetWorth,
                 prefixText: widget.currencyFormat.currencySymbol,
               ),
             ),
@@ -379,17 +388,17 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             TextField(
               controller: yearCtrl,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Target year'),
+              decoration: InputDecoration(labelText: l.projTargetYear),
             ),
           ],
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
+              child: Text(l.actionCancel)),
           FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Save')),
+              child: Text(l.actionSave)),
         ],
       ),
     );
@@ -416,6 +425,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   }
 
   Widget _buildChartCard() {
+    final l = AppLocalizations.of(context);
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
@@ -427,15 +437,15 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 children: [
                   Row(
                     children: [
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'Net worth projection',
-                          style: TextStyle(
+                          l.projNetWorthProjection,
+                          style: const TextStyle(
                               fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                       ),
                       FilterChip(
-                        label: const Text('Scenarios'),
+                        label: Text(l.projScenarios),
                         selected: _showScenarios,
                         onSelected: (v) =>
                             setState(() => _showScenarios = v),
@@ -479,6 +489,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   }
 
   Widget _buildChart() {
+    final l = AppLocalizations.of(context);
     if (_projectionData == null) return Container();
 
     final points = _projectionData!['points'] as List<dynamic>;
@@ -527,7 +538,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               getTitlesWidget: (value, meta) => Padding(
                 padding: const EdgeInsets.only(top: 8.0),
                 child: Text(
-                  'Yr ${value.toInt()}',
+                  l.projYearAxisLabel(value.toInt()),
                   style: TextStyle(color: context.textSubtle, fontSize: 12),
                 ),
               ),
@@ -658,7 +669,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {
                 return LineTooltipItem(
-                  'Year ${spot.x.toStringAsFixed(1)}\n${widget.currencyFormat.format(spot.y)}',
+                  l.projTooltipYearAmount(
+                    spot.x.toStringAsFixed(1),
+                    widget.currencyFormat.format(spot.y),
+                  ),
                   TextStyle(
                     color: context.tooltipOnSurface,
                     fontWeight: FontWeight.bold,
@@ -673,47 +687,48 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   }
 
   Widget _buildMilestonesRow() {
+    final l = AppLocalizations.of(context);
     if (_projectionData == null) return Container();
     final metrics = _projectionData!['fire_metrics'];
 
     return Row(
       children: [
         _buildMilestoneCard(
-          title: 'FI number',
+          title: l.projFiNumber,
           value: widget.currencyFormat.format(
             (metrics['fi_number'] as num).toDouble() * widget.conversionFactor,
           ),
-          subtitle: 'Target net worth',
+          subtitle: l.projTargetNetWorth,
           icon: Icons.flag_rounded,
           color: context.warning,
         ),
         const SizedBox(width: 16),
         _buildMilestoneCard(
-          title: 'Progress',
+          title: l.projProgress,
           value:
               '${(metrics['current_progress_pct'] as num).toStringAsFixed(1)}%',
-          subtitle: 'Toward FIRE',
+          subtitle: l.projTowardFire,
           icon: Icons.trending_up_rounded,
           color: context.positive,
         ),
         const SizedBox(width: 16),
         _buildMilestoneCard(
-          title: 'Years to FI',
+          title: l.projYearsToFi,
           value: metrics['estimated_years_to_fi'] != null
               ? (metrics['estimated_years_to_fi'] as num).toStringAsFixed(1)
               : '∞',
-          subtitle: 'Estimate',
+          subtitle: l.projEstimate,
           icon: Icons.speed_rounded,
           color: context.info,
         ),
         const SizedBox(width: 16),
         _buildMilestoneCard(
-          title: 'FI income',
+          title: l.projFiIncome,
           value: widget.currencyFormat.format(
             (metrics['monthly_income_at_retirement'] as num).toDouble() *
                 widget.conversionFactor,
           ),
-          subtitle: 'Monthly @ withdrawal rate',
+          subtitle: l.projMonthlyAtWithdrawalRate,
           icon: Icons.account_balance_wallet_rounded,
           color: context.purpleAccent,
         ),

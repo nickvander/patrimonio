@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../services/preferences.dart';
 import '../utils/theme_colors.dart';
+import '../l10n/app_localizations.dart';
 
 /// Unified panel for everything the user has dismissed across the app —
 /// "ignored" subscriptions, the since-last-login banner suppression, etc.
@@ -77,13 +78,15 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
             .where((row) => (row as Map)['merchant_key'] != merchantKey)
             .toList();
       });
+      final l = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Restored "$merchantKey"')),
+        SnackBar(content: Text(l.hiddenRestoredMerchant(merchantKey))),
       );
     } catch (e) {
       if (!mounted) return;
+      final l = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to restore: $e')),
+        SnackBar(content: Text(l.hiddenRestoreFailed(e.toString()))),
       );
     }
   }
@@ -91,8 +94,9 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
   void _restoreSinceLastLoginBanner() {
     Preferences.clearSinceLastLoginDismissal();
     setState(() => _sinceLastLoginAnchor = null);
+    final l = AppLocalizations.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Since-last-login banner will reappear.')),
+      SnackBar(content: Text(l.hiddenBannerWillReappear)),
     );
   }
 
@@ -105,17 +109,17 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
             .where((row) => (row as Map)['id'] != id)
             .toList();
       });
+      final l = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Restored — the detector may re-propose $summary on the next sync.',
-          ),
+          content: Text(l.hiddenFxPairRestored(summary)),
         ),
       );
     } catch (e) {
       if (!mounted) return;
+      final l = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to restore: $e')),
+        SnackBar(content: Text(l.hiddenRestoreFailed(e.toString()))),
       );
     }
   }
@@ -134,11 +138,12 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final hasDismissedSinceLastLogin =
         (_sinceLastLoginAnchor ?? '').isNotEmpty;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Hidden items')),
+      appBar: AppBar(title: Text(l.hiddenTitle)),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -148,8 +153,7 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
                       horizontal: 24, vertical: 16),
                   children: [
                     Text(
-                      'Things you told Patrimonio to stop showing. '
-                      'Restoring a row brings it back where it normally lives.',
+                      l.hiddenIntro,
                       style: TextStyle(
                         color: context.textSubtle,
                         fontSize: 13,
@@ -158,14 +162,12 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
                     const SizedBox(height: 16),
                     _sectionHeader(
                       icon: Icons.autorenew_rounded,
-                      title: 'Recurring charges',
+                      title: l.hiddenRecurringCharges,
                       count: _ignoredSubs.length,
                     ),
                     if (_ignoredSubs.isEmpty)
                       _emptyTile(
-                        'No subscriptions are currently hidden. '
-                        'When you dismiss a row with × on the Recurring '
-                        'charges card it shows up here.',
+                        l.hiddenNoSubscriptions,
                       )
                     else
                       Card(
@@ -184,21 +186,21 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
                     const SizedBox(height: 24),
                     _sectionHeader(
                       icon: Icons.notifications_off_outlined,
-                      title: 'Banners',
+                      title: l.hiddenBanners,
                       count: hasDismissedSinceLastLogin ? 1 : 0,
                     ),
                     if (!hasDismissedSinceLastLogin)
                       _emptyTile(
-                        'No banners are currently dismissed.',
+                        l.hiddenNoBanners,
                       )
                     else
                       Card(
                         child: ListTile(
                           leading: const Icon(Icons.history_outlined),
-                          title: const Text('Since last login'),
+                          title: Text(l.hiddenSinceLastLogin),
                           subtitle: Text(
-                            'Hidden for the visit starting '
-                            '${_formatAnchor(_sinceLastLoginAnchor!)}',
+                            l.hiddenHiddenForVisit(
+                                _formatAnchor(_sinceLastLoginAnchor!)),
                             style: TextStyle(
                               color: context.textSubtle,
                               fontSize: 12,
@@ -207,22 +209,19 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
                           trailing: TextButton.icon(
                             onPressed: _restoreSinceLastLoginBanner,
                             icon: const Icon(Icons.refresh, size: 16),
-                            label: const Text('Show again'),
+                            label: Text(l.hiddenShowAgain),
                           ),
                         ),
                       ),
                     const SizedBox(height: 24),
                     _sectionHeader(
                       icon: Icons.swap_horiz_outlined,
-                      title: 'FX-transfer pairs',
+                      title: l.hiddenFxTransferPairs,
                       count: _dismissedFxPairs.length,
                     ),
                     if (_dismissedFxPairs.isEmpty)
                       _emptyTile(
-                        'No FX pairs are currently dismissed. '
-                        'When you unlink a detected Wise / Remitly / Xoom '
-                        'transfer on the Transactions tab, it lands here so '
-                        'the detector won\'t re-propose it.',
+                        l.hiddenNoFxPairs,
                       )
                     else
                       Card(
@@ -244,6 +243,7 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
   }
 
   Widget _dismissedFxTile(Map<String, dynamic> row) {
+    final l = AppLocalizations.of(context);
     final id = (row['id'] ?? '').toString();
     final srcLabel = (row['source_label'] ?? '—').toString();
     final dstLabel = (row['dest_label'] ?? '—').toString();
@@ -261,13 +261,13 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
       title: Text(summary, style: const TextStyle(fontSize: 14)),
       subtitle: Text(
         '${srcFmt.format(srcAmt)} → ${dstFmt.format(dstAmt)}'
-        '${dismissedAt.isEmpty ? '' : ' · dismissed ${_formatIgnoredAt(dismissedAt)}'}',
+        '${dismissedAt.isEmpty ? '' : ' · ${l.hiddenDismissedAt(_formatIgnoredAt(dismissedAt))}'}',
         style: TextStyle(color: context.textSubtle, fontSize: 11),
       ),
       trailing: TextButton.icon(
         onPressed: () => _restoreFxPair(id, summary),
         icon: const Icon(Icons.refresh, size: 16),
-        label: const Text('Restore'),
+        label: Text(l.hiddenRestore),
       ),
     );
   }
@@ -312,6 +312,7 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
   }
 
   Widget _ignoredSubTile(Map<String, dynamic> row) {
+    final l = AppLocalizations.of(context);
     final key = (row['merchant_key'] ?? '').toString();
     final at = (row['ignored_at'] ?? '').toString();
     return ListTile(
@@ -328,13 +329,13 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
       subtitle: at.isEmpty
           ? null
           : Text(
-              'Dismissed ${_formatIgnoredAt(at)}',
+              l.hiddenDismissedAt(_formatIgnoredAt(at)),
               style: TextStyle(color: context.textSubtle, fontSize: 11),
             ),
       trailing: TextButton.icon(
         onPressed: () => _unignoreSub(key),
         icon: const Icon(Icons.refresh, size: 16),
-        label: const Text('Restore'),
+        label: Text(l.hiddenRestore),
       ),
     );
   }

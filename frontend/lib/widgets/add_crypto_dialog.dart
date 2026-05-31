@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../l10n/app_localizations.dart';
 import '../utils/theme_colors.dart';
 import '../services/api_service.dart';
 
@@ -78,18 +79,16 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
       if (!ok) throw Exception('no handler');
     } catch (_) {
       if (!mounted) return;
+      final l = AppLocalizations.of(context);
       showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text('${_info.label} API keys'),
+          title: Text(l.dlgCryptoApiKeysTitle(_info.label)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Generate a Read-Only API key in your ${_info.label} '
-                'settings, then paste it here. Open:',
-              ),
+              Text(l.dlgCryptoApiKeysFallbackBody(_info.label)),
               const SizedBox(height: 8),
               SelectableText(
                 url.toString(),
@@ -100,7 +99,7 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Close'),
+              child: Text(l.actionClose),
             ),
           ],
         ),
@@ -124,17 +123,19 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
       );
 
       if (mounted) {
+        final l = AppLocalizations.of(context);
         Navigator.of(context).pop();
         widget.onLinked();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Successfully linked ${widget.exchange}!')),
+          SnackBar(content: Text(l.dlgCryptoLinkSuccess(_info.label))),
         );
       }
     } catch (e) {
       if (mounted) {
+        final l = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error linking: $e'),
+            content: Text(l.dlgCryptoLinkError(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -146,6 +147,7 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final isCoinbase = widget.exchange == 'coinbase';
     // Coinbase blue is brand-fixed (it's their logo colour); Bitso
     // uses our brightness-aware positive accent so the icon stays
@@ -162,7 +164,7 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
             color: accentColor,
           ),
           const SizedBox(width: 12),
-          Text('Link ${_info.label}'),
+          Text(l.dlgCryptoLinkTitle(_info.label)),
         ],
       ),
       content: Form(
@@ -172,14 +174,14 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Generate a "Read-Only" API key in ${_info.label} settings. We only use this to fetch balances and estimate their value.',
+                l.dlgCryptoIntro(_info.label),
                 style: TextStyle(fontSize: 12, color: context.textMuted),
               ),
               const SizedBox(height: 8),
               InkWell(
                 onTap: _openApiDocs,
                 child: Text(
-                  'Where do I find my API keys? ↗',
+                  l.dlgCryptoWhereApiKeys,
                   style: TextStyle(
                     fontSize: 12,
                     color: context.positive,
@@ -191,29 +193,29 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
               TextFormField(
                 controller: _nameController,
                 decoration: InputDecoration(
-                  labelText: 'Display Name (e.g. ${_info.exampleName})',
+                  labelText: l.dlgCryptoDisplayName(_info.exampleName),
                   border: const OutlineInputBorder(),
                 ),
-                validator: (v) => v!.isEmpty ? 'Required' : null,
+                validator: (v) => v!.isEmpty ? l.commonRequired : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _apiKeyController,
-                decoration: const InputDecoration(
-                  labelText: 'API Key',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l.dlgCryptoApiKey,
+                  border: const OutlineInputBorder(),
                 ),
-                validator: (v) => v!.isEmpty ? 'Required' : null,
+                validator: (v) => v!.isEmpty ? l.commonRequired : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _apiSecretController,
-                decoration: const InputDecoration(
-                  labelText: 'API Secret',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l.dlgCryptoApiSecret,
+                  border: const OutlineInputBorder(),
                 ),
                 obscureText: true,
-                validator: (v) => v!.isEmpty ? 'Required' : null,
+                validator: (v) => v!.isEmpty ? l.commonRequired : null,
               ),
             ],
           ),
@@ -222,7 +224,7 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
       actions: [
         TextButton(
           onPressed: _isLoading ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(l.actionCancel),
         ),
         ElevatedButton(
           onPressed: _isLoading ? null : _submit,
@@ -239,7 +241,7 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
                     color: context.textPrimary,
                   ),
                 )
-              : const Text('Link account'),
+              : Text(l.dlgCryptoLinkAccount),
         ),
       ],
     );

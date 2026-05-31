@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../l10n/app_localizations.dart';
 import '../services/preferences.dart';
 import '../utils/theme_colors.dart';
 
@@ -22,6 +23,7 @@ class NetWorthGoalTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final goalUsd = Preferences.getGoalAmountUsd();
     final goalYear = Preferences.getGoalYear();
     if (goalUsd == null || goalYear == null || goalUsd <= 0) {
@@ -51,10 +53,10 @@ class NetWorthGoalTile extends StatelessWidget {
               children: [
                 Icon(Icons.flag_outlined, color: color, size: 18),
                 const SizedBox(width: 8),
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Net-worth goal',
-                    style: TextStyle(
+                    l.pfNetWorthGoal,
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                     ),
@@ -73,8 +75,13 @@ class NetWorthGoalTile extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Hit ${currencyFormat.format(goalUsd * conversionFactor)} by $goalYear · '
-              '${yearsRemaining <= 0 ? "due now" : "$yearsRemaining year${yearsRemaining == 1 ? "" : "s"} left"}',
+              l.pfGoalHitBy(
+                currencyFormat.format(goalUsd * conversionFactor),
+                goalYear,
+                yearsRemaining <= 0
+                    ? l.pfGoalDueNow
+                    : l.pfGoalYearsLeft(yearsRemaining),
+              ),
               style: TextStyle(color: context.textMuted, fontSize: 12),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -91,7 +98,8 @@ class NetWorthGoalTile extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Current: ${currencyFormat.format(netWorthUsd * conversionFactor)}',
+              l.pfGoalCurrent(
+                  currencyFormat.format(netWorthUsd * conversionFactor)),
               style: TextStyle(
                 fontSize: 12,
                 color: context.textSubtle,

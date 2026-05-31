@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../utils/currency.dart';
 import '../widgets/transactions_tab.dart';
+import '../l10n/app_localizations.dart';
 
 /// Per-account transaction history. Rendered as the body of a slide-from-
 /// right side panel via [showAccountTransactionsPanel] — no Scaffold/AppBar
@@ -94,18 +95,19 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   }
 
   void _showRenameDialog() {
+    final l = AppLocalizations.of(context);
     final controller = TextEditingController(text: _nickname);
     showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: Theme.of(context).colorScheme.surface,
-        title: const Text('Rename account'),
+        title: Text(l.acctxRenameAccount),
         content: TextField(
           controller: controller,
           autofocus: true,
           decoration: InputDecoration(
-            labelText: 'Nickname',
-            hintText: widget.account['name']?.toString() ?? 'Account',
+            labelText: l.acctxNickname,
+            hintText: widget.account['name']?.toString() ?? l.acctxAccountFallback,
           ),
           onSubmitted: (v) {
             Navigator.pop(context);
@@ -118,7 +120,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+              child: Text(l.actionCancel)),
           FilledButton(
             onPressed: () async {
               final v = controller.text.trim();
@@ -127,7 +129,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
               await widget.onRenameAccount
                   ?.call(widget.account['id'].toString(), v);
             },
-            child: const Text('Save'),
+            child: Text(l.actionSave),
           ),
         ],
       ),
@@ -212,6 +214,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   }
 
   void _showEditBalanceDialog() {
+    final l = AppLocalizations.of(context);
     final controller = TextEditingController(text: _currentBalance.toString());
     final currency =
         (widget.account['currency'] ?? 'USD').toString().toUpperCase();
@@ -219,7 +222,8 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Theme.of(context).colorScheme.surface,
-        title: Text('Update ${widget.account['name']} balance'),
+        title: Text(l.acctxUpdateBalanceTitle(
+            (widget.account['name'] ?? l.acctxAccountFallback).toString())),
         content: TextField(
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(
@@ -233,7 +237,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             widget.onBalanceUpdate?.call(widget.account['id'], newBalance);
           },
           decoration: InputDecoration(
-            labelText: 'Current balance',
+            labelText: l.acctxCurrentBalance,
             prefixText: r'$ ',
             suffixText: currency,
           ),
@@ -241,7 +245,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(l.actionCancel),
           ),
           ElevatedButton(
             onPressed: () {
@@ -251,7 +255,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
               setState(() => _currentBalance = newBalance);
               widget.onBalanceUpdate?.call(widget.account['id'], newBalance);
             },
-            child: const Text('Save'),
+            child: Text(l.actionSave),
           ),
         ],
       ),
@@ -271,6 +275,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   }
 
   Widget _buildHeader() {
+    final l = AppLocalizations.of(context);
     final balance = _currentBalance.abs();
     final sourceCurrency =
         (widget.account['currency'] ?? widget.targetCurrency).toString();
@@ -283,7 +288,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     final needsConversion = widget.usdMxnRate > 0 &&
         sourceCurrency != widget.targetCurrency;
     final inst = (widget.account['institution_name'] ?? '').toString();
-    final name = (widget.account['name'] ?? 'Account').toString();
+    final name = (widget.account['name'] ?? l.acctxAccountFallback).toString();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 12, 16),
@@ -321,7 +326,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                 ),
               ),
               PopupMenuButton<String>(
-                tooltip: 'Account actions',
+                tooltip: l.acctxAccountActions,
                 onSelected: (v) {
                   switch (v) {
                     case 'balance':
@@ -331,28 +336,28 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                   }
                 },
                 itemBuilder: (_) => [
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'balance',
                     child: ListTile(
                       dense: true,
-                      leading: Icon(Icons.edit_outlined),
-                      title: Text('Update balance'),
+                      leading: const Icon(Icons.edit_outlined),
+                      title: Text(l.acctxUpdateBalance),
                     ),
                   ),
                   if (widget.onRenameAccount != null)
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'rename',
                       child: ListTile(
                         dense: true,
-                        leading: Icon(Icons.drive_file_rename_outline),
-                        title: Text('Rename account'),
+                        leading: const Icon(Icons.drive_file_rename_outline),
+                        title: Text(l.acctxRenameAccount),
                       ),
                     ),
                 ],
                 icon: const Icon(Icons.more_vert, size: 20),
               ),
               IconButton(
-                tooltip: 'Close',
+                tooltip: l.actionClose,
                 icon: const Icon(Icons.close, size: 20),
                 onPressed: () => Navigator.of(context).pop(),
               ),
@@ -393,6 +398,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   }
 
   Widget _buildBody() {
+    final l = AppLocalizations.of(context);
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -405,13 +411,13 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             const Icon(Icons.error_outline, size: 64, color: Colors.red),
             const SizedBox(height: 16),
             Text(
-              'Error loading transactions: $_error',
+              l.acctxLoadError(_error!),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _fetchTransactions,
-              child: const Text('Retry'),
+              child: Text(l.acctxRetry),
             ),
           ],
         ),
@@ -426,12 +432,12 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             Icon(Icons.receipt_long, size: 64, color: Colors.grey[800]),
             const SizedBox(height: 16),
             Text(
-              'No transactions yet',
+              l.acctxNoTransactionsTitle,
               style: TextStyle(fontSize: 16, color: context.textSubtle),
             ),
             const SizedBox(height: 8),
             Text(
-              'Records might just be starting, or offline accounts have no history.',
+              l.acctxNoTransactionsBody,
               style: TextStyle(color: Colors.grey[600], fontSize: 12),
               textAlign: TextAlign.center,
             ),
@@ -462,7 +468,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
           } catch (e) {
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to update transaction: $e')),
+              SnackBar(content: Text(l.acctxUpdateFailed(e.toString()))),
             );
           }
         },
@@ -494,7 +500,7 @@ Future<void> showAccountTransactionsPanel(
   return showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
-    barrierLabel: 'Dismiss',
+    barrierLabel: AppLocalizations.of(context).acctxDismissBarrier,
     barrierColor: Colors.black.withValues(alpha: 0.4),
     transitionDuration: const Duration(milliseconds: 220),
     pageBuilder: (ctx, anim, secAnim) {

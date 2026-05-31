@@ -1938,4 +1938,1230 @@ class AppLocalizationsEn extends AppLocalizations {
   String dashThemeTooltip(Object label) {
     return '$label · tap to cycle, long-press to pick';
   }
+
+  @override
+  String get projTitle => 'Wealth projection';
+
+  @override
+  String get projSubtitle =>
+      'Project your financial future based on current assets and savings strategy.';
+
+  @override
+  String get projMonthlySavings => 'Monthly savings';
+
+  @override
+  String get projExpectedReturn => 'Expected return';
+
+  @override
+  String get projAnnualExpenses => 'Annual expenses';
+
+  @override
+  String get projSafeWithdrawalRate => 'Safe withdrawal rate';
+
+  @override
+  String get projProjectionYears => 'Projection years';
+
+  @override
+  String get projGoal => 'Goal';
+
+  @override
+  String get projClear => 'Clear';
+
+  @override
+  String projGoalHitBy(Object amount, Object year) {
+    return 'Hit $amount by $year';
+  }
+
+  @override
+  String get projGoalSetTarget => 'Set a target — e.g. \$1M by 2030';
+
+  @override
+  String get projSetTargetTitle => 'Set a target';
+
+  @override
+  String get projTargetNetWorth => 'Target net worth';
+
+  @override
+  String get projTargetYear => 'Target year';
+
+  @override
+  String get projNetWorthProjection => 'Net worth projection';
+
+  @override
+  String get projScenarios => 'Scenarios';
+
+  @override
+  String projYearAxisLabel(Object year) {
+    return 'Yr $year';
+  }
+
+  @override
+  String projTooltipYearAmount(Object amount, Object year) {
+    return 'Year $year\n$amount';
+  }
+
+  @override
+  String get projFiNumber => 'FI number';
+
+  @override
+  String get projProgress => 'Progress';
+
+  @override
+  String get projTowardFire => 'Toward FIRE';
+
+  @override
+  String get projYearsToFi => 'Years to FI';
+
+  @override
+  String get projEstimate => 'Estimate';
+
+  @override
+  String get projFiIncome => 'FI income';
+
+  @override
+  String get projMonthlyAtWithdrawalRate => 'Monthly @ withdrawal rate';
+
+  @override
+  String get taxTitle => 'Tax planning';
+
+  @override
+  String get taxFilingSingle => 'Single';
+
+  @override
+  String get taxFilingMarried => 'Married';
+
+  @override
+  String get taxFilingHeadOfHousehold => 'Head of Household';
+
+  @override
+  String get taxCsvLaunchFailed => 'Could not launch CSV export.';
+
+  @override
+  String get taxPdfLaunchFailed => 'Could not launch PDF export.';
+
+  @override
+  String taxLoadError(Object error) {
+    return 'Error loading tax data: $error';
+  }
+
+  @override
+  String get taxRetry => 'Retry';
+
+  @override
+  String get taxExportCsv => 'Export CSV';
+
+  @override
+  String get taxExportPdf => 'PDF';
+
+  @override
+  String get taxTotalTaxableIncome => 'Total taxable income';
+
+  @override
+  String taxOrdinaryIncome(Object amount) {
+    return 'Ordinary income: $amount';
+  }
+
+  @override
+  String taxCapitalGains(Object amount) {
+    return 'Capital gains: $amount';
+  }
+
+  @override
+  String get taxUsEstimatedLiability => 'US estimated liability (IRS)';
+
+  @override
+  String get taxMxEstimatedLiability => 'MX estimated liability (SAT)';
+
+  @override
+  String taxEffectiveRate(Object rate) {
+    return 'Effective rate: $rate%';
+  }
+
+  @override
+  String get taxTaxableEvents => 'Taxable events';
+
+  @override
+  String get taxNoEventsTitle => 'No taxable events found for this year.';
+
+  @override
+  String get taxNoEventsBody =>
+      'Income, salary, interest, and investment sale transactions will appear here.';
+
+  @override
+  String get taxDisclaimer =>
+      'Disclaimer: Tax estimates are approximations using 2026 IRS/SAT brackets. Consult a qualified tax professional for filing.';
+
+  @override
+  String get acctxRenameAccount => 'Rename account';
+
+  @override
+  String get acctxNickname => 'Nickname';
+
+  @override
+  String get acctxAccountFallback => 'Account';
+
+  @override
+  String acctxUpdateBalanceTitle(Object account) {
+    return 'Update $account balance';
+  }
+
+  @override
+  String get acctxCurrentBalance => 'Current balance';
+
+  @override
+  String get acctxAccountActions => 'Account actions';
+
+  @override
+  String get acctxUpdateBalance => 'Update balance';
+
+  @override
+  String acctxLoadError(Object error) {
+    return 'Error loading transactions: $error';
+  }
+
+  @override
+  String get acctxRetry => 'Retry';
+
+  @override
+  String get acctxNoTransactionsTitle => 'No transactions yet';
+
+  @override
+  String get acctxNoTransactionsBody =>
+      'Records might just be starting, or offline accounts have no history.';
+
+  @override
+  String acctxUpdateFailed(Object error) {
+    return 'Failed to update transaction: $error';
+  }
+
+  @override
+  String get acctxDismissBarrier => 'Dismiss';
+
+  @override
+  String get hiddenTitle => 'Hidden items';
+
+  @override
+  String hiddenRestoredMerchant(Object merchant) {
+    return 'Restored \"$merchant\"';
+  }
+
+  @override
+  String hiddenRestoreFailed(Object error) {
+    return 'Failed to restore: $error';
+  }
+
+  @override
+  String get hiddenBannerWillReappear =>
+      'Since-last-login banner will reappear.';
+
+  @override
+  String hiddenFxPairRestored(Object summary) {
+    return 'Restored — the detector may re-propose $summary on the next sync.';
+  }
+
+  @override
+  String get hiddenIntro =>
+      'Things you told Patrimonio to stop showing. Restoring a row brings it back where it normally lives.';
+
+  @override
+  String get hiddenRecurringCharges => 'Recurring charges';
+
+  @override
+  String get hiddenNoSubscriptions =>
+      'No subscriptions are currently hidden. When you dismiss a row with × on the Recurring charges card it shows up here.';
+
+  @override
+  String get hiddenBanners => 'Banners';
+
+  @override
+  String get hiddenNoBanners => 'No banners are currently dismissed.';
+
+  @override
+  String get hiddenSinceLastLogin => 'Since last login';
+
+  @override
+  String hiddenHiddenForVisit(Object date) {
+    return 'Hidden for the visit starting $date';
+  }
+
+  @override
+  String get hiddenShowAgain => 'Show again';
+
+  @override
+  String get hiddenFxTransferPairs => 'FX-transfer pairs';
+
+  @override
+  String get hiddenNoFxPairs =>
+      'No FX pairs are currently dismissed. When you unlink a detected Wise / Remitly / Xoom transfer on the Transactions tab, it lands here so the detector won\'t re-propose it.';
+
+  @override
+  String hiddenDismissedAt(Object date) {
+    return 'Dismissed $date';
+  }
+
+  @override
+  String get hiddenRestore => 'Restore';
+
+  @override
+  String get cbTitle => 'Connect bank';
+
+  @override
+  String get cbSetupIncompleteTitle => 'Plaid setup is incomplete.';
+
+  @override
+  String get cbSetupIncompleteBody =>
+      'Set Plaid credentials and ENCRYPTION_KEY before linking real bank accounts.';
+
+  @override
+  String get cbConnectWithPlaid => 'Connect with Plaid';
+
+  @override
+  String get cbEnvSandbox => 'Plaid Sandbox Mode — Mock data only';
+
+  @override
+  String get cbEnvDevelopment =>
+      'Plaid Development Mode — Real account data (test items)';
+
+  @override
+  String get cbEnvProduction => 'Plaid Production Mode — Real account data';
+
+  @override
+  String cbEnvUnknown(Object env) {
+    return 'Plaid Environment: $env';
+  }
+
+  @override
+  String get cbConnected => 'Bank connected. Initial sync has started.';
+
+  @override
+  String get cbExchangeTokenFailed => 'Failed to exchange token';
+
+  @override
+  String cbBackendCommError(Object error) {
+    return 'Error communicating with backend: $error';
+  }
+
+  @override
+  String get cbLinkTokenFailed => 'Failed to retrieve link token';
+
+  @override
+  String cbBackendConnectError(Object error) {
+    return 'Error connecting to backend: $error';
+  }
+
+  @override
+  String cbHttpError(Object fallback, Object status) {
+    return '$fallback: HTTP $status';
+  }
+
+  @override
+  String cbPlaidError(Object message) {
+    return 'Plaid Error: $message';
+  }
+
+  @override
+  String get pfAssetBreakdown => 'Asset breakdown';
+
+  @override
+  String get pfByType => 'By type';
+
+  @override
+  String get pfByInstitution => 'By institution';
+
+  @override
+  String get pfOther => 'Other';
+
+  @override
+  String get pfBank => 'Bank';
+
+  @override
+  String get pfNetWorthGoal => 'Net-worth goal';
+
+  @override
+  String get pfGoalDueNow => 'due now';
+
+  @override
+  String pfGoalYearsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count years left',
+      one: '1 year left',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String pfGoalHitBy(Object amount, Object remaining, Object year) {
+    return 'Hit $amount by $year · $remaining';
+  }
+
+  @override
+  String pfGoalCurrent(Object amount) {
+    return 'Current: $amount';
+  }
+
+  @override
+  String get pfShowingBands => 'Showing per-institution bands';
+
+  @override
+  String get pfShowingLine => 'Showing only the net worth line';
+
+  @override
+  String get pfSimple => 'Simple';
+
+  @override
+  String get pfDetailed => 'Detailed';
+
+  @override
+  String pfTotalNetWorthCurrency(Object currency) {
+    return 'Total net worth ($currency)';
+  }
+
+  @override
+  String get pfTotalNetWorth => 'Total net worth';
+
+  @override
+  String pfTooltipNetWorth(Object value) {
+    return 'Net worth: $value';
+  }
+
+  @override
+  String pfTooltipAssets(Object value) {
+    return 'Assets: $value';
+  }
+
+  @override
+  String pfTooltipLiabilities(Object value) {
+    return 'Liabilities: $value';
+  }
+
+  @override
+  String pfDeltaVsAgo(Object window) {
+    return 'vs $window ago';
+  }
+
+  @override
+  String get pfNoAccountsYet => 'No accounts yet';
+
+  @override
+  String get pfNoAccountsBody =>
+      'Link a bank, import a CSV, or add a manual account to\nget started.';
+
+  @override
+  String get pfAddAnAccount => 'Add an account';
+
+  @override
+  String get pfAccountsHeader => 'ACCOUNTS';
+
+  @override
+  String get pfGroupCash => 'Cash';
+
+  @override
+  String get pfGroupInvestments => 'Investments';
+
+  @override
+  String get pfGroupCrypto => 'Crypto';
+
+  @override
+  String get pfGroupCreditCards => 'Credit cards';
+
+  @override
+  String get pfGroupLoans => 'Loans & mortgages';
+
+  @override
+  String get pfGroupRealAssets => 'Real assets';
+
+  @override
+  String get pfGroupOther => 'Other';
+
+  @override
+  String pfUnknownSubtypes(int count, Object list) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Unknown subtypes: $list',
+      one: 'Unknown subtype: $list',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get pfVaults => 'Vaults';
+
+  @override
+  String get pfAccountsDescriptor => 'Accounts';
+
+  @override
+  String pfInstDescriptor(Object descriptor, Object inst) {
+    return '$inst · $descriptor';
+  }
+
+  @override
+  String get pfVault => 'Vault';
+
+  @override
+  String get pfUnknownAccount => 'Unknown account';
+
+  @override
+  String get pfAccountActions => 'Account actions';
+
+  @override
+  String get pfRename => 'Rename';
+
+  @override
+  String get pfRevalue => 'Revalue';
+
+  @override
+  String get pfDelete => 'Delete';
+
+  @override
+  String get pfDeleteAccountTitle => 'Delete account';
+
+  @override
+  String pfDeleteAccountConfirm(Object name) {
+    return 'Are you sure you want to delete \"$name\"? This will remove all its history.';
+  }
+
+  @override
+  String pfRevalueTitle(Object name) {
+    return 'Revalue $name';
+  }
+
+  @override
+  String pfRevalueCurrent(Object amount, Object currency) {
+    return 'Current: $amount $currency';
+  }
+
+  @override
+  String get pfNewBalance => 'New balance';
+
+  @override
+  String get pfNotesOptional => 'Notes (optional)';
+
+  @override
+  String get pfNotesHint => 'e.g. Zillow estimate, 2026 appraisal, last round';
+
+  @override
+  String get pfHistoryPointNote =>
+      'A new history point is recorded with today\'s date.';
+
+  @override
+  String get pfEnterNumericBalance => 'Enter a numeric balance';
+
+  @override
+  String get pfAssetFallback => 'asset';
+
+  @override
+  String get pfRenameAccountTitle => 'Rename account';
+
+  @override
+  String pfRenameOriginal(Object name) {
+    return 'Original: $name';
+  }
+
+  @override
+  String get pfNickname => 'Nickname';
+
+  @override
+  String get pfNicknameHint => 'e.g. Joint checking';
+
+  @override
+  String get pfRenameBlankHint => 'Leave blank to clear and use the bank name.';
+
+  @override
+  String get pfInvestmentPortfolio => 'Investment portfolio';
+
+  @override
+  String get pfTotalValue => 'Total value';
+
+  @override
+  String get pfProfitLoss => 'Profit / Loss';
+
+  @override
+  String get pfUsDollar => 'US Dollar';
+
+  @override
+  String get pfMexicanPeso => 'Mexican Peso';
+
+  @override
+  String get pfHoldings => 'Holdings';
+
+  @override
+  String pfAccountsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count accounts',
+      one: '1 account',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get pfTopPosition => 'Top position';
+
+  @override
+  String get pfBiggestGainer => 'Biggest gainer';
+
+  @override
+  String get pfBiggestLoser => 'Biggest loser';
+
+  @override
+  String get pfUnknown => 'Unknown';
+
+  @override
+  String pfInstPositions(Object inst, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count positions',
+      one: '1 position',
+    );
+    return '$inst · $_temp0';
+  }
+
+  @override
+  String pfSharesSuffix(Object qty) {
+    return '$qty sh';
+  }
+
+  @override
+  String pfCategoryFilter(Object category) {
+    return 'Category: $category';
+  }
+
+  @override
+  String get pfSearchHint => 'Search ticker, name, account, or institution…';
+
+  @override
+  String pfHoldingsAccountsCount(int accounts, int holdings) {
+    String _temp0 = intl.Intl.pluralLogic(
+      holdings,
+      locale: localeName,
+      other: '$holdings holdings',
+      one: '1 holding',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      accounts,
+      locale: localeName,
+      other: '$accounts accounts',
+      one: '1 account',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String pfShownOfTotal(Object shown, Object total) {
+    return '$shown of $total';
+  }
+
+  @override
+  String get pfFlat => 'Flat';
+
+  @override
+  String get pfByAccount => 'By account';
+
+  @override
+  String get pfNoHoldingsYet => 'No holdings yet';
+
+  @override
+  String get pfNoHoldingsBody =>
+      'Once you link a brokerage with Plaid (or import a CSV) your\npositions will appear here.';
+
+  @override
+  String get pfColAsset => 'Asset';
+
+  @override
+  String get pfColShares => 'Shares';
+
+  @override
+  String get pfColPrice => 'Price';
+
+  @override
+  String get pfColValue => 'Value';
+
+  @override
+  String get pfColCostBasis => 'Cost basis';
+
+  @override
+  String get pfColGain => 'Gain';
+
+  @override
+  String get pfColReturn => 'Return';
+
+  @override
+  String get pfShares => 'sh';
+
+  @override
+  String get pfHolding => 'Holding';
+
+  @override
+  String pfLotBreakdownTitle(Object title) {
+    return 'Lot breakdown · $title';
+  }
+
+  @override
+  String get pfLotBreakdownSubtitle =>
+      'FIFO order. Cost basis sums each lot at its historical USD/native FX rate, not today\'s.';
+
+  @override
+  String get pfLotAcquired => 'Acquired';
+
+  @override
+  String get pfLotQty => 'Qty';
+
+  @override
+  String get pfLotCostPerUnit => 'Cost / unit';
+
+  @override
+  String get pfLotFxAtLot => 'FX at lot';
+
+  @override
+  String get pfLotUsdCost => 'USD cost';
+
+  @override
+  String get dlgAccountTitle => 'Add manual account';
+
+  @override
+  String get dlgAccountName => 'Account name';
+
+  @override
+  String get dlgAccountNameHint => 'e.g. My savings, Rental property';
+
+  @override
+  String get dlgAccountType => 'Account type';
+
+  @override
+  String get dlgAccountCurrency => 'Currency';
+
+  @override
+  String get dlgAccountInitialBalance => 'Initial balance';
+
+  @override
+  String get dlgAccountBalanceHelper =>
+      'For credit cards / loans, enter the amount owed as a positive number.';
+
+  @override
+  String get dlgAccountBalanceInvalid => 'Enter a numeric amount';
+
+  @override
+  String get dlgAccountCreate => 'Create account';
+
+  @override
+  String get dlgAccountGroupCashBanking => 'Cash & banking';
+
+  @override
+  String get dlgAccountGroupInvestments => 'Investments';
+
+  @override
+  String get dlgAccountGroupCrypto => 'Crypto';
+
+  @override
+  String get dlgAccountGroupRealAssets => 'Real assets';
+
+  @override
+  String get dlgAccountGroupLiabilities => 'Liabilities';
+
+  @override
+  String dlgAccountCreated(Object name) {
+    return 'Account \"$name\" created!';
+  }
+
+  @override
+  String dlgAccountCreateError(Object error) {
+    return 'Could not add account: $error';
+  }
+
+  @override
+  String dlgCryptoLinkTitle(Object exchange) {
+    return 'Link $exchange';
+  }
+
+  @override
+  String dlgCryptoIntro(Object exchange) {
+    return 'Generate a \"Read-Only\" API key in $exchange settings. We only use this to fetch balances and estimate their value.';
+  }
+
+  @override
+  String get dlgCryptoWhereApiKeys => 'Where do I find my API keys? ↗';
+
+  @override
+  String dlgCryptoDisplayName(Object example) {
+    return 'Display Name (e.g. $example)';
+  }
+
+  @override
+  String get dlgCryptoApiKey => 'API Key';
+
+  @override
+  String get dlgCryptoApiSecret => 'API Secret';
+
+  @override
+  String get dlgCryptoLinkAccount => 'Link account';
+
+  @override
+  String dlgCryptoApiKeysTitle(Object exchange) {
+    return '$exchange API keys';
+  }
+
+  @override
+  String dlgCryptoApiKeysFallbackBody(Object exchange) {
+    return 'Generate a Read-Only API key in your $exchange settings, then paste it here. Open:';
+  }
+
+  @override
+  String dlgCryptoLinkSuccess(Object exchange) {
+    return 'Successfully linked $exchange!';
+  }
+
+  @override
+  String dlgCryptoLinkError(Object error) {
+    return 'Error linking: $error';
+  }
+
+  @override
+  String get dlgTxTitle => 'Add transaction';
+
+  @override
+  String get dlgTxAdded => 'Transaction added';
+
+  @override
+  String get dlgTxNoAccounts =>
+      'You need at least one account before you can add a transaction.';
+
+  @override
+  String get dlgTxAccount => 'Account';
+
+  @override
+  String get dlgTxExpense => 'Expense';
+
+  @override
+  String get dlgTxIncome => 'Income';
+
+  @override
+  String get dlgTxAmount => 'Amount';
+
+  @override
+  String get dlgTxAmountRequired => 'Enter an amount';
+
+  @override
+  String get dlgTxAmountPositive => 'Enter a positive amount';
+
+  @override
+  String get dlgTxDate => 'Date';
+
+  @override
+  String get dlgTxDescription => 'Description';
+
+  @override
+  String get dlgTxDescriptionHint => 'e.g. Coffee with Sam';
+
+  @override
+  String get dlgTxDescriptionRequired => 'Description is required';
+
+  @override
+  String get dlgTxCategory => 'Category (optional)';
+
+  @override
+  String get dlgTxCategoryHint => 'e.g. Restaurants';
+
+  @override
+  String get dlgTxNotes => 'Notes (optional)';
+
+  @override
+  String get dlgRecoveryTitle => 'Save your recovery codes';
+
+  @override
+  String get dlgRecoveryWarning =>
+      'These codes will NOT be shown again. Each is single-use; use one if you lose your password.';
+
+  @override
+  String get dlgRecoveryCopied => 'Copied';
+
+  @override
+  String get dlgRecoveryCopyAll => 'Copy all';
+
+  @override
+  String get dlgRecoverySavedConfirm =>
+      'I\'ve saved these codes somewhere safe';
+
+  @override
+  String get dlgRecoveryContinue => 'Continue';
+
+  @override
+  String get lwFxExchangeRate => 'Exchange rate';
+
+  @override
+  String get lwFxRefreshNow => 'Refresh rate now';
+
+  @override
+  String lwFxSource(Object source) {
+    return 'Source: $source';
+  }
+
+  @override
+  String get lwFxUpdatedUnknown => 'Updated: unknown';
+
+  @override
+  String lwFxStalePrefix(Object age) {
+    return 'Stale · $age';
+  }
+
+  @override
+  String get lwFxUpdatedJustNow => 'Updated just now';
+
+  @override
+  String lwFxUpdatedMinutesAgo(Object minutes) {
+    return 'Updated ${minutes}m ago';
+  }
+
+  @override
+  String lwFxUpdatedHoursAgo(Object hours) {
+    return 'Updated ${hours}h ago';
+  }
+
+  @override
+  String lwFxUpdatedDaysAgo(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Updated $days days ago',
+      one: 'Updated $days day ago',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lwSyncInstitutionsHeader => 'INSTITUTIONS';
+
+  @override
+  String lwSyncRetryFailed(Object count) {
+    return 'Retry $count failed';
+  }
+
+  @override
+  String get lwSyncNoInstitutions => 'No institutions linked yet';
+
+  @override
+  String get lwSyncNoInstitutionsHint =>
+      'Use the buttons below to connect a bank, import a\nstatement, or add a manual account.';
+
+  @override
+  String get lwSyncNever => 'Never';
+
+  @override
+  String get lwSyncUnknownInstitution => 'Unknown';
+
+  @override
+  String get lwSyncFailedUnknownReason =>
+      'Sync failed. Reason unknown — try Retry or Reconnect.';
+
+  @override
+  String get lwSyncReconnect => 'Reconnect';
+
+  @override
+  String get lwSyncRetrySync => 'Retry sync';
+
+  @override
+  String get lwSyncDeleteInstitution => 'Delete institution';
+
+  @override
+  String lwSyncVia(Object source) {
+    return 'Via $source';
+  }
+
+  @override
+  String get lwSyncDetailSyncingNow => 'Syncing now';
+
+  @override
+  String get lwSyncDetailSetupRequired => 'Setup required before sync';
+
+  @override
+  String get lwSyncDetailReconnectRequired => 'Reconnect required';
+
+  @override
+  String get lwSyncDetailWaitingFirstSync => 'Waiting for first sync';
+
+  @override
+  String get lwSyncDetailManualSource => 'Manual/offline source';
+
+  @override
+  String get lwSyncStaleSuffix => '(Stale)';
+
+  @override
+  String lwSyncBannerOneNeedsAttention(Object name) {
+    return '$name needs attention';
+  }
+
+  @override
+  String lwSyncBannerManyNeedAttention(Object count) {
+    return '$count institutions need attention';
+  }
+
+  @override
+  String get lwSyncBannerReconnect => 'Reconnect';
+
+  @override
+  String lwSyncBannerReconnectName(Object name) {
+    return 'Reconnect $name';
+  }
+
+  @override
+  String lwSyncBannerReconnectCount(Object count) {
+    return 'Reconnect $count…';
+  }
+
+  @override
+  String get lwSyncBannerOpenSettings => 'Open settings';
+
+  @override
+  String lwSinceNewTransactions(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count new transactions',
+      one: '$count new transaction',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lwSinceLargestMove(Object account, Object amount) {
+    return '$amount on $account';
+  }
+
+  @override
+  String lwSinceSyncErrors(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sync errors',
+      one: '$count sync error',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lwSinceLastVisit => 'Since your last visit';
+
+  @override
+  String lwSinceDate(Object date) {
+    return 'Since $date';
+  }
+
+  @override
+  String get lwSinceViewAction => 'View';
+
+  @override
+  String get lwSinceFixAction => 'Fix';
+
+  @override
+  String get lwSinceDismiss => 'Dismiss';
+
+  @override
+  String get lwNotifBorrowerFallback => 'Borrower';
+
+  @override
+  String get lwNotifInstitutionFallback => 'Institution';
+
+  @override
+  String lwNotifRepaymentOverdueTitle(Object borrower) {
+    return '$borrower repayment overdue';
+  }
+
+  @override
+  String lwNotifRepaymentOverdueDetail(
+    Object amount,
+    Object daysOverdue,
+    Object dueDate,
+    Object number,
+  ) {
+    return 'Installment #$number of $amount was due $dueDate (${daysOverdue}d ago).';
+  }
+
+  @override
+  String lwNotifRepaymentDueTitle(Object borrower, Object days) {
+    return '$borrower repayment due in ${days}d';
+  }
+
+  @override
+  String lwNotifRepaymentDueDetail(
+    Object amount,
+    Object dueDate,
+    Object number,
+  ) {
+    return 'Installment #$number of $amount due $dueDate.';
+  }
+
+  @override
+  String lwNotifNeedsReconnectTitle(Object name) {
+    return '$name needs reconnect';
+  }
+
+  @override
+  String get lwNotifNeedsReconnectDetail =>
+      'Plaid token expired — reconnect to resume sync.';
+
+  @override
+  String lwNotifSyncFailedTitle(Object name) {
+    return '$name sync failed';
+  }
+
+  @override
+  String get lwNotifUnknownSyncError => 'Unknown sync error';
+
+  @override
+  String lwNotifStaleSyncTitle(Object days, Object name) {
+    return '$name last synced ${days}d ago';
+  }
+
+  @override
+  String get lwNotifStaleSyncDetail =>
+      'Trigger a sync to pull in transactions and balance updates.';
+
+  @override
+  String lwNotifNetWorthDropTitle(Object pct) {
+    return 'Net worth dropped $pct in 30 days';
+  }
+
+  @override
+  String lwNotifNetWorthDropDetail(Object latest, Object reference) {
+    return 'Latest $latest vs $reference.';
+  }
+
+  @override
+  String get lwNotifTooltipNone => 'Notifications';
+
+  @override
+  String lwNotifTooltipCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count alerts',
+      one: '$count alert',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lwNotifAllClear => 'All clear';
+
+  @override
+  String get lwNotifNoAlerts => 'No alerts right now.';
+
+  @override
+  String get lwPaletteSearchHint =>
+      'Search accounts, holdings, transactions, or jump to a tab…';
+
+  @override
+  String get lwPaletteNoMatches => 'No matches.';
+
+  @override
+  String get lwPaletteHintNavigate => 'navigate';
+
+  @override
+  String get lwPaletteHintSelect => 'select';
+
+  @override
+  String get lwPaletteHintClose => 'close';
+
+  @override
+  String get lwTrendsTitle => 'Cash flow trends';
+
+  @override
+  String get lwTrendsIncome => 'Income';
+
+  @override
+  String get lwTrendsSpending => 'Spending';
+
+  @override
+  String get lwTrendsTapToView => 'Tap to view transactions';
+
+  @override
+  String get lwTrendsInfoTooltip =>
+      'Internal transfers (between your accounts) and credit-card bill payments are excluded so the bars reflect actual external income and spending.';
+
+  @override
+  String get lwTrendsSemanticNoData => 'Cash flow trends chart, no data';
+
+  @override
+  String lwTrendsSemanticSummary(
+    int count,
+    Object income,
+    Object month,
+    Object spending,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Cash flow trends, $count months. Latest $month: income $income, spending $spending.',
+      one:
+          'Cash flow trends, $count month. Latest $month: income $income, spending $spending.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lwTrendsSemanticMonth(Object income, Object month, Object spending) {
+    return '$month: income $income, spending $spending';
+  }
+
+  @override
+  String get lwAllocTitle => 'Asset distribution';
+
+  @override
+  String lwAllocTotal(Object amount) {
+    return 'Total: $amount';
+  }
+
+  @override
+  String get lwAllocOtherCategory => 'Other';
+
+  @override
+  String lwAllocHoldingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count holdings',
+      one: '$count holding',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lwAllocSharesSuffix(Object qty) {
+    return '$qty sh';
+  }
+
+  @override
+  String get lwAllocFilteringHint =>
+      'Filtering holdings to this category — tap again to clear';
+
+  @override
+  String lwAllocSemanticLabel(Object category, Object pct, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$category, $pct of portfolio, $count holdings',
+      one: '$category, $pct of portfolio, $count holding',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lwRangeOneMonth => '1M';
+
+  @override
+  String get lwRangeYearToDate => 'YTD';
+
+  @override
+  String get lwRangeOneYear => '1Y';
+
+  @override
+  String get lwRangeFiveYears => '5Y';
+
+  @override
+  String get lwRangeAll => 'ALL';
 }

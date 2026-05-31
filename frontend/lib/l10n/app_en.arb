@@ -591,5 +591,428 @@
   "dashThemeSystemDefault": "System default",
   "dashThemeLightShort": "Light",
   "dashThemeDarkShort": "Dark",
-  "dashThemeTooltip": "{label} · tap to cycle, long-press to pick"
+  "dashThemeTooltip": "{label} · tap to cycle, long-press to pick",
+  "projTitle": "Wealth projection",
+  "projSubtitle": "Project your financial future based on current assets and savings strategy.",
+  "projMonthlySavings": "Monthly savings",
+  "projExpectedReturn": "Expected return",
+  "projAnnualExpenses": "Annual expenses",
+  "projSafeWithdrawalRate": "Safe withdrawal rate",
+  "projProjectionYears": "Projection years",
+  "projGoal": "Goal",
+  "projClear": "Clear",
+  "projGoalHitBy": "Hit {amount} by {year}",
+  "projGoalSetTarget": "Set a target — e.g. $1M by 2030",
+  "projSetTargetTitle": "Set a target",
+  "projTargetNetWorth": "Target net worth",
+  "projTargetYear": "Target year",
+  "projNetWorthProjection": "Net worth projection",
+  "projScenarios": "Scenarios",
+  "projYearAxisLabel": "Yr {year}",
+  "projTooltipYearAmount": "Year {year}\n{amount}",
+  "projFiNumber": "FI number",
+  "projProgress": "Progress",
+  "projTowardFire": "Toward FIRE",
+  "projYearsToFi": "Years to FI",
+  "projEstimate": "Estimate",
+  "projFiIncome": "FI income",
+  "projMonthlyAtWithdrawalRate": "Monthly @ withdrawal rate",
+  "taxTitle": "Tax planning",
+  "taxFilingSingle": "Single",
+  "taxFilingMarried": "Married",
+  "taxFilingHeadOfHousehold": "Head of Household",
+  "taxCsvLaunchFailed": "Could not launch CSV export.",
+  "taxPdfLaunchFailed": "Could not launch PDF export.",
+  "taxLoadError": "Error loading tax data: {error}",
+  "taxRetry": "Retry",
+  "taxExportCsv": "Export CSV",
+  "taxExportPdf": "PDF",
+  "taxTotalTaxableIncome": "Total taxable income",
+  "taxOrdinaryIncome": "Ordinary income: {amount}",
+  "taxCapitalGains": "Capital gains: {amount}",
+  "taxUsEstimatedLiability": "US estimated liability (IRS)",
+  "taxMxEstimatedLiability": "MX estimated liability (SAT)",
+  "taxEffectiveRate": "Effective rate: {rate}%",
+  "taxTaxableEvents": "Taxable events",
+  "taxNoEventsTitle": "No taxable events found for this year.",
+  "taxNoEventsBody": "Income, salary, interest, and investment sale transactions will appear here.",
+  "taxDisclaimer": "Disclaimer: Tax estimates are approximations using 2026 IRS/SAT brackets. Consult a qualified tax professional for filing.",
+  "acctxRenameAccount": "Rename account",
+  "acctxNickname": "Nickname",
+  "acctxAccountFallback": "Account",
+  "acctxUpdateBalanceTitle": "Update {account} balance",
+  "acctxCurrentBalance": "Current balance",
+  "acctxAccountActions": "Account actions",
+  "acctxUpdateBalance": "Update balance",
+  "acctxLoadError": "Error loading transactions: {error}",
+  "acctxRetry": "Retry",
+  "acctxNoTransactionsTitle": "No transactions yet",
+  "acctxNoTransactionsBody": "Records might just be starting, or offline accounts have no history.",
+  "acctxUpdateFailed": "Failed to update transaction: {error}",
+  "acctxDismissBarrier": "Dismiss",
+  "hiddenTitle": "Hidden items",
+  "hiddenRestoredMerchant": "Restored \"{merchant}\"",
+  "hiddenRestoreFailed": "Failed to restore: {error}",
+  "hiddenBannerWillReappear": "Since-last-login banner will reappear.",
+  "hiddenFxPairRestored": "Restored — the detector may re-propose {summary} on the next sync.",
+  "hiddenIntro": "Things you told Patrimonio to stop showing. Restoring a row brings it back where it normally lives.",
+  "hiddenRecurringCharges": "Recurring charges",
+  "hiddenNoSubscriptions": "No subscriptions are currently hidden. When you dismiss a row with × on the Recurring charges card it shows up here.",
+  "hiddenBanners": "Banners",
+  "hiddenNoBanners": "No banners are currently dismissed.",
+  "hiddenSinceLastLogin": "Since last login",
+  "hiddenHiddenForVisit": "Hidden for the visit starting {date}",
+  "hiddenShowAgain": "Show again",
+  "hiddenFxTransferPairs": "FX-transfer pairs",
+  "hiddenNoFxPairs": "No FX pairs are currently dismissed. When you unlink a detected Wise / Remitly / Xoom transfer on the Transactions tab, it lands here so the detector won't re-propose it.",
+  "hiddenDismissedAt": "Dismissed {date}",
+  "hiddenRestore": "Restore",
+  "cbTitle": "Connect bank",
+  "cbSetupIncompleteTitle": "Plaid setup is incomplete.",
+  "cbSetupIncompleteBody": "Set Plaid credentials and ENCRYPTION_KEY before linking real bank accounts.",
+  "cbConnectWithPlaid": "Connect with Plaid",
+  "cbEnvSandbox": "Plaid Sandbox Mode — Mock data only",
+  "cbEnvDevelopment": "Plaid Development Mode — Real account data (test items)",
+  "cbEnvProduction": "Plaid Production Mode — Real account data",
+  "cbEnvUnknown": "Plaid Environment: {env}",
+  "cbConnected": "Bank connected. Initial sync has started.",
+  "cbExchangeTokenFailed": "Failed to exchange token",
+  "cbBackendCommError": "Error communicating with backend: {error}",
+  "cbLinkTokenFailed": "Failed to retrieve link token",
+  "cbBackendConnectError": "Error connecting to backend: {error}",
+  "cbHttpError": "{fallback}: HTTP {status}",
+  "cbPlaidError": "Plaid Error: {message}",
+  "pfAssetBreakdown": "Asset breakdown",
+  "pfByType": "By type",
+  "pfByInstitution": "By institution",
+  "pfOther": "Other",
+  "pfBank": "Bank",
+  "pfNetWorthGoal": "Net-worth goal",
+  "pfGoalDueNow": "due now",
+  "pfGoalYearsLeft": "{count, plural, =1{1 year left} other{{count} years left}}",
+  "@pfGoalYearsLeft": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pfGoalHitBy": "Hit {amount} by {year} · {remaining}",
+  "pfGoalCurrent": "Current: {amount}",
+  "pfShowingBands": "Showing per-institution bands",
+  "pfShowingLine": "Showing only the net worth line",
+  "pfSimple": "Simple",
+  "pfDetailed": "Detailed",
+  "pfTotalNetWorthCurrency": "Total net worth ({currency})",
+  "pfTotalNetWorth": "Total net worth",
+  "pfTooltipNetWorth": "Net worth: {value}",
+  "pfTooltipAssets": "Assets: {value}",
+  "pfTooltipLiabilities": "Liabilities: {value}",
+  "pfDeltaVsAgo": "vs {window} ago",
+  "pfNoAccountsYet": "No accounts yet",
+  "pfNoAccountsBody": "Link a bank, import a CSV, or add a manual account to\nget started.",
+  "pfAddAnAccount": "Add an account",
+  "pfAccountsHeader": "ACCOUNTS",
+  "pfGroupCash": "Cash",
+  "pfGroupInvestments": "Investments",
+  "pfGroupCrypto": "Crypto",
+  "pfGroupCreditCards": "Credit cards",
+  "pfGroupLoans": "Loans & mortgages",
+  "pfGroupRealAssets": "Real assets",
+  "pfGroupOther": "Other",
+  "pfUnknownSubtypes": "{count, plural, =1{Unknown subtype: {list}} other{Unknown subtypes: {list}}}",
+  "@pfUnknownSubtypes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "list": {
+        "type": "Object"
+      }
+    }
+  },
+  "pfVaults": "Vaults",
+  "pfAccountsDescriptor": "Accounts",
+  "pfInstDescriptor": "{inst} · {descriptor}",
+  "pfVault": "Vault",
+  "pfUnknownAccount": "Unknown account",
+  "pfAccountActions": "Account actions",
+  "pfRename": "Rename",
+  "pfRevalue": "Revalue",
+  "pfDelete": "Delete",
+  "pfDeleteAccountTitle": "Delete account",
+  "pfDeleteAccountConfirm": "Are you sure you want to delete \"{name}\"? This will remove all its history.",
+  "pfRevalueTitle": "Revalue {name}",
+  "pfRevalueCurrent": "Current: {amount} {currency}",
+  "pfNewBalance": "New balance",
+  "pfNotesOptional": "Notes (optional)",
+  "pfNotesHint": "e.g. Zillow estimate, 2026 appraisal, last round",
+  "pfHistoryPointNote": "A new history point is recorded with today's date.",
+  "pfEnterNumericBalance": "Enter a numeric balance",
+  "pfAssetFallback": "asset",
+  "pfRenameAccountTitle": "Rename account",
+  "pfRenameOriginal": "Original: {name}",
+  "pfNickname": "Nickname",
+  "pfNicknameHint": "e.g. Joint checking",
+  "pfRenameBlankHint": "Leave blank to clear and use the bank name.",
+  "pfInvestmentPortfolio": "Investment portfolio",
+  "pfTotalValue": "Total value",
+  "pfProfitLoss": "Profit / Loss",
+  "pfUsDollar": "US Dollar",
+  "pfMexicanPeso": "Mexican Peso",
+  "pfHoldings": "Holdings",
+  "pfAccountsCount": "{count, plural, =1{1 account} other{{count} accounts}}",
+  "@pfAccountsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pfTopPosition": "Top position",
+  "pfBiggestGainer": "Biggest gainer",
+  "pfBiggestLoser": "Biggest loser",
+  "pfUnknown": "Unknown",
+  "pfInstPositions": "{inst} · {count, plural, =1{1 position} other{{count} positions}}",
+  "@pfInstPositions": {
+    "placeholders": {
+      "inst": {
+        "type": "Object"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pfSharesSuffix": "{qty} sh",
+  "pfCategoryFilter": "Category: {category}",
+  "pfSearchHint": "Search ticker, name, account, or institution…",
+  "pfHoldingsAccountsCount": "{holdings, plural, =1{1 holding} other{{holdings} holdings}} · {accounts, plural, =1{1 account} other{{accounts} accounts}}",
+  "@pfHoldingsAccountsCount": {
+    "placeholders": {
+      "accounts": {
+        "type": "int"
+      },
+      "holdings": {
+        "type": "int"
+      }
+    }
+  },
+  "pfShownOfTotal": "{shown} of {total}",
+  "pfFlat": "Flat",
+  "pfByAccount": "By account",
+  "pfNoHoldingsYet": "No holdings yet",
+  "pfNoHoldingsBody": "Once you link a brokerage with Plaid (or import a CSV) your\npositions will appear here.",
+  "pfColAsset": "Asset",
+  "pfColShares": "Shares",
+  "pfColPrice": "Price",
+  "pfColValue": "Value",
+  "pfColCostBasis": "Cost basis",
+  "pfColGain": "Gain",
+  "pfColReturn": "Return",
+  "pfShares": "sh",
+  "pfHolding": "Holding",
+  "pfLotBreakdownTitle": "Lot breakdown · {title}",
+  "pfLotBreakdownSubtitle": "FIFO order. Cost basis sums each lot at its historical USD/native FX rate, not today's.",
+  "pfLotAcquired": "Acquired",
+  "pfLotQty": "Qty",
+  "pfLotCostPerUnit": "Cost / unit",
+  "pfLotFxAtLot": "FX at lot",
+  "pfLotUsdCost": "USD cost",
+  "dlgAccountTitle": "Add manual account",
+  "dlgAccountName": "Account name",
+  "dlgAccountNameHint": "e.g. My savings, Rental property",
+  "dlgAccountType": "Account type",
+  "dlgAccountCurrency": "Currency",
+  "dlgAccountInitialBalance": "Initial balance",
+  "dlgAccountBalanceHelper": "For credit cards / loans, enter the amount owed as a positive number.",
+  "dlgAccountBalanceInvalid": "Enter a numeric amount",
+  "dlgAccountCreate": "Create account",
+  "dlgAccountGroupCashBanking": "Cash & banking",
+  "dlgAccountGroupInvestments": "Investments",
+  "dlgAccountGroupCrypto": "Crypto",
+  "dlgAccountGroupRealAssets": "Real assets",
+  "dlgAccountGroupLiabilities": "Liabilities",
+  "dlgAccountCreated": "Account \"{name}\" created!",
+  "dlgAccountCreateError": "Could not add account: {error}",
+  "dlgCryptoLinkTitle": "Link {exchange}",
+  "dlgCryptoIntro": "Generate a \"Read-Only\" API key in {exchange} settings. We only use this to fetch balances and estimate their value.",
+  "dlgCryptoWhereApiKeys": "Where do I find my API keys? ↗",
+  "dlgCryptoDisplayName": "Display Name (e.g. {example})",
+  "dlgCryptoApiKey": "API Key",
+  "dlgCryptoApiSecret": "API Secret",
+  "dlgCryptoLinkAccount": "Link account",
+  "dlgCryptoApiKeysTitle": "{exchange} API keys",
+  "dlgCryptoApiKeysFallbackBody": "Generate a Read-Only API key in your {exchange} settings, then paste it here. Open:",
+  "dlgCryptoLinkSuccess": "Successfully linked {exchange}!",
+  "dlgCryptoLinkError": "Error linking: {error}",
+  "dlgTxTitle": "Add transaction",
+  "dlgTxAdded": "Transaction added",
+  "dlgTxNoAccounts": "You need at least one account before you can add a transaction.",
+  "dlgTxAccount": "Account",
+  "dlgTxExpense": "Expense",
+  "dlgTxIncome": "Income",
+  "dlgTxAmount": "Amount",
+  "dlgTxAmountRequired": "Enter an amount",
+  "dlgTxAmountPositive": "Enter a positive amount",
+  "dlgTxDate": "Date",
+  "dlgTxDescription": "Description",
+  "dlgTxDescriptionHint": "e.g. Coffee with Sam",
+  "dlgTxDescriptionRequired": "Description is required",
+  "dlgTxCategory": "Category (optional)",
+  "dlgTxCategoryHint": "e.g. Restaurants",
+  "dlgTxNotes": "Notes (optional)",
+  "dlgRecoveryTitle": "Save your recovery codes",
+  "dlgRecoveryWarning": "These codes will NOT be shown again. Each is single-use; use one if you lose your password.",
+  "dlgRecoveryCopied": "Copied",
+  "dlgRecoveryCopyAll": "Copy all",
+  "dlgRecoverySavedConfirm": "I've saved these codes somewhere safe",
+  "dlgRecoveryContinue": "Continue",
+  "lwFxExchangeRate": "Exchange rate",
+  "lwFxRefreshNow": "Refresh rate now",
+  "lwFxSource": "Source: {source}",
+  "lwFxUpdatedUnknown": "Updated: unknown",
+  "lwFxStalePrefix": "Stale · {age}",
+  "lwFxUpdatedJustNow": "Updated just now",
+  "lwFxUpdatedMinutesAgo": "Updated {minutes}m ago",
+  "lwFxUpdatedHoursAgo": "Updated {hours}h ago",
+  "lwFxUpdatedDaysAgo": "{days, plural, one{Updated {days} day ago} other{Updated {days} days ago}}",
+  "@lwFxUpdatedDaysAgo": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "lwSyncInstitutionsHeader": "INSTITUTIONS",
+  "lwSyncRetryFailed": "Retry {count} failed",
+  "lwSyncNoInstitutions": "No institutions linked yet",
+  "lwSyncNoInstitutionsHint": "Use the buttons below to connect a bank, import a\nstatement, or add a manual account.",
+  "lwSyncNever": "Never",
+  "lwSyncUnknownInstitution": "Unknown",
+  "lwSyncFailedUnknownReason": "Sync failed. Reason unknown — try Retry or Reconnect.",
+  "lwSyncReconnect": "Reconnect",
+  "lwSyncRetrySync": "Retry sync",
+  "lwSyncDeleteInstitution": "Delete institution",
+  "lwSyncVia": "Via {source}",
+  "lwSyncDetailSyncingNow": "Syncing now",
+  "lwSyncDetailSetupRequired": "Setup required before sync",
+  "lwSyncDetailReconnectRequired": "Reconnect required",
+  "lwSyncDetailWaitingFirstSync": "Waiting for first sync",
+  "lwSyncDetailManualSource": "Manual/offline source",
+  "lwSyncStaleSuffix": "(Stale)",
+  "lwSyncBannerOneNeedsAttention": "{name} needs attention",
+  "lwSyncBannerManyNeedAttention": "{count} institutions need attention",
+  "lwSyncBannerReconnect": "Reconnect",
+  "lwSyncBannerReconnectName": "Reconnect {name}",
+  "lwSyncBannerReconnectCount": "Reconnect {count}…",
+  "lwSyncBannerOpenSettings": "Open settings",
+  "lwSinceNewTransactions": "{count, plural, one{{count} new transaction} other{{count} new transactions}}",
+  "@lwSinceNewTransactions": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lwSinceLargestMove": "{amount} on {account}",
+  "lwSinceSyncErrors": "{count, plural, one{{count} sync error} other{{count} sync errors}}",
+  "@lwSinceSyncErrors": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lwSinceLastVisit": "Since your last visit",
+  "lwSinceDate": "Since {date}",
+  "lwSinceViewAction": "View",
+  "lwSinceFixAction": "Fix",
+  "lwSinceDismiss": "Dismiss",
+  "lwNotifBorrowerFallback": "Borrower",
+  "lwNotifInstitutionFallback": "Institution",
+  "lwNotifRepaymentOverdueTitle": "{borrower} repayment overdue",
+  "lwNotifRepaymentOverdueDetail": "Installment #{number} of {amount} was due {dueDate} ({daysOverdue}d ago).",
+  "lwNotifRepaymentDueTitle": "{borrower} repayment due in {days}d",
+  "lwNotifRepaymentDueDetail": "Installment #{number} of {amount} due {dueDate}.",
+  "lwNotifNeedsReconnectTitle": "{name} needs reconnect",
+  "lwNotifNeedsReconnectDetail": "Plaid token expired — reconnect to resume sync.",
+  "lwNotifSyncFailedTitle": "{name} sync failed",
+  "lwNotifUnknownSyncError": "Unknown sync error",
+  "lwNotifStaleSyncTitle": "{name} last synced {days}d ago",
+  "lwNotifStaleSyncDetail": "Trigger a sync to pull in transactions and balance updates.",
+  "lwNotifNetWorthDropTitle": "Net worth dropped {pct} in 30 days",
+  "lwNotifNetWorthDropDetail": "Latest {latest} vs {reference}.",
+  "lwNotifTooltipNone": "Notifications",
+  "lwNotifTooltipCount": "{count, plural, one{{count} alert} other{{count} alerts}}",
+  "@lwNotifTooltipCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lwNotifAllClear": "All clear",
+  "lwNotifNoAlerts": "No alerts right now.",
+  "lwPaletteSearchHint": "Search accounts, holdings, transactions, or jump to a tab…",
+  "lwPaletteNoMatches": "No matches.",
+  "lwPaletteHintNavigate": "navigate",
+  "lwPaletteHintSelect": "select",
+  "lwPaletteHintClose": "close",
+  "lwTrendsTitle": "Cash flow trends",
+  "lwTrendsIncome": "Income",
+  "lwTrendsSpending": "Spending",
+  "lwTrendsTapToView": "Tap to view transactions",
+  "lwTrendsInfoTooltip": "Internal transfers (between your accounts) and credit-card bill payments are excluded so the bars reflect actual external income and spending.",
+  "lwTrendsSemanticNoData": "Cash flow trends chart, no data",
+  "lwTrendsSemanticSummary": "{count, plural, one{Cash flow trends, {count} month. Latest {month}: income {income}, spending {spending}.} other{Cash flow trends, {count} months. Latest {month}: income {income}, spending {spending}.}}",
+  "@lwTrendsSemanticSummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "income": {
+        "type": "Object"
+      },
+      "month": {
+        "type": "Object"
+      },
+      "spending": {
+        "type": "Object"
+      }
+    }
+  },
+  "lwTrendsSemanticMonth": "{month}: income {income}, spending {spending}",
+  "lwAllocTitle": "Asset distribution",
+  "lwAllocTotal": "Total: {amount}",
+  "lwAllocOtherCategory": "Other",
+  "lwAllocHoldingsCount": "{count, plural, one{{count} holding} other{{count} holdings}}",
+  "@lwAllocHoldingsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lwAllocSharesSuffix": "{qty} sh",
+  "lwAllocFilteringHint": "Filtering holdings to this category — tap again to clear",
+  "lwAllocSemanticLabel": "{count, plural, one{{category}, {pct} of portfolio, {count} holding} other{{category}, {pct} of portfolio, {count} holdings}}",
+  "@lwAllocSemanticLabel": {
+    "placeholders": {
+      "category": {
+        "type": "Object"
+      },
+      "pct": {
+        "type": "Object"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lwRangeOneMonth": "1M",
+  "lwRangeYearToDate": "YTD",
+  "lwRangeOneYear": "1Y",
+  "lwRangeFiveYears": "5Y",
+  "lwRangeAll": "ALL"
 }

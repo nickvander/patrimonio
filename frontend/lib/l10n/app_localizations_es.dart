@@ -1960,4 +1960,1239 @@ class AppLocalizationsEs extends AppLocalizations {
   String dashThemeTooltip(Object label) {
     return '$label · toca para alternar, mantén presionado para elegir';
   }
+
+  @override
+  String get projTitle => 'Proyección de patrimonio';
+
+  @override
+  String get projSubtitle =>
+      'Proyecta tu futuro financiero con base en tus activos actuales y tu estrategia de ahorro.';
+
+  @override
+  String get projMonthlySavings => 'Ahorro mensual';
+
+  @override
+  String get projExpectedReturn => 'Rendimiento esperado';
+
+  @override
+  String get projAnnualExpenses => 'Gastos anuales';
+
+  @override
+  String get projSafeWithdrawalRate => 'Tasa de retiro segura';
+
+  @override
+  String get projProjectionYears => 'Años de proyección';
+
+  @override
+  String get projGoal => 'Meta';
+
+  @override
+  String get projClear => 'Borrar';
+
+  @override
+  String projGoalHitBy(Object amount, Object year) {
+    return 'Alcanzar $amount para $year';
+  }
+
+  @override
+  String get projGoalSetTarget => 'Define una meta, p. ej. \$1M para 2030';
+
+  @override
+  String get projSetTargetTitle => 'Definir una meta';
+
+  @override
+  String get projTargetNetWorth => 'Patrimonio objetivo';
+
+  @override
+  String get projTargetYear => 'Año objetivo';
+
+  @override
+  String get projNetWorthProjection => 'Proyección de patrimonio neto';
+
+  @override
+  String get projScenarios => 'Escenarios';
+
+  @override
+  String projYearAxisLabel(Object year) {
+    return 'Año $year';
+  }
+
+  @override
+  String projTooltipYearAmount(Object amount, Object year) {
+    return 'Año $year\n$amount';
+  }
+
+  @override
+  String get projFiNumber => 'Número IF';
+
+  @override
+  String get projProgress => 'Avance';
+
+  @override
+  String get projTowardFire => 'Hacia FIRE';
+
+  @override
+  String get projYearsToFi => 'Años para IF';
+
+  @override
+  String get projEstimate => 'Estimación';
+
+  @override
+  String get projFiIncome => 'Ingreso IF';
+
+  @override
+  String get projMonthlyAtWithdrawalRate => 'Mensual a la tasa de retiro';
+
+  @override
+  String get taxTitle => 'Planeación fiscal';
+
+  @override
+  String get taxFilingSingle => 'Soltero';
+
+  @override
+  String get taxFilingMarried => 'Casado';
+
+  @override
+  String get taxFilingHeadOfHousehold => 'Jefe de familia';
+
+  @override
+  String get taxCsvLaunchFailed => 'No se pudo abrir la exportación CSV.';
+
+  @override
+  String get taxPdfLaunchFailed => 'No se pudo abrir la exportación PDF.';
+
+  @override
+  String taxLoadError(Object error) {
+    return 'Error al cargar los datos fiscales: $error';
+  }
+
+  @override
+  String get taxRetry => 'Reintentar';
+
+  @override
+  String get taxExportCsv => 'Exportar CSV';
+
+  @override
+  String get taxExportPdf => 'PDF';
+
+  @override
+  String get taxTotalTaxableIncome => 'Ingreso gravable total';
+
+  @override
+  String taxOrdinaryIncome(Object amount) {
+    return 'Ingreso ordinario: $amount';
+  }
+
+  @override
+  String taxCapitalGains(Object amount) {
+    return 'Ganancias de capital: $amount';
+  }
+
+  @override
+  String get taxUsEstimatedLiability => 'Impuesto estimado EE. UU. (IRS)';
+
+  @override
+  String get taxMxEstimatedLiability => 'Impuesto estimado MX (SAT)';
+
+  @override
+  String taxEffectiveRate(Object rate) {
+    return 'Tasa efectiva: $rate%';
+  }
+
+  @override
+  String get taxTaxableEvents => 'Eventos gravables';
+
+  @override
+  String get taxNoEventsTitle =>
+      'No se encontraron eventos gravables para este año.';
+
+  @override
+  String get taxNoEventsBody =>
+      'Aquí aparecerán las transacciones de ingresos, salario, intereses y venta de inversiones.';
+
+  @override
+  String get taxDisclaimer =>
+      'Aviso: las estimaciones fiscales son aproximaciones basadas en los tramos del IRS/SAT 2026. Consulta a un profesional fiscal calificado para tu declaración.';
+
+  @override
+  String get acctxRenameAccount => 'Renombrar cuenta';
+
+  @override
+  String get acctxNickname => 'Apodo';
+
+  @override
+  String get acctxAccountFallback => 'Cuenta';
+
+  @override
+  String acctxUpdateBalanceTitle(Object account) {
+    return 'Actualizar saldo de $account';
+  }
+
+  @override
+  String get acctxCurrentBalance => 'Saldo actual';
+
+  @override
+  String get acctxAccountActions => 'Acciones de la cuenta';
+
+  @override
+  String get acctxUpdateBalance => 'Actualizar saldo';
+
+  @override
+  String acctxLoadError(Object error) {
+    return 'Error al cargar las transacciones: $error';
+  }
+
+  @override
+  String get acctxRetry => 'Reintentar';
+
+  @override
+  String get acctxNoTransactionsTitle => 'Aún no hay transacciones';
+
+  @override
+  String get acctxNoTransactionsBody =>
+      'Es posible que los registros apenas comiencen, o que las cuentas sin conexión no tengan historial.';
+
+  @override
+  String acctxUpdateFailed(Object error) {
+    return 'No se pudo actualizar la transacción: $error';
+  }
+
+  @override
+  String get acctxDismissBarrier => 'Cerrar';
+
+  @override
+  String get hiddenTitle => 'Elementos ocultos';
+
+  @override
+  String hiddenRestoredMerchant(Object merchant) {
+    return 'Se restauró \"$merchant\"';
+  }
+
+  @override
+  String hiddenRestoreFailed(Object error) {
+    return 'No se pudo restaurar: $error';
+  }
+
+  @override
+  String get hiddenBannerWillReappear =>
+      'El aviso de \"desde el último inicio de sesión\" volverá a aparecer.';
+
+  @override
+  String hiddenFxPairRestored(Object summary) {
+    return 'Restaurado: el detector podría volver a proponer $summary en la próxima sincronización.';
+  }
+
+  @override
+  String get hiddenIntro =>
+      'Cosas que le pediste a Patrimonio que dejara de mostrar. Al restaurar una fila, vuelve a donde normalmente aparece.';
+
+  @override
+  String get hiddenRecurringCharges => 'Cargos recurrentes';
+
+  @override
+  String get hiddenNoSubscriptions =>
+      'No hay suscripciones ocultas por ahora. Cuando descartas una fila con la × en la tarjeta de Cargos recurrentes, aparece aquí.';
+
+  @override
+  String get hiddenBanners => 'Avisos';
+
+  @override
+  String get hiddenNoBanners => 'No hay avisos descartados por ahora.';
+
+  @override
+  String get hiddenSinceLastLogin => 'Desde el último inicio de sesión';
+
+  @override
+  String hiddenHiddenForVisit(Object date) {
+    return 'Oculto para la visita que inició el $date';
+  }
+
+  @override
+  String get hiddenShowAgain => 'Mostrar de nuevo';
+
+  @override
+  String get hiddenFxTransferPairs => 'Pares de transferencias en divisas';
+
+  @override
+  String get hiddenNoFxPairs =>
+      'No hay pares de divisas descartados por ahora. Cuando desvinculas una transferencia detectada de Wise / Remitly / Xoom en la pestaña de Transacciones, llega aquí para que el detector no la vuelva a proponer.';
+
+  @override
+  String hiddenDismissedAt(Object date) {
+    return 'Descartado el $date';
+  }
+
+  @override
+  String get hiddenRestore => 'Restaurar';
+
+  @override
+  String get cbTitle => 'Conectar banco';
+
+  @override
+  String get cbSetupIncompleteTitle =>
+      'La configuración de Plaid está incompleta.';
+
+  @override
+  String get cbSetupIncompleteBody =>
+      'Configura las credenciales de Plaid y ENCRYPTION_KEY antes de vincular cuentas bancarias reales.';
+
+  @override
+  String get cbConnectWithPlaid => 'Conectar con Plaid';
+
+  @override
+  String get cbEnvSandbox => 'Modo Sandbox de Plaid — Solo datos de prueba';
+
+  @override
+  String get cbEnvDevelopment =>
+      'Modo Development de Plaid — Datos reales de cuenta (elementos de prueba)';
+
+  @override
+  String get cbEnvProduction =>
+      'Modo Production de Plaid — Datos reales de cuenta';
+
+  @override
+  String cbEnvUnknown(Object env) {
+    return 'Entorno de Plaid: $env';
+  }
+
+  @override
+  String get cbConnected =>
+      'Banco conectado. La sincronización inicial ya comenzó.';
+
+  @override
+  String get cbExchangeTokenFailed => 'No se pudo intercambiar el token';
+
+  @override
+  String cbBackendCommError(Object error) {
+    return 'Error al comunicarse con el servidor: $error';
+  }
+
+  @override
+  String get cbLinkTokenFailed => 'No se pudo obtener el token de vinculación';
+
+  @override
+  String cbBackendConnectError(Object error) {
+    return 'Error al conectarse con el servidor: $error';
+  }
+
+  @override
+  String cbHttpError(Object fallback, Object status) {
+    return '$fallback: HTTP $status';
+  }
+
+  @override
+  String cbPlaidError(Object message) {
+    return 'Error de Plaid: $message';
+  }
+
+  @override
+  String get pfAssetBreakdown => 'Desglose de activos';
+
+  @override
+  String get pfByType => 'Por tipo';
+
+  @override
+  String get pfByInstitution => 'Por institución';
+
+  @override
+  String get pfOther => 'Otros';
+
+  @override
+  String get pfBank => 'Banco';
+
+  @override
+  String get pfNetWorthGoal => 'Meta de patrimonio';
+
+  @override
+  String get pfGoalDueNow => 'vencida';
+
+  @override
+  String pfGoalYearsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'quedan $count años',
+      one: 'queda 1 año',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String pfGoalHitBy(Object amount, Object remaining, Object year) {
+    return 'Alcanzar $amount para $year · $remaining';
+  }
+
+  @override
+  String pfGoalCurrent(Object amount) {
+    return 'Actual: $amount';
+  }
+
+  @override
+  String get pfShowingBands => 'Mostrando bandas por institución';
+
+  @override
+  String get pfShowingLine => 'Mostrando solo la línea de patrimonio';
+
+  @override
+  String get pfSimple => 'Simple';
+
+  @override
+  String get pfDetailed => 'Detallado';
+
+  @override
+  String pfTotalNetWorthCurrency(Object currency) {
+    return 'Patrimonio total ($currency)';
+  }
+
+  @override
+  String get pfTotalNetWorth => 'Patrimonio total';
+
+  @override
+  String pfTooltipNetWorth(Object value) {
+    return 'Patrimonio: $value';
+  }
+
+  @override
+  String pfTooltipAssets(Object value) {
+    return 'Activos: $value';
+  }
+
+  @override
+  String pfTooltipLiabilities(Object value) {
+    return 'Pasivos: $value';
+  }
+
+  @override
+  String pfDeltaVsAgo(Object window) {
+    return 'vs. hace $window';
+  }
+
+  @override
+  String get pfNoAccountsYet => 'Aún no hay cuentas';
+
+  @override
+  String get pfNoAccountsBody =>
+      'Vincula un banco, importa un CSV o agrega una cuenta manual\npara comenzar.';
+
+  @override
+  String get pfAddAnAccount => 'Agregar una cuenta';
+
+  @override
+  String get pfAccountsHeader => 'CUENTAS';
+
+  @override
+  String get pfGroupCash => 'Efectivo';
+
+  @override
+  String get pfGroupInvestments => 'Inversiones';
+
+  @override
+  String get pfGroupCrypto => 'Cripto';
+
+  @override
+  String get pfGroupCreditCards => 'Tarjetas de crédito';
+
+  @override
+  String get pfGroupLoans => 'Préstamos e hipotecas';
+
+  @override
+  String get pfGroupRealAssets => 'Activos reales';
+
+  @override
+  String get pfGroupOther => 'Otros';
+
+  @override
+  String pfUnknownSubtypes(int count, Object list) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Subtipos desconocidos: $list',
+      one: 'Subtipo desconocido: $list',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get pfVaults => 'Apartados';
+
+  @override
+  String get pfAccountsDescriptor => 'Cuentas';
+
+  @override
+  String pfInstDescriptor(Object descriptor, Object inst) {
+    return '$inst · $descriptor';
+  }
+
+  @override
+  String get pfVault => 'Apartado';
+
+  @override
+  String get pfUnknownAccount => 'Cuenta desconocida';
+
+  @override
+  String get pfAccountActions => 'Acciones de la cuenta';
+
+  @override
+  String get pfRename => 'Renombrar';
+
+  @override
+  String get pfRevalue => 'Revaluar';
+
+  @override
+  String get pfDelete => 'Eliminar';
+
+  @override
+  String get pfDeleteAccountTitle => 'Eliminar cuenta';
+
+  @override
+  String pfDeleteAccountConfirm(Object name) {
+    return '¿Seguro que quieres eliminar \"$name\"? Se borrará todo su historial.';
+  }
+
+  @override
+  String pfRevalueTitle(Object name) {
+    return 'Revaluar $name';
+  }
+
+  @override
+  String pfRevalueCurrent(Object amount, Object currency) {
+    return 'Actual: $amount $currency';
+  }
+
+  @override
+  String get pfNewBalance => 'Nuevo saldo';
+
+  @override
+  String get pfNotesOptional => 'Notas (opcional)';
+
+  @override
+  String get pfNotesHint =>
+      'ej. estimación de Zillow, avalúo 2026, última ronda';
+
+  @override
+  String get pfHistoryPointNote =>
+      'Se registra un nuevo punto de historial con la fecha de hoy.';
+
+  @override
+  String get pfEnterNumericBalance => 'Ingresa un saldo numérico';
+
+  @override
+  String get pfAssetFallback => 'activo';
+
+  @override
+  String get pfRenameAccountTitle => 'Renombrar cuenta';
+
+  @override
+  String pfRenameOriginal(Object name) {
+    return 'Original: $name';
+  }
+
+  @override
+  String get pfNickname => 'Apodo';
+
+  @override
+  String get pfNicknameHint => 'ej. Cuenta conjunta';
+
+  @override
+  String get pfRenameBlankHint =>
+      'Déjalo en blanco para usar el nombre del banco.';
+
+  @override
+  String get pfInvestmentPortfolio => 'Portafolio de inversión';
+
+  @override
+  String get pfTotalValue => 'Valor total';
+
+  @override
+  String get pfProfitLoss => 'Ganancia / Pérdida';
+
+  @override
+  String get pfUsDollar => 'Dólar estadounidense';
+
+  @override
+  String get pfMexicanPeso => 'Peso mexicano';
+
+  @override
+  String get pfHoldings => 'Posiciones';
+
+  @override
+  String pfAccountsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count cuentas',
+      one: '1 cuenta',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get pfTopPosition => 'Posición principal';
+
+  @override
+  String get pfBiggestGainer => 'Mayor ganadora';
+
+  @override
+  String get pfBiggestLoser => 'Mayor perdedora';
+
+  @override
+  String get pfUnknown => 'Desconocida';
+
+  @override
+  String pfInstPositions(Object inst, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count posiciones',
+      one: '1 posición',
+    );
+    return '$inst · $_temp0';
+  }
+
+  @override
+  String pfSharesSuffix(Object qty) {
+    return '$qty acc.';
+  }
+
+  @override
+  String pfCategoryFilter(Object category) {
+    return 'Categoría: $category';
+  }
+
+  @override
+  String get pfSearchHint => 'Buscar símbolo, nombre, cuenta o institución…';
+
+  @override
+  String pfHoldingsAccountsCount(int accounts, int holdings) {
+    String _temp0 = intl.Intl.pluralLogic(
+      holdings,
+      locale: localeName,
+      other: '$holdings posiciones',
+      one: '1 posición',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      accounts,
+      locale: localeName,
+      other: '$accounts cuentas',
+      one: '1 cuenta',
+    );
+    return '$_temp0 · $_temp1';
+  }
+
+  @override
+  String pfShownOfTotal(Object shown, Object total) {
+    return '$shown de $total';
+  }
+
+  @override
+  String get pfFlat => 'Lista';
+
+  @override
+  String get pfByAccount => 'Por cuenta';
+
+  @override
+  String get pfNoHoldingsYet => 'Aún no hay posiciones';
+
+  @override
+  String get pfNoHoldingsBody =>
+      'Cuando vincules una casa de bolsa con Plaid (o importes un CSV)\ntus posiciones aparecerán aquí.';
+
+  @override
+  String get pfColAsset => 'Activo';
+
+  @override
+  String get pfColShares => 'Acciones';
+
+  @override
+  String get pfColPrice => 'Precio';
+
+  @override
+  String get pfColValue => 'Valor';
+
+  @override
+  String get pfColCostBasis => 'Costo base';
+
+  @override
+  String get pfColGain => 'Ganancia';
+
+  @override
+  String get pfColReturn => 'Rendimiento';
+
+  @override
+  String get pfShares => 'acc.';
+
+  @override
+  String get pfHolding => 'Posición';
+
+  @override
+  String pfLotBreakdownTitle(Object title) {
+    return 'Desglose por lote · $title';
+  }
+
+  @override
+  String get pfLotBreakdownSubtitle =>
+      'Orden FIFO. El costo base suma cada lote a su tipo de cambio USD/moneda nativa histórico, no al de hoy.';
+
+  @override
+  String get pfLotAcquired => 'Adquirido';
+
+  @override
+  String get pfLotQty => 'Cant.';
+
+  @override
+  String get pfLotCostPerUnit => 'Costo / unidad';
+
+  @override
+  String get pfLotFxAtLot => 'TC del lote';
+
+  @override
+  String get pfLotUsdCost => 'Costo USD';
+
+  @override
+  String get dlgAccountTitle => 'Agregar cuenta manual';
+
+  @override
+  String get dlgAccountName => 'Nombre de la cuenta';
+
+  @override
+  String get dlgAccountNameHint => 'p. ej. Mis ahorros, Propiedad en renta';
+
+  @override
+  String get dlgAccountType => 'Tipo de cuenta';
+
+  @override
+  String get dlgAccountCurrency => 'Moneda';
+
+  @override
+  String get dlgAccountInitialBalance => 'Saldo inicial';
+
+  @override
+  String get dlgAccountBalanceHelper =>
+      'Para tarjetas de crédito o préstamos, ingresa el monto adeudado como número positivo.';
+
+  @override
+  String get dlgAccountBalanceInvalid => 'Ingresa un monto numérico';
+
+  @override
+  String get dlgAccountCreate => 'Crear cuenta';
+
+  @override
+  String get dlgAccountGroupCashBanking => 'Efectivo y banca';
+
+  @override
+  String get dlgAccountGroupInvestments => 'Inversiones';
+
+  @override
+  String get dlgAccountGroupCrypto => 'Cripto';
+
+  @override
+  String get dlgAccountGroupRealAssets => 'Activos reales';
+
+  @override
+  String get dlgAccountGroupLiabilities => 'Pasivos';
+
+  @override
+  String dlgAccountCreated(Object name) {
+    return '¡Cuenta \"$name\" creada!';
+  }
+
+  @override
+  String dlgAccountCreateError(Object error) {
+    return 'No se pudo agregar la cuenta: $error';
+  }
+
+  @override
+  String dlgCryptoLinkTitle(Object exchange) {
+    return 'Vincular $exchange';
+  }
+
+  @override
+  String dlgCryptoIntro(Object exchange) {
+    return 'Genera una clave de API \"de solo lectura\" en los ajustes de $exchange. Solo la usamos para consultar saldos y estimar su valor.';
+  }
+
+  @override
+  String get dlgCryptoWhereApiKeys => '¿Dónde encuentro mis claves de API? ↗';
+
+  @override
+  String dlgCryptoDisplayName(Object example) {
+    return 'Nombre visible (p. ej. $example)';
+  }
+
+  @override
+  String get dlgCryptoApiKey => 'Clave de API';
+
+  @override
+  String get dlgCryptoApiSecret => 'Secreto de API';
+
+  @override
+  String get dlgCryptoLinkAccount => 'Vincular cuenta';
+
+  @override
+  String dlgCryptoApiKeysTitle(Object exchange) {
+    return 'Claves de API de $exchange';
+  }
+
+  @override
+  String dlgCryptoApiKeysFallbackBody(Object exchange) {
+    return 'Genera una clave de API de solo lectura en los ajustes de $exchange y pégala aquí. Abrir:';
+  }
+
+  @override
+  String dlgCryptoLinkSuccess(Object exchange) {
+    return '¡$exchange vinculado correctamente!';
+  }
+
+  @override
+  String dlgCryptoLinkError(Object error) {
+    return 'Error al vincular: $error';
+  }
+
+  @override
+  String get dlgTxTitle => 'Agregar transacción';
+
+  @override
+  String get dlgTxAdded => 'Transacción agregada';
+
+  @override
+  String get dlgTxNoAccounts =>
+      'Necesitas al menos una cuenta antes de poder agregar una transacción.';
+
+  @override
+  String get dlgTxAccount => 'Cuenta';
+
+  @override
+  String get dlgTxExpense => 'Gasto';
+
+  @override
+  String get dlgTxIncome => 'Ingreso';
+
+  @override
+  String get dlgTxAmount => 'Monto';
+
+  @override
+  String get dlgTxAmountRequired => 'Ingresa un monto';
+
+  @override
+  String get dlgTxAmountPositive => 'Ingresa un monto positivo';
+
+  @override
+  String get dlgTxDate => 'Fecha';
+
+  @override
+  String get dlgTxDescription => 'Descripción';
+
+  @override
+  String get dlgTxDescriptionHint => 'p. ej. Café con Sam';
+
+  @override
+  String get dlgTxDescriptionRequired => 'La descripción es obligatoria';
+
+  @override
+  String get dlgTxCategory => 'Categoría (opcional)';
+
+  @override
+  String get dlgTxCategoryHint => 'p. ej. Restaurantes';
+
+  @override
+  String get dlgTxNotes => 'Notas (opcional)';
+
+  @override
+  String get dlgRecoveryTitle => 'Guarda tus códigos de recuperación';
+
+  @override
+  String get dlgRecoveryWarning =>
+      'Estos códigos NO se mostrarán de nuevo. Cada uno es de un solo uso; usa uno si pierdes tu contraseña.';
+
+  @override
+  String get dlgRecoveryCopied => 'Copiado';
+
+  @override
+  String get dlgRecoveryCopyAll => 'Copiar todo';
+
+  @override
+  String get dlgRecoverySavedConfirm =>
+      'Guardé estos códigos en un lugar seguro';
+
+  @override
+  String get dlgRecoveryContinue => 'Continuar';
+
+  @override
+  String get lwFxExchangeRate => 'Tipo de cambio';
+
+  @override
+  String get lwFxRefreshNow => 'Actualizar tipo de cambio ahora';
+
+  @override
+  String lwFxSource(Object source) {
+    return 'Fuente: $source';
+  }
+
+  @override
+  String get lwFxUpdatedUnknown => 'Actualizado: desconocido';
+
+  @override
+  String lwFxStalePrefix(Object age) {
+    return 'Desactualizado · $age';
+  }
+
+  @override
+  String get lwFxUpdatedJustNow => 'Actualizado hace un momento';
+
+  @override
+  String lwFxUpdatedMinutesAgo(Object minutes) {
+    return 'Actualizado hace $minutes min';
+  }
+
+  @override
+  String lwFxUpdatedHoursAgo(Object hours) {
+    return 'Actualizado hace $hours h';
+  }
+
+  @override
+  String lwFxUpdatedDaysAgo(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Actualizado hace $days días',
+      one: 'Actualizado hace $days día',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lwSyncInstitutionsHeader => 'INSTITUCIONES';
+
+  @override
+  String lwSyncRetryFailed(Object count) {
+    return 'Reintentar $count con error';
+  }
+
+  @override
+  String get lwSyncNoInstitutions => 'Aún no hay instituciones vinculadas';
+
+  @override
+  String get lwSyncNoInstitutionsHint =>
+      'Usa los botones de abajo para conectar un banco, importar un\nestado de cuenta o agregar una cuenta manual.';
+
+  @override
+  String get lwSyncNever => 'Nunca';
+
+  @override
+  String get lwSyncUnknownInstitution => 'Desconocida';
+
+  @override
+  String get lwSyncFailedUnknownReason =>
+      'Falló la sincronización. Motivo desconocido: intenta Reintentar o Reconectar.';
+
+  @override
+  String get lwSyncReconnect => 'Reconectar';
+
+  @override
+  String get lwSyncRetrySync => 'Reintentar sincronización';
+
+  @override
+  String get lwSyncDeleteInstitution => 'Eliminar institución';
+
+  @override
+  String lwSyncVia(Object source) {
+    return 'Vía $source';
+  }
+
+  @override
+  String get lwSyncDetailSyncingNow => 'Sincronizando ahora';
+
+  @override
+  String get lwSyncDetailSetupRequired =>
+      'Requiere configuración antes de sincronizar';
+
+  @override
+  String get lwSyncDetailReconnectRequired => 'Requiere reconexión';
+
+  @override
+  String get lwSyncDetailWaitingFirstSync =>
+      'Esperando la primera sincronización';
+
+  @override
+  String get lwSyncDetailManualSource => 'Fuente manual/sin conexión';
+
+  @override
+  String get lwSyncStaleSuffix => '(Desactualizado)';
+
+  @override
+  String lwSyncBannerOneNeedsAttention(Object name) {
+    return '$name requiere atención';
+  }
+
+  @override
+  String lwSyncBannerManyNeedAttention(Object count) {
+    return '$count instituciones requieren atención';
+  }
+
+  @override
+  String get lwSyncBannerReconnect => 'Reconectar';
+
+  @override
+  String lwSyncBannerReconnectName(Object name) {
+    return 'Reconectar $name';
+  }
+
+  @override
+  String lwSyncBannerReconnectCount(Object count) {
+    return 'Reconectar $count…';
+  }
+
+  @override
+  String get lwSyncBannerOpenSettings => 'Abrir configuración';
+
+  @override
+  String lwSinceNewTransactions(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count transacciones nuevas',
+      one: '$count transacción nueva',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lwSinceLargestMove(Object account, Object amount) {
+    return '$amount en $account';
+  }
+
+  @override
+  String lwSinceSyncErrors(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count errores de sincronización',
+      one: '$count error de sincronización',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lwSinceLastVisit => 'Desde tu última visita';
+
+  @override
+  String lwSinceDate(Object date) {
+    return 'Desde $date';
+  }
+
+  @override
+  String get lwSinceViewAction => 'Ver';
+
+  @override
+  String get lwSinceFixAction => 'Corregir';
+
+  @override
+  String get lwSinceDismiss => 'Descartar';
+
+  @override
+  String get lwNotifBorrowerFallback => 'Deudor';
+
+  @override
+  String get lwNotifInstitutionFallback => 'Institución';
+
+  @override
+  String lwNotifRepaymentOverdueTitle(Object borrower) {
+    return 'Pago de $borrower vencido';
+  }
+
+  @override
+  String lwNotifRepaymentOverdueDetail(
+    Object amount,
+    Object daysOverdue,
+    Object dueDate,
+    Object number,
+  ) {
+    return 'La cuota #$number de $amount venció el $dueDate (hace $daysOverdue d).';
+  }
+
+  @override
+  String lwNotifRepaymentDueTitle(Object borrower, Object days) {
+    return 'Pago de $borrower vence en $days d';
+  }
+
+  @override
+  String lwNotifRepaymentDueDetail(
+    Object amount,
+    Object dueDate,
+    Object number,
+  ) {
+    return 'Cuota #$number de $amount vence el $dueDate.';
+  }
+
+  @override
+  String lwNotifNeedsReconnectTitle(Object name) {
+    return '$name requiere reconexión';
+  }
+
+  @override
+  String get lwNotifNeedsReconnectDetail =>
+      'El token de Plaid expiró: reconecta para reanudar la sincronización.';
+
+  @override
+  String lwNotifSyncFailedTitle(Object name) {
+    return 'Falló la sincronización de $name';
+  }
+
+  @override
+  String get lwNotifUnknownSyncError => 'Error de sincronización desconocido';
+
+  @override
+  String lwNotifStaleSyncTitle(Object days, Object name) {
+    return '$name se sincronizó por última vez hace $days d';
+  }
+
+  @override
+  String get lwNotifStaleSyncDetail =>
+      'Inicia una sincronización para traer transacciones y actualizaciones de saldo.';
+
+  @override
+  String lwNotifNetWorthDropTitle(Object pct) {
+    return 'El patrimonio bajó $pct en 30 días';
+  }
+
+  @override
+  String lwNotifNetWorthDropDetail(Object latest, Object reference) {
+    return 'Más reciente $latest vs $reference.';
+  }
+
+  @override
+  String get lwNotifTooltipNone => 'Notificaciones';
+
+  @override
+  String lwNotifTooltipCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count alertas',
+      one: '$count alerta',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lwNotifAllClear => 'Todo en orden';
+
+  @override
+  String get lwNotifNoAlerts => 'No hay alertas por ahora.';
+
+  @override
+  String get lwPaletteSearchHint =>
+      'Busca cuentas, posiciones, transacciones o salta a una pestaña…';
+
+  @override
+  String get lwPaletteNoMatches => 'Sin coincidencias.';
+
+  @override
+  String get lwPaletteHintNavigate => 'navegar';
+
+  @override
+  String get lwPaletteHintSelect => 'seleccionar';
+
+  @override
+  String get lwPaletteHintClose => 'cerrar';
+
+  @override
+  String get lwTrendsTitle => 'Tendencias de flujo de efectivo';
+
+  @override
+  String get lwTrendsIncome => 'Ingresos';
+
+  @override
+  String get lwTrendsSpending => 'Gastos';
+
+  @override
+  String get lwTrendsTapToView => 'Toca para ver las transacciones';
+
+  @override
+  String get lwTrendsInfoTooltip =>
+      'Se excluyen las transferencias internas (entre tus cuentas) y los pagos de tarjetas de crédito para que las barras reflejen ingresos y gastos externos reales.';
+
+  @override
+  String get lwTrendsSemanticNoData =>
+      'Gráfica de tendencias de flujo de efectivo, sin datos';
+
+  @override
+  String lwTrendsSemanticSummary(
+    int count,
+    Object income,
+    Object month,
+    Object spending,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Tendencias de flujo de efectivo, $count meses. Más reciente $month: ingresos $income, gastos $spending.',
+      one:
+          'Tendencias de flujo de efectivo, $count mes. Más reciente $month: ingresos $income, gastos $spending.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lwTrendsSemanticMonth(Object income, Object month, Object spending) {
+    return '$month: ingresos $income, gastos $spending';
+  }
+
+  @override
+  String get lwAllocTitle => 'Distribución de activos';
+
+  @override
+  String lwAllocTotal(Object amount) {
+    return 'Total: $amount';
+  }
+
+  @override
+  String get lwAllocOtherCategory => 'Otros';
+
+  @override
+  String lwAllocHoldingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count posiciones',
+      one: '$count posición',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lwAllocSharesSuffix(Object qty) {
+    return '$qty tít.';
+  }
+
+  @override
+  String get lwAllocFilteringHint =>
+      'Filtrando posiciones a esta categoría: toca de nuevo para quitar el filtro';
+
+  @override
+  String lwAllocSemanticLabel(Object category, Object pct, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$category, $pct del portafolio, $count posiciones',
+      one: '$category, $pct del portafolio, $count posición',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lwRangeOneMonth => '1M';
+
+  @override
+  String get lwRangeYearToDate => 'YTD';
+
+  @override
+  String get lwRangeOneYear => '1A';
+
+  @override
+  String get lwRangeFiveYears => '5A';
+
+  @override
+  String get lwRangeAll => 'TODO';
 }

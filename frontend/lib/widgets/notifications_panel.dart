@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../utils/theme_colors.dart';
+import '../l10n/app_localizations.dart';
 
 /// One notification row shown in the bell-icon popover.
 class AppNotification {
@@ -25,6 +26,7 @@ class AppNotification {
 /// in widget code rather than the API because all the inputs are already
 /// in memory client-side.
 List<AppNotification> deriveNotifications({
+  required AppLocalizations l,
   required List<dynamic> syncData,
   required List<dynamic> netWorthHistory,
   required VoidCallback onJumpToManagement,
@@ -47,7 +49,7 @@ List<AppNotification> deriveNotifications({
       ).format(v);
   for (final raw in loanReminders) {
     if (raw is! Map) continue;
-    final borrower = (raw['borrower_name'] ?? 'Borrower').toString();
+    final borrower = (raw['borrower_name'] ?? l.lwNotifBorrowerFallback).toString();
     final amount = (raw['amount'] as num?)?.toDouble() ?? 0;
     final cur = (raw['currency'] ?? 'USD').toString();
     final n = (raw['installment_number'] as num?)?.toInt() ?? 0;
@@ -59,17 +61,17 @@ List<AppNotification> deriveNotifications({
       out.add(AppNotification(
         icon: Icons.event_busy,
         accent: Colors.redAccent,
-        title: '$borrower repayment overdue',
-        detail:
-            'Installment #$n of ${money(amount, cur)} was due $dueStr (${overdue}d ago).',
+        title: l.lwNotifRepaymentOverdueTitle(borrower),
+        detail: l.lwNotifRepaymentOverdueDetail(
+            n, money(amount, cur), dueStr, overdue),
         onTap: onJumpToLending,
       ));
     } else if (until > 0) {
       out.add(AppNotification(
         icon: Icons.event,
         accent: Colors.amber,
-        title: '$borrower repayment due in ${until}d',
-        detail: 'Installment #$n of ${money(amount, cur)} due $dueStr.',
+        title: l.lwNotifRepaymentDueTitle(borrower, until),
+        detail: l.lwNotifRepaymentDueDetail(n, money(amount, cur), dueStr),
         onTap: onJumpToLending,
       ));
     }
@@ -79,21 +81,21 @@ List<AppNotification> deriveNotifications({
   for (final raw in syncData) {
     if (raw is! Map) continue;
     final status = raw['sync_status']?.toString();
-    final name = (raw['name'] ?? 'Institution').toString();
+    final name = (raw['name'] ?? l.lwNotifInstitutionFallback).toString();
     if (status == 'reconnect_required') {
       out.add(AppNotification(
         icon: Icons.link_off,
         accent: Colors.orangeAccent,
-        title: '$name needs reconnect',
-        detail: 'Plaid token expired — reconnect to resume sync.',
+        title: l.lwNotifNeedsReconnectTitle(name),
+        detail: l.lwNotifNeedsReconnectDetail,
         onTap: onJumpToManagement,
       ));
     } else if (status == 'error' || status == 'failed') {
       out.add(AppNotification(
         icon: Icons.error_outline,
         accent: Colors.redAccent,
-        title: '$name sync failed',
-        detail: (raw['last_sync_error'] ?? 'Unknown sync error').toString(),
+        title: l.lwNotifSyncFailedTitle(name),
+        detail: (raw['last_sync_error'] ?? l.lwNotifUnknownSyncError).toString(),
         onTap: onJumpToManagement,
       ));
     } else if (status == 'synced') {
@@ -107,9 +109,8 @@ List<AppNotification> deriveNotifications({
             out.add(AppNotification(
               icon: Icons.access_time,
               accent: Colors.amber,
-              title: '$name last synced ${days}d ago',
-              detail:
-                  'Trigger a sync to pull in transactions and balance updates.',
+              title: l.lwNotifStaleSyncTitle(name, days),
+              detail: l.lwNotifStaleSyncDetail,
               onTap: onJumpToManagement,
             ));
           }
@@ -150,10 +151,13 @@ List<AppNotification> deriveNotifications({
           out.add(AppNotification(
             icon: Icons.trending_down,
             accent: Colors.redAccent,
-            title:
-                'Net worth dropped ${pct.toStringAsFixed(1)}% in 30 days',
-            detail:
-                'Latest ${DateFormat('MMM d').format(latestDt)} vs ${DateFormat('MMM d').format(DateTime.tryParse(ref['date']?.toString() ?? '') ?? latestDt)}.',
+            title: l.lwNotifNetWorthDropTitle('${pct.toStringAsFixed(1)}%'),
+            detail: l.lwNotifNetWorthDropDetail(
+              DateFormat('MMM d').format(latestDt),
+              DateFormat('MMM d').format(
+                  DateTime.tryParse(ref['date']?.toString() ?? '') ??
+                      latestDt),
+            ),
           ));
         }
       }
@@ -172,10 +176,11 @@ class NotificationsBell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return PopupMenuButton<void>(
       tooltip: notifications.isEmpty
-          ? 'Notifications'
-          : '${notifications.length} ${notifications.length == 1 ? 'alert' : 'alerts'}',
+          ? l.lwNotifTooltipNone
+          : l.lwNotifTooltipCount(notifications.length),
       icon: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -208,8 +213,8 @@ class NotificationsBell extends StatelessWidget {
                 dense: true,
                 leading: Icon(Icons.check_circle_outline,
                     color: context.positive),
-                title: const Text('All clear'),
-                subtitle: const Text('No alerts right now.'),
+                title: Text(l.lwNotifAllClear),
+                subtitle: Text(l.lwNotifNoAlerts),
               ),
             ),
           ];

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/services/api_service.dart';
 import 'package:patrimonio/widgets/add_transaction_dialog.dart';
 
@@ -8,7 +9,11 @@ import 'package:patrimonio/widgets/add_transaction_dialog.dart';
 // here via the default constructor, which is VM-safe via the conditional
 // api_platform export) but the test never triggers the network. Per MEMORY we
 // do NOT subclass ApiService.
-Widget _host(Widget child) => MaterialApp(home: Scaffold(body: child));
+Widget _host(Widget child) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: child),
+    );
 
 void main() {
   testWidgets('category autocomplete surfaces a matching suggestion',
