@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../widgets/recovery_codes_dialog.dart';
+import '../l10n/app_localizations.dart';
 
 /// First-run screen: create the single owner account. Shown only when
 /// the server reports `needs_bootstrap: true`. After success the user
@@ -61,6 +62,7 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
       body: Center(
         child: ConstrainedBox(
@@ -74,7 +76,7 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Welcome to Patrimonio',
+                    l.authWelcomeTitle,
                     textAlign: TextAlign.center,
                     style: Theme.of(context)
                         .textTheme
@@ -83,30 +85,30 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Create the owner account. This is a one-time setup.',
+                    l.authBootstrapSubtitle,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 32),
                   TextFormField(
                     controller: _username,
-                    decoration: const InputDecoration(
-                      labelText: 'Username',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l.authUsername,
+                      border: const OutlineInputBorder(),
                     ),
                     validator: (v) {
                       final value = v?.trim() ?? '';
-                      if (value.isEmpty) return 'Required';
-                      if (value.length > 64) return 'Max 64 characters';
+                      if (value.isEmpty) return l.commonRequired;
+                      if (value.length > 64) return l.authUsernameMaxLength;
                       return null;
                     },
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _email,
-                    decoration: const InputDecoration(
-                      labelText: 'Email (optional)',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l.authEmailOptional,
+                      border: const OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.emailAddress,
                   ),
@@ -114,13 +116,13 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
                   TextFormField(
                     controller: _password,
                     obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Password (12+ characters)',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l.authPasswordWithMin,
+                      border: const OutlineInputBorder(),
                     ),
                     validator: (v) {
                       if (v == null || v.length < 12) {
-                        return 'At least 12 characters';
+                        return l.authPasswordMinHelper;
                       }
                       return null;
                     },
@@ -129,12 +131,12 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
                   TextFormField(
                     controller: _confirm,
                     obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Confirm password',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l.authConfirmPassword,
+                      border: const OutlineInputBorder(),
                     ),
                     validator: (v) =>
-                        v == _password.text ? null : 'Passwords do not match',
+                        v == _password.text ? null : l.authPasswordsDoNotMatch,
                   ),
                   const SizedBox(height: 16),
                   if (_error != null) ...[
@@ -152,7 +154,7 @@ class _BootstrapScreenState extends State<BootstrapScreen> {
                             width: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Create account'),
+                        : Text(l.authCreateAccount),
                   ),
                 ],
               ),

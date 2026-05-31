@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:qr/qr.dart';
+import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/passkeys.dart';
@@ -87,8 +88,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
       builder: (_) => const _ChangePasswordDialog(),
     );
     if (result == true && mounted) {
+      final l = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password changed. Other sessions signed out.')),
+        SnackBar(content: Text(l.secPasswordChangedSnack)),
       );
       // After change-password the server revokes all our sessions —
       // refreshStatus will drop us back to login.
@@ -97,22 +99,20 @@ class _SecurityScreenState extends State<SecurityScreen> {
   }
 
   Future<void> _regenerateRecoveryCodes() async {
+    final l = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Regenerate recovery codes?'),
-        content: const Text(
-          'Your old codes will stop working immediately. Make sure you '
-          'save the new ones before closing the dialog.',
-        ),
+        title: Text(l.secRegenerateCodesTitle),
+        content: Text(l.secRegenerateCodesBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l.actionCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Generate new'),
+            child: Text(l.secGenerateNew),
           ),
         ],
       ),
@@ -130,13 +130,14 @@ class _SecurityScreenState extends State<SecurityScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: ${e.toString().replaceFirst('Exception: ', '')}')),
+          SnackBar(content: Text(l.secFailedWithReason(e.toString().replaceFirst('Exception: ', '')))),
         );
       }
     }
   }
 
   Future<void> _enrollTotp() async {
+    final l = AppLocalizations.of(context);
     try {
       final challenge = await _api.beginTotpEnroll();
       if (!mounted) return;
@@ -150,26 +151,26 @@ class _SecurityScreenState extends State<SecurityScreen> {
       );
       if (ok == true && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Two-factor authentication enabled.')),
+          SnackBar(content: Text(l.secTwoFactorEnabledSnack)),
         );
         await _load();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: ${e.toString().replaceFirst('Exception: ', '')}')),
+          SnackBar(content: Text(l.secFailedWithReason(e.toString().replaceFirst('Exception: ', '')))),
         );
       }
     }
   }
 
   Future<void> _disableTotp() async {
+    final l = AppLocalizations.of(context);
     final pw = await showDialog<String?>(
       context: context,
-      builder: (_) => const _PromptPasswordDialog(
-        title: 'Disable two-factor authentication?',
-        message: 'Enter your password to confirm. Disabling TOTP makes '
-            'your account less secure.',
+      builder: (_) => _PromptPasswordDialog(
+        title: l.secDisableTwoFactorTitle,
+        message: l.secDisableTwoFactorBody,
       ),
     );
     if (pw == null || !mounted) return;
@@ -177,37 +178,34 @@ class _SecurityScreenState extends State<SecurityScreen> {
       await _api.disableTotp(pw);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Two-factor authentication disabled.')),
+          SnackBar(content: Text(l.secTwoFactorDisabledSnack)),
         );
         await _load();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: ${e.toString().replaceFirst('Exception: ', '')}')),
+          SnackBar(content: Text(l.secFailedWithReason(e.toString().replaceFirst('Exception: ', '')))),
         );
       }
     }
   }
 
   Future<void> _revokeSession(ActiveSession session) async {
+    final l = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Sign out this session?'),
-        content: Text(
-          'This will sign out the device "${_describeSession(session)}" '
-          'immediately. They will have to enter the password (and TOTP) '
-          'to sign in again.',
-        ),
+        title: Text(l.secSignOutSessionTitle),
+        content: Text(l.secSignOutSessionBody(_describeSession(session))),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l.actionCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Sign out'),
+            child: Text(l.secSignOut),
           ),
         ],
       ),
@@ -217,14 +215,14 @@ class _SecurityScreenState extends State<SecurityScreen> {
       await _api.revokeSession(session.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Session signed out.')),
+          SnackBar(content: Text(l.secSessionSignedOutSnack)),
         );
         await _load();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: ${e.toString().replaceFirst('Exception: ', '')}')),
+          SnackBar(content: Text(l.secFailedWithReason(e.toString().replaceFirst('Exception: ', '')))),
         );
       }
     }
@@ -235,22 +233,20 @@ class _SecurityScreenState extends State<SecurityScreen> {
   /// screen because that's where users go looking for it ("manage
   /// sessions" naturally implies "I can end the current one").
   Future<void> _signOutThisDevice() async {
+    final l = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Sign out of this device?'),
-        content: const Text(
-          'You will need to enter your password again (and TOTP, if '
-          'enabled) to sign back in.',
-        ),
+        title: Text(l.secSignOutThisDeviceTitle),
+        content: Text(l.secSignOutThisDeviceBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l.actionCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Sign out'),
+            child: Text(l.secSignOut),
           ),
         ],
       ),
@@ -267,22 +263,20 @@ class _SecurityScreenState extends State<SecurityScreen> {
         .where((s) => !s.isCurrent)
         .length;
     if (others == 0) return;
+    final l = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Sign out everywhere else?'),
-        content: Text(
-          'This will end $others other session${others == 1 ? '' : 's'} '
-          'immediately. This device will stay signed in.',
-        ),
+        title: Text(l.secSignOutEverywhereTitle),
+        content: Text(l.secSignOutEverywhereBody(others)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l.actionCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Sign out others'),
+            child: Text(l.secSignOutOthers),
           ),
         ],
       ),
@@ -293,11 +287,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              n == 1
-                  ? '1 other session signed out.'
-                  : '$n other sessions signed out.',
-            ),
+            content: Text(l.secOtherSessionsSignedOutSnack(n)),
           ),
         );
         await _load();
@@ -305,7 +295,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: ${e.toString().replaceFirst('Exception: ', '')}')),
+          SnackBar(content: Text(l.secFailedWithReason(e.toString().replaceFirst('Exception: ', '')))),
         );
       }
     }
@@ -316,13 +306,14 @@ class _SecurityScreenState extends State<SecurityScreen> {
   /// macOS / 73.42.0.1", which is good enough to recognize an
   /// unfamiliar device.
   String _describeSession(ActiveSession s) {
+    final l = AppLocalizations.of(context);
     final ua = (s.userAgent ?? '').trim();
     final browser = _browserName(ua);
     final os = _osName(ua);
     final parts = <String>[];
     if (browser.isNotEmpty) parts.add(browser);
-    if (os.isNotEmpty) parts.add('on $os');
-    if (parts.isEmpty) parts.add(ua.isEmpty ? 'Unknown device' : ua.substring(0, ua.length > 40 ? 40 : ua.length));
+    if (os.isNotEmpty) parts.add(l.secOnOs(os));
+    if (parts.isEmpty) parts.add(ua.isEmpty ? l.secUnknownDevice : ua.substring(0, ua.length > 40 ? 40 : ua.length));
     if (s.ipAddress != null && s.ipAddress!.isNotEmpty) {
       parts.add('· ${s.ipAddress}');
     }
@@ -351,19 +342,21 @@ class _SecurityScreenState extends State<SecurityScreen> {
   }
 
   String _formatLastSeen(DateTime t) {
+    final l = AppLocalizations.of(context);
     final now = DateTime.now();
     final diff = now.difference(t);
-    if (diff.inMinutes < 1) return 'Active just now';
-    if (diff.inMinutes < 60) return 'Active ${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return 'Active ${diff.inHours}h ago';
-    if (diff.inDays < 30) return 'Active ${diff.inDays}d ago';
-    return 'Active on ${DateFormat.yMMMd().format(t.toLocal())}';
+    if (diff.inMinutes < 1) return l.secActiveJustNow;
+    if (diff.inMinutes < 60) return l.secActiveMinutesAgo(diff.inMinutes);
+    if (diff.inHours < 24) return l.secActiveHoursAgo(diff.inHours);
+    if (diff.inDays < 30) return l.secActiveDaysAgo(diff.inDays);
+    return l.secActiveOnDate(DateFormat.yMMMd().format(t.toLocal()));
   }
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Security')),
+      appBar: AppBar(title: Text(l.secTitle)),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -372,20 +365,18 @@ class _SecurityScreenState extends State<SecurityScreen> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 24, vertical: 16),
                   children: [
-                    _section('Password'),
+                    _section(l.secPasswordSection),
                     Card(
                       child: ListTile(
                         leading: const Icon(Icons.lock_outline),
-                        title: const Text('Change password'),
-                        subtitle: const Text(
-                          'Sign out of every other session.',
-                        ),
+                        title: Text(l.secChangePassword),
+                        subtitle: Text(l.secChangePasswordSubtitle),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: _changePassword,
                       ),
                     ),
                     const SizedBox(height: 16),
-                    _section('Two-factor authentication'),
+                    _section(l.secTwoFactorSection),
                     Card(
                       child: ListTile(
                         leading: Icon(
@@ -398,13 +389,13 @@ class _SecurityScreenState extends State<SecurityScreen> {
                         ),
                         title: Text(
                           (_user?.totpEnabled ?? false)
-                              ? 'TOTP enabled'
-                              : 'Add an authenticator app',
+                              ? l.secTotpEnabled
+                              : l.secAddAuthenticatorApp,
                         ),
                         subtitle: Text(
                           (_user?.totpEnabled ?? false)
-                              ? 'You will be asked for a 6-digit code at each sign-in.'
-                              : 'Scan a QR code with Authy / Google Authenticator / 1Password.',
+                              ? l.secTotpEnabledSubtitle
+                              : l.secAddAuthenticatorSubtitle,
                         ),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: (_user?.totpEnabled ?? false)
@@ -413,7 +404,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    _section('Recovery codes'),
+                    _section(l.secRecoveryCodesSection),
                     if ((_unusedRecoveryCodes ?? 99) < 3)
                       Card(
                         color: context.warning.withValues(alpha: 0.12),
@@ -430,22 +421,17 @@ class _SecurityScreenState extends State<SecurityScreen> {
                           ),
                           title: Text(
                             (_unusedRecoveryCodes ?? 0) == 0
-                                ? 'No recovery codes left'
-                                : 'Only ${_unusedRecoveryCodes ?? 0} recovery '
-                                  'code${(_unusedRecoveryCodes ?? 0) == 1 ? '' : 's'} left',
+                                ? l.secNoCodesLeft
+                                : l.secFewCodesLeft(_unusedRecoveryCodes ?? 0),
                             style: TextStyle(
                               color: context.warning,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                          subtitle: const Text(
-                            'If you lose your authenticator and run out of '
-                            'codes you can be locked out. Regenerate now to '
-                            'restore a full set of 10.',
-                          ),
+                          subtitle: Text(l.secLowCodesWarningBody),
                           trailing: FilledButton(
                             onPressed: _regenerateRecoveryCodes,
-                            child: const Text('Regenerate'),
+                            child: Text(l.secRegenerate),
                           ),
                         ),
                       )
@@ -453,16 +439,11 @@ class _SecurityScreenState extends State<SecurityScreen> {
                       Card(
                         child: ListTile(
                           leading: const Icon(Icons.vpn_key_outlined),
-                          title: Text(
-                            '${_unusedRecoveryCodes ?? 0} unused codes',
-                          ),
-                          subtitle: const Text(
-                            'Regenerate if you lose your saved codes — all '
-                            'old codes stop working.',
-                          ),
+                          title: Text(l.secUnusedCodes(_unusedRecoveryCodes ?? 0)),
+                          subtitle: Text(l.secUnusedCodesSubtitle),
                           trailing: TextButton(
                             onPressed: _regenerateRecoveryCodes,
-                            child: const Text('Regenerate'),
+                            child: Text(l.secRegenerate),
                           ),
                         ),
                       ),
@@ -490,6 +471,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
       builder: (_) => const _InviteRoleDialog(),
     );
     if (role == null || !mounted) return;
+    final l = AppLocalizations.of(context);
     try {
       final invite = await _api.createInvite(role: role);
       if (!mounted) return;
@@ -501,19 +483,16 @@ class _SecurityScreenState extends State<SecurityScreen> {
         builder: (ctx) {
           return AlertDialog(
             title: Text(isReadOnly
-                ? 'Read-only invite link ready'
-                : 'Invite link ready'),
+                ? l.secReadOnlyInviteReadyTitle
+                : l.secInviteReadyTitle),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   isReadOnly
-                      ? 'Share this URL with the new user. They will be able '
-                          'to view your data but not change anything. It works '
-                          'for one account creation and expires on:'
-                      : 'Share this URL with the new user. It works for one '
-                          'account creation and expires on:',
+                      ? l.secReadOnlyInviteReadyBody
+                      : l.secInviteReadyBody,
                 ),
                 const SizedBox(height: 6),
                 Text(expires,
@@ -528,7 +507,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Copied to clipboard.',
+                  l.secCopiedToClipboard,
                   style: TextStyle(
                     fontSize: 11,
                     color: Theme.of(context).colorScheme.primary,
@@ -541,11 +520,11 @@ class _SecurityScreenState extends State<SecurityScreen> {
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: invite.url));
                 },
-                child: const Text('Copy again'),
+                child: Text(l.secCopyAgain),
               ),
               FilledButton(
                 onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('Done'),
+                child: Text(l.secDone),
               ),
             ],
           );
@@ -555,7 +534,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed: ${e.toString().replaceFirst('Exception: ', '')}')),
+        SnackBar(content: Text(l.secFailedWithReason(e.toString().replaceFirst('Exception: ', '')))),
       );
     }
   }
@@ -570,22 +549,20 @@ class _SecurityScreenState extends State<SecurityScreen> {
   }
 
   Future<void> _revokeInvite(InviteSummary inv) async {
+    final l = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Revoke invite?'),
-        content: const Text(
-          'The link will stop working immediately. You can mint a new '
-          'one if you change your mind.',
-        ),
+        title: Text(l.secRevokeInviteTitle),
+        content: Text(l.secRevokeInviteBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l.actionCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Revoke'),
+            child: Text(l.secRevoke),
           ),
         ],
       ),
@@ -597,12 +574,13 @@ class _SecurityScreenState extends State<SecurityScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Revoke failed: ${e.toString().replaceFirst('Exception: ', '')}')),
+        SnackBar(content: Text(l.secRevokeFailedWithReason(e.toString().replaceFirst('Exception: ', '')))),
       );
     }
   }
 
   Widget _buildInvitesSection() {
+    final l = AppLocalizations.of(context);
     final invites = _invites ?? const <InviteSummary>[];
     final now = DateTime.now();
     final live = invites.where((i) => !i.used && i.expiresAt.isAfter(now)).toList();
@@ -613,23 +591,20 @@ class _SecurityScreenState extends State<SecurityScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            _section('Invite users'),
+            _section(l.secInviteUsersSection),
             TextButton.icon(
               onPressed: _mintInvite,
               icon: const Icon(Icons.add_link, size: 16),
-              label: const Text('New invite link'),
+              label: Text(l.secNewInviteLink),
             ),
           ],
         ),
         if (invites.isEmpty)
-          const Card(
+          Card(
             child: ListTile(
-              leading: Icon(Icons.mail_outline),
-              title: Text('No invites'),
-              subtitle: Text(
-                'Generate a one-time link to let another person sign up '
-                'for their own Patrimonio account.',
-              ),
+              leading: const Icon(Icons.mail_outline),
+              title: Text(l.secNoInvites),
+              subtitle: Text(l.secNoInvitesSubtitle),
             ),
           )
         else
@@ -651,28 +626,28 @@ class _SecurityScreenState extends State<SecurityScreen> {
                         Flexible(
                           child: Text(
                             invites[i].used
-                                ? 'Redeemed'
+                                ? l.secInviteRedeemed
                                 : invites[i].expiresAt.isBefore(now)
-                                    ? 'Expired'
-                                    : 'Active',
+                                    ? l.secInviteExpired
+                                    : l.secInviteActive,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         if (invites[i].isReadOnly) ...[
                           const SizedBox(width: 8),
-                          _roleChip('Read-only'),
+                          _roleChip(l.secReadOnlyChip),
                         ],
                       ],
                     ),
                     subtitle: Text(
                       invites[i].used && invites[i].usedAt != null
-                          ? 'Used ${DateFormat.yMMMd().format(invites[i].usedAt!.toLocal())}'
-                          : 'Expires ${DateFormat.yMMMd().add_jm().format(invites[i].expiresAt.toLocal())}',
+                          ? l.secInviteUsedOn(DateFormat.yMMMd().format(invites[i].usedAt!.toLocal()))
+                          : l.secInviteExpiresOn(DateFormat.yMMMd().add_jm().format(invites[i].expiresAt.toLocal())),
                     ),
                     trailing: invites[i].used || invites[i].expiresAt.isBefore(now)
                         ? null
                         : IconButton(
-                            tooltip: 'Revoke',
+                            tooltip: l.secRevoke,
                             icon: const Icon(Icons.close),
                             onPressed: () => _revokeInvite(invites[i]),
                           ),
@@ -684,7 +659,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
         if (live.length >= 3) ...[
           const SizedBox(height: 4),
           Text(
-            'You have ${live.length} active invites — consider revoking unused links.',
+            l.secManyActiveInvitesHint(live.length),
             style: TextStyle(fontSize: 11, color: context.textSubtle),
           ),
         ],
@@ -693,6 +668,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
   }
 
   Widget _buildPasskeysSection() {
+    final l = AppLocalizations.of(context);
     final passkeys = _passkeys ?? const <PasskeySummary>[];
     final supported = PasskeyService.instance.isAvailable;
     return Column(
@@ -702,7 +678,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            _section('Passkeys'),
+            _section(l.secPasskeysSection),
             if (supported)
               MenuAnchor(
                 alignmentOffset: const Offset(0, 6),
@@ -723,21 +699,21 @@ class _SecurityScreenState extends State<SecurityScreen> {
                       ? controller.close()
                       : controller.open(),
                   icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Add'),
+                  label: Text(l.secAdd),
                 ),
                 menuChildren: [
                   MenuItemButton(
                     leadingIcon: const Icon(Icons.fingerprint, size: 20),
                     onPressed: () => _registerPasskey(),
-                    child: const Padding(
-                      padding: EdgeInsets.only(right: 16),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 16),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('This device'),
-                          Text('Face ID / Touch ID / Windows Hello',
-                              style: TextStyle(fontSize: 11)),
+                          Text(l.secThisDevice),
+                          Text(l.secThisDeviceSubtitle,
+                              style: const TextStyle(fontSize: 11)),
                         ],
                       ),
                     ),
@@ -745,15 +721,15 @@ class _SecurityScreenState extends State<SecurityScreen> {
                   MenuItemButton(
                     leadingIcon: const Icon(Icons.usb, size: 20),
                     onPressed: () => _registerPasskey(hardwareKeyOnly: true),
-                    child: const Padding(
-                      padding: EdgeInsets.only(right: 16),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 16),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Security key'),
-                          Text('USB / NFC key — YubiKey, Titan',
-                              style: TextStyle(fontSize: 11)),
+                          Text(l.secSecurityKey),
+                          Text(l.secSecurityKeySubtitle,
+                              style: const TextStyle(fontSize: 11)),
                         ],
                       ),
                     ),
@@ -763,26 +739,19 @@ class _SecurityScreenState extends State<SecurityScreen> {
           ],
         ),
         if (!supported)
-          const Card(
+          Card(
             child: ListTile(
-              leading: Icon(Icons.fingerprint),
-              title: Text('Passkeys not available'),
-              subtitle: Text(
-                'This browser does not expose the WebAuthn API. Try Chrome, '
-                'Safari, or Edge on a recent OS to register a passkey.',
-              ),
+              leading: const Icon(Icons.fingerprint),
+              title: Text(l.secPasskeysUnavailable),
+              subtitle: Text(l.secPasskeysUnavailableSubtitle),
             ),
           )
         else if (passkeys.isEmpty)
-          const Card(
+          Card(
             child: ListTile(
-              leading: Icon(Icons.fingerprint),
-              title: Text('No passkeys registered'),
-              subtitle: Text(
-                'Add this device, your phone, or a hardware security key '
-                '(YubiKey, Titan, etc.) so you can sign in with biometrics '
-                'or a tap instead of a password.',
-              ),
+              leading: const Icon(Icons.fingerprint),
+              title: Text(l.secNoPasskeys),
+              subtitle: Text(l.secNoPasskeysSubtitle),
             ),
           )
         else
@@ -814,12 +783,12 @@ class _SecurityScreenState extends State<SecurityScreen> {
     if (nickname == null) return;
 
     if (!mounted) return;
+    final l = AppLocalizations.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(hardwareKeyOnly
-            ? 'Insert your security key and tap it (choose the USB/security-key '
-                'option if your browser offers a saved passkey)…'
-            : 'Confirm with your device biometric…'),
+            ? l.secInsertSecurityKeyPrompt
+            : l.secConfirmBiometricPrompt),
         duration: const Duration(seconds: 3),
       ),
     );
@@ -829,7 +798,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
       await _load();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Passkey added.')),
+        SnackBar(content: Text(l.secPasskeyAddedSnack)),
       );
     } on PasskeyException catch (e) {
       if (!mounted) return;
@@ -843,22 +812,22 @@ class _SecurityScreenState extends State<SecurityScreen> {
   }
 
   Future<void> _removePasskey(PasskeySummary pk) async {
+    final l = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Remove this passkey?'),
+        title: Text(l.secRemovePasskeyTitle),
         content: Text(
-          'You will no longer be able to sign in with '
-          '"${pk.nickname ?? 'this device'}". This cannot be undone.',
+          l.secRemovePasskeyBody(pk.nickname ?? l.secThisDeviceFallback),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text(l.actionCancel),
           ),
           FilledButton.tonal(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Remove'),
+            child: Text(l.secRemove),
           ),
         ],
       ),
@@ -869,7 +838,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
       await _load();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Passkey removed.')),
+        SnackBar(content: Text(l.secPasskeyRemovedSnack)),
       );
     } catch (e) {
       if (!mounted) return;
@@ -879,6 +848,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
   }
 
   Widget _buildSessionsSection() {
+    final l = AppLocalizations.of(context);
     final sessions = _sessions ?? const <ActiveSession>[];
     final otherCount = sessions.where((s) => !s.isCurrent).length;
     final scheme = Theme.of(context).colorScheme;
@@ -890,27 +860,21 @@ class _SecurityScreenState extends State<SecurityScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            _section('Active sessions'),
+            _section(l.secActiveSessionsSection),
             if (otherCount > 0)
               TextButton.icon(
                 onPressed: _revokeOtherSessions,
                 icon: const Icon(Icons.logout, size: 16),
-                label: Text(
-                  otherCount == 1
-                      ? 'Sign out 1 other'
-                      : 'Sign out $otherCount others',
-                ),
+                label: Text(l.secSignOutNOthers(otherCount)),
               ),
           ],
         ),
         if (sessions.isEmpty)
-          const Card(
+          Card(
             child: ListTile(
-              leading: Icon(Icons.devices_other),
-              title: Text('No active sessions'),
-              subtitle: Text(
-                'You should at least see this device. Refresh to retry.',
-              ),
+              leading: const Icon(Icons.devices_other),
+              title: Text(l.secNoActiveSessions),
+              subtitle: Text(l.secNoActiveSessionsSubtitle),
             ),
           )
         else
@@ -941,7 +905,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              'This device',
+                              l.secThisDeviceBadge,
                               style: TextStyle(
                                 fontSize: 11,
                                 color: scheme.onPrimaryContainer,
@@ -967,7 +931,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
                               ),
                             ),
                             child: Text(
-                              'New since last visit',
+                              l.secNewSinceLastVisit,
                               style: TextStyle(
                                 fontSize: 11,
                                 color: context.warning,
@@ -987,10 +951,10 @@ class _SecurityScreenState extends State<SecurityScreen> {
                         ? TextButton.icon(
                             onPressed: _signOutThisDevice,
                             icon: const Icon(Icons.logout, size: 16),
-                            label: const Text('Sign out'),
+                            label: Text(l.secSignOut),
                           )
                         : IconButton(
-                            tooltip: 'Sign out this session',
+                            tooltip: l.secSignOutSessionTooltip,
                             icon: const Icon(Icons.close),
                             onPressed: () => _revokeSession(sessions[i]),
                           ),
@@ -1085,8 +1049,9 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return AlertDialog(
-      title: const Text('Change password'),
+      title: Text(l.secChangePasswordTitle),
       content: SizedBox(
         width: 360,
         child: Form(
@@ -1097,34 +1062,34 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
               TextFormField(
                 controller: _current,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Current password',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l.secCurrentPasswordLabel,
+                  border: const OutlineInputBorder(),
                 ),
                 validator: (v) =>
-                    (v == null || v.isEmpty) ? 'Required' : null,
+                    (v == null || v.isEmpty) ? l.commonRequired : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _next,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'New password (12+ characters)',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l.secNewPasswordLabel,
+                  border: const OutlineInputBorder(),
                 ),
                 validator: (v) =>
-                    (v == null || v.length < 12) ? 'At least 12 characters' : null,
+                    (v == null || v.length < 12) ? l.secPasswordTooShort : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _confirm,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Confirm',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: l.secConfirmPasswordLabel,
+                  border: const OutlineInputBorder(),
                 ),
                 validator: (v) =>
-                    v == _next.text ? null : 'Passwords do not match',
+                    v == _next.text ? null : l.secPasswordsDoNotMatch,
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
@@ -1140,7 +1105,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
       actions: [
         TextButton(
           onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(l.actionCancel),
         ),
         FilledButton(
           onPressed: _busy ? null : _submit,
@@ -1150,7 +1115,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Change'),
+              : Text(l.secChangeButton),
         ),
       ],
     );
@@ -1184,7 +1149,7 @@ class _TotpEnrollDialogState extends State<_TotpEnrollDialog> {
   Future<void> _confirm() async {
     final raw = _code.text.trim();
     if (raw.length != 6) {
-      setState(() => _error = 'Enter the 6-digit code from your app.');
+      setState(() => _error = AppLocalizations.of(context).secEnterSixDigitCode);
       return;
     }
     setState(() {
@@ -1203,22 +1168,17 @@ class _TotpEnrollDialogState extends State<_TotpEnrollDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
     return AlertDialog(
-      title: const Text('Set up two-factor authentication'),
+      title: Text(l.secEnrollTitle),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              '1. Open your authenticator app (Authy, Google Authenticator, '
-              '1Password, etc.).\n'
-              '2. Scan the QR code below — or choose "Enter a setup key" and '
-              'paste the secret.\n'
-              '3. Enter the 6-digit code your app shows.',
-            ),
+            Text(l.secEnrollSteps),
             const SizedBox(height: 16),
             // Real scannable QR of the otpauth:// URI, on a white card so it
             // reads in either theme. The copyable secret below remains as a
@@ -1252,14 +1212,14 @@ class _TotpEnrollDialogState extends State<_TotpEnrollDialog> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Setup link / secret'),
+                      Text(l.secSetupLinkSecret),
                       TextButton.icon(
                         onPressed: () =>
                             setState(() => _showSecret = !_showSecret),
                         icon: Icon(_showSecret
                             ? Icons.visibility_off
                             : Icons.visibility),
-                        label: Text(_showSecret ? 'Hide' : 'Show'),
+                        label: Text(_showSecret ? l.secHide : l.secShow),
                       ),
                     ],
                   ),
@@ -1278,7 +1238,7 @@ class _TotpEnrollDialogState extends State<_TotpEnrollDialog> {
                         ClipboardData(text: widget.provisioningUri),
                       ),
                       icon: const Icon(Icons.copy, size: 16),
-                      label: const Text('Copy otpauth:// URI'),
+                      label: Text(l.secCopyOtpauthUri),
                     ),
                   ],
                 ],
@@ -1298,9 +1258,9 @@ class _TotpEnrollDialogState extends State<_TotpEnrollDialog> {
                 letterSpacing: 8,
                 fontFamily: 'monospace',
               ),
-              decoration: const InputDecoration(
-                labelText: '6-digit code from your app',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l.secSixDigitCodeLabel,
+                border: const OutlineInputBorder(),
                 hintText: '000000',
               ),
             ),
@@ -1317,7 +1277,7 @@ class _TotpEnrollDialogState extends State<_TotpEnrollDialog> {
       actions: [
         TextButton(
           onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(l.actionCancel),
         ),
         FilledButton(
           onPressed: _busy ? null : _confirm,
@@ -1327,7 +1287,7 @@ class _TotpEnrollDialogState extends State<_TotpEnrollDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Enable'),
+              : Text(l.secEnable),
         ),
       ],
     );
@@ -1353,6 +1313,7 @@ class _PromptPasswordDialogState extends State<_PromptPasswordDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return AlertDialog(
       title: Text(widget.title),
       content: SizedBox(
@@ -1366,9 +1327,9 @@ class _PromptPasswordDialogState extends State<_PromptPasswordDialog> {
             TextField(
               controller: _pw,
               obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Current password',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l.secCurrentPasswordLabel,
+                border: const OutlineInputBorder(),
               ),
             ),
           ],
@@ -1377,11 +1338,11 @@ class _PromptPasswordDialogState extends State<_PromptPasswordDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l.actionCancel),
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(_pw.text),
-          child: const Text('Confirm'),
+          child: Text(l.secConfirm),
         ),
       ],
     );
@@ -1393,25 +1354,26 @@ class _PasskeyRow extends StatelessWidget {
   final VoidCallback onRemove;
   const _PasskeyRow({required this.passkey, required this.onRemove});
 
-  String _registered(DateTime t) {
-    return 'Registered ${DateFormat.yMMMd().format(t.toLocal())}';
+  String _registered(AppLocalizations l, DateTime t) {
+    return l.secPasskeyRegisteredOn(DateFormat.yMMMd().format(t.toLocal()));
   }
 
-  String? _lastUsed(DateTime? t) {
+  String? _lastUsed(AppLocalizations l, DateTime? t) {
     if (t == null) return null;
     final diff = DateTime.now().difference(t.toLocal());
-    if (diff.inMinutes < 1) return 'Last used just now';
-    if (diff.inMinutes < 60) return 'Last used ${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return 'Last used ${diff.inHours}h ago';
-    if (diff.inDays < 30) return 'Last used ${diff.inDays}d ago';
-    return 'Last used ${DateFormat.yMMMd().format(t.toLocal())}';
+    if (diff.inMinutes < 1) return l.secLastUsedJustNow;
+    if (diff.inMinutes < 60) return l.secLastUsedMinutesAgo(diff.inMinutes);
+    if (diff.inHours < 24) return l.secLastUsedHoursAgo(diff.inHours);
+    if (diff.inDays < 30) return l.secLastUsedDaysAgo(diff.inDays);
+    return l.secLastUsedOn(DateFormat.yMMMd().format(t.toLocal()));
   }
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final title = passkey.nickname?.trim().isNotEmpty == true
         ? passkey.nickname!.trim()
-        : (passkey.isHardwareKey ? 'Hardware security key' : 'Device passkey');
+        : (passkey.isHardwareKey ? l.secHardwareKeyTitle : l.secDevicePasskeyTitle);
     // Icon mirrors the authenticator class so the user can tell a phone
     // biometric ("This iPhone") apart from a roaming key ("YubiKey on
     // keychain") at a glance.
@@ -1419,11 +1381,12 @@ class _PasskeyRow extends StatelessWidget {
     // "Platform passkey" rather than "Platform biometric" — a platform
     // credential isn't necessarily a biometric (it may be a device PIN), and
     // overclaiming "biometric" read as wrong for keys the browser mislabeled.
-    final kind = passkey.isHardwareKey ? 'Hardware security key' : 'Platform passkey';
+    final kind = passkey.isHardwareKey ? l.secHardwareKeyKind : l.secPlatformPasskeyKind;
+    final lastUsed = _lastUsed(l, passkey.lastUsedAt);
     final subtitleParts = <String>[
       kind,
-      _registered(passkey.createdAt),
-      if (_lastUsed(passkey.lastUsedAt) != null) _lastUsed(passkey.lastUsedAt)!,
+      _registered(l, passkey.createdAt),
+      if (lastUsed != null) lastUsed,
     ];
     return ListTile(
       leading: Icon(icon),
@@ -1431,7 +1394,7 @@ class _PasskeyRow extends StatelessWidget {
       subtitle: Text(subtitleParts.join(' · ')),
       trailing: IconButton(
         icon: const Icon(Icons.delete_outline),
-        tooltip: 'Remove passkey',
+        tooltip: l.secRemovePasskeyTooltip,
         onPressed: onRemove,
       ),
     );
@@ -1453,46 +1416,41 @@ class _InviteRoleDialogState extends State<_InviteRoleDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return AlertDialog(
-      title: const Text('New invite link'),
+      title: Text(l.secNewInviteLink),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('What level of access should this invite grant?'),
+          Text(l.secInviteAccessQuestion),
           const SizedBox(height: 8),
           RadioListTile<String>(
             value: 'owner',
             groupValue: _role,
             onChanged: (v) => setState(() => _role = v!),
             contentPadding: EdgeInsets.zero,
-            title: const Text('Full access'),
-            subtitle: const Text(
-              'Can view and change everything — link accounts, edit '
-              'transactions, run syncs.',
-            ),
+            title: Text(l.secFullAccess),
+            subtitle: Text(l.secFullAccessSubtitle),
           ),
           RadioListTile<String>(
             value: 'read_only',
             groupValue: _role,
             onChanged: (v) => setState(() => _role = v!),
             contentPadding: EdgeInsets.zero,
-            title: const Text('Read-only'),
-            subtitle: const Text(
-              'Can view everything but cannot make changes. Good for a '
-              'spouse, advisor, or accountant.',
-            ),
+            title: Text(l.secReadOnlyAccess),
+            subtitle: Text(l.secReadOnlyAccessSubtitle),
           ),
         ],
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l.actionCancel),
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(_role),
-          child: const Text('Create link'),
+          child: Text(l.secCreateLink),
         ),
       ],
     );
@@ -1517,24 +1475,22 @@ class _NicknamePromptDialogState extends State<_NicknamePromptDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return AlertDialog(
-      title: const Text('Name this passkey'),
+      title: Text(l.secNamePasskeyTitle),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Optional label so you can tell this passkey apart later. '
-            'Examples: "iPhone 15", "Work MacBook", "YubiKey on keychain".',
-          ),
+          Text(l.secNamePasskeyBody),
           const SizedBox(height: 12),
           TextField(
             controller: _controller,
             autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'Device name',
-              hintText: 'e.g. iPhone 15',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: l.secDeviceNameLabel,
+              hintText: l.secDeviceNameHint,
+              border: const OutlineInputBorder(),
             ),
             maxLength: 64,
             onSubmitted: (v) =>
@@ -1545,11 +1501,11 @@ class _NicknamePromptDialogState extends State<_NicknamePromptDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(l.actionCancel),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, _controller.text.trim()),
-          child: const Text('Continue'),
+          child: Text(l.secContinue),
         ),
       ],
     );

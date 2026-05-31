@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/preferences.dart';
 import '../utils/category.dart';
@@ -87,6 +88,7 @@ class _BudgetsCardState extends State<BudgetsCard> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final spend = _monthlySpendByCategory();
     final hasBudgets = _budgets.isNotEmpty;
 
@@ -102,10 +104,10 @@ class _BudgetsCardState extends State<BudgetsCard> {
               children: [
                 Icon(Icons.donut_small, color: context.tealAccent, size: 18),
                 const SizedBox(width: 8),
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Budgets this month',
-                    style: TextStyle(
+                    l.cfBudgetsTitle,
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                     ),
@@ -114,14 +116,14 @@ class _BudgetsCardState extends State<BudgetsCard> {
                 TextButton.icon(
                   onPressed: () => _openEditor(spend),
                   icon: const Icon(Icons.edit_outlined, size: 16),
-                  label: Text(hasBudgets ? 'Edit' : 'Add'),
+                  label: Text(hasBudgets ? l.cfBudgetsEdit : l.actionAdd),
                 ),
               ],
             ),
             const SizedBox(height: 12),
             if (!hasBudgets)
               Text(
-                'Set a monthly budget for any category to track spending against it here.',
+                l.cfBudgetsEmpty,
                 style: TextStyle(color: context.textMuted, fontSize: 13),
               )
             else
@@ -199,6 +201,7 @@ class _BudgetsCardState extends State<BudgetsCard> {
   }
 
   Future<void> _openEditor(Map<String, double> spend) async {
+    final l = AppLocalizations.of(context);
     final categories = <String>{
       ..._budgets.keys,
       ...spend.keys,
@@ -217,7 +220,7 @@ class _BudgetsCardState extends State<BudgetsCard> {
       context: context,
       builder: (_) {
         return AlertDialog(
-          title: const Text('Edit monthly budgets'),
+          title: Text(l.cfBudgetsDialogTitle),
           content: SizedBox(
             width: 420,
             child: Column(
@@ -256,10 +259,10 @@ class _BudgetsCardState extends State<BudgetsCard> {
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel')),
+                child: Text(l.actionCancel)),
             FilledButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('Save')),
+                child: Text(l.actionSave)),
           ],
         );
       },

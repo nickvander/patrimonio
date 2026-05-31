@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import '../l10n/app_localizations.dart';
 import '../utils/theme_colors.dart';
 
 /// Compact "what hit my accounts this month" card pinned to the Overview.
@@ -23,6 +24,7 @@ class MonthlyCashFlowCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     if (trends.isEmpty) {
       return _buildEmpty(context);
     }
@@ -71,7 +73,7 @@ class MonthlyCashFlowCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Cash flow this month',
+                  l.cfMonthlyTitle,
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
@@ -94,10 +96,7 @@ class MonthlyCashFlowCard extends StatelessWidget {
                 // don't equal "sum of every transaction this month."
                 // Without this, a bulk-import month looks suspicious.
                 Tooltip(
-                  message:
-                      'Excludes internal transfers between your accounts and '
-                      'credit-card payments — those move money around your '
-                      'own balance sheet without changing your spending.',
+                  message: l.cfMonthlyExcludesTooltip,
                   child: Icon(
                     Icons.info_outline,
                     size: 14,
@@ -117,7 +116,7 @@ class MonthlyCashFlowCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: _StatBlock(
-                    label: 'Income',
+                    label: l.cfIncome,
                     value: currencyFormat.format(income),
                     accent: context.tealAccent,
                   ),
@@ -125,7 +124,7 @@ class MonthlyCashFlowCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: _StatBlock(
-                    label: 'Expense',
+                    label: l.cfExpense,
                     value: currencyFormat.format(spending),
                     accent: context.pinkAccent,
                   ),
@@ -199,7 +198,7 @@ class MonthlyCashFlowCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Text(
-          'Cash flow will appear here once a few weeks of transactions are synced.',
+          AppLocalizations.of(context).cfMonthlyEmpty,
           style: TextStyle(color: context.textSubtle, fontSize: 13),
         ),
       ),
@@ -232,6 +231,7 @@ class _NetLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final positive = net >= 0;
     final color = positive ? context.positive : context.pinkAccent;
     final delta = priorNet == null ? null : net - priorNet!;
@@ -255,7 +255,8 @@ class _NetLine extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: Text(
-              '${delta >= 0 ? '↑' : '↓'} ${currencyFormat.format(delta.abs())} vs last month',
+              l.cfVsLastMonth(
+                  '${delta >= 0 ? '↑' : '↓'} ${currencyFormat.format(delta.abs())}'),
               style: TextStyle(
                 fontSize: 11,
                 color: delta >= 0 ? context.positive : context.pinkAccent,
@@ -333,7 +334,7 @@ class _NetSparkline extends StatelessWidget {
     if (points.length < 2) {
       return Center(
         child: Text(
-          'Not enough history yet',
+          AppLocalizations.of(context).cfNotEnoughHistory,
           style: TextStyle(
             color: context.textFaint,
             fontSize: 11,

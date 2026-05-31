@@ -5,6 +5,7 @@ import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 import 'package:web/web.dart' as web;
 import '../services/api_service.dart';
+import '../l10n/app_localizations.dart';
 import '../utils/category.dart';
 import '../utils/currency.dart';
 import '../utils/transaction_display.dart';
@@ -288,19 +289,20 @@ class _TransactionsTabState extends State<TransactionsTab> {
     final onUpdate = widget.onUpdate;
     setState(() => _inlineEditingTxId = null);
     if (onUpdate == null) return;
+    final l = AppLocalizations.of(context);
     try {
       await onUpdate(id, userDescription: text);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           duration: const Duration(seconds: 2),
-          content: Text(text.isEmpty ? 'Override cleared' : 'Renamed'),
+          content: Text(text.isEmpty ? l.txOverrideCleared : l.txRenamed),
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Rename failed: $e')),
+        SnackBar(content: Text(l.txRenameFailed(e.toString()))),
       );
     }
   }
@@ -433,16 +435,17 @@ class _TransactionsTabState extends State<TransactionsTab> {
   /// that one; the strip hides entirely when nothing's active.
   Widget _activeFilterChips() {
     if (!_filters.isActive) return const SizedBox.shrink();
+    final l = AppLocalizations.of(context);
     final chips = <Widget>[];
     if (_filters.flow != TxFlow.all) {
       chips.add(_filterChip(
-        _filters.flow == TxFlow.expense ? 'Expense' : 'Income',
+        _filters.flow == TxFlow.expense ? l.txFlowExpense : l.txFlowIncome,
         () => setState(() => _filters = _filters.copyWith(flow: TxFlow.all)),
       ));
     }
     if (_filters.status != TxStatus.all) {
       chips.add(_filterChip(
-        _filters.status == TxStatus.pending ? 'Pending' : 'Settled',
+        _filters.status == TxStatus.pending ? l.txStatusPending : l.txStatusSettled,
         () => setState(
             () => _filters = _filters.copyWith(status: TxStatus.all)),
       ));
@@ -484,7 +487,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
         label =
             '${DateFormat('MMM d').format(_filters.customStart!)}–${DateFormat('MMM d').format(_filters.customEnd!)}';
       } else {
-        label = _filters.dateRange.label;
+        label = _filters.dateRange.labelFor(context);
       }
       chips.add(_filterChip(
         label,
@@ -500,7 +503,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
         padding: const EdgeInsets.symmetric(horizontal: 8),
         minimumSize: const Size(0, 28),
       ),
-      child: const Text('Clear all'),
+      child: Text(l.txClearAll),
     ));
     return Padding(
       padding: const EdgeInsets.only(top: 8, bottom: 4),
@@ -530,6 +533,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     if (widget.transactions.isEmpty) {
       return Center(
         child: Column(
@@ -539,7 +543,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 size: 64, color: Colors.grey),
             const SizedBox(height: 16),
             Text(
-              'No transactions yet',
+              l.txEmptyTitle,
               style: TextStyle(
                 color: context.textMuted,
                 fontSize: 18,
@@ -547,17 +551,16 @@ class _TransactionsTabState extends State<TransactionsTab> {
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Link a bank, import a statement, or add an account manually\n'
-              'to start seeing activity here.',
+            Text(
+              l.txEmptyBody,
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
+              style: const TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 20),
             FilledButton.icon(
               onPressed: widget.onAddAccount,
               icon: const Icon(Icons.add_link, size: 18),
-              label: const Text('Add an account'),
+              label: Text(l.txAddAccount),
               style: FilledButton.styleFrom(
                 backgroundColor: context.positive,
                 foregroundColor: Colors.black,
@@ -591,7 +594,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               _activeFilterChips(),
               const SizedBox(height: 8),
               Text(
-                'Showing ${filtered.length} of ${widget.transactions.length}',
+                l.txShowingCount(filtered.length, widget.transactions.length),
                 style: const TextStyle(color: Colors.grey, fontSize: 12),
               ),
               const SizedBox(height: 8),
@@ -629,7 +632,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                               }
                             },
                             icon: const Icon(Icons.expand_more, size: 18),
-                            label: const Text('Load more'),
+                            label: Text(l.txLoadMore),
                           ),
                   ),
                 ),
@@ -646,6 +649,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
   // currently-filtered row, the two action buttons run the multi-update,
   // and "Clear" exits selection mode without doing anything.
   Widget _buildBulkActionBar(List<dynamic> filtered) {
+    final l = AppLocalizations.of(context);
     final filteredIds = <String>[
       for (final t in filtered)
         if (t['id'] != null) t['id'].toString(),
@@ -680,27 +684,27 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 : Icons.select_all,
             size: 18,
           ),
-          label: Text(allSelected ? 'Deselect all' : 'Select all'),
+          label: Text(allSelected ? l.txDeselectAll : l.txSelectAll),
         );
 
         final categorize = FilledButton.tonalIcon(
           onPressed:
               selectedCount == 0 ? null : () => _bulkCategorize(),
           icon: const Icon(Icons.label_outline, size: 18),
-          label: const Text('Set category'),
+          label: Text(l.txSetCategory),
         );
 
         final moveAccount = FilledButton.tonalIcon(
           onPressed:
               selectedCount == 0 ? null : () => _bulkMoveAccount(),
           icon: const Icon(Icons.compare_arrows, size: 18),
-          label: const Text('Move account'),
+          label: Text(l.txMoveAccount),
         );
 
         final rename = FilledButton.tonalIcon(
           onPressed: selectedCount == 0 ? null : () => _bulkRename(),
           icon: const Icon(Icons.edit_outlined, size: 18),
-          label: const Text('Rename'),
+          label: Text(l.txRename),
         );
 
         final delete = FilledButton.tonalIcon(
@@ -708,7 +712,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               ? null
               : () => _bulkDelete(),
           icon: Icon(Icons.delete_outline, size: 18, color: context.negative),
-          label: Text('Delete', style: TextStyle(color: context.negative)),
+          label: Text(l.actionDelete, style: TextStyle(color: context.negative)),
         );
 
         final clear = TextButton(
@@ -716,11 +720,11 @@ class _TransactionsTabState extends State<TransactionsTab> {
             _selectionMode = false;
             _selectedIds.clear();
           }),
-          child: const Text('Clear'),
+          child: Text(l.txClear),
         );
 
         final summary = Text(
-          '$selectedCount selected',
+          l.txSelectedCount(selectedCount),
           style: TextStyle(
               fontWeight: FontWeight.w700, color: context.positive),
         );
@@ -764,12 +768,13 @@ class _TransactionsTabState extends State<TransactionsTab> {
   }
 
   Future<void> _bulkCategorize() async {
+    final l = AppLocalizations.of(context);
     final suggestions = _distinctCategories();
     var typed = '';
     final cat = await showDialog<String>(
       context: context,
       builder: (dialogCtx) => AlertDialog(
-        title: const Text('Set category'),
+        title: Text(l.txSetCategory),
         content: Autocomplete<String>(
           // Suggest from the categories already in use so the user
           // doesn't fragment them ("Restaurant" vs "Restaurants"); a
@@ -786,7 +791,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               controller: controller,
               focusNode: focusNode,
               autofocus: true,
-              decoration: const InputDecoration(hintText: 'e.g. Restaurants'),
+              decoration: InputDecoration(hintText: l.txCategoryHint),
               onChanged: (v) => typed = v,
               onSubmitted: (v) => Navigator.pop(dialogCtx, v.trim()),
             );
@@ -795,10 +800,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogCtx),
-              child: const Text('Cancel')),
+              child: Text(l.actionCancel)),
           FilledButton(
               onPressed: () => Navigator.pop(dialogCtx, typed.trim()),
-              child: const Text('Apply')),
+              child: Text(l.actionApply)),
         ],
       ),
     );
@@ -807,29 +812,30 @@ class _TransactionsTabState extends State<TransactionsTab> {
   }
 
   Future<void> _bulkRename() async {
+    final l = AppLocalizations.of(context);
     final controller = TextEditingController();
     final count = _selectedIds.length;
     final name = await showDialog<String>(
       context: context,
       builder: (dialogCtx) => AlertDialog(
-        title: Text('Rename $count transactions'),
+        title: Text(l.txRenameNTitle(count)),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'New description',
-            hintText: 'e.g. Rent — March',
+          decoration: InputDecoration(
+            labelText: l.txNewDescription,
+            hintText: l.txRenameHint,
           ),
           onSubmitted: (v) => Navigator.pop(dialogCtx, v.trim()),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogCtx),
-              child: const Text('Cancel')),
+              child: Text(l.actionCancel)),
           FilledButton(
               onPressed: () =>
                   Navigator.pop(dialogCtx, controller.text.trim()),
-              child: const Text('Apply')),
+              child: Text(l.actionApply)),
         ],
       ),
     );
@@ -842,22 +848,20 @@ class _TransactionsTabState extends State<TransactionsTab> {
     if (onBulkDelete == null) return;
     final ids = _selectedIds.toList();
     if (ids.isEmpty) return;
+    final l = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogCtx) => AlertDialog(
-        title: Text('Delete ${ids.length} transactions?'),
-        content: const Text(
-          'They\'ll be removed from your lists and totals. A future sync '
-          'may re-import bank-linked transactions.',
-        ),
+        title: Text(l.txDeleteNTitle(ids.length)),
+        content: Text(l.txBulkDeleteBody),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogCtx, false),
-              child: const Text('Cancel')),
+              child: Text(l.actionCancel)),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: context.negative),
             onPressed: () => Navigator.pop(dialogCtx, true),
-            child: const Text('Delete'),
+            child: Text(l.actionDelete),
           ),
         ],
       ),
@@ -865,7 +869,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
     if (confirmed != true) return;
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
-      SnackBar(content: Text('Deleting ${ids.length} transactions…')),
+      SnackBar(content: Text(l.txDeletingN(ids.length))),
     );
     var ok = true;
     try {
@@ -882,18 +886,19 @@ class _TransactionsTabState extends State<TransactionsTab> {
     messenger.showSnackBar(
       SnackBar(
         content: Text(ok
-            ? 'Deleted ${ids.length} transactions'
-            : 'Couldn\'t delete some transactions'),
+            ? l.txDeletedN(ids.length)
+            : l.txDeleteSomeFailed),
       ),
     );
   }
 
   Future<void> _bulkMoveAccount() async {
+    final l = AppLocalizations.of(context);
     final accId = await showDialog<String>(
       context: context,
       builder: (_) {
         return SimpleDialog(
-          title: const Text('Move to account'),
+          title: Text(l.txMoveToAccount),
           children: [
             for (final a in widget.accounts)
               SimpleDialogOption(
@@ -965,16 +970,17 @@ class _TransactionsTabState extends State<TransactionsTab> {
     // Close the detail modal so the refreshed list (which hides the
     // parent) is the visible state.
     Navigator.of(context).pop();
+    final l = AppLocalizations.of(context);
     try {
       await onSplit(tx['id'].toString(), result);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Split into ${result.length} parts')),
+        SnackBar(content: Text(l.txSplitIntoN(result.length))),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Split failed: $e')),
+        SnackBar(content: Text(l.txSplitFailed(e.toString()))),
       );
     }
   }
@@ -1003,6 +1009,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
     final onUnsplit = widget.onUnsplitTransaction;
     final onReplace = widget.onReplaceSplits;
     if (onSplit == null || onUnsplit == null) return;
+    final l = AppLocalizations.of(context);
 
     final siblings = widget.transactions
         .where((row) =>
@@ -1011,7 +1018,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
         .toList();
     if (siblings.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not find split children to edit.')),
+        SnackBar(content: Text(l.txSplitChildrenNotFound)),
       );
       return;
     }
@@ -1063,12 +1070,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Split updated (${result.length} parts)')),
+        SnackBar(content: Text(l.txSplitUpdatedN(result.length))),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Edit split failed: $e')),
+        SnackBar(content: Text(l.txEditSplitFailed(e.toString()))),
       );
     }
   }
@@ -1130,6 +1137,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
   }) async {
     final onUpdate = widget.onUpdate;
     if (onUpdate == null) return;
+    final l = AppLocalizations.of(context);
     final controller = TextEditingController(
       text: (tx['user_description'] ?? '').toString(),
     );
@@ -1142,25 +1150,23 @@ class _TransactionsTabState extends State<TransactionsTab> {
       builder: (ctx) {
         return StatefulBuilder(builder: (ctx, setLocal) {
           return AlertDialog(
-            title: const Text('Rename transaction'),
+            title: Text(l.txRenameTransaction),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Display label only. The original bank description is '
-                  'preserved and remains visible in this row’s detail '
-                  'panel under "Raw bank text".',
+                  l.txRenameDisplayLabelHelp,
                   style: TextStyle(fontSize: 12, color: context.textSubtle),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: controller,
                   autofocus: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Display label',
-                    hintText: 'e.g. Rent — John',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: l.txDisplayLabel,
+                    hintText: l.txDisplayLabelHint,
+                    border: const OutlineInputBorder(),
                   ),
                 ),
                 if (similarIds.isNotEmpty) ...[
@@ -1173,12 +1179,11 @@ class _TransactionsTabState extends State<TransactionsTab> {
                     onChanged: (v) =>
                         setLocal(() => applyToAll = v ?? false),
                     title: Text(
-                      'Also apply to ${similarIds.length} matching '
-                      'transaction${similarIds.length == 1 ? '' : 's'}',
+                      l.txAlsoApplyToN(similarIds.length),
                       style: const TextStyle(fontSize: 13),
                     ),
                     subtitle: Text(
-                      'Rows that share this raw bank description.',
+                      l.txAlsoApplySubtitle,
                       style: TextStyle(
                           fontSize: 11, color: context.textSubtle),
                     ),
@@ -1189,7 +1194,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(null),
-                child: const Text('Cancel'),
+                child: Text(l.actionCancel),
               ),
               // Clear button only when something is set on the row already
               // — avoids a dead button on transactions that never had an
@@ -1198,14 +1203,14 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 TextButton(
                   onPressed: () => Navigator.of(ctx)
                       .pop((text: '', applyToAll: applyToAll)),
-                  child: const Text('Clear override'),
+                  child: Text(l.txClearOverride),
                 ),
               FilledButton(
                 onPressed: () => Navigator.of(ctx).pop((
                   text: controller.text.trim(),
                   applyToAll: applyToAll,
                 )),
-                child: const Text('Save'),
+                child: Text(l.actionSave),
               ),
             ],
           );
@@ -1235,11 +1240,11 @@ class _TransactionsTabState extends State<TransactionsTab> {
         content: Text(
           ids.length == 1
               ? (failed == 0
-                  ? 'Renamed'
-                  : 'Rename failed')
+                  ? l.txRenamed
+                  : l.txRenameFailedShort)
               : (failed == 0
-                  ? 'Renamed ${ids.length} transactions'
-                  : 'Renamed ${ids.length - failed} · $failed failed'),
+                  ? l.txRenamedN(ids.length)
+                  : l.txRenamedNFailed(ids.length - failed, failed)),
         ),
       ),
     );
@@ -1252,9 +1257,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
       {String? userCategory, String? accountId, String? userDescription}) async {
     final ids = _selectedIds.toList();
     if (ids.isEmpty) return;
+    final l = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
-      SnackBar(content: Text('Updating ${ids.length} transactions…')),
+      SnackBar(content: Text(l.txUpdatingN(ids.length))),
     );
 
     int updated = 0;
@@ -1297,8 +1303,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
       SnackBar(
         content: Text(
           failed == 0
-              ? 'Updated $updated transactions'
-              : 'Updated $updated · $failed failed',
+              ? l.txUpdatedN(updated)
+              : l.txUpdatedNFailed(updated, failed),
         ),
       ),
     );
@@ -1309,6 +1315,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
   /// full-width input, so the title doesn't fight a 280px search box for
   /// horizontal space.
   Widget _buildToolbar(bool isNarrow) {
+    final l = AppLocalizations.of(context);
     if (isNarrow && _searchOpenOnNarrow) {
       return Row(
         children: [
@@ -1327,7 +1334,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               });
             },
             icon: const Icon(Icons.close, size: 20),
-            tooltip: 'Close search',
+            tooltip: l.txCloseSearch,
           ),
         ],
       );
@@ -1335,10 +1342,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        const Flexible(
+        Flexible(
           child: Text(
-            'Recent transactions',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            l.txRecentTransactions,
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1354,7 +1361,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 IconButton(
                   onPressed: _openFilters,
                   icon: const Icon(Icons.filter_list, size: 22),
-                  tooltip: 'Filter transactions',
+                  tooltip: l.txFilterTransactions,
                 ),
                 if (_filters.isActive)
                   Positioned(
@@ -1382,23 +1389,23 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 color: _selectionMode ? context.positive : null,
               ),
               tooltip:
-                  _selectionMode ? 'Exit selection mode' : 'Select multiple',
+                  _selectionMode ? l.txExitSelectionMode : l.txSelectMultiple,
             ),
             if (widget.apiService != null) ...[
               IconButton(
                 onPressed: () => _openAddDialog(),
                 icon: const Icon(Icons.add, size: 22),
-                tooltip: 'Add transaction',
+                tooltip: l.txAddTransaction,
               ),
               IconButton(
                 onPressed: () => _downloadCsv(),
                 icon: const Icon(Icons.file_download_outlined, size: 22),
-                tooltip: 'Export CSV',
+                tooltip: l.txExportCsv,
               ),
             ],
             if (widget.onDetectFxTransfers != null)
               IconButton(
-                tooltip: 'Scan for cross-currency transfers (Wise / Remitly / etc.)',
+                tooltip: l.txScanTransfers,
                 icon: const Icon(Icons.swap_horiz, size: 22),
                 onPressed: () => widget.onDetectFxTransfers!(),
               ),
@@ -1407,7 +1414,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 onPressed: () =>
                     setState(() => _searchOpenOnNarrow = true),
                 icon: const Icon(Icons.search, size: 20),
-                tooltip: 'Search transactions',
+                tooltip: l.txSearchTransactions,
               )
             else
               SizedBox(width: 280, height: 40, child: _searchField()),
@@ -1455,7 +1462,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
         );
       },
       decoration: InputDecoration(
-        hintText: 'Search transactions…',
+        hintText: AppLocalizations.of(context).searchTransactionsHint,
         hintStyle: TextStyle(color: context.textFaint, fontSize: 13),
         prefixIcon:
             Icon(Icons.search, size: 18, color: context.textFaint),
@@ -1618,11 +1625,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
     final today = DateTime(now.year, now.month, now.day);
     final d = DateTime(date.year, date.month, date.day);
     final diff = today.difference(d).inDays;
+    final l = AppLocalizations.of(context);
     String label;
     if (diff == 0) {
-      label = 'Today';
+      label = l.txDateToday;
     } else if (diff == 1) {
-      label = 'Yesterday';
+      label = l.txDateYesterday;
     } else if (diff > 1 && diff < 7) {
       label = DateFormat('EEEE').format(date);
     } else if (date.year == now.year) {
@@ -1654,6 +1662,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
   /// Total row height is ~56px (was 92), so a wall of transactions
   /// actually feels like a scannable list instead of an inbox of cards.
   Widget _buildTransactionRow(dynamic tx, bool isNarrow) {
+    final l = AppLocalizations.of(context);
     final sourceAmount = ((tx['amount'] as num?)?.toDouble() ?? 0.0);
     final sourceCurrency =
         (tx['currency'] ?? widget.targetCurrency).toString();
@@ -1816,12 +1825,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
                                       fontSize: 14,
                                       height: 1.2,
                                     ),
-                                    decoration: const InputDecoration(
+                                    decoration: InputDecoration(
                                       isDense: true,
-                                      contentPadding: EdgeInsets.symmetric(
+                                      contentPadding: const EdgeInsets.symmetric(
                                           horizontal: 6, vertical: 4),
-                                      border: OutlineInputBorder(),
-                                      hintText: 'New label · Enter to save',
+                                      border: const OutlineInputBorder(),
+                                      hintText: l.txInlineEditHint,
                                     ),
                                   ),
                                 ),
@@ -1863,7 +1872,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            'Split',
+                            l.txSplitPill,
                             style: TextStyle(
                               fontSize: 9,
                               fontWeight: FontWeight.w700,
@@ -1933,9 +1942,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
                         color: Colors.orange.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(3),
                       ),
-                      child: const Text(
-                        'Pending',
-                        style: TextStyle(
+                      child: Text(
+                        l.txStatusPending,
+                        style: const TextStyle(
                           color: Colors.orange,
                           fontSize: 9,
                           fontWeight: FontWeight.bold,
@@ -1983,6 +1992,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
   /// - "Recent at this merchant" — up to 3 other transactions matching description
   /// - Save / Close footer
   void _showTransactionDetails(dynamic tx) {
+    final l = AppLocalizations.of(context);
     final catController = TextEditingController(
       text: (tx['user_category'] ?? tx['category'] ?? '').toString(),
     );
@@ -2055,7 +2065,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
-      barrierLabel: 'Dismiss',
+      barrierLabel: l.txDismiss,
       barrierColor: Colors.black.withValues(alpha: 0.4),
       transitionDuration: const Duration(milliseconds: 220),
       pageBuilder: (ctx, anim, secAnim) {
@@ -2092,7 +2102,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                     child: IconButton(
                       icon: const Icon(Icons.close, size: 20),
                       onPressed: () => Navigator.pop(context),
-                      tooltip: 'Close',
+                      tooltip: l.actionClose,
                       // Keep a ≥48px touch target (a11y) instead of the
                       // zero-padding/empty-constraints ~20px hit area.
                       constraints: const BoxConstraints(
@@ -2160,8 +2170,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
                                 // below.
                                 IconButton(
                                   tooltip: merchantMatches.isEmpty
-                                      ? 'Rename'
-                                      : 'Rename (+${merchantMatches.length} matching)',
+                                      ? l.txRename
+                                      : l.txRenamePlusMatching(merchantMatches.length),
                                   iconSize: 18,
                                   visualDensity: VisualDensity.compact,
                                   icon: const Icon(Icons.edit_outlined),
@@ -2209,7 +2219,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          isExpense ? 'OUTFLOW' : 'INFLOW',
+                          isExpense ? l.txOutflow : l.txInflow,
                           style: TextStyle(
                             fontSize: 10,
                             letterSpacing: 1.2,
@@ -2235,7 +2245,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
                         if (needsConversion) ...[
                           const SizedBox(height: 4),
                           Text(
-                            '≈ ${widget.currencyFormat.format(convertedAmount.abs())} (estimated)',
+                            l.txApproxEstimated(
+                                widget.currencyFormat.format(convertedAmount.abs())),
                             style: TextStyle(
                               fontSize: 12,
                               color: context.textSubtle,
@@ -2259,7 +2270,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                       if ((tx['account_name'] ?? '').toString().isNotEmpty)
                         _metaChip(Icons.account_balance,
                             tx['account_name'].toString()),
-                      _metaChip(Icons.cloud_download, _sourceLabel(source)),
+                      _metaChip(Icons.cloud_download, _sourceLabel(context, source)),
                       // The auto-classified category, prettified from
                       // Plaid's PFC enum codes. Only shown when the user
                       // hasn't already overridden it with a hand-typed
@@ -2296,13 +2307,13 @@ class _TransactionsTabState extends State<TransactionsTab> {
                         _metaChip(Icons.storefront,
                             (tx['merchant_name'] ?? '').toString()),
                       if (pending)
-                        _metaChip(Icons.hourglass_empty, 'Pending',
+                        _metaChip(Icons.hourglass_empty, l.txStatusPending,
                             accent: Colors.orange),
                     ],
                   ),
                   if (rawDescription != titleDescription) ...[
                     const SizedBox(height: 16),
-                    _sectionLabel('Raw bank text'),
+                    _sectionLabel(l.txRawBankText),
                     const SizedBox(height: 4),
                     SelectableText(
                       rawDescription,
@@ -2314,14 +2325,14 @@ class _TransactionsTabState extends State<TransactionsTab> {
                     ),
                   ],
                   const SizedBox(height: 18),
-                  _sectionLabel('Category & notes'),
+                  _sectionLabel(l.txCategoryAndNotes),
                   const SizedBox(height: 8),
                   TextField(
                     controller: catController,
                     decoration: InputDecoration(
-                      labelText: 'Category',
+                      labelText: l.txCategory,
                       hintText: originalCategory.isNotEmpty
-                          ? 'e.g. $originalCategory'
+                          ? l.txCategoryExample(originalCategory)
                           : null,
                       border: const OutlineInputBorder(),
                       isDense: true,
@@ -2330,10 +2341,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: notesController,
-                    decoration: const InputDecoration(
-                      labelText: 'Notes',
-                      hintText: 'Why does this transaction matter?',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l.txNotes,
+                      hintText: l.txNotesHint,
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                     maxLines: 3,
@@ -2346,12 +2357,14 @@ class _TransactionsTabState extends State<TransactionsTab> {
                   ..._fxTransferBlock(tx['id']?.toString() ?? ''),
                   if (similar.isNotEmpty) ...[
                     const SizedBox(height: 20),
-                    _sectionLabel('Recent at this merchant'),
+                    _sectionLabel(l.txRecentAtMerchant),
                     const SizedBox(height: 6),
                     Padding(
                       padding: const EdgeInsets.only(bottom: 6),
                       child: Text(
-                        'Total: ${widget.currencyFormat.format(merchantTotal)} across $merchantCount transactions',
+                        l.txMerchantTotal(
+                            widget.currencyFormat.format(merchantTotal),
+                            merchantCount),
                         style: TextStyle(
                           fontSize: 12,
                           color: context.textMuted,
@@ -2363,7 +2376,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                   ],
                   if (widget.accounts.isNotEmpty) ...[
                     const SizedBox(height: 20),
-                    _sectionLabel('Move to a different account'),
+                    _sectionLabel(l.txMoveToDifferentAccount),
                     const SizedBox(height: 6),
                     _AccountMover(
                       accounts: widget.accounts,
@@ -2378,7 +2391,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                         } catch (e) {
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Move failed: $e')),
+                            SnackBar(content: Text(l.txMoveFailed(e.toString()))),
                           );
                         }
                       },
@@ -2404,7 +2417,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                                 _openSplitDialog(tx, sourceCurrency, sourceAmount,
                                     titleDescription, originalCategory),
                             icon: const Icon(Icons.call_split, size: 16),
-                            label: const Text('Split this transaction'),
+                            label: Text(l.txSplitThisTransaction),
                           ),
                         if ((tx['parent_id'] ?? '').toString().isNotEmpty &&
                             widget.onSplitTransaction != null &&
@@ -2418,7 +2431,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                               originalCategory,
                             ),
                             icon: const Icon(Icons.edit_outlined, size: 16),
-                            label: const Text('Edit split'),
+                            label: Text(l.txEditSplit),
                           ),
                         if ((tx['parent_id'] ?? '').toString().isNotEmpty &&
                             widget.onUnsplitTransaction != null)
@@ -2430,17 +2443,17 @@ class _TransactionsTabState extends State<TransactionsTab> {
                                     (tx['parent_id'] ?? '').toString());
                                 if (!mounted) return;
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Split removed')),
+                                  SnackBar(content: Text(l.txSplitRemoved)),
                                 );
                               } catch (e) {
                                 if (!mounted) return;
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Unsplit failed: $e')),
+                                  SnackBar(content: Text(l.txUnsplitFailed(e.toString()))),
                                 );
                               }
                             },
                             icon: const Icon(Icons.call_merge, size: 16),
-                            label: const Text('Unsplit (restore original)'),
+                            label: Text(l.txUnsplitRestore),
                           ),
                       ],
                     ),
@@ -2454,20 +2467,19 @@ class _TransactionsTabState extends State<TransactionsTab> {
                             final confirm = await showDialog<bool>(
                               context: context,
                               builder: (ctx) => AlertDialog(
-                                title: const Text('Delete transaction?'),
-                                content: const Text(
-                                    'This permanently removes the transaction. To re-import from CSV/PDF you will need to upload the file again.'),
+                                title: Text(l.txDeleteOneTitle),
+                                content: Text(l.txDeleteOneBody),
                                 actions: [
                                   TextButton(
                                       onPressed: () =>
                                           Navigator.pop(ctx, false),
-                                      child: const Text('Cancel')),
+                                      child: Text(l.actionCancel)),
                                   TextButton(
                                     onPressed: () =>
                                         Navigator.pop(ctx, true),
                                     style: TextButton.styleFrom(
                                         foregroundColor: Colors.redAccent),
-                                    child: const Text('Delete'),
+                                    child: Text(l.actionDelete),
                                   ),
                                 ],
                               ),
@@ -2482,19 +2494,19 @@ class _TransactionsTabState extends State<TransactionsTab> {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                     content:
-                                        Text('Delete failed: $e')),
+                                        Text(l.txDeleteFailed(e.toString()))),
                               );
                             }
                           },
                           icon: const Icon(Icons.delete_outline,
                               size: 16, color: Colors.redAccent),
-                          label: const Text('Delete',
-                              style: TextStyle(color: Colors.redAccent)),
+                          label: Text(l.actionDelete,
+                              style: const TextStyle(color: Colors.redAccent)),
                         ),
                       const Spacer(),
                       TextButton(
                         onPressed: () => Navigator.pop(context),
-                        child: const Text('Close'),
+                        child: Text(l.actionClose),
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton(
@@ -2506,7 +2518,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                             userNotes: notesController.text.trim(),
                           );
                         },
-                        child: const Text('Save'),
+                        child: Text(l.actionSave),
                       ),
                     ],
                   ),
@@ -2545,10 +2557,11 @@ class _TransactionsTabState extends State<TransactionsTab> {
           raw['dest_tx_id']?.toString() == txId;
     }).toList();
     if (matches.isEmpty) return const [];
+    final l = AppLocalizations.of(context);
 
     final widgets = <Widget>[
       const SizedBox(height: 20),
-      _sectionLabel('Linked cross-currency transfer'),
+      _sectionLabel(l.txLinkedTransfer),
       const SizedBox(height: 6),
     ];
     for (final raw in matches) {
@@ -2603,8 +2616,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 ),
                 Text(
                   confirmed
-                      ? 'Confirmed'
-                      : 'Auto · $confidence%${keyword.isEmpty ? '' : ' · $keyword'}',
+                      ? l.txConfirmed
+                      : (keyword.isEmpty
+                          ? l.txAutoConfidence(confidence)
+                          : l.txAutoConfidenceKeyword(confidence, keyword)),
                   style: TextStyle(
                     fontSize: 11,
                     color: accent,
@@ -2615,8 +2630,13 @@ class _TransactionsTabState extends State<TransactionsTab> {
             ),
             const SizedBox(height: 4),
             Text(
-              '${_formatNative(srcAmt, srcCcy)} → ${_formatNative(dstAmt, dstCcy)} '
-              '· implied ${implied.toStringAsFixed(2)} $dstCcy/$srcCcy',
+              l.txTransferImpliedRate(
+                _formatNative(srcAmt, srcCcy),
+                _formatNative(dstAmt, dstCcy),
+                implied.toStringAsFixed(2),
+                dstCcy,
+                srcCcy,
+              ),
               style: TextStyle(
                 fontSize: 12,
                 color: context.textMuted,
@@ -2633,7 +2653,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                       Navigator.of(context).pop();
                       await widget.onConfirmFxTransfer!(m['id'].toString());
                     },
-                    child: const Text('Confirm'),
+                    child: Text(l.txConfirm),
                   ),
                 if (widget.onUnlinkFxTransfer != null)
                   TextButton(
@@ -2642,7 +2662,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                       await widget.onUnlinkFxTransfer!(m['id'].toString());
                     },
                     child: Text(
-                      'Unlink',
+                      l.txUnlink,
                       style: TextStyle(color: context.negative),
                     ),
                   ),
@@ -2695,16 +2715,17 @@ class _TransactionsTabState extends State<TransactionsTab> {
     );
   }
 
-  String _sourceLabel(String source) {
+  String _sourceLabel(BuildContext context, String source) {
+    final l = AppLocalizations.of(context);
     switch (source) {
       case 'plaid':
-        return 'Synced via Plaid';
+        return l.txSourcePlaid;
       case 'csv':
-        return 'Imported (CSV)';
+        return l.txSourceCsv;
       case 'manual':
-        return 'Manual entry';
+        return l.txSourceManual;
       default:
-        return source.isEmpty ? 'Unknown source' : source;
+        return source.isEmpty ? l.txSourceUnknown : source;
     }
   }
 
@@ -2906,6 +2927,7 @@ class _AccountMoverState extends State<_AccountMover> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final candidates = widget.accounts
         .where((a) => a['id']?.toString() != widget.currentAccountId)
         .toList();
@@ -2915,9 +2937,9 @@ class _AccountMoverState extends State<_AccountMover> {
           child: DropdownButtonFormField<String>(
             initialValue: _selectedId,
             isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'Reassign to…',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: l.txReassignTo,
+              border: const OutlineInputBorder(),
               isDense: true,
             ),
             items: candidates.map<DropdownMenuItem<String>>((a) {
@@ -2939,7 +2961,7 @@ class _AccountMoverState extends State<_AccountMover> {
         const SizedBox(width: 8),
         ElevatedButton(
           onPressed: _selectedId == null ? null : () => widget.onMove(_selectedId!),
-          child: const Text('Move'),
+          child: Text(l.txMove),
         ),
       ],
     );

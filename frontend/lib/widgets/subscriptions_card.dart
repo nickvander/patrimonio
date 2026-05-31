@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../l10n/app_localizations.dart';
 import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
@@ -53,6 +54,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     if (widget.subscriptions.isEmpty) return const SizedBox.shrink();
 
     // Partition by status. Rows without an explicit status field fall
@@ -94,7 +96,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Recurring charges',
+                  l.cfSubscriptionsTitle,
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
@@ -104,8 +106,10 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    '${active.length} active'
-                    '${stopped.isEmpty ? '' : ' · ${stopped.length} stopped'}',
+                    l.cfSubscriptionsActiveCount(active.length) +
+                        (stopped.isEmpty
+                            ? ''
+                            : ' · ${l.cfSubscriptionsStoppedCount(stopped.length)}'),
                     style: TextStyle(
                       fontSize: 12,
                       color: context.textSubtle,
@@ -115,7 +119,8 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
                   ),
                 ),
                 Text(
-                  '≈ ${widget.currencyFormat.format(totalMonthly * widget.conversionFactor)} / mo',
+                  l.cfPerMonthApprox(widget.currencyFormat
+                      .format(totalMonthly * widget.conversionFactor)),
                   style: TextStyle(
                     fontSize: 13,
                     color: context.textPrimary,
@@ -127,8 +132,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Charges that repeat every 5–62 days. Tap a row to filter '
-              'the transactions list.',
+              l.cfSubscriptionsSubtitle,
               style: TextStyle(fontSize: 11, color: context.textSubtle),
             ),
             const SizedBox(height: 12),
@@ -136,7 +140,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Text(
-                  'No active subscriptions detected.',
+                  l.cfSubscriptionsNoneActive,
                   style: TextStyle(
                     fontSize: 12,
                     color: context.textSubtle,
@@ -168,7 +172,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'Stopped (${stopped.length})',
+                        l.cfSubscriptionsStoppedHeader(stopped.length),
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -178,7 +182,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Last charged > 90 days ago',
+                          l.cfSubscriptionsStoppedHint,
                           style: TextStyle(
                             fontSize: 11,
                             color: context.textSubtle,
@@ -208,6 +212,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
     Map<String, dynamic> s, {
     required bool cancelled,
   }) {
+    final l = AppLocalizations.of(context);
     final merchant = (s['merchant'] ?? '—').toString();
     final monthlyUsd = (s['monthly_usd'] as num?)?.toDouble() ?? 0.0;
     final cadence = (s['cadence_days'] as num?)?.toInt() ?? 30;
@@ -219,12 +224,12 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
         (s['by_account'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
 
     final cadenceLabel = cadence <= 8
-        ? 'Weekly'
+        ? l.cfCadenceWeekly
         : cadence <= 16
-            ? 'Bi-weekly'
+            ? l.cfCadenceBiweekly
             : cadence <= 35
-                ? 'Monthly'
-                : 'Every ${cadence}d';
+                ? l.cfCadenceMonthly
+                : l.cfCadenceEveryNDays(cadence);
 
     // Muted treatment for cancelled rows: lower opacity icon tile,
     // subdued text. The row is still tappable to drill into the
@@ -275,8 +280,8 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '$cadenceLabel · $occurrences charges'
-                    '${lastDate == null ? '' : ' · last ${DateFormat('MMM d').format(lastDate)}'}',
+                    '$cadenceLabel · ${l.cfChargesCount(occurrences)}'
+                    '${lastDate == null ? '' : ' · ${l.cfLastCharged(DateFormat('MMM d').format(lastDate))}'}',
                     style: TextStyle(
                       fontSize: 11,
                       color: context.textSubtle,
@@ -320,8 +325,10 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
                 ),
                 Text(
                   cancelled
-                      ? 'was ${widget.currencyFormat.format(monthlyUsd * widget.conversionFactor)} / mo'
-                      : '${widget.currencyFormat.format(monthlyUsd * widget.conversionFactor)} / mo',
+                      ? l.cfWasPerMonth(widget.currencyFormat
+                          .format(monthlyUsd * widget.conversionFactor))
+                      : l.cfPerMonth(widget.currencyFormat
+                          .format(monthlyUsd * widget.conversionFactor)),
                   style: TextStyle(
                     fontSize: 11,
                     color: context.textSubtle,
@@ -336,7 +343,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
             // subscription" vs "stopped subscription").
             if (!cancelled && widget.onIgnoreMerchant != null)
               IconButton(
-                tooltip: 'Not a subscription — hide this row',
+                tooltip: l.cfNotASubscription,
                 iconSize: 16,
                 visualDensity: VisualDensity.compact,
                 icon: const Icon(Icons.close),
@@ -361,6 +368,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
     const maxChips = 3;
     final visible = slices.take(maxChips).toList();
     final hidden = slices.length - visible.length;
+    final l = AppLocalizations.of(context);
     final accent =
         cancelled ? context.neutralAccent : context.purpleAccent;
     return Wrap(
@@ -390,7 +398,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
           Padding(
             padding: const EdgeInsets.only(left: 2),
             child: Text(
-              '+$hidden more',
+              l.cfPlusNMore(hidden),
               style: TextStyle(
                 fontSize: 10,
                 color: context.textSubtle,

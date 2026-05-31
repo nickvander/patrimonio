@@ -69,6 +69,27 @@ void main() {
         'Mostrando en MXN · toca para cambiar');
   });
 
+  testWidgets('tranche-3 strings localize (tx / security / cashflow / dash)',
+      (tester) async {
+    String quad(AppLocalizations l) =>
+        '${l.txSetCategory}|${l.secTitle}|${l.cfMonthlyTitle}|${l.dashSignOut}';
+    expect(await readKeys(tester, const Locale('en'), quad),
+        'Set category|Security|Cash flow this month|Sign out');
+    expect(await readKeys(tester, const Locale('es'), quad),
+        'Asignar categoría|Seguridad|Flujo de efectivo de este mes|Cerrar sesión');
+  });
+
+  testWidgets('a tranche-3 plural resolves both cases in es', (tester) async {
+    expect(
+        await readKeys(
+            tester, const Locale('es'), (l) => l.cfChargesCount(1)),
+        '1 cargo');
+    expect(
+        await readKeys(
+            tester, const Locale('es'), (l) => l.cfChargesCount(5)),
+        '5 cargos');
+  });
+
   test('both locales are supported', () {
     final codes =
         AppLocalizations.supportedLocales.map((l) => l.languageCode).toSet();

@@ -405,6 +405,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// OAuth redirect; Bitso uses the API-key dialog — mirrors the Settings
   /// "Connect crypto exchanges" controls.
   void _openConnectExchange() {
+    final l = AppLocalizations.of(context);
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -415,7 +416,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ListTile(
               leading: const Icon(Icons.login, color: Color(0xFF0052FF)),
               title: const Text('Coinbase'),
-              subtitle: const Text('Connect via OAuth'),
+              subtitle: Text(l.dashConnectViaOauth),
               onTap: () {
                 Navigator.of(sheetCtx).pop();
                 web.window.location.href = '${_apiService.baseUrl}/auth/coinbase';
@@ -424,7 +425,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ListTile(
               leading: Icon(Icons.currency_exchange, color: context.positive),
               title: const Text('Bitso'),
-              subtitle: const Text('Connect with an API key'),
+              subtitle: Text(l.dashConnectWithApiKey),
               onTap: () {
                 Navigator.of(sheetCtx).pop();
                 showDialog(
@@ -480,10 +481,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final l10n = AppLocalizations.of(context);
     for (final d in _destinations) {
       items.add(PaletteItem(
-        label: 'Jump to ${_navLabel(l10n, d.id)}',
+        label: l10n.dashPaletteJumpTo(_navLabel(l10n, d.id)),
         subtitle: d.id == NavId.lending
-            ? 'Section · money you\'ve lent'
-            : 'Section',
+            ? l10n.dashPaletteSectionLending
+            : l10n.dashPaletteSection,
         icon: d.icon,
         accent: d.accent,
         onSelected: () => _goToNav(d.id),
@@ -498,7 +499,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final inst = (a['institution_name'] ?? '').toString();
       items.add(PaletteItem(
         label: nick.isNotEmpty ? '$nick (${a['account_type'] ?? ''})' : name,
-        subtitle: 'Account · $inst',
+        subtitle: l10n.dashPaletteAccount(inst),
         icon: Icons.account_balance_wallet_outlined,
         accent: context.tealAccent,
         // Deep-link: open the account-detail side panel directly so the
@@ -536,7 +537,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final seed = ticker.isNotEmpty ? ticker : name;
       items.add(PaletteItem(
         label: ticker.isNotEmpty ? '$ticker — $name' : name,
-        subtitle: 'Holding',
+        subtitle: l10n.dashPaletteHolding,
         icon: Icons.show_chart,
         accent: context.info,
         onSelected: () {
@@ -559,8 +560,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final id = t['id']?.toString();
       items.add(PaletteItem(
         label: label,
-        subtitle:
-            'Transaction · ${t['account_name'] ?? ''} · ${t['date'] ?? ''}',
+        subtitle: l10n.dashPaletteTransaction(
+            (t['account_name'] ?? '').toString(), (t['date'] ?? '').toString()),
         icon: Icons.receipt_outlined,
         accent: context.warning,
         onSelected: () {
@@ -745,6 +746,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// the underlying `ignored_subscription_merchants` row so the
   /// detector can resurface the cluster on its next run.
   Widget _buildIgnoredSubscriptionsPanel() {
+    final l = AppLocalizations.of(context);
     final ignored = _ignoredSubscriptions ?? const [];
     if (ignored.isEmpty) return const SizedBox.shrink();
     return Card(
@@ -761,7 +763,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     size: 18, color: context.textSubtle),
                 const SizedBox(width: 8),
                 Text(
-                  'Hidden from subscriptions',
+                  l.dashHiddenFromSubscriptions,
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -778,7 +780,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              'You dismissed these as "not a subscription." Unhide a row to let the detector reconsider it.',
+              l.dashHiddenFromSubscriptionsHint,
               style: TextStyle(fontSize: 11, color: context.textSubtle),
             ),
             const SizedBox(height: 8),
@@ -791,6 +793,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildIgnoredRow(Map<String, dynamic> row) {
+    final l = AppLocalizations.of(context);
     final key = (row['merchant_key'] ?? '').toString();
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -806,19 +809,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           TextButton.icon(
             icon: const Icon(Icons.refresh, size: 14),
-            label: const Text('Unhide'),
+            label: Text(l.dashUnhide),
             onPressed: () async {
               try {
                 await _apiService.unignoreSubscription(key);
                 await _refreshData();
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('"$key" is back in the subscription detector')),
+                  SnackBar(content: Text(l.dashSubscriptionRestored(key))),
                 );
               } catch (e) {
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Unhide failed: $e')),
+                  SnackBar(content: Text(l.dashUnhideFailed(e.toString()))),
                 );
               }
             },
@@ -835,6 +838,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// server-side (app_settings 'lending_enabled') so it follows the
   /// user across devices, and flipping it adds/removes the Lending tab.
   Widget _buildModulesCard() {
+    final l = AppLocalizations.of(context);
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -850,12 +854,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onChanged: _toggleLending,
               secondary:
                   Icon(Icons.monetization_on_outlined, color: context.tealAccent),
-              title: Text('Personal lending',
+              title: Text(l.dashModuleLendingTitle,
                   style: TextStyle(
                       fontWeight: FontWeight.w600, color: context.textPrimary)),
               subtitle: Text(
-                'Track money you lend to friends — designate the bank '
-                'transactions that fund and repay each loan. Adds a Lending section.',
+                l.dashModuleLendingSubtitle,
                 style: TextStyle(fontSize: 12, color: context.textSubtle),
               ),
             ),
@@ -870,20 +873,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'Remind me before a repayment is due',
+                        l.dashRemindBeforeRepayment,
                         style: TextStyle(
                             fontSize: 13, color: context.textPrimary),
                       ),
                     ),
                     IconButton(
                       icon: const Icon(Icons.remove_circle_outline, size: 20),
-                      tooltip: 'Fewer days',
+                      tooltip: l.dashFewerDays,
                       onPressed: _lendingReminderLeadDays <= 0
                           ? null
                           : () => _setReminderLeadDays(
                               _lendingReminderLeadDays - 1),
                     ),
-                    Text('$_lendingReminderLeadDays d',
+                    Text(l.dashDaysShort(_lendingReminderLeadDays),
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
                           color: context.textPrimary,
@@ -891,7 +894,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         )),
                     IconButton(
                       icon: const Icon(Icons.add_circle_outline, size: 20),
-                      tooltip: 'More days',
+                      tooltip: l.dashMoreDays,
                       onPressed: _lendingReminderLeadDays >= 60
                           ? null
                           : () => _setReminderLeadDays(
@@ -918,7 +921,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (!mounted) return;
       setState(() => _lendingReminderLeadDays = prev);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Couldn\'t save reminder setting')),
+        SnackBar(content: Text(AppLocalizations.of(context).dashReminderSaveFailed)),
       );
     }
   }
@@ -938,7 +941,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() => _applyLendingSetting(!enabled));
       _persistSection();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Couldn\'t save that setting')),
+        SnackBar(content: Text(AppLocalizations.of(context).dashSettingSaveFailed)),
       );
     }
   }
@@ -946,6 +949,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// `Sandbox` / `Development` otherwise. Reads `plaid_environment`
   /// from `/api/setup/status` (already loaded into _setupStatus).
   Widget _buildEnvChip() {
+    final l = AppLocalizations.of(context);
     final env = (_setupStatus?['plaid_environment'] ?? '')
         .toString()
         .toLowerCase()
@@ -954,13 +958,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return const SizedBox.shrink();
     }
     final label = env == 'sandbox'
-        ? 'Sandbox'
+        ? l.dashEnvSandbox
         : env == 'development'
-            ? 'Dev'
+            ? l.dashEnvDev
             : env;
     return Tooltip(
-      message:
-          'Plaid is in $env mode. Linked accounts will not access real bank data.',
+      message: l.dashEnvTooltip(env),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
@@ -988,6 +991,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildFxBadge({bool compact = false}) {
+    final l = AppLocalizations.of(context);
     final rate = (_fxRate?['rate'] as num?)?.toDouble();
     final recordedAtRaw = _fxRate?['recorded_at'] as String?;
     final recordedLocal = recordedAtRaw == null
@@ -1006,12 +1010,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final accent = isStale ? context.warning : context.tealAccent;
 
     final tooltip = rate == null
-        ? 'Exchange rate loading…'
+        ? l.dashFxLoading
         : recordedLocal == null
-            ? 'Live USD/MXN exchange rate'
-            : '${isStale ? "Stale rate — " : "Updated "}'
-                '${DateFormat('MMM d, y · h:mm a').format(recordedLocal)} '
-                '${recordedLocal.timeZoneName}';
+            ? l.dashFxLive
+            : (isStale
+                ? l.dashFxStaleAt(
+                    '${DateFormat('MMM d, y · h:mm a').format(recordedLocal)} '
+                    '${recordedLocal.timeZoneName}')
+                : l.dashFxUpdatedAt(
+                    '${DateFormat('MMM d, y · h:mm a').format(recordedLocal)} '
+                    '${recordedLocal.timeZoneName}'));
 
     return Tooltip(
       message: tooltip,
@@ -1045,6 +1053,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Lives in the body slot so the AppBar's tab strip can be dropped — every
   // tab is empty in this state and would mislead a fresh user.
   Widget _buildOnboardingHero() {
+    final l = AppLocalizations.of(context);
     final plaidReady = _setupStatus?['ready_for_plaid_linking'] == true;
 
     Widget actionTile({
@@ -1126,9 +1135,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   final tiles = [
                     actionTile(
                       icon: Icons.account_balance,
-                      title: 'Link a US bank',
-                      subtitle:
-                          'Securely connect via Plaid — balances and transactions sync automatically.',
+                      title: l.dashLinkUsBank,
+                      subtitle: l.dashLinkUsBankSubtitle,
                       accent: context.tealAccent,
                       onPressed: plaidReady
                           ? () {
@@ -1140,14 +1148,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ).then((_) => _loadAllData(silent: true));
                             }
                           : null,
-                      disabledHint:
-                          'Plaid credentials not configured yet — use CSV or manual for now.',
+                      disabledHint: l.dashLinkUsBankDisabledHint,
                     ),
                     actionTile(
                       icon: Icons.upload_file,
-                      title: 'Import Mexico CSV or PDF',
-                      subtitle:
-                          'Drop a statement from ${supportedMxBanksSentence()}.',
+                      title: l.dashImportMxCsvPdf,
+                      subtitle: l.dashImportMxCsvPdfSubtitle(
+                          supportedMxBanksSentence()),
                       accent: context.info,
                       onPressed: () {
                         Navigator.push(
@@ -1160,9 +1167,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     actionTile(
                       icon: Icons.add_circle_outline,
-                      title: 'Add a manual account',
-                      subtitle:
-                          'Track a cash balance, brokerage, or anything else by hand.',
+                      title: l.dashAddManualAccount,
+                      subtitle: l.dashAddManualAccountSubtitle,
                       accent: context.positive,
                       onPressed: () {
                         showDialog(
@@ -1177,17 +1183,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     // aren't hidden behind a Settings toggle / sub-menu.
                     actionTile(
                       icon: Icons.monetization_on_outlined,
-                      title: 'Track money you\'ve lent',
-                      subtitle:
-                          'Lend to friends or family? Record loans, reconcile repayments, and track interest.',
+                      title: l.dashTrackMoneyLent,
+                      subtitle: l.dashTrackMoneyLentSubtitle,
                       accent: context.tealAccent,
                       onPressed: _enableLendingFromOnboarding,
                     ),
                     actionTile(
                       icon: Icons.currency_exchange,
-                      title: 'Connect a crypto exchange',
-                      subtitle:
-                          'Link Coinbase or Bitso to track crypto alongside your accounts.',
+                      title: l.dashConnectCryptoExchangeTile,
+                      subtitle: l.dashConnectCryptoExchangeTileSubtitle,
                       accent: context.warning,
                       onPressed: _openConnectExchange,
                     ),
@@ -1207,7 +1211,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'Welcome to Patrimonio',
+                        l.dashOnboardingWelcome,
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w800,
@@ -1216,8 +1220,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Connect your first account to see your net worth, '
-                        'transactions, and projections in one place.',
+                        l.dashOnboardingSubtitle,
                         style: TextStyle(
                           fontSize: 14,
                           color: context.textMuted,
@@ -1234,7 +1237,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       const SizedBox(height: 20),
                       Text(
-                        'Already linked accounts elsewhere? They will appear here as soon as the first sync completes.',
+                        l.dashOnboardingAlreadyLinked,
                         style: TextStyle(
                           fontSize: 12,
                           color: context.textFaint,
@@ -1257,18 +1260,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final status = uri.queryParameters['status'];
     if (status == 'success') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Account linked successfully!'),
+            content: Text(AppLocalizations.of(context).dashAccountLinkedSuccess),
             backgroundColor: context.positive,
           ),
         );
       });
     } else if (status == 'error') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Failed to link account. Please try again.'),
+            content: Text(AppLocalizations.of(context).dashAccountLinkFailed),
             backgroundColor: context.negative,
           ),
         );
@@ -1321,7 +1326,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Reconnect failed: $e')),
+          SnackBar(content: Text(AppLocalizations.of(context).dashReconnectFailed(e.toString()))),
         );
       }
     } finally {
@@ -1336,6 +1341,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// operator first sets PLAID_WEBHOOK_URL on a deployment that
   /// already has linked items.
   Future<void> _pushWebhookToAllInstitutions() async {
+    final l = AppLocalizations.of(context);
     setState(() => _isLoading = true);
     try {
       final result = await _apiService.updateWebhooks();
@@ -1348,8 +1354,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         context: context,
         builder: (ctx) => AlertDialog(
           title: Text(failed == 0
-              ? 'Webhook URL pushed to $updated institution${updated == 1 ? '' : 's'}'
-              : '$updated updated, $failed failed'),
+              ? l.dashWebhookPushed(updated)
+              : l.dashWebhookPartial(updated, failed)),
           content: SizedBox(
             width: 420,
             child: SingleChildScrollView(
@@ -1371,7 +1377,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ...results.map((raw) {
                     final row = raw as Map<String, dynamic>;
                     final ok = row['ok'] == true;
-                    final name = row['name']?.toString() ?? 'Unknown';
+                    final name = row['name']?.toString() ?? l.dashUnknown;
                     final reason = row['reason']?.toString() ?? '';
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 3),
@@ -1407,7 +1413,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Close'),
+              child: Text(l.actionClose),
             ),
           ],
         ),
@@ -1415,7 +1421,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Push failed: $e')),
+        SnackBar(content: Text(l.dashPushFailed(e.toString()))),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -1571,6 +1577,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final isCompact = MediaQuery.sizeOf(context).width < 720;
 
     // During the first-run state we strip the chrome: tab bar (every tab
@@ -1661,7 +1668,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                   builder: (context, controller, _) => IconButton(
-                    tooltip: 'More',
+                    tooltip: l.navMore,
                     icon: const Icon(Icons.more_vert),
                     onPressed: () => controller.isOpen
                         ? controller.close()
@@ -1678,9 +1685,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         );
                         if (mounted) _loadAllData(silent: true);
                       },
-                      child: const Padding(
-                        padding: EdgeInsets.only(right: 16),
-                        child: Text('Hidden items'),
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 16),
+                        child: Text(l.dashHiddenItems),
                       ),
                     ),
                     MenuItemButton(
@@ -1689,9 +1696,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         MaterialPageRoute(
                             builder: (_) => const SecurityScreen()),
                       ),
-                      child: const Padding(
-                        padding: EdgeInsets.only(right: 16),
-                        child: Text('Security'),
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 16),
+                        child: Text(l.dashSecurity),
                       ),
                     ),
                     // Language toggle (EN ⇄ ES). Shows the language you'd
@@ -1723,7 +1730,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       onPressed: () => AuthService.instance.logout(),
                       child: Padding(
                         padding: const EdgeInsets.only(right: 16),
-                        child: Text('Sign out',
+                        child: Text(l.dashSignOut,
                             style: TextStyle(color: scheme.error)),
                       ),
                     ),
@@ -1770,6 +1777,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildBody() {
+    final l = AppLocalizations.of(context);
     if (_isLoading) {
       // Skeleton mirrors the Overview tab's actual KPI / cash-flow / body
       // layout so the page doesn't reflow when data arrives. Other tabs
@@ -1785,11 +1793,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const Icon(Icons.error_outline, size: 64, color: Colors.red),
             const SizedBox(height: 16),
             Text(
-              'Error loading dashboard: $_error',
+              l.dashErrorLoading(_error ?? ''),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
-            ElevatedButton(onPressed: _loadAllData, child: const Text('Retry')),
+            ElevatedButton(onPressed: _loadAllData, child: Text(l.dashRetry)),
           ],
         ),
       );
@@ -1839,7 +1847,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 if (!mounted) return;
                 ScaffoldMessenger.of(
                   context,
-                ).showSnackBar(SnackBar(content: Text('Update failed: $e')));
+                ).showSnackBar(SnackBar(content: Text(l.dashUpdateFailed(e.toString()))));
               }
             },
             onDeleteAccount: (id) async {
@@ -1848,12 +1856,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _loadAllData(silent: true);
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Account deleted')),
+                  SnackBar(content: Text(l.dashAccountDeleted)),
                 );
               } catch (e) {
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Delete failed: $e')),
+                  SnackBar(content: Text(l.dashDeleteFailed(e.toString()))),
                 );
               }
             },
@@ -1866,15 +1874,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   SnackBar(
                     content: Text(
                       nickname.isEmpty
-                          ? 'Nickname cleared'
-                          : 'Renamed to "$nickname"',
+                          ? l.dashNicknameCleared
+                          : l.dashRenamedTo(nickname),
                     ),
                   ),
                 );
               } catch (e) {
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Rename failed: $e')),
+                  SnackBar(content: Text(l.dashRenameFailed(e.toString()))),
                 );
               }
             },
@@ -1887,15 +1895,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   SnackBar(
                     content: Text(
                       notes == null || notes.isEmpty
-                          ? 'Revalued'
-                          : 'Revalued · note saved',
+                          ? l.dashRevalued
+                          : l.dashRevaluedNoteSaved,
                     ),
                   ),
                 );
               } catch (e) {
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Revalue failed: $e')),
+                  SnackBar(content: Text(l.dashRevalueFailed(e.toString()))),
                 );
               }
             },
@@ -1914,9 +1922,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return LayoutBuilder(
         builder: (context, constraints) {
           final isNarrow = constraints.maxWidth < 520;
-          final title = const Text(
-            'Net worth history',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          final title = Text(
+            l.dashNetWorthHistory,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           );
           final selector = SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -1956,10 +1964,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final messenger = ScaffoldMessenger.of(context);
       messenger.hideCurrentSnackBar();
       messenger.showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Row(
             children: [
-              SizedBox(
+              const SizedBox(
                 width: 16,
                 height: 16,
                 child: CircularProgressIndicator(
@@ -1968,11 +1976,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       AlwaysStoppedAnimation<Color>(Colors.white),
                 ),
               ),
-              SizedBox(width: 12),
-              Text('Syncing all institutions…'),
+              const SizedBox(width: 12),
+              Text(l.dashSyncingAll),
             ],
           ),
-          duration: Duration(seconds: 30),
+          duration: const Duration(seconds: 30),
         ),
       );
       try {
@@ -1980,9 +1988,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (!mounted) return;
         messenger.hideCurrentSnackBar();
         messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Sync complete'),
-            duration: Duration(seconds: 2),
+          SnackBar(
+            content: Text(l.dashSyncComplete),
+            duration: const Duration(seconds: 2),
           ),
         );
       } catch (e) {
@@ -1990,7 +1998,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (!mounted) return;
         messenger.hideCurrentSnackBar();
         messenger.showSnackBar(
-          SnackBar(content: Text('Sync failed: $e')),
+          SnackBar(content: Text(l.dashSyncFailed(e.toString()))),
         );
       }
       // Reload without flipping _isLoading — just refresh the data fields.
@@ -2023,7 +2031,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text('Reconnect failed: $e')));
+          ).showSnackBar(SnackBar(content: Text(l.dashReconnectFailed(e.toString()))));
         }
       } finally {
         setState(() => _isLoading = false);
@@ -2084,17 +2092,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     color: blocking.isEmpty ? context.positive : context.warning,
                   ),
                   const SizedBox(width: 10),
-                  const Text(
-                    'Launch setup',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  Text(
+                    l.dashLaunchSetup,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
               Text(
                 blocking.isEmpty
-                    ? 'Plaid linking can start. Optional services may still improve data quality.'
-                    : 'Complete required setup before real users can link Plaid accounts.',
+                    ? l.dashLaunchSetupReady
+                    : l.dashLaunchSetupBlocked,
                 style: TextStyle(color: context.textMuted, fontSize: 13),
               ),
               const SizedBox(height: 12),
@@ -2114,8 +2122,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     onPressed: () => _pushWebhookToAllInstitutions(),
                     icon: const Icon(Icons.cloud_upload_outlined, size: 16),
                     label: Text(
-                      'Push to $plaidInstitutionCount '
-                      'institution${plaidInstitutionCount == 1 ? '' : 's'}',
+                      l.dashPushToInstitutions(plaidInstitutionCount),
                     ),
                     style: TextButton.styleFrom(
                       visualDensity: VisualDensity.compact,
@@ -2175,12 +2182,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 // Lists labels from the recommended set; falls back to a
                 // generic line if all the labels happen to be missing.
                 Text(
-                  'Recommended before production: '
-                  '${recommended
-                          .map((c) => (c as Map)['label']?.toString() ?? '')
-                          .where((s) => s.isNotEmpty)
-                          .join(', ')}'
-                      '.',
+                  l.dashRecommendedBeforeProduction(recommended
+                      .map((c) => (c as Map)['label']?.toString() ?? '')
+                      .where((s) => s.isNotEmpty)
+                      .join(', ')),
                   style: TextStyle(color: context.textSubtle, fontSize: 12),
                 ),
               ],
@@ -2365,7 +2370,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           } catch (e) {
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Confirm failed: $e')),
+              SnackBar(content: Text(l.dashConfirmFailed(e.toString()))),
             );
           }
         },
@@ -2376,7 +2381,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           } catch (e) {
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Unlink failed: $e')),
+              SnackBar(content: Text(l.dashUnlinkFailed(e.toString()))),
             );
           }
         },
@@ -2395,7 +2400,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onDetectFxTransfers: () async {
           final messenger = ScaffoldMessenger.of(context);
           messenger.showSnackBar(
-            const SnackBar(content: Text('Scanning for cross-currency transfers…')),
+            SnackBar(content: Text(l.dashScanningTransfers)),
           );
           try {
             final r = await _apiService.detectFxTransfers();
@@ -2406,9 +2411,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               SnackBar(
                 content: Text(
                   (r['inserted'] as num? ?? 0) > 0
-                      ? 'Linked ${r['inserted']} transfer pair${(r['inserted'] as num? ?? 0) == 1 ? '' : 's'} '
-                          '(checked ${r['checked']} candidates)'
-                      : 'No new transfers found',
+                      ? l.dashTransfersLinked(
+                          (r['inserted'] as num? ?? 0).toInt(),
+                          (r['checked'] as num? ?? 0).toInt())
+                      : l.dashNoNewTransfers,
                 ),
               ),
             );
@@ -2416,7 +2422,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             if (!mounted) return;
             messenger.hideCurrentSnackBar();
             messenger.showSnackBar(
-              SnackBar(content: Text('Detection failed: $e')),
+              SnackBar(content: Text(l.dashDetectionFailed(e.toString()))),
             );
           }
         },
@@ -2433,7 +2439,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           } catch (e) {
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to update transaction: $e')),
+              SnackBar(content: Text(l.dashUpdateTransactionFailed(e.toString()))),
             );
           }
         },
@@ -2461,7 +2467,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           await _refreshData();
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Transaction deleted')),
+            SnackBar(content: Text(l.dashTransactionDeleted)),
           );
         },
       ),
@@ -2515,12 +2521,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   await _refreshData();
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Link confirmed')),
+                    SnackBar(content: Text(l.dashLinkConfirmed)),
                   );
                 } catch (e) {
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Confirm failed: $e')),
+                    SnackBar(content: Text(l.dashConfirmFailed(e.toString()))),
                   );
                 }
               },
@@ -2530,12 +2536,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   await _refreshData();
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Pair unlinked')),
+                    SnackBar(content: Text(l.dashPairUnlinked)),
                   );
                 } catch (e) {
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Unlink failed: $e')),
+                    SnackBar(content: Text(l.dashUnlinkFailed(e.toString()))),
                   );
                 }
               },
@@ -2569,12 +2575,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   await _refreshData();
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('"$m" hidden from subscriptions')),
+                    SnackBar(content: Text(l.dashMerchantHidden(m))),
                   );
                 } catch (e) {
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed: $e')),
+                    SnackBar(content: Text(l.dashFailedGeneric(e.toString()))),
                   );
                 }
               },
@@ -2614,9 +2620,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Data sources & sync',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          Text(
+            l.dashDataSources,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
           _buildModulesCard(),
@@ -2635,7 +2641,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 } catch (e) {
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Retry failed: $e')),
+                    SnackBar(content: Text(l.dashRetryFailed(e.toString()))),
                   );
                 }
               },
@@ -2646,7 +2652,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 } catch (e) {
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Retry failed: $e')),
+                    SnackBar(content: Text(l.dashRetryFailed(e.toString()))),
                   );
                 }
               },
@@ -2655,18 +2661,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 final confirm = await showDialog<bool>(
                   context: context,
                   builder: (context) => AlertDialog(
-                    title: const Text('Delete institution'),
-                    content: const Text(
-                        'Are you sure? This will remove ALL accounts and history for this institution.'),
+                    title: Text(l.dashDeleteInstitutionTitle),
+                    content: Text(l.dashDeleteInstitutionBody),
                     actions: [
                       TextButton(
                           onPressed: () => Navigator.pop(context, false),
-                          child: const Text('Cancel')),
+                          child: Text(l.actionCancel)),
                       TextButton(
                         onPressed: () => Navigator.pop(context, true),
                         style: TextButton.styleFrom(
                             foregroundColor: context.negative),
-                        child: const Text('Delete everything'),
+                        child: Text(l.dashDeleteEverything),
                       ),
                     ],
                   ),
@@ -2679,7 +2684,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   } catch (e) {
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Delete failed: $e')));
+                        SnackBar(content: Text(l.dashDeleteFailed(e.toString()))));
                   }
                 }
               },
@@ -2696,12 +2701,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   if (!mounted) return;
                   setState(() => _fxRate = fresh);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('FX rate refreshed')),
+                    SnackBar(content: Text(l.dashFxRateRefreshed)),
                   );
                 } catch (e) {
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Refresh failed: $e')),
+                    SnackBar(content: Text(l.dashRefreshFailed(e.toString()))),
                   );
                 }
               },
@@ -2728,7 +2733,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           buildSetupStatusCard(),
           const SizedBox(height: 24),
           Text(
-            'Connect standard accounts',
+            l.dashConnectStandardAccounts,
             style: TextStyle(fontSize: 16, color: context.textMuted),
           ),
           const SizedBox(height: 12),
@@ -2770,11 +2775,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               spacing: 16,
               runSpacing: 16,
               children: [
-                tile(Icons.sync, 'Sync all accounts',
+                tile(Icons.sync, l.dashSyncAllAccounts,
                     bg: context.accentSoft(context.info), onPressed: runSync),
                 tile(
                   Icons.add_link,
-                  'Link Plaid (US Banks)',
+                  l.dashLinkPlaidUsBanks,
                   bg: context.accentSoft(context.tealAccent),
                   onPressed: plaidReady()
                       ? () {
@@ -2787,7 +2792,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         }
                       : null,
                 ),
-                tile(Icons.upload_file, 'Import Mexico (CSV/PDF)',
+                tile(Icons.upload_file, l.dashImportMxShort,
                     bg: context.hairline,
                     onPressed: () {
                       Navigator.push(
@@ -2797,7 +2802,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ).then((_) => _loadAllData(silent: true));
                     }),
-                tile(Icons.add_circle_outline, 'Add manual account',
+                tile(Icons.add_circle_outline, l.dashAddManualAccountShort,
                     bg: context.hairline,
                     onPressed: () {
                       showDialog(
@@ -2811,7 +2816,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           }),
           const SizedBox(height: 32),
           Text(
-            'Connect crypto exchanges',
+            l.dashConnectCryptoExchanges,
             style: TextStyle(fontSize: 16, color: context.textMuted),
           ),
           const SizedBox(height: 12),
@@ -2830,8 +2835,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     // the active theme brightness so the brand reads
                     // correctly in light mode too.
                     icon: const Icon(Icons.login, color: Colors.white),
-                    label: const Text(
-                      'Link Coinbase',
+                    label: Text(
+                      l.dashLinkCoinbase,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -2856,8 +2861,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       Icons.currency_exchange,
                       color: context.positive,
                     ),
-                    label: const Text(
-                      'Connect Bitso',
+                    label: Text(
+                      l.dashConnectBitso,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -3330,10 +3335,10 @@ class _ThemeCycleButton extends StatelessWidget {
         ThemeMode.dark => Icons.dark_mode_outlined,
       };
 
-  String _labelFor(ThemeMode m) => switch (m) {
-        ThemeMode.system => 'System theme',
-        ThemeMode.light => 'Light theme',
-        ThemeMode.dark => 'Dark theme',
+  String _labelFor(AppLocalizations l, ThemeMode m) => switch (m) {
+        ThemeMode.system => l.dashThemeSystem,
+        ThemeMode.light => l.dashThemeLight,
+        ThemeMode.dark => l.dashThemeDark,
       };
 
   void _persist(ThemeMode m) => Preferences.setThemeMode(switch (m) {
@@ -3344,6 +3349,7 @@ class _ThemeCycleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: themeModeNotifier,
       builder: (ctx, mode, _) {
@@ -3352,29 +3358,29 @@ class _ThemeCycleButton extends StatelessWidget {
             final picked = await showMenu<ThemeMode>(
               context: context,
               position: const RelativeRect.fromLTRB(1000, 56, 0, 0),
-              items: const [
+              items: [
                 PopupMenuItem(
                   value: ThemeMode.system,
                   child: ListTile(
                     dense: true,
-                    leading: Icon(Icons.brightness_auto),
-                    title: Text('System default'),
+                    leading: const Icon(Icons.brightness_auto),
+                    title: Text(l.dashThemeSystemDefault),
                   ),
                 ),
                 PopupMenuItem(
                   value: ThemeMode.light,
                   child: ListTile(
                     dense: true,
-                    leading: Icon(Icons.light_mode_outlined),
-                    title: Text('Light'),
+                    leading: const Icon(Icons.light_mode_outlined),
+                    title: Text(l.dashThemeLightShort),
                   ),
                 ),
                 PopupMenuItem(
                   value: ThemeMode.dark,
                   child: ListTile(
                     dense: true,
-                    leading: Icon(Icons.dark_mode_outlined),
-                    title: Text('Dark'),
+                    leading: const Icon(Icons.dark_mode_outlined),
+                    title: Text(l.dashThemeDarkShort),
                   ),
                 ),
               ],
@@ -3385,8 +3391,7 @@ class _ThemeCycleButton extends StatelessWidget {
             }
           },
           child: IconButton(
-            tooltip:
-                '${_labelFor(mode)} · tap to cycle, long-press to pick',
+            tooltip: l.dashThemeTooltip(_labelFor(l, mode)),
             // AnimatedSwitcher fades between the per-mode icons so the
             // tap-cycle reads as a smooth icon swap rather than an
             // instant glyph flip.

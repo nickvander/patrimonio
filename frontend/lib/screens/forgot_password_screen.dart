@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/api_service.dart';
+import '../l10n/app_localizations.dart';
 
 /// "Forgot password?" flow. The user supplies their username, an
 /// unused recovery code, and a new password. On success they are
@@ -59,8 +60,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Reset password')),
+      appBar: AppBar(title: Text(l.authResetPasswordTitle)),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
@@ -74,6 +76,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   Widget _doneView() {
+    final l = AppLocalizations.of(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -81,25 +84,26 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary, size: 48),
         const SizedBox(height: 16),
         Text(
-          'Password reset',
+          l.authPasswordResetDoneTitle,
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: 8),
-        const Text(
-          'Sign in with your new password. The code you used has been consumed.',
+        Text(
+          l.authPasswordResetDoneBody,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 24),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Back to sign in'),
+          child: Text(l.authBackToSignIn),
         ),
       ],
     );
   }
 
   Widget _formView() {
+    final l = AppLocalizations.of(context);
     return Form(
       key: _formKey,
       child: Column(
@@ -107,31 +111,30 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Use a recovery code',
+            l.authUseRecoveryCodeTitle,
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Enter one of the recovery codes you saved at setup. Each code '
-            'is single-use — once redeemed it cannot be reused.',
+          Text(
+            l.authUseRecoveryCodeBody,
           ),
           const SizedBox(height: 24),
           TextFormField(
             controller: _username,
-            decoration: const InputDecoration(
-              labelText: 'Username',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: l.authUsername,
+              border: const OutlineInputBorder(),
             ),
             validator: (v) =>
-                (v == null || v.trim().isEmpty) ? 'Required' : null,
+                (v == null || v.trim().isEmpty) ? l.commonRequired : null,
           ),
           const SizedBox(height: 16),
           TextFormField(
             controller: _code,
-            decoration: const InputDecoration(
-              labelText: 'Recovery code (e.g. XK4T-9PMQ-7HZL)',
-              border: OutlineInputBorder(),
-              hintText: 'Hyphens and case are optional',
+            decoration: InputDecoration(
+              labelText: l.authRecoveryCodeLabel,
+              border: const OutlineInputBorder(),
+              hintText: l.authRecoveryCodeHint,
             ),
             style: const TextStyle(fontFamily: 'monospace', letterSpacing: 1.2),
             validator: (v) {
@@ -139,7 +142,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   .replaceAll(RegExp(r'\s|-'), '')
                   .toUpperCase();
               if (stripped.length != 12) {
-                return 'Codes are 12 letters/digits (hyphens optional)';
+                return l.authRecoveryCodeInvalid;
               }
               return null;
             },
@@ -148,23 +151,23 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           TextFormField(
             controller: _password,
             obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'New password (12+ characters)',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: l.authNewPasswordLabel,
+              border: const OutlineInputBorder(),
             ),
             validator: (v) =>
-                (v == null || v.length < 12) ? 'At least 12 characters' : null,
+                (v == null || v.length < 12) ? l.authPasswordMinHelper : null,
           ),
           const SizedBox(height: 16),
           TextFormField(
             controller: _confirm,
             obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'Confirm new password',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: l.authConfirmNewPassword,
+              border: const OutlineInputBorder(),
             ),
             validator: (v) =>
-                v == _password.text ? null : 'Passwords do not match',
+                v == _password.text ? null : l.authPasswordsDoNotMatch,
           ),
           const SizedBox(height: 16),
           if (_error != null) ...[
@@ -182,7 +185,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     width: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Reset password'),
+                : Text(l.authResetPasswordTitle),
           ),
         ],
       ),

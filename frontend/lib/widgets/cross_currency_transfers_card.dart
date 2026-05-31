@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../l10n/app_localizations.dart';
 import '../utils/theme_colors.dart';
 
 /// Lists every detected (or user-confirmed) cross-currency cash
@@ -27,6 +28,7 @@ class CrossCurrencyTransfersCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     if (transfers.isEmpty) return const SizedBox.shrink();
 
     return Card(
@@ -45,7 +47,7 @@ class CrossCurrencyTransfersCard extends StatelessWidget {
                 Icon(Icons.swap_horiz, size: 18, color: context.tealAccent),
                 const SizedBox(width: 8),
                 Text(
-                  'Cross-currency transfers',
+                  l.cfTransfersTitle,
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -73,9 +75,7 @@ class CrossCurrencyTransfersCard extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Linked Wise / Remitly / wire pairs. Implied rate is the '
-              'effective FX the service used; spot is the market rate '
-              'on the source date.',
+              l.cfTransfersSubtitle,
               style: TextStyle(
                 fontSize: 12,
                 color: context.textSubtle,
@@ -90,6 +90,7 @@ class CrossCurrencyTransfersCard extends StatelessWidget {
   }
 
   Widget _buildRow(BuildContext context, Map t) {
+    final l = AppLocalizations.of(context);
     final srcAmount = (t['source_amount'] as num?)?.toDouble() ?? 0;
     final dstAmount = (t['dest_amount'] as num?)?.toDouble() ?? 0;
     final srcCur = (t['source_currency'] ?? '').toString().toUpperCase();
@@ -162,7 +163,7 @@ class CrossCurrencyTransfersCard extends StatelessWidget {
                   ),
                   if (spot != null)
                     Text(
-                      'spot ${NumberFormat('0.00').format(spot)}',
+                      l.cfTransfersSpot(NumberFormat('0.00').format(spot)),
                       style: TextStyle(
                         fontSize: 11,
                         color: context.textFaint,
@@ -184,7 +185,8 @@ class CrossCurrencyTransfersCard extends StatelessWidget {
                 TextButton.icon(
                   onPressed: () => onConfirm!(id),
                   icon: const Icon(Icons.check, size: 14),
-                  label: const Text('Confirm', style: TextStyle(fontSize: 12)),
+                  label: Text(l.cfTransfersConfirm,
+                      style: const TextStyle(fontSize: 12)),
                   style: TextButton.styleFrom(
                     foregroundColor: context.tealAccent,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -201,7 +203,7 @@ class CrossCurrencyTransfersCard extends StatelessWidget {
                           size: 13, color: context.tealAccent),
                       const SizedBox(width: 4),
                       Text(
-                        'Confirmed',
+                        l.cfTransfersConfirmed,
                         style: TextStyle(
                           fontSize: 11,
                           color: context.tealAccent,
@@ -215,7 +217,8 @@ class CrossCurrencyTransfersCard extends StatelessWidget {
                 TextButton.icon(
                   onPressed: () => onUnlink!(id),
                   icon: const Icon(Icons.link_off, size: 14),
-                  label: const Text('Unlink', style: TextStyle(fontSize: 12)),
+                  label: Text(l.cfTransfersUnlink,
+                      style: const TextStyle(fontSize: 12)),
                   style: TextButton.styleFrom(
                     foregroundColor: context.textSubtle,
                     padding: const EdgeInsets.symmetric(horizontal: 8),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/auth_service.dart';
+import '../l10n/app_localizations.dart';
 
 /// Second step of the two-step login. Shown by AuthGate when the
 /// server has issued a pending-TOTP session and is waiting for the
@@ -26,7 +27,7 @@ class _TotpChallengeScreenState extends State<TotpChallengeScreen> {
   Future<void> _submit() async {
     final raw = _code.text.trim();
     if (raw.length < 6) {
-      setState(() => _error = 'Enter the 6-digit code from your app.');
+      setState(() => _error = AppLocalizations.of(context).authTotpEnterCode);
       return;
     }
     setState(() {
@@ -44,6 +45,7 @@ class _TotpChallengeScreenState extends State<TotpChallengeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
       body: Center(
         child: ConstrainedBox(
@@ -55,7 +57,7 @@ class _TotpChallengeScreenState extends State<TotpChallengeScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Two-factor required',
+                  l.authTotpTitle,
                   textAlign: TextAlign.center,
                   style: Theme.of(context)
                       .textTheme
@@ -64,7 +66,7 @@ class _TotpChallengeScreenState extends State<TotpChallengeScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Open your authenticator app and enter the 6-digit code for Patrimonio.',
+                  l.authTotpSubtitle,
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
@@ -105,14 +107,14 @@ class _TotpChallengeScreenState extends State<TotpChallengeScreen> {
                           width: 18,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Verify'),
+                      : Text(l.authTotpVerify),
                 ),
                 const SizedBox(height: 12),
                 TextButton(
                   onPressed: _submitting
                       ? null
                       : () => AuthService.instance.logout(),
-                  child: const Text('Cancel'),
+                  child: Text(l.actionCancel),
                 ),
               ],
             ),

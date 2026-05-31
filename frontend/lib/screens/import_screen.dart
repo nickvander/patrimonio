@@ -5,6 +5,7 @@ import '../utils/theme_colors.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/api_service.dart';
 import '../services/file_drop_web.dart';
+import '../l10n/app_localizations.dart';
 
 class ImportScreen extends StatefulWidget {
   const ImportScreen({super.key});
@@ -26,6 +27,10 @@ class _ImportScreenState extends State<ImportScreen> {
   List<dynamic>? _accounts;
   String? _selectedAccountId;
   String? _message;
+  /// Whether `_message` represents a failure. Tracked explicitly rather
+  /// than sniffing the message text for "failed" — the copy is now
+  /// localized, so substring matching on English words is unreliable.
+  bool _messageIsError = false;
 
   bool _requiresPassword = false;
   final TextEditingController _passwordController = TextEditingController();
@@ -121,8 +126,8 @@ class _ImportScreenState extends State<ImportScreen> {
     if (_isUploading) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Wait for the current import to finish before adding more files.'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context).impWaitForUpload),
         ),
       );
       return;
@@ -136,12 +141,13 @@ class _ImportScreenState extends State<ImportScreen> {
       _passwordController.clear();
     });
     if (!mounted) return;
+    final l = AppLocalizations.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           files.length == 1
-              ? 'Added 1 file from drop'
-              : 'Added ${files.length} files from drop',
+              ? l.impAddedFileFromDrop
+              : l.impAddedFilesFromDrop(files.length),
         ),
       ),
     );
@@ -236,13 +242,12 @@ class _ImportScreenState extends State<ImportScreen> {
     // length read by the picker/drop reader.
     final totalBytes =
         _selectedFiles.fold<int>(0, (sum, f) => sum + f.size);
+    final l = AppLocalizations.of(context);
     if (totalBytes > _maxUploadBytes) {
       final totalMb = (totalBytes / (1024 * 1024)).toStringAsFixed(1);
       setState(() {
-        _message =
-            'These ${_selectedFiles.length} files total $totalMb MB, over the '
-            '100 MB upload limit. Remove some files and import them in '
-            'separate batches.';
+        _message = l.impUploadTooLarge(_selectedFiles.length, totalMb);
+        _messageIsError = false;
       });
       return;
     }
@@ -251,19 +256,18 @@ class _ImportScreenState extends State<ImportScreen> {
       final proceed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Large upload'),
+          title: Text(l.impLargeUploadTitle),
           content: Text(
-            'This batch is $totalMb MB — close to the 100 MB limit. Large '
-            'uploads can be slow and may be rejected. Import anyway?',
+            l.impLargeUploadBody(totalMb),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
+              child: Text(l.actionCancel),
             ),
             FilledButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Import anyway'),
+              child: Text(l.impImportAnyway),
             ),
           ],
         ),
@@ -309,22 +313,27 @@ class _ImportScreenState extends State<ImportScreen> {
         if (response['status'] == 'password_required') {
           _requiresPassword = true;
           _previewTransactions = null;
+          _messageIsError = false;
         } else if (response['status'] == 'success') {
           _previewTransactions = response['transactions'];
           _initializeSelection();
+          _messageIsError = false;
+        } else {
+          _messageIsError = true;
         }
       });
 
       if (response['status'] == 'success' && _previewTransactions != null) {
         final autoDeselected =
             _previewTransactions!.length - _selectedIndices.length;
-        final msg = 'Found ${response['transactions_count']} transactions.';
+        final msg =
+            l.impFoundTransactions(response['transactions_count'] as int);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               autoDeselected > 0
-                  ? '$msg ($autoDeselected auto-deselected as informational)'
+                  ? l.impFoundWithAutoDeselected(msg, autoDeselected)
                   : msg,
             ),
           ),
@@ -332,19 +341,21 @@ class _ImportScreenState extends State<ImportScreen> {
       }
     } catch (e) {
       setState(() {
-        _message = 'Upload failed: $e';
+        _message = l.impUploadFailed(e.toString());
+        _messageIsError = true;
         _isUploading = false;
       });
     }
   }
 
   Future<void> _confirmImport() async {
+    final l = AppLocalizations.of(context);
     if (_selectedAccountId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Please select a destination account first.',
-            style: TextStyle(color: Colors.redAccent),
+            l.impSelectAccountFirst,
+            style: const TextStyle(color: Colors.redAccent),
           ),
         ),
       );
@@ -362,8 +373,8 @@ class _ImportScreenState extends State<ImportScreen> {
 
     if (selectedTxs.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No transactions selected. Please check at least one.'),
+        SnackBar(
+          content: Text(l.impNoTransactionsSelected),
         ),
       );
       return;
@@ -381,12 +392,13 @@ class _ImportScreenState extends State<ImportScreen> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(response['message'] ?? 'Import successful')),
+        SnackBar(content: Text(response['message'] ?? l.impImportSuccessful)),
       );
       Navigator.pop(context);
     } catch (e) {
       setState(() {
-        _message = 'Confirmation failed: $e';
+        _message = l.impConfirmationFailed(e.toString());
+        _messageIsError = true;
         _isUploading = false;
       });
     }
@@ -394,21 +406,21 @@ class _ImportScreenState extends State<ImportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Import statement')),
+      appBar: AppBar(title: Text(l.impTitle)),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Upload account statement',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            Text(
+              l.impUploadHeading,
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
-              'Upload CSV or PDF statements from ${supportedMxBanksSentence()}. '
-              'We will automatically detect the format.',
+              l.impUploadSubtitle(supportedMxBanksSentence()),
               style: const TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 32),
@@ -488,10 +500,10 @@ class _ImportScreenState extends State<ImportScreen> {
                           children: [
                             Text(
                               _readingFileCount == null
-                                  ? 'Reading files…'
+                                  ? l.impReadingFiles
                                   : _readingFileCount == 1
-                                      ? 'Reading 1 file…'
-                                      : 'Reading $_readingFileCount files…',
+                                      ? l.impReadingOneFile
+                                      : l.impReadingNFiles(_readingFileCount!),
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
@@ -500,9 +512,7 @@ class _ImportScreenState extends State<ImportScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Loading file contents into the browser '
-                              'before sending. This step is local — '
-                              'no upload yet.',
+                              l.impReadingHint,
                               style: TextStyle(
                                 fontSize: 12,
                                 color: context.textSubtle,
@@ -517,11 +527,12 @@ class _ImportScreenState extends State<ImportScreen> {
                           children: [
                             Text(
                               _selectedFiles.length == 1
-                                  ? 'Processing 1 file…'
+                                  ? l.impProcessingOneFile
                                   : _uploadDone > 0
-                                      ? 'Processing $_uploadDone of '
-                                          '${_selectedFiles.length} files…'
-                                      : 'Processing ${_selectedFiles.length} files…',
+                                      ? l.impProcessingProgress(
+                                          _uploadDone, _selectedFiles.length)
+                                      : l.impProcessingNFiles(
+                                          _selectedFiles.length),
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
@@ -537,8 +548,8 @@ class _ImportScreenState extends State<ImportScreen> {
                             if (_uploadLastFile != null)
                               Text(
                                 _uploadLastFileOk
-                                    ? 'Last: ${_uploadLastFile!}'
-                                    : 'Last: ${_uploadLastFile!} (skipped)',
+                                    ? l.impLastFile(_uploadLastFile!)
+                                    : l.impLastFileSkipped(_uploadLastFile!),
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: _uploadLastFileOk
@@ -551,8 +562,7 @@ class _ImportScreenState extends State<ImportScreen> {
                               )
                             else
                               Text(
-                                'Large batches can take 30-120 seconds — '
-                                'each PDF is parsed individually on the server.',
+                                l.impLargeBatchHint,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: context.textSubtle,
@@ -567,7 +577,7 @@ class _ImportScreenState extends State<ImportScreen> {
                       // above owns the user's attention.
                       if (!_isUploading && !_isReadingFiles && _isDragging)
                         Text(
-                          'Drop to import',
+                          l.impDropToImport,
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
@@ -579,7 +589,7 @@ class _ImportScreenState extends State<ImportScreen> {
                           kIsWeb &&
                           _selectedFiles.isEmpty)
                         Text(
-                          'Drop CSV or PDF files anywhere on this page, or select them manually below.',
+                          l.impDropHint,
                           style: TextStyle(
                             fontSize: 13,
                             color: context.textSubtle,
@@ -595,13 +605,15 @@ class _ImportScreenState extends State<ImportScreen> {
                           _selectedFiles.isEmpty &&
                           !kIsWeb &&
                           !_isDragging)
-                        const Text('No files selected'),
+                        Text(l.impNoFilesSelected),
                       if (_selectedFiles.isNotEmpty)
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '${_selectedFiles.length} file${_selectedFiles.length == 1 ? '' : 's'} selected',
+                              _selectedFiles.length == 1
+                                  ? l.impOneFileSelected
+                                  : l.impNFilesSelected(_selectedFiles.length),
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                               ),
@@ -635,7 +647,7 @@ class _ImportScreenState extends State<ImportScreen> {
                                             ),
                                             IconButton(
                                               icon: const Icon(Icons.close, size: 16),
-                                              tooltip: 'Remove',
+                                              tooltip: l.impRemoveFile,
                                               visualDensity: VisualDensity.compact,
                                               onPressed: (_isUploading || _isReadingFiles)
                                                   ? null
@@ -663,8 +675,8 @@ class _ImportScreenState extends State<ImportScreen> {
                         ),
                         label: Text(
                           _selectedFiles.isEmpty
-                              ? 'Select files'
-                              : 'Add more files',
+                              ? l.impSelectFiles
+                              : l.impAddMoreFiles,
                         ),
                       ),
                     ],
@@ -675,9 +687,10 @@ class _ImportScreenState extends State<ImportScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Assign to account',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  Text(
+                    l.impAssignToAccount,
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
                   if (_accounts != null)
@@ -711,7 +724,8 @@ class _ImportScreenState extends State<ImportScreen> {
                     children: [
                       Flexible(
                         child: Text(
-                          'Preview (${_selectedIndices.length}/${_previewTransactions!.length} selected)',
+                          l.impPreviewSelected(_selectedIndices.length,
+                              _previewTransactions!.length),
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
@@ -732,7 +746,7 @@ class _ImportScreenState extends State<ImportScreen> {
                               });
                             },
                             child: Text(
-                              'Select all',
+                              l.impSelectAll,
                               style: TextStyle(color: context.positive),
                             ),
                           ),
@@ -743,9 +757,9 @@ class _ImportScreenState extends State<ImportScreen> {
                                 _selectedIndices = {};
                               });
                             },
-                            child: const Text(
-                              'Deselect all',
-                              style: TextStyle(color: Colors.grey),
+                            child: Text(
+                              l.impDeselectAll,
+                              style: const TextStyle(color: Colors.grey),
                             ),
                           ),
                         ],
@@ -838,8 +852,7 @@ class _ImportScreenState extends State<ImportScreen> {
                                 if (isAutoDeselected) ...[
                                   const SizedBox(width: 12),
                                   Tooltip(
-                                    message:
-                                        'Auto-deselected: informational entry',
+                                    message: l.impAutoDeselectedTooltip,
                                     child: Icon(
                                       Icons.info_outline,
                                       size: 16,
@@ -867,7 +880,9 @@ class _ImportScreenState extends State<ImportScreen> {
                       ),
                       onPressed: _confirmImport,
                       child: Text(
-                        'Import ${_selectedIndices.length} Transaction${_selectedIndices.length == 1 ? '' : 's'}',
+                        _selectedIndices.length == 1
+                            ? l.impImportOneTransaction
+                            : l.impImportNTransactions(_selectedIndices.length),
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -876,10 +891,10 @@ class _ImportScreenState extends State<ImportScreen> {
                   TextButton(
                     onPressed: () =>
                         setState(() => _previewTransactions = null),
-                    child: const Center(
+                    child: Center(
                       child: Text(
-                        'Cancel',
-                        style: TextStyle(color: Colors.grey),
+                        l.actionCancel,
+                        style: const TextStyle(color: Colors.grey),
                       ),
                     ),
                   ),
@@ -897,7 +912,7 @@ class _ImportScreenState extends State<ImportScreen> {
                         controller: _passwordController,
                         obscureText: true,
                         decoration: InputDecoration(
-                          labelText: 'PDF password (e.g. RFC)',
+                          labelText: l.impPdfPassword,
                           filled: true,
                           fillColor: context.tint(0.05),
                           border: OutlineInputBorder(
@@ -918,9 +933,9 @@ class _ImportScreenState extends State<ImportScreen> {
                       onPressed: (_isUploading || _isReadingFiles) ? null : _uploadFile,
                       child: _isUploading
                           ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text(
-                              'Process statement',
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                          : Text(
+                              l.impProcessStatement,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
                             ),
                     ),
                   ),
@@ -931,7 +946,7 @@ class _ImportScreenState extends State<ImportScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: _message!.contains('failed')
+                  color: _messageIsError
                       ? Colors.red.withValues(alpha: 0.1)
                       : (_requiresPassword
                             ? Colors.amber.withValues(alpha: 0.1)
@@ -952,7 +967,7 @@ class _ImportScreenState extends State<ImportScreen> {
                       child: Text(
                         _message!,
                         style: TextStyle(
-                          color: _message!.contains('failed')
+                          color: _messageIsError
                               ? Colors.redAccent
                               : (_requiresPassword
                                     ? Colors.amberAccent

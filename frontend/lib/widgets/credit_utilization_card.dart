@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 
@@ -24,16 +25,17 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     // Read the props through `widget.` (StatefulWidget body).
     final creditData = widget.creditData;
     if (creditData.isEmpty) {
-      return const Card(
+      return Card(
         child: Padding(
-          padding: EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(24.0),
           child: Center(
             child: Text(
-              'No credit accounts found.',
-              style: TextStyle(color: Colors.grey),
+              l.cfCreditNoAccounts,
+              style: const TextStyle(color: Colors.grey),
             ),
           ),
         ),
@@ -64,7 +66,7 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'CREDIT UTILIZATION',
+                  l.cfCreditUtilizationHeader,
                   style: TextStyle(
                     fontSize: 11,
                     color: context.textSubtle,
@@ -108,6 +110,7 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
   /// unless the user has expanded the list. Caps prevent a portfolio of
   /// 10+ credit cards from dominating the Overview tab.
   List<Widget> _buildCreditRows() {
+    final l = AppLocalizations.of(context);
     final creditData = widget.creditData;
     final conversionFactor = widget.conversionFactor;
     final currencyFormat = widget.currencyFormat;
@@ -142,7 +145,7 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        item['name'] ?? 'Credit account',
+                        item['name'] ?? l.cfCreditAccountFallback,
                         style: const TextStyle(fontWeight: FontWeight.w500),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -197,8 +200,8 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
             size: 18,
           ),
           label: Text(_expanded
-              ? 'Show fewer'
-              : 'Show $hidden more ${hidden == 1 ? "card" : "cards"}'),
+              ? l.cfCreditShowFewer
+              : l.cfCreditShowMore(hidden)),
           style: TextButton.styleFrom(foregroundColor: context.textMuted),
         ),
       ));

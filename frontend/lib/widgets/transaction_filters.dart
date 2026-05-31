@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
+import '../l10n/app_localizations.dart';
 import '../utils/category.dart';
 
 enum TxFlow { all, income, expense }
@@ -12,24 +13,25 @@ enum TxStatus { all, pending, settled }
 enum TxDateRange { all, today, sevenDays, thirtyDays, ninetyDays, ytd, oneYear, custom }
 
 extension TxDateRangeLabel on TxDateRange {
-  String get label {
+  String labelFor(BuildContext context) {
+    final l = AppLocalizations.of(context);
     switch (this) {
       case TxDateRange.all:
-        return 'All time';
+        return l.txDateAllTime;
       case TxDateRange.today:
-        return 'Today';
+        return l.txDateToday;
       case TxDateRange.sevenDays:
-        return 'Last 7 days';
+        return l.txDateLast7Days;
       case TxDateRange.thirtyDays:
-        return 'Last 30 days';
+        return l.txDateLast30Days;
       case TxDateRange.ninetyDays:
-        return 'Last 90 days';
+        return l.txDateLast90Days;
       case TxDateRange.ytd:
-        return 'Year to date';
+        return l.txDateYtd;
       case TxDateRange.oneYear:
-        return 'Last year';
+        return l.txDateLastYear;
       case TxDateRange.custom:
-        return 'Custom range';
+        return l.txDateCustomRange;
     }
   }
 }
@@ -236,17 +238,18 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     final accountOptions = _accountOptions();
     final categoryOptions = _categoryOptions();
 
     return AlertDialog(
       title: Row(
         children: [
-          const Expanded(child: Text('Filter transactions')),
+          Expanded(child: Text(l.txFilterTransactions)),
           if (_draft.isActive)
             TextButton(
               onPressed: () => setState(() => _draft = TxFilters.empty),
-              child: const Text('Reset'),
+              child: Text(l.txReset),
             ),
         ],
       ),
@@ -257,7 +260,7 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _sectionLabel('Date range'),
+              _sectionLabel(l.txDateRange),
               const SizedBox(height: 6),
               Wrap(
                 spacing: 6,
@@ -265,7 +268,7 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
                 children: TxDateRange.values.map((r) {
                   final selected = _draft.dateRange == r;
                   return FilterChip(
-                    label: Text(r.label),
+                    label: Text(r.labelFor(context)),
                     selected: selected,
                     onSelected: (_) async {
                       if (r == TxDateRange.custom) {
@@ -309,30 +312,30 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
                 ),
               ],
               const SizedBox(height: 18),
-              _sectionLabel('Flow'),
+              _sectionLabel(l.txFlow),
               const SizedBox(height: 6),
               SegmentedButton<TxFlow>(
-                segments: const [
-                  ButtonSegment(value: TxFlow.all, label: Text('All')),
+                segments: [
+                  ButtonSegment(value: TxFlow.all, label: Text(l.txFlowAll)),
                   ButtonSegment(
-                      value: TxFlow.expense, label: Text('Expense')),
+                      value: TxFlow.expense, label: Text(l.txFlowExpense)),
                   ButtonSegment(
-                      value: TxFlow.income, label: Text('Income')),
+                      value: TxFlow.income, label: Text(l.txFlowIncome)),
                 ],
                 selected: {_draft.flow},
                 onSelectionChanged: (s) =>
                     setState(() => _draft = _draft.copyWith(flow: s.first)),
               ),
               const SizedBox(height: 16),
-              _sectionLabel('Status'),
+              _sectionLabel(l.txStatus),
               const SizedBox(height: 6),
               SegmentedButton<TxStatus>(
-                segments: const [
-                  ButtonSegment(value: TxStatus.all, label: Text('All')),
+                segments: [
+                  ButtonSegment(value: TxStatus.all, label: Text(l.txStatusAll)),
                   ButtonSegment(
-                      value: TxStatus.settled, label: Text('Settled')),
+                      value: TxStatus.settled, label: Text(l.txStatusSettled)),
                   ButtonSegment(
-                      value: TxStatus.pending, label: Text('Pending')),
+                      value: TxStatus.pending, label: Text(l.txStatusPending)),
                 ],
                 selected: {_draft.status},
                 onSelectionChanged: (s) =>
@@ -340,7 +343,7 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
               ),
               if (accountOptions.isNotEmpty) ...[
                 const SizedBox(height: 18),
-                _sectionLabel('Accounts'),
+                _sectionLabel(l.txAccounts),
                 const SizedBox(height: 6),
                 Wrap(
                   spacing: 6,
@@ -366,7 +369,7 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
               ],
               if (categoryOptions.isNotEmpty) ...[
                 const SizedBox(height: 18),
-                _sectionLabel('Categories'),
+                _sectionLabel(l.txCategories),
                 const SizedBox(height: 6),
                 Wrap(
                   spacing: 6,
@@ -397,11 +400,11 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop<TxFilters>(context),
-          child: const Text('Cancel'),
+          child: Text(l.actionCancel),
         ),
         FilledButton(
           onPressed: () => Navigator.pop<TxFilters>(context, _draft),
-          child: const Text('Apply'),
+          child: Text(l.actionApply),
         ),
       ],
     );

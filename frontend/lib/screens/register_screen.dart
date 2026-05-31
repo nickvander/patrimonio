@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/recovery_codes_dialog.dart';
+import '../l10n/app_localizations.dart';
 
 /// Invite-redemption + account-creation screen.
 ///
@@ -68,6 +69,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
       body: Center(
         child: ConstrainedBox(
@@ -90,14 +92,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Create your account',
+                    l.authCreateAccount,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'You were invited. Pick a username and password to '
-                    'finish setting up your account.',
+                    l.authInviteIntro,
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 12,
@@ -112,14 +113,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _username,
                     autofillHints: const [AutofillHints.newUsername],
-                    decoration: const InputDecoration(
-                      labelText: 'Username',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l.authUsername,
+                      border: const OutlineInputBorder(),
                     ),
                     validator: (v) {
                       final s = (v ?? '').trim();
-                      if (s.isEmpty) return 'Required';
-                      if (s.length > 64) return 'Must be ≤ 64 characters';
+                      if (s.isEmpty) return l.commonRequired;
+                      if (s.length > 64) return l.authUsernameMaxLength;
                       return null;
                     },
                   ),
@@ -127,9 +128,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _email,
                     autofillHints: const [AutofillHints.email],
-                    decoration: const InputDecoration(
-                      labelText: 'Email (optional)',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l.authEmailOptional,
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -137,14 +138,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     controller: _password,
                     obscureText: true,
                     autofillHints: const [AutofillHints.newPassword],
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                      helperText: 'At least 12 characters',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l.authPassword,
+                      helperText: l.authPasswordMinHelper,
+                      border: const OutlineInputBorder(),
                     ),
                     validator: (v) {
                       if (v == null || v.length < 12) {
-                        return 'At least 12 characters';
+                        return l.authPasswordMinHelper;
                       }
                       return null;
                     },
@@ -153,12 +154,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: _confirm,
                     obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Confirm password',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l.authConfirmPassword,
+                      border: const OutlineInputBorder(),
                     ),
                     validator: (v) =>
-                        v == _password.text ? null : 'Passwords do not match',
+                        v == _password.text ? null : l.authPasswordsDoNotMatch,
                     onFieldSubmitted: (_) => _submit(),
                   ),
                   const SizedBox(height: 16),
@@ -178,7 +179,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             width: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Create account'),
+                        : Text(l.authCreateAccount),
                   ),
                 ],
               ),
