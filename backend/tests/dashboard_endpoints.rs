@@ -978,6 +978,238 @@ async fn split_cross_user_is_404() {
 }
 
 // =====================================================================
+// /api/accounts/transactions/batch — bulk category / account update
+// =====================================================================
+
+/// Read a single transaction's category straight from the DB. Cleaner
+/// than round-tripping a list endpoint just to assert one column.
+async fn tx_category(pool: &PgPool, tx_id: uuid::Uuid) -> Option<String> {
+    sqlx::query_scalar("SELECT user_category FROM transactions WHERE id = $1")
+        .bind(tx_id)
+        .fetch_one(pool)
+        .await
+        .expect("read tx category")
+}
+
+async fn tx_account(pool: &PgPool, tx_id: uuid::Uuid) -> uuid::Uuid {
+    sqlx::query_scalar("SELECT account_id FROM transactions WHERE id = $1")
+        .bind(tx_id)
+        .fetch_one(pool)
+        .await
+        .expect("read tx account")
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn batch_set_category_on_many_txns() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, account) = seed_account(&pool, user_id).await;
+    let t1 = seed_tx(&pool, user_id, account, "Coffee", "4.50").await;
+    let t2 = seed_tx(&pool, user_id, account, "Lunch", "12.00").await;
+    let t3 = seed_tx(&pool, user_id, account, "Dinner", "30.00").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PATCH,
+            "/api/accounts/transactions/batch",
+            Some(&serde_json::json!({
+                "ids": [t1.to_string(), t2.to_string(), t3.to_string()],
+                "user_category": "Dining"
+            })),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["updated"], 3);
+
+    for t in [t1, t2, t3] {
+        assert_eq!(
+            tx_category(&pool, t).await.as_deref(),
+            Some("Dining"),
+            "all three should be recategorized"
+        );
+    }
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn batch_move_account_on_many_txns() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (inst, src) = seed_account(&pool, user_id).await;
+    // A second account under the same institution to move the txns into.
+    let dest: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO accounts (institution_id, name, account_type, currency, current_balance, user_id) \
+         VALUES ($1, 'Savings', 'depository', 'USD', 0.00, $2) RETURNING id",
+    )
+    .bind(inst)
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .expect("seed dest account");
+
+    let t1 = seed_tx(&pool, user_id, src, "A", "1.00").await;
+    let t2 = seed_tx(&pool, user_id, src, "B", "2.00").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PATCH,
+            "/api/accounts/transactions/batch",
+            Some(&serde_json::json!({
+                "ids": [t1.to_string(), t2.to_string()],
+                "account_id": dest.to_string()
+            })),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["updated"], 2);
+
+    assert_eq!(tx_account(&pool, t1).await, dest);
+    assert_eq!(tx_account(&pool, t2).await, dest);
+}
+
+/// Regression: the single PATCH /transactions/{id} handler wrote a
+/// nonexistent `updated_at` column, so every inline edit (rename /
+/// recategorize / move account) 500'd. It must 200 and persist.
+#[tokio::test]
+#[serial_test::serial]
+async fn single_update_transaction_sets_category_ok() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, account) = seed_account(&pool, user_id).await;
+    let t1 = seed_tx(&pool, user_id, account, "Coffee", "4.50").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PATCH,
+            &format!("/api/accounts/transactions/{t1}"),
+            Some(&serde_json::json!({"user_category": "Dining"})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK, "single inline edit must 200, not 500");
+    assert_eq!(tx_category(&pool, t1).await.as_deref(), Some("Dining"));
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn batch_empty_ids_is_400() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PATCH,
+            "/api/accounts/transactions/batch",
+            Some(&serde_json::json!({
+                "ids": [],
+                "user_category": "Dining"
+            })),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn batch_cross_tenant_cannot_touch_other_users_txns() {
+    // User B's transactions must be untouchable from user A's session.
+    // The `user_id` predicate filters them out → updated count excludes
+    // them, and B's category stays unchanged.
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let _ = bootstrap(&app, &pool).await;
+    let (alice_id, alice_token) = seed_owner(&pool, "alice").await;
+    let (bob_id, _bob_token) = seed_owner(&pool, "bob").await;
+
+    let (_a_inst, a_acct) = seed_account(&pool, alice_id).await;
+    let a_tx = seed_tx(&pool, alice_id, a_acct, "Alice tx", "10.00").await;
+    let (_b_inst, b_acct) = seed_account(&pool, bob_id).await;
+    let b_tx = seed_tx(&pool, bob_id, b_acct, "Bob tx", "20.00").await;
+
+    // Alice tries to recategorize BOTH her tx and Bob's tx in one batch.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PATCH,
+            "/api/accounts/transactions/batch",
+            Some(&serde_json::json!({
+                "ids": [a_tx.to_string(), b_tx.to_string()],
+                "user_category": "Hijacked"
+            })),
+            Some(&alice_token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    // Only Alice's row matches the user_id filter.
+    assert_eq!(body["updated"], 1, "Bob's tx must be filtered out");
+
+    assert_eq!(tx_category(&pool, a_tx).await.as_deref(), Some("Hijacked"));
+    assert_eq!(
+        tx_category(&pool, b_tx).await,
+        None,
+        "Bob's tx must be unchanged — cross-tenant write blocked"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn batch_partial_owned_and_bogus_ids_updates_only_owned() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, account) = seed_account(&pool, user_id).await;
+    let owned = seed_tx(&pool, user_id, account, "Real", "5.00").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PATCH,
+            "/api/accounts/transactions/batch",
+            Some(&serde_json::json!({
+                "ids": [
+                    owned.to_string(),
+                    "00000000-0000-0000-0000-000000000000",
+                    "11111111-1111-1111-1111-111111111111"
+                ],
+                "user_category": "Mixed"
+            })),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["updated"], 1, "only the owned, existing id updates");
+    assert_eq!(tx_category(&pool, owned).await.as_deref(), Some("Mixed"));
+}
+
+// =====================================================================
 // /api/dashboard/since-last-login
 // =====================================================================
 

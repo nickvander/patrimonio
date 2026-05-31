@@ -20,6 +20,9 @@ pub fn router() -> Router<AppState> {
         .route("/{id}/balance", patch(update_account_balance))
         .route("/{id}/nickname", patch(update_account_nickname))
         .route("/{id}/transactions", get(get_account_transactions))
+        // Static segment must precede the dynamic `/{tx_id}` route so
+        // `/transactions/batch` isn't swallowed as a tx_id path param.
+        .route("/transactions/batch", patch(batch_update_transactions))
         .route("/transactions/{tx_id}", patch(update_transaction).delete(delete_transaction))
         .route(
             "/transactions/{tx_id}/splits",
@@ -612,8 +615,7 @@ async fn update_transaction(
                 WHEN $3::text = '' THEN NULL
                 ELSE $3::text
             END,
-            account_id    = COALESCE($4, account_id),
-            updated_at    = NOW()
+            account_id    = COALESCE($4, account_id)
         WHERE id = $5 AND user_id = $6
         "#,
     )
@@ -640,6 +642,110 @@ async fn update_transaction(
         }
         Err(e) => {
             error!("Failed to update transaction: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct BatchUpdateTransactionsRequest {
+    /// Transactions to update. The `user_id` filter on the UPDATE is the
+    /// security boundary — ids the caller doesn't own are silently
+    /// skipped (they don't match the WHERE clause), never trusted.
+    ids: Vec<uuid::Uuid>,
+    /// Optional batch changes. COALESCE semantics, mirroring the single
+    /// PATCH: a missing/None field leaves the column alone.
+    user_category: Option<String>,
+    user_notes: Option<String>,
+    user_description: Option<String>,
+    /// Reassign every matched transaction to a different account. Must
+    /// belong to the caller (validated below, same as the single PATCH).
+    account_id: Option<uuid::Uuid>,
+}
+
+#[derive(Serialize)]
+struct BatchUpdateResponse {
+    updated: u64,
+}
+
+/// Update many transactions in a single request (and a single SQL
+/// statement). The bulk-action UI uses this to recategorize or move a
+/// selection of transactions without firing N separate PATCHes.
+///
+/// Field semantics mirror `update_transaction` exactly: optional fields
+/// use COALESCE ("leave alone" when absent), `user_description` uses the
+/// CASE clearing trick, and the `user_id` predicate scopes every write
+/// to the caller. Returns `{ "updated": <rows_affected> }`.
+async fn batch_update_transactions(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Json(payload): Json<BatchUpdateTransactionsRequest>,
+) -> impl IntoResponse {
+    info!(
+        "Batch-updating {} transactions for user {}: cat={:?}, account_id={:?}",
+        payload.ids.len(),
+        ctx.user_id,
+        payload.user_category,
+        payload.account_id
+    );
+
+    // An empty selection is a client bug, not a no-op we should reward
+    // with 200. Reject it.
+    if payload.ids.is_empty() {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+
+    // If moving transactions, the destination account must belong to the
+    // caller — otherwise the batch could re-parent rows into someone
+    // else's account. Same check as the single PATCH.
+    if let Some(dest) = payload.account_id {
+        let owns = sqlx::query("SELECT 1 FROM accounts WHERE id = $1 AND user_id = $2")
+            .bind(dest)
+            .bind(ctx.user_id)
+            .fetch_optional(&state.db)
+            .await;
+        if !matches!(owns, Ok(Some(_))) {
+            return StatusCode::NOT_FOUND.into_response();
+        }
+    }
+
+    let result = sqlx::query(
+        r#"
+        UPDATE transactions
+        SET user_category = COALESCE($1, user_category),
+            user_notes    = COALESCE($2, user_notes),
+            user_description = CASE
+                WHEN $3::text IS NULL THEN user_description
+                WHEN $3::text = '' THEN NULL
+                ELSE $3::text
+            END,
+            account_id    = COALESCE($4, account_id)
+        WHERE id = ANY($5) AND user_id = $6
+        "#,
+    )
+    .bind(payload.user_category)
+    .bind(payload.user_notes)
+    .bind(payload.user_description)
+    .bind(payload.account_id)
+    .bind(&payload.ids)
+    .bind(ctx.user_id)
+    .execute(&state.db)
+    .await;
+
+    match result {
+        Ok(r) => {
+            state
+                .realtime
+                .publish(
+                    ctx.user_id,
+                    crate::services::realtime::RealtimeEvent::TransactionsChanged,
+                )
+                .await;
+            (StatusCode::OK, Json(BatchUpdateResponse { updated: r.rows_affected() }))
+                .into_response()
+        }
+        Err(e) => {
+            error!("Failed to batch-update transactions: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
