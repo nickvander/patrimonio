@@ -2461,6 +2461,212 @@ async fn loan_interest_only_and_monthly_rate_schedule() {
 }
 
 // =====================================================================
+// B1 — partial payment top-up stays on the same installment
+// =====================================================================
+
+/// A PARTIAL payment to installment 1, then the remainder, must fully
+/// pay installment 1 (status='paid', paid_amount == scheduled total)
+/// WITHOUT spilling into installment 2. Regression for the bug where the
+/// next-installment selector keyed off `actual_tx_id IS NULL`, so the
+/// remainder skipped the partial row and filled installment 2 instead.
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_partial_payment_tops_up_same_installment() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+
+    // Interest-free loan: $1,200 over 12 months → $100 principal/month,
+    // each installment's scheduled_amount is exactly 100.
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+        "origination_date": "2026-01-15", "interest_type": "none",
+        "term_months": 12, "payment_frequency": "monthly"
+    })).await;
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // Partial: $40 against installment 1 (cash, no tx).
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/payments"),
+        Some(&serde_json::json!({"amount": 40.0, "paid_date": "2026-02-15"})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // After the partial: installment 1 is 'partial' with paid_amount 40;
+    // installment 2 untouched.
+    let rows = loan_payments(&app, &token, loan_id).await;
+    let i1 = &rows[0];
+    let i2 = &rows[1];
+    assert_eq!(i1["installment_number"].as_i64().unwrap(), 1);
+    assert_eq!(i1["status"], "partial", "installment 1 should be partial after $40");
+    assert!((i1["paid_amount"].as_f64().unwrap() - 40.0).abs() < 0.01);
+    assert!(i2["paid_amount"].is_null(), "installment 2 must be untouched by the partial");
+
+    // Remainder: $60 → fully covers installment 1's $100 schedule.
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/payments"),
+        Some(&serde_json::json!({"amount": 60.0, "paid_date": "2026-02-20"})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    let rows = loan_payments(&app, &token, loan_id).await;
+    let i1 = &rows[0];
+    let i2 = &rows[1];
+    // Installment 1 is now fully paid: status='paid', paid_amount == 100.
+    assert_eq!(i1["status"], "paid", "installment 1 must be paid after the remainder");
+    assert!((i1["paid_amount"].as_f64().unwrap() - 100.0).abs() < 0.01,
+        "installment 1 paid_amount should equal the $100 schedule, got {}", i1["paid_amount"]);
+    // CRITICAL: the remainder did NOT spill into installment 2.
+    assert_eq!(i2["installment_number"].as_i64().unwrap(), 2);
+    assert!(i2["paid_amount"].is_null(),
+        "remainder must NOT spill into installment 2 — got paid_amount {}", i2["paid_amount"]);
+    assert_eq!(i2["status"], "scheduled", "installment 2 must still be scheduled");
+
+    // Outstanding dropped by exactly $100 (1200 - 100).
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
+    )).await.unwrap();
+    let l = body_json(res.into_body()).await;
+    assert!((l["outstanding"].as_f64().unwrap() - 1100.0).abs() < 0.01,
+        "outstanding should be 1100 after one full installment, got {}", l["outstanding"]);
+    assert!((l["total_repaid"].as_f64().unwrap() - 100.0).abs() < 0.01);
+}
+
+/// Helper: GET a loan's payments list, returning the JSON array.
+async fn loan_payments(app: &Router, token: &str, loan_id: uuid::Uuid) -> Value {
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, &format!("/api/loans/{loan_id}/payments"), None, Some(token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    body_json(res.into_body()).await
+}
+
+// =====================================================================
+// B2 — update_loan regenerates the schedule + validates principal
+// =====================================================================
+
+/// Changing the principal of a scheduled loan (no reconciled payments)
+/// must regenerate the schedule rows to the new principal — Σ
+/// scheduled_principal == new principal — instead of leaving a stale
+/// schedule.
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_update_principal_regenerates_schedule() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+        "origination_date": "2026-01-15", "interest_type": "none",
+        "term_months": 12, "payment_frequency": "monthly"
+    })).await;
+    let _ = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
+    )).await.unwrap();
+
+    // Bump the principal to $2,400.
+    let res = app.clone().oneshot(req(
+        Method::PATCH, &format!("/api/loans/{loan_id}"),
+        Some(&serde_json::json!({"principal": 2400.0})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK, "update with valid principal must 200");
+
+    // Schedule regenerated: still 12 rows, Σ scheduled_principal == 2400.
+    let rows = loan_payments(&app, &token, loan_id).await;
+    let arr = rows.as_array().unwrap();
+    assert_eq!(arr.len(), 12, "schedule still has 12 installments");
+    let sum_principal: f64 = arr.iter().map(|r| r["scheduled_principal"].as_f64().unwrap()).sum();
+    assert!((sum_principal - 2400.0).abs() < 0.01,
+        "scheduled principal must sum to the new 2400, got {sum_principal}");
+
+    // The loan view's total_scheduled tracks the new principal too.
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
+    )).await.unwrap();
+    let l = body_json(res.into_body()).await;
+    assert!((l["total_scheduled"].as_f64().unwrap() - 2400.0).abs() < 0.01,
+        "total_scheduled should follow the regenerated schedule, got {}", l["total_scheduled"]);
+}
+
+/// update_loan with principal <= 0 returns 400 (not a 500 surfacing the
+/// DB CHECK).
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_update_nonpositive_principal_is_400() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 1000.0, "currency": "USD",
+        "origination_date": "2026-01-15"
+    })).await;
+
+    let res = app.clone().oneshot(req(
+        Method::PATCH, &format!("/api/loans/{loan_id}"),
+        Some(&serde_json::json!({"principal": 0.0})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST, "principal 0 must 400, not 500");
+
+    let res = app.clone().oneshot(req(
+        Method::PATCH, &format!("/api/loans/{loan_id}"),
+        Some(&serde_json::json!({"principal": -50.0})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST, "negative principal must 400");
+}
+
+/// A schedule-affecting edit (principal) on a loan WITH a reconciled
+/// payment is rejected with 409 — terms can't change after money has
+/// been reconciled (chosen policy; unreconcile first).
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_update_terms_rejected_after_reconcile() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose", "principal": 1200.0, "currency": "USD",
+        "origination_date": "2026-01-15", "interest_type": "none",
+        "term_months": 12, "payment_frequency": "monthly"
+    })).await;
+    let _ = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/schedule"), Some(&serde_json::json!({})), Some(&token),
+    )).await.unwrap();
+    // Reconcile a real repayment.
+    let repay = seed_tx_dated(&pool, user_id, acct, "Zelle from Jose", "100.00", "2026-02-15").await;
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/payments"),
+        Some(&serde_json::json!({"transaction_id": repay.to_string()})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // Changing principal now must 409.
+    let res = app.clone().oneshot(req(
+        Method::PATCH, &format!("/api/loans/{loan_id}"),
+        Some(&serde_json::json!({"principal": 5000.0})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CONFLICT,
+        "schedule-affecting edit after reconcile must 409");
+
+    // A non-schedule field (notes) is still editable on the same loan.
+    let res = app.clone().oneshot(req(
+        Method::PATCH, &format!("/api/loans/{loan_id}"),
+        Some(&serde_json::json!({"notes": "called borrower"})), Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK, "non-schedule edit stays allowed after reconcile");
+}
+
+// =====================================================================
 // Interest income (cash basis) — principal/interest split + report
 // =====================================================================
 

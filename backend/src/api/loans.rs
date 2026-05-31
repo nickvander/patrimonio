@@ -549,6 +549,49 @@ async fn update_loan(
             return (StatusCode::BAD_REQUEST, "invalid status").into_response();
         }
     }
+    // B2(b): validate principal > 0 in Rust so a non-positive value
+    // returns a clean 400 instead of surfacing the DB CHECK as a 500
+    // (mirrors create_loan).
+    if let Some(p) = payload.principal {
+        if p <= 0.0 {
+            return (StatusCode::BAD_REQUEST, "principal must be positive").into_response();
+        }
+    }
+
+    // B2(a): does this edit change a schedule-affecting term? If a
+    // generated schedule exists, the loans row and the loan_payments
+    // schedule would otherwise diverge (total_scheduled / per-row
+    // interest / reminders / agreement). We regenerate AFTER the UPDATE
+    // below, from the loan's new terms.
+    //
+    // Policy for a schedule WITH reconciled payments: REJECT the
+    // schedule-affecting edit with 409 (do not silently regenerate, do
+    // not leave a stale schedule). This is the safest, least-surprising
+    // choice — it matches generate_schedule's existing guard and keeps
+    // the Σprincipal == principal invariant intact. The user unreconciles
+    // first, edits terms, then re-reconciles. Non-schedule fields
+    // (borrower_name, status, notes) are unaffected and always editable.
+    let schedule_affecting =
+        payload.principal.is_some() || payload.interest_rate.is_some() || payload.interest_type.is_some();
+    if schedule_affecting {
+        let reconciled: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM loan_payments \
+             WHERE loan_id = $1 AND user_id = $2 AND actual_tx_id IS NOT NULL",
+        )
+        .bind(id)
+        .bind(ctx.user_id)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(0);
+        if reconciled > 0 {
+            return (
+                StatusCode::CONFLICT,
+                "cannot change loan terms after payments are reconciled — unreconcile them first",
+            )
+                .into_response();
+        }
+    }
+
     let result = sqlx::query(
         r#"
         UPDATE loans SET
@@ -574,7 +617,37 @@ async fn update_loan(
     .await;
     match result {
         Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
-        Ok(_) => StatusCode::OK.into_response(),
+        Ok(_) => {
+            // Rebuild the schedule from the new terms IFF one already
+            // exists (require_existing=true: don't fabricate a schedule
+            // for an MVP loan that never had one). Reconciled loans were
+            // already rejected above, so this only ever rebuilds unpaid
+            // schedules.
+            if schedule_affecting {
+                match regenerate_schedule(&state.db, id, ctx.user_id, true).await {
+                    RegenOutcome::Regenerated(_) | RegenOutcome::NoSchedule => {}
+                    RegenOutcome::Reconciled => {
+                        // Guarded above; treat as a conflict if it races.
+                        return (
+                            StatusCode::CONFLICT,
+                            "cannot change loan terms after payments are reconciled — unreconcile them first",
+                        )
+                            .into_response();
+                    }
+                    // The loan still has a schedule but the new terms make
+                    // it open-ended / invalid — shouldn't happen via this
+                    // path (term/frequency aren't editable here), so log
+                    // and report a server error rather than corrupt state.
+                    RegenOutcome::OpenEnded
+                    | RegenOutcome::BadFrequency
+                    | RegenOutcome::DbError => {
+                        error!("update_loan schedule regen failed for loan {id}");
+                        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                    }
+                }
+            }
+            StatusCode::OK.into_response()
+        }
         Err(e) => {
             error!("update_loan failed: {e}");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
@@ -928,13 +1001,38 @@ async fn record_payment(
     let balance_before = (principal - principal_paid).max(0.0);
 
     // If a GENERATED schedule exists (rows with scheduled_principal > 0),
-    // fill the earliest UNPAID scheduled installment rather than
-    // appending a new row — that's what makes the schedule-aware
+    // fill the earliest NOT-YET-FULLY-PAID scheduled installment rather
+    // than appending a new row — that's what makes the schedule-aware
     // outstanding (principal − Σ paid scheduled_principal) decrease.
-    // Otherwise (MVP / open-ended loan) append a new installment.
-    let next_scheduled: Option<(uuid::Uuid, f64)> = sqlx::query(
-        "SELECT id, scheduled_interest FROM loan_payments \
-         WHERE loan_id = $1 AND actual_tx_id IS NULL AND scheduled_principal > 0 \
+    //
+    // B1 fix: we key off "not fully paid" (status in scheduled/partial/
+    // late AND paid_amount < scheduled_amount), NOT off actual_tx_id IS
+    // NULL. A partial payment leaves the row with status='partial' and
+    // (when tx-linked) a non-NULL actual_tx_id; the old NULL-keyed
+    // selector skipped that row, so the NEXT payment filled installment
+    // k+1 and stranded k's remainder. Now the remainder is topped up on
+    // the same row.
+    //
+    // Multi-tx-per-installment constraint: the partial unique index
+    // idx_loan_payments_actual_tx allows only ONE actual_tx_id per row,
+    // and DELETE /payments/{id} unreconciles by deleting the whole row.
+    // We therefore cannot attach a SECOND bank tx to a row that already
+    // carries one without breaking the one-tx-per-row + unreconcile
+    // model. The minimal correct behaviour: top up paid_amount/splits in
+    // place and only adopt the incoming tx_id when the row has none yet
+    // (cash top-up, or the first reconciliation). A row's actual_tx_id is
+    // thus "the first reconciled tx"; the running balance stays correct
+    // regardless. (A future schema with a child loan_payment_txs table
+    // could store every tx — out of scope here.)
+    let next_scheduled: Option<(uuid::Uuid, f64, f64, f64, f64, bool)> = sqlx::query(
+        "SELECT id, scheduled_amount, scheduled_interest, \
+                COALESCE(paid_amount, 0) AS paid_so_far, \
+                COALESCE(interest_portion, 0) AS interest_so_far, \
+                actual_tx_id \
+         FROM loan_payments \
+         WHERE loan_id = $1 AND scheduled_principal > 0 \
+           AND (paid_amount IS NULL OR paid_amount < scheduled_amount) \
+           AND status <> 'skipped' \
          ORDER BY installment_number ASC LIMIT 1",
     )
     .bind(id)
@@ -945,13 +1043,21 @@ async fn record_payment(
     .map(|r| {
         (
             r.get::<uuid::Uuid, _>("id"),
+            dec_to_f64(r.try_get("scheduled_amount").ok()),
             dec_to_f64(r.try_get("scheduled_interest").ok()),
+            dec_to_f64(r.try_get("paid_so_far").ok()),
+            dec_to_f64(r.try_get("interest_so_far").ok()),
+            r.try_get::<Option<uuid::Uuid>, _>("actual_tx_id").ok().flatten().is_some(),
         )
     });
 
     // Compute the principal/interest split (interest-first, US Rule —
-    // see services/loan_schedule + the interest-income research).
-    let scheduled_interest = next_scheduled.map(|(_, si)| si);
+    // see services/loan_schedule + the interest-income research). When
+    // topping up a 'partial' row we split against the REMAINING scheduled
+    // interest (scheduled_interest already realized on prior payments)
+    // and ADD to the existing portions, so the row never double-counts.
+    let scheduled_interest =
+        next_scheduled.map(|(_, _, si, _, interest_so_far, _)| (si - interest_so_far).max(0.0));
     let interest_portion = split_interest_portion(
         amount,
         balance_before,
@@ -971,17 +1077,25 @@ async fn record_payment(
     let balance_after_dec =
         rust_decimal::Decimal::from_f64_retain(balance_after).unwrap_or_default();
 
-    let result = if let Some((payment_id, _)) = next_scheduled {
+    let result = if let Some((payment_id, _, _, _, _, has_tx)) = next_scheduled {
+        // Adopt the incoming tx_id only if the row has none yet (see the
+        // multi-tx constraint comment above); otherwise keep the first.
+        let tx_for_row = if has_tx { None } else { payload.transaction_id };
         sqlx::query(
             r#"
             UPDATE loan_payments
-            SET actual_tx_id = $1, paid_amount = $2, paid_date = $3,
-                principal_portion = $4, interest_portion = $5, balance_after = $6,
-                status = CASE WHEN $2 >= scheduled_amount THEN 'paid' ELSE 'partial' END
+            SET actual_tx_id = COALESCE(actual_tx_id, $1),
+                paid_amount = COALESCE(paid_amount, 0) + $2,
+                paid_date = $3,
+                principal_portion = COALESCE(principal_portion, 0) + $4,
+                interest_portion = COALESCE(interest_portion, 0) + $5,
+                balance_after = $6,
+                status = CASE WHEN COALESCE(paid_amount, 0) + $2 >= scheduled_amount
+                              THEN 'paid' ELSE 'partial' END
             WHERE id = $7 AND user_id = $8
             "#,
         )
-        .bind(payload.transaction_id)
+        .bind(tx_for_row)
         .bind(amount_dec)
         .bind(paid_date)
         .bind(principal_dec)
@@ -1208,56 +1322,92 @@ async fn suggest_repayment(
 
 // ---------- schedule generation ----------
 
-/// (Re)generate the amortization schedule for a loan. Refuses (409) if
-/// any installment is already reconciled — regen with changed terms
-/// would produce a different per-row split and leave paid rows
-/// belonging to the old schedule, breaking the Σprincipal == principal
-/// invariant. 422 if the loan is open-ended (no term / frequency).
-async fn generate_schedule(
-    State(state): State<AppState>,
-    Extension(ctx): Extension<AuthContext>,
-    Path(id): Path<uuid::Uuid>,
-) -> impl IntoResponse {
+/// Outcome of an attempt to (re)build a loan's amortization schedule via
+/// the shared [`regenerate_schedule`] helper.
+enum RegenOutcome {
+    /// Schedule rebuilt; carries the installment count.
+    Regenerated(usize),
+    /// The loan had no generated schedule yet — nothing to rebuild. (The
+    /// caller decides whether that's fine, e.g. update_loan on an MVP
+    /// loan with only manually-recorded payments.)
+    NoSchedule,
+    /// At least one installment is already reconciled — refused, since a
+    /// rebuild would re-split paid rows and break Σprincipal == principal.
+    Reconciled,
+    /// Loan is open-ended (no term / payment_frequency).
+    OpenEnded,
+    /// payment_frequency is set but invalid.
+    BadFrequency,
+    /// A DB error occurred.
+    DbError,
+}
+
+/// Shared schedule (re)builder used by both `generate_schedule` (the
+/// POST /schedule endpoint) and `update_loan` (when a schedule-affecting
+/// term changes). Computes the schedule from the loan's CURRENT terms and
+/// upserts the rows in one transaction.
+///
+/// Guard: refuses (returns `Reconciled`) if any installment is already
+/// reconciled — a rebuild with changed terms would re-split paid rows and
+/// break the Σprincipal == principal invariant. `require_existing` =
+/// true makes the helper a no-op (`NoSchedule`) when the loan has no
+/// generated schedule yet, which is what update_loan wants: editing the
+/// principal of an MVP loan that never had a schedule shouldn't fabricate
+/// one.
+async fn regenerate_schedule(
+    db: &sqlx::PgPool,
+    loan_id: uuid::Uuid,
+    user_id: uuid::Uuid,
+    require_existing: bool,
+) -> RegenOutcome {
     let loan = sqlx::query(
         "SELECT principal, interest_rate, interest_type, rate_period, origination_date, \
                 term_months, payment_frequency \
          FROM loans WHERE id = $1 AND user_id = $2",
     )
-    .bind(id)
-    .bind(ctx.user_id)
-    .fetch_optional(&state.db)
+    .bind(loan_id)
+    .bind(user_id)
+    .fetch_optional(db)
     .await;
     let Ok(Some(l)) = loan else {
-        return StatusCode::NOT_FOUND.into_response();
+        return RegenOutcome::DbError;
     };
+
+    if require_existing {
+        let has_schedule: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM loan_payments \
+             WHERE loan_id = $1 AND scheduled_principal > 0)",
+        )
+        .bind(loan_id)
+        .fetch_one(db)
+        .await
+        .unwrap_or(false);
+        if !has_schedule {
+            return RegenOutcome::NoSchedule;
+        }
+    }
 
     // Refuse if any payment is already reconciled.
     let reconciled: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM loan_payments WHERE loan_id = $1 AND actual_tx_id IS NOT NULL",
     )
-    .bind(id)
-    .fetch_one(&state.db)
+    .bind(loan_id)
+    .fetch_one(db)
     .await
     .unwrap_or(0);
     if reconciled > 0 {
-        return (
-            StatusCode::CONFLICT,
-            "cannot regenerate schedule: payments already reconciled — unreconcile them first",
-        )
-            .into_response();
+        return RegenOutcome::Reconciled;
     }
 
-    let principal: rust_decimal::Decimal =
-        l.try_get("principal").unwrap_or_default();
-    let rate: rust_decimal::Decimal =
-        l.try_get("interest_rate").unwrap_or_default();
+    let principal: rust_decimal::Decimal = l.try_get("principal").unwrap_or_default();
+    let rate: rust_decimal::Decimal = l.try_get("interest_rate").unwrap_or_default();
     let interest_type: String =
         l.try_get("interest_type").unwrap_or_else(|_| "none".to_string());
     let rate_period: String =
         l.try_get("rate_period").unwrap_or_else(|_| "annual".to_string());
     let origination: chrono::NaiveDate = match l.try_get("origination_date") {
         Ok(d) => d,
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        Err(_) => return RegenOutcome::DbError,
     };
     let term_months: Option<i32> = l.try_get("term_months").ok().flatten();
     let payment_frequency: Option<String> = l.try_get("payment_frequency").ok().flatten();
@@ -1273,37 +1423,32 @@ async fn generate_schedule(
     ) {
         Ok(r) => r,
         Err(crate::services::loan_schedule::ScheduleError::OpenEnded) => {
-            return (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "loan has no term / payment frequency — set both to generate a schedule",
-            )
-                .into_response();
+            return RegenOutcome::OpenEnded;
         }
         Err(crate::services::loan_schedule::ScheduleError::BadFrequency) => {
-            return (StatusCode::UNPROCESSABLE_ENTITY, "invalid payment frequency").into_response();
+            return RegenOutcome::BadFrequency;
         }
     };
 
-    // One transaction: delete any unpaid rows beyond the new length,
-    // then upsert each generated row. (No reconciled rows exist — we
-    // checked above — so a blanket delete of unpaid rows is safe and
-    // simplest.)
-    let mut tx = match state.db.begin().await {
+    // One transaction: clear unpaid rows then upsert each generated row.
+    // (No reconciled rows exist — we checked above — so a blanket delete
+    // of unpaid rows is safe and simplest.)
+    let mut tx = match db.begin().await {
         Ok(t) => t,
         Err(e) => {
-            error!("generate_schedule begin failed: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            error!("regenerate_schedule begin failed: {e}");
+            return RegenOutcome::DbError;
         }
     };
     if let Err(e) = sqlx::query(
         "DELETE FROM loan_payments WHERE loan_id = $1 AND actual_tx_id IS NULL",
     )
-    .bind(id)
+    .bind(loan_id)
     .execute(&mut *tx)
     .await
     {
-        error!("generate_schedule clear failed: {e}");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        error!("regenerate_schedule clear failed: {e}");
+        return RegenOutcome::DbError;
     }
     for row in &rows {
         let res = sqlx::query(
@@ -1320,8 +1465,8 @@ async fn generate_schedule(
                 status = 'scheduled'
             "#,
         )
-        .bind(ctx.user_id)
-        .bind(id)
+        .bind(user_id)
+        .bind(loan_id)
         .bind(row.installment_number)
         .bind(row.due_date)
         .bind(row.amount)
@@ -1330,20 +1475,51 @@ async fn generate_schedule(
         .execute(&mut *tx)
         .await;
         if let Err(e) = res {
-            error!("generate_schedule insert failed: {e}");
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            error!("regenerate_schedule insert failed: {e}");
+            return RegenOutcome::DbError;
         }
     }
     if let Err(e) = tx.commit().await {
-        error!("generate_schedule commit failed: {e}");
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        error!("regenerate_schedule commit failed: {e}");
+        return RegenOutcome::DbError;
     }
+    RegenOutcome::Regenerated(rows.len())
+}
 
-    (
-        StatusCode::CREATED,
-        Json(serde_json::json!({"installments": rows.len()})),
-    )
-        .into_response()
+/// (Re)generate the amortization schedule for a loan. Refuses (409) if
+/// any installment is already reconciled — regen with changed terms
+/// would produce a different per-row split and leave paid rows
+/// belonging to the old schedule, breaking the Σprincipal == principal
+/// invariant. 422 if the loan is open-ended (no term / frequency).
+async fn generate_schedule(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path(id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    match regenerate_schedule(&state.db, id, ctx.user_id, false).await {
+        RegenOutcome::Regenerated(n) => {
+            (StatusCode::CREATED, Json(serde_json::json!({"installments": n}))).into_response()
+        }
+        RegenOutcome::NoSchedule => {
+            // require_existing=false above, so this is unreachable here;
+            // an empty schedule still produces Regenerated(0).
+            (StatusCode::CREATED, Json(serde_json::json!({"installments": 0}))).into_response()
+        }
+        RegenOutcome::Reconciled => (
+            StatusCode::CONFLICT,
+            "cannot regenerate schedule: payments already reconciled — unreconcile them first",
+        )
+            .into_response(),
+        RegenOutcome::OpenEnded => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "loan has no term / payment frequency — set both to generate a schedule",
+        )
+            .into_response(),
+        RegenOutcome::BadFrequency => {
+            (StatusCode::UNPROCESSABLE_ENTITY, "invalid payment frequency").into_response()
+        }
+        RegenOutcome::DbError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
 }
 
 /// Administrative early/full payoff: close an active loan and void any
