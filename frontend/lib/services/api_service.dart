@@ -1092,6 +1092,37 @@ class ApiService {
     }
   }
 
+  /// Apply the same change (category and/or account move) to many
+  /// transactions in ONE request — used by the bulk-action toolbar so a
+  /// 40-row selection is a single round-trip, not 40 PATCHes. Only the
+  /// non-null fields are sent (COALESCE semantics on the server: an
+  /// absent field leaves that column alone). Returns the number of rows
+  /// the server actually updated (ids the user doesn't own are filtered
+  /// out by the `user_id` predicate and never counted). The `_patch`
+  /// wrapper invalidates the dashboard cache on success, like every
+  /// other mutation here.
+  Future<int> batchUpdateTransactions(
+    List<String> ids, {
+    String? category,
+    String? accountId,
+  }) async {
+    final body = <String, dynamic>{
+      'ids': ids,
+      if (category != null) 'user_category': category,
+      if (accountId != null) 'account_id': accountId,
+    };
+    final response = await _patch(
+      Uri.parse('$_baseUrl/accounts/transactions/batch'),
+      headers: _withCsrf({'Content-Type': 'application/json'}),
+      body: json.encode(body),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to batch-update transactions');
+    }
+    final decoded = json.decode(response.body) as Map<String, dynamic>;
+    return (decoded['updated'] as num).toInt();
+  }
+
   /// URL of the CSV export endpoint. We hand this to the browser via an
   /// anchor click rather than fetching + blobbing in Dart — the backend
   /// returns Content-Disposition: attachment so the browser downloads

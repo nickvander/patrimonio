@@ -140,6 +140,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // _loadAllData resolves it, since Lending may not be in _destinations
   // until then). Cleared after the first apply.
   NavId? _pendingRestore;
+  // Sections the user has actually opened. The IndexedStack only mounts
+  // these — unvisited sections render as a cheap placeholder, so their
+  // one-shot initState fetches (Tax / Projections / Lending) don't fire on
+  // boot, and their (chart-heavy) trees aren't built/laid out until first
+  // visit. Once visited, a section stays mounted + kept-alive.
+  final Set<NavId> _visitedSections = {};
   // Category that the AllocationHeatmap is currently drilled into. When
   // non-null, the PortfolioCard's holdings table filters to that category.
   String? _portfolioCategoryFilter;
@@ -162,6 +168,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// events trigger a silent _loadAllData refresh.
   final RealtimeService _realtime = RealtimeService();
   StreamSubscription<RealtimeEvent>? _realtimeSub;
+  // Coalesces bursty data-change pushes into a single dashboard reload.
+  Timer? _reloadDebounce;
 
   @override
   void initState() {
@@ -195,6 +203,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    _reloadDebounce?.cancel();
     _realtimeSub?.cancel();
     _realtime.dispose();
     super.dispose();
@@ -289,10 +298,101 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _handleRealtimeEvent(RealtimeEvent e) {
     if (!mounted) return;
     debugPrint('realtime: received ${e.type}');
-    // A realtime event means the server-side data just changed; the
-    // client cache must NOT win here. Force a cache-bypassing reload so
-    // we never paint stale numbers in response to a push.
-    _loadAllData(silent: true, forceRefresh: true);
+    switch (e.type) {
+      case RealtimeEventType.fxRatesUpdated:
+        // FX ticks are the most frequent push and only change the
+        // displayed USD↔MXN conversion, which every card derives
+        // client-side from _fxRate. Refetch JUST the rate instead of
+        // re-pulling all ~17 endpoints (the old behaviour re-fetched the
+        // entire dashboard on every background rate tick).
+        _refreshFxRateOnly();
+        return;
+      case RealtimeEventType.transactionsChanged:
+      case RealtimeEventType.accountsChanged:
+      case RealtimeEventType.syncComplete:
+      case RealtimeEventType.resync:
+      case RealtimeEventType.unknown:
+        // These change server-side data feeding many derived figures, so
+        // a full cache-bypassing reload is the correct recovery — but
+        // coalesce bursts (e.g. a multi-institution sync completing,
+        // which fires syncComplete per institution) into ONE reload
+        // rather than one per event.
+        _reloadDebounce?.cancel();
+        _reloadDebounce = Timer(const Duration(milliseconds: 400), () {
+          if (mounted) _loadAllData(silent: true, forceRefresh: true);
+        });
+        return;
+    }
+  }
+
+  /// Lightweight FX-only refresh for `fxRatesUpdated` pushes: pull the
+  /// latest USD/MXN rate (server-forced) and re-render with it, without
+  /// touching the other dashboard endpoints. A failure is non-fatal — the
+  /// rate self-heals on the next full reload.
+  Future<void> _refreshFxRateOnly() async {
+    try {
+      final fx = await _apiService.getExchangeRate('USD', 'MXN', force: true);
+      if (!mounted) return;
+      setState(() => _fxRate = fx);
+    } catch (_) {}
+  }
+
+  /// Open the Add-account dialog directly. Wired into the empty-state CTAs
+  /// (Transactions / Accounts) so a fresh user adds an account in one tap
+  /// instead of being bounced to Settings to find the control.
+  void _openAddAccount() {
+    showDialog(
+      context: context,
+      builder: (_) => AddAccountDialog(onAccountCreated: _loadAllData),
+    );
+  }
+
+  /// Onboarding tile: enable the lending module and jump to it. Lending
+  /// needs no linked bank account, so enabling it also exits the
+  /// account-gated first-run hero (see [_isFirstRun]).
+  Future<void> _enableLendingFromOnboarding() async {
+    if (!_lendingEnabled) await _toggleLending(true);
+    if (!mounted) return;
+    _goToNav(NavId.lending);
+  }
+
+  /// Onboarding tile: pick a crypto exchange to connect. Coinbase is an
+  /// OAuth redirect; Bitso uses the API-key dialog — mirrors the Settings
+  /// "Connect crypto exchanges" controls.
+  void _openConnectExchange() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.login, color: Color(0xFF0052FF)),
+              title: const Text('Coinbase'),
+              subtitle: const Text('Connect via OAuth'),
+              onTap: () {
+                Navigator.of(sheetCtx).pop();
+                web.window.location.href = '${_apiService.baseUrl}/auth/coinbase';
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.currency_exchange, color: context.positive),
+              title: const Text('Bitso'),
+              subtitle: const Text('Connect with an API key'),
+              onTap: () {
+                Navigator.of(sheetCtx).pop();
+                showDialog(
+                  context: context,
+                  builder: (_) =>
+                      AddCryptoDialog(exchange: 'bitso', onLinked: _loadAllData),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   String _loadSavedCurrency() {
@@ -309,7 +409,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return accounts != null && accounts.isNotEmpty;
   }
 
-  bool get _isFirstRun => !_isLoading && _error == null && !_hasAccounts;
+  // Lending needs no linked bank account, so a user who has enabled the
+  // lending module is NOT a blank first-run user — show them the full
+  // dashboard (with the Lending section) instead of the onboarding hero.
+  bool get _isFirstRun =>
+      !_isLoading && _error == null && !_hasAccounts && !_lendingEnabled;
 
   // Build the searchable index used by the Cmd-K palette. We do it on
   // demand so the list always reflects the most recent _loadAllData()
@@ -1022,6 +1126,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         );
                       },
                     ),
+                    // Signature features — surfaced at first run so they
+                    // aren't hidden behind a Settings toggle / sub-menu.
+                    actionTile(
+                      icon: Icons.monetization_on_outlined,
+                      title: 'Track money you\'ve lent',
+                      subtitle:
+                          'Lend to friends or family? Record loans, reconcile repayments, and track interest.',
+                      accent: context.tealAccent,
+                      onPressed: _enableLendingFromOnboarding,
+                    ),
+                    actionTile(
+                      icon: Icons.currency_exchange,
+                      title: 'Connect a crypto exchange',
+                      subtitle:
+                          'Link Coinbase or Bitso to track crypto alongside your accounts.',
+                      accent: context.warning,
+                      onPressed: _openConnectExchange,
+                    ),
                   ];
 
                   final tileWidth = stack
@@ -1639,7 +1761,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             currencyFormat: currencyFormat,
             targetCurrency: _targetCurrency,
             usdMxnRate: fxRate,
-            onGoToManagement: () => _goToNav(NavId.settings),
+            onAddAccount: _openAddAccount,
             onBalanceUpdate: (id, bal) async {
               try {
                 await _apiService.updateAccountBalance(id, bal);
@@ -2157,7 +2279,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         currencyFormat: currencyFormat,
         targetCurrency: _targetCurrency,
         usdMxnRate: fxRate,
-        onGoToManagement: () => _goToNav(NavId.settings),
+        onAddAccount: _openAddAccount,
         apiService: _apiService,
         onTransactionAdded: () => _refreshData(),
         onLoadMore: _loadMoreTransactions,
@@ -2245,6 +2367,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
               SnackBar(content: Text('Failed to update transaction: $e')),
             );
           }
+        },
+        // Batch bulk edits into ONE request + ONE refresh (instead of N
+        // per-row PATCHes each force-refreshing the whole dashboard).
+        onBulkUpdate: (ids, {userCategory, accountId}) async {
+          final n = await _apiService.batchUpdateTransactions(
+            ids,
+            category: userCategory,
+            accountId: accountId,
+          );
+          await _refreshData();
+          return n;
         },
         onDelete: (id) async {
           await _apiService.deleteTransaction(id);
@@ -2713,6 +2846,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     };
     final dests = _destinations;
     final index = _section.clamp(0, dests.length - 1);
+    // The visible section is always mounted; mark it visited so it stays
+    // mounted on later builds. (Mutating here is safe — this build already
+    // renders it real, so no extra rebuild is needed.)
+    _visitedSections.add(dests[index].id);
     return IndexedStack(
       index: index,
       // Expand so non-scrolling sections (Projections / Tax / Lending,
@@ -2720,7 +2857,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // TabBarView viewport did.
       sizing: StackFit.expand,
       children: [
-        for (final d in dests) _KeepAliveTab(child: sectionBodies[d.id]!),
+        for (final d in dests)
+          _visitedSections.contains(d.id)
+              ? _KeepAliveTab(child: sectionBodies[d.id]!)
+              : const SizedBox.shrink(),
       ],
     );
   }

@@ -24,10 +24,18 @@ class TransactionsTab extends StatefulWidget {
       String? userNotes,
       String? userDescription,
       String? accountId})? onUpdate;
+  /// Bulk variant: updates many transactions in ONE request (the batch
+  /// endpoint) and refreshes the dashboard ONCE. The old path looped the
+  /// per-id [onUpdate], each of which triggered a full dashboard reload —
+  /// selecting N rows fired N writes × a full refetch each. Falls back to
+  /// the per-id loop when null. Returns the number actually updated.
+  final Future<int> Function(List<String> ids,
+      {String? userCategory, String? accountId})? onBulkUpdate;
   final Future<void> Function(String id)? onDelete;
-  /// Optional callback to jump to the Management tab (used by the empty
-  /// state's "Go to Settings" button). Wired by the dashboard.
-  final VoidCallback? onGoToManagement;
+  /// Opens the Add-account dialog directly (used by the no-data empty
+  /// state's "Add an account" button) so a fresh user isn't bounced to
+  /// Settings to hunt for it. Wired by the dashboard.
+  final VoidCallback? onAddAccount;
   /// ApiService for the "Add transaction" button + CSV export URL.
   /// Optional so consumers that don't need those actions can omit it.
   final ApiService? apiService;
@@ -94,8 +102,9 @@ class TransactionsTab extends StatefulWidget {
     required this.targetCurrency,
     required this.usdMxnRate,
     this.onUpdate,
+    this.onBulkUpdate,
     this.onDelete,
-    this.onGoToManagement,
+    this.onAddAccount,
     this.apiService,
     this.onTransactionAdded,
     this.onLoadMore,
@@ -540,9 +549,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
             ),
             const SizedBox(height: 20),
             FilledButton.icon(
-              onPressed: widget.onGoToManagement,
+              onPressed: widget.onAddAccount,
               icon: const Icon(Icons.add_link, size: 18),
-              label: const Text('Go to Settings'),
+              label: const Text('Add an account'),
               style: FilledButton.styleFrom(
                 backgroundColor: context.positive,
                 foregroundColor: Colors.black,
@@ -1114,26 +1123,44 @@ class _TransactionsTabState extends State<TransactionsTab> {
     );
   }
 
-  // Per-tx PATCH is the only API we have, so we loop. With ~hundreds of
-  // selected rows this is still fast on a desktop network — keep simple.
+  // Prefers the batch endpoint (one request + one refresh for the whole
+  // selection); falls back to looping the per-id onUpdate only if no bulk
+  // handler is wired.
   Future<void> _applyBulkUpdate(
       {String? userCategory, String? accountId}) async {
-    final onUpdate = widget.onUpdate;
-    if (onUpdate == null) return;
     final ids = _selectedIds.toList();
+    if (ids.isEmpty) return;
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
       SnackBar(content: Text('Updating ${ids.length} transactions…')),
     );
-    var failed = 0;
-    for (final id in ids) {
+
+    int updated = 0;
+    int failed = 0;
+    final onBulk = widget.onBulkUpdate;
+    if (onBulk != null) {
+      // One batched request → one dashboard refresh.
       try {
-        await onUpdate(id,
+        updated = await onBulk(ids,
             userCategory: userCategory, accountId: accountId);
+        failed = ids.length - updated;
       } catch (_) {
-        failed++;
+        failed = ids.length;
+      }
+    } else {
+      final onUpdate = widget.onUpdate;
+      if (onUpdate == null) return;
+      for (final id in ids) {
+        try {
+          await onUpdate(id,
+              userCategory: userCategory, accountId: accountId);
+          updated++;
+        } catch (_) {
+          failed++;
+        }
       }
     }
+
     if (!mounted) return;
     setState(() {
       _selectedIds.clear();
@@ -1144,8 +1171,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
       SnackBar(
         content: Text(
           failed == 0
-              ? 'Updated ${ids.length} transactions'
-              : 'Updated ${ids.length - failed} · $failed failed',
+              ? 'Updated $updated transactions'
+              : 'Updated $updated · $failed failed',
         ),
       ),
     );

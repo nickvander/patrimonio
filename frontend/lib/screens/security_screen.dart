@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:qr/qr.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/passkeys.dart';
@@ -1214,14 +1215,31 @@ class _TotpEnrollDialogState extends State<_TotpEnrollDialog> {
             const Text(
               '1. Open your authenticator app (Authy, Google Authenticator, '
               '1Password, etc.).\n'
-              '2. Tap "Add account" and choose "Scan QR code" — or paste '
-              'the secret below.\n'
+              '2. Scan the QR code below — or choose "Enter a setup key" and '
+              'paste the secret.\n'
               '3. Enter the 6-digit code your app shows.',
             ),
             const SizedBox(height: 16),
-            // We render the otpauth:// URI as text + copy button rather
-            // than as a QR. Adding a QR library is a bigger lift —
-            // copy/paste works on every authenticator app.
+            // Real scannable QR of the otpauth:// URI, on a white card so it
+            // reads in either theme. The copyable secret below remains as a
+            // manual-entry fallback for apps that can't scan.
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: SizedBox(
+                  width: 180,
+                  height: 180,
+                  child: CustomPaint(
+                    painter: _TotpQrPainter(widget.provisioningUri),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -1536,4 +1554,47 @@ class _NicknamePromptDialogState extends State<_NicknamePromptDialog> {
       ],
     );
   }
+}
+
+/// Renders a TOTP `otpauth://` URI as a scannable QR. Black modules on a
+/// transparent ground — the caller paints the white quiet-zone card so the
+/// code scans in either theme. Uses the pure-Dart `qr` package (no runtime
+/// fetch, consistent with the bundled-fonts policy).
+class _TotpQrPainter extends CustomPainter {
+  _TotpQrPainter(this.data)
+      : _image = QrImage(
+          QrCode.fromData(
+            data: data,
+            errorCorrectLevel: QrErrorCorrectLevel.M,
+          ),
+        );
+
+  final String data;
+  final QrImage _image;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final count = _image.moduleCount;
+    if (count == 0) return;
+    final cell = size.width / count;
+    final paint = Paint()
+      ..color = Colors.black
+      ..isAntiAlias = false
+      ..style = PaintingStyle.fill;
+    for (var row = 0; row < count; row++) {
+      for (var col = 0; col < count; col++) {
+        if (_image.isDark(row, col)) {
+          // +0.6 overdraw closes hairline seams between adjacent cells.
+          canvas.drawRect(
+            Rect.fromLTWH(col * cell, row * cell, cell + 0.6, cell + 0.6),
+            paint,
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TotpQrPainter oldDelegate) =>
+      oldDelegate.data != data;
 }

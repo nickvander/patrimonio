@@ -20,9 +20,9 @@ class AccountsListWidget extends StatelessWidget {
   /// value moved. When null the popup menu entry is hidden.
   final Function(String accountId, double balance, String? notes)?
       onRevalueAccount;
-  /// Optional callback used by the empty state's "Add an account" button
-  /// to jump to the Management tab.
-  final VoidCallback? onGoToManagement;
+  /// Opens the Add-account dialog directly from the empty state's
+  /// "Add an account" button (instead of bouncing to Settings).
+  final VoidCallback? onAddAccount;
 
   const AccountsListWidget({
     super.key,
@@ -35,7 +35,7 @@ class AccountsListWidget extends StatelessWidget {
     this.onDeleteAccount,
     this.onRenameAccount,
     this.onRevalueAccount,
-    this.onGoToManagement,
+    this.onAddAccount,
   });
 
   @override
@@ -68,7 +68,7 @@ class AccountsListWidget extends StatelessWidget {
                 ),
                 const SizedBox(height: 18),
                 FilledButton.icon(
-                  onPressed: onGoToManagement,
+                  onPressed: onAddAccount,
                   icon: const Icon(Icons.add_link, size: 18),
                   label: const Text('Add an account'),
                   style: FilledButton.styleFrom(
