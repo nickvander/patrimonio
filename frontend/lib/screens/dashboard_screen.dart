@@ -257,7 +257,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (i < 0 || i >= _destinations.length) return;
     if (i == _section) return;
     setState(() => _section = i);
-    Preferences.setLastSection(_destinations[i].id.name);
+    _persistSection();
+  }
+
+  /// Persist the active section by NavId name. Safe to call any time;
+  /// no-op-safe if [_section] is somehow out of range.
+  void _persistSection() {
+    if (_section < 0 || _section >= _destinations.length) return;
+    Preferences.setLastSection(_destinations[_section].id.name);
   }
 
   /// Apply a freshly-loaded lending_enabled value. Keeps the user on the
@@ -766,14 +773,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _toggleLending(bool enabled) async {
-    // Optimistically flip the tab + controller, then persist. On
+    // Optimistically recompute the section list, then persist. On
     // failure, revert so the UI doesn't lie about the saved state.
     setState(() => _applyLendingSetting(enabled));
+    // _applyLendingSetting may have moved us off the now-hidden Lending
+    // section; keep the persisted section pref in step with where we
+    // actually landed (otherwise a reload restores a stale section name).
+    _persistSection();
     try {
       await _apiService.putSetting('lending_enabled', enabled);
     } catch (e) {
       if (!mounted) return;
       setState(() => _applyLendingSetting(!enabled));
+      _persistSection();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Couldn\'t save that setting')),
       );
@@ -2723,6 +2735,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .where((d) => d.tier == NavTier.secondary && d.id != NavId.settings)
         .toList();
     final settings = dests.firstWhere((d) => d.id == NavId.settings);
+    final selectedId =
+        (_section >= 0 && _section < dests.length) ? dests[_section].id : null;
     return Container(
       width: 188,
       color: scheme.surface,
@@ -2736,15 +2750,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final d in primary) _railTile(d),
+                  for (final d in primary)
+                    _railTile(d, d.id == selectedId),
                   if (secondary.isNotEmpty) _railGroupLabel('More'),
-                  for (final d in secondary) _railTile(d),
+                  for (final d in secondary)
+                    _railTile(d, d.id == selectedId),
                 ],
               ),
             ),
           ),
           Divider(height: 1, color: scheme.outlineVariant),
-          _railTile(settings),
+          _railTile(settings, settings.id == selectedId),
           const SizedBox(height: 8),
         ],
       ),
@@ -2773,43 +2789,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _railTile(_NavDest d) {
+  Widget _railTile(_NavDest d, bool selected) {
     final scheme = Theme.of(context).colorScheme;
-    final dests = _destinations;
-    final selected =
-        _section >= 0 && _section < dests.length && dests[_section].id == d.id;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      child: Material(
-        color: selected
-            ? d.accent.withValues(alpha: 0.14)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
+    // Expose selection to assistive tech — color/weight alone don't tell a
+    // screen-reader user which section is current (the NavigationBar path
+    // gets this for free; the hand-rolled rail must opt in).
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: d.label,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        child: Material(
+          color: selected
+              ? d.accent.withValues(alpha: 0.14)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
-          onTap: () => _goToNav(d.id),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-            child: Row(
-              children: [
-                Icon(d.icon,
-                    size: 20,
-                    color: selected ? d.accent : scheme.onSurfaceVariant),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    d.label,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight:
-                          selected ? FontWeight.w600 : FontWeight.w500,
-                      color:
-                          selected ? scheme.onSurface : scheme.onSurfaceVariant,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => _goToNav(d.id),
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+              child: Row(
+                children: [
+                  Icon(d.icon,
+                      size: 20,
+                      color: selected ? d.accent : scheme.onSurfaceVariant),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      d.label,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.w500,
+                        color: selected
+                            ? scheme.onSurface
+                            : scheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
