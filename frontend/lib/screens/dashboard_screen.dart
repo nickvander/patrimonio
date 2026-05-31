@@ -2759,9 +2759,9 @@ class _StatTile extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 value,
-                // IBM Plex Mono "ledger" figures — same treatment as the
+                // JetBrains Mono "ledger" figures — same treatment as the
                 // net-worth hero so the dashboard's big numbers share one
-                // consistent identity (Plex Mono tops out at Bold/w700).
+                // consistent identity (bundled up to Bold/w700).
                 style: brandDisplayStyle(
                   fontSize: isHero ? 22 : 18,
                   fontWeight: FontWeight.w700,

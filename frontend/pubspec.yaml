@@ -79,7 +79,7 @@ flutter:
   # Brand fonts are bundled locally (vendored from official OFL upstreams) so
   # the app never fetches from an external CDN at runtime — a hard requirement
   # for a privacy-respecting, self-hostable product. See assets/fonts/OFL-*.txt
-  # for license texts. Both Inter (UI) and IBMPlexMono (big "ledger" figures)
+  # for license texts. Both Inter (UI) and JetBrainsMono (big "ledger" figures)
   # ship as static instances — one file per weight.
   fonts:
     - family: Inter
@@ -94,14 +94,15 @@ flutter:
           weight: 700
     # Monospace for the big "feature" figures (net-worth hero + the overview
     # stat strip) — a distinctive, precise "ledger" identity scoped to numbers.
-    # Everything else is Inter. Bundled locally (no google_fonts CDN).
-    - family: IBMPlexMono
+    # JetBrains Mono chosen for legibility (dotted zero, distinct 1/l/I, tall
+    # glyphs). Everything else is Inter. Bundled locally (no google_fonts CDN).
+    - family: JetBrainsMono
       fonts:
-        - asset: assets/fonts/IBMPlexMono-Regular.ttf
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
           weight: 400
-        - asset: assets/fonts/IBMPlexMono-Medium.ttf
+        - asset: assets/fonts/JetBrainsMono-Medium.ttf
           weight: 500
-        - asset: assets/fonts/IBMPlexMono-SemiBold.ttf
+        - asset: assets/fonts/JetBrainsMono-SemiBold.ttf
           weight: 600
-        - asset: assets/fonts/IBMPlexMono-Bold.ttf
+        - asset: assets/fonts/JetBrainsMono-Bold.ttf
           weight: 700

@@ -195,12 +195,12 @@ class _NetWorthCardState extends State<NetWorthCard> {
           alignment: Alignment.centerLeft,
           child: Text(
             currencyFormat.format(netWorth),
-            // IBM Plex Mono with tabular lining figures — the signature
+            // JetBrains Mono with tabular lining figures — the signature
             // "ledger" hero number. Tabular figures keep digit columns
             // aligned as the value changes.
             style: brandDisplayStyle(
               fontSize: isCompact ? 32 : 42,
-              // Plex Mono tops out at Bold; w900 would faux-bold (muddy).
+              // Bundled up to Bold; w900 would faux-bold (muddy on a mono).
               fontWeight: FontWeight.w700,
               color: context.textPrimary,
             ),

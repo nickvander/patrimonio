@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Brand typography: Inter for ALL UI/text, IBM Plex Mono for the big
+/// Brand typography: Inter for ALL UI/text, JetBrains Mono for the big
 /// "feature" figures (the net-worth hero + the overview stat strip).
 ///
 /// Why this split: a single workhorse sans (Inter — legible at every size,
@@ -15,7 +15,7 @@ import 'package:flutter/material.dart';
 /// fetches font files from an external CDN at runtime, which breaks the
 /// privacy / self-hosting promise and adds a first-paint network dependency.
 const String _interFamily = 'Inter';
-const String _monoFamily = 'IBMPlexMono';
+const String _monoFamily = 'JetBrainsMono';
 
 /// The whole text theme is Inter. (We no longer overlay a display serif on the
 /// `display*`/`headline*` slots — the app styles its headers with explicit
@@ -28,7 +28,7 @@ TextTheme buildBrandTextTheme(TextTheme base) =>
 /// The display style for signature big numbers — the net-worth hero and the
 /// overview stat-strip values. Monospace + tabular lining figures keep digit
 /// columns aligned as values change (the "ledger precision" cue). Callers pass
-/// size/weight/color. NOTE: IBM Plex Mono tops out at Bold (w700); callers
+/// size/weight/color. NOTE: JetBrains Mono tops out at Bold (w700); callers
 /// should not request heavier weights or the engine synthesises a faux bold
 /// that looks muddy on a mono.
 TextStyle brandDisplayStyle({
