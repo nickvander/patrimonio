@@ -58,9 +58,6 @@ class _LendingTabState extends State<LendingTab> {
         widget.apiService.getLoans(),
         widget.apiService.getLoanPeople(),
         widget.apiService.getLoansSummary(),
-        widget.apiService
-            .getInterestIncome()
-            .catchError((_) => <String, dynamic>{}),
       ]);
       if (!mounted) return;
       setState(() {
@@ -177,7 +174,7 @@ class _LendingTabState extends State<LendingTab> {
           children: [
             Row(
               children: [
-                Icon(Icons.handshake_outlined, color: context.tealAccent),
+                Icon(Icons.monetization_on_outlined, color: context.tealAccent),
                 const SizedBox(width: 8),
                 Text(
                   'Money I\'ve lent',
@@ -272,7 +269,7 @@ class _LendingTabState extends State<LendingTab> {
       padding: const EdgeInsets.symmetric(vertical: 48),
       child: Column(
         children: [
-          Icon(Icons.handshake_outlined, size: 56, color: context.textFaint),
+          Icon(Icons.monetization_on_outlined, size: 56, color: context.textFaint),
           const SizedBox(height: 12),
           Text('No loans yet',
               style: TextStyle(
@@ -565,7 +562,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
               color: context.accentSoft(context.tealAccent),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(Icons.volunteer_activism_outlined,
+            child: Icon(Icons.monetization_on_outlined,
                 color: context.tealAccent, size: 20),
           ),
           const SizedBox(width: 12),

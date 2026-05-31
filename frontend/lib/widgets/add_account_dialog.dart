@@ -125,7 +125,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                   labelText: 'Initial balance',
                   // Currency-aware prefix: don't hardcode `$` regardless of
                   // the selected currency.
-                  prefixText: _currency == 'MXN' ? r'$ ' : r'$ ',
+                  prefixText: _currency == 'MXN' ? r'MX$ ' : r'$ ',
                   suffixText: _currency,
                   helperText:
                       'For credit cards / loans, enter the amount owed as a positive number.',
@@ -183,7 +183,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Could not add account: ${e.toString().replaceFirst('Exception: ', '')}'), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);

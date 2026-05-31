@@ -173,7 +173,9 @@ class NotificationsBell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<void>(
-      tooltip: 'Notifications',
+      tooltip: notifications.isEmpty
+          ? 'Notifications'
+          : '${notifications.length} ${notifications.length == 1 ? 'alert' : 'alerts'}',
       icon: Stack(
         clipBehavior: Clip.none,
         children: [

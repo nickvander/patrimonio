@@ -87,7 +87,7 @@ class SyncErrorBanner extends StatelessWidget {
             TextButton.icon(
               onPressed: onJumpToManagement,
               icon: const Icon(Icons.settings, size: 16),
-              label: const Text('Open management'),
+              label: const Text('Open settings'),
             ),
           ],
         );

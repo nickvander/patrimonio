@@ -217,7 +217,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Icons.trending_up_outlined, Color(0xFFFFB300), NavTier.secondary),
     _NavDest(NavId.tax, 'Tax planning', 'Tax', Icons.account_balance_outlined,
         Color(0xFFAB47BC), NavTier.secondary),
-    _NavDest(NavId.lending, 'Lending', 'Loans', Icons.handshake_outlined,
+    _NavDest(NavId.lending, 'Lending', 'Loans', Icons.monetization_on_outlined,
         Color(0xFF1DE9B6), NavTier.secondary),
     _NavDest(NavId.settings, 'Settings', 'Settings', Icons.settings_outlined,
         Color(0xFF90A4AE), NavTier.secondary),
@@ -698,7 +698,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               value: _lendingEnabled,
               onChanged: _toggleLending,
               secondary:
-                  Icon(Icons.handshake_outlined, color: context.tealAccent),
+                  Icon(Icons.monetization_on_outlined, color: context.tealAccent),
               title: Text('Personal lending',
                   style: TextStyle(
                       fontWeight: FontWeight.w600, color: context.textPrimary)),
@@ -1394,7 +1394,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (e, stack) {
       debugPrint("Data load error: $e\n$stack");
       setState(() {
-        _error = "Error: $e";
+        _error = e.toString().replaceFirst('Exception: ', '');
         _isLoading = false;
       });
     }
@@ -1441,9 +1441,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               // Sandbox / Development indicator.
               if (!isCompact) _buildEnvChip(),
               if (!isCompact) const SizedBox(width: 4),
-              // FX pill — wide screens only.
-              if (!isCompact) _buildFxBadge(compact: true),
-              if (!isCompact) const SizedBox(width: 4),
+              // FX pill — keep visible on mobile too; the live USD/MXN
+              // rate is the most currency-relevant signal for this user.
+              _buildFxBadge(compact: true),
+              const SizedBox(width: 4),
               NotificationsBell(
                 notifications: deriveNotifications(
                   syncData: _syncData ?? const [],

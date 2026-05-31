@@ -26,7 +26,7 @@ class TransactionsTab extends StatefulWidget {
       String? accountId})? onUpdate;
   final Future<void> Function(String id)? onDelete;
   /// Optional callback to jump to the Management tab (used by the empty
-  /// state's "Go to Management" button). Wired by the dashboard.
+  /// state's "Go to Settings" button). Wired by the dashboard.
   final VoidCallback? onGoToManagement;
   /// ApiService for the "Add transaction" button + CSV export URL.
   /// Optional so consumers that don't need those actions can omit it.
@@ -542,7 +542,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
             FilledButton.icon(
               onPressed: widget.onGoToManagement,
               icon: const Icon(Icons.add_link, size: 18),
-              label: const Text('Go to Management'),
+              label: const Text('Go to Settings'),
               style: FilledButton.styleFrom(
                 backgroundColor: context.positive,
                 foregroundColor: Colors.black,
