@@ -67,10 +67,11 @@ async fn trigger_sync(
     )
     .await
     {
+        // Log the detail server-side; don't echo internals (SQL / upstream
+        // Plaid text) to the client where they'd leak implementation detail.
         tracing::error!("Manual Plaid sync failed: {}", e);
         return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, axum::response::Json(serde_json::json!({
-            "error": "Sync failed",
-            "details": e.to_string()
+            "error": "Sync failed"
         }))).into_response();
     }
     // Wake every open dashboard tab for this user. The event is
@@ -110,8 +111,7 @@ async fn trigger_sync_one(
         return (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             axum::response::Json(serde_json::json!({
-                "error": "Sync failed",
-                "details": e.to_string(),
+                "error": "Sync failed"
             })),
         )
             .into_response();
@@ -417,10 +417,11 @@ async fn exchange_public_token(
     let access_token = match res["access_token"].as_str() {
         Some(t) => t,
         None => {
+            // Log server-side only; the raw Plaid exchange response must not
+            // be echoed to the client.
             tracing::error!("Plaid response missing access_token: {:?}", res);
             return (axum::http::StatusCode::BAD_REQUEST, axum::response::Json(serde_json::json!({
-                "error": "Missing access_token",
-                "details": res.to_string()
+                "error": "Missing access_token"
             }))).into_response();
         }
     };

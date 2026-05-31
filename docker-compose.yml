@@ -10,6 +10,8 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
 
   # Rust API server
   api:
@@ -18,16 +20,18 @@ services:
       dockerfile: Dockerfile
     ports:
       - "${API_PORT:-8080}:8080"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     environment:
-      DATABASE_URL: postgres://patrimonio:${POSTGRES_PASSWORD:-patrimonio}@host.docker.internal:${POSTGRES_PORT:-5433}/patrimonio
-      REDIS_URL: redis://host.docker.internal:${REDIS_PORT:-6380}
+      # Reach Postgres/Redis over the internal compose network by SERVICE
+      # NAME (not host.docker.internal + a host port). This lets the host
+      # ports be bound to loopback only — see the postgres/redis blocks —
+      # so the DB and session store are never exposed on 0.0.0.0.
+      DATABASE_URL: postgres://patrimonio:${POSTGRES_PASSWORD:-patrimonio}@postgres:5432/patrimonio
+      REDIS_URL: redis://:${REDIS_PASSWORD:-patrimonio}@redis:6379
       PLAID_CLIENT_ID: ${PLAID_CLIENT_ID:-}
       PLAID_SECRET: ${PLAID_SECRET:-}
       PLAID_ENV: ${PLAID_ENV:-sandbox}
@@ -50,19 +54,19 @@ services:
       # or other sensitive context into stdout.
       RUST_LOG: ${RUST_LOG:-patrimonio=info,tower_http=info}
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
 
   # PostgreSQL database
   postgres:
     image: postgres:17-alpine
     ports:
-      # Default 0.0.0.0 because the api container reaches postgres via
-      # host.docker.internal:5433, which only resolves when the port is
-      # bound on the host's externally-visible interface. If you run
-      # the api outside docker (cargo run on the host), 127.0.0.1 is
-      # safer — set POSTGRES_BIND=127.0.0.1 in .env. In prod, ALWAYS
-      # set POSTGRES_BIND=127.0.0.1 (or remove the host port entirely
-      # and let the api join the docker network).
-      - "${POSTGRES_BIND:-0.0.0.0}:${POSTGRES_PORT:-5433}:5432"
+      # Bound to loopback by default. The api reaches postgres over the
+      # internal compose network (service name `postgres:5432`), so the
+      # host port is only for the operator's own psql/backup tooling and
+      # must NOT be on 0.0.0.0. Override POSTGRES_BIND only if you have a
+      # specific reason (and never to 0.0.0.0 on a networked host).
+      - "${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_PORT:-5433}:5432"
     environment:
       POSTGRES_USER: patrimonio
       # Default is "patrimonio" to keep local dev one-command-up; the
@@ -78,17 +82,31 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    security_opt:
+      - no-new-privileges:true
 
-  # Redis cache
+  # Redis cache + session / WebAuthn-ceremony store
   redis:
     image: redis:7-alpine
     ports:
-      # Same caveat as Postgres above. Default 0.0.0.0 so the api
-      # container reaches redis via host.docker.internal.
-      - "${REDIS_BIND:-0.0.0.0}:${REDIS_PORT:-6380}:6379"
+      # Loopback only (same rationale as postgres). The api reaches redis
+      # over the internal network (service name `redis:6379`).
+      - "${REDIS_BIND:-127.0.0.1}:${REDIS_PORT:-6380}:6379"
+    environment:
+      # Used by both the server (--requirepass) and the healthcheck below.
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-patrimonio}
+    # Require auth: redis holds session tokens + in-flight WebAuthn state,
+    # so an unauthenticated instance is a credential-store exposure.
+    command: ["sh", "-c", "redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
     volumes:
       - redisdata:/data
-    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    security_opt:
+      - no-new-privileges:true
 
 volumes:
   pgdata:

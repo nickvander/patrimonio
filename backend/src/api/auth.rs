@@ -164,17 +164,33 @@ async fn coinbase_callback(
                     return frontend_redirect(&state, "error", Some("Invalid Coinbase response")).into_response();
                 }
             };
+            // SECURITY: never log the `tokens` object — even when one field is
+            // missing the rest are live credentials. Log only the key names so
+            // the failure is still diagnosable without writing a usable token
+            // to stdout / log aggregation.
+            let token_keys = || {
+                tokens
+                    .as_object()
+                    .map(|o| o.keys().cloned().collect::<Vec<_>>())
+                    .unwrap_or_default()
+            };
             let access_token = match tokens["access_token"].as_str() {
                 Some(token) => token,
                 None => {
-                    tracing::error!("Coinbase OAuth response missing access_token: {:?}", tokens);
+                    tracing::error!(
+                        "Coinbase OAuth response missing access_token (keys: {:?})",
+                        token_keys()
+                    );
                     return frontend_redirect(&state, "error", Some("Coinbase token missing")).into_response();
                 }
             };
             let refresh_token = match tokens["refresh_token"].as_str() {
                 Some(token) => token,
                 None => {
-                    tracing::error!("Coinbase OAuth response missing refresh_token: {:?}", tokens);
+                    tracing::error!(
+                        "Coinbase OAuth response missing refresh_token (keys: {:?})",
+                        token_keys()
+                    );
                     return frontend_redirect(&state, "error", Some("Coinbase refresh token missing")).into_response();
                 }
             };

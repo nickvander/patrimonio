@@ -223,6 +223,12 @@ async fn main() -> Result<()> {
 
     let app = public
         .merge(protected)
+        // App-wide request body cap so a single oversized request can't
+        // exhaust memory on this single-instance deploy. The import-upload
+        // route raises its own limit to 100 MB via a route-level
+        // DefaultBodyLimit (the innermost layer wins), so bulk statement
+        // uploads are unaffected; every other endpoint is held to 2 MB.
+        .layer(axum::extract::DefaultBodyLimit::max(2 * 1024 * 1024))
         // Sanitise proxy-set headers BEFORE anything else looks at the
         // request. If the TCP peer isn't in TRUSTED_PROXY_CIDRS we strip
         // X-Forwarded-For + X-Real-IP so downstream rate-limiting can't
