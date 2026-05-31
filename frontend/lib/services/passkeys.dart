@@ -143,6 +143,23 @@ class PasskeyService {
           (publicKeyOpts['authenticatorSelection'] as Map?) ?? const {});
       sel['authenticatorAttachment'] = 'cross-platform';
       publicKeyOpts['authenticatorSelection'] = sel;
+      // Strip the credProtect extension on the security-key path. webauthn-rs
+      // attaches a credentialProtectionPolicy (UV-required, enforced) that a
+      // roaming key can't satisfy here — it surfaced as a generic
+      // NotAllowedError (UV=required) or NotSupportedError "protection policy
+      // inconsistent" (UV relaxed). Roaming 2FA keys don't need credProtect, so
+      // clear extensions for this ceremony; UV stays as the server set it.
+      publicKeyOpts['extensions'] = <String, dynamic>{};
+      // Drop excludeCredentials on the security-key path. The user's existing
+      // credential is a SYNCED platform passkey that's present on this device
+      // via the password manager; with it in excludeCredentials, Chrome sees
+      // it available locally and pre-rejects create() with a generic
+      // NotAllowedError BEFORE the physical security key is ever tried. Safe
+      // to drop here: authenticatorAttachment=cross-platform already keeps the
+      // synced passkey from being re-used, and webauthn-rs validates the new
+      // credential at finish regardless of exclusions (the global
+      // UNIQUE(credential_id) + the 409 path still prevent a true duplicate).
+      publicKeyOpts['excludeCredentials'] = <Map<String, dynamic>>[];
     }
 
     // 2. Hand the publicKey options to the browser. The platform shows
