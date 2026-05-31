@@ -264,9 +264,19 @@ Future<JSObject> _callCredentialsCreate(JSObject publicKey) async {
   wrap['publicKey'] = publicKey;
   final navigator = globalContext['navigator'] as JSObject;
   final credentials = navigator['credentials'] as JSObject;
-  final promise =
-      credentials.callMethod<JSPromise<JSAny?>>('create'.toJS, wrap);
-  final result = (await promise.toDart) as JSObject?;
+  final JSObject? result;
+  try {
+    final promise =
+        credentials.callMethod<JSPromise<JSAny?>>('create'.toJS, wrap);
+    result = (await promise.toDart) as JSObject?;
+  } catch (e) {
+    // The browser rejects the create() promise with a DOMException for the
+    // common failure modes — most notably InvalidStateError when the
+    // authenticator is ALREADY enrolled (it sees its own credential in
+    // excludeCredentials). Without this mapping the raw JS error reached
+    // the snackbar as a cryptic string; map it to something actionable.
+    throw _mapCredentialError(e, registering: true);
+  }
   if (result == null) {
     throw PasskeyException('Passkey enrolment was cancelled.');
   }
@@ -278,13 +288,68 @@ Future<JSObject> _callCredentialsGet(JSObject publicKey) async {
   wrap['publicKey'] = publicKey;
   final navigator = globalContext['navigator'] as JSObject;
   final credentials = navigator['credentials'] as JSObject;
-  final promise =
-      credentials.callMethod<JSPromise<JSAny?>>('get'.toJS, wrap);
-  final result = (await promise.toDart) as JSObject?;
+  final JSObject? result;
+  try {
+    final promise =
+        credentials.callMethod<JSPromise<JSAny?>>('get'.toJS, wrap);
+    result = (await promise.toDart) as JSObject?;
+  } catch (e) {
+    throw _mapCredentialError(e, registering: false);
+  }
   if (result == null) {
     throw PasskeyException('Passkey sign-in was cancelled.');
   }
   return result;
+}
+
+/// Turn a WebAuthn `DOMException` (thrown by navigator.credentials
+/// create/get) into a clear, actionable [PasskeyException]. We read the
+/// exception's `name`/`message` off the JS object when we can, and also
+/// string-match as a fallback since the boxed-error type varies across
+/// Dart web backends.
+PasskeyException _mapCredentialError(Object e, {required bool registering}) {
+  if (e is PasskeyException) return e;
+  String name = '';
+  String message = '';
+  try {
+    final obj = e as JSObject;
+    final n = obj['name'];
+    if (n != null) name = (n as JSString).toDart;
+    final m = obj['message'];
+    if (m != null) message = (m as JSString).toDart;
+  } catch (_) {
+    // Not a JS object (or property read failed) — fall back to toString.
+  }
+  final probe = '$name $message ${e.toString()}';
+  final verb = registering ? 'enrolment' : 'sign-in';
+  if (probe.contains('InvalidStateError')) {
+    return PasskeyException(registering
+        ? 'This device or security key is already registered on your '
+            'account. To re-enrol it, remove the existing passkey on this '
+            'screen first.'
+        : 'This passkey isn\'t recognised for this account.');
+  }
+  if (probe.contains('NotAllowedError') || probe.contains('AbortError')) {
+    return PasskeyException(
+        'Passkey $verb was cancelled or timed out. Please try again.');
+  }
+  if (probe.contains('NotSupportedError')) {
+    return PasskeyException(
+        'This authenticator isn\'t supported. Try a different device or '
+        'security key.');
+  }
+  if (probe.contains('SecurityError')) {
+    return PasskeyException(
+        'Passkey $verb was blocked for security reasons (the site origin '
+        'or domain didn\'t match). Make sure you\'re on the right URL.');
+  }
+  if (probe.contains('ConstraintError')) {
+    return PasskeyException(
+        'This authenticator can\'t satisfy the required settings (e.g. it '
+        'needs a PIN or biometric). Try a different one.');
+  }
+  final detail = message.isNotEmpty ? message : e.toString();
+  return PasskeyException('Passkey $verb failed: $detail');
 }
 
 // ----- decoding server → JS (base64url strings → ArrayBuffer) -----
