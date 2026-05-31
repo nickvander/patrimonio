@@ -131,15 +131,17 @@ class PasskeyService {
 
     if (hardwareKeyOnly) {
       // Force a roaming security key: the browser then prompts "insert your
-      // security key" and skips the synced platform passkey provider. We
-      // also relax residentKey to 'discouraged' so keys low on discoverable-
-      // credential slots still enrol (login is username-first with an
-      // allowCredentials list, so a non-resident key still works to sign in).
+      // security key" and skips the synced platform passkey provider. We only
+      // override authenticatorAttachment — residentKey / userVerification are
+      // left as the server's PasskeyRegistration state requires them (resident
+      // + UV), so the finish step stays consistent. NOTE: webauthn-rs 0.5's
+      // passkey policy mandates User Verification, so the security key must
+      // have a PIN/biometric configured (a tap-only key will be rejected with
+      // NotAllowedError — see the security-key registration path for the
+      // relaxed-UV alternative).
       final sel = Map<String, dynamic>.from(
           (publicKeyOpts['authenticatorSelection'] as Map?) ?? const {});
       sel['authenticatorAttachment'] = 'cross-platform';
-      sel['residentKey'] = 'discouraged';
-      sel['requireResidentKey'] = false;
       publicKeyOpts['authenticatorSelection'] = sel;
     }
 
