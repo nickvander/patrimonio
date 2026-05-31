@@ -1,0 +1,277 @@
+//! Passkey listing / removal integration tests.
+//!
+//! Motivated by a real report: a user enrolled one security key (showed
+//! fine), then a second — the UI said "success" but the new passkey never
+//! appeared in the list, and re-adding it errored. The list endpoint and
+//! the multi-credential storage are what these tests pin down: a user can
+//! hold MORE THAN ONE passkey and `GET /api/auth/passkeys` returns all of
+//! them. (The full WebAuthn ceremony needs a software authenticator and is
+//! covered by the frontend; here we exercise the storage + list + delete
+//! layer directly by seeding rows.)
+
+use axum::body::{to_bytes, Body};
+use axum::http::{header, HeaderValue, Method, Request, StatusCode};
+use axum::middleware::from_fn_with_state;
+use axum::Router;
+use serde_json::Value;
+use sqlx::postgres::PgPoolOptions;
+use sqlx::PgPool;
+use std::sync::Arc;
+use tower::ServiceExt;
+use uuid::Uuid;
+
+use patrimonio::config::AppConfig;
+use patrimonio::AppState;
+
+mod common;
+use common::TestLockGuard;
+
+const TEST_DB_VAR: &str = "PATRIMONIO_TEST_DATABASE_URL";
+const SESSION_COOKIE: &str = "patrimonio_session";
+
+async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
+    let database_url = std::env::var(TEST_DB_VAR).ok()?;
+    let lock = TestLockGuard::acquire(&database_url).await?;
+    let pool = PgPoolOptions::new()
+        .max_connections(2)
+        .connect(&database_url)
+        .await
+        .expect("connect to test DB");
+
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("apply migrations to test DB");
+
+    sqlx::query(
+        "TRUNCATE passkey_credentials, auth_audit, user_sessions, users \
+         RESTART IDENTITY CASCADE",
+    )
+    .execute(&pool)
+    .await
+    .expect("truncate");
+
+    let config = AppConfig {
+        database_url: database_url.clone(),
+        database_max_connections: 2,
+        redis_url: "redis://127.0.0.1:6379".to_string(),
+        port: 0,
+        plaid_client_id: None,
+        plaid_secret: None,
+        plaid_env: "sandbox".to_string(),
+        exchange_rate_api_key: None,
+        encryption_key: None,
+        coinbase_client_id: None,
+        coinbase_client_secret: None,
+        coinbase_redirect_uri: "http://localhost/api/auth/coinbase/callback".to_string(),
+        frontend_base_url: "http://localhost:3000".to_string(),
+        plaid_redirect_uri: None,
+        plaid_webhook_url: None,
+        trusted_proxy_cidrs: vec![],
+        allowed_origins: vec!["http://localhost:3000".to_string()],
+        cookie_secure: false,
+        hibp_api_base: String::new(),
+    };
+
+    let redis = redis::Client::open(config.redis_url.clone()).expect("redis client");
+    let webauthn = Arc::new(
+        patrimonio::api::passkeys::build_webauthn(&config.frontend_base_url)
+            .expect("webauthn builder"),
+    );
+    let state = AppState {
+        db: pool.clone(),
+        redis,
+        config: Arc::new(config),
+        webauthn,
+        realtime: patrimonio::services::realtime::Realtime::new(),
+    };
+
+    // Mirror main.rs: bootstrap lives on the public session router; the
+    // passkeys management routes sit behind require_auth (NOT require_owner —
+    // a read-only user manages their own credentials).
+    let public =
+        Router::new().nest("/api/auth", patrimonio::api::session::public_router());
+
+    let protected = Router::new()
+        .nest(
+            "/api/auth/passkeys",
+            patrimonio::api::passkeys::protected_router(),
+        )
+        .layer(from_fn_with_state(
+            state.clone(),
+            patrimonio::api::session::require_auth,
+        ));
+
+    let app = public.merge(protected).with_state(state);
+    Some((app, pool, lock))
+}
+
+fn skip_if_no_db<T>(result: Option<T>) -> Option<T> {
+    if result.is_none() {
+        eprintln!("(skipping: set {TEST_DB_VAR} to enable passkey integration tests)");
+    }
+    result
+}
+
+async fn body_json(body: Body) -> Value {
+    let bytes = to_bytes(body, 1024 * 64).await.expect("read body");
+    serde_json::from_slice(&bytes).expect("json body")
+}
+
+fn set_cookie_value(headers: &axum::http::HeaderMap) -> Option<String> {
+    for cookie in headers.get_all(header::SET_COOKIE).iter() {
+        let raw = cookie.to_str().ok()?;
+        let pair = raw.split(';').next()?.trim();
+        if let Some(rest) = pair.strip_prefix(&format!("{SESSION_COOKIE}=")) {
+            return Some(rest.to_string());
+        }
+    }
+    None
+}
+
+fn cookie_header(token: &str) -> HeaderValue {
+    HeaderValue::from_str(&format!("{SESSION_COOKIE}={token}")).expect("cookie header")
+}
+
+fn get_request(uri: &str, cookie: &str) -> Request<Body> {
+    Request::builder()
+        .method(Method::GET)
+        .uri(uri)
+        .header(header::COOKIE, cookie_header(cookie))
+        .body(Body::empty())
+        .unwrap()
+}
+
+async fn bootstrap_owner(app: &Router) -> String {
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/api/auth/bootstrap")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            serde_json::to_vec(&serde_json::json!({
+                "username": "owner",
+                "email": "owner@example.com",
+                "password": "correcthorsebatterystaple"
+            }))
+            .unwrap(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK, "bootstrap should succeed");
+    set_cookie_value(res.headers()).expect("session cookie on bootstrap")
+}
+
+/// Seed a passkey row directly (the list endpoint never deserialises
+/// `passkey_json`, so an empty object is enough to satisfy the NOT NULL).
+async fn seed_passkey(pool: &PgPool, user_id: Uuid, cred_id: &[u8], nickname: &str) {
+    sqlx::query(
+        "INSERT INTO passkey_credentials (user_id, credential_id, passkey_json, nickname) \
+         VALUES ($1, $2, $3, $4)",
+    )
+    .bind(user_id)
+    .bind(cred_id)
+    .bind(serde_json::json!({}))
+    .bind(nickname)
+    .execute(pool)
+    .await
+    .expect("seed passkey row");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn lists_every_passkey_a_user_holds() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let cookie = bootstrap_owner(&app).await;
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'owner'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    // One key enrolled → list shows exactly it.
+    seed_passkey(&pool, user_id, b"credential-id-AAAA", "Key A").await;
+    let res = app
+        .clone()
+        .oneshot(get_request("/api/auth/passkeys", &cookie))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let one = body_json(res.into_body()).await;
+    assert_eq!(one.as_array().unwrap().len(), 1, "first key must list");
+
+    // Second DISTINCT key → BOTH must list. This is the regression the
+    // user hit: the second passkey not appearing.
+    seed_passkey(&pool, user_id, b"credential-id-BBBB", "Key B").await;
+    let res = app
+        .clone()
+        .oneshot(get_request("/api/auth/passkeys", &cookie))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let both = body_json(res.into_body()).await;
+    let arr = both.as_array().unwrap();
+    assert_eq!(arr.len(), 2, "BOTH passkeys must appear in the list");
+    let nicknames: Vec<&str> = arr.iter().map(|p| p["nickname"].as_str().unwrap()).collect();
+    assert!(nicknames.contains(&"Key A"));
+    assert!(nicknames.contains(&"Key B"));
+
+    // Removing one leaves the other — delete is scoped to the row id.
+    let victim = arr
+        .iter()
+        .find(|p| p["nickname"] == "Key A")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::DELETE)
+                .uri(format!("/api/auth/passkeys/{victim}"))
+                .header(header::COOKIE, cookie_header(&cookie))
+                .header("X-Requested-With", "fetch")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+
+    let res = app
+        .clone()
+        .oneshot(get_request("/api/auth/passkeys", &cookie))
+        .await
+        .unwrap();
+    let after = body_json(res.into_body()).await;
+    let arr = after.as_array().unwrap();
+    assert_eq!(arr.len(), 1, "only the removed key should be gone");
+    assert_eq!(arr[0]["nickname"], "Key B");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn duplicate_credential_id_is_rejected_not_silently_upserted() {
+    // The DB's UNIQUE(credential_id) is what backs the register_finish
+    // 409: a credential we already hold cannot be inserted a second time.
+    // This guards the storage invariant the 409 path relies on.
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let _cookie = bootstrap_owner(&app).await;
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'owner'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    seed_passkey(&pool, user_id, b"same-credential", "Original").await;
+    let dup = sqlx::query(
+        "INSERT INTO passkey_credentials (user_id, credential_id, passkey_json) \
+         VALUES ($1, $2, $3)",
+    )
+    .bind(user_id)
+    .bind(b"same-credential".as_slice())
+    .bind(serde_json::json!({}))
+    .execute(&pool)
+    .await;
+    assert!(
+        dup.is_err(),
+        "a duplicate credential_id must violate UNIQUE, not silently insert"
+    );
+}

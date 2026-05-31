@@ -247,16 +247,21 @@ async fn register_finish(
             _ => None,
         });
 
-    let id: Uuid = sqlx::query_scalar(
+    // DO NOTHING (not DO UPDATE) so we can tell a brand-new credential
+    // apart from one we already hold. `fetch_optional` returns None on
+    // conflict — meaning the authenticator handed back a credential_id
+    // that's already enrolled. That happens when the browser's
+    // `excludeCredentials` list didn't stop the ceremony (some roaming
+    // security keys ignore it), and the OLD behaviour (DO UPDATE) silently
+    // "succeeded" without creating a new row — so the user saw a success
+    // toast but no new passkey in the list, and re-adding then failed.
+    // Surfacing a clear 409 instead is the honest answer.
+    let id: Option<Uuid> = sqlx::query_scalar(
         r#"
         INSERT INTO passkey_credentials
             (user_id, credential_id, passkey_json, nickname, authenticator_attachment)
         VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (credential_id) DO UPDATE
-            SET passkey_json             = EXCLUDED.passkey_json,
-                nickname                 = COALESCE(EXCLUDED.nickname, passkey_credentials.nickname),
-                authenticator_attachment = COALESCE(EXCLUDED.authenticator_attachment,
-                                                    passkey_credentials.authenticator_attachment)
+        ON CONFLICT (credential_id) DO NOTHING
         RETURNING id
         "#,
     )
@@ -265,9 +270,20 @@ async fn register_finish(
     .bind(&passkey_json)
     .bind(&nickname)
     .bind(&attachment)
-    .fetch_one(&state.db)
+    .fetch_optional(&state.db)
     .await
     .map_err(internal)?;
+
+    let id = match id {
+        Some(id) => id,
+        None => {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "This security key or passkey is already registered on your \
+                 account. To re-enrol it, remove the existing one first.",
+            ));
+        }
+    };
 
     let created_at: DateTime<Utc> =
         sqlx::query_scalar("SELECT created_at FROM passkey_credentials WHERE id = $1")
