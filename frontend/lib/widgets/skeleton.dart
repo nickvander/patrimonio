@@ -21,10 +21,27 @@ class SkeletonBox extends StatefulWidget {
 
 class _SkeletonBoxState extends State<SkeletonBox>
     with SingleTickerProviderStateMixin {
+  // Not started in the field initializer: whether we repeat depends on the
+  // platform "reduce motion" setting, which needs an inherited MediaQuery
+  // and so can only be read once the element is mounted (didChangeDependencies).
   late final AnimationController _ctrl = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1100),
-  )..repeat(reverse: true);
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Honour the OS "reduce motion" preference: when set, freeze the
+    // shimmer on a static mid-opacity placeholder instead of pulsing.
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (reduceMotion) {
+      if (_ctrl.isAnimating) _ctrl.stop();
+      _ctrl.value = 0.5; // static placeholder at the pulse midpoint
+    } else if (!_ctrl.isAnimating) {
+      _ctrl.repeat(reverse: true);
+    }
+  }
 
   @override
   void dispose() {

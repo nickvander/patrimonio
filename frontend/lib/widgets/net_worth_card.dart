@@ -116,23 +116,32 @@ class _NetWorthCardState extends State<NetWorthCard> {
     // Segmented "Simple / Detailed" pill. We keep it small so it sits next
     // to the legend without dominating the header.
     Widget seg(String label, bool active, VoidCallback onTap) {
-      return GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          decoration: BoxDecoration(
-            color: active
-                ? context.accentSoft(context.positive)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: active ? context.positive : context.textMuted,
-              letterSpacing: 0.4,
+      // InkWell makes the segment focusable + Enter/Space-activatable;
+      // Semantics(button + selected) lets a screen reader announce both
+      // the role and which segment is currently active.
+      return Semantics(
+        button: true,
+        selected: active,
+        label: label,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: active
+                  ? context.accentSoft(context.positive)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: active ? context.positive : context.textMuted,
+                letterSpacing: 0.4,
+              ),
             ),
           ),
         ),

@@ -100,7 +100,17 @@ class CashFlowTrendsChart extends StatelessWidget {
               },
             ),
             const SizedBox(height: 24),
-            SizedBox(
+            // Screen readers can't see the bar geometry or reach the
+            // pointer-only hover tooltip, so we mirror the data as text:
+            // a one-line summary on the container plus an offstage,
+            // focus-order list of per-month income/spending values.
+            Semantics(
+              container: true,
+              label: _semanticSummary(context),
+              child: Stack(
+                children: [
+                  ExcludeSemantics(
+                    child: SizedBox(
               height: chartHeight,
               child: Builder(builder: (context) {
                 final maxY = _getMaxValue();
@@ -277,10 +287,72 @@ class CashFlowTrendsChart extends StatelessWidget {
                 ),
               );
               }),
+                    ),
+                  ),
+                  // Offstage but in the semantic tree: per-month values.
+                  Positioned.fill(child: _buildSemanticBars(context)),
+                ],
+              ),
             ),
           ],
         );
         }),
+      ),
+    );
+  }
+
+  /// Human-readable label for `month` ("2026-03" -> "March 2026"),
+  /// falling back to the raw string if it doesn't parse.
+  String _monthLabel(String month) {
+    final parts = month.split('-');
+    if (parts.length >= 2) {
+      final year = int.tryParse(parts[0]);
+      final m = int.tryParse(parts[1]);
+      if (year != null && m != null && m >= 1 && m <= 12) {
+        return DateFormat('MMMM y').format(DateTime(year, m));
+      }
+    }
+    return month;
+  }
+
+  String _money(num value) =>
+      currencyFormat.format(value * conversionFactor);
+
+  /// One-line summary spoken for the whole chart: span + latest month's
+  /// income and spending.
+  String _semanticSummary(BuildContext context) {
+    if (trends.isEmpty) return 'Cash flow trends chart, no data';
+    final last = trends.last;
+    final month = (last['month'] ?? '').toString();
+    final income = (last['income'] as num?) ?? 0;
+    final spending = (last['spending'] as num?) ?? 0;
+    return 'Cash flow trends, ${trends.length} '
+        '${trends.length == 1 ? 'month' : 'months'}. '
+        'Latest ${_monthLabel(month)}: income ${_money(income)}, '
+        'spending ${_money(spending)}.';
+  }
+
+  /// Per-month rows that are visually invisible (zero-opacity, ignored by
+  /// pointers) but still laid out and therefore present in the semantics
+  /// tree — so a screen reader can walk each bar's income/spending values.
+  Widget _buildSemanticBars(BuildContext context) {
+    return IgnorePointer(
+      child: Opacity(
+        opacity: 0.0,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: trends.map((t) {
+            final month = (t['month'] ?? '').toString();
+            final income = (t['income'] as num?) ?? 0;
+            final spending = (t['spending'] as num?) ?? 0;
+            return Semantics(
+              label: '${_monthLabel(month)}: '
+                  'income ${_money(income)}, spending ${_money(spending)}',
+              child: const SizedBox(height: 1, width: 1),
+            );
+          }).toList(),
+        ),
       ),
     );
   }

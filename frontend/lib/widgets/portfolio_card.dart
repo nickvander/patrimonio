@@ -1588,10 +1588,12 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
       cursor: hasLots ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
-      child: GestureDetector(
+      child: InkWell(
         // Tap-to-expand: only fires when there's a lot breakdown to
         // show. Securities synced before the lot tracker shipped, or
         // non-investment holdings, show no clickable affordance.
+        // InkWell (over GestureDetector) makes the row keyboard-focusable
+        // and Enter/Space-activatable for screen-reader users.
         onTap: hasLots ? () => _showLotBreakdown(context) : null,
         child: Container(
           color:
@@ -1669,6 +1671,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.close),
+                        tooltip: 'Close',
                         onPressed: () => Navigator.pop(ctx),
                       ),
                     ],

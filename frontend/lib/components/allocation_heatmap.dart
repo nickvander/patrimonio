@@ -330,10 +330,23 @@ class AllocationHeatmap extends StatelessWidget {
                 ),
               );
 
-              if (!canTap) return inner;
+              // Screen-reader label for the category band: name + share of
+              // total + holding count. Applied whether or not the band is
+              // tappable so non-interactive views are still announced.
+              final semanticLabel =
+                  '${_displayCategory(cat)}, '
+                  '${(catPercentage * 100).toStringAsFixed(1)}% of portfolio, '
+                  '${items.length} ${items.length == 1 ? "holding" : "holdings"}';
+
+              if (!canTap) {
+                return Semantics(label: semanticLabel, child: inner);
+              }
               // InkWell wraps each per-category block so the entire band
               // (bar + label + sub-items) is tappable, not just the icon.
-              return InkWell(
+              return Semantics(
+                button: true,
+                label: semanticLabel,
+                child: InkWell(
                 onTap: () => onCategorySelected!(cat),
                 borderRadius: BorderRadius.circular(12),
                 child: AnimatedContainer(
@@ -348,6 +361,7 @@ class AllocationHeatmap extends StatelessWidget {
                       horizontal: 8, vertical: 4),
                   child: inner,
                 ),
+              ),
               );
             }),
           ],
