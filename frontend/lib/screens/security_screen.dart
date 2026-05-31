@@ -703,10 +703,61 @@ class _SecurityScreenState extends State<SecurityScreen> {
           children: [
             _section('Passkeys'),
             if (supported)
-              TextButton.icon(
-                onPressed: _registerPasskey,
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Add device'),
+              MenuAnchor(
+                alignmentOffset: const Offset(0, 6),
+                style: MenuStyle(
+                  alignment: AlignmentDirectional.bottomEnd,
+                  elevation: const WidgetStatePropertyAll(3),
+                  shape: WidgetStatePropertyAll(
+                    RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  padding: const WidgetStatePropertyAll(
+                    EdgeInsets.symmetric(vertical: 6),
+                  ),
+                ),
+                builder: (context, controller, _) => TextButton.icon(
+                  onPressed: () => controller.isOpen
+                      ? controller.close()
+                      : controller.open(),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add'),
+                ),
+                menuChildren: [
+                  MenuItemButton(
+                    leadingIcon: const Icon(Icons.fingerprint, size: 20),
+                    onPressed: () => _registerPasskey(),
+                    child: const Padding(
+                      padding: EdgeInsets.only(right: 16),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('This device'),
+                          Text('Face ID / Touch ID / Windows Hello',
+                              style: TextStyle(fontSize: 11)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  MenuItemButton(
+                    leadingIcon: const Icon(Icons.usb, size: 20),
+                    onPressed: () => _registerPasskey(hardwareKeyOnly: true),
+                    child: const Padding(
+                      padding: EdgeInsets.only(right: 16),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Security key'),
+                          Text('USB / NFC key — YubiKey, Titan',
+                              style: TextStyle(fontSize: 11)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
           ],
         ),
@@ -751,7 +802,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
     );
   }
 
-  Future<void> _registerPasskey() async {
+  Future<void> _registerPasskey({bool hardwareKeyOnly = false}) async {
     final nickname = await showDialog<String?>(
       context: context,
       builder: (ctx) => const _NicknamePromptDialog(),
@@ -763,13 +814,17 @@ class _SecurityScreenState extends State<SecurityScreen> {
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Confirm with your device biometric…'),
-        duration: Duration(seconds: 2),
+      SnackBar(
+        content: Text(hardwareKeyOnly
+            ? 'Insert your security key and tap it (choose the USB/security-key '
+                'option if your browser offers a saved passkey)…'
+            : 'Confirm with your device biometric…'),
+        duration: const Duration(seconds: 3),
       ),
     );
     try {
-      await PasskeyService.instance.registerNewPasskey(nickname: nickname);
+      await PasskeyService.instance
+          .registerNewPasskey(nickname: nickname, hardwareKeyOnly: hardwareKeyOnly);
       await _load();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

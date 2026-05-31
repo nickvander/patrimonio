@@ -93,7 +93,17 @@ class PasskeyService {
   // Registration ceremony (authenticated user adds a passkey).
   // ---------------------------------------------------------------------------
 
-  Future<PasskeySummary> registerNewPasskey({String? nickname}) async {
+  /// Enrol a new passkey. When [hardwareKeyOnly] is true we constrain the
+  /// ceremony to a roaming (cross-platform) authenticator — a USB / NFC
+  /// security key like a YubiKey or Titan. This is the escape hatch for the
+  /// "a synced platform passkey provider keeps intercepting and throwing
+  /// InvalidStateError" problem: forcing cross-platform attachment makes the
+  /// browser prompt for the physical key directly instead of offering the
+  /// already-enrolled synced passkey.
+  Future<PasskeySummary> registerNewPasskey({
+    String? nickname,
+    bool hardwareKeyOnly = false,
+  }) async {
     if (!isAvailable) {
       throw PasskeyException(
         'This browser doesn\'t support passkeys. Try Chrome/Safari/Edge on a recent OS.',
@@ -116,11 +126,26 @@ class PasskeyService {
     final startJson = jsonDecode(startRes.body) as Map<String, dynamic>;
     final nonce = startJson['nonce'] as String;
     final options = startJson['options'] as Map<String, dynamic>;
+    final publicKeyOpts =
+        Map<String, dynamic>.from(options['publicKey'] as Map<String, dynamic>);
+
+    if (hardwareKeyOnly) {
+      // Force a roaming security key: the browser then prompts "insert your
+      // security key" and skips the synced platform passkey provider. We
+      // also relax residentKey to 'discouraged' so keys low on discoverable-
+      // credential slots still enrol (login is username-first with an
+      // allowCredentials list, so a non-resident key still works to sign in).
+      final sel = Map<String, dynamic>.from(
+          (publicKeyOpts['authenticatorSelection'] as Map?) ?? const {});
+      sel['authenticatorAttachment'] = 'cross-platform';
+      sel['residentKey'] = 'discouraged';
+      sel['requireResidentKey'] = false;
+      publicKeyOpts['authenticatorSelection'] = sel;
+    }
 
     // 2. Hand the publicKey options to the browser. The platform shows
     //    the biometric prompt and returns a PublicKeyCredential.
-    final publicKey =
-        _coerceCreationOptions(options['publicKey'] as Map<String, dynamic>);
+    final publicKey = _coerceCreationOptions(publicKeyOpts);
     final cred = await _callCredentialsCreate(publicKey);
     final credJson = _encodeAttestationCredential(cred);
     // Lift transports OUT of the credential object before sending — it's a
