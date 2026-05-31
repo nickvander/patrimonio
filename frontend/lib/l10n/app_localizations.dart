@@ -248,6 +248,12 @@ abstract class AppLocalizations {
   /// **'Close'**
   String get actionClose;
 
+  /// No description provided for @commonRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Required'**
+  String get commonRequired;
+
   /// No description provided for @searchTransactionsHint.
   ///
   /// In en, this message translates to:
@@ -277,6 +283,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Reporting in {code} · tap to swap'**
   String currencyToggleTooltip(String code);
+
+  /// No description provided for @authSignInToContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to continue'**
+  String get authSignInToContinue;
+
+  /// No description provided for @authUsername.
+  ///
+  /// In en, this message translates to:
+  /// **'Username'**
+  String get authUsername;
+
+  /// No description provided for @authPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get authPassword;
+
+  /// No description provided for @authSignIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in'**
+  String get authSignIn;
+
+  /// No description provided for @authSignInWithPasskey.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with passkey'**
+  String get authSignInWithPasskey;
+
+  /// No description provided for @authForgotPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Forgot password?'**
+  String get authForgotPassword;
+
+  /// No description provided for @authEnterUsernameFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your username first.'**
+  String get authEnterUsernameFirst;
+
+  /// No description provided for @statNetWorth.
+  ///
+  /// In en, this message translates to:
+  /// **'Net worth'**
+  String get statNetWorth;
+
+  /// No description provided for @statAssets.
+  ///
+  /// In en, this message translates to:
+  /// **'Assets'**
+  String get statAssets;
+
+  /// No description provided for @statLiabilities.
+  ///
+  /// In en, this message translates to:
+  /// **'Liabilities'**
+  String get statLiabilities;
+
+  /// No description provided for @statCash.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash'**
+  String get statCash;
+
+  /// No description provided for @statInvestments.
+  ///
+  /// In en, this message translates to:
+  /// **'Investments'**
+  String get statInvestments;
+
+  /// No description provided for @lendingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Money I\'ve lent'**
+  String get lendingTitle;
+
+  /// No description provided for @lendingAddLoan.
+  ///
+  /// In en, this message translates to:
+  /// **'Add loan'**
+  String get lendingAddLoan;
+
+  /// No description provided for @lendingOutstanding.
+  ///
+  /// In en, this message translates to:
+  /// **'Outstanding'**
+  String get lendingOutstanding;
+
+  /// No description provided for @lendingTotalLent.
+  ///
+  /// In en, this message translates to:
+  /// **'Total lent'**
+  String get lendingTotalLent;
+
+  /// No description provided for @lendingActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get lendingActive;
+
+  /// No description provided for @lendingInterestEarned.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest earned'**
+  String get lendingInterestEarned;
+
+  /// No description provided for @lendingRepaid.
+  ///
+  /// In en, this message translates to:
+  /// **'Repaid'**
+  String get lendingRepaid;
+
+  /// No description provided for @lendingNoLoans.
+  ///
+  /// In en, this message translates to:
+  /// **'No loans yet'**
+  String get lendingNoLoans;
+
+  /// No description provided for @lendingEmptySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Lent money to a friend? Add it here, then designate the bank transactions that funded it and paid it back.'**
+  String get lendingEmptySubtitle;
 }
 
 class _AppLocalizationsDelegate

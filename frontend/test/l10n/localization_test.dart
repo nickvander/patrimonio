@@ -35,6 +35,40 @@ void main() {
     expect(find.text('Resumen|Préstamos|MÁS'), findsOneWidget);
   });
 
+  Future<String> readKeys(WidgetTester tester, Locale locale,
+      String Function(AppLocalizations l) pick) async {
+    late String out;
+    await tester.pumpWidget(MaterialApp(
+      locale: locale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Builder(builder: (context) {
+        out = pick(AppLocalizations.of(context));
+        return const SizedBox();
+      }),
+    ));
+    await tester.pumpAndSettle();
+    return out;
+  }
+
+  testWidgets('tranche-2 strings localize (login / stats / lending)',
+      (tester) async {
+    String triple(AppLocalizations l) =>
+        '${l.authSignIn}|${l.statNetWorth}|${l.lendingTitle}';
+    expect(await readKeys(tester, const Locale('en'), triple),
+        'Sign in|Net worth|Money I\'ve lent');
+    expect(await readKeys(tester, const Locale('es'), triple),
+        'Iniciar sesión|Patrimonio neto|Dinero que presté');
+  });
+
+  testWidgets('currency tooltip interpolates the code per locale',
+      (tester) async {
+    expect(
+        await readKeys(
+            tester, const Locale('es'), (l) => l.currencyToggleTooltip('MXN')),
+        'Mostrando en MXN · toca para cambiar');
+  });
+
   test('both locales are supported', () {
     final codes =
         AppLocalizations.supportedLocales.map((l) => l.languageCode).toSet();

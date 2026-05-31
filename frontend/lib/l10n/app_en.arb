@@ -25,6 +25,7 @@
   "actionApply": "Apply",
   "actionDelete": "Delete",
   "actionClose": "Close",
+  "commonRequired": "Required",
   "searchTransactionsHint": "Search transactions…",
   "languageLabel": "Language",
   "languageEnglish": "English",
@@ -35,5 +36,26 @@
     "placeholders": {
       "code": { "type": "String", "example": "MXN" }
     }
-  }
+  },
+  "authSignInToContinue": "Sign in to continue",
+  "authUsername": "Username",
+  "authPassword": "Password",
+  "authSignIn": "Sign in",
+  "authSignInWithPasskey": "Sign in with passkey",
+  "authForgotPassword": "Forgot password?",
+  "authEnterUsernameFirst": "Enter your username first.",
+  "statNetWorth": "Net worth",
+  "statAssets": "Assets",
+  "statLiabilities": "Liabilities",
+  "statCash": "Cash",
+  "statInvestments": "Investments",
+  "lendingTitle": "Money I've lent",
+  "lendingAddLoan": "Add loan",
+  "lendingOutstanding": "Outstanding",
+  "lendingTotalLent": "Total lent",
+  "lendingActive": "Active",
+  "lendingInterestEarned": "Interest earned",
+  "lendingRepaid": "Repaid",
+  "lendingNoLoans": "No loans yet",
+  "lendingEmptySubtitle": "Lent money to a friend? Add it here, then designate the bank transactions that funded it and paid it back."
 }

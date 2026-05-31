@@ -84,6 +84,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get actionClose => 'Close';
 
   @override
+  String get commonRequired => 'Required';
+
+  @override
   String get searchTransactionsHint => 'Search transactions…';
 
   @override
@@ -99,4 +102,68 @@ class AppLocalizationsEn extends AppLocalizations {
   String currencyToggleTooltip(String code) {
     return 'Reporting in $code · tap to swap';
   }
+
+  @override
+  String get authSignInToContinue => 'Sign in to continue';
+
+  @override
+  String get authUsername => 'Username';
+
+  @override
+  String get authPassword => 'Password';
+
+  @override
+  String get authSignIn => 'Sign in';
+
+  @override
+  String get authSignInWithPasskey => 'Sign in with passkey';
+
+  @override
+  String get authForgotPassword => 'Forgot password?';
+
+  @override
+  String get authEnterUsernameFirst => 'Enter your username first.';
+
+  @override
+  String get statNetWorth => 'Net worth';
+
+  @override
+  String get statAssets => 'Assets';
+
+  @override
+  String get statLiabilities => 'Liabilities';
+
+  @override
+  String get statCash => 'Cash';
+
+  @override
+  String get statInvestments => 'Investments';
+
+  @override
+  String get lendingTitle => 'Money I\'ve lent';
+
+  @override
+  String get lendingAddLoan => 'Add loan';
+
+  @override
+  String get lendingOutstanding => 'Outstanding';
+
+  @override
+  String get lendingTotalLent => 'Total lent';
+
+  @override
+  String get lendingActive => 'Active';
+
+  @override
+  String get lendingInterestEarned => 'Interest earned';
+
+  @override
+  String get lendingRepaid => 'Repaid';
+
+  @override
+  String get lendingNoLoans => 'No loans yet';
+
+  @override
+  String get lendingEmptySubtitle =>
+      'Lent money to a friend? Add it here, then designate the bank transactions that funded it and paid it back.';
 }

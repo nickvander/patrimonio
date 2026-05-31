@@ -608,6 +608,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required NumberFormat currencyFormat,
     required double conversionFactor,
   }) {
+    final l = AppLocalizations.of(context);
     final overview = _overview ?? const <String, dynamic>{};
     final accounts = (overview['accounts'] as List?) ?? const [];
     final typeBreakdown = (overview['type_breakdown'] as List?) ?? const [];
@@ -673,13 +674,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final tiles = <_StatTile>[
       _StatTile(
-        label: 'Net worth',
+        label: l.statNetWorth,
         value: currencyFormat.format(netWorth),
         accent: context.positive,
         emphasized: true,
       ),
       _StatTile(
-        label: 'Assets',
+        label: l.statAssets,
         value: currencyFormat.format(assets),
         // Neutral grey — sits between the green hero (Net worth) and
         // the colour-coded secondary stats so the row reads as a
@@ -688,17 +689,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         accent: context.neutralAccent,
       ),
       _StatTile(
-        label: 'Liabilities',
+        label: l.statLiabilities,
         value: currencyFormat.format(liabilities),
         accent: context.negative,
       ),
       _StatTile(
-        label: 'Cash',
+        label: l.statCash,
         value: currencyFormat.format(cash),
         accent: context.info,
       ),
       _StatTile(
-        label: 'Investments',
+        label: l.statInvestments,
         value: currencyFormat.format(investments),
         accent: context.tealAccent,
       ),
@@ -3283,7 +3284,7 @@ class _CurrencyToggleButton extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Tooltip(
-        message: 'Reporting in $targetCurrency · tap to swap',
+        message: AppLocalizations.of(context).currencyToggleTooltip(targetCurrency),
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
           onTap: onSwap,

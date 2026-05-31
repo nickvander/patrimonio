@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import '../services/auth_service.dart';
 import '../services/passkeys.dart';
 import 'forgot_password_screen.dart';
@@ -45,7 +46,8 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _signInWithPasskey() async {
     final username = _username.text.trim();
     if (username.isEmpty) {
-      setState(() => _error = 'Enter your username first.');
+      setState(() =>
+          _error = AppLocalizations.of(context).authEnterUsernameFirst);
       return;
     }
     setState(() {
@@ -77,6 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
     return Scaffold(
       body: Center(
         child: ConstrainedBox(
@@ -99,7 +102,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Sign in to continue',
+                    l.authSignInToContinue,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
@@ -107,24 +110,25 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextFormField(
                     controller: _username,
                     autofillHints: const [AutofillHints.username],
-                    decoration: const InputDecoration(
-                      labelText: 'Username',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l.authUsername,
+                      border: const OutlineInputBorder(),
                     ),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? l.commonRequired
+                        : null,
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _password,
                     obscureText: true,
                     autofillHints: const [AutofillHints.password],
-                    decoration: const InputDecoration(
-                      labelText: 'Password',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l.authPassword,
+                      border: const OutlineInputBorder(),
                     ),
                     validator: (v) =>
-                        (v == null || v.isEmpty) ? 'Required' : null,
+                        (v == null || v.isEmpty) ? l.commonRequired : null,
                     onFieldSubmitted: (_) => _submit(),
                   ),
                   const SizedBox(height: 16),
@@ -143,7 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             width: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Sign in'),
+                        : Text(l.authSignIn),
                   ),
                   if (PasskeyService.instance.isAvailable) ...[
                     const SizedBox(height: 8),
@@ -157,7 +161,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     OutlinedButton.icon(
                       onPressed: _submitting ? null : _signInWithPasskey,
                       icon: const Icon(Icons.fingerprint, size: 18),
-                      label: const Text('Sign in with passkey'),
+                      label: Text(l.authSignInWithPasskey),
                     ),
                   ],
                   const SizedBox(height: 8),
@@ -169,7 +173,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 builder: (_) => const ForgotPasswordScreen(),
                               ),
                             ),
-                    child: const Text('Forgot password?'),
+                    child: Text(l.authForgotPassword),
                   ),
                 ],
               ),

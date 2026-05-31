@@ -84,6 +84,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get actionClose => 'Cerrar';
 
   @override
+  String get commonRequired => 'Obligatorio';
+
+  @override
   String get searchTransactionsHint => 'Buscar transacciones…';
 
   @override
@@ -99,4 +102,68 @@ class AppLocalizationsEs extends AppLocalizations {
   String currencyToggleTooltip(String code) {
     return 'Mostrando en $code · toca para cambiar';
   }
+
+  @override
+  String get authSignInToContinue => 'Inicia sesión para continuar';
+
+  @override
+  String get authUsername => 'Usuario';
+
+  @override
+  String get authPassword => 'Contraseña';
+
+  @override
+  String get authSignIn => 'Iniciar sesión';
+
+  @override
+  String get authSignInWithPasskey => 'Iniciar sesión con passkey';
+
+  @override
+  String get authForgotPassword => '¿Olvidaste tu contraseña?';
+
+  @override
+  String get authEnterUsernameFirst => 'Primero ingresa tu usuario.';
+
+  @override
+  String get statNetWorth => 'Patrimonio neto';
+
+  @override
+  String get statAssets => 'Activos';
+
+  @override
+  String get statLiabilities => 'Pasivos';
+
+  @override
+  String get statCash => 'Efectivo';
+
+  @override
+  String get statInvestments => 'Inversiones';
+
+  @override
+  String get lendingTitle => 'Dinero que presté';
+
+  @override
+  String get lendingAddLoan => 'Agregar préstamo';
+
+  @override
+  String get lendingOutstanding => 'Pendiente';
+
+  @override
+  String get lendingTotalLent => 'Total prestado';
+
+  @override
+  String get lendingActive => 'Activos';
+
+  @override
+  String get lendingInterestEarned => 'Intereses ganados';
+
+  @override
+  String get lendingRepaid => 'Reembolsado';
+
+  @override
+  String get lendingNoLoans => 'Aún no hay préstamos';
+
+  @override
+  String get lendingEmptySubtitle =>
+      '¿Le prestaste a un amigo? Agrégalo aquí y luego selecciona las transacciones bancarias que lo fondearon y lo pagaron.';
 }

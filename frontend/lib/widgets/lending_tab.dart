@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../utils/lending_summary.dart';
 import '../utils/theme_colors.dart';
@@ -177,7 +178,7 @@ class _LendingTabState extends State<LendingTab> {
                 Icon(Icons.monetization_on_outlined, color: context.tealAccent),
                 const SizedBox(width: 8),
                 Text(
-                  'Money I\'ve lent',
+                  AppLocalizations.of(context).lendingTitle,
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
@@ -212,7 +213,7 @@ class _LendingTabState extends State<LendingTab> {
                 FilledButton.icon(
                   onPressed: _openAddLoanDialog,
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add loan'),
+                  label: Text(AppLocalizations.of(context).lendingAddLoan),
                 ),
               ],
             ),
@@ -230,14 +231,15 @@ class _LendingTabState extends State<LendingTab> {
               spacing: 24,
               runSpacing: 12,
               children: [
-                _stat('Outstanding', _money(totalOut, summaryCur),
-                    context.warning),
-                _stat('Total lent', _money(totalLent, summaryCur),
-                    context.textPrimary),
-                _stat('Active', '$active', context.tealAccent),
+                _stat(AppLocalizations.of(context).lendingOutstanding,
+                    _money(totalOut, summaryCur), context.warning),
+                _stat(AppLocalizations.of(context).lendingTotalLent,
+                    _money(totalLent, summaryCur), context.textPrimary),
+                _stat(AppLocalizations.of(context).lendingActive, '$active',
+                    context.tealAccent),
                 // Interest income — the headline of this feature.
-                _stat('Interest earned', _money(interestEarned, summaryCur),
-                    context.positive),
+                _stat(AppLocalizations.of(context).lendingInterestEarned,
+                    _money(interestEarned, summaryCur), context.positive),
               ],
             ),
           ],
@@ -271,15 +273,14 @@ class _LendingTabState extends State<LendingTab> {
         children: [
           Icon(Icons.monetization_on_outlined, size: 56, color: context.textFaint),
           const SizedBox(height: 12),
-          Text('No loans yet',
+          Text(AppLocalizations.of(context).lendingNoLoans,
               style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                   color: context.textMuted)),
           const SizedBox(height: 6),
           Text(
-            'Lent money to a friend? Add it here, then designate the\n'
-            'bank transactions that funded it and paid it back.',
+            AppLocalizations.of(context).lendingEmptySubtitle,
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 13, color: context.textSubtle),
           ),
@@ -359,9 +360,11 @@ class _LendingTabState extends State<LendingTab> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Repaid ${_money(repaid, currency)}',
+                  Text(
+                      '${AppLocalizations.of(context).lendingRepaid} ${_money(repaid, currency)}',
                       style: TextStyle(fontSize: 12, color: context.textMuted)),
-                  Text('Outstanding ${_money(outstanding, currency)}',
+                  Text(
+                      '${AppLocalizations.of(context).lendingOutstanding} ${_money(outstanding, currency)}',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -375,7 +378,7 @@ class _LendingTabState extends State<LendingTab> {
               if (((loan['interest_earned'] as num?)?.toDouble() ?? 0) > 0) ...[
                 const SizedBox(height: 4),
                 Text(
-                  'Interest earned ${_money((loan['interest_earned'] as num).toDouble(), currency)}',
+                  '${AppLocalizations.of(context).lendingInterestEarned} ${_money((loan['interest_earned'] as num).toDouble(), currency)}',
                   style: TextStyle(
                     fontSize: 11,
                     color: context.positive,
