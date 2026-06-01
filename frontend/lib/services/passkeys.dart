@@ -6,8 +6,15 @@ import 'dart:typed_data';
 
 import 'package:http/browser_client.dart';
 
+import '../utils/app_locale.dart';
 import 'api_service.dart';
 import 'auth_service.dart';
+
+/// Pick the English or es-MX variant of a user-facing message based on the
+/// app's active locale. The passkey service has no BuildContext, so it can't
+/// use AppLocalizations — this reads the web-free locale notifier instead.
+String _t(String en, String es) =>
+    localeNotifier.value?.languageCode == 'es' ? es : en;
 
 /// One row from `GET /api/auth/passkeys`.
 class PasskeySummary {
@@ -105,9 +112,10 @@ class PasskeyService {
     bool hardwareKeyOnly = false,
   }) async {
     if (!isAvailable) {
-      throw PasskeyException(
+      throw PasskeyException(_t(
         'This browser doesn\'t support passkeys. Try Chrome/Safari/Edge on a recent OS.',
-      );
+        'Este navegador no admite claves de acceso. Prueba con Chrome/Safari/Edge en un sistema reciente.',
+      ));
     }
 
     // 1. Ask the server for the challenge + options.
@@ -120,7 +128,8 @@ class PasskeyService {
     );
     if (startRes.statusCode != 200) {
       throw PasskeyException(
-        _decodeError(startRes.body, 'Could not start passkey registration.'),
+        _decodeError(startRes.body, _t('Could not start passkey registration.',
+            'No se pudo iniciar el registro de la clave de acceso.')),
       );
     }
     final startJson = jsonDecode(startRes.body) as Map<String, dynamic>;
@@ -194,7 +203,8 @@ class PasskeyService {
     );
     if (finishRes.statusCode != 200) {
       throw PasskeyException(
-        _decodeError(finishRes.body, 'Could not save the new passkey.'),
+        _decodeError(finishRes.body, _t('Could not save the new passkey.',
+            'No se pudo guardar la nueva clave de acceso.')),
       );
     }
     return PasskeySummary.fromJson(
@@ -212,12 +222,14 @@ class PasskeyService {
   /// assertion challenge to that account's registered passkeys.
   Future<AuthUser> signInWithPasskey({required String username}) async {
     if (!isAvailable) {
-      throw PasskeyException(
+      throw PasskeyException(_t(
         'This browser doesn\'t support passkeys. Try Chrome/Safari/Edge on a recent OS.',
-      );
+        'Este navegador no admite claves de acceso. Prueba con Chrome/Safari/Edge en un sistema reciente.',
+      ));
     }
     if (username.trim().isEmpty) {
-      throw PasskeyException('Enter your username first.');
+      throw PasskeyException(_t('Enter your username first.',
+          'Primero ingresa tu nombre de usuario.'));
     }
 
     final startRes = await _client.post(
@@ -230,7 +242,8 @@ class PasskeyService {
     );
     if (startRes.statusCode != 200) {
       throw PasskeyException(
-        _decodeError(startRes.body, 'Could not start passkey sign-in.'),
+        _decodeError(startRes.body, _t('Could not start passkey sign-in.',
+            'No se pudo iniciar el acceso con clave de acceso.')),
       );
     }
     final startJson = jsonDecode(startRes.body) as Map<String, dynamic>;
@@ -252,7 +265,8 @@ class PasskeyService {
     );
     if (finishRes.statusCode != 200) {
       throw PasskeyException(
-        _decodeError(finishRes.body, 'Passkey sign-in failed.'),
+        _decodeError(finishRes.body, _t('Passkey sign-in failed.',
+            'Falló el acceso con clave de acceso.')),
       );
     }
     final body = jsonDecode(finishRes.body) as Map<String, dynamic>;
@@ -270,7 +284,8 @@ class PasskeyService {
     }
     if (res.statusCode != 200) {
       throw PasskeyException(
-        _decodeError(res.body, 'Could not load passkeys.'),
+        _decodeError(res.body, _t('Could not load passkeys.',
+            'No se pudieron cargar las claves de acceso.')),
       );
     }
     final raw = jsonDecode(res.body) as List<dynamic>;
@@ -289,7 +304,8 @@ class PasskeyService {
     }
     if (res.statusCode != 204) {
       throw PasskeyException(
-        _decodeError(res.body, 'Could not remove the passkey.'),
+        _decodeError(res.body, _t('Could not remove the passkey.',
+            'No se pudo eliminar la clave de acceso.')),
       );
     }
   }
@@ -327,7 +343,8 @@ Future<JSObject> _callCredentialsCreate(JSObject publicKey) async {
     throw _mapCredentialError(e, registering: true);
   }
   if (result == null) {
-    throw PasskeyException('Passkey enrolment was cancelled.');
+    throw PasskeyException(_t('Passkey enrolment was cancelled.',
+        'Se canceló el registro de la clave de acceso.'));
   }
   return result;
 }
@@ -346,7 +363,8 @@ Future<JSObject> _callCredentialsGet(JSObject publicKey) async {
     throw _mapCredentialError(e, registering: false);
   }
   if (result == null) {
-    throw PasskeyException('Passkey sign-in was cancelled.');
+    throw PasskeyException(_t('Passkey sign-in was cancelled.',
+        'Se canceló el acceso con clave de acceso.'));
   }
   return result;
 }
@@ -370,38 +388,58 @@ PasskeyException _mapCredentialError(Object e, {required bool registering}) {
     // Not a JS object (or property read failed) — fall back to toString.
   }
   final probe = '$name $message ${e.toString()}';
-  final verb = registering ? 'enrolment' : 'sign-in';
+  final verb = registering
+      ? _t('enrolment', 'registro')
+      : _t('sign-in', 'acceso');
   if (probe.contains('InvalidStateError')) {
     return PasskeyException(registering
-        ? 'A passkey for this account already exists on the authenticator you '
+        ? _t(
+            'A passkey for this account already exists on the authenticator you '
             'used. If you\'re adding a DIFFERENT security key, your browser is '
             'likely offering a saved/synced passkey instead of the new key — '
             'in the prompt choose "Use a different device" (or insert the key '
             'and pick the security-key / USB option). To replace the existing '
-            'passkey, remove it on this screen first.'
-        : 'This passkey isn\'t recognised for this account.');
+            'passkey, remove it on this screen first.',
+            'Ya existe una clave de acceso para esta cuenta en el autenticador '
+            'que usaste. Si estás agregando una llave de seguridad DISTINTA, tu '
+            'navegador probablemente esté ofreciendo una clave guardada o '
+            'sincronizada en lugar de la nueva — en el aviso elige "Usar otro '
+            'dispositivo" (o inserta la llave y elige la opción de llave de '
+            'seguridad / USB). Para reemplazar la clave existente, primero '
+            'elimínala en esta pantalla.')
+        : _t('This passkey isn\'t recognised for this account.',
+            'Esta clave de acceso no se reconoce para esta cuenta.'));
   }
   if (probe.contains('NotAllowedError') || probe.contains('AbortError')) {
-    return PasskeyException(
-        'Passkey $verb was cancelled or timed out. Please try again.');
+    return PasskeyException(_t(
+        'Passkey $verb was cancelled or timed out. Please try again.',
+        'El $verb con clave de acceso se canceló o expiró. Inténtalo de nuevo.'));
   }
   if (probe.contains('NotSupportedError')) {
-    return PasskeyException(
+    return PasskeyException(_t(
         'This authenticator isn\'t supported. Try a different device or '
-        'security key.');
+        'security key.',
+        'Este autenticador no es compatible. Prueba con otro dispositivo o '
+        'llave de seguridad.'));
   }
   if (probe.contains('SecurityError')) {
-    return PasskeyException(
+    return PasskeyException(_t(
         'Passkey $verb was blocked for security reasons (the site origin '
-        'or domain didn\'t match). Make sure you\'re on the right URL.');
+        'or domain didn\'t match). Make sure you\'re on the right URL.',
+        'El $verb con clave de acceso se bloqueó por razones de seguridad (el '
+        'origen o dominio del sitio no coincidió). Asegúrate de estar en la URL '
+        'correcta.'));
   }
   if (probe.contains('ConstraintError')) {
-    return PasskeyException(
+    return PasskeyException(_t(
         'This authenticator can\'t satisfy the required settings (e.g. it '
-        'needs a PIN or biometric). Try a different one.');
+        'needs a PIN or biometric). Try a different one.',
+        'Este autenticador no cumple con los ajustes requeridos (p. ej. '
+        'necesita un PIN o biometría). Prueba con otro.'));
   }
   final detail = message.isNotEmpty ? message : e.toString();
-  return PasskeyException('Passkey $verb failed: $detail');
+  return PasskeyException(_t('Passkey $verb failed: $detail',
+      'El $verb con clave de acceso falló: $detail'));
 }
 
 // ----- decoding server → JS (base64url strings → ArrayBuffer) -----

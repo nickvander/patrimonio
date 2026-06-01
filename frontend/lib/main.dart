@@ -2,6 +2,7 @@ import 'dart:js_interop';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'l10n/app_localizations.dart';
+import 'utils/app_locale.dart';
 import 'screens/auth_gate.dart';
 import 'services/preferences.dart';
 import 'theme/palette.dart';
@@ -13,11 +14,8 @@ import 'theme/typography.dart';
 final ValueNotifier<ThemeMode> themeModeNotifier =
     ValueNotifier(_loadInitialThemeMode());
 
-/// Notifies the app when the user changes language. Null = follow the
-/// device locale (among supported locales). Same module-scope pattern as
-/// [themeModeNotifier] so a toggle anywhere can set it.
-final ValueNotifier<Locale?> localeNotifier =
-    ValueNotifier(_loadInitialLocale());
+// localeNotifier now lives in utils/app_locale.dart (web-free) so pure-Dart
+// code can read the active locale; main() seeds it below.
 
 Locale? _loadInitialLocale() {
   final code = Preferences.getLocale();
@@ -60,6 +58,8 @@ void _dismissSplash() {
 
 void main() {
   _updateSplash(60, 'Starting app…');
+  // Seed the active locale (web-free notifier) from the saved preference.
+  localeNotifier.value = _loadInitialLocale();
   runApp(const PatrimonioApp());
 }
 

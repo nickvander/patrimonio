@@ -1,3 +1,5 @@
+import 'app_locale.dart';
+
 /// Pretty-print Plaid's Personal Finance Category enum codes.
 ///
 /// Plaid emits a two-level taxonomy:
@@ -15,12 +17,17 @@ String prettyCategory({
   String? detailed,
   String? primary,
 }) {
+  // A user-typed override is their own data — never re-translate it.
   final u = (userCategory ?? '').trim();
   if (u.isNotEmpty) return u;
 
+  // Active UI language (read from the web-free notifier so this stays
+  // pure-Dart / test-safe). When Spanish, prefer the es taxonomy below.
+  final es = localeNotifier.value?.languageCode == 'es';
+
   final d = (detailed ?? '').trim();
   final p = (primary ?? '').trim();
-  if (d.isEmpty && p.isEmpty) return 'Uncategorized';
+  if (d.isEmpty && p.isEmpty) return es ? 'Sin categoría' : 'Uncategorized';
 
   // 1. Explicit overrides for the cases where the auto-generated label
   //    would still read poorly. Most detailed enums fall through to the
@@ -92,8 +99,84 @@ String prettyCategory({
     'PERSONAL_CARE_HAIR_AND_BEAUTY': 'Hair & beauty',
   };
 
+  // Hand-tuned es-MX labels, keyed identically to `overrides` (plus a few
+  // primary buckets that otherwise fall through to the derived path). Any
+  // Plaid code without an es entry falls back to the English override, then
+  // to the derived English label — so the common, visible categories are
+  // Spanish and only the rare long tail stays English.
+  const esOverrides = <String, String>{
+    // Primary
+    'LOAN_PAYMENTS': 'Pago de préstamo',
+    'TRANSFER_IN': 'Transferencia recibida',
+    'TRANSFER_OUT': 'Transferencia enviada',
+    'GENERAL_MERCHANDISE': 'Compras',
+    'GENERAL_SERVICES': 'Servicios',
+    'FOOD_AND_DRINK': 'Comida y bebida',
+    'RENT_AND_UTILITIES': 'Renta y servicios',
+    'GOVERNMENT_AND_NON_PROFIT': 'Gobierno y ONG',
+    'PERSONAL_CARE': 'Cuidado personal',
+    'HOME_IMPROVEMENT': 'Mejoras al hogar',
+    'BANK_FEES': 'Comisiones bancarias',
+    'TRANSPORTATION': 'Transporte',
+    'TRAVEL': 'Viajes',
+    'ENTERTAINMENT': 'Entretenimiento',
+    'INCOME': 'Ingresos',
+    'MEDICAL': 'Salud',
+    // Detailed
+    'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT': 'Pago de tarjeta de crédito',
+    'LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT': 'Pago de préstamo personal',
+    'LOAN_PAYMENTS_CAR_PAYMENT': 'Pago de auto',
+    'LOAN_PAYMENTS_MORTGAGE_PAYMENT': 'Pago de hipoteca',
+    'LOAN_PAYMENTS_STUDENT_LOAN_PAYMENT': 'Pago de préstamo estudiantil',
+    'TRANSFER_IN_DEPOSIT': 'Depósito',
+    'TRANSFER_IN_ACCOUNT_TRANSFER': 'Transferencia entre cuentas',
+    'TRANSFER_IN_SAVINGS': 'Desde ahorros',
+    'TRANSFER_OUT_ACCOUNT_TRANSFER': 'Transferencia entre cuentas',
+    'TRANSFER_OUT_SAVINGS': 'A ahorros',
+    'TRANSFER_OUT_WITHDRAWAL': 'Retiro',
+    'TRANSFER_OUT_TRANSFER_OUT_FROM_APPS': 'Pago por app',
+    'TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS': 'A inversiones',
+    'TRANSFER_OUT_OTHER_TRANSFER_OUT': 'Transferencia saliente',
+    'TRANSFER_IN_TRANSFER_IN_FROM_APPS': 'Depósito por app',
+    'TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS': 'Desde inversiones',
+    'TRANSFER_IN_OTHER_TRANSFER_IN': 'Transferencia entrante',
+    'OTHER': 'Otros',
+    'OTHER_OTHER': 'Otros',
+    'INCOME_WAGES': 'Salario',
+    'INCOME_INTEREST_EARNED': 'Intereses ganados',
+    'INCOME_DIVIDENDS': 'Dividendos',
+    'INCOME_RETIREMENT_PENSION': 'Jubilación / pensión',
+    'INCOME_TAX_REFUND': 'Devolución de impuestos',
+    'FOOD_AND_DRINK_RESTAURANT': 'Restaurantes',
+    'FOOD_AND_DRINK_FAST_FOOD': 'Comida rápida',
+    'FOOD_AND_DRINK_COFFEE': 'Café',
+    'FOOD_AND_DRINK_GROCERIES': 'Supermercado',
+    'FOOD_AND_DRINK_BEER_WINE_AND_LIQUOR': 'Cerveza, vino y licor',
+    'GENERAL_MERCHANDISE_ONLINE_MARKETPLACES': 'Tiendas en línea',
+    'GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES': 'Ropa',
+    'GENERAL_MERCHANDISE_ELECTRONICS': 'Electrónica',
+    'GENERAL_MERCHANDISE_DEPARTMENT_STORES': 'Tiendas departamentales',
+    'TRANSPORTATION_GAS': 'Gasolina',
+    'TRANSPORTATION_PARKING': 'Estacionamiento',
+    'TRANSPORTATION_PUBLIC_TRANSIT': 'Transporte público',
+    'TRANSPORTATION_TAXIS_AND_RIDE_SHARES': 'Viajes compartidos',
+    'TRAVEL_FLIGHTS': 'Vuelos',
+    'TRAVEL_LODGING': 'Hospedaje',
+    'BANK_FEES_OVERDRAFT_FEES': 'Comisión por sobregiro',
+    'BANK_FEES_ATM_FEES': 'Comisión de cajero',
+    'BANK_FEES_FOREIGN_TRANSACTION_FEES': 'Comisión por transacción internacional',
+    'RENT_AND_UTILITIES_RENT': 'Renta',
+    'RENT_AND_UTILITIES_INTERNET_AND_CABLE': 'Internet y cable',
+    'RENT_AND_UTILITIES_TELEPHONE': 'Teléfono',
+    'RENT_AND_UTILITIES_GAS_AND_ELECTRICITY': 'Gas y electricidad',
+    'RENT_AND_UTILITIES_WATER': 'Agua',
+    'ENTERTAINMENT_VIDEO_AND_AUDIO_MEDIA': 'Streaming',
+    'PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS': 'Gimnasio y fitness',
+    'PERSONAL_CARE_HAIR_AND_BEAUTY': 'Belleza y peluquería',
+  };
+
   final key = d.isNotEmpty ? d : p;
-  final override = overrides[key];
+  final override = es ? (esOverrides[key] ?? overrides[key]) : overrides[key];
   if (override != null) return override;
 
   // 2. If we have a detailed code that starts with the primary's prefix,
