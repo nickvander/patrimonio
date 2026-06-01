@@ -106,6 +106,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic>? _portfolioData;
   List<dynamic>? _creditData;
   List<dynamic>? _syncData;
+  // Drives the "refresh while a newly-linked institution is still syncing"
+  // backstop (see _scheduleSyncPollIfNeeded). Bounded by _syncPollAttempts.
+  Timer? _syncPollTimer;
+  int _syncPollAttempts = 0;
   Map<String, dynamic>? _setupStatus;
   Map<String, dynamic>? _fxRate;
   List<dynamic>? _transactions;
@@ -208,6 +212,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     _reloadDebounce?.cancel();
+    _syncPollTimer?.cancel();
     _realtimeSub?.cancel();
     _realtime.dispose();
     super.dispose();
@@ -1620,6 +1625,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       debugPrint(
         "State updated with Phase 7 data: ${_allocationData?.length} categories, ${_trendData?.length} trend months",
       );
+
+      // A just-linked institution lands in 'syncing' until its background
+      // Plaid sync finishes (exchange-token returns first). Keep refreshing
+      // until it clears so the new accounts appear on their own.
+      _scheduleSyncPollIfNeeded();
     } catch (e, stack) {
       debugPrint("Data load error: $e\n$stack");
       setState(() {
@@ -1627,6 +1637,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  /// Newly-linked institutions sit in `sync_status == 'syncing'` until their
+  /// background Plaid sync finishes — `exchange-token` returns before it does.
+  /// While anything is syncing, force-refresh on a short interval so the new
+  /// accounts surface without the user hitting "sync all". Bounded so a stuck
+  /// institution can't poll forever; the realtime AccountsChanged push covers
+  /// the instant case when the websocket is connected (e.g. over the tunnel).
+  void _scheduleSyncPollIfNeeded() {
+    _syncPollTimer?.cancel();
+    final anySyncing = (_syncData ?? const []).any(
+        (e) => e is Map && e['sync_status']?.toString() == 'syncing');
+    if (!anySyncing) {
+      _syncPollAttempts = 0;
+      return;
+    }
+    if (_syncPollAttempts >= 15) return; // ~45s cap, then leave it to the user
+    _syncPollAttempts++;
+    _syncPollTimer = Timer(const Duration(seconds: 3), () {
+      // forceRefresh so the poll sees fresh sync_status + the new accounts,
+      // not a cached snapshot.
+      if (mounted) _loadAllData(silent: true, forceRefresh: true);
+    });
   }
 
   @override

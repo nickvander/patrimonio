@@ -499,12 +499,20 @@ async fn exchange_public_token(
 
     let config = state.config.clone();
     let db = state.db.clone();
+    let realtime = state.realtime.clone();
     let user_id = ctx.user_id;
     tokio::spawn(async move {
-        if let Err(e) =
-            crate::services::sync::sync_user_institutions(&db, &config, user_id, None).await
-        {
-            tracing::error!("Immediate Plaid sync failed for new institution: {}", e);
+        match crate::services::sync::sync_user_institutions(&db, &config, user_id, None).await {
+            Ok(()) => {
+                // exchange-token already returned; this sync ran in the
+                // background. Tell any open client the new accounts +
+                // transactions have landed so they appear immediately,
+                // without the user hitting "sync all".
+                use crate::services::realtime::RealtimeEvent;
+                realtime.publish(user_id, RealtimeEvent::AccountsChanged).await;
+                realtime.publish(user_id, RealtimeEvent::TransactionsChanged).await;
+            }
+            Err(e) => tracing::error!("Immediate Plaid sync failed for new institution: {}", e),
         }
     });
 
@@ -592,12 +600,16 @@ async fn link_crypto_institution(
 
     let config = state.config.clone();
     let db = state.db.clone();
+    let realtime = state.realtime.clone();
     let user_id = ctx.user_id;
     tokio::spawn(async move {
-        if let Err(e) =
-            crate::services::sync::sync_user_institutions(&db, &config, user_id, None).await
-        {
-            tracing::error!("Immediate crypto sync failed for new institution: {}", e);
+        match crate::services::sync::sync_user_institutions(&db, &config, user_id, None).await {
+            Ok(()) => {
+                use crate::services::realtime::RealtimeEvent;
+                realtime.publish(user_id, RealtimeEvent::AccountsChanged).await;
+                realtime.publish(user_id, RealtimeEvent::TransactionsChanged).await;
+            }
+            Err(e) => tracing::error!("Immediate crypto sync failed for new institution: {}", e),
         }
     });
 
