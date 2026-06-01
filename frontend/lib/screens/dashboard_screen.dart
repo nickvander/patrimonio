@@ -123,7 +123,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // true, a "Lending" section is inserted into [_destinations] (between
   // Tax planning and Settings). No controller juggling — the section
   // list is just recomputed.
-  bool _lendingEnabled = false;
+  bool _lendingEnabled = true; // on by default; user can opt out in Settings
   // Upcoming + overdue loan installments for the notifications bell.
   List<dynamic> _loanReminders = const [];
   // Configurable reminder lead time (days before due). Server-stored
@@ -1604,9 +1604,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _fxTransfers = results[12] as List<dynamic>;
         _ignoredSubscriptions = results[13] as List<dynamic>;
         // Lending module toggle (server-side). The setting stores a
-        // raw bool; absent/null = off. Recomputes the section list only
-        // when the flag actually flips.
-        _applyLendingSetting(results[14] == true);
+        // raw bool; absent/null = treated as ON (lending is visible by
+        // default — the user opts out rather than opting in).
+        _applyLendingSetting(results[14] != false);
         // First load: now that the lending flag (and thus the full
         // section list) is known, resolve the saved section. A saved
         // "Lending" that wasn't yet in _destinations lands correctly here.
