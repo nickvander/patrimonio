@@ -4,9 +4,10 @@ import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:typed_data';
 
-import 'package:http/browser_client.dart';
+import 'package:http/http.dart' as http;
 
 import '../utils/app_locale.dart';
+import 'api_platform.dart';
 import 'api_service.dart';
 import 'auth_service.dart';
 
@@ -71,12 +72,11 @@ class PasskeyService {
   static final PasskeyService instance = PasskeyService._();
 
   final ApiService _api = ApiService();
-  // BrowserClient with withCredentials=true is required so the session
-  // cookie is sent on cross-origin XHRs during local dev (frontend on
-  // :3000, API on :8080). Identical in same-origin prod; harmless. The
-  // password login path uses the same shape — match it so a passkey
-  // user gets the same Set-Cookie handling.
-  static final BrowserClient _client = BrowserClient()..withCredentials = true;
+  // Shared credentialed client (withCredentials=true so the session cookie is
+  // sent on XHRs; carries host-specific headers like the ngrok skip header).
+  // Matches the password login path so a passkey user gets the same Set-Cookie
+  // handling.
+  static final http.Client _client = createApiClient();
 
   String get _baseUrl => '${_api.baseUrl}/auth/passkeys';
 

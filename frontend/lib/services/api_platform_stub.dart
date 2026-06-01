@@ -12,4 +12,6 @@ String apiBaseUrl() => 'http://localhost:8080/api';
 
 String apiWsUrl() => 'ws://localhost:8080/api/realtime/ws';
 
+Map<String, String> apiExtraHeaders() => const {};
+
 http.Client createApiClient() => http.Client();

@@ -32,8 +32,35 @@ String apiWsUrl() {
   return 'ws://${currentHost()}:8080/api/realtime/ws';
 }
 
+/// Extra headers every API request should carry, decided by the current host.
+///
+/// Behind an **ngrok free** tunnel, `ngrok-skip-browser-warning` suppresses the
+/// browser interstitial ngrok injects for browser-looking requests — without
+/// it, XHRs come back as ngrok's HTML warning page instead of the backend's
+/// JSON. No-op (empty) on any non-ngrok host, so normal/self-hosted deploys are
+/// unaffected.
+Map<String, String> apiExtraHeaders() {
+  if (web.window.location.hostname.contains('ngrok')) {
+    return const {'ngrok-skip-browser-warning': 'true'};
+  }
+  return const {};
+}
+
+/// Wraps an inner client to stamp [apiExtraHeaders] onto every request, so the
+/// ngrok header rides along no matter which ApiService helper made the call.
+class _ExtraHeaderClient extends http.BaseClient {
+  _ExtraHeaderClient(this._inner);
+  final http.Client _inner;
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    request.headers.addAll(apiExtraHeaders());
+    return _inner.send(request);
+  }
+}
+
 /// Credentialed client: `withCredentials` is required for the browser to
 /// send (and accept) the session cookie on cross-origin XHRs in dev, and
-/// is harmless same-origin in production. Preserves the exact behaviour
-/// ApiService had before the platform seam was extracted.
-http.Client createApiClient() => BrowserClient()..withCredentials = true;
+/// is harmless same-origin in production. Wrapped so host-specific headers
+/// (e.g. the ngrok skip header) are applied uniformly.
+http.Client createApiClient() =>
+    _ExtraHeaderClient(BrowserClient()..withCredentials = true);

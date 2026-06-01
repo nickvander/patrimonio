@@ -36,6 +36,10 @@ services:
       PLAID_SECRET: ${PLAID_SECRET:-}
       PLAID_ENV: ${PLAID_ENV:-sandbox}
       PLAID_WEBHOOK_URL: ${PLAID_WEBHOOK_URL:-}
+      # Sent to Plaid on link-token create; must EXACTLY match a redirect URI
+      # registered in the Plaid dashboard. Empty = omitted (non-OAuth only).
+      # Required for OAuth banks, which must use an https redirect.
+      PLAID_REDIRECT_URI: ${PLAID_REDIRECT_URI:-}
       TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
       EXCHANGE_RATE_API_KEY: ${EXCHANGE_RATE_API_KEY:-}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}

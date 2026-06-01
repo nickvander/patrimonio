@@ -29,6 +29,7 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
     try {
       final response = await http.get(
         Uri.parse('${apiBaseUrl()}/setup/status'),
+        headers: apiExtraHeaders(),
       );
       if (response.statusCode == 200 && mounted) {
         setState(() => _setupStatus = json.decode(response.body));
@@ -44,7 +45,7 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
     try {
       final response = await http.post(
         Uri.parse('${apiBaseUrl()}/institutions/link-token'),
-        headers: const {'X-Requested-With': 'fetch'},
+        headers: {'X-Requested-With': 'fetch', ...apiExtraHeaders()},
       );
 
       if (response.statusCode == 200) {
@@ -81,9 +82,10 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
 
       final response = await http.post(
         Uri.parse('${apiBaseUrl()}/institutions/exchange-token'),
-        headers: const {
+        headers: {
           'Content-Type': 'application/json',
           'X-Requested-With': 'fetch',
+          ...apiExtraHeaders(),
         },
         body: json.encode({
           'public_token': publicToken,
