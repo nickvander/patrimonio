@@ -265,7 +265,13 @@ async fn create_link_token(State(state): State<AppState>) -> Response {
         "user": {
             "client_user_id": "patrimonio-single-user"
         },
-        "products": ["transactions", "investments"]
+        // `transactions` is the broad base product — banks, credit cards, and
+        // most brokerages support it. `investments` is requested only when the
+        // institution supports it (required_if_supported_products), so linking
+        // a credit card or checking account no longer fails with Plaid Link's
+        // "no investment account" error, while brokerages still get holdings.
+        "products": ["transactions"],
+        "required_if_supported_products": ["investments"]
     });
     attach_redirect_uri(&mut payload, &state.config.plaid_redirect_uri);
     // Plaid will POST update notifications to this URL once the item

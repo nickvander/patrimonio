@@ -281,7 +281,25 @@ pub async fn sync_institutions(
                     }))
                     .send().await {
                     if let Ok(hold_val) = hold_res.json::<serde_json::Value>().await {
-                        if let Some(status) = plaid_error_status(&hold_val) {
+                        // Items without the investments product (credit cards,
+                        // plain depository) return a soft error here. Skip it —
+                        // don't taint the institution: the accounts/balance pass
+                        // already imported the card/bank accounts; there are just
+                        // no holdings to fetch. Only real errors set the status.
+                        let soft_no_investments = matches!(
+                            hold_val["error_code"].as_str(),
+                            Some("INVALID_PRODUCT")
+                                | Some("PRODUCTS_NOT_SUPPORTED")
+                                | Some("PRODUCT_NOT_ENABLED")
+                                | Some("NO_INVESTMENT_ACCOUNTS")
+                        );
+                        if soft_no_investments {
+                            tracing::info!(
+                                "Plaid holdings skipped for {} ({}) — no investment accounts",
+                                inst_name,
+                                hold_val["error_code"].as_str().unwrap_or("")
+                            );
+                        } else if let Some(status) = plaid_error_status(&hold_val) {
                             let error_msg = hold_val["error_message"].as_str().unwrap_or("Unknown Plaid error");
                             update_sync_status(db, inst_id, status, Some(error_msg)).await;
                             tracing::error!("Plaid holdings sync failed for {}: {:?}", inst_name, hold_val);
