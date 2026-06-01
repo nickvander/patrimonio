@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:web/web.dart' as web;
 
+import '../services/plaid_oauth.dart';
 import '../utils/theme_colors.dart';
 import '../l10n/app_localizations.dart';
 
@@ -58,15 +59,14 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
         final data = json.decode(response.body);
         final linkToken = data['link_token'];
 
-        LinkTokenConfiguration linkTokenConfiguration = LinkTokenConfiguration(
-          token: linkToken,
-        );
-
         PlaidLink.onSuccess.listen(_onSuccess);
         PlaidLink.onEvent.listen(_onEvent);
         PlaidLink.onExit.listen(_onExit);
-        PlaidLink.create(configuration: linkTokenConfiguration);
-        PlaidLink.open();
+        // Persist the token before opening so an OAuth bank that navigates the
+        // tab away and back can resume the same session (see plaid_oauth.dart).
+        // For non-OAuth banks this is a no-op beyond a localStorage write —
+        // _onSuccess fires in-tab as before.
+        openPlaidLink(linkToken);
       } else {
         if (!mounted) return;
         _showError(_responseError(

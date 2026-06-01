@@ -817,6 +817,26 @@ class ApiService {
         'No se pudo obtener el token de reconexión'));
   }
 
+  /// Swap a Plaid public token (from a completed Link session) for a stored
+  /// access token, creating the institution. Used by the OAuth-redirect resume
+  /// path; the in-tab connect flow calls the same endpoint directly.
+  Future<void> exchangePublicToken(String publicToken, String institutionName,
+      {String institutionType = 'banking'}) async {
+    final response = await _post(
+      Uri.parse('$_baseUrl/institutions/exchange-token'),
+      body: json.encode({
+        'public_token': publicToken,
+        'institution_name': institutionName,
+        'institution_type': institutionType,
+      }),
+      headers: const {'Content-Type': 'application/json'},
+    );
+    if (response.statusCode != 200) {
+      throw Exception(_t('Failed to exchange public token',
+          'No se pudo intercambiar el token público'));
+    }
+  }
+
   Future<void> deleteInstitution(String institutionId) async {
     final response = await _delete(
       Uri.parse('$_baseUrl/institutions/$institutionId'),

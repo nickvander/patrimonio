@@ -9,6 +9,7 @@ import '../main.dart' show themeModeNotifier;
 import '../utils/app_locale.dart';
 import '../l10n/app_localizations.dart';
 import '../services/preferences.dart';
+import '../services/plaid_oauth.dart';
 import '../services/realtime_service.dart';
 import '../widgets/net_worth_card.dart';
 import '../widgets/assets_liabilities_bar.dart';
@@ -195,6 +196,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _section = _indexOfNav(_pendingRestore) ?? 0;
     _loadAllData();
     _checkRedirectStatus();
+    _resumePlaidOAuthIfNeeded();
     // Open the realtime channel and route server-pushed
     // invalidations into the existing silent-reload path. The
     // service self-reconnects on drop, so we connect once at boot
@@ -1282,6 +1284,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  /// Plaid OAuth banks bounce the whole tab out to the bank's login and back
+  /// to our redirect_uri (carrying `oauth_state_id`). On that cold boot we
+  /// re-open Link with the persisted token + the return URL so Plaid can
+  /// finish the handshake, then run the same completion the in-tab flow would
+  /// have: exchange the public token for a NEW institution, or re-sync for a
+  /// reconnect. Non-OAuth links never reach this — they complete in-tab.
+  void _resumePlaidOAuthIfNeeded() {
+    final pending = pendingPlaidOAuth();
+    if (pending == null) return;
+    // Clear up front so refreshing the return URL can't replay a spent token.
+    clearPlaidOAuth();
+    PlaidLink.onSuccess.listen((event) async {
+      try {
+        if (pending.mode == 'reconnect') {
+          await _apiService.syncInstitutions();
+          if (mounted) _loadAllData(silent: true);
+        } else {
+          await _apiService.exchangePublicToken(
+            event.publicToken,
+            event.metadata.institution?.name ?? 'Unknown institution',
+          );
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+                  Text(AppLocalizations.of(context).dashAccountLinkedSuccess),
+              backgroundColor: context.positive,
+            ),
+          );
+          _loadAllData(silent: true);
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppLocalizations.of(context).dashAccountLinkFailed),
+              backgroundColor: context.negative,
+            ),
+          );
+        }
+      }
+    });
+    PlaidLink.onExit.listen((_) {
+      if (mounted) _loadAllData(silent: true);
+    });
+    // Defer the open until after first frame so the overlay/context are ready.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      resumePlaidLink(pending.token);
+    });
+  }
+
   /// Explicit user-initiated refresh (pull-to-refresh, "sync everything",
   /// post-mutation reloads). Bypasses the response cache so the user who
   /// just asked for fresh data gets exactly that.
@@ -1310,7 +1363,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     try {
       final data = await _apiService.getReconnectToken(institutionId);
       final linkToken = data['link_token'];
-      final cfg = LinkTokenConfiguration(token: linkToken);
       PlaidLink.onSuccess.listen((_) {
         debugPrint('Plaid reconnect success');
         // Defer to the global sync via the public API method so the
@@ -1322,8 +1374,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       PlaidLink.onExit.listen((_) {
         if (mounted) _loadAllData(silent: true);
       });
-      PlaidLink.create(configuration: cfg);
-      PlaidLink.open();
+      // mode:'reconnect' tags the persisted session so an OAuth redirect
+      // resumes into a re-sync rather than a new-institution exchange.
+      openPlaidLink(linkToken, mode: 'reconnect');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2013,10 +2066,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final data = await _apiService.getReconnectToken(institutionId);
         final linkToken = data['link_token'];
 
-        LinkTokenConfiguration linkTokenConfiguration = LinkTokenConfiguration(
-          token: linkToken,
-        );
-
         PlaidLink.onSuccess.listen((event) {
           debugPrint("Plaid Reconnect Success");
           runSync();
@@ -2026,8 +2075,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _loadAllData(silent: true);
         });
 
-        PlaidLink.create(configuration: linkTokenConfiguration);
-        PlaidLink.open();
+        openPlaidLink(linkToken, mode: 'reconnect');
       } catch (e) {
         debugPrint("Reconnect error: $e");
         if (mounted) {
