@@ -217,6 +217,29 @@ struct ExchangeTokenRequest {
     institution_type: String, // e.g., "banking"
 }
 
+/// Attach the Plaid OAuth `redirect_uri` to a link-token payload — but ONLY
+/// when it is https. Plaid (Production especially) rejects a non-https
+/// redirect_uri with `INVALID_FIELD: redirect_uri must use HTTPS`, which
+/// 502s link-token creation entirely; an http/localhost dev value is
+/// therefore strictly worse than sending none. Omitting it still links
+/// every non-OAuth institution — only OAuth banks need a redirect, and they
+/// require an https URL registered in the Plaid dashboard.
+fn attach_redirect_uri(payload: &mut serde_json::Value, redirect: &Option<String>) {
+    match redirect {
+        Some(uri) if uri.starts_with("https://") => {
+            payload["redirect_uri"] = serde_json::Value::String(uri.clone());
+        }
+        Some(uri) => {
+            tracing::warn!(
+                "PLAID_REDIRECT_URI is not https ({uri}); omitting it so linking \
+                 still works. OAuth banks won't link until it's an https URL \
+                 registered in your Plaid dashboard."
+            );
+        }
+        None => {}
+    }
+}
+
 /// Creates a Plaid Link token
 async fn create_link_token(State(state): State<AppState>) -> Response {
     let (client_id, secret) = match (&state.config.plaid_client_id, &state.config.plaid_secret) {
@@ -242,9 +265,9 @@ async fn create_link_token(State(state): State<AppState>) -> Response {
         "user": {
             "client_user_id": "patrimonio-single-user"
         },
-        "products": ["transactions", "investments"],
-        "redirect_uri": state.config.plaid_redirect_uri
+        "products": ["transactions", "investments"]
     });
+    attach_redirect_uri(&mut payload, &state.config.plaid_redirect_uri);
     // Plaid will POST update notifications to this URL once the item
     // is created. Items inherit the webhook URL from their link
     // session, so the *first* time Plaid Production is configured the
@@ -340,9 +363,9 @@ async fn create_reconnect_token(
         "access_token": access_token,
         "user": {
             "client_user_id": "patrimonio-single-user"
-        },
-        "redirect_uri": state.config.plaid_redirect_uri
+        }
     });
+    attach_redirect_uri(&mut payload, &state.config.plaid_redirect_uri);
     // Re-establish the webhook URL on every reconnect. Items that
     // were originally linked before PLAID_WEBHOOK_URL was configured
     // pick up the URL here, so reconnecting an old institution is
