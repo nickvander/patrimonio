@@ -4,6 +4,8 @@ import 'dart:js_interop';
 import 'package:flutter/foundation.dart';
 import 'package:web/web.dart' as web;
 
+import 'api_platform.dart';
+
 /// Coarse server-pushed events. Mirrors `services::realtime::RealtimeEvent`
 /// in the backend — payloads are intentionally tiny ("go refetch
 /// transactions") rather than the actual data, so the existing REST
@@ -46,12 +48,7 @@ class RealtimeService {
   /// Resolves `ws[s]://<host>:8080/api/realtime/ws` from the current
   /// page's location, mirroring the API base derivation in
   /// `ApiService._baseUrl`.
-  static String _wsUrl() {
-    final loc = web.window.location;
-    final host = loc.hostname.isEmpty ? 'localhost' : loc.hostname;
-    final scheme = loc.protocol == 'https:' ? 'wss' : 'ws';
-    return '$scheme://$host:8080/api/realtime/ws';
-  }
+  static String _wsUrl() => apiWsUrl();
 
   web.WebSocket? _socket;
   StreamController<RealtimeEvent>? _events;

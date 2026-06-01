@@ -51,9 +51,7 @@ typedef ImportProgressCallback = void Function({
 });
 
 class ApiService {
-  String get _baseUrl {
-    return 'http://${currentHost()}:8080/api';
-  }
+  String get _baseUrl => apiBaseUrl();
 
   String get baseUrl => _baseUrl;
 

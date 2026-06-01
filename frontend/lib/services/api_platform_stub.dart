@@ -6,4 +6,10 @@ import 'package:http/http.dart' as http;
 
 String currentHost() => 'localhost';
 
+// VM stubs — never used against a real server (tests inject fakes); present
+// only so the seam compiles. Mirror the localhost split-port dev shape.
+String apiBaseUrl() => 'http://localhost:8080/api';
+
+String apiWsUrl() => 'ws://localhost:8080/api/realtime/ws';
+
 http.Client createApiClient() => http.Client();

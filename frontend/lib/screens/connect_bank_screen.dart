@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:plaid_flutter/plaid_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:web/web.dart' as web;
 
+import '../services/api_platform.dart';
 import '../services/plaid_oauth.dart';
 import '../utils/theme_colors.dart';
 import '../l10n/app_localizations.dart';
@@ -26,12 +26,9 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
   }
 
   Future<void> _loadSetupStatus() async {
-    final host = web.window.location.hostname.isEmpty
-        ? 'localhost'
-        : web.window.location.hostname;
     try {
       final response = await http.get(
-        Uri.parse('http://$host:8080/api/setup/status'),
+        Uri.parse('${apiBaseUrl()}/setup/status'),
       );
       if (response.statusCode == 200 && mounted) {
         setState(() => _setupStatus = json.decode(response.body));
@@ -44,14 +41,9 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
   Future<void> _startPlaidLink() async {
     setState(() => _isLoading = true);
 
-    // Dynamically detect host to support VM/Docker test networks correctly
-    final host = web.window.location.hostname.isEmpty
-        ? 'localhost'
-        : web.window.location.hostname;
-
     try {
       final response = await http.post(
-        Uri.parse('http://$host:8080/api/institutions/link-token'),
+        Uri.parse('${apiBaseUrl()}/institutions/link-token'),
         headers: const {'X-Requested-With': 'fetch'},
       );
 
@@ -87,12 +79,8 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
       final String institutionName =
           event.metadata.institution?.name ?? 'Unknown institution';
 
-      final host = web.window.location.hostname.isEmpty
-          ? 'localhost'
-          : web.window.location.hostname;
-
       final response = await http.post(
-        Uri.parse('http://$host:8080/api/institutions/exchange-token'),
+        Uri.parse('${apiBaseUrl()}/institutions/exchange-token'),
         headers: const {
           'Content-Type': 'application/json',
           'X-Requested-With': 'fetch',
