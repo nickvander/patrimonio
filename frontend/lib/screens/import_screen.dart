@@ -157,7 +157,19 @@ class _ImportScreenState extends State<ImportScreen> {
     try {
       final overview = await _apiService.getDashboardOverview();
       setState(() {
-        _accounts = overview['accounts'];
+        final all = overview['accounts'] as List<dynamic>? ?? [];
+        // Sort: MXN accounts first (most common import target for Mexico PDFs),
+        // then by institution name so the dropdown is predictable.
+        all.sort((a, b) {
+          final aCur = (a['currency'] as String? ?? '').toUpperCase();
+          final bCur = (b['currency'] as String? ?? '').toUpperCase();
+          if (aCur == 'MXN' && bCur != 'MXN') return -1;
+          if (bCur == 'MXN' && aCur != 'MXN') return 1;
+          final aName = '${a['institution_name']} ${a['name']}';
+          final bName = '${b['institution_name']} ${b['name']}';
+          return aName.compareTo(bName);
+        });
+        _accounts = all;
         if (_accounts != null && _accounts!.isNotEmpty) {
           _selectedAccountId = _accounts!.first['id'];
         }
@@ -704,11 +716,13 @@ class _ImportScreenState extends State<ImportScreen> {
                         ),
                       ),
                       items: _accounts!.map((acc) {
+                        final cur = (acc['currency'] as String? ?? '').toUpperCase();
+                        final label = cur.isNotEmpty
+                            ? '${acc['institution_name']} - ${acc['name']} ($cur)'
+                            : '${acc['institution_name']} - ${acc['name']}';
                         return DropdownMenuItem<String>(
                           value: acc['id'],
-                          child: Text(
-                            '${acc['institution_name']} - ${acc['name']}',
-                          ),
+                          child: Text(label),
                         );
                       }).toList(),
                       onChanged: (val) =>

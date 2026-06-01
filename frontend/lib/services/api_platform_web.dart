@@ -7,29 +7,22 @@ String currentHost() => web.window.location.hostname.isEmpty
     ? 'localhost'
     : web.window.location.hostname;
 
-/// The API base URL, derived from how the page is served.
+/// The API base URL — always same-origin via the nginx `/api` proxy.
 ///
-/// Behind a TLS proxy / tunnel (the page is on **https**) the API is reached
-/// SAME-ORIGIN at `/api` — nginx proxies it to the backend. That keeps the
-/// app, its XHRs, and the Plaid OAuth redirect on one https origin, which is
-/// what makes OAuth banks work at all (an https page can't call `http://…:8080`
-/// — mixed content — and a tunnel only exposes one origin anyway).
-///
-/// Plain-http localhost dev is left exactly as it was: the split-port
-/// `http://<host>:8080` the app has always used (frontend :3000, API :8080).
-String apiBaseUrl() {
-  final loc = web.window.location;
-  if (loc.protocol == 'https:') return '${loc.origin}/api';
-  return 'http://${currentHost()}:8080/api';
-}
+/// nginx proxies `/api` to the backend regardless of http or https, so the
+/// app never needs to reach port 8080 directly. This means forwarding only
+/// port 3000 is sufficient: plain-http port-forwarding from another machine,
+/// the tunnel, and direct localhost access all work without `:8080` being
+/// reachable. Previously this fell back to `http://host:8080` on plain-http,
+/// which broke when the browser was on a different machine (port 8080 not
+/// forwarded → "failed to fetch").
+String apiBaseUrl() => '${web.window.location.origin}/api';
 
-/// WebSocket URL for the realtime channel, mirroring [apiBaseUrl]: same-origin
-/// `wss://…/api/realtime/ws` under https, split-port `ws://host:8080/…` on
-/// plain-http localhost dev.
+/// WebSocket URL — same-origin, protocol-matched (ws on http, wss on https).
 String apiWsUrl() {
   final loc = web.window.location;
-  if (loc.protocol == 'https:') return 'wss://${loc.host}/api/realtime/ws';
-  return 'ws://${currentHost()}:8080/api/realtime/ws';
+  final scheme = loc.protocol == 'https:' ? 'wss' : 'ws';
+  return '$scheme://${loc.host}/api/realtime/ws';
 }
 
 /// Extra headers every API request should carry, decided by the current host.
