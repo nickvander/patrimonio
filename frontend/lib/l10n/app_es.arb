@@ -405,6 +405,7 @@
   "impLastFileSkipped": "Último: {file} (omitido)",
   "impLargeBatchHint": "Los lotes grandes pueden tardar de 30 a 120 segundos: cada PDF se procesa por separado en el servidor.",
   "impAlreadyImported": "Ya importado",
+  "impCreateAccountForImport": "Nueva cuenta (p. ej. Banamex)",
   "impFileWaiting": "en espera…",
   "impFileParsing": "procesando…",
   "impFileSkipped": "omitido",

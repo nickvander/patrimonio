@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../utils/supported_banks.dart';
 import '../utils/theme_colors.dart';
 import '../utils/currency.dart';
+import '../widgets/add_account_dialog.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/api_service.dart';
 import '../services/file_drop_web.dart';
@@ -29,6 +30,10 @@ class _ImportScreenState extends State<ImportScreen> {
   // dedup signature). Flagged + auto-deselected so the user doesn't
   // re-import them; recomputed whenever the account changes.
   Set<int> _duplicateIndices = {};
+  // source_file → its row indices, computed ONCE when the preview loads.
+  // Avoids re-grouping all rows on every rebuild (the per-file chips read
+  // this), which was a chunk of the lag with 1000+ transactions.
+  Map<String, List<int>> _fileGroups = {};
   List<dynamic>? _accounts;
   String? _selectedAccountId;
   String? _message;
@@ -231,15 +236,20 @@ class _ImportScreenState extends State<ImportScreen> {
   void _initializeSelection() {
     if (_previewTransactions == null) return;
     _selectedIndices = {};
+    final groups = <String, List<int>>{};
     for (int i = 0; i < _previewTransactions!.length; i++) {
-      final desc = (_previewTransactions![i]['description'] ?? '')
-          .toString()
-          .toUpperCase();
+      final tx = _previewTransactions![i];
+      final desc = (tx['description'] ?? '').toString().toUpperCase();
       final shouldDeselect = _autoDeselectPatterns.any((p) => desc.contains(p));
       if (!shouldDeselect) {
         _selectedIndices.add(i);
       }
+      final f = tx['source_file']?.toString();
+      if (f != null && f.isNotEmpty) {
+        groups.putIfAbsent(f, () => []).add(i);
+      }
     }
+    _fileGroups = groups;
   }
 
   /// Backend caps the multipart body at 100 MB (DefaultBodyLimit in
@@ -338,6 +348,44 @@ class _ImportScreenState extends State<ImportScreen> {
         _isUploading = false;
       });
     }
+  }
+
+  /// Create a destination account inline (for statements from a bank that
+  /// isn't linked, e.g. Banamex). Reuses the shared AddAccountDialog,
+  /// pre-set to the imported transactions' currency, then auto-selects the
+  /// new account so the user can import straight into it.
+  Future<void> _openCreateAccount() async {
+    final cur = (_previewTransactions?.isNotEmpty ?? false)
+        ? (_previewTransactions!.first['currency']?.toString().toUpperCase() ??
+            'MXN')
+        : 'MXN';
+    final existingIds =
+        (_accounts ?? const []).map((a) => a['id']).toSet();
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AddAccountDialog(
+        defaultCurrency: cur,
+        onAccountCreated: () => _selectNewlyCreatedAccount(existingIds),
+      ),
+    );
+  }
+
+  /// After an inline account creation, reload accounts and select the one
+  /// that wasn't there before (robust against duplicate names). Fire-and-
+  /// forget so it fits AddAccountDialog's VoidCallback.
+  void _selectNewlyCreatedAccount(Set<dynamic> existingIds) {
+    () async {
+      await _fetchAccounts();
+      if (!mounted) return;
+      final created = (_accounts ?? const []).cast<dynamic>().firstWhere(
+            (a) => !existingIds.contains(a['id']),
+            orElse: () => null,
+          );
+      if (created != null) {
+        setState(() => _selectedAccountId = created['id']?.toString());
+        _recheckDuplicates();
+      }
+    }();
   }
 
   /// Flag (and auto-deselect) preview rows already imported in the chosen
@@ -774,7 +822,19 @@ class _ImportScreenState extends State<ImportScreen> {
                     )
                   else
                     const CircularProgressIndicator(),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 8),
+                  // Statements from a bank you haven't linked (e.g. Banamex)
+                  // have no destination account yet — let the user make one
+                  // inline, pre-set to the statements' currency.
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: _openCreateAccount,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: Text(l.impCreateAccountForImport),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
 
                   // Header row with title and selection controls
                   Row(
@@ -830,13 +890,7 @@ class _ImportScreenState extends State<ImportScreen> {
                   // fast way to drop a mis-parsed file. Only shown when the
                   // batch spans more than one file.
                   Builder(builder: (context) {
-                    final byFile = <String, List<int>>{};
-                    for (var i = 0; i < _previewTransactions!.length; i++) {
-                      final f = _previewTransactions![i]['source_file']
-                          ?.toString();
-                      if (f == null || f.isEmpty) continue;
-                      byFile.putIfAbsent(f, () => []).add(i);
-                    }
+                    final byFile = _fileGroups;
                     if (byFile.length < 2) return const SizedBox.shrink();
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 16),
@@ -870,9 +924,14 @@ class _ImportScreenState extends State<ImportScreen> {
                       ),
                     );
                   }),
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
+                  // Bounded-height, self-scrolling list so only the
+                  // visible rows are built. The old shrinkWrap +
+                  // NeverScrollable list (inside the page scroll view) built
+                  // ALL 1000+ rows on every setState — the main source of
+                  // the lag with a big batch.
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.62,
+                    child: ListView.builder(
                     itemCount: _previewTransactions!.length,
                     itemBuilder: (context, index) {
                       final tx = _previewTransactions![index];
@@ -1017,6 +1076,7 @@ class _ImportScreenState extends State<ImportScreen> {
                         ),
                       );
                     },
+                    ),
                   ),
                   const SizedBox(height: 32),
                   SizedBox(

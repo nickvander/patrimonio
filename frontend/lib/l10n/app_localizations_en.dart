@@ -1488,6 +1488,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get impAlreadyImported => 'Already imported';
 
   @override
+  String get impCreateAccountForImport => 'New account (e.g. Banamex)';
+
+  @override
   String get impFileWaiting => 'waiting…';
 
   @override

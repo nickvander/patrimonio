@@ -6,7 +6,16 @@ import '../services/api_service.dart';
 class AddAccountDialog extends StatefulWidget {
   final VoidCallback onAccountCreated;
 
-  const AddAccountDialog({super.key, required this.onAccountCreated});
+  /// Currency the picker starts on. Defaults to USD; the statement import
+  /// passes the imported transactions' currency (e.g. MXN for Banamex) so
+  /// the new account matches and the confirm currency-guard accepts it.
+  final String defaultCurrency;
+
+  const AddAccountDialog({
+    super.key,
+    required this.onAccountCreated,
+    this.defaultCurrency = 'USD',
+  });
 
   @override
   State<AddAccountDialog> createState() => _AddAccountDialogState();
@@ -18,7 +27,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
   final _balanceController = TextEditingController();
 
   String _type = 'Checking';
-  String _currency = 'USD';
+  late String _currency = widget.defaultCurrency;
   bool _isSubmitting = false;
 
   // Grouped type list. Section labels are rendered as disabled

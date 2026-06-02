@@ -470,6 +470,7 @@
   "impLastFileSkipped": "Last: {file} (skipped)",
   "impLargeBatchHint": "Large batches can take 30-120 seconds — each PDF is parsed individually on the server.",
   "impAlreadyImported": "Already imported",
+  "impCreateAccountForImport": "New account (e.g. Banamex)",
   "impFileWaiting": "waiting…",
   "impFileParsing": "parsing…",
   "impFileSkipped": "skipped",

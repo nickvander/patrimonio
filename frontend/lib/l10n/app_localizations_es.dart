@@ -1508,6 +1508,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get impAlreadyImported => 'Ya importado';
 
   @override
+  String get impCreateAccountForImport => 'Nueva cuenta (p. ej. Banamex)';
+
+  @override
   String get impFileWaiting => 'en espera…';
 
   @override

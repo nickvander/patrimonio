@@ -94,6 +94,69 @@ fn pdftotext_layout(data: &[u8]) -> String {
     }
 }
 
+/// OCR an image-only / scanned PDF: rasterize each page with `pdftoppm`
+/// (300dpi grayscale) and run `tesseract` (Spanish, `--psm 6` +
+/// preserved interword spacing, which keeps the statement's columns
+/// aligned so `banamex_layout` can read it). SLOW — only called as a last
+/// resort when both text extractors come up empty. Returns "" on failure.
+fn ocr_extract(data: &[u8]) -> String {
+    let dir = std::env::temp_dir();
+    let id = uuid::Uuid::new_v4();
+    let pdf_path = dir.join(format!("ocr_{id}.pdf"));
+    if fs::write(&pdf_path, data).is_err() {
+        return String::new();
+    }
+    let prefix = format!("ocr_{id}_pg");
+    let raster = Command::new("pdftoppm")
+        .arg("-r")
+        .arg("300")
+        .arg("-gray")
+        .arg(&pdf_path)
+        .arg(dir.join(&prefix))
+        .output();
+    let _ = fs::remove_file(&pdf_path);
+    if raster.map(|o| !o.status.success()).unwrap_or(true) {
+        return String::new();
+    }
+
+    // Collect the generated page images (prefix-NN.pgm), in page order.
+    let mut pages: Vec<std::path::PathBuf> = fs::read_dir(&dir)
+        .map(|rd| {
+            rd.filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| {
+                    p.file_name()
+                        .and_then(|n| n.to_str())
+                        .map(|n| n.starts_with(&prefix) && n.ends_with(".pgm"))
+                        .unwrap_or(false)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    pages.sort();
+
+    let mut out = String::new();
+    for pg in &pages {
+        if let Ok(o) = Command::new("tesseract")
+            .arg(pg)
+            .arg("-")
+            .arg("-l")
+            .arg("spa")
+            .arg("--psm")
+            .arg("6")
+            .arg("-c")
+            .arg("preserve_interword_spaces=1")
+            .output()
+        {
+            if o.status.success() {
+                out.push_str(&String::from_utf8_lossy(&o.stdout));
+                out.push('\n');
+            }
+        }
+        let _ = fs::remove_file(pg);
+    }
+    out
+}
+
 /// Strip generic prefixes ("MISC DEBIT", "ACH PYMT", "POS ", "COMPRA ",
 /// "RETIRO ", etc.) and trailing date suffixes ("20260418",
 /// "18/04/2026") from a Mexican-bank parsed description when there's
@@ -299,23 +362,39 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
         // message instead of a vague "couldn't identify institution".
         let pdf_text = pdftotext_layout(data);
         let lopdf_text = extract_doc_text(&doc);
-        let full_text: &str = if pdf_text.trim().len() >= lopdf_text.trim().len() {
-            &pdf_text
+        let mut best = if pdf_text.trim().len() >= lopdf_text.trim().len() {
+            pdf_text
         } else {
-            &lopdf_text
+            lopdf_text
         };
-        if let Some(reason) = unreadable_reason(full_text) {
+
+        // A blank browser printout has no statement content at all — OCR
+        // can't recover what was never rendered.
+        if best.to_uppercase().contains("ABOUT:BLANK") {
+            return Err(anyhow!(
+                "This looks like a blank browser printout — the statement text didn't render. \
+                 Open your statement in the bank's app or website and use its \"Download PDF\" \
+                 button instead of printing the page."
+            ));
+        }
+        // Almost no extractable text → an image-only / scanned PDF. OCR it
+        // (rasterize + tesseract; slow, so only as a last resort) before
+        // giving up.
+        let alpha = |s: &str| s.chars().filter(|c| c.is_alphabetic()).count();
+        if alpha(&best) < 100 {
+            info!("PDF '{}' has no text layer — running OCR…", file_name);
+            let ocr = ocr_extract(data);
+            if alpha(&ocr) > alpha(&best) {
+                info!("OCR recovered {} chars for '{}'", ocr.len(), file_name);
+                best = ocr;
+            }
+        }
+        if let Some(reason) = unreadable_reason(&best) {
             info!("PDF '{}' is unreadable: {}", file_name, reason);
             return Err(anyhow!(reason));
         }
-        let sample_text = full_text.to_uppercase();
-        info!(
-            "PDF '{}': {} chars (pdftotext={}, lopdf={})",
-            file_name,
-            full_text.len(),
-            pdf_text.len(),
-            lopdf_text.len()
-        );
+        let sample_text = best.to_uppercase();
+        info!("PDF '{}': {} chars of usable text", file_name, best.len());
 
         // Each rung WINS only if its parser produces rows; otherwise we
         // fall through to the next rung and ultimately the generic parser,
@@ -335,16 +414,13 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
             || sample_text.contains("BANCO NACIONAL DE MEXICO")
             || sample_text.contains("CITIBANAMEX")
             || sample_text.contains("BNM840515VB1");
-        // Banamex (incl. MiCuenta): the column-layout parser over pdftotext
-        // is primary; the legacy lopdf parser is a fallback for the rare
-        // statement pdftotext can't lay out.
+        // Banamex (incl. MiCuenta + OCR'd scans): the column-layout parser
+        // over the extracted/OCR text is primary; legacy lopdf is fallback.
         if looks_banamex {
-            if !pdf_text.is_empty() {
-                try_rows!(
-                    banamex_layout::parse_text(&pdf_text).unwrap_or_default(),
-                    "banamex-layout"
-                );
-            }
+            try_rows!(
+                banamex_layout::parse_text(&best).unwrap_or_default(),
+                "banamex-layout"
+            );
             try_rows!(banamex_pdf::parse(data).unwrap_or_default(), "banamex-lopdf");
         }
 
@@ -369,12 +445,10 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
             || sample_text.contains("MOVIMIENTOS")
             || sample_text.contains("SALDO ANTERIOR")
         {
-            if !pdf_text.is_empty() {
-                try_rows!(
-                    banamex_layout::parse_text(&pdf_text).unwrap_or_default(),
-                    "broad-banamex-layout"
-                );
-            }
+            try_rows!(
+                banamex_layout::parse_text(&best).unwrap_or_default(),
+                "broad-banamex-layout"
+            );
             try_rows!(banamex_pdf::parse(data).unwrap_or_default(), "broad-banamex-lopdf");
         }
 
@@ -382,7 +456,7 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
         // of the richer text. Catches unsupported banks (and known banks
         // the dedicated parser missed). The import preview lets the user
         // vet these before confirming.
-        try_rows!(generic_pdf::parse_text(full_text).unwrap_or_default(), "generic");
+        try_rows!(generic_pdf::parse_text(&best).unwrap_or_default(), "generic");
 
         // There WAS readable text, but nothing parsed as a transaction —
         // most likely an unsupported layout. Ask for a sample rather than

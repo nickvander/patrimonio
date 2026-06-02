@@ -2534,6 +2534,12 @@ abstract class AppLocalizations {
   /// **'Already imported'**
   String get impAlreadyImported;
 
+  /// No description provided for @impCreateAccountForImport.
+  ///
+  /// In en, this message translates to:
+  /// **'New account (e.g. Banamex)'**
+  String get impCreateAccountForImport;
+
   /// No description provided for @impFileWaiting.
   ///
   /// In en, this message translates to:
