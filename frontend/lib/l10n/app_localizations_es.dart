@@ -1511,6 +1511,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get impCreateAccountForImport => 'Nueva cuenta (p. ej. Banamex)';
 
   @override
+  String get impOcrHint =>
+      'Los estados de cuenta escaneados o fotografiados se leen con reconocimiento de texto (OCR), lo que puede tardar hasta un minuto por archivo: es normal, no está atorado.';
+
+  @override
   String get impCleanupTitle => 'Gestionar importaciones';
 
   @override

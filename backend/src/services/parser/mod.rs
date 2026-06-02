@@ -94,12 +94,31 @@ fn pdftotext_layout(data: &[u8]) -> String {
     }
 }
 
-/// OCR an image-only / scanned PDF: rasterize each page with `pdftoppm`
-/// (300dpi grayscale) and run `tesseract` (Spanish, `--psm 6` +
-/// preserved interword spacing, which keeps the statement's columns
-/// aligned so `banamex_layout` can read it). SLOW — only called as a last
-/// resort when both text extractors come up empty. Returns "" on failure.
+/// OCR an image-only / scanned PDF (incl. browser "Print to PDF"
+/// statements whose only text layer is the "about:blank" header — the
+/// real content is in page images). Tries the EXTRACTED page images first
+/// (preserves the scan's native resolution; rasterizing a low-DPI image
+/// loses text), and falls back to rasterizing the page (which handles
+/// vector overlays / multi-image pages). Tesseract runs in Spanish,
+/// `--psm 6` with preserved interword spacing so the columns stay aligned
+/// for `banamex_layout`. SLOW — only a last resort. Returns "" on failure.
 fn ocr_extract(data: &[u8]) -> String {
+    let via_images = ocr_pages(data, true);
+    if via_images.chars().filter(|c| c.is_alphabetic()).count() > 200 {
+        return via_images;
+    }
+    let via_raster = ocr_pages(data, false);
+    if via_raster.len() >= via_images.len() {
+        via_raster
+    } else {
+        via_images
+    }
+}
+
+/// Produce page images (via `pdfimages -png` when `extract`, else
+/// `pdftoppm` rasterization), OCR each in page order, and return the
+/// concatenated text. Cleans up its temp files.
+fn ocr_pages(data: &[u8], extract: bool) -> String {
     let dir = std::env::temp_dir();
     let id = uuid::Uuid::new_v4();
     let pdf_path = dir.join(format!("ocr_{id}.pdf"));
@@ -107,26 +126,35 @@ fn ocr_extract(data: &[u8]) -> String {
         return String::new();
     }
     let prefix = format!("ocr_{id}_pg");
-    let raster = Command::new("pdftoppm")
-        .arg("-r")
-        .arg("300")
-        .arg("-gray")
-        .arg(&pdf_path)
-        .arg(dir.join(&prefix))
-        .output();
+    let out_base = dir.join(&prefix);
+    let (ok, ext) = if extract {
+        let r = Command::new("pdfimages")
+            .arg("-png")
+            .arg(&pdf_path)
+            .arg(&out_base)
+            .output();
+        (r.map(|o| o.status.success()).unwrap_or(false), ".png")
+    } else {
+        let r = Command::new("pdftoppm")
+            .arg("-r")
+            .arg("300")
+            .arg(&pdf_path)
+            .arg(&out_base)
+            .output();
+        (r.map(|o| o.status.success()).unwrap_or(false), ".ppm")
+    };
     let _ = fs::remove_file(&pdf_path);
-    if raster.map(|o| !o.status.success()).unwrap_or(true) {
+    if !ok {
         return String::new();
     }
 
-    // Collect the generated page images (prefix-NN.pgm), in page order.
     let mut pages: Vec<std::path::PathBuf> = fs::read_dir(&dir)
         .map(|rd| {
             rd.filter_map(|e| e.ok().map(|e| e.path()))
                 .filter(|p| {
                     p.file_name()
                         .and_then(|n| n.to_str())
-                        .map(|n| n.starts_with(&prefix) && n.ends_with(".pgm"))
+                        .map(|n| n.starts_with(&prefix) && n.ends_with(ext))
                         .unwrap_or(false)
                 })
                 .collect()
@@ -368,21 +396,16 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
             lopdf_text
         };
 
-        // A blank browser printout has no statement content at all — OCR
-        // can't recover what was never rendered.
-        if best.to_uppercase().contains("ABOUT:BLANK") {
-            return Err(anyhow!(
-                "This looks like a blank browser printout — the statement text didn't render. \
-                 Open your statement in the bank's app or website and use its \"Download PDF\" \
-                 button instead of printing the page."
-            ));
-        }
-        // Almost no extractable text → an image-only / scanned PDF. OCR it
-        // (rasterize + tesseract; slow, so only as a last resort) before
-        // giving up.
+        // Run OCR when the extracted text is either sparse (image-only /
+        // scanned) OR is just a browser "Print to PDF" header. Firefox
+        // print-to-PDF statements render the real content as page images
+        // and leave only "about:blank … N of M" in the text layer — there
+        // are *enough* header letters to clear a simple length check, so we
+        // trigger on the marker too. OCR (slow) only as a last resort.
         let alpha = |s: &str| s.chars().filter(|c| c.is_alphabetic()).count();
-        if alpha(&best) < 100 {
-            info!("PDF '{}' has no text layer — running OCR…", file_name);
+        let is_browser_print = best.to_uppercase().contains("ABOUT:BLANK");
+        if is_browser_print || alpha(&best) < 100 {
+            info!("PDF '{}' looks image-only — running OCR…", file_name);
             let ocr = ocr_extract(data);
             if alpha(&ocr) > alpha(&best) {
                 info!("OCR recovered {} chars for '{}'", ocr.len(), file_name);

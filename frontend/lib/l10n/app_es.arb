@@ -406,6 +406,7 @@
   "impLargeBatchHint": "Los lotes grandes pueden tardar de 30 a 120 segundos: cada PDF se procesa por separado en el servidor.",
   "impAlreadyImported": "Ya importado",
   "impCreateAccountForImport": "Nueva cuenta (p. ej. Banamex)",
+  "impOcrHint": "Los estados de cuenta escaneados o fotografiados se leen con reconocimiento de texto (OCR), lo que puede tardar hasta un minuto por archivo: es normal, no está atorado.",
   "impCleanupTitle": "Gestionar importaciones",
   "impRecentImports": "Importaciones recientes",
   "impNoRecentImports": "Aún no hay importaciones registradas. Las que hagas de ahora en adelante aparecerán aquí y podrás deshacerlas.",

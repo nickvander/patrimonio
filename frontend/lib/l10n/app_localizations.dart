@@ -2540,6 +2540,12 @@ abstract class AppLocalizations {
   /// **'New account (e.g. Banamex)'**
   String get impCreateAccountForImport;
 
+  /// No description provided for @impOcrHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanned or photographed statements are read with text recognition (OCR), which can take up to a minute each — this is normal, not stuck.'**
+  String get impOcrHint;
+
   /// No description provided for @impCleanupTitle.
   ///
   /// In en, this message translates to:

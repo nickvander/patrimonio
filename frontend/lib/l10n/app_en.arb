@@ -471,6 +471,7 @@
   "impLargeBatchHint": "Large batches can take 30-120 seconds — each PDF is parsed individually on the server.",
   "impAlreadyImported": "Already imported",
   "impCreateAccountForImport": "New account (e.g. Banamex)",
+  "impOcrHint": "Scanned or photographed statements are read with text recognition (OCR), which can take up to a minute each — this is normal, not stuck.",
   "impCleanupTitle": "Manage imports",
   "impRecentImports": "Recent imports",
   "impNoRecentImports": "No tracked imports yet. Imports you do from now on appear here and can be undone.",

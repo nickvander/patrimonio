@@ -442,6 +442,29 @@ class _ImportScreenState extends State<ImportScreen> {
               ),
             ),
           ),
+        const SizedBox(height: 12),
+        // Scanned / photographed statements have no text layer, so the
+        // server reads them with OCR — that's the slow step. Call it out so
+        // a file sitting on "parsing…" reads as working, not stuck.
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.document_scanner_outlined,
+                  size: 14, color: context.textFaint),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  l.impOcrHint,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 11.5, color: context.textSubtle, height: 1.3),
+                ),
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 16),
       ],
     );
