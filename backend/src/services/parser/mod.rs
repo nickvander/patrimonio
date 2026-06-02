@@ -4,6 +4,7 @@ pub mod banamex;
 pub mod cetes;
 pub mod cetes_pdf;
 pub mod banamex_pdf;
+pub mod generic_pdf;
 
 #[cfg(test)]
 mod tests;
@@ -162,6 +163,55 @@ fn polish_all(result: Result<Vec<ParsedTransaction>>) -> Result<Vec<ParsedTransa
     })
 }
 
+/// Concatenate the text of every page of a loaded PDF (sorted by page
+/// number). Shared by the detection gate and the generic fallback so we
+/// extract once instead of per-parser.
+fn extract_doc_text(doc: &Document) -> String {
+    let mut out = String::new();
+    let pages = doc.get_pages();
+    let mut keys: Vec<_> = pages.keys().collect();
+    keys.sort();
+    for k in &keys {
+        if let Ok(t) = doc.extract_text(&[**k]) {
+            out.push_str(&t);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// Decide whether a PDF is fundamentally unreadable (no statement text to
+/// parse) and, if so, return a clear, actionable message. Runs BEFORE any
+/// institution parser so a blank printout or a scan gets a specific
+/// explanation instead of a vague "couldn't identify institution".
+fn unreadable_reason(text: &str) -> Option<String> {
+    let upper = text.to_uppercase();
+    // Browser "print to PDF" of a page that never rendered: the only text
+    // is the print header (the URL `about:blank`, page numbers, a
+    // timestamp). Case-insensitive — the previous guard missed mixed-case
+    // text and let these fall through as "0 transactions".
+    if upper.contains("ABOUT:BLANK") {
+        return Some(
+            "This looks like a blank browser printout — the statement text didn't render. \
+             Open your statement in the bank's app or website and use its \"Download PDF\" \
+             button instead of printing the page."
+                .to_string(),
+        );
+    }
+    // Almost no letters across the whole document → an image-only / scanned
+    // PDF with no text layer. (Stage 2 will route these through OCR.)
+    let alpha = text.chars().filter(|c| c.is_alphabetic()).count();
+    if alpha < 40 {
+        return Some(
+            "This PDF has no readable text — it looks scanned or image-based. \
+             Automatic recognition for scanned statements is coming; for now, download \
+             the digital PDF from your bank rather than a scan, photo, or screenshot."
+                .to_string(),
+        );
+    }
+    None
+}
+
 pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<&str>) -> Result<Vec<ParsedTransaction>> {
     let mut data_vec = original_data.to_vec();
     let lower_name = file_name.to_lowercase();
@@ -214,66 +264,72 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
             return Err(anyhow!("PASSWORD_REQUIRED"));
         }
 
-        // Try filename keyword first
+        // Extract the text ONCE, then gate on readability before trying
+        // any parser — a blank browser printout or a scanned/image PDF
+        // gets a specific, actionable message instead of a vague
+        // "couldn't identify institution" / silent "0 transactions".
+        let full_text = extract_doc_text(&doc);
+        if let Some(reason) = unreadable_reason(&full_text) {
+            info!("PDF '{}' is unreadable: {}", file_name, reason);
+            return Err(anyhow!(reason));
+        }
+        let sample_text = full_text.to_uppercase();
+        info!("PDF '{}' has {} chars of text", file_name, sample_text.len());
+
+        // Run the institution detection ladder. Each rung only WINS if its
+        // parser actually produces rows — otherwise we fall through to the
+        // next rung and ultimately to the generic heuristic parser, so a
+        // misdetected (but real) statement still gets a chance.
+        macro_rules! try_parser {
+            ($parser:path, $why:expr) => {{
+                let rows = $parser(data).unwrap_or_default();
+                if !rows.is_empty() {
+                    info!("Parsed {} transactions via {}", rows.len(), $why);
+                    return polish_all(Ok(rows));
+                }
+            }};
+        }
+
+        // Filename keyword first (the user named it).
         if lower_name.contains("nu") {
-            return polish_all(nu_mexico_pdf::parse(data));
-        }
-        if lower_name.contains("cetes") {
-            return polish_all(cetes_pdf::parse(data));
-        }
-        if lower_name.contains("banamex") {
-            return polish_all(banamex_pdf::parse(data));
+            try_parser!(nu_mexico_pdf::parse, "filename=nu");
+        } else if lower_name.contains("cetes") {
+            try_parser!(cetes_pdf::parse, "filename=cetes");
+        } else if lower_name.contains("banamex") {
+            try_parser!(banamex_pdf::parse, "filename=banamex");
         }
 
-        // Fallback: Scan PDF content
-        info!("Ambiguous PDF filename '{}'. Scanning content...", file_name);
-        
-        // Extract text from ALL pages for robust detection
-        let mut sample_text = String::new();
-        let pages = doc.get_pages();
-        let mut page_keys: Vec<_> = pages.keys().collect();
-        page_keys.sort();
-
-        for page_id in &page_keys {
-            if let Ok(text) = doc.extract_text(&[**page_id]) {
-                sample_text.push_str(&text.to_uppercase());
-                sample_text.push(' ');
-            }
-        }
-
-        info!("Scanned {} pages, got {} chars of text", page_keys.len(), sample_text.len());
-        debug!("PDF Sample text (first 1000 chars): {}", sample_text.chars().take(1000).collect::<String>());
-
-        // 1. Banamex (most common)
-        if sample_text.contains("BANAMEX") 
-            || sample_text.contains("BANCO NACIONAL DE MEXICO") 
+        // Content signatures.
+        if sample_text.contains("BANAMEX")
+            || sample_text.contains("BANCO NACIONAL DE MEXICO")
             || sample_text.contains("CITIBANAMEX")
             || sample_text.contains("BNM840515VB1")
         {
-            return polish_all(banamex_pdf::parse(data));
+            try_parser!(banamex_pdf::parse, "content=banamex");
+        }
+        if sample_text.contains("CETESDIRECTO")
+            || (sample_text.contains("NACIONAL FINANCIERA") && sample_text.contains("CETES"))
+        {
+            try_parser!(cetes_pdf::parse, "content=cetes");
+        }
+        if sample_text.contains("NU MEXICO")
+            || sample_text.contains("NUBNK")
+            || sample_text.contains("NU BANK")
+        {
+            try_parser!(nu_mexico_pdf::parse, "content=nu");
         }
 
-        // 2. Cetes
-        if sample_text.contains("CETESDIRECTO") || (sample_text.contains("NACIONAL FINANCIERA") && sample_text.contains("CETES")) {
-            return polish_all(cetes_pdf::parse(data));
-        }
-
-        // 3. Nu Mexico
-        if sample_text.contains("NU MEXICO") || sample_text.contains("NUBNK") || sample_text.contains("NU BANK") {
-            return polish_all(nu_mexico_pdf::parse(data));
-        }
-
-        // 4. Broad Mexican bank indicators → default to Banamex
-        if sample_text.contains("ESTADO DE CUENTA") 
+        // Broad Mexican-bank indicators → the Banamex parser is the most
+        // capable general reader of these layouts.
+        if sample_text.contains("ESTADO DE CUENTA")
             || sample_text.contains("CLABE")
             || sample_text.contains("MOVIMIENTOS")
             || sample_text.contains("SALDO ANTERIOR")
         {
-            info!("Identified as Mexican bank statement via broad indicators, defaulting to Banamex parser");
-            return polish_all(banamex_pdf::parse(data));
+            try_parser!(banamex_pdf::parse, "broad-indicators=banamex");
         }
 
-        // 5. Metadata Fallback
+        // PDF metadata (Title/Producer/Author/Subject) naming the bank.
         if let Ok(info_ref) = doc.trailer.get(b"Info") {
             if let Ok(dict) = info_ref.as_dict() {
                 let mut meta_text = String::new();
@@ -281,35 +337,43 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
                 for key in keys {
                     if let Ok(val) = dict.get(*key) {
                         if let Ok(s) = val.as_str() {
-                            let t = String::from_utf8_lossy(s).to_uppercase();
-                            debug!("PDF Metadata {}: {}", String::from_utf8_lossy(*key), t);
-                            meta_text.push_str(&t);
+                            meta_text.push_str(&String::from_utf8_lossy(s).to_uppercase());
                             meta_text.push(' ');
                         }
                     }
                 }
                 if meta_text.contains("BANAMEX") || meta_text.contains("CITIBANAMEX") {
-                    info!("Identified as Banamex via PDF Metadata");
-                    return polish_all(banamex_pdf::parse(data));
+                    try_parser!(banamex_pdf::parse, "metadata=banamex");
                 }
                 if meta_text.contains("NU") {
-                    info!("Identified as Nu Mexico via PDF Metadata");
-                    return polish_all(nu_mexico_pdf::parse(data));
+                    try_parser!(nu_mexico_pdf::parse, "metadata=nu");
                 }
                 if meta_text.contains("CETES") {
-                    info!("Identified as Cetes via PDF Metadata");
-                    return polish_all(cetes_pdf::parse(data));
+                    try_parser!(cetes_pdf::parse, "metadata=cetes");
                 }
             }
         }
 
-        // 6. If we got this far with a PDF, just try Banamex as last resort
-        // since the user's PDFs are predominantly from Banamex
-        if sample_text.len() > 100 {
-            info!("Unidentified PDF with {} chars of text — trying Banamex parser as fallback", sample_text.len());
-            return polish_all(banamex_pdf::parse(data));
+        // Generic heuristic fallback: pull date/description/amount runs out
+        // of the already-extracted text. Catches unsupported banks (and
+        // known banks the dedicated parser didn't recognise). The import
+        // preview lets the user vet these before confirming.
+        let generic = generic_pdf::parse_text(&full_text).unwrap_or_default();
+        if !generic.is_empty() {
+            info!("Generic parser recovered {} transactions from '{}'", generic.len(), file_name);
+            return polish_all(Ok(generic));
         }
+
+        // There WAS readable text, but nothing parsed as a transaction —
+        // most likely an unsupported layout. Ask for a sample rather than
+        // blaming the file.
+        return Err(anyhow!(
+            "Couldn't find any transactions in '{}'. If this is a real statement, its layout \
+             isn't supported yet — share a sample and we can add it. (Built-in support: Nu, \
+             Banamex, CetesDirecto, plus CSV exports.)",
+            file_name
+        ));
     }
-    
+
     Err(anyhow!("Could not identify institution for file: {}. Please ensure the file is a supported PDF or CSV from Nu, Banamex, or CetesDirecto.", file_name))
 }
