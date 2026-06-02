@@ -910,7 +910,6 @@ class ApiService {
 
     final merged = <dynamic>[];
     var sawSuccess = false;
-    String? lastMessage;
     for (final batch in batches) {
       // Files in the in-flight batch all start at once on the server's
       // blocking pool — show them as 'parsing'; later batches stay
@@ -942,7 +941,6 @@ class ApiService {
       if (resp['status']?.toString() == 'password_required') {
         return resp;
       }
-      lastMessage = resp['message']?.toString();
       final txs = resp['transactions'];
       if (txs is List) {
         merged.addAll(txs);
@@ -960,20 +958,40 @@ class ApiService {
     emit();
 
     final fileCount = usable.length;
+    final plural = fileCount == 1 ? '' : 's';
+    final String message;
+    if (sawSuccess) {
+      message = _t(
+        'Parsed ${merged.length} transactions from $fileCount file$plural.',
+        'Se procesaron ${merged.length} transacciones de $fileCount '
+            'archivo$plural.',
+      );
+    } else {
+      // Nothing parsed. Summarise concisely from the checklist (the
+      // backend's all-failed message is a long per-file dump) and point
+      // at the likely cause.
+      final failed =
+          status.values.where((s) => s.status == 'failed').length;
+      if (failed > 0) {
+        message = _t(
+          'No transactions found. $failed of $fileCount file$plural '
+              "couldn't be read — make sure each is a Nu, Banamex, or "
+              'CetesDirecto statement (PDF or CSV).',
+          'No se encontraron transacciones. No se pudieron leer $failed de '
+              '$fileCount archivo$plural: asegúrate de que cada uno sea un '
+              'estado de cuenta de Nu, Banamex o CetesDirecto (PDF o CSV).',
+        );
+      } else {
+        message = _t(
+          'No transactions found in the selected file$plural.',
+          'No se encontraron transacciones en '
+              '${fileCount == 1 ? 'el archivo seleccionado' : 'los archivos seleccionados'}.',
+        );
+      }
+    }
     return {
       'status': sawSuccess ? 'success' : 'error',
-      // On total failure, surface the server's specific reason (e.g. a
-      // parse error) rather than a bare count. On success the aggregate
-      // count is the right headline; the checklist carries per-file
-      // detail including any skips.
-      'message': (!sawSuccess && lastMessage != null)
-          ? lastMessage
-          : _t(
-              'Parsed ${merged.length} transactions from $fileCount '
-                  'file${fileCount == 1 ? '' : 's'}.',
-              'Se procesaron ${merged.length} transacciones de $fileCount '
-                  'archivo${fileCount == 1 ? '' : 's'}.',
-            ),
+      'message': message,
       'transactions_count': merged.length,
       'transactions': merged,
     };
@@ -1052,18 +1070,36 @@ class ApiService {
       _maybeUnauthorizedStreamed(streamedResponse);
 
       final response = await http.Response.fromStream(streamedResponse);
-      if (response.statusCode == 200) {
-        // Multipart upload bypasses the _post/_patch verb wrappers, so the
-        // central post-mutation invalidation doesn't fire here — clear by
-        // hand. A successful import changes balances, holdings, txns, etc.
-        clearDashboardCache();
-        // Final reconcile: the background poller may have exited before
-        // the terminal snapshot, so fetch it once to ensure every file's
-        // final state reaches the checklist.
-        if (jobId != null && onFiles != null) {
-          await _fetchFinalProgress(jobId, onFiles);
+      // The import endpoint returns an ImportResponse JSON on 200
+      // (success / password_required) AND on 422 (every file failed or
+      // yielded 0 transactions). Treat both as a valid result so an
+      // all-skipped batch surfaces its per-file outcome + message instead
+      // of throwing — only genuine transport/size failures below become
+      // exceptions.
+      if (response.statusCode == 200 || response.statusCode == 422) {
+        Map<String, dynamic>? decoded;
+        try {
+          final body = json.decode(response.body);
+          if (body is Map<String, dynamic> && body.containsKey('status')) {
+            decoded = body;
+          }
+        } catch (_) {
+          // Non-JSON body (e.g. a multipart read error) — fall through to
+          // the size/transport handling below.
         }
-        return json.decode(response.body) as Map<String, dynamic>;
+        if (decoded != null) {
+          // Multipart upload bypasses the _post/_patch verb wrappers, so
+          // the central post-mutation invalidation doesn't fire here —
+          // clear by hand, but only when something was actually imported.
+          if (decoded['status'] == 'success') clearDashboardCache();
+          // Final reconcile: the background poller may have exited before
+          // the terminal snapshot, so fetch it once to ensure every
+          // file's final state reaches the checklist.
+          if (jobId != null && onFiles != null) {
+            await _fetchFinalProgress(jobId, onFiles);
+          }
+          return decoded;
+        }
       }
       // Payload-too-large surfaces as a real 413 OR (more often through
       // the axum multipart stack) as a truncated body that makes parsing
