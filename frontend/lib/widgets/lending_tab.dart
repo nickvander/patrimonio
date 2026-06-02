@@ -496,11 +496,28 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   String _paymentFrequency = 'monthly';
   DateTime _originationDate = DateTime.now();
   bool _submitting = false;
+  // When true, the user enters the payment they can make and we solve
+  // for the term (instead of entering a term and computing the payment).
+  // Only offered for the loan styles where a fixed payment defines a
+  // term — see [_supportsSolve].
+  bool _setByPayment = false;
+  // The per-period payment the borrower can make, for solve-by-payment.
+  final _paymentCtrl = TextEditingController();
+  // Rate period + payment frequency live behind this expander so the
+  // default view isn't a wall of dropdowns.
+  bool _showAdvanced = false;
 
   /// Native-currency symbol for the loan being entered (never the
   /// converted display currency — the preview always speaks the loan's
   /// own money).
   String get _sym => _currency == 'MXN' ? r'MX$' : r'$';
+
+  /// Whether "set the payment, solve for the term" applies to the current
+  /// selection. Only standard (amortized) and no-interest loans amortize
+  /// from a fixed periodic payment; a lump sum has no recurring payment.
+  bool get _supportsSolve =>
+      (_interestType == 'amortized' || _interestType == 'none') &&
+      _paymentFrequency != 'lump_sum';
 
   /// Live, approximate projection of this loan's finances for the preview
   /// card. Mirrors the backend schedule formulas (see lending_summary
@@ -531,6 +548,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     _principalCtrl.dispose();
     _rateCtrl.dispose();
     _termCtrl.dispose();
+    _paymentCtrl.dispose();
     _notesCtrl.dispose();
     super.dispose();
   }
@@ -653,81 +671,27 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                   ),
                 ]),
                 const SizedBox(height: 16),
-                _section('Interest terms', [
-                  DropdownButtonFormField<String>(
-                    initialValue: _interestType,
-                    isExpanded: true,
-                    decoration: _decoration('Interest type'),
-                    items: const [
-                      DropdownMenuItem(
-                          value: 'none', child: Text('No interest')),
-                      DropdownMenuItem(
-                          value: 'simple', child: Text('Simple interest')),
-                      DropdownMenuItem(
-                          value: 'amortized', child: Text('Amortized')),
-                      DropdownMenuItem(
-                          value: 'interest_only',
-                          child: Text('Interest-only')),
-                      DropdownMenuItem(
-                          value: 'compound', child: Text('Compound')),
-                    ],
-                    onChanged: (v) =>
-                        setState(() => _interestType = v ?? 'none'),
-                  ),
+                _section('How the loan works', [
+                  // Plain-language loan styles replace the cryptic
+                  // interest-type dropdown — each says how its plan works.
+                  _loanStyleChooser(),
                   if (_interestType != 'none') ...[
-                    const SizedBox(height: 12),
-                    _twoUp(
-                      narrow,
-                      TextField(
-                        controller: _rateCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        onChanged: (_) => setState(() {}),
-                        decoration: _decoration('Rate %',
-                            hint: 'e.g. 5', icon: Icons.percent),
-                      ),
-                      DropdownButtonFormField<String>(
-                        initialValue: _ratePeriod,
-                        isExpanded: true,
-                        decoration: _decoration('per'),
-                        items: const [
-                          DropdownMenuItem(
-                              value: 'annual', child: Text('year')),
-                          DropdownMenuItem(
-                              value: 'monthly', child: Text('month')),
-                        ],
-                        onChanged: (v) =>
-                            setState(() => _ratePeriod = v ?? 'annual'),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _twoUp(
-                      narrow,
-                      TextField(
-                        controller: _termCtrl,
-                        keyboardType: TextInputType.number,
-                        onChanged: (_) => setState(() {}),
-                        decoration: _decoration('Term (months)',
-                            hint: 'e.g. 12',
-                            icon: Icons.schedule_outlined),
-                      ),
-                      DropdownButtonFormField<String>(
-                        initialValue: _paymentFrequency,
-                        isExpanded: true,
-                        decoration: _decoration('Payments'),
-                        items: const [
-                          DropdownMenuItem(
-                              value: 'monthly', child: Text('Monthly')),
-                          DropdownMenuItem(
-                              value: 'weekly', child: Text('Weekly')),
-                          DropdownMenuItem(
-                              value: 'lump_sum', child: Text('Lump sum')),
-                        ],
-                        onChanged: (v) => setState(
-                            () => _paymentFrequency = v ?? 'monthly'),
-                      ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _rateCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      onChanged: (_) => setState(() {}),
+                      decoration: _decoration('Interest rate',
+                          hint: 'e.g. 5',
+                          icon: Icons.percent,
+                          suffixText:
+                              _ratePeriod == 'monthly' ? '% / month' : '% / year'),
                     ),
                   ],
+                  const SizedBox(height: 14),
+                  _termOrPaymentControls(narrow),
+                  _advancedPanel(narrow),
                 ]),
                 const SizedBox(height: 16),
                 _section('Notes', [
@@ -817,11 +781,12 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
 
   /// Shared filled, rounded input styling for the dialog.
   InputDecoration _decoration(String label,
-      {String? hint, String? prefixText, IconData? icon}) {
+      {String? hint, String? prefixText, String? suffixText, IconData? icon}) {
     return InputDecoration(
       labelText: label,
       hintText: hint,
       prefixText: prefixText,
+      suffixText: suffixText,
       prefixIcon: icon == null ? null : Icon(icon, size: 18),
       isDense: true,
       filled: true,
@@ -841,26 +806,271 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     );
   }
 
+  /// Plain-language loan styles, each explaining how its plan works —
+  /// replaces the cryptic interest-type dropdown.
+  static const List<(String, String, String)> _loanStyles = [
+    ('none', 'No interest', 'They pay back exactly what they borrowed.'),
+    (
+      'amortized',
+      'Standard loan',
+      'Equal payments over time; each covers interest plus a bit of principal.'
+    ),
+    (
+      'simple',
+      'Flat interest',
+      'Interest figured once on the full amount, split evenly across payments.'
+    ),
+    (
+      'interest_only',
+      'Interest-only + balloon',
+      'They pay just interest each period, then the whole amount at the end.'
+    ),
+    (
+      'compound',
+      'Pay all at the end',
+      "Nothing's due until the end; interest builds up until then."
+    ),
+  ];
+
+  Widget _loanStyleChooser() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < _loanStyles.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          _loanStyleTile(
+            value: _loanStyles[i].$1,
+            label: _loanStyles[i].$2,
+            desc: _loanStyles[i].$3,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _loanStyleTile(
+      {required String value, required String label, required String desc}) {
+    final selected = _interestType == value;
+    final accent = context.tealAccent;
+    return InkWell(
+      onTap: () => setState(() {
+        _interestType = value;
+        // Solve-by-payment only applies to standard / no-interest loans.
+        if (!_supportsSolve) _setByPayment = false;
+      }),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: selected ? context.accentSoft(accent) : context.tint(0.02),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? context.accentBorder(accent) : context.hairline,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+                selected
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off,
+                size: 18,
+                color: selected ? accent : context.textFaint),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: context.textPrimary)),
+                  const SizedBox(height: 2),
+                  Text(desc,
+                      style: TextStyle(
+                          fontSize: 11.5,
+                          color: context.textMuted,
+                          height: 1.3)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Either a term field, or — for the styles that amortize from a fixed
+  /// payment — a toggle between entering the term and entering the
+  /// payment (solving for the term).
+  Widget _termOrPaymentControls(bool narrow) {
+    final termField = TextField(
+      controller: _termCtrl,
+      keyboardType: TextInputType.number,
+      onChanged: (_) => setState(() {}),
+      decoration: _decoration('Term (months)',
+          hint: 'e.g. 12', icon: Icons.schedule_outlined),
+    );
+    if (!_supportsSolve) return termField;
+
+    final cadence = _paymentFrequency == 'weekly' ? 'week' : 'month';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(value: false, label: Text('Set the term')),
+            ButtonSegment(value: true, label: Text('Set the payment')),
+          ],
+          selected: {_setByPayment},
+          showSelectedIcon: false,
+          style: ButtonStyle(
+            textStyle: WidgetStatePropertyAll(
+                Theme.of(context).textTheme.bodySmall),
+            visualDensity: VisualDensity.compact,
+          ),
+          onSelectionChanged: (s) => setState(() => _setByPayment = s.first),
+        ),
+        const SizedBox(height: 12),
+        if (_setByPayment)
+          TextField(
+            controller: _paymentCtrl,
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (_) => setState(() {}),
+            decoration: _decoration('Most they can pay',
+                prefixText: '$_sym ',
+                suffixText: '/ $cadence',
+                icon: Icons.payments_outlined),
+          )
+        else
+          termField,
+      ],
+    );
+  }
+
+  /// Rate period + payment frequency, tucked behind an expander so the
+  /// default view isn't a wall of dropdowns. Sensible defaults (per year,
+  /// monthly) mean most users never open it.
+  Widget _advancedPanel(bool narrow) {
+    final fields = <Widget>[
+      if (_interestType != 'none')
+        DropdownButtonFormField<String>(
+          initialValue: _ratePeriod,
+          isExpanded: true,
+          decoration: _decoration('Rate is per'),
+          items: const [
+            DropdownMenuItem(value: 'annual', child: Text('Year')),
+            DropdownMenuItem(value: 'monthly', child: Text('Month')),
+          ],
+          onChanged: (v) => setState(() => _ratePeriod = v ?? 'annual'),
+        ),
+      DropdownButtonFormField<String>(
+        initialValue: _paymentFrequency,
+        isExpanded: true,
+        decoration: _decoration('Payment frequency'),
+        items: const [
+          DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
+          DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
+          DropdownMenuItem(value: 'lump_sum', child: Text('Lump sum')),
+        ],
+        onChanged: (v) => setState(() {
+          _paymentFrequency = v ?? 'monthly';
+          // A lump sum has no recurring payment to solve a term from.
+          if (_paymentFrequency == 'lump_sum') _setByPayment = false;
+        }),
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _showAdvanced = !_showAdvanced),
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Icon(_showAdvanced ? Icons.expand_less : Icons.expand_more,
+                    size: 18, color: context.textMuted),
+                const SizedBox(width: 6),
+                Text('Advanced options',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: context.textMuted)),
+              ],
+            ),
+          ),
+        ),
+        if (_showAdvanced)
+          for (var i = 0; i < fields.length; i++) ...[
+            if (i > 0) const SizedBox(height: 12),
+            fields[i],
+          ],
+      ],
+    );
+  }
+
   /// Always-visible projection so the user sees the finances before
   /// saving — including no-interest loans, where it shows the total to
   /// repay. Native currency only (never the converted display value).
   Widget _buildPreviewCard() {
-    final proj = _projection();
     final accent = context.tealAccent;
+    final rows = (_setByPayment && _supportsSolve)
+        ? _solvePreviewRows(accent)
+        : _termPreviewRows(accent);
 
-    final List<Widget> rows;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.accentSoft(accent),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: context.accentBorder(accent)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.insights_outlined, size: 16, color: accent),
+              const SizedBox(width: 6),
+              Text('Loan preview',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: accent)),
+              const Spacer(),
+              Text('estimate',
+                  style: TextStyle(fontSize: 10, color: context.textSubtle)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ...rows,
+        ],
+      ),
+    );
+  }
+
+  /// The default preview: given the term, what's the payment + totals.
+  List<Widget> _termPreviewRows(Color accent) {
+    final proj = _projection();
     if (proj == null) {
-      rows = [
+      return [
         Text('Enter an amount to see the projection',
             style: TextStyle(fontSize: 13, color: context.textSubtle)),
       ];
-    } else {
-      final cadenceLabel = switch (proj.cadence) {
-        'monthly' => '/mo',
-        'weekly' => '/wk',
-        _ => '',
-      };
-      rows = [
+    }
+    final cadenceLabel = switch (proj.cadence) {
+      'monthly' => '/mo',
+      'weekly' => '/wk',
+      _ => '',
+    };
+    return [
         _previewRow('Total to repay', _fmtMoney(proj.totalRepayment),
             bold: true),
         const SizedBox(height: 6),
@@ -897,38 +1107,51 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
           Text('Open-ended — repay anytime, no fixed schedule',
               style: TextStyle(fontSize: 12, color: context.textSubtle)),
         ],
+    ];
+  }
+
+  /// Solve-for-term preview: given the payment the borrower can make, how
+  /// many payments it takes, roughly how long, and the total cost.
+  List<Widget> _solvePreviewRows(Color accent) {
+    final res = solveTermFromPayment(
+      principal: double.tryParse(_principalCtrl.text.trim()),
+      interestType: _interestType,
+      ratePercent: double.tryParse(_rateCtrl.text.trim()),
+      ratePeriod: _ratePeriod,
+      paymentFrequency: _paymentFrequency,
+      targetPayment: double.tryParse(_paymentCtrl.text.trim()),
+    );
+    final cadence = _paymentFrequency == 'weekly' ? 'wk' : 'mo';
+    if (!res.ok) {
+      return [
+        Text(res.reason ?? 'Enter a payment to see how long it takes',
+            style: TextStyle(fontSize: 13, color: context.textSubtle)),
+        if (res.minimumPayment != null) ...[
+          const SizedBox(height: 6),
+          _previewRow('Minimum payment',
+              '${_fmtMoney(res.minimumPayment!)}/$cadence',
+              color: accent),
+        ],
       ];
     }
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.accentSoft(accent),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: context.accentBorder(accent)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.insights_outlined, size: 16, color: accent),
-              const SizedBox(width: 6),
-              Text('Loan preview',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: accent)),
-              const Spacer(),
-              Text('estimate',
-                  style: TextStyle(fontSize: 10, color: context.textSubtle)),
-            ],
-          ),
-          const SizedBox(height: 10),
-          ...rows,
-        ],
-      ),
-    );
+    final months = res.termMonths!;
+    final years = months / 12.0;
+    final termLabel = months < 12
+        ? '$months ${months == 1 ? 'month' : 'months'}'
+        : '~${years.toStringAsFixed(months % 12 == 0 ? 0 : 1)} yr';
+    return [
+      _previewRow('Paid off in', '${res.periods} payments  ·  $termLabel',
+          bold: true),
+      const SizedBox(height: 6),
+      if (res.totalInterest! > 0.005)
+        _previewRow('Projected interest', _fmtMoney(res.totalInterest!),
+            color: accent)
+      else
+        Text('No interest on this loan',
+            style: TextStyle(fontSize: 12, color: context.textMuted)),
+      const SizedBox(height: 6),
+      _previewRow('Total to repay', _fmtMoney(res.totalRepayment!)),
+    ];
   }
 
   Widget _previewRow(String label, String value,
@@ -978,19 +1201,44 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     try {
       // Rate entered as a percent; backend wants a fraction. The period
       // (year/month) is passed through verbatim so it's stored exactly.
+      final isNone = _interestType == 'none';
       final ratePct = double.tryParse(_rateCtrl.text.trim()) ?? 0;
-      final term = int.tryParse(_termCtrl.text.trim());
-      final interestBearing = _interestType != 'none';
+
+      // Resolve the term: either typed directly, or solved from the
+      // payment the borrower can make. A fixed schedule needs both a term
+      // and a frequency; leaving the term blank makes the loan open-ended.
+      int? term;
+      if (_setByPayment && _supportsSolve) {
+        final res = solveTermFromPayment(
+          principal: principal,
+          interestType: _interestType,
+          ratePercent: isNone ? 0 : ratePct,
+          ratePeriod: _ratePeriod,
+          paymentFrequency: _paymentFrequency,
+          targetPayment: double.tryParse(_paymentCtrl.text.trim()),
+        );
+        if (!res.ok) {
+          setState(() => _submitting = false);
+          _toast(res.reason ?? 'Enter a payment to compute the term');
+          return;
+        }
+        term = res.termMonths;
+      } else {
+        term = int.tryParse(_termCtrl.text.trim());
+      }
+
       await widget.apiService.createLoan(
         borrowerName: borrower,
         principal: principal,
         currency: _currency,
         originationDate: _originationDate,
-        interestRate: interestBearing ? ratePct / 100.0 : 0,
+        interestRate: isNone ? 0 : ratePct / 100.0,
         interestType: _interestType,
         ratePeriod: _ratePeriod,
-        termMonths: interestBearing ? term : null,
-        paymentFrequency: interestBearing ? _paymentFrequency : null,
+        termMonths: term,
+        // A frequency only makes sense alongside a fixed term; without one
+        // the loan is open-ended (repayments recorded ad hoc).
+        paymentFrequency: term != null ? _paymentFrequency : null,
         notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
       );
       if (!mounted) return;
@@ -1745,6 +1993,31 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
         Row(
           children: [
             Expanded(child: _sectionTitle('Payment schedule')),
+            // Hand the borrower their plan: a printable one-pager or a
+            // CSV that opens in Google Sheets / Excel. Available whenever
+            // the loan has a fixed schedule (the backend computes one on
+            // the fly even before "Generate" is clicked).
+            if (hasTerms)
+              PopupMenuButton<String>(
+                tooltip: 'Export payment plan',
+                icon: const Icon(Icons.ios_share, size: 18),
+                onSelected: (which) {
+                  final url = which == 'csv'
+                      ? widget.apiService.loanScheduleCsvUrl(_loanId)
+                      : widget.apiService.loanPaymentPlanUrl(_loanId);
+                  launchUrl(Uri.parse(url), webOnlyWindowName: '_blank');
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: 'plan',
+                    child: Text('Printable plan (PDF)'),
+                  ),
+                  PopupMenuItem(
+                    value: 'csv',
+                    child: Text('Download CSV (Google Sheets / Excel)'),
+                  ),
+                ],
+              ),
             if (hasTerms)
               TextButton.icon(
                 onPressed: _generateSchedule,

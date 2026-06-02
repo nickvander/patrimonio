@@ -1505,6 +1505,25 @@ class AppLocalizationsEs extends AppLocalizations {
       'Los lotes grandes pueden tardar de 30 a 120 segundos: cada PDF se procesa por separado en el servidor.';
 
   @override
+  String get impFileWaiting => 'en espera…';
+
+  @override
+  String get impFileParsing => 'procesando…';
+
+  @override
+  String get impFileSkipped => 'omitido';
+
+  @override
+  String impFileTransactions(Object count) {
+    return '$count transacciones';
+  }
+
+  @override
+  String impFileTooLarge(Object file, Object totalMb) {
+    return '«$file» pesa $totalMb MB, supera el límite de 100 MB para un solo archivo y no se puede dividir. Intenta exportar un periodo más corto del estado de cuenta.';
+  }
+
+  @override
   String get impDropToImport => 'Suelta para importar';
 
   @override

@@ -55,6 +55,10 @@ pub fn router() -> Router<AppState> {
         .route("/{id}/suggestions/repayment", get(suggest_repayment))
         // Printable promissory-note / agreement (HTML → browser PDF).
         .route("/{id}/agreement", get(loan_agreement))
+        // Borrower-facing payment plan: printable HTML and a CSV that
+        // opens directly in Google Sheets / Excel.
+        .route("/{id}/plan", get(loan_payment_plan))
+        .route("/{id}/schedule.csv", get(export_schedule_csv))
 }
 
 // ---------- shapes ----------
@@ -2250,4 +2254,448 @@ enforceable agreement.</p>
         html,
     )
         .into_response()
+}
+
+// ---------- borrower-facing payment plan (CSV + printable) ----------
+
+/// One payment-plan row for the borrower-facing exports, carrying a
+/// running principal balance (what's still owed AFTER this payment) —
+/// the figure a borrower actually wants, which neither the schedule
+/// table nor the legal agreement shows.
+struct PlanRow {
+    installment_number: i32,
+    due_date: Option<chrono::NaiveDate>,
+    amount: rust_decimal::Decimal,
+    principal: rust_decimal::Decimal,
+    interest: rust_decimal::Decimal,
+    balance_remaining: rust_decimal::Decimal,
+    status: String,
+}
+
+/// Attach a running principal balance to a list of per-row principals.
+/// `balance_remaining` after row k = principal − Σ principal[0..=k]; by
+/// the schedule's tail-absorbs-residual invariant it closes to EXACTLY 0
+/// on the final row. Tiny negative drift (defensive) is clamped to 0.
+/// Pure + DB-free so it's unit-testable against `loan_schedule::generate`.
+fn running_balances(
+    principal: rust_decimal::Decimal,
+    principals: &[rust_decimal::Decimal],
+) -> Vec<rust_decimal::Decimal> {
+    use rust_decimal::Decimal;
+    let mut balance = principal;
+    let mut out = Vec::with_capacity(principals.len());
+    for p in principals {
+        balance -= *p;
+        if balance < Decimal::ZERO {
+            balance = Decimal::ZERO;
+        }
+        out.push(balance);
+    }
+    out
+}
+
+/// Build the borrower-facing plan rows for a loan. Prefers the persisted
+/// scheduled installments (so paid/scheduled status is real), and falls
+/// back to an ephemeral schedule computed exactly as `generate_schedule`
+/// would — so the export works even before the user clicks "Generate".
+/// Err mirrors `loan_schedule::generate`'s open-ended / bad-frequency
+/// guards.
+async fn build_plan_rows(
+    db: &sqlx::PgPool,
+    loan_id: uuid::Uuid,
+    principal: rust_decimal::Decimal,
+    rate: rust_decimal::Decimal,
+    rate_period: &str,
+    interest_type: &str,
+    origination: chrono::NaiveDate,
+    term_months: Option<i32>,
+    payment_frequency: Option<&str>,
+) -> Result<Vec<PlanRow>, crate::services::loan_schedule::ScheduleError> {
+    use rust_decimal::Decimal;
+
+    let persisted = sqlx::query(
+        "SELECT installment_number, due_date, scheduled_amount, scheduled_principal, \
+                scheduled_interest, status \
+         FROM loan_payments \
+         WHERE loan_id = $1 AND (scheduled_principal > 0 OR scheduled_interest > 0) \
+         ORDER BY installment_number ASC",
+    )
+    .bind(loan_id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+
+    // Normalise persisted rows and ephemeral rows to a common tuple shape:
+    // (installment, due_date, amount, principal, interest, status).
+    type Raw = (
+        i32,
+        Option<chrono::NaiveDate>,
+        Decimal,
+        Decimal,
+        Decimal,
+        String,
+    );
+    let raw: Vec<Raw> = if !persisted.is_empty() {
+        persisted
+            .iter()
+            .map(|p| {
+                (
+                    p.try_get("installment_number").unwrap_or(0),
+                    p.try_get::<Option<chrono::NaiveDate>, _>("due_date")
+                        .ok()
+                        .flatten(),
+                    p.try_get("scheduled_amount").unwrap_or_default(),
+                    p.try_get("scheduled_principal").unwrap_or_default(),
+                    p.try_get("scheduled_interest").unwrap_or_default(),
+                    p.try_get("status").unwrap_or_else(|_| "scheduled".to_string()),
+                )
+            })
+            .collect()
+    } else {
+        let rows = crate::services::loan_schedule::generate(
+            principal,
+            rate,
+            rate_period,
+            interest_type,
+            origination,
+            term_months,
+            payment_frequency,
+        )?;
+        rows.into_iter()
+            .map(|r| {
+                (
+                    r.installment_number,
+                    Some(r.due_date),
+                    r.amount,
+                    r.principal,
+                    r.interest,
+                    "scheduled".to_string(),
+                )
+            })
+            .collect()
+    };
+
+    let principals: Vec<Decimal> = raw.iter().map(|t| t.3).collect();
+    let balances = running_balances(principal, &principals);
+    Ok(raw
+        .into_iter()
+        .zip(balances)
+        .map(|((n, due, amount, prin, int, status), bal)| PlanRow {
+            installment_number: n,
+            due_date: due,
+            amount,
+            principal: prin,
+            interest: int,
+            balance_remaining: bal,
+            status,
+        })
+        .collect())
+}
+
+/// Load the loan fields the plan exports need, then build the plan rows.
+/// Returns (borrower, currency, principal, rows) or an HTTP-ready error
+/// response (404 unknown loan, 422 open-ended / bad frequency).
+async fn loan_plan_context(
+    db: &sqlx::PgPool,
+    loan_id: uuid::Uuid,
+    user_id: uuid::Uuid,
+) -> Result<(sqlx::postgres::PgRow, Vec<PlanRow>), Response> {
+    let sql =
+        format!("SELECT l.*, {LOAN_AGGREGATES} FROM loans l WHERE l.id = $1 AND l.user_id = $2");
+    let row = sqlx::query(&sql)
+        .bind(loan_id)
+        .bind(user_id)
+        .fetch_optional(db)
+        .await;
+    let r = match row {
+        Ok(Some(r)) => r,
+        Ok(None) => return Err(StatusCode::NOT_FOUND.into_response()),
+        Err(e) => {
+            error!("loan_plan_context load failed: {e}");
+            return Err(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+        }
+    };
+
+    let principal: rust_decimal::Decimal = r.try_get("principal").unwrap_or_default();
+    let rate: rust_decimal::Decimal = r.try_get("interest_rate").unwrap_or_default();
+    let interest_type: String = r.try_get("interest_type").unwrap_or_else(|_| "none".into());
+    let rate_period: String = r.try_get("rate_period").unwrap_or_else(|_| "annual".into());
+    let origination: chrono::NaiveDate = match r.try_get("origination_date") {
+        Ok(d) => d,
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR.into_response()),
+    };
+    let term_months: Option<i32> = r.try_get("term_months").ok().flatten();
+    let payment_frequency: Option<String> = r.try_get("payment_frequency").ok().flatten();
+
+    let rows = match build_plan_rows(
+        db,
+        loan_id,
+        principal,
+        rate,
+        &rate_period,
+        &interest_type,
+        origination,
+        term_months,
+        payment_frequency.as_deref(),
+    )
+    .await
+    {
+        Ok(rows) => rows,
+        Err(_) => {
+            return Err((
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "loan has no term / payment frequency — there's no fixed plan to export",
+            )
+                .into_response())
+        }
+    };
+    Ok((r, rows))
+}
+
+/// CSV of the borrower's payment plan — installments with their
+/// principal/interest split AND the running balance remaining. Opens
+/// straight into Google Sheets / Excel. Filename carries the borrower.
+async fn export_schedule_csv(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path(id): Path<uuid::Uuid>,
+) -> Response {
+    let (r, rows) = match loan_plan_context(&state.db, id, ctx.user_id).await {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let borrower: String = r.try_get("borrower_name").unwrap_or_default();
+
+    fn esc(s: &str) -> String {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    }
+    let mut csv = String::from(
+        "installment,due_date,amount,principal,interest,balance_remaining,status\n",
+    );
+    for p in &rows {
+        let due = p.due_date.map(|d| d.to_string()).unwrap_or_default();
+        csv.push_str(&format!(
+            "{},{},{:.2},{:.2},{:.2},{:.2},{}\n",
+            p.installment_number,
+            due,
+            dec_to_f64(Some(p.amount)),
+            dec_to_f64(Some(p.principal)),
+            dec_to_f64(Some(p.interest)),
+            dec_to_f64(Some(p.balance_remaining)),
+            esc(&p.status),
+        ));
+    }
+
+    // Sanitise the borrower for a Content-Disposition filename.
+    let slug: String = borrower
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string();
+    let slug = if slug.is_empty() { "loan".to_string() } else { slug };
+    let filename = format!("patrimonio-payment-plan-{slug}.csv");
+
+    (
+        [
+            (header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{filename}\""),
+            ),
+        ],
+        csv,
+    )
+        .into_response()
+}
+
+/// Printable, borrower-facing payment plan as a self-contained HTML
+/// document (opened in a browser tab; the borrower prints / saves to
+/// PDF). Friendlier than the legal agreement: a plain-language intro and
+/// a schedule table that shows the BALANCE REMAINING after each payment.
+async fn loan_payment_plan(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path(id): Path<uuid::Uuid>,
+) -> Response {
+    let (r, rows) = match loan_plan_context(&state.db, id, ctx.user_id).await {
+        Ok(v) => v,
+        Err(resp) => return resp,
+    };
+    let today = chrono::Utc::now().date_naive();
+    let v = loan_view(&r, today);
+
+    let lender: String = sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
+        .bind(ctx.user_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "your lender".to_string());
+
+    fn esc_html(s: &str) -> String {
+        s.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+    }
+    let sym = if v.currency == "MXN" { "MX$" } else { "$" };
+    let money = |x: f64| format!("{sym}{x:.2}");
+
+    // Plain-language interest description (mirrors loan_agreement's).
+    let per = if v.rate_period == "monthly" { "month" } else { "year" };
+    let interest_desc = match v.interest_type.as_str() {
+        "none" => "no interest — you pay back exactly what you borrowed".to_string(),
+        "simple" => format!(
+            "simple interest at {:.3}% per {per}, figured once and split evenly",
+            v.interest_rate * 100.0
+        ),
+        "amortized" => format!(
+            "{:.3}% per {per}; each payment covers the interest plus a little principal",
+            v.interest_rate * 100.0
+        ),
+        "interest_only" => format!(
+            "interest-only at {:.3}% per {per}; the full amount is due with the final payment",
+            v.interest_rate * 100.0
+        ),
+        "compound" => format!(
+            "compound interest at {:.3}% per {per}; nothing is due until the end",
+            v.interest_rate * 100.0
+        ),
+        _ => format!("{:.3}% per {per}", v.interest_rate * 100.0),
+    };
+
+    // Schedule table with the balance-remaining column + a paid marker,
+    // plus a totals footer.
+    let mut total_amount = 0.0;
+    let mut total_principal = 0.0;
+    let mut total_interest = 0.0;
+    let mut body = String::new();
+    for p in &rows {
+        let due = p.due_date.map(|d| d.to_string()).unwrap_or_default();
+        let amt = dec_to_f64(Some(p.amount));
+        let prin = dec_to_f64(Some(p.principal));
+        let int = dec_to_f64(Some(p.interest));
+        let bal = dec_to_f64(Some(p.balance_remaining));
+        total_amount += amt;
+        total_principal += prin;
+        total_interest += int;
+        let mark = if p.status == "paid" { "✓ paid" } else { "" };
+        body.push_str(&format!(
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td class=\"paid\">{}</td></tr>",
+            p.installment_number,
+            due,
+            money(amt),
+            money(prin),
+            money(int),
+            money(bal),
+            mark,
+        ));
+    }
+    let schedule_html = format!(
+        "<table><thead><tr><th>#</th><th>Due</th><th>Payment</th><th>Principal</th>\
+         <th>Interest</th><th>Balance left</th><th></th></tr></thead><tbody>{body}\
+         <tr class=\"totals\"><td></td><td>Total</td><td>{}</td><td>{}</td><td>{}</td>\
+         <td></td><td></td></tr></tbody></table>",
+        money(total_amount),
+        money(total_principal),
+        money(total_interest),
+    );
+
+    let term_line = match (v.term_months, v.payment_frequency.as_deref()) {
+        (Some(t), Some(f)) => format!("{t} months · {f} payments"),
+        _ => "open-ended (no fixed schedule)".to_string(),
+    };
+
+    let html = format!(
+        r#"<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<title>Payment plan — {borrower}</title>
+<style>
+  body {{ font-family: -apple-system, system-ui, 'Segoe UI', Roboto, sans-serif; max-width: 760px; margin: 40px auto; color: #1a1a1a; line-height: 1.6; padding: 0 20px; }}
+  h1 {{ font-size: 22px; margin-bottom: 4px; }}
+  .sub {{ color: #555; margin-top: 0; }}
+  .intro {{ background: #f4f8f6; border: 1px solid #d9e6e0; border-radius: 10px; padding: 14px 16px; margin: 20px 0; }}
+  .intro strong {{ font-weight: 700; }}
+  table {{ width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }}
+  th, td {{ border-bottom: 1px solid #e3e3e3; padding: 6px 8px; text-align: right; }}
+  th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) {{ text-align: left; }}
+  thead th {{ border-bottom: 2px solid #1a1a1a; }}
+  .totals td {{ border-top: 2px solid #1a1a1a; font-weight: 700; }}
+  td.paid {{ color: #2e7d5b; font-weight: 600; text-align: left; }}
+  .note {{ margin-top: 28px; font-size: 11px; color: #777; }}
+  @media print {{ body {{ margin: 0; }} button {{ display: none; }} }}
+</style></head><body>
+<button onclick="window.print()" style="float:right;padding:6px 12px;">Print / Save as PDF</button>
+<h1>Payment plan</h1>
+<p class="sub">for {borrower}, from {lender}</p>
+<div class="intro">
+  You borrowed <strong>{principal} {currency}</strong> on <strong>{origination}</strong>.
+  Terms: {interest_desc}. Schedule: {term_line}.
+  Below is each payment, what it covers, and how much is left to pay afterward.
+</div>
+{schedule_html}
+<p class="note">Generated by Patrimonio as a record-keeping convenience — not legal advice.
+Figures are computed from the loan's terms; minor rounding lands on the final payment.</p>
+</body></html>"#,
+        borrower = esc_html(&v.borrower_name),
+        lender = esc_html(&lender),
+        principal = format!("{:.2}", v.principal),
+        currency = esc_html(&v.currency),
+        origination = v.origination_date,
+        interest_desc = esc_html(&interest_desc),
+        term_line = esc_html(&term_line),
+        schedule_html = schedule_html,
+    );
+
+    (
+        [(header::CONTENT_TYPE, "text/html; charset=utf-8".to_string())],
+        html,
+    )
+        .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rust_decimal::Decimal;
+    use std::str::FromStr;
+
+    fn d(s: &str) -> Decimal {
+        Decimal::from_str(s).unwrap()
+    }
+
+    /// The running balance must close to EXACTLY zero on the final row of
+    /// every schedule type, and produce one balance per installment.
+    #[test]
+    fn running_balance_closes_to_zero() {
+        let orig = chrono::NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        let cases = [
+            ("amortized", d("2000"), d("0.05"), 24, "monthly"),
+            ("none", d("1000"), Decimal::ZERO, 3, "monthly"),
+            ("simple", d("1200"), d("0.06"), 12, "monthly"),
+            ("interest_only", d("10000"), d("0.12"), 6, "monthly"),
+            ("compound", d("1000"), d("0.10"), 24, "monthly"),
+        ];
+        for (itype, principal, rate, term, freq) in cases {
+            let sched = crate::services::loan_schedule::generate(
+                principal, rate, "annual", itype, orig, Some(term), Some(freq),
+            )
+            .unwrap();
+            let principals: Vec<Decimal> = sched.iter().map(|r| r.principal).collect();
+            let balances = running_balances(principal, &principals);
+            assert_eq!(
+                balances.len(),
+                sched.len(),
+                "{itype}: one balance per installment"
+            );
+            assert_eq!(
+                *balances.last().unwrap(),
+                Decimal::ZERO,
+                "{itype}: final balance must be exactly 0"
+            );
+            // Balance is monotonically non-increasing.
+            for w in balances.windows(2) {
+                assert!(w[1] <= w[0], "{itype}: balance should never grow");
+            }
+        }
+    }
 }

@@ -1485,6 +1485,25 @@ class AppLocalizationsEn extends AppLocalizations {
       'Large batches can take 30-120 seconds — each PDF is parsed individually on the server.';
 
   @override
+  String get impFileWaiting => 'waiting…';
+
+  @override
+  String get impFileParsing => 'parsing…';
+
+  @override
+  String get impFileSkipped => 'skipped';
+
+  @override
+  String impFileTransactions(Object count) {
+    return '$count transactions';
+  }
+
+  @override
+  String impFileTooLarge(Object file, Object totalMb) {
+    return '\"$file\" is $totalMb MB, over the 100 MB limit for a single file — it can\'t be split. Try exporting a shorter statement period.';
+  }
+
+  @override
   String get impDropToImport => 'Drop to import';
 
   @override

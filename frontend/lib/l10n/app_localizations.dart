@@ -2528,6 +2528,36 @@ abstract class AppLocalizations {
   /// **'Large batches can take 30-120 seconds — each PDF is parsed individually on the server.'**
   String get impLargeBatchHint;
 
+  /// No description provided for @impFileWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'waiting…'**
+  String get impFileWaiting;
+
+  /// No description provided for @impFileParsing.
+  ///
+  /// In en, this message translates to:
+  /// **'parsing…'**
+  String get impFileParsing;
+
+  /// No description provided for @impFileSkipped.
+  ///
+  /// In en, this message translates to:
+  /// **'skipped'**
+  String get impFileSkipped;
+
+  /// No description provided for @impFileTransactions.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} transactions'**
+  String impFileTransactions(Object count);
+
+  /// No description provided for @impFileTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'\"{file}\" is {totalMb} MB, over the 100 MB limit for a single file — it can\'t be split. Try exporting a shorter statement period.'**
+  String impFileTooLarge(Object file, Object totalMb);
+
   /// No description provided for @impDropToImport.
   ///
   /// In en, this message translates to:

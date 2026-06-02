@@ -53,15 +53,12 @@ class _ImportScreenState extends State<ImportScreen> {
   /// until the OS dialog returns).
   int? _readingFileCount;
 
-  /// Per-file upload-parse progress fed by the backend's NDJSON
-  /// stream. `_uploadDone` is the count of files the server has
-  /// finished (success OR failure); `_uploadLastFile` is the most
-  /// recently completed file name. Rendered under the spinner so
-  /// a long batch (12+ PDFs) shows live progress instead of a
-  /// blank "Processing N files…" wait.
-  int _uploadDone = 0;
-  String? _uploadLastFile;
-  bool _uploadLastFileOk = true;
+  /// Per-file upload-parse progress fed by the backend's progress
+  /// side-channel — one [ImportFileStatus] per selected file
+  /// (waiting → parsing → ok/failed), rendered as a live checklist so a
+  /// long batch (12+ PDFs) shows each file resolve with its transaction
+  /// count instead of a blank "Processing N files…" wait.
+  List<ImportFileStatus> _fileStatuses = [];
 
   /// Web-only drag-and-drop listener. Null on non-web targets — the
   /// import screen is reachable from the dashboard which itself only
@@ -241,58 +238,39 @@ class _ImportScreenState extends State<ImportScreen> {
   }
 
   /// Backend caps the multipart body at 100 MB (DefaultBodyLimit in
-  /// api/imports.rs). Preflight against that here so a too-large batch
-  /// fails instantly with a clear message instead of streaming the
-  /// whole payload up to a 413. Headroom left for multipart framing.
+  /// api/imports.rs). Rather than rejecting a big drop, we auto-split it
+  /// into batches that each stay under [_perBatchBytes] (headroom under
+  /// the cap for multipart framing) and upload them in sequence. A
+  /// single file larger than the hard cap can't be split, so that one
+  /// case still surfaces a clear error.
   static const int _maxUploadBytes = 100 * 1024 * 1024;
-  static const int _uploadWarnBytes = 90 * 1024 * 1024;
+  static const int _perBatchBytes = 80 * 1024 * 1024;
 
   Future<void> _uploadFile() async {
     if (_selectedFiles.isEmpty) return;
 
-    // Preflight: total payload size. PlatformFile.size is the byte
-    // length read by the picker/drop reader.
-    final totalBytes =
-        _selectedFiles.fold<int>(0, (sum, f) => sum + f.size);
     final l = AppLocalizations.of(context);
-    if (totalBytes > _maxUploadBytes) {
-      final totalMb = (totalBytes / (1024 * 1024)).toStringAsFixed(1);
+    // The only unrecoverable case: a single file over the hard cap (it
+    // can't be batched). Individual statements are ~3-5 MB, so this is
+    // rare — but give a precise message instead of a silent 413.
+    final tooBig =
+        _selectedFiles.where((f) => f.size > _maxUploadBytes).toList();
+    if (tooBig.isNotEmpty) {
+      final f = tooBig.first;
+      final mb = (f.size / (1024 * 1024)).toStringAsFixed(1);
       setState(() {
-        _message = l.impUploadTooLarge(_selectedFiles.length, totalMb);
-        _messageIsError = false;
+        _message = l.impFileTooLarge(f.name, mb);
+        _messageIsError = true;
       });
       return;
-    }
-    if (totalBytes > _uploadWarnBytes && mounted) {
-      final totalMb = (totalBytes / (1024 * 1024)).toStringAsFixed(1);
-      final proceed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text(l.impLargeUploadTitle),
-          content: Text(
-            l.impLargeUploadBody(totalMb),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text(l.actionCancel),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: Text(l.impImportAnyway),
-            ),
-          ],
-        ),
-      );
-      if (proceed != true) return;
     }
 
     setState(() {
       _isUploading = true;
       _message = null;
-      _uploadDone = 0;
-      _uploadLastFile = null;
-      _uploadLastFileOk = true;
+      _fileStatuses = [
+        for (final f in _selectedFiles) ImportFileStatus(f.name, 'waiting'),
+      ];
     });
 
     try {
@@ -301,20 +279,14 @@ class _ImportScreenState extends State<ImportScreen> {
         password: _passwordController.text.trim().isEmpty
             ? null
             : _passwordController.text.trim(),
+        maxBatchBytes: _perBatchBytes,
         onProgress: ({
+          required List<ImportFileStatus> files,
           required int done,
           required int total,
-          String? lastFile,
-          bool? lastFileOk,
         }) {
           if (!mounted) return;
-          setState(() {
-            _uploadDone = done;
-            if (lastFile != null) {
-              _uploadLastFile = lastFile;
-              _uploadLastFileOk = lastFileOk ?? true;
-            }
-          });
+          setState(() => _fileStatuses = files);
         },
       );
 
@@ -358,6 +330,96 @@ class _ImportScreenState extends State<ImportScreen> {
         _isUploading = false;
       });
     }
+  }
+
+  /// Live multi-PDF progress: a header count plus a checklist with one
+  /// row per file (waiting → parsing → ✓ count / skipped).
+  Widget _buildUploadProgress(AppLocalizations l) {
+    final total =
+        _fileStatuses.isEmpty ? _selectedFiles.length : _fileStatuses.length;
+    final done = _fileStatuses.where((s) => s.isDone).length;
+    return Column(
+      children: [
+        Text(
+          total == 1
+              ? l.impProcessingOneFile
+              : (done > 0
+                  ? l.impProcessingProgress(done, total)
+                  : l.impProcessingNFiles(total)),
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: context.info,
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (_fileStatuses.isNotEmpty)
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 220, maxWidth: 440),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final s in _fileStatuses) _buildFileRow(l, s),
+                ],
+              ),
+            ),
+          ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  Widget _buildFileRow(AppLocalizations l, ImportFileStatus s) {
+    final Widget leading;
+    final String trailing;
+    final Color trailingColor;
+    switch (s.status) {
+      case 'ok':
+        leading = Icon(Icons.check_circle, size: 16, color: context.positive);
+        trailing = l.impFileTransactions(s.count);
+        trailingColor = context.textSubtle;
+        break;
+      case 'failed':
+        leading = Icon(Icons.error_outline, size: 16, color: context.warning);
+        trailing = l.impFileSkipped;
+        trailingColor = context.warning;
+        break;
+      case 'parsing':
+        leading = const SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        );
+        trailing = l.impFileParsing;
+        trailingColor = context.textSubtle;
+        break;
+      default: // waiting
+        leading =
+            Icon(Icons.schedule_outlined, size: 16, color: context.textFaint);
+        trailing = l.impFileWaiting;
+        trailingColor = context.textFaint;
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+      child: Row(
+        children: [
+          SizedBox(width: 18, child: Center(child: leading)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              s.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 13, color: context.textPrimary),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(trailing,
+              style: TextStyle(fontSize: 12, color: trailingColor)),
+        ],
+      ),
+    );
   }
 
   Future<void> _confirmImport() async {
@@ -535,55 +597,7 @@ class _ImportScreenState extends State<ImportScreen> {
                           ],
                         )
                       else if (_isUploading)
-                        Column(
-                          children: [
-                            Text(
-                              _selectedFiles.length == 1
-                                  ? l.impProcessingOneFile
-                                  : _uploadDone > 0
-                                      ? l.impProcessingProgress(
-                                          _uploadDone, _selectedFiles.length)
-                                      : l.impProcessingNFiles(
-                                          _selectedFiles.length),
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: context.info,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            // Live per-file caption fed by the
-                            // backend's NDJSON stream. Falls back to
-                            // the original generic hint until the
-                            // first file completes (a few seconds
-                            // into the parse phase).
-                            if (_uploadLastFile != null)
-                              Text(
-                                _uploadLastFileOk
-                                    ? l.impLastFile(_uploadLastFile!)
-                                    : l.impLastFileSkipped(_uploadLastFile!),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: _uploadLastFileOk
-                                      ? context.textSubtle
-                                      : context.warning,
-                                ),
-                                textAlign: TextAlign.center,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              )
-                            else
-                              Text(
-                                l.impLargeBatchHint,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: context.textSubtle,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            const SizedBox(height: 16),
-                          ],
-                        ),
+                        _buildUploadProgress(l),
                       // Drag / idle helper text — hidden while
                       // uploading OR reading so the status block
                       // above owns the user's attention.
@@ -957,41 +971,47 @@ class _ImportScreenState extends State<ImportScreen> {
               ),
             if (_message != null && _previewTransactions == null) ...[
               const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: _messageIsError
-                      ? Colors.red.withValues(alpha: 0.1)
-                      : (_requiresPassword
-                            ? Colors.amber.withValues(alpha: 0.1)
-                            : Colors.green.withValues(alpha: 0.1)),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    if (_requiresPassword)
-                      const Padding(
-                        padding: EdgeInsets.only(right: 12),
-                        child: Icon(
-                          Icons.warning_amber_rounded,
-                          color: Colors.amberAccent,
+              Builder(builder: (context) {
+                // Theme-tuned semantic colors instead of raw *Accent shades,
+                // which washed out against the tinted background (the
+                // "hard to read" message). Error/warning/success each get a
+                // matching icon + a high-contrast text color.
+                final Color tone = _messageIsError
+                    ? context.negative
+                    : (_requiresPassword ? context.warning : context.positive);
+                final IconData icon = _messageIsError
+                    ? Icons.error_outline
+                    : (_requiresPassword
+                        ? Icons.lock_outline
+                        : Icons.check_circle_outline);
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: tone.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: tone.withValues(alpha: 0.35)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: Icon(icon, color: tone, size: 20),
+                      ),
+                      Flexible(
+                        child: Text(
+                          _message!,
+                          style: TextStyle(
+                            color: tone,
+                            fontWeight: FontWeight.w600,
+                            height: 1.35,
+                          ),
                         ),
                       ),
-                    Flexible(
-                      child: Text(
-                        _message!,
-                        style: TextStyle(
-                          color: _messageIsError
-                              ? Colors.redAccent
-                              : (_requiresPassword
-                                    ? Colors.amberAccent
-                                    : Colors.greenAccent),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                    ],
+                  ),
+                );
+              }),
             ],
           ],
         ),

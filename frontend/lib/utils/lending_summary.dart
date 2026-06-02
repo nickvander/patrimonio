@@ -118,6 +118,165 @@ class LoanProjection {
   });
 }
 
+/// The outcome of solving for a loan's term from a target payment —
+/// either a viable plan or a reason it can't be done.
+///
+/// This is the inverse of [projectLoan]: instead of "given a term, what's
+/// the payment?", it answers "given the most they can pay, how long does
+/// it take and what does it cost?". Only meaningful for the loan styles
+/// where a fixed periodic payment chips away at the balance — amortized
+/// and no-interest. (Interest-only and compound never amortize from a
+/// periodic payment; simple interest is term-dependent and circular.)
+class SolveTermResult {
+  /// Whether a viable term was found. When false, [reason] explains why
+  /// and [minimumPayment] (when set) is the smallest payment that would
+  /// make progress.
+  final bool ok;
+
+  /// Number of scheduled payments to clear the loan (when [ok]).
+  final int? periods;
+
+  /// Equivalent term in whole months, derived from [periods] and the
+  /// payment cadence — what gets submitted as `term_months` (when [ok]).
+  final int? termMonths;
+
+  /// Total interest paid over the solved term (when [ok]).
+  final double? totalInterest;
+
+  /// principal + [totalInterest] (when [ok]).
+  final double? totalRepayment;
+
+  /// Human-readable reason the solve failed (when ![ok]).
+  final String? reason;
+
+  /// The smallest viable payment, surfaced on failure so the UI can say
+  /// "needs at least $X". Set only when the failure is "payment too low".
+  final double? minimumPayment;
+
+  const SolveTermResult._({
+    required this.ok,
+    this.periods,
+    this.termMonths,
+    this.totalInterest,
+    this.totalRepayment,
+    this.reason,
+    this.minimumPayment,
+  });
+
+  factory SolveTermResult.success({
+    required int periods,
+    required int termMonths,
+    required double totalInterest,
+    required double totalRepayment,
+  }) =>
+      SolveTermResult._(
+        ok: true,
+        periods: periods,
+        termMonths: termMonths,
+        totalInterest: totalInterest,
+        totalRepayment: totalRepayment,
+      );
+
+  factory SolveTermResult.failure(String reason, {double? minimumPayment}) =>
+      SolveTermResult._(ok: false, reason: reason, minimumPayment: minimumPayment);
+}
+
+/// Solve for how many payments (and the equivalent term) it takes to
+/// clear a loan, given the most the borrower can pay each period.
+///
+/// Supported [interestType]s: `amortized` and `none` (or any type at a
+/// 0% rate — that's just equal-principal). Other types return a failure
+/// with a clear reason, since a fixed periodic payment doesn't define a
+/// term for them.
+///
+/// Math (amortized): with periodic rate r and payment M, the balance
+/// reaches zero after n = −ln(1 − P·r/M) / ln(1+r) payments. That's only
+/// real when M > P·r (the payment must exceed the first period's
+/// interest, or the balance never shrinks) — otherwise we fail and hand
+/// back the minimum viable payment (just over P·r).
+///
+/// [targetPayment] and [principal] are in the loan's native currency.
+/// [ratePercent] is as typed (5 = 5%); [ratePeriod] is 'annual'|'monthly'
+/// (a monthly rate is annualised ×12, matching [projectLoan] and the
+/// backend). [paymentFrequency] is monthly/weekly (lump_sum has no
+/// recurring payment to solve from).
+SolveTermResult solveTermFromPayment({
+  required double? principal,
+  required String interestType,
+  required double? ratePercent,
+  required String ratePeriod,
+  required String paymentFrequency,
+  required double? targetPayment,
+}) {
+  if (principal == null || principal <= 0) {
+    return SolveTermResult.failure('Enter the amount lent first.');
+  }
+  if (targetPayment == null || targetPayment <= 0) {
+    return SolveTermResult.failure('Enter a payment amount.');
+  }
+  final ppy = _periodsPerYear(paymentFrequency);
+  if (ppy == null) {
+    return SolveTermResult.failure(
+        'A lump-sum loan has a single payment — switch to monthly or weekly to '
+        'solve for a term.');
+  }
+
+  final p = principal;
+  final m = targetPayment;
+  final rate = ratePercent ?? 0;
+  final annual = (ratePeriod == 'monthly' ? rate * 12 : rate) / 100.0;
+
+  // No-interest (or 0% / unsupported-type-at-0%): pure principal, equal
+  // slices — n is just ceil(P / M).
+  if (interestType == 'none' || annual <= 0) {
+    final n = math.max(1, (p / m).ceil());
+    final months = math.max(1, (n / ppy * 12).round());
+    return SolveTermResult.success(
+      periods: n,
+      termMonths: months,
+      totalInterest: 0,
+      totalRepayment: p,
+    );
+  }
+
+  // Beyond this point we only model amortized. Interest-only and compound
+  // don't amortize from a periodic payment; simple interest is circular
+  // (its total depends on the term we're solving for).
+  if (interestType != 'amortized') {
+    return SolveTermResult.failure(
+        'Solving from a payment only applies to standard (amortized) and '
+        'no-interest loans.');
+  }
+
+  final r = annual / ppy; // periodic rate
+  final firstInterest = p * r;
+  // M must clear more than the first period's interest, or the balance
+  // never declines. Surface the smallest payment that would (a hair over
+  // the interest, rounded up to the cent).
+  if (m <= firstInterest) {
+    final minPay = ((firstInterest * 100).ceil() + 1) / 100.0;
+    return SolveTermResult.failure(
+      'That payment only covers the interest, so the balance never shrinks.',
+      minimumPayment: minPay,
+    );
+  }
+
+  // n = −ln(1 − P·r/M) / ln(1+r).
+  final n = (-math.log(1 - p * r / m) / math.log(1 + r)).ceil();
+  final periods = math.max(1, n);
+  final months = math.max(1, (periods / ppy * 12).round());
+  // Total interest ≈ payment × periods − principal (the final payment is
+  // a touch smaller in reality; this is the preview's honest upper bound).
+  final totalRepayment = m * periods;
+  final totalInterest = math.max(0.0, totalRepayment - p);
+  return SolveTermResult.success(
+    periods: periods,
+    termMonths: months,
+    totalInterest: totalInterest,
+    totalRepayment: totalRepayment,
+  );
+}
+
 /// Payments per year for a given frequency. `lump_sum` returns null
 /// (a single payment at maturity, not a periodic cadence).
 int? _periodsPerYear(String frequency) {

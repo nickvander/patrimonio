@@ -37,17 +37,31 @@ class LoanTermsLockedException implements Exception {
 }
 
 /// Per-file progress tick from the streaming upload handler.
-/// `done` is the count of files that have finished parsing
-/// (regardless of success/failure); `total` is the batch size from
-/// the initial `started` event. `lastFile` is the most recently
-/// completed file name + ok flag. The import screen uses these to
-/// render "N of M done: foo.pdf" in real time while a large batch
-/// of PDFs is parsing on the server.
+/// One file's live status within a multi-PDF import, for the per-file
+/// checklist. [status] is one of:
+///   'waiting'  — queued, not started (a later batch)
+///   'parsing'  — in flight on the server right now
+///   'ok'       — finished, parsed [count] transactions
+///   'failed'   — finished with an error (skipped)
+class ImportFileStatus {
+  final String name;
+  final String status;
+  final int count;
+  const ImportFileStatus(this.name, this.status, [this.count = 0]);
+
+  ImportFileStatus copyWith({String? status, int? count}) =>
+      ImportFileStatus(name, status ?? this.status, count ?? this.count);
+
+  bool get isDone => status == 'ok' || status == 'failed';
+}
+
+/// Live import progress. [files] is the whole batch in submission order,
+/// each carrying its own status, so the screen can render a per-file
+/// checklist; [done]/[total] are the aggregate counts.
 typedef ImportProgressCallback = void Function({
+  required List<ImportFileStatus> files,
   required int done,
   required int total,
-  String? lastFile,
-  bool? lastFileOk,
 });
 
 class ApiService {
@@ -862,26 +876,152 @@ class ApiService {
     List<PlatformFile> files, {
     String? password,
     ImportProgressCallback? onProgress,
+    int? maxBatchBytes,
   }) async {
-    if (files.isEmpty) {
+    final usable = files.where((f) => f.bytes != null).toList();
+    if (usable.isEmpty) {
       throw Exception(_t('No files to upload',
           'No hay archivos para subir'));
     }
+
+    // Split into batches that each stay under the server's body limit,
+    // so a big multi-year drop doesn't bounce off the 100 MB cap — the
+    // user no longer has to split by hand. Null = one batch (callers
+    // that don't care about the cap, e.g. a single small CSV).
+    final batches =
+        maxBatchBytes == null ? [usable] : _packIntoBatches(usable, maxBatchBytes);
+
+    // The full checklist, in submission order, seeded as 'waiting'.
+    final order = usable.map((f) => f.name).toList();
+    final status = <String, ImportFileStatus>{
+      for (final f in usable) f.name: ImportFileStatus(f.name, 'waiting'),
+    };
+    void emit() {
+      if (onProgress == null) return;
+      final list = [for (final n in order) status[n]!];
+      onProgress(
+        files: list,
+        done: list.where((s) => s.isDone).length,
+        total: list.length,
+      );
+    }
+
+    emit(); // initial all-waiting render
+
+    final merged = <dynamic>[];
+    var sawSuccess = false;
+    String? lastMessage;
+    for (final batch in batches) {
+      // Files in the in-flight batch all start at once on the server's
+      // blocking pool — show them as 'parsing'; later batches stay
+      // 'waiting'.
+      for (final f in batch) {
+        final s = status[f.name];
+        if (s != null && !s.isDone) {
+          status[f.name] = s.copyWith(status: 'parsing');
+        }
+      }
+      emit();
+
+      final resp = await _uploadOneBatch(
+        batch,
+        password,
+        onProgress == null
+            ? null
+            : (completed) {
+                for (final c in completed) {
+                  if (status.containsKey(c.name)) status[c.name] = c;
+                }
+                emit();
+              },
+      );
+
+      // One password covers the whole set — surface immediately so the
+      // user re-enters it and retries everything (mirrors the old
+      // single-request semantics).
+      if (resp['status']?.toString() == 'password_required') {
+        return resp;
+      }
+      lastMessage = resp['message']?.toString();
+      final txs = resp['transactions'];
+      if (txs is List) {
+        merged.addAll(txs);
+        if (txs.isNotEmpty) sawSuccess = true;
+      }
+    }
+
+    // Resolve anything the server never reported (older API without the
+    // per-file channel, or a missed final poll) so no row hangs on
+    // 'parsing'.
+    for (final n in order) {
+      final s = status[n]!;
+      if (!s.isDone) status[n] = s.copyWith(status: 'ok');
+    }
+    emit();
+
+    final fileCount = usable.length;
+    return {
+      'status': sawSuccess ? 'success' : 'error',
+      // On total failure, surface the server's specific reason (e.g. a
+      // parse error) rather than a bare count. On success the aggregate
+      // count is the right headline; the checklist carries per-file
+      // detail including any skips.
+      'message': (!sawSuccess && lastMessage != null)
+          ? lastMessage
+          : _t(
+              'Parsed ${merged.length} transactions from $fileCount '
+                  'file${fileCount == 1 ? '' : 's'}.',
+              'Se procesaron ${merged.length} transacciones de $fileCount '
+                  'archivo${fileCount == 1 ? '' : 's'}.',
+            ),
+      'transactions_count': merged.length,
+      'transactions': merged,
+    };
+  }
+
+  /// Greedy bin-pack: walk the files in order, starting a new batch
+  /// whenever adding the next would push the running total over
+  /// [maxBytes]. A single file larger than [maxBytes] still lands alone
+  /// in its own batch (the caller pre-screens for files over the hard
+  /// server cap).
+  List<List<PlatformFile>> _packIntoBatches(
+      List<PlatformFile> files, int maxBytes) {
+    final batches = <List<PlatformFile>>[];
+    var current = <PlatformFile>[];
+    var currentBytes = 0;
+    for (final f in files) {
+      final sz = f.size;
+      if (current.isNotEmpty && currentBytes + sz > maxBytes) {
+        batches.add(current);
+        current = <PlatformFile>[];
+        currentBytes = 0;
+      }
+      current.add(f);
+      currentBytes += sz;
+    }
+    if (current.isNotEmpty) batches.add(current);
+    return batches;
+  }
+
+  /// Upload ONE batch (single multipart POST) and return its
+  /// `ImportResponse` JSON. When [onFiles] is supplied, a job-id is sent
+  /// and a parallel poller reports each file's completion as it parses;
+  /// a final reconcile fetch guarantees the terminal per-file state is
+  /// delivered even if the background poller exited first.
+  Future<Map<String, dynamic>> _uploadOneBatch(
+    List<PlatformFile> files,
+    String? password,
+    void Function(List<ImportFileStatus> completed)? onFiles,
+  ) async {
     final request = http.MultipartRequest(
       'POST',
       Uri.parse('$_baseUrl/imports/upload'),
     );
-    // Mirror the protected router's CSRF guard. The multipart
-    // helper bypasses our _post wrapper, so the header has to be
-    // attached by hand. Value matches `_csrfHeader` everywhere
-    // else.
+    // Mirror the protected router's CSRF guard. The multipart helper
+    // bypasses our _post wrapper, so attach the header by hand.
     request.headers['X-Requested-With'] = 'fetch';
 
-    // When a progress callback is supplied, tag the request with a
-    // UUID the server will key its progress entry on. We use a
-    // simple time+random scheme rather than pulling in `uuid`
-    // (the package is already a transitive dep but not surfaced).
-    final String? jobId = onProgress != null ? _generateJobId() : null;
+    final String? jobId = onFiles != null ? _generateJobId() : null;
     if (jobId != null) {
       request.headers['X-Upload-Job-Id'] = jobId;
     }
@@ -896,29 +1036,19 @@ class ApiService {
       request.fields['password'] = password;
     }
 
-    // Kick off the polling loop concurrently with the upload. It
-    // self-terminates when the server marks the job terminal OR
-    // when this scope completes (we cancel via the bool flag).
     bool uploadComplete = false;
     Future<void>? pollerFuture;
-    if (jobId != null && onProgress != null) {
-      pollerFuture = _pollUploadProgress(
-        jobId,
-        onProgress,
-        () => uploadComplete,
-      );
+    if (jobId != null && onFiles != null) {
+      pollerFuture = _pollUploadProgress(jobId, onFiles, () => uploadComplete);
     }
 
     try {
       // 600s (10 min) timeout. The backend parallelises PDF parsing
-      // across the blocking pool, but each file is still CPU-bound
-      // for several seconds (qpdf decrypt + lopdf extract + table
-      // recovery). A worst-case batch — e.g. two years of monthly
-      // Banamex PDFs on a busy single-vCPU VPS — can plausibly take
-      // ~5 minutes; 600s gives a generous safety margin.
+      // across the blocking pool, but each file is still CPU-bound for
+      // several seconds (qpdf decrypt + lopdf extract + table recovery).
       final streamedResponse = await _client.send(request).timeout(
-        const Duration(seconds: 600),
-      );
+            const Duration(seconds: 600),
+          );
       _maybeUnauthorizedStreamed(streamedResponse);
 
       final response = await http.Response.fromStream(streamedResponse);
@@ -927,13 +1057,18 @@ class ApiService {
         // central post-mutation invalidation doesn't fire here — clear by
         // hand. A successful import changes balances, holdings, txns, etc.
         clearDashboardCache();
+        // Final reconcile: the background poller may have exited before
+        // the terminal snapshot, so fetch it once to ensure every file's
+        // final state reaches the checklist.
+        if (jobId != null && onFiles != null) {
+          await _fetchFinalProgress(jobId, onFiles);
+        }
         return json.decode(response.body) as Map<String, dynamic>;
       }
-      // Payload-too-large surfaces as a real 413 OR (more often
-      // through the axum multipart stack) as a truncated body that
-      // makes parsing fail with 4xx/5xx. Give the user a specific
-      // hint when the size pattern matches so they don't have to
-      // guess.
+      // Payload-too-large surfaces as a real 413 OR (more often through
+      // the axum multipart stack) as a truncated body that makes parsing
+      // fail with 4xx/5xx. With auto-batching this should be rare, but
+      // keep the specific hint for the no-batch path.
       if (response.statusCode == 413 ||
           response.body.contains('failed to read stream') ||
           response.body.contains('body limit exceeded')) {
@@ -954,10 +1089,6 @@ class ApiService {
           'Server returned ${response.statusCode}: ${response.body}',
           'El servidor respondió ${response.statusCode}: ${response.body}'));
     } on TimeoutException catch (_) {
-      // 10 minutes elapsed without a response. We don't know whether
-      // the server finished parsing or hit its own ceiling; advise
-      // the user to either retry or split the batch rather than
-      // surface the bare "TimeoutException" string.
       throw Exception(_t(
         'Upload timed out after 10 minutes. '
         'Try splitting the batch into smaller groups (e.g. 6 PDFs at a time) '
@@ -972,17 +1103,44 @@ class ApiService {
         'Error de red durante la carga. Revisa tu conexión e inténtalo de nuevo. ($e)',
       ));
     } finally {
-      // Stop the poller as soon as the upload returns. The poller
-      // also self-terminates on the next tick after we flip
-      // `uploadComplete = true`.
       uploadComplete = true;
-      if (pollerFuture != null) {
-        // Don't await — the poller exits within ~250 ms; making
-        // the caller wait that long would be visible UX latency
-        // on top of an already-finished upload.
-        // ignore: unawaited_futures
-        pollerFuture;
+      // ignore: unawaited_futures
+      pollerFuture;
+    }
+  }
+
+  /// Decode a progress snapshot's `files` array into completed statuses.
+  List<ImportFileStatus> _parseProgressFiles(Map<String, dynamic> snap) {
+    final raw = snap['files'];
+    final out = <ImportFileStatus>[];
+    if (raw is List) {
+      for (final e in raw) {
+        if (e is Map) {
+          final name = e['name']?.toString() ?? '';
+          final ok = e['ok'] as bool? ?? true;
+          final count = (e['count'] as num?)?.toInt() ?? 0;
+          if (name.isNotEmpty) {
+            out.add(ImportFileStatus(name, ok ? 'ok' : 'failed', count));
+          }
+        }
       }
+    }
+    return out;
+  }
+
+  /// One-shot fetch of the terminal snapshot, used to reconcile the
+  /// checklist after the POST returns (the background poller may have
+  /// stopped before observing the terminal state).
+  Future<void> _fetchFinalProgress(
+      String jobId, void Function(List<ImportFileStatus>) onFiles) async {
+    try {
+      final res = await _get(Uri.parse('$_baseUrl/imports/progress/$jobId'));
+      if (res.statusCode == 200) {
+        final snap = json.decode(res.body) as Map<String, dynamic>;
+        onFiles(_parseProgressFiles(snap));
+      }
+    } catch (_) {
+      // Best-effort; the merged response is still authoritative.
     }
   }
 
@@ -1013,7 +1171,7 @@ class ApiService {
   /// surface as a user-visible failure.
   Future<void> _pollUploadProgress(
     String jobId,
-    ImportProgressCallback onProgress,
+    void Function(List<ImportFileStatus> completed) onFiles,
     bool Function() done,
   ) async {
     const interval = Duration(milliseconds: 250);
@@ -1027,19 +1185,13 @@ class ApiService {
         if (res.statusCode == 200) {
           final snap = json.decode(res.body) as Map<String, dynamic>;
           final d = (snap['done'] as num?)?.toInt() ?? 0;
-          final t = (snap['total'] as num?)?.toInt() ?? 0;
           final terminal = snap['terminal'] as bool? ?? false;
-          // Only fire onProgress when the snapshot actually moved —
-          // saves the import screen from rebuilding 4× per second
-          // when nothing's changed.
+          // Only fire when the snapshot actually moved — saves the
+          // import screen from rebuilding 4× per second when nothing's
+          // changed.
           if (d != lastDone || terminal) {
             lastDone = d;
-            onProgress(
-              done: d,
-              total: t,
-              lastFile: snap['last_file']?.toString(),
-              lastFileOk: snap['last_ok'] as bool?,
-            );
+            onFiles(_parseProgressFiles(snap));
           }
           if (terminal) return;
         }
@@ -1766,6 +1918,17 @@ class ApiService {
   /// a new tab; the user prints to PDF from the browser).
   String loanAgreementUrl(String loanId) =>
       '$_baseUrl/loans/$loanId/agreement';
+
+  /// Borrower-facing printable payment plan (HTML → browser PDF): the
+  /// schedule with a running balance, friendlier than the legal
+  /// agreement. Opened in a new tab so cookie auth rides along.
+  String loanPaymentPlanUrl(String loanId) => '$_baseUrl/loans/$loanId/plan';
+
+  /// The payment plan as a CSV that opens directly in Google Sheets /
+  /// Excel (installment, due date, principal/interest split, balance
+  /// remaining). Opened in a new tab to trigger the download.
+  String loanScheduleCsvUrl(String loanId) =>
+      '$_baseUrl/loans/$loanId/schedule.csv';
 
   /// Upcoming + overdue installments for the notifications bell. Each
   /// item: {loan_id, payment_id, borrower_name, amount, currency,

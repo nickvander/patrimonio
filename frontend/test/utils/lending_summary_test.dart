@@ -164,6 +164,123 @@ void main() {
     });
   });
 
+  group('solveTermFromPayment', () {
+    test('amortized: \$10k @ 6%/yr, \$200/mo pays off in ~58 months', () {
+      final res = solveTermFromPayment(
+        principal: 10000,
+        interestType: 'amortized',
+        ratePercent: 6,
+        ratePeriod: 'annual',
+        paymentFrequency: 'monthly',
+        targetPayment: 200,
+      );
+      expect(res.ok, true);
+      // n = -ln(1 - 10000*0.005/200) / ln(1.005) ≈ 57.68 → 58 payments.
+      expect(res.periods, 58);
+      expect(res.termMonths, 58);
+      // Total interest is positive and modest (a few hundred dollars).
+      expect(res.totalInterest, greaterThan(0));
+      expect(res.totalInterest, lessThan(2000));
+      expect(res.totalRepayment, closeTo(10000 + res.totalInterest!, 0.001));
+    });
+
+    test('no-interest: term is simply ceil(principal / payment)', () {
+      final res = solveTermFromPayment(
+        principal: 1000,
+        interestType: 'none',
+        ratePercent: 0,
+        ratePeriod: 'annual',
+        paymentFrequency: 'monthly',
+        targetPayment: 300,
+      );
+      expect(res.ok, true);
+      expect(res.periods, 4); // 1000/300 = 3.33 → 4
+      expect(res.totalInterest, 0);
+      expect(res.totalRepayment, 1000);
+    });
+
+    test('payment that only covers interest fails with a minimum', () {
+      // $10k @ 12%/yr → first-month interest = $100. A $100 payment never
+      // amortizes; the minimum viable payment is just over $100.
+      final res = solveTermFromPayment(
+        principal: 10000,
+        interestType: 'amortized',
+        ratePercent: 12,
+        ratePeriod: 'annual',
+        paymentFrequency: 'monthly',
+        targetPayment: 100,
+      );
+      expect(res.ok, false);
+      expect(res.minimumPayment, isNotNull);
+      expect(res.minimumPayment, greaterThan(100));
+      expect(res.minimumPayment, lessThan(101));
+    });
+
+    test('a monthly rate is annualised ×12 (1%/mo == 12%/yr)', () {
+      final monthly = solveTermFromPayment(
+        principal: 10000,
+        interestType: 'amortized',
+        ratePercent: 1,
+        ratePeriod: 'monthly',
+        paymentFrequency: 'monthly',
+        targetPayment: 100,
+      );
+      // Same as 12%/yr → $100 only covers interest → fails.
+      expect(monthly.ok, false);
+      expect(monthly.minimumPayment, greaterThan(100));
+    });
+
+    test('unsupported interest types fail with a clear reason', () {
+      for (final t in ['interest_only', 'compound', 'simple']) {
+        final res = solveTermFromPayment(
+          principal: 10000,
+          interestType: t,
+          ratePercent: 6,
+          ratePeriod: 'annual',
+          paymentFrequency: 'monthly',
+          targetPayment: 200,
+        );
+        expect(res.ok, false, reason: '$t should be unsupported');
+        expect(res.reason, isNotNull);
+      }
+    });
+
+    test('missing inputs fail gracefully', () {
+      expect(
+          solveTermFromPayment(
+            principal: null,
+            interestType: 'amortized',
+            ratePercent: 6,
+            ratePeriod: 'annual',
+            paymentFrequency: 'monthly',
+            targetPayment: 200,
+          ).ok,
+          false);
+      expect(
+          solveTermFromPayment(
+            principal: 10000,
+            interestType: 'amortized',
+            ratePercent: 6,
+            ratePeriod: 'annual',
+            paymentFrequency: 'monthly',
+            targetPayment: null,
+          ).ok,
+          false);
+    });
+
+    test('lump_sum has no recurring payment to solve from', () {
+      final res = solveTermFromPayment(
+        principal: 10000,
+        interestType: 'amortized',
+        ratePercent: 6,
+        ratePeriod: 'annual',
+        paymentFrequency: 'lump_sum',
+        targetPayment: 200,
+      );
+      expect(res.ok, false);
+    });
+  });
+
   group('loansAreMixedCurrency', () {
     test('empty is not mixed', () {
       expect(loansAreMixedCurrency([]), false);

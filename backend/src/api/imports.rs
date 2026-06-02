@@ -51,15 +51,25 @@ pub fn router() -> Router<AppState> {
 /// Snapshot of one in-flight upload. `terminal` becomes true once
 /// the parse phase has produced a final state; the frontend uses
 /// that to stop polling.
+/// Per-file outcome, accumulated as each PDF finishes parsing so the
+/// client can render a checklist (one row per file) rather than a bare
+/// "N of M" counter. `count` is the number of transactions parsed (0 on
+/// failure).
+#[derive(Clone, Serialize)]
+pub struct FileProgress {
+    pub name: String,
+    pub ok: bool,
+    pub count: usize,
+}
+
 #[derive(Clone, Serialize)]
 pub struct ProgressSnapshot {
     pub total: usize,
     pub done: usize,
-    /// Most recently completed file name, if any.
-    pub last_file: Option<String>,
-    /// True iff the last file completed without an error. Drives the
-    /// "(skipped)" subtitle on failed rows.
-    pub last_ok: bool,
+    /// One entry per file that has finished parsing, in completion
+    /// order. The client matches these against the files it submitted to
+    /// drive a per-file checklist (✓ / skipped / still parsing).
+    pub files: Vec<FileProgress>,
     /// True after the upload finished (success, password, or all-
     /// failed). Frontend stops polling once this flips.
     pub terminal: bool,
@@ -103,22 +113,21 @@ async fn register_job(job_id: Uuid, owner: Uuid, total: usize) {
         ProgressSnapshot {
             total,
             done: 0,
-            last_file: None,
-            last_ok: true,
+            files: Vec::new(),
             terminal: false,
             owner,
         },
     );
 }
 
-/// Bump the done counter + record the most recently completed file.
-/// Silent no-op when the job_id isn't registered (older client).
-async fn note_file_done(job_id: Uuid, name: String, ok: bool) {
+/// Bump the done counter + append the completed file's outcome (name,
+/// success, transaction count). Silent no-op when the job_id isn't
+/// registered (older client).
+async fn note_file_done(job_id: Uuid, name: String, ok: bool, count: usize) {
     let store = progress_store();
     if let Some(snap) = store.write().await.get_mut(&job_id) {
         snap.done += 1;
-        snap.last_file = Some(name);
-        snap.last_ok = ok;
+        snap.files.push(FileProgress { name, ok, count });
     }
 }
 
@@ -456,9 +465,11 @@ async fn upload_handler(
             }
         };
         let succeeded;
+        let mut parsed_count = 0;
         match parse_result {
             Ok(mut txs) => {
                 succeeded = true;
+                parsed_count = txs.len();
                 success_files.push(file_name.clone());
                 all_transactions.append(&mut txs);
             }
@@ -481,7 +492,7 @@ async fn upload_handler(
             }
         }
         if let Some(id) = job_id {
-            note_file_done(id, file_name, succeeded).await;
+            note_file_done(id, file_name, succeeded, parsed_count).await;
         }
     }
 
