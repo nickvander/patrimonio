@@ -175,7 +175,7 @@ class _LendingTabState extends State<LendingTab> {
           children: [
             Row(
               children: [
-                Icon(Icons.monetization_on_outlined, color: context.tealAccent),
+                Icon(Icons.monetization_on, color: context.tealAccent),
                 const SizedBox(width: 8),
                 Text(
                   AppLocalizations.of(context).lendingTitle,
@@ -271,7 +271,7 @@ class _LendingTabState extends State<LendingTab> {
       padding: const EdgeInsets.symmetric(vertical: 48),
       child: Column(
         children: [
-          Icon(Icons.monetization_on_outlined, size: 56, color: context.textFaint),
+          Icon(Icons.monetization_on, size: 56, color: context.textFaint),
           const SizedBox(height: 12),
           Text(AppLocalizations.of(context).lendingNoLoans,
               style: TextStyle(
@@ -565,7 +565,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
               color: context.accentSoft(context.tealAccent),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(Icons.monetization_on_outlined,
+            child: Icon(Icons.monetization_on,
                 color: context.tealAccent, size: 20),
           ),
           const SizedBox(width: 12),

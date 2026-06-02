@@ -235,7 +235,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Icons.trending_up_outlined, Color(0xFFFFB300), NavTier.secondary),
     _NavDest(NavId.tax, 'Tax planning', 'Tax', Icons.account_balance_outlined,
         Color(0xFFAB47BC), NavTier.secondary),
-    _NavDest(NavId.lending, 'Lending', 'Loans', Icons.monetization_on_outlined,
+    _NavDest(NavId.lending, 'Lending', 'Loans', Icons.monetization_on,
         Color(0xFF1DE9B6), NavTier.secondary),
     _NavDest(NavId.settings, 'Settings', 'Settings', Icons.settings_outlined,
         Color(0xFF90A4AE), NavTier.secondary),
@@ -861,7 +861,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               value: _lendingEnabled,
               onChanged: _toggleLending,
               secondary:
-                  Icon(Icons.monetization_on_outlined, color: context.tealAccent),
+                  Icon(Icons.monetization_on, color: context.tealAccent),
               title: Text(l.dashModuleLendingTitle,
                   style: TextStyle(
                       fontWeight: FontWeight.w600, color: context.textPrimary)),
@@ -1190,7 +1190,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     // Signature features — surfaced at first run so they
                     // aren't hidden behind a Settings toggle / sub-menu.
                     actionTile(
-                      icon: Icons.monetization_on_outlined,
+                      icon: Icons.monetization_on,
                       title: l.dashTrackMoneyLent,
                       subtitle: l.dashTrackMoneyLentSubtitle,
                       accent: context.tealAccent,
