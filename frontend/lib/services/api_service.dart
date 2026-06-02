@@ -1304,6 +1304,34 @@ class ApiService {
     }
   }
 
+  /// Preview-time duplicate check: returns the indices (into
+  /// [transactions]) that are already imported in [accountId], by the same
+  /// signature confirm dedups on. Best-effort — returns an empty set on
+  /// any error so the preview still works.
+  Future<Set<int>> checkImportDuplicates(
+    String accountId,
+    List<dynamic> transactions,
+  ) async {
+    try {
+      final response = await _post(
+        Uri.parse('$_baseUrl/imports/check-duplicates'),
+        headers: _withCsrf({'Content-Type': 'application/json'}),
+        body: json.encode({
+          'account_id': accountId,
+          'transactions': transactions,
+        }),
+      );
+      if (response.statusCode == 200) {
+        final body = json.decode(response.body) as Map<String, dynamic>;
+        final idx = (body['duplicate_indices'] as List?) ?? const [];
+        return idx.map((e) => (e as num).toInt()).toSet();
+      }
+    } catch (_) {
+      // Best-effort; fall through to "no duplicates known".
+    }
+    return <int>{};
+  }
+
   /// Bump an account's `current_balance` and write a `balance_snapshots`
   /// row. `notes` (when set) is stored alongside the snapshot — used by
   /// manual-asset revaluations to capture "why this value moved" without

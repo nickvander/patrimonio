@@ -404,6 +404,7 @@
   "impLastFile": "Último: {file}",
   "impLastFileSkipped": "Último: {file} (omitido)",
   "impLargeBatchHint": "Los lotes grandes pueden tardar de 30 a 120 segundos: cada PDF se procesa por separado en el servidor.",
+  "impAlreadyImported": "Ya importado",
   "impFileWaiting": "en espera…",
   "impFileParsing": "procesando…",
   "impFileSkipped": "omitido",

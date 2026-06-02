@@ -1485,6 +1485,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Large batches can take 30-120 seconds — each PDF is parsed individually on the server.';
 
   @override
+  String get impAlreadyImported => 'Already imported';
+
+  @override
   String get impFileWaiting => 'waiting…';
 
   @override

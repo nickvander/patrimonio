@@ -33,7 +33,11 @@ RUN ls -la target/release/rotate_encryption_key && test $(stat -c%s target/relea
 # Runtime stage
 FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y ca-certificates qpdf && rm -rf /var/lib/apt/lists/*
+# qpdf decrypts password-protected statements; poppler-utils provides
+# `pdftotext`, a far more robust text extractor than the in-process lopdf
+# (official Banamex AFP→PDF statements that lopdf reads as "0 pages"
+# extract cleanly via pdftotext).
+RUN apt-get update && apt-get install -y ca-certificates qpdf poppler-utils && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/patrimonio /usr/local/bin/patrimonio
 COPY --from=builder /app/target/release/rotate_encryption_key /usr/local/bin/rotate_encryption_key

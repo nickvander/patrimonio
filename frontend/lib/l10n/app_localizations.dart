@@ -2528,6 +2528,12 @@ abstract class AppLocalizations {
   /// **'Large batches can take 30-120 seconds — each PDF is parsed individually on the server.'**
   String get impLargeBatchHint;
 
+  /// No description provided for @impAlreadyImported.
+  ///
+  /// In en, this message translates to:
+  /// **'Already imported'**
+  String get impAlreadyImported;
+
   /// No description provided for @impFileWaiting.
   ///
   /// In en, this message translates to:

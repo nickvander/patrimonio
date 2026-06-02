@@ -1505,6 +1505,9 @@ class AppLocalizationsEs extends AppLocalizations {
       'Los lotes grandes pueden tardar de 30 a 120 segundos: cada PDF se procesa por separado en el servidor.';
 
   @override
+  String get impAlreadyImported => 'Ya importado';
+
+  @override
   String get impFileWaiting => 'en espera…';
 
   @override

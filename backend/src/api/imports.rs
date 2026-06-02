@@ -18,12 +18,25 @@ use crate::AppState;
 
 use crate::models::import::{ConfirmImportRequest, ParsedTransaction};
 
+/// A parsed transaction plus the file it came from, for the import
+/// preview. `#[serde(flatten)]` keeps the wire shape identical to
+/// `ParsedTransaction` with one extra `source_file` key — so the frontend
+/// reads `tx['source_file']` to group/exclude by file, and the confirm
+/// endpoint (which deserializes a plain `ParsedTransaction`) just ignores
+/// the extra key.
+#[derive(Serialize, Deserialize)]
+pub struct PreviewTx {
+    #[serde(flatten)]
+    pub tx: ParsedTransaction,
+    pub source_file: String,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct ImportResponse {
     pub message: String,
     pub status: String,
     pub transactions_count: usize,
-    pub transactions: Vec<ParsedTransaction>,
+    pub transactions: Vec<PreviewTx>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -46,6 +59,64 @@ pub fn router() -> Router<AppState> {
         // that broke the first streaming attempt.
         .route("/progress/{job_id}", get(progress_handler))
         .route("/confirm", post(confirm_handler))
+        // Preview-time duplicate check: given the chosen account + parsed
+        // rows, return which are already imported so the UI can flag /
+        // auto-deselect them BEFORE confirming.
+        .route("/check-duplicates", post(check_duplicates_handler))
+}
+
+/// The dedup key for an imported transaction. MUST stay identical to the
+/// signature `confirm_handler` inserts, so a row the preview marks
+/// "already imported" is exactly the row confirm would skip.
+fn tx_signature(date: &chrono::NaiveDate, amount: &rust_decimal::Decimal, description: &str) -> String {
+    format!(
+        "manual:{}:{}:{}",
+        date,
+        amount,
+        description.to_lowercase().chars().take(50).collect::<String>()
+    )
+}
+
+#[derive(Deserialize)]
+struct CheckDuplicatesRequest {
+    account_id: uuid::Uuid,
+    transactions: Vec<ParsedTransaction>,
+}
+
+/// Returns the indices (into the submitted `transactions` array) that
+/// already exist in the chosen account — by the same signature confirm
+/// dedups on. Scoped to the caller's own account.
+async fn check_duplicates_handler(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Json(req): Json<CheckDuplicatesRequest>,
+) -> Response {
+    let sigs: Vec<String> = req
+        .transactions
+        .iter()
+        .map(|t| tx_signature(&t.date, &t.amount, &t.description))
+        .collect();
+
+    let existing: Vec<String> = sqlx::query_scalar(
+        "SELECT external_id FROM transactions \
+         WHERE account_id = $1 AND user_id = $2 AND external_id = ANY($3)",
+    )
+    .bind(req.account_id)
+    .bind(ctx.user_id)
+    .bind(&sigs)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let existing: std::collections::HashSet<String> = existing.into_iter().collect();
+    let duplicate_indices: Vec<usize> = sigs
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| existing.contains(*s))
+        .map(|(i, _)| i)
+        .collect();
+
+    Json(serde_json::json!({ "duplicate_indices": duplicate_indices })).into_response()
 }
 
 /// Snapshot of one in-flight upload. `terminal` becomes true once
@@ -226,16 +297,7 @@ async fn confirm_handler(
     }
 
     for tx in payload.transactions {
-        let signature = format!(
-            "manual:{}:{}:{}",
-            tx.date,
-            tx.amount,
-            tx.description
-                .to_lowercase()
-                .chars()
-                .take(50)
-                .collect::<String>()
-        );
+        let signature = tx_signature(&tx.date, &tx.amount, &tx.description);
 
         // The parser stashes the pre-polish raw line in
         // `original_description` only when polish_description
@@ -421,7 +483,7 @@ async fn upload_handler(
         register_job(id, ctx.user_id, total_files).await;
     }
 
-    let mut all_transactions: Vec<ParsedTransaction> = Vec::new();
+    let mut all_transactions: Vec<PreviewTx> = Vec::new();
     let mut success_files: Vec<String> = Vec::new();
     let mut errors: Vec<String> = Vec::new();
     // Password-failure signals can't early-return from the middle
@@ -467,11 +529,15 @@ async fn upload_handler(
         let succeeded;
         let mut parsed_count = 0;
         match parse_result {
-            Ok(mut txs) => {
+            Ok(txs) => {
                 succeeded = true;
                 parsed_count = txs.len();
                 success_files.push(file_name.clone());
-                all_transactions.append(&mut txs);
+                // Tag every row with its source file for the preview.
+                all_transactions.extend(txs.into_iter().map(|t| PreviewTx {
+                    tx: t,
+                    source_file: file_name.clone(),
+                }));
             }
             Err(e) => {
                 succeeded = false;

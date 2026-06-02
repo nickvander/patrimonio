@@ -4,6 +4,7 @@ pub mod banamex;
 pub mod cetes;
 pub mod cetes_pdf;
 pub mod banamex_pdf;
+pub mod banamex_layout;
 pub mod generic_pdf;
 
 #[cfg(test)]
@@ -65,6 +66,32 @@ fn try_decrypt_with_qpdf(data: &[u8], password: &str) -> Result<Vec<u8>> {
     let _ = fs::remove_file(&out_path);
 
     Ok(decrypted_data)
+}
+
+/// Extract text from a PDF with poppler's `pdftotext -layout`. Far more
+/// robust than the in-process lopdf extractor — official Banamex AFP→PDF
+/// statements that lopdf reports as "0 pages" extract cleanly here.
+/// `-layout` preserves column geometry so the RETIROS / DEPÓSITOS / SALDO
+/// columns stay aligned, which `banamex_layout` relies on. Returns an
+/// empty string when pdftotext is absent or fails (callers fall back to
+/// lopdf).
+fn pdftotext_layout(data: &[u8]) -> String {
+    let in_path = std::env::temp_dir().join(format!("pt_{}.pdf", uuid::Uuid::new_v4()));
+    if fs::write(&in_path, data).is_err() {
+        return String::new();
+    }
+    let output = Command::new("pdftotext")
+        .arg("-layout")
+        .arg("-enc")
+        .arg("UTF-8")
+        .arg(&in_path)
+        .arg("-")
+        .output();
+    let _ = fs::remove_file(&in_path);
+    match output {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+        _ => String::new(),
+    }
 }
 
 /// Strip generic prefixes ("MISC DEBIT", "ACH PYMT", "POS ", "COMPRA ",
@@ -264,25 +291,38 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
             return Err(anyhow!("PASSWORD_REQUIRED"));
         }
 
-        // Extract the text ONCE, then gate on readability before trying
-        // any parser — a blank browser printout or a scanned/image PDF
-        // gets a specific, actionable message instead of a vague
-        // "couldn't identify institution" / silent "0 transactions".
-        let full_text = extract_doc_text(&doc);
-        if let Some(reason) = unreadable_reason(&full_text) {
+        // Extract text with BOTH engines and keep the richer result:
+        // poppler's `pdftotext` (robust — reads the official AFP→PDF
+        // Banamex statements lopdf returns "0 pages" for) and the
+        // in-process lopdf. Gate on readability first so a blank browser
+        // printout or a scanned/image PDF gets a specific, actionable
+        // message instead of a vague "couldn't identify institution".
+        let pdf_text = pdftotext_layout(data);
+        let lopdf_text = extract_doc_text(&doc);
+        let full_text: &str = if pdf_text.trim().len() >= lopdf_text.trim().len() {
+            &pdf_text
+        } else {
+            &lopdf_text
+        };
+        if let Some(reason) = unreadable_reason(full_text) {
             info!("PDF '{}' is unreadable: {}", file_name, reason);
             return Err(anyhow!(reason));
         }
         let sample_text = full_text.to_uppercase();
-        info!("PDF '{}' has {} chars of text", file_name, sample_text.len());
+        info!(
+            "PDF '{}': {} chars (pdftotext={}, lopdf={})",
+            file_name,
+            full_text.len(),
+            pdf_text.len(),
+            lopdf_text.len()
+        );
 
-        // Run the institution detection ladder. Each rung only WINS if its
-        // parser actually produces rows — otherwise we fall through to the
-        // next rung and ultimately to the generic heuristic parser, so a
-        // misdetected (but real) statement still gets a chance.
-        macro_rules! try_parser {
-            ($parser:path, $why:expr) => {{
-                let rows = $parser(data).unwrap_or_default();
+        // Each rung WINS only if its parser produces rows; otherwise we
+        // fall through to the next rung and ultimately the generic parser,
+        // so a misdetected (but real) statement still gets a chance.
+        macro_rules! try_rows {
+            ($rows:expr, $why:expr) => {{
+                let rows = $rows;
                 if !rows.is_empty() {
                     info!("Parsed {} transactions via {}", rows.len(), $why);
                     return polish_all(Ok(rows));
@@ -290,79 +330,59 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
             }};
         }
 
-        // Filename keyword first (the user named it).
-        if lower_name.contains("nu") {
-            try_parser!(nu_mexico_pdf::parse, "filename=nu");
-        } else if lower_name.contains("cetes") {
-            try_parser!(cetes_pdf::parse, "filename=cetes");
-        } else if lower_name.contains("banamex") {
-            try_parser!(banamex_pdf::parse, "filename=banamex");
-        }
-
-        // Content signatures.
-        if sample_text.contains("BANAMEX")
+        let looks_banamex = lower_name.contains("banamex")
+            || sample_text.contains("BANAMEX")
             || sample_text.contains("BANCO NACIONAL DE MEXICO")
             || sample_text.contains("CITIBANAMEX")
-            || sample_text.contains("BNM840515VB1")
-        {
-            try_parser!(banamex_pdf::parse, "content=banamex");
+            || sample_text.contains("BNM840515VB1");
+        // Banamex (incl. MiCuenta): the column-layout parser over pdftotext
+        // is primary; the legacy lopdf parser is a fallback for the rare
+        // statement pdftotext can't lay out.
+        if looks_banamex {
+            if !pdf_text.is_empty() {
+                try_rows!(
+                    banamex_layout::parse_text(&pdf_text).unwrap_or_default(),
+                    "banamex-layout"
+                );
+            }
+            try_rows!(banamex_pdf::parse(data).unwrap_or_default(), "banamex-lopdf");
         }
-        if sample_text.contains("CETESDIRECTO")
+
+        // Cetes / Nu — their PDFs differ; keep the existing lopdf parsers.
+        if lower_name.contains("cetes")
+            || sample_text.contains("CETESDIRECTO")
             || (sample_text.contains("NACIONAL FINANCIERA") && sample_text.contains("CETES"))
         {
-            try_parser!(cetes_pdf::parse, "content=cetes");
+            try_rows!(cetes_pdf::parse(data).unwrap_or_default(), "cetes");
         }
-        if sample_text.contains("NU MEXICO")
+        if lower_name.contains("nu")
+            || sample_text.contains("NU MEXICO")
             || sample_text.contains("NUBNK")
             || sample_text.contains("NU BANK")
         {
-            try_parser!(nu_mexico_pdf::parse, "content=nu");
+            try_rows!(nu_mexico_pdf::parse(data).unwrap_or_default(), "nu");
         }
 
-        // Broad Mexican-bank indicators → the Banamex parser is the most
-        // capable general reader of these layouts.
+        // Broad Mexican-bank indicators → try the Banamex layout parser.
         if sample_text.contains("ESTADO DE CUENTA")
             || sample_text.contains("CLABE")
             || sample_text.contains("MOVIMIENTOS")
             || sample_text.contains("SALDO ANTERIOR")
         {
-            try_parser!(banamex_pdf::parse, "broad-indicators=banamex");
-        }
-
-        // PDF metadata (Title/Producer/Author/Subject) naming the bank.
-        if let Ok(info_ref) = doc.trailer.get(b"Info") {
-            if let Ok(dict) = info_ref.as_dict() {
-                let mut meta_text = String::new();
-                let keys: &[&[u8]] = &[b"Title", b"Producer", b"Author", b"Subject"];
-                for key in keys {
-                    if let Ok(val) = dict.get(*key) {
-                        if let Ok(s) = val.as_str() {
-                            meta_text.push_str(&String::from_utf8_lossy(s).to_uppercase());
-                            meta_text.push(' ');
-                        }
-                    }
-                }
-                if meta_text.contains("BANAMEX") || meta_text.contains("CITIBANAMEX") {
-                    try_parser!(banamex_pdf::parse, "metadata=banamex");
-                }
-                if meta_text.contains("NU") {
-                    try_parser!(nu_mexico_pdf::parse, "metadata=nu");
-                }
-                if meta_text.contains("CETES") {
-                    try_parser!(cetes_pdf::parse, "metadata=cetes");
-                }
+            if !pdf_text.is_empty() {
+                try_rows!(
+                    banamex_layout::parse_text(&pdf_text).unwrap_or_default(),
+                    "broad-banamex-layout"
+                );
             }
+            try_rows!(banamex_pdf::parse(data).unwrap_or_default(), "broad-banamex-lopdf");
         }
 
         // Generic heuristic fallback: pull date/description/amount runs out
-        // of the already-extracted text. Catches unsupported banks (and
-        // known banks the dedicated parser didn't recognise). The import
-        // preview lets the user vet these before confirming.
-        let generic = generic_pdf::parse_text(&full_text).unwrap_or_default();
-        if !generic.is_empty() {
-            info!("Generic parser recovered {} transactions from '{}'", generic.len(), file_name);
-            return polish_all(Ok(generic));
-        }
+        // of the richer text. Catches unsupported banks (and known banks
+        // the dedicated parser missed). The import preview lets the user
+        // vet these before confirming.
+        try_rows!(generic_pdf::parse_text(full_text).unwrap_or_default(), "generic");
 
         // There WAS readable text, but nothing parsed as a transaction —
         // most likely an unsupported layout. Ask for a sample rather than

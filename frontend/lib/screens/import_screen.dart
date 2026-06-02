@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../utils/supported_banks.dart';
 import '../utils/theme_colors.dart';
+import '../utils/currency.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/api_service.dart';
 import '../services/file_drop_web.dart';
@@ -24,6 +25,10 @@ class _ImportScreenState extends State<ImportScreen> {
   List<PlatformFile> _selectedFiles = [];
   List<dynamic>? _previewTransactions;
   Set<int> _selectedIndices = {};
+  // Preview rows already present in the chosen account (by the backend's
+  // dedup signature). Flagged + auto-deselected so the user doesn't
+  // re-import them; recomputed whenever the account changes.
+  Set<int> _duplicateIndices = {};
   List<dynamic>? _accounts;
   String? _selectedAccountId;
   String? _message;
@@ -268,6 +273,7 @@ class _ImportScreenState extends State<ImportScreen> {
     setState(() {
       _isUploading = true;
       _message = null;
+      _duplicateIndices = {};
       _fileStatuses = [
         for (final f in _selectedFiles) ImportFileStatus(f.name, 'waiting'),
       ];
@@ -323,6 +329,8 @@ class _ImportScreenState extends State<ImportScreen> {
           ),
         );
       }
+      // Flag rows already imported in the (pre-)selected account.
+      await _recheckDuplicates();
     } catch (e) {
       setState(() {
         _message = l.impUploadFailed(e.toString());
@@ -330,6 +338,26 @@ class _ImportScreenState extends State<ImportScreen> {
         _isUploading = false;
       });
     }
+  }
+
+  /// Flag (and auto-deselect) preview rows already imported in the chosen
+  /// account. Re-runs whenever the account or preview changes. Best-effort.
+  Future<void> _recheckDuplicates() async {
+    final acct = _selectedAccountId;
+    final txs = _previewTransactions;
+    if (acct == null || txs == null || txs.isEmpty) {
+      if (_duplicateIndices.isNotEmpty) {
+        setState(() => _duplicateIndices = {});
+      }
+      return;
+    }
+    final dups = await _apiService.checkImportDuplicates(acct, txs);
+    if (!mounted) return;
+    setState(() {
+      _duplicateIndices = dups;
+      // Don't re-import what's already there.
+      _selectedIndices = _selectedIndices.difference(dups);
+    });
   }
 
   /// Live multi-PDF progress: a header count plus a checklist with one
@@ -739,8 +767,10 @@ class _ImportScreenState extends State<ImportScreen> {
                           child: Text(label),
                         );
                       }).toList(),
-                      onChanged: (val) =>
-                          setState(() => _selectedAccountId = val),
+                      onChanged: (val) {
+                        setState(() => _selectedAccountId = val);
+                        _recheckDuplicates();
+                      },
                     )
                   else
                     const CircularProgressIndicator(),
@@ -795,6 +825,51 @@ class _ImportScreenState extends State<ImportScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
+                  // Per-file filter: one chip per source PDF. Tap to
+                  // include/exclude all of that file's rows at once — the
+                  // fast way to drop a mis-parsed file. Only shown when the
+                  // batch spans more than one file.
+                  Builder(builder: (context) {
+                    final byFile = <String, List<int>>{};
+                    for (var i = 0; i < _previewTransactions!.length; i++) {
+                      final f = _previewTransactions![i]['source_file']
+                          ?.toString();
+                      if (f == null || f.isEmpty) continue;
+                      byFile.putIfAbsent(f, () => []).add(i);
+                    }
+                    if (byFile.length < 2) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: byFile.entries.map((e) {
+                          final allSelected =
+                              e.value.every(_selectedIndices.contains);
+                          final anySelected =
+                              e.value.any(_selectedIndices.contains);
+                          return FilterChip(
+                            label: Text('${e.key}  (${e.value.length})'),
+                            selected: allSelected,
+                            showCheckmark: true,
+                            onSelected: (_) {
+                              setState(() {
+                                final s = Set<int>.from(_selectedIndices);
+                                // Any part selected → exclude the whole
+                                // file; fully excluded → include it.
+                                if (anySelected) {
+                                  e.value.forEach(s.remove);
+                                } else {
+                                  s.addAll(e.value);
+                                }
+                                _selectedIndices = s;
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    );
+                  }),
                   ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
@@ -808,6 +883,7 @@ class _ImportScreenState extends State<ImportScreen> {
                       final isAutoDeselected = _autoDeselectPatterns.any(
                         (p) => desc.contains(p),
                       );
+                      final isDuplicate = _duplicateIndices.contains(index);
 
                       return Card(
                         color: isSelected
@@ -845,15 +921,40 @@ class _ImportScreenState extends State<ImportScreen> {
                               });
                             }
                           },
-                          title: Text(
-                            tx['description'] ?? '',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w500,
-                              color: isSelected ? null : Colors.grey,
-                              decoration: isSelected
-                                  ? null
-                                  : TextDecoration.lineThrough,
-                            ),
+                          title: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  tx['description'] ?? '',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                    color: isSelected ? null : Colors.grey,
+                                    decoration: isSelected
+                                        ? null
+                                        : TextDecoration.lineThrough,
+                                  ),
+                                ),
+                              ),
+                              if (isDuplicate) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: context.warning.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    l.impAlreadyImported,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: context.warning,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                           subtitle: Padding(
                             padding: const EdgeInsets.only(top: 4.0),
@@ -867,9 +968,29 @@ class _ImportScreenState extends State<ImportScreen> {
                                         : Colors.grey[600],
                                   ),
                                 ),
+                                // Which file this row came from — so a
+                                // mis-parsed file is easy to spot (and
+                                // exclude via the chips above).
+                                if (tx['source_file'] != null) ...[
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      '· ${tx['source_file']}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: context.textFaint,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                                 const Spacer(),
                                 Text(
-                                  '${tx['currency']} ${tx['amount']}',
+                                  formatCurrencyAmount(
+                                    double.tryParse('${tx['amount']}') ?? 0,
+                                    (tx['currency'] ?? 'MXN').toString(),
+                                  ),
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     color: isSelected
