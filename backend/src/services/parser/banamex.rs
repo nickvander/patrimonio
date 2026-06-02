@@ -35,6 +35,7 @@ pub fn parse_csv(data: &[u8]) -> Result<Vec<ParsedTransaction>> {
             currency: "MXN".to_string(),
             category: None,
             original_description: None,
+            balance_after: None,
         });
     }
     

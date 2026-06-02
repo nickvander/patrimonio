@@ -24,7 +24,9 @@ class AddAccountDialog extends StatefulWidget {
 class _AddAccountDialogState extends State<AddAccountDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  final _balanceController = TextEditingController();
+  // Default to 0 — most accounts (and every statement import, where the
+  // balance is set from the imported closing balance) start there.
+  final _balanceController = TextEditingController(text: '0');
 
   String _type = 'Checking';
   late String _currency = widget.defaultCurrency;

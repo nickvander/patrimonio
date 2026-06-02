@@ -216,9 +216,19 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
                 currency: "MXN".to_string(),
                 category: None,
                 original_description: None,
+                balance_after: Some(saldo),
             });
         }
     };
+
+    // Banamex bundles MULTIPLE accounts into one statement (MiCuenta, then
+    // a Pagaré / Inversión account), each with its own detail table and its
+    // own opening "SALDO ANTERIOR". We only want the PRIMARY account — the
+    // secondary ones are daily-interest noise and mirror-entries of the
+    // primary's transfers (and their "RETIRO 44555" / "DEPOSITO 68156"
+    // folio concepts decay to bare numbers once polished). Stop at the
+    // second "SALDO ANTERIOR".
+    let mut saldo_anterior_count = 0;
 
     for raw in section.lines() {
         let line = raw.trim_end();
@@ -229,8 +239,43 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
         let upper_line = trimmed.to_uppercase();
         let amounts: Vec<Decimal> = amt_re
             .find_iter(trimmed)
+            .filter(|m| {
+                // A number directly followed by '%' is a rate (the "0.50%"
+                // in "INTERESES AL 0.50%"), not money.
+                if trimmed[m.end()..].chars().next() == Some('%') {
+                    return false;
+                }
+                // A real amount stands alone — reject matches embedded in a
+                // longer token, e.g. the "0624.01" inside a page-footer code
+                // "...B26INDA009.OD.0624.01", which otherwise corrupts the
+                // record's amount + running balance. The preceding char must
+                // not be a digit, letter, or '.'.
+                let before = trimmed[..m.start()].chars().last();
+                !matches!(before, Some(c) if c.is_ascii_alphanumeric() || c == '.')
+            })
             .filter_map(|m| Decimal::from_str(&m.as_str().replace(',', "")).ok())
             .collect();
+
+        // Count only the DATE-LED detail "SALDO ANTERIOR" (each account's
+        // opening row) — not the mixed-case "Saldo anterior" summary boxes,
+        // which would otherwise trip the cutoff early.
+        if date_re.is_match(line) && upper_line.contains("SALDO ANTERIOR") {
+            saldo_anterior_count += 1;
+            if saldo_anterior_count >= 2 {
+                if in_record {
+                    flush(
+                        cur_day,
+                        cur_month,
+                        &mut cur_desc,
+                        &mut cur_amounts,
+                        &mut prev_saldo,
+                        &mut txs,
+                    );
+                    in_record = false;
+                }
+                break;
+            }
+        }
 
         if let Some(c) = date_re.captures(line) {
             // New record — flush the previous one.
@@ -330,6 +375,43 @@ FECHA        CONCEPTO                                    RETIROS     DEPÓSITOS 
         // Jan row rolls into 2026.
         assert_eq!(txs[2].date, NaiveDate::from_ymd_opt(2026, 1, 12).unwrap());
         assert_eq!(txs[2].amount, Decimal::from_str("27000.00").unwrap());
+
+        // Running balance captured (drives the account's current balance).
+        assert_eq!(txs[2].balance_after, Some(Decimal::from_str("31000.00").unwrap()));
+    }
+
+    // Multi-account statement: a primary MiCuenta + a secondary Pagaré
+    // section (its own date-led "SALDO ANTERIOR"), an interest rate that
+    // must NOT be read as money, and a page-footer code with an embedded
+    // ".dd" that must NOT be read as money.
+    const MULTI: &str = "\
+Período del 25 de mayo del 2024 al 24 de junio del 2024
+Detalle de Operaciones   FECHA  CONCEPTO   RETIROS  DEPÓSITOS  SALDO
+25 MAY       SALDO ANTERIOR                                              5,000.00
+28 MAY       PAGO RECIBIDO DE BBVA
+             HORA 08:30 SUC 0519                            3,000.00     8,000.00
+             0005073                      000190.B26INDA009.OD.0624.01
+29 MAY       INTERESES AL 0.50%                             2.23         8,002.23
+Detalle de operaciones
+25 MAY       SALDO ANTERIOR                                              88,317.93
+28 MAY       RETIRO 44555                  12,500.00
+28 MAY       INTERESES AL 0.00%                                          75,817.93
+";
+
+    #[test]
+    fn stops_at_second_account_and_ignores_rate_and_codes() {
+        let txs = parse_text(MULTI).unwrap();
+        // Only the primary account's two real rows — the Pagaré section
+        // (RETIRO 44555 / daily INTERESES) is excluded entirely.
+        assert_eq!(txs.len(), 2, "got {:?}", txs);
+        assert!(txs.iter().all(|t| t.description.chars().any(|c| c.is_alphabetic())),
+            "no bare-number descriptions");
+        // The deposit's balance is 8,000 — the "0624.01" inside the footer
+        // code did NOT corrupt it.
+        assert_eq!(txs[0].amount, Decimal::from_str("3000.00").unwrap());
+        assert_eq!(txs[0].balance_after, Some(Decimal::from_str("8000.00").unwrap()));
+        // The 0.50% rate is not money: the interest row's amount is 2.23.
+        assert_eq!(txs[1].amount, Decimal::from_str("2.23").unwrap());
     }
 
     #[test]

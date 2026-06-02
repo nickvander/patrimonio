@@ -323,8 +323,18 @@ async fn confirm_handler(
         }
     }
 
+    // Closing balance = the running SALDO of the latest-dated row that
+    // carries one (Banamex statements do). Used to set the account's
+    // current balance after the import — idempotent on re-import.
+    let mut closing: Option<(chrono::NaiveDate, rust_decimal::Decimal)> = None;
+
     for ct in payload.transactions {
         let ConfirmTx { tx, source_file } = ct;
+        if let Some(bal) = tx.balance_after {
+            if closing.map(|(d, _)| tx.date >= d).unwrap_or(true) {
+                closing = Some((tx.date, bal));
+            }
+        }
         let signature = tx_signature(&tx.date, &tx.amount, &tx.description);
 
         // The parser stashes the pre-polish raw line in
@@ -373,12 +383,34 @@ async fn confirm_handler(
         imported_count, duplicate_count, payload.account_id
     );
 
-    if imported_count > 0 {
+    // Set the account's current balance from the statement's closing
+    // balance, so an imported account doesn't read $0. Idempotent: re-
+    // importing the same (or newer) statements just re-sets it.
+    if let Some((_, bal)) = closing {
+        let _ = sqlx::query(
+            "UPDATE accounts SET current_balance = $1, updated_at = NOW() \
+             WHERE id = $2 AND user_id = $3",
+        )
+        .bind(bal)
+        .bind(payload.account_id)
+        .bind(ctx.user_id)
+        .execute(&state.db)
+        .await;
+    }
+
+    if imported_count > 0 || closing.is_some() {
         state
             .realtime
             .publish(
                 ctx.user_id,
                 crate::services::realtime::RealtimeEvent::TransactionsChanged,
+            )
+            .await;
+        state
+            .realtime
+            .publish(
+                ctx.user_id,
+                crate::services::realtime::RealtimeEvent::AccountsChanged,
             )
             .await;
     }

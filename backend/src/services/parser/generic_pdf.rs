@@ -97,6 +97,7 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
                     currency: "MXN".to_string(),
                     category: None,
                     original_description: None,
+                    balance_after: None,
                 });
             }
         }

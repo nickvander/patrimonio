@@ -1632,10 +1632,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _scheduleSyncPollIfNeeded();
     } catch (e, stack) {
       debugPrint("Data load error: $e\n$stack");
-      setState(() {
-        _error = e.toString().replaceFirst('Exception: ', '');
-        _isLoading = false;
-      });
+      // Only surface the error screen on an EXPLICIT (non-silent) load. A
+      // silent background refresh — e.g. the one fired right after deleting
+      // an account, while its transactions are still cascading — must not
+      // blank the dashboard on a transient hiccup; keep the current data on
+      // screen and let the next refresh / realtime event reconcile.
+      if (!silent) {
+        setState(() {
+          _error = e.toString().replaceFirst('Exception: ', '');
+          _isLoading = false;
+        });
+      }
     }
   }
 

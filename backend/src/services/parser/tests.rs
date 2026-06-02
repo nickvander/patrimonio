@@ -246,6 +246,7 @@ fn test_polish_all_captures_original_when_changed() {
         currency: "MXN".to_string(),
         category: None,
         original_description: None,
+        balance_after: None,
     }];
     let polished = polish_all(Ok(parsed)).unwrap();
     assert_eq!(polished[0].description, "OXXO");
@@ -264,6 +265,7 @@ fn test_polish_all_skips_original_when_unchanged() {
         currency: "MXN".to_string(),
         category: None,
         original_description: None,
+        balance_after: None,
     }];
     let polished = polish_all(Ok(parsed)).unwrap();
     assert_eq!(polished[0].description, "UBER EATS MEXICO");
