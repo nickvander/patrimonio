@@ -6,6 +6,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use tokio::sync::RwLock;
@@ -16,7 +17,7 @@ use crate::api::session::AuthContext;
 use crate::services::parser;
 use crate::AppState;
 
-use crate::models::import::{ConfirmImportRequest, ParsedTransaction};
+use crate::models::import::ParsedTransaction;
 
 /// A parsed transaction plus the file it came from, for the import
 /// preview. `#[serde(flatten)]` keeps the wire shape identical to
@@ -63,6 +64,11 @@ pub fn router() -> Router<AppState> {
         // rows, return which are already imported so the UI can flag /
         // auto-deselect them BEFORE confirming.
         .route("/check-duplicates", post(check_duplicates_handler))
+        // Import cleanup: list past import batches, undo one, or bulk-
+        // delete transactions in an account + date range.
+        .route("/batches", get(list_batches_handler))
+        .route("/batches/{id}", axum::routing::delete(undo_batch_handler))
+        .route("/transactions/bulk-delete", post(bulk_delete_handler))
 }
 
 /// The dedup key for an imported transaction. MUST stay identical to the
@@ -234,13 +240,34 @@ async fn progress_handler(
     }
 }
 
+/// A confirmed transaction plus the file it came from. `#[serde(flatten)]`
+/// accepts the preview's flattened shape (ParsedTransaction fields +
+/// `source_file`), so the per-row source survives into the persisted
+/// import batch and can be shown / undone later.
+#[derive(Deserialize)]
+struct ConfirmTx {
+    #[serde(flatten)]
+    tx: ParsedTransaction,
+    #[serde(default)]
+    source_file: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ConfirmRequest {
+    account_id: uuid::Uuid,
+    transactions: Vec<ConfirmTx>,
+}
+
 async fn confirm_handler(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
-    Json(payload): Json<ConfirmImportRequest>,
+    Json(payload): Json<ConfirmRequest>,
 ) -> axum::response::Response {
     let mut imported_count = 0;
     let mut duplicate_count = 0;
+    // One batch id for this whole confirm, stamped on every inserted row so
+    // the import can be listed + undone as a unit.
+    let batch_id = uuid::Uuid::new_v4();
 
     // Currency-mismatch guard, scoped to caller's accounts so that an
     // attacker can't probe other users' account currencies via import
@@ -276,7 +303,7 @@ async fn confirm_handler(
         let tx_currencies: std::collections::HashSet<String> = payload
             .transactions
             .iter()
-            .map(|t| t.currency.to_uppercase())
+            .map(|t| t.tx.currency.to_uppercase())
             .collect();
         if tx_currencies.len() == 1
             && !tx_currencies.contains(&target_cur.to_uppercase())
@@ -296,7 +323,8 @@ async fn confirm_handler(
         }
     }
 
-    for tx in payload.transactions {
+    for ct in payload.transactions {
+        let ConfirmTx { tx, source_file } = ct;
         let signature = tx_signature(&tx.date, &tx.amount, &tx.description);
 
         // The parser stashes the pre-polish raw line in
@@ -307,8 +335,8 @@ async fn confirm_handler(
         // the original kept as the fallback). NULL when polishing
         // was a no-op — saves a column-equal-column copy.
         let result = sqlx::query(
-            "INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, source, source_id, user_id, original_description)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 'csv', $8, $9, $10)
+            "INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, source, source_id, user_id, original_description, import_batch_id, import_file)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'csv', $8, $9, $10, $11, $12)
              ON CONFLICT (account_id, external_id) DO NOTHING",
         )
         .bind(payload.account_id)
@@ -321,6 +349,8 @@ async fn confirm_handler(
         .bind("csv_import")
         .bind(ctx.user_id)
         .bind(tx.original_description.as_deref())
+        .bind(batch_id)
+        .bind(source_file.as_deref())
         .execute(&state.db)
         .await;
 
@@ -360,6 +390,8 @@ async fn confirm_handler(
             "message": format!("Import complete: {} new transactions, {} duplicates found.", imported_count, duplicate_count),
             "new_transactions": imported_count,
             "duplicates": duplicate_count,
+            // Only meaningful when something landed — used by "Undo import".
+            "import_batch_id": if imported_count > 0 { Some(batch_id.to_string()) } else { None },
         })),
     )
         .into_response()
@@ -644,3 +676,175 @@ async fn upload_handler(
         .into_response()
 }
 
+
+// ---------- import cleanup ----------
+
+/// GET /api/imports/batches — recent import batches (future imports, which
+/// are tagged with a batch id), newest first, with the account, file(s),
+/// row count, and date span. Used by the "Undo import" list.
+async fn list_batches_handler(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Response {
+    let rows = sqlx::query(
+        r#"
+        SELECT t.import_batch_id,
+               t.account_id,
+               a.name AS account_name,
+               COUNT(*) AS txn_count,
+               MIN(t.date) AS from_date,
+               MAX(t.date) AS to_date,
+               MAX(t.created_at) AS imported_at,
+               COALESCE(
+                   ARRAY_AGG(DISTINCT t.import_file)
+                       FILTER (WHERE t.import_file IS NOT NULL),
+                   '{}'
+               ) AS files
+        FROM transactions t
+        JOIN accounts a ON a.id = t.account_id
+        WHERE t.user_id = $1 AND t.import_batch_id IS NOT NULL
+        GROUP BY t.import_batch_id, t.account_id, a.name
+        ORDER BY MAX(t.created_at) DESC
+        LIMIT 100
+        "#,
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let batches: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "batch_id": r.try_get::<uuid::Uuid, _>("import_batch_id").map(|u| u.to_string()).unwrap_or_default(),
+                "account_id": r.try_get::<uuid::Uuid, _>("account_id").map(|u| u.to_string()).unwrap_or_default(),
+                "account_name": r.try_get::<String, _>("account_name").unwrap_or_default(),
+                "txn_count": r.try_get::<i64, _>("txn_count").unwrap_or(0),
+                "from_date": r.try_get::<chrono::NaiveDate, _>("from_date").map(|d| d.to_string()).unwrap_or_default(),
+                "to_date": r.try_get::<chrono::NaiveDate, _>("to_date").map(|d| d.to_string()).unwrap_or_default(),
+                "imported_at": r.try_get::<chrono::DateTime<chrono::Utc>, _>("imported_at").map(|d| d.to_rfc3339()).unwrap_or_default(),
+                "files": r.try_get::<Vec<String>, _>("files").unwrap_or_default(),
+            })
+        })
+        .collect();
+    Json(serde_json::json!({ "batches": batches })).into_response()
+}
+
+/// DELETE /api/imports/batches/{id} — undo an import by deleting every row
+/// it created (scoped to the caller).
+async fn undo_batch_handler(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let res = sqlx::query(
+        "DELETE FROM transactions WHERE import_batch_id = $1 AND user_id = $2",
+    )
+    .bind(id)
+    .bind(ctx.user_id)
+    .execute(&state.db)
+    .await;
+    match res {
+        Ok(r) => {
+            if r.rows_affected() > 0 {
+                state
+                    .realtime
+                    .publish(
+                        ctx.user_id,
+                        crate::services::realtime::RealtimeEvent::TransactionsChanged,
+                    )
+                    .await;
+            }
+            Json(serde_json::json!({ "deleted": r.rows_affected() })).into_response()
+        }
+        Err(e) => {
+            error!("undo_batch failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct BulkDeleteRequest {
+    account_id: uuid::Uuid,
+    date_from: chrono::NaiveDate,
+    date_to: chrono::NaiveDate,
+    /// When true, only rows imported from a statement (`source_id =
+    /// 'csv_import'`) are removed — leaves bank-synced transactions alone.
+    #[serde(default)]
+    imported_only: bool,
+    /// When true, return the count that WOULD be deleted without deleting,
+    /// for a confirm preview.
+    #[serde(default)]
+    dry_run: bool,
+}
+
+/// POST /api/imports/transactions/bulk-delete — remove transactions in an
+/// account + inclusive date range (optionally only imported rows). The
+/// cleanup path for PAST imports that predate batch tagging.
+async fn bulk_delete_handler(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Json(req): Json<BulkDeleteRequest>,
+) -> Response {
+    let owns: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM accounts WHERE id = $1 AND user_id = $2)",
+    )
+    .bind(req.account_id)
+    .bind(ctx.user_id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(false);
+    if !owns {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+
+    if req.dry_run {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM transactions \
+             WHERE user_id = $1 AND account_id = $2 AND date >= $3 AND date <= $4 \
+               AND ($5 = false OR source_id = 'csv_import')",
+        )
+        .bind(ctx.user_id)
+        .bind(req.account_id)
+        .bind(req.date_from)
+        .bind(req.date_to)
+        .bind(req.imported_only)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(0);
+        return Json(serde_json::json!({ "count": count })).into_response();
+    }
+
+    let res = sqlx::query(
+        "DELETE FROM transactions \
+         WHERE user_id = $1 AND account_id = $2 AND date >= $3 AND date <= $4 \
+           AND ($5 = false OR source_id = 'csv_import')",
+    )
+    .bind(ctx.user_id)
+    .bind(req.account_id)
+    .bind(req.date_from)
+    .bind(req.date_to)
+    .bind(req.imported_only)
+    .execute(&state.db)
+    .await;
+    match res {
+        Ok(r) => {
+            if r.rows_affected() > 0 {
+                state
+                    .realtime
+                    .publish(
+                        ctx.user_id,
+                        crate::services::realtime::RealtimeEvent::TransactionsChanged,
+                    )
+                    .await;
+            }
+            Json(serde_json::json!({ "deleted": r.rows_affected() })).into_response()
+        }
+        Err(e) => {
+            error!("bulk_delete failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}

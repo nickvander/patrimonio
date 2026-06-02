@@ -2540,6 +2540,108 @@ abstract class AppLocalizations {
   /// **'New account (e.g. Banamex)'**
   String get impCreateAccountForImport;
 
+  /// No description provided for @impCleanupTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage imports'**
+  String get impCleanupTitle;
+
+  /// No description provided for @impRecentImports.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent imports'**
+  String get impRecentImports;
+
+  /// No description provided for @impNoRecentImports.
+  ///
+  /// In en, this message translates to:
+  /// **'No tracked imports yet. Imports you do from now on appear here and can be undone.'**
+  String get impNoRecentImports;
+
+  /// No description provided for @impUndo.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get impUndo;
+
+  /// No description provided for @impUndoImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo import'**
+  String get impUndoImport;
+
+  /// No description provided for @impUndoImportConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete all {count} transactions from this import?'**
+  String impUndoImportConfirm(Object count);
+
+  /// No description provided for @impDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get impDelete;
+
+  /// No description provided for @impDeletedN.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted {count} transactions'**
+  String impDeletedN(Object count);
+
+  /// No description provided for @impBulkDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Clean up by account & date'**
+  String get impBulkDelete;
+
+  /// No description provided for @impBulkDeleteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'For imports done before this update (no batch). Removes transactions in the chosen account and date range.'**
+  String get impBulkDeleteHint;
+
+  /// No description provided for @impOnlyImported.
+  ///
+  /// In en, this message translates to:
+  /// **'Only imported transactions'**
+  String get impOnlyImported;
+
+  /// No description provided for @impPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview'**
+  String get impPreview;
+
+  /// No description provided for @impWillDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} transactions will be deleted'**
+  String impWillDelete(Object count);
+
+  /// No description provided for @impFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'From'**
+  String get impFrom;
+
+  /// No description provided for @impTo.
+  ///
+  /// In en, this message translates to:
+  /// **'To'**
+  String get impTo;
+
+  /// No description provided for @impTransactionsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'transactions'**
+  String get impTransactionsLabel;
+
+  /// No description provided for @impCleanupFillAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick an account and both dates'**
+  String get impCleanupFillAll;
+
   /// No description provided for @impFileWaiting.
   ///
   /// In en, this message translates to:

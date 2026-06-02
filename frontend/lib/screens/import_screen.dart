@@ -4,6 +4,7 @@ import '../utils/supported_banks.dart';
 import '../utils/theme_colors.dart';
 import '../utils/currency.dart';
 import '../widgets/add_account_dialog.dart';
+import 'import_cleanup_screen.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/api_service.dart';
 import '../services/file_drop_web.dart';
@@ -558,7 +559,20 @@ class _ImportScreenState extends State<ImportScreen> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     return Scaffold(
-      appBar: AppBar(title: Text(l.impTitle)),
+      appBar: AppBar(
+        title: Text(l.impTitle),
+        actions: [
+          IconButton(
+            tooltip: l.impCleanupTitle,
+            icon: const Icon(Icons.cleaning_services_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const ImportCleanupScreen(),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(

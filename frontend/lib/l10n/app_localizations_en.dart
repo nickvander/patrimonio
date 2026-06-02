@@ -1491,6 +1491,65 @@ class AppLocalizationsEn extends AppLocalizations {
   String get impCreateAccountForImport => 'New account (e.g. Banamex)';
 
   @override
+  String get impCleanupTitle => 'Manage imports';
+
+  @override
+  String get impRecentImports => 'Recent imports';
+
+  @override
+  String get impNoRecentImports =>
+      'No tracked imports yet. Imports you do from now on appear here and can be undone.';
+
+  @override
+  String get impUndo => 'Undo';
+
+  @override
+  String get impUndoImport => 'Undo import';
+
+  @override
+  String impUndoImportConfirm(Object count) {
+    return 'Delete all $count transactions from this import?';
+  }
+
+  @override
+  String get impDelete => 'Delete';
+
+  @override
+  String impDeletedN(Object count) {
+    return 'Deleted $count transactions';
+  }
+
+  @override
+  String get impBulkDelete => 'Clean up by account & date';
+
+  @override
+  String get impBulkDeleteHint =>
+      'For imports done before this update (no batch). Removes transactions in the chosen account and date range.';
+
+  @override
+  String get impOnlyImported => 'Only imported transactions';
+
+  @override
+  String get impPreview => 'Preview';
+
+  @override
+  String impWillDelete(Object count) {
+    return '$count transactions will be deleted';
+  }
+
+  @override
+  String get impFrom => 'From';
+
+  @override
+  String get impTo => 'To';
+
+  @override
+  String get impTransactionsLabel => 'transactions';
+
+  @override
+  String get impCleanupFillAll => 'Pick an account and both dates';
+
+  @override
   String get impFileWaiting => 'waiting…';
 
   @override

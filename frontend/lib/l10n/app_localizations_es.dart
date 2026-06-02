@@ -1511,6 +1511,65 @@ class AppLocalizationsEs extends AppLocalizations {
   String get impCreateAccountForImport => 'Nueva cuenta (p. ej. Banamex)';
 
   @override
+  String get impCleanupTitle => 'Gestionar importaciones';
+
+  @override
+  String get impRecentImports => 'Importaciones recientes';
+
+  @override
+  String get impNoRecentImports =>
+      'Aún no hay importaciones registradas. Las que hagas de ahora en adelante aparecerán aquí y podrás deshacerlas.';
+
+  @override
+  String get impUndo => 'Deshacer';
+
+  @override
+  String get impUndoImport => 'Deshacer importación';
+
+  @override
+  String impUndoImportConfirm(Object count) {
+    return '¿Eliminar las $count transacciones de esta importación?';
+  }
+
+  @override
+  String get impDelete => 'Eliminar';
+
+  @override
+  String impDeletedN(Object count) {
+    return 'Se eliminaron $count transacciones';
+  }
+
+  @override
+  String get impBulkDelete => 'Limpiar por cuenta y fecha';
+
+  @override
+  String get impBulkDeleteHint =>
+      'Para importaciones hechas antes de esta actualización (sin lote). Elimina las transacciones en la cuenta y el rango de fechas elegidos.';
+
+  @override
+  String get impOnlyImported => 'Solo transacciones importadas';
+
+  @override
+  String get impPreview => 'Vista previa';
+
+  @override
+  String impWillDelete(Object count) {
+    return 'Se eliminarán $count transacciones';
+  }
+
+  @override
+  String get impFrom => 'Desde';
+
+  @override
+  String get impTo => 'Hasta';
+
+  @override
+  String get impTransactionsLabel => 'transacciones';
+
+  @override
+  String get impCleanupFillAll => 'Elige una cuenta y ambas fechas';
+
+  @override
   String get impFileWaiting => 'en espera…';
 
   @override

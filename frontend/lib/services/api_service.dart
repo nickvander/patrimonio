@@ -1304,6 +1304,60 @@ class ApiService {
     }
   }
 
+  /// Recent import batches (newest first): each is
+  /// {batch_id, account_id, account_name, txn_count, from_date, to_date,
+  /// imported_at, files[]}.
+  Future<List<dynamic>> getImportBatches() async {
+    final res = await _get(Uri.parse('$_baseUrl/imports/batches'));
+    if (res.statusCode == 200) {
+      final body = json.decode(res.body) as Map<String, dynamic>;
+      return (body['batches'] as List?) ?? const [];
+    }
+    return const [];
+  }
+
+  /// Undo an import — delete every transaction it created. Returns the
+  /// number removed.
+  Future<int> undoImportBatch(String batchId) async {
+    final res = await _delete(Uri.parse('$_baseUrl/imports/batches/$batchId'));
+    if (res.statusCode == 200) {
+      clearDashboardCache();
+      return ((json.decode(res.body) as Map)['deleted'] as num?)?.toInt() ?? 0;
+    }
+    throw Exception(
+        _t('Failed to undo import', 'No se pudo deshacer la importación'));
+  }
+
+  /// Bulk-delete transactions in an account + inclusive date range. With
+  /// [dryRun] true, returns the count that WOULD be deleted (for a confirm
+  /// preview); otherwise deletes and returns the number removed.
+  /// [importedOnly] limits it to statement-imported rows.
+  Future<int> bulkDeleteTransactions({
+    required String accountId,
+    required String dateFrom,
+    required String dateTo,
+    required bool importedOnly,
+    required bool dryRun,
+  }) async {
+    final res = await _post(
+      Uri.parse('$_baseUrl/imports/transactions/bulk-delete'),
+      headers: _withCsrf({'Content-Type': 'application/json'}),
+      body: json.encode({
+        'account_id': accountId,
+        'date_from': dateFrom,
+        'date_to': dateTo,
+        'imported_only': importedOnly,
+        'dry_run': dryRun,
+      }),
+    );
+    if (res.statusCode == 200) {
+      if (!dryRun) clearDashboardCache();
+      final body = json.decode(res.body) as Map<String, dynamic>;
+      return (body[dryRun ? 'count' : 'deleted'] as num?)?.toInt() ?? 0;
+    }
+    throw Exception(_t('Bulk delete failed', 'La eliminación masiva falló'));
+  }
+
   /// Preview-time duplicate check: returns the indices (into
   /// [transactions]) that are already imported in [accountId], by the same
   /// signature confirm dedups on. Best-effort — returns an empty set on
