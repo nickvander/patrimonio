@@ -494,10 +494,15 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
         }
         if lower_name.contains("nu")
             || sample_text.contains("NU MEXICO")
+            || sample_text.contains("NU MÉXICO FINANCIERA")
+            || sample_text.contains("CUENTA NU")
             || sample_text.contains("NUBNK")
             || sample_text.contains("NU BANK")
         {
-            try_rows!(nu_mexico_pdf::parse(data).unwrap_or_default(), "nu");
+            // Primary: the column parser over the richer pdftotext/OCR text.
+            try_rows!(nu_mexico_pdf::parse_text(&best).unwrap_or_default(), "nu-layout");
+            // Fallback: the in-process lopdf extraction.
+            try_rows!(nu_mexico_pdf::parse(data).unwrap_or_default(), "nu-lopdf");
         }
 
         // Broad Mexican-bank indicators → try the Banamex layout parser.

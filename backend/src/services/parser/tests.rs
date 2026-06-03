@@ -62,12 +62,16 @@ fn test_cetes_csv() {
 
 #[test]
 fn test_parse_nu_mexico_pdf_text() {
-    let text = "15 MAR Uber Mexico $ 150.50\n16 MAR OXXO $ 50.00";
+    // Balance-less rows: sign comes from keyword, defaulting to debit for an
+    // unrecognised merchant ("Uber"/"OXXO" aren't keyworded → spending).
+    let text = "15 MAR Uber Mexico $ 150.50\n16 MAR Recibiste de PATRON $ 500.00";
     let result = nu_mexico_pdf::parse_text(text).unwrap();
-    
+
     assert_eq!(result.len(), 2);
     assert_eq!(result[0].description, "Uber Mexico");
-    assert_eq!(result[0].amount, Decimal::from_str("150.50").unwrap());
+    assert_eq!(result[0].amount, Decimal::from_str("-150.50").unwrap());
+    // "Recibiste" → credit (positive).
+    assert_eq!(result[1].amount, Decimal::from_str("500.00").unwrap());
 }
 
 #[test]

@@ -168,11 +168,16 @@ as a new row); dedup vs Plaid-synced rows. A balance-anchored content hash
 ### 5. More banks  ★ medium, incremental — BBVA + Santander SHIPPED
 **Done:** `bbva_layout.rs` + `santander_layout.rs` (+ shared `layout_util.rs`),
 routed by content signature, unit-tested against reconstructed-from-real
-fixtures. **Remaining:** HSBC, Banorte, Scotiabank, a Nu *PDF* parser
-(Nu currently CSV-only). Same shape as the new layout parsers. **Highest
-priority within this item:** validate BBVA + Santander against a real
-*personal* statement (current fixtures use plausible personal-account
-description vocab — see Known-limitation #5).
+fixtures. **Nu PDF** (`nu_mexico_pdf.rs`) is now a real column parser too:
+the prior stub was replaced (it hardcoded the current year + had a no-op
+sign TODO). It reads the Cuenta statement's signed `Monto` + running
+`$Saldo`, takes the sign from the balance delta (keyword fallback), and
+takes the year from the `Periodo` header; routing tries it over the
+pdftotext `-layout` text first, lopdf as fallback. **Remaining:** HSBC,
+Banorte, Scotiabank. Same shape as the layout parsers. **Highest priority
+within this item:** validate BBVA + Santander + Nu against a real *personal*
+statement (current fixtures use plausible personal-account description
+vocab — see Known-limitation #5).
 
 ### 6. OCR confidence + review flagging  ★ low
 **Why:** Catch OCR misreads before they pollute the ledger.
