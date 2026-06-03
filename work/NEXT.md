@@ -1,5 +1,10 @@
 # Next session — handoff
 
+> **⇒ START HERE: [work/HANDOFF.md](HANDOFF.md)** has the current (2026-06-03)
+> state after the statement-import deepening sprint — what shipped, caveats,
+> and the suggested next steps. This file (NEXT.md) is the older broader
+> backlog; read HANDOFF.md first.
+>
 > **Last updated:** 2026-05-30 (after the personal-lending feature shipped)
 > **Purpose:** Pickup-ready priorities for the next agent. Each item
 > has a why, scope sketch, and where to look in code. Ordered by
