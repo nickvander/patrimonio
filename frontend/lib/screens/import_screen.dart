@@ -38,6 +38,13 @@ class _ImportScreenState extends State<ImportScreen> {
   Map<String, List<int>> _fileGroups = {};
   List<dynamic>? _accounts;
   String? _selectedAccountId;
+  // When one statement bundles more than one account (Banamex's primary
+  // MiCuenta + a Pagaré/Ahorro section), the parser tags the secondary rows
+  // with `account_label`. These are the distinct secondary labels seen in
+  // the preview and the destination account picked for each — so the savings
+  // section is routed to its own account instead of being dropped.
+  List<String> _secondaryLabels = [];
+  final Map<String, String?> _secondaryAccountIds = {};
   String? _message;
   /// Whether `_message` represents a failure. Tracked explicitly rather
   /// than sniffing the message text for "failed" — the copy is now
@@ -252,6 +259,16 @@ class _ImportScreenState extends State<ImportScreen> {
       }
     }
     _fileGroups = groups;
+
+    // Distinct secondary-account labels (e.g. "Cuenta secundaria") so the UI
+    // can offer a destination per bundled account.
+    final labels = <String>{};
+    for (final tx in _previewTransactions!) {
+      final lbl = (tx['account_label'] ?? '').toString();
+      if (lbl.isNotEmpty) labels.add(lbl);
+    }
+    _secondaryLabels = labels.toList()..sort();
+    _secondaryAccountIds.removeWhere((k, _) => !labels.contains(k));
   }
 
   /// Backend caps the multipart body at 100 MB (DefaultBodyLimit in
@@ -356,7 +373,10 @@ class _ImportScreenState extends State<ImportScreen> {
   /// isn't linked, e.g. Banamex). Reuses the shared AddAccountDialog,
   /// pre-set to the imported transactions' currency, then auto-selects the
   /// new account so the user can import straight into it.
-  Future<void> _openCreateAccount() async {
+  ///
+  /// [secondaryLabel] routes the new account to a bundled secondary section
+  /// instead of the primary destination (null = primary).
+  Future<void> _openCreateAccount({String? secondaryLabel}) async {
     final cur = (_previewTransactions?.isNotEmpty ?? false)
         ? (_previewTransactions!.first['currency']?.toString().toUpperCase() ??
             'MXN')
@@ -367,15 +387,17 @@ class _ImportScreenState extends State<ImportScreen> {
       context: context,
       builder: (_) => AddAccountDialog(
         defaultCurrency: cur,
-        onAccountCreated: () => _selectNewlyCreatedAccount(existingIds),
+        onAccountCreated: () =>
+            _selectNewlyCreatedAccount(existingIds, secondaryLabel),
       ),
     );
   }
 
   /// After an inline account creation, reload accounts and select the one
   /// that wasn't there before (robust against duplicate names). Fire-and-
-  /// forget so it fits AddAccountDialog's VoidCallback.
-  void _selectNewlyCreatedAccount(Set<dynamic> existingIds) {
+  /// forget so it fits AddAccountDialog's VoidCallback. [secondaryLabel]
+  /// assigns the new account to that bundled section's slot (null = primary).
+  void _selectNewlyCreatedAccount(Set<dynamic> existingIds, String? secondaryLabel) {
     () async {
       await _fetchAccounts();
       if (!mounted) return;
@@ -384,10 +406,107 @@ class _ImportScreenState extends State<ImportScreen> {
             orElse: () => null,
           );
       if (created != null) {
-        setState(() => _selectedAccountId = created['id']?.toString());
-        _recheckDuplicates();
+        final id = created['id']?.toString();
+        setState(() {
+          if (secondaryLabel == null) {
+            _selectedAccountId = id;
+          } else {
+            _secondaryAccountIds[secondaryLabel] = id;
+          }
+        });
+        if (secondaryLabel == null) _recheckDuplicates();
       }
     }();
+  }
+
+  /// Count of currently-selected preview rows belonging to a bundled
+  /// secondary-account section.
+  int _countForLabel(String label) {
+    if (_previewTransactions == null) return 0;
+    var n = 0;
+    for (final i in _selectedIndices) {
+      if ((_previewTransactions![i]['account_label'] ?? '').toString() == label) {
+        n++;
+      }
+    }
+    return n;
+  }
+
+  /// Destination pickers for the secondary accounts bundled in a statement
+  /// (Banamex primary + Pagaré/Ahorro). Each section gets its own account
+  /// dropdown + inline-create; unassigned sections are skipped at confirm.
+  List<Widget> _buildSecondaryPickers(BuildContext context) {
+    final es = Localizations.localeOf(context).languageCode == 'es';
+    final accounts = _accounts ?? const [];
+    return [
+      const SizedBox(height: 16),
+      Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: context.info.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              es
+                  ? 'Este estado de cuenta incluye otra(s) cuenta(s)'
+                  : 'This statement includes additional account(s)',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              es
+                  ? 'Elige una cuenta destino para cada sección, o crea una nueva. Las secciones sin cuenta no se importarán.'
+                  : "Pick a destination account for each section, or create one. Sections left unassigned won't be imported.",
+              style: TextStyle(fontSize: 12, color: context.textSubtle),
+            ),
+            for (final label in _secondaryLabels) ...[
+              const SizedBox(height: 12),
+              Text(
+                '$label · ${_countForLabel(label)} ${es ? "movimientos" : "transactions"}',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 6),
+              if (accounts.isNotEmpty)
+                DropdownButtonFormField<String>(
+                  initialValue: _secondaryAccountIds[label],
+                  isExpanded: true,
+                  hint: Text(es ? 'Elegir cuenta…' : 'Choose account…'),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: context.tint(0.05),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  items: accounts.map<DropdownMenuItem<String>>((acc) {
+                    final cur = (acc['currency'] as String? ?? '').toUpperCase();
+                    final lbl = cur.isNotEmpty
+                        ? '${acc['institution_name']} - ${acc['name']} ($cur)'
+                        : '${acc['institution_name']} - ${acc['name']}';
+                    return DropdownMenuItem<String>(
+                      value: acc['id'],
+                      child: Text(lbl),
+                    );
+                  }).toList(),
+                  onChanged: (val) =>
+                      setState(() => _secondaryAccountIds[label] = val),
+                ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => _openCreateAccount(secondaryLabel: label),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: Text(es ? 'Crear cuenta' : 'Create account'),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    ];
   }
 
   /// Flag (and auto-deselect) preview rows already imported in the chosen
@@ -525,49 +644,78 @@ class _ImportScreenState extends State<ImportScreen> {
 
   Future<void> _confirmImport() async {
     final l = AppLocalizations.of(context);
-    if (_selectedAccountId == null) {
+    if (_previewTransactions == null) return;
+
+    // Group the selected rows by their destination account. The primary
+    // section (no account_label) goes to `_selectedAccountId`; each bundled
+    // secondary section goes to the account chosen for its label.
+    final byAccount = <String, List<dynamic>>{};
+    final unassigned = <String>[]; // secondary labels with no account chosen
+    for (final i in _selectedIndices) {
+      final tx = _previewTransactions![i];
+      final label = (tx['account_label'] ?? '').toString();
+      final accountId =
+          label.isEmpty ? _selectedAccountId : _secondaryAccountIds[label];
+      if (accountId == null || accountId.isEmpty) {
+        if (label.isEmpty) {
+          // Primary section with no account selected — the original guard.
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(l.impSelectAccountFirst,
+                  style: const TextStyle(color: Colors.redAccent)),
+            ),
+          );
+          return;
+        }
+        if (!unassigned.contains(label)) unassigned.add(label);
+        continue;
+      }
+      byAccount.putIfAbsent(accountId, () => []).add(tx);
+    }
+
+    if (byAccount.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l.impNoTransactionsSelected)),
+      );
+      return;
+    }
+
+    setState(() => _isUploading = true);
+
+    try {
+      final messages = <String>[];
+      final warnings = <String>[];
+      // One confirm call per destination account.
+      for (final entry in byAccount.entries) {
+        final response =
+            await _apiService.confirmImport(entry.key, entry.value);
+        if (response['message'] != null) {
+          messages.add(response['message'].toString());
+        }
+        final w = response['warnings'];
+        if (w is List) warnings.addAll(w.map((e) => e.toString()));
+      }
+
+      if (!mounted) return;
+
+      // Surface likely-missing-statement warnings before leaving the screen.
+      if (warnings.isNotEmpty) {
+        await _showContinuityWarnings(warnings);
+        if (!mounted) return;
+      }
+
+      final skippedNote = unassigned.isEmpty
+          ? ''
+          : (Localizations.localeOf(context).languageCode == 'es'
+              ? ' (secciones sin cuenta omitidas: ${unassigned.join(", ")})'
+              : ' (skipped unassigned sections: ${unassigned.join(", ")})');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            l.impSelectAccountFirst,
-            style: const TextStyle(color: Colors.redAccent),
+            (messages.isEmpty ? l.impImportSuccessful : messages.join(' · ')) +
+                skippedNote,
           ),
         ),
-      );
-      return;
-    }
-    if (_previewTransactions == null) return;
-
-    // Only send selected transactions
-    final selectedTxs = <dynamic>[];
-    for (int i = 0; i < _previewTransactions!.length; i++) {
-      if (_selectedIndices.contains(i)) {
-        selectedTxs.add(_previewTransactions![i]);
-      }
-    }
-
-    if (selectedTxs.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(l.impNoTransactionsSelected),
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _isUploading = true;
-    });
-
-    try {
-      final response = await _apiService.confirmImport(
-        _selectedAccountId!,
-        selectedTxs,
-      );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(response['message'] ?? l.impImportSuccessful)),
       );
       Navigator.pop(context);
     } catch (e) {
@@ -577,6 +725,47 @@ class _ImportScreenState extends State<ImportScreen> {
         _isUploading = false;
       });
     }
+  }
+
+  /// Show the backend's statement-continuity warnings (likely missing
+  /// months) in a dialog so the user can go fetch the gap before relying on
+  /// the import being complete.
+  Future<void> _showContinuityWarnings(List<String> warnings) async {
+    final es = Localizations.localeOf(context).languageCode == 'es';
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: context.warning),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(es
+                  ? 'Posibles estados de cuenta faltantes'
+                  : 'Possible missing statements'),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final w in warnings) ...[
+                Text('• $w', style: const TextStyle(fontSize: 13, height: 1.35)),
+                const SizedBox(height: 10),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(es ? 'Entendido' : 'Got it'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -872,6 +1061,10 @@ class _ImportScreenState extends State<ImportScreen> {
                       label: Text(l.impCreateAccountForImport),
                     ),
                   ),
+                  // Per-section destination pickers when a statement bundles
+                  // more than one account (Banamex primary + Pagaré/Ahorro).
+                  if (_secondaryLabels.isNotEmpty)
+                    ..._buildSecondaryPickers(context),
                   const SizedBox(height: 24),
 
                   // Header row with title and selection controls

@@ -80,6 +80,10 @@ fn is_meta_line(upper: &str) -> bool {
         || upper.starts_with("AVENIDA")
         || upper.starts_with("PLAZA")
         || upper.starts_with("SUC.")
+        // The next account section's "Detalle de operaciones" header lands
+        // at the tail of the previous section — don't let it pollute the
+        // last record's description.
+        || upper.starts_with("DETALLE")
 }
 
 /// Whole-record skip: summary lines + net-zero informational notices.
@@ -132,17 +136,72 @@ fn year_resolver(upper: &str) -> Box<dyn Fn(u32) -> i32> {
 }
 
 /// Parse the `pdftotext -layout` text of a Banamex statement.
+///
+/// A single Banamex PDF bundles MULTIPLE accounts (a primary MiCuenta, then
+/// a Pagaré / Ahorro / Inversión sub-account), each with its OWN detail
+/// table and its own opening "SALDO ANTERIOR". We split on those openers and
+/// parse each section independently, tagging the secondary sections with an
+/// `account_label` so the import flow can route them to their own account —
+/// otherwise that savings balance is silently dropped from net worth.
 pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
     let upper = text.to_uppercase();
     let resolve_year = year_resolver(&upper);
 
     // Anchor to the detail table when present, so summary figures don't
     // masquerade as transactions. Falls back to the whole document.
-    let start = upper
-        .find("DETALLE DE OPERACIONES")
-        .unwrap_or(0);
+    let start = upper.find("DETALLE DE OPERACIONES").unwrap_or(0);
     let section = &text[start..];
+    let lines: Vec<&str> = section.lines().collect();
 
+    // Section openers: each account's opening "SALDO ANTERIOR" row (the
+    // uppercase detail form — the mixed-case "Saldo anterior" summary boxes
+    // don't match, so they never split a section).
+    let openers: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| l.contains("SALDO ANTERIOR"))
+        .map(|(i, _)| i)
+        .collect();
+
+    let mut txs: Vec<ParsedTransaction> = Vec::new();
+    if openers.is_empty() {
+        // No opener found — parse the whole thing as one (primary) section.
+        txs.extend(parse_section(&lines, resolve_year.as_ref()));
+    } else {
+        for (sec_idx, &begin) in openers.iter().enumerate() {
+            let end = openers.get(sec_idx + 1).copied().unwrap_or(lines.len());
+            let label = section_label(sec_idx);
+            let mut sec_txs = parse_section(&lines[begin..end], resolve_year.as_ref());
+            for t in &mut sec_txs {
+                t.account_label = label.clone();
+            }
+            txs.extend(sec_txs);
+        }
+    }
+
+    info!("Banamex layout parser extracted {} transactions", txs.len());
+    Ok(txs)
+}
+
+/// Stable destination label for an account section. The primary (index 0)
+/// keeps `None` so single-account statements — and the primary account of a
+/// bundled statement — behave EXACTLY as before. Secondary sections get a
+/// stable ordinal label; the user maps it to their real savings/Pagaré
+/// account in the import picker (so the label only needs to be consistent
+/// across statements, not pretty).
+fn section_label(sec_idx: usize) -> Option<String> {
+    match sec_idx {
+        0 => None,
+        1 => Some("Cuenta secundaria".to_string()),
+        n => Some(format!("Cuenta secundaria {}", n)),
+    }
+}
+
+/// Parse a SINGLE account section (one "SALDO ANTERIOR" opener + its detail
+/// rows). Sign comes from the running-SALDO delta — the bank's own balance
+/// column is the most reliable signal. `account_label` is left `None`; the
+/// caller stamps the section's label.
+fn parse_section(lines: &[&str], resolve_year: &dyn Fn(u32) -> i32) -> Vec<ParsedTransaction> {
     let date_re =
         Regex::new(r"^\s*(\d{1,2})\s+(ENE|FEB|MAR|ABR|MAY|JUN|JUL|AGO|SEP|OCT|NOV|DIC)\b").unwrap();
     let amt_re = Regex::new(r"\d{1,3}(?:,\d{3})*\.\d{2}").unwrap();
@@ -217,20 +276,12 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
                 category: None,
                 original_description: None,
                 balance_after: Some(saldo),
+                account_label: None,
             });
         }
     };
 
-    // Banamex bundles MULTIPLE accounts into one statement (MiCuenta, then
-    // a Pagaré / Inversión account), each with its own detail table and its
-    // own opening "SALDO ANTERIOR". We only want the PRIMARY account — the
-    // secondary ones are daily-interest noise and mirror-entries of the
-    // primary's transfers (and their "RETIRO 44555" / "DEPOSITO 68156"
-    // folio concepts decay to bare numbers once polished). Stop at the
-    // second "SALDO ANTERIOR".
-    let mut saldo_anterior_count = 0;
-
-    for raw in section.lines() {
+    for raw in lines {
         let line = raw.trim_end();
         let trimmed = line.trim();
         if trimmed.is_empty() {
@@ -255,27 +306,6 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
             })
             .filter_map(|m| Decimal::from_str(&m.as_str().replace(',', "")).ok())
             .collect();
-
-        // Count only the DATE-LED detail "SALDO ANTERIOR" (each account's
-        // opening row) — not the mixed-case "Saldo anterior" summary boxes,
-        // which would otherwise trip the cutoff early.
-        if date_re.is_match(line) && upper_line.contains("SALDO ANTERIOR") {
-            saldo_anterior_count += 1;
-            if saldo_anterior_count >= 2 {
-                if in_record {
-                    flush(
-                        cur_day,
-                        cur_month,
-                        &mut cur_desc,
-                        &mut cur_amounts,
-                        &mut prev_saldo,
-                        &mut txs,
-                    );
-                    in_record = false;
-                }
-                break;
-            }
-        }
 
         if let Some(c) = date_re.captures(line) {
             // New record — flush the previous one.
@@ -333,8 +363,7 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
         );
     }
 
-    info!("Banamex layout parser extracted {} transactions", txs.len());
-    Ok(txs)
+    txs
 }
 
 #[cfg(test)]
@@ -380,10 +409,10 @@ FECHA        CONCEPTO                                    RETIROS     DEPÓSITOS 
         assert_eq!(txs[2].balance_after, Some(Decimal::from_str("31000.00").unwrap()));
     }
 
-    // Multi-account statement: a primary MiCuenta + a secondary Pagaré
-    // section (its own date-led "SALDO ANTERIOR"), an interest rate that
-    // must NOT be read as money, and a page-footer code with an embedded
-    // ".dd" that must NOT be read as money.
+    // Multi-account statement: a primary MiCuenta + a secondary
+    // (Pagaré/Ahorro) section, each with its own "SALDO ANTERIOR" opener and
+    // running-balance table. Also exercises an interest rate that must NOT
+    // be read as money and a page-footer code with an embedded ".dd".
     const MULTI: &str = "\
 Período del 25 de mayo del 2024 al 24 de junio del 2024
 Detalle de Operaciones   FECHA  CONCEPTO   RETIROS  DEPÓSITOS  SALDO
@@ -394,24 +423,40 @@ Detalle de Operaciones   FECHA  CONCEPTO   RETIROS  DEPÓSITOS  SALDO
 29 MAY       INTERESES AL 0.50%                             2.23         8,002.23
 Detalle de operaciones
 25 MAY       SALDO ANTERIOR                                              88,317.93
-28 MAY       RETIRO 44555                  12,500.00
-28 MAY       INTERESES AL 0.00%                                          75,817.93
+28 MAY       TRASPASO ENTRE CUENTAS
+             HORA 08:30 SUC 0519           3,000.00                      85,317.93
+29 MAY       INTERESES GANADOS                              12.50        85,330.43
 ";
 
     #[test]
-    fn stops_at_second_account_and_ignores_rate_and_codes() {
+    fn parses_both_accounts_and_labels_the_secondary() {
         let txs = parse_text(MULTI).unwrap();
-        // Only the primary account's two real rows — the Pagaré section
-        // (RETIRO 44555 / daily INTERESES) is excluded entirely.
-        assert_eq!(txs.len(), 2, "got {:?}", txs);
-        assert!(txs.iter().all(|t| t.description.chars().any(|c| c.is_alphabetic())),
-            "no bare-number descriptions");
+        // Both account sections are now parsed: 2 primary + 2 secondary.
+        assert_eq!(txs.len(), 4, "got {:#?}", txs);
+
+        // --- Primary section (account_label None) ---
         // The deposit's balance is 8,000 — the "0624.01" inside the footer
         // code did NOT corrupt it.
         assert_eq!(txs[0].amount, Decimal::from_str("3000.00").unwrap());
         assert_eq!(txs[0].balance_after, Some(Decimal::from_str("8000.00").unwrap()));
+        assert_eq!(txs[0].account_label, None);
         // The 0.50% rate is not money: the interest row's amount is 2.23.
         assert_eq!(txs[1].amount, Decimal::from_str("2.23").unwrap());
+        assert_eq!(txs[1].account_label, None);
+        assert!(!txs[1].description.to_uppercase().contains("DETALLE"),
+            "next section's header must not leak into the description");
+
+        // --- Secondary section (account_label = Cuenta secundaria) ---
+        // Sign comes from this section's OWN running balance (its prev_saldo
+        // was reset to 88,317.93), so the traspaso is -3,000 not garbage.
+        assert_eq!(txs[2].amount, Decimal::from_str("-3000.00").unwrap());
+        assert_eq!(txs[2].balance_after, Some(Decimal::from_str("85317.93").unwrap()));
+        assert_eq!(txs[2].account_label.as_deref(), Some("Cuenta secundaria"));
+        assert_eq!(txs[3].amount, Decimal::from_str("12.50").unwrap());
+        assert_eq!(txs[3].account_label.as_deref(), Some("Cuenta secundaria"));
+
+        assert!(txs.iter().all(|t| t.description.chars().any(|c| c.is_alphabetic())),
+            "no bare-number descriptions");
     }
 
     #[test]

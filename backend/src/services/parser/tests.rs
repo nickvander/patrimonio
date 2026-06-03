@@ -260,6 +260,7 @@ fn test_polish_all_captures_original_when_changed() {
         category: None,
         original_description: None,
         balance_after: None,
+        account_label: None,
     }];
     let polished = polish_all(Ok(parsed)).unwrap();
     assert_eq!(polished[0].description, "OXXO");
@@ -279,6 +280,7 @@ fn test_polish_all_skips_original_when_unchanged() {
         category: None,
         original_description: None,
         balance_after: None,
+        account_label: None,
     }];
     let polished = polish_all(Ok(parsed)).unwrap();
     assert_eq!(polished[0].description, "UBER EATS MEXICO");

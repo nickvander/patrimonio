@@ -323,6 +323,24 @@ async fn confirm_handler(
         }
     }
 
+    // Statement continuity: every row in this confirm lands in ONE account,
+    // so we can chain their per-statement running balances and flag a likely
+    // missing statement (the gap month's balance jump). Computed before the
+    // loop consumes `payload.transactions`. Advisory — returned in the
+    // response, never blocks the import.
+    let continuity_rows: Vec<crate::services::continuity::Row> = payload
+        .transactions
+        .iter()
+        .map(|ct| crate::services::continuity::Row {
+            file: ct.source_file.clone().unwrap_or_default(),
+            date: ct.tx.date,
+            amount: ct.tx.amount,
+            balance_after: ct.tx.balance_after,
+        })
+        .collect();
+    let continuity_warnings =
+        crate::services::continuity::continuity_warnings(&continuity_rows);
+
     // Closing balance = the running SALDO of the latest-dated row that
     // carries one (Banamex statements do). Used to set the account's
     // current balance after the import — idempotent on re-import.
@@ -433,6 +451,8 @@ async fn confirm_handler(
             "duplicates": duplicate_count,
             // Only meaningful when something landed — used by "Undo import".
             "import_batch_id": if imported_count > 0 { Some(batch_id.to_string()) } else { None },
+            // Advisory statement-continuity warnings (likely missing months).
+            "warnings": continuity_warnings,
         })),
     )
         .into_response()

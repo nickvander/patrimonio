@@ -165,6 +165,7 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
                 category: None,
                 original_description: None,
                 balance_after: rec.balance,
+                account_label: None,
             });
         }
     };

@@ -25,6 +25,14 @@ pub struct ParsedTransaction {
     /// that don't expose a running balance (CSV, etc.).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub balance_after: Option<Decimal>,
+    /// The statement account-section this row belongs to, when a single
+    /// PDF bundles more than one account (Banamex bundles a primary
+    /// MiCuenta + a Pagaré/Ahorro/Inversión sub-account). `None` for the
+    /// primary section and for single-account statements — so the common
+    /// case is unchanged. When `Some`, the import flow offers to route that
+    /// section to its own account so its balance isn't lost.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_label: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -80,10 +80,14 @@ parse. (7 truly-blank prints aside, now fixed via OCR.)
 
 ## Known limitations (entry points for the backlog)
 
-1. **Secondary accounts are dropped.** We parse only the primary MiCuenta. The
-   Pagaré / Inversión / Ahorro Fácil sub-account in the same PDF is skipped
-   entirely (its transfers mirror MiCuenta + its daily interest is noise) — but
-   the user *does* hold that savings balance, and it's currently invisible.
+1. ~~**Secondary accounts are dropped.**~~ **DONE** — `banamex_layout` now
+   splits a bundled statement at each "SALDO ANTERIOR" opener and parses every
+   account section (resetting the running balance per section), tagging
+   secondary rows with `account_label`. The import UI shows a destination
+   picker per section so the Pagaré/Ahorro balance lands in its own account.
+   **Caveat:** built/tested against a fixture; the secondary-section row
+   fidelity (the delta parser on sparse savings rows) should be eyeballed in
+   the preview against a real multi-account statement.
 2. **Dedup signature is fuzzy.** `manual:{date}:{amount}:{desc[:50]}` — two
    genuinely-distinct same-day/same-amount/same-desc rows collapse to one; and
    a description that parses slightly differently across versions re-imports.
@@ -94,8 +98,11 @@ parse. (7 truly-blank prints aside, now fixed via OCR.)
    uncategorized by design (a wrong category is worse than none); growing
    the rule table is the incremental follow-up.
 4. **Balance is a point-in-time stamp.** `current_balance` is set from the last
-   import; there's no "balance over time derived from transactions" or a check
-   that the imported running balance is continuous across months.
+   import; there's no "balance over time derived from transactions". *Partially
+   addressed:* `services/continuity.rs` now chains the per-statement running
+   balances at confirm time and warns about likely-missing months (a balance
+   jump between sequential statements). It's in-batch + advisory only — not a
+   persisted balance history (would need a `balance_after` column).
 5. **5 banks now** (Banamex, BBVA, Santander, Nu, CetesDirecto). Adding a
    bank = a new layout parser; the architecture makes this incremental.
    **Caveat:** the BBVA + Santander parsers were built and unit-tested
@@ -111,18 +118,18 @@ parse. (7 truly-blank prints aside, now fixed via OCR.)
 
 ## Backlog — prioritized (impact-per-effort)
 
-### 1. Import the secondary (savings/Pagaré) account as its own account  ★ high
-**Why:** We currently *delete* real data — the user's Ahorro Fácil / Pagaré
-balance and its (non-mirror) movements. They asked about balances being right;
-this is the missing piece of their net worth.
-**Scope:** In `banamex_layout`, instead of stopping at the 2nd SALDO ANTERIOR,
-parse each account *section* separately (split on date-led SALDO ANTERIOR +
-the account-name header above each "Detalle de operaciones"). Return
-`Vec<(account_label, Vec<tx>)>`. Import flow: offer to route each section to a
-separate account (auto-named from the header, e.g. "Banamex Ahorro Fácil"). Dedup
-the cross-account transfer mirrors. **Where:** `banamex_layout.rs` (section
-split), `imports.rs` (multi-account confirm), `import_screen.dart` (per-section
-account picker).
+### 1. Import the secondary (savings/Pagaré) account as its own account  ★ high — ✅ SHIPPED
+`banamex_layout` now splits a bundled statement at each "SALDO ANTERIOR"
+opener and parses **every** account section (resetting the running balance
+per section), tagging secondary rows with `ParsedTransaction.account_label`
+(stable ordinal "Cuenta secundaria"). The preview groups by label and
+`import_screen.dart` shows a destination-account picker per section
+(+ inline create); confirm fires one call per destination account. No
+cross-account dedup needed — each account legitimately records its own side
+of a transfer. Tests: `parses_both_accounts_and_labels_the_secondary`.
+**Remaining:** validate secondary-section row fidelity against a real
+multi-account statement (the delta parser can misread sparse savings rows —
+the preview is the guard); a friendlier auto-derived label than the ordinal.
 
 ### 2. Auto-categorize imported transactions  ★ high — ✅ SHIPPED
 `services/categorize.rs`: rule pass (Spanish merchant/keyword + amount sign)
@@ -132,15 +139,17 @@ safety net. Tests in `categorize.rs` + `parser/tests.rs`.
 **Remaining follow-up:** grow the merchant rule table; a "learn from my
 edits" pass that promotes user re-categorizations into rules.
 
-### 3. Statement continuity / gap detection  ★ medium
-**Why:** Confidence that the import is complete + correct. The SALDO ANTERIOR of
-month N should equal the closing balance of month N-1; a mismatch = a missing
-statement or a parse error.
-**Scope:** After import, per account, sort statements by period and check
-`opening[N] == closing[N-1]`. Surface "gap between Mar and May 2022" or "balance
-discontinuity" in the import summary / a small report. Uses `import_file` +
-`balance_after`. **Where:** a new `/imports/continuity` endpoint + a panel in
-`ImportCleanupScreen` or the import result.
+### 3. Statement continuity / gap detection  ★ medium — ✅ SHIPPED (in-batch)
+`services/continuity.rs`: at confirm time, groups the imported rows by
+statement file, derives each statement's opening/closing from the running
+`balance_after`, sorts by period, and flags a balance discontinuity between
+sequential statements (a likely missing month). Returned as `warnings` in the
+confirm response; `import_screen.dart` shows them in a dialog. Tests cover
+missing-middle, clean-chain, out-of-order, duplicate-overlap, and
+no-balance cases.
+**Remaining:** this is **in-batch** (checks only what's in one confirm) and
+advisory. A full-history check would need a persisted `balance_after` column
+on `transactions` + a `/imports/continuity` endpoint over stored data.
 
 ### 4. Harden the dedup signature  ★ medium
 **Why:** Avoid the false-merge of legitimate same-day/same-amount rows and the
