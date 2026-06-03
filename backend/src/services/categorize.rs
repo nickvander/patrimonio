@@ -81,6 +81,10 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
         "CFE", "TELMEX", "TELCEL", "MOVISTAR", "AT&T", "ATT ", "IZZI",
         "TOTALPLAY", "MEGACABLE", "DISH", "SKY ", "NATURGY", "GAS NATURAL",
         "AGUA ", "SACMEX", "SIAPA", "INTERNET", "RENTA",
+        // More MX telecom / utilities / water boards.
+        "BAIT", "UNEFON", "VIRGIN MOBILE", "AXTEL", "VETV", "STARLINK",
+        "CESPT", "JAPAC", "SAPAL", "INTERAPAS", "CEA ", "GAS LICUADO",
+        "GASRED", "GLOBALGAS", "ZGAS", "LUZ Y FUERZA", "PREDIO",
     ]) {
         return cat("RENT_AND_UTILITIES");
     }
@@ -93,6 +97,14 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
         "SUPERMERCADO", "ABARROTES", "RESTAURANTE", "UBER EATS", "RAPPI",
         "DIDI FOOD", "STARBUCKS", "MCDONALD", "BURGER", "DOMINO", "KFC",
         "VIPS", "SANBORNS", "TACO", "CAFE", "CAFÉ",
+        // More MX grocers / convenience / food.
+        "FRESKO", "SUMESA", "CALIMAX", "MERZA", "SMART AND FINAL", "S MART",
+        "TIENDAS TRES B", "BODEGA COMERCIAL", "MEGA COMERCIAL", "PANADERIA",
+        "PANADERÍA", "TORTILLERIA", "TORTILLERÍA", "CARNICERIA", "CARNICERÍA",
+        "LITTLE CAESARS", "CARLS JR", "WINGS", "TOKS", "ITALIANNI", "CHILIS",
+        "CHILI'S", "SUSHI", "PIZZA", "POLLO", "STARBUCK", "CIELITO QUERIDO",
+        "LA CASA DE TOÑO", "FISHER", "BISTRO", "CANTINA", "CERVECERIA",
+        "CERVECERÍA", "HEINEKEN", "MODELORAMA",
     ]) {
         return cat("FOOD_AND_DRINK");
     }
@@ -103,6 +115,10 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
         "BP ", "SHELL", "MOBIL", "ESTACIONAMIENTO", "PARKING", "PARKIMETRO",
         "CASETA", "PEAJE", "IAVE", "TELEVIA", "PASE ", "METRO ", "METROBUS",
         "MOVILIDAD INTEGRAL",
+        // More MX fuel / transit / mobility.
+        "REPSOL", "CHEVRON", "G500", "HIDROSINA", "REDCO", "ORSAN",
+        "GASOLINERA", "CAPUFE", "TAG ", "ECOBICI", "MIBICI", "JETTY",
+        "CUOTA", "AUTOPISTA", "PRIMERA PLUS", "SITIO ", "TAXI",
     ]) {
         return cat("TRANSPORTATION");
     }
@@ -138,6 +154,10 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
         "SPOTIFY", "NETFLIX", "DISNEY", "HBO", "MAX ", "PARAMOUNT", "STAR+",
         "YOUTUBE", "PRIME VIDEO", "CINEPOLIS", "CINÉPOLIS", "CINEMEX",
         "STEAM", "PLAYSTATION", "XBOX", "NINTENDO", "TICKETMASTER",
+        // More streaming / gaming / events.
+        "CRUNCHYROLL", "VIX", "BLIM", "MUBI", "DEEZER", "APPLE MUSIC",
+        "AUDIBLE", "TWITCH", "EPIC GAMES", "RIOT GAMES", "BOLETIA",
+        "SUPERBOLETOS", "FANDANGO", "DEPORTES",
     ]) {
         return cat("ENTERTAINMENT");
     }
@@ -157,6 +177,10 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
         "MERCADOPAGO", "LIVERPOOL", "PALACIO DE HIERRO", "COPPEL", "ELEKTRA",
         "SHEIN", "ALIEXPRESS", "BEST BUY", "APPLE.COM", "APPLE STORE",
         "OFFICE DEPOT",
+        // More marketplaces / department / apparel / electronics.
+        "TEMU", "SEARS", "SUBURBIA", "C&A", "ZARA", "BERSHKA", "PULL AND BEAR",
+        "PULL&BEAR", "NIKE", "ADIDAS", "INNOVASPORT", "MARTI", "STEREN",
+        "RADIOSHACK", "PCEL", "CYBERPUERTA", "MIXUP", "GANDHI", "SANBORN",
     ]) {
         return cat("GENERAL_MERCHANDISE");
     }
@@ -165,6 +189,9 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
     if has(&[
         "GOOGLE", "MICROSOFT", "ICLOUD", "DROPBOX", "ADOBE", "GITHUB",
         "OPENAI", "ANTHROPIC", "NOTION",
+        // More SaaS / app subscriptions.
+        "CANVA", "FIGMA", "ZOOM", "SLACK", "LINKEDIN", "CHATGPT", "CLAUDE",
+        "GODADDY", "NAMECHEAP", "CLOUDFLARE", "AWS", "DIGITALOCEAN",
     ]) {
         return cat("GENERAL_SERVICES");
     }
@@ -195,6 +222,33 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
     }
 
     None
+}
+
+/// A coarse merchant key for "learn from my edits": normalize a description
+/// to its leading significant words, dropping generic verbs/stopwords, so a
+/// category the user set on one "STARBUCKS …" row can be reused for future
+/// "STARBUCKS …" imports. Returns "" when nothing significant remains (the
+/// caller skips learned-matching then). Deliberately conservative (keeps a
+/// few words) so it doesn't over-apply across unrelated merchants.
+pub fn merchant_key(description: &str) -> String {
+    const NOISE: &[&str] = &[
+        "COMPRA", "PAGO", "SPEI", "ENVIASTE", "RECIBISTE", "RECIBIDO",
+        "ABONO", "CARGO", "TRASPASO", "DEPOSITO", "DEPÓSITO", "RETIRO",
+        "TRANSFERENCIA", "CON", "TARJETA", "DEBITO", "DÉBITO", "CREDITO",
+        "CRÉDITO", "DE", "DEL", "LA", "EL", "EN", "POR", "PARA", "REF",
+        "TDD", "TDC", "MN", "MXN", "SERVICIO", "Y",
+    ];
+    let upper = description.to_uppercase();
+    let cleaned: String = upper
+        .chars()
+        .map(|c| if c.is_alphabetic() || c == ' ' { c } else { ' ' })
+        .collect();
+    let words: Vec<&str> = cleaned
+        .split_whitespace()
+        .filter(|w| w.chars().count() >= 2 && !NOISE.contains(w))
+        .take(3)
+        .collect();
+    words.join(" ")
 }
 
 #[cfg(test)]
@@ -262,6 +316,27 @@ mod tests {
     fn unknown_stays_none() {
         assert_eq!(categorize("XYZZY REFERENCIA 9981", neg("42.00")), None);
         assert_eq!(categorize("", pos("1.00")), None);
+    }
+
+    #[test]
+    fn merchant_key_strips_noise_and_matches_recurring() {
+        // Generic verbs/refs/punctuation dropped; the same merchant produces
+        // the same key across imports so a learned category can be reused.
+        assert_eq!(merchant_key("COMPRA STARBUCKS REFORMA REF 9981"), "STARBUCKS REFORMA");
+        assert_eq!(merchant_key("Pago de servicio SPOTIFY"), "SPOTIFY");
+        // Single-token app-style merchant → broad, stable key.
+        assert_eq!(merchant_key("Enviaste a NETFLIX"), "NETFLIX");
+        // Pure noise → empty (caller won't learn-match).
+        assert_eq!(merchant_key("PAGO TARJETA DE DEBITO"), "");
+    }
+
+    #[test]
+    fn grown_rules_cover_more_merchants() {
+        assert_eq!(categorize("COMPRA TEMU", neg("300.00")).as_deref(), Some("GENERAL_MERCHANDISE"));
+        assert_eq!(categorize("PAGO BAIT RECARGA", neg("100.00")).as_deref(), Some("RENT_AND_UTILITIES"));
+        assert_eq!(categorize("CRUNCHYROLL", neg("129.00")).as_deref(), Some("ENTERTAINMENT"));
+        assert_eq!(categorize("REPSOL GASOLINERA", neg("800.00")).as_deref(), Some("TRANSPORTATION"));
+        assert_eq!(categorize("CANVA PRO", neg("199.00")).as_deref(), Some("GENERAL_SERVICES"));
     }
 
     #[test]
