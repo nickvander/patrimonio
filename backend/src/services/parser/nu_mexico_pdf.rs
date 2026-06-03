@@ -222,6 +222,7 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
                 original_description: None,
                 balance_after: balance,
                 account_label: None,
+                from_ocr: false,
             });
         }
     }

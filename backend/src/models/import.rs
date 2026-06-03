@@ -33,6 +33,13 @@ pub struct ParsedTransaction {
     /// section to its own account so its balance isn't lost.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_label: Option<String>,
+    /// True when this row's text came from OCR (a scanned / photographed /
+    /// browser-printed statement) rather than an extractable text layer. OCR
+    /// can misread an amount or date, so the preview flags these rows for the
+    /// user to eyeball before confirming. Transient (not persisted) — a
+    /// review hint, not stored data.
+    #[serde(default)]
+    pub from_ocr: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

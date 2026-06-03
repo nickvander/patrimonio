@@ -277,6 +277,7 @@ fn parse_section(lines: &[&str], resolve_year: &dyn Fn(u32) -> i32) -> Vec<Parse
                 original_description: None,
                 balance_after: Some(saldo),
                 account_label: None,
+                from_ocr: false,
             });
         }
     };

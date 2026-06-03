@@ -60,6 +60,7 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
             original_description: None,
             balance_after: None,
             account_label: None,
+            from_ocr: false,
         });
     }
     

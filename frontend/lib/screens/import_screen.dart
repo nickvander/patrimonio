@@ -1244,6 +1244,34 @@ class _ImportScreenState extends State<ImportScreen> {
                                   ),
                                 ),
                               ],
+                              // OCR-sourced rows can have misread amounts/
+                              // dates — badge them so the user verifies.
+                              if (tx['from_ocr'] == true) ...[
+                                const SizedBox(width: 8),
+                                Tooltip(
+                                  message: Localizations.localeOf(context)
+                                              .languageCode ==
+                                          'es'
+                                      ? 'Leído por OCR (escaneado) — verifica el monto y la fecha'
+                                      : 'Read by OCR (scanned) — verify the amount and date',
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: context.info.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      'OCR',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: context.info,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                           subtitle: Padding(

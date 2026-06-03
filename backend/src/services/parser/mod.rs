@@ -416,12 +416,16 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
         // trigger on the marker too. OCR (slow) only as a last resort.
         let alpha = |s: &str| s.chars().filter(|c| c.is_alphabetic()).count();
         let is_browser_print = best.to_uppercase().contains("ABOUT:BLANK");
+        // Track whether the text we ultimately parse came from OCR, so the
+        // preview can flag those rows for review (OCR can misread a digit).
+        let mut ocr_used = false;
         if is_browser_print || alpha(&best) < 100 {
             info!("PDF '{}' looks image-only — running OCR…", file_name);
             let ocr = ocr_extract(data);
             if alpha(&ocr) > alpha(&best) {
                 info!("OCR recovered {} chars for '{}'", ocr.len(), file_name);
                 best = ocr;
+                ocr_used = true;
             }
         }
         if let Some(reason) = unreadable_reason(&best) {
@@ -439,7 +443,13 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
                 let rows = $rows;
                 if !rows.is_empty() {
                     info!("Parsed {} transactions via {}", rows.len(), $why);
-                    return polish_all(Ok(rows));
+                    let mut polished = polish_all(Ok(rows))?;
+                    if ocr_used {
+                        for t in &mut polished {
+                            t.from_ocr = true;
+                        }
+                    }
+                    return Ok(polished);
                 }
             }};
         }

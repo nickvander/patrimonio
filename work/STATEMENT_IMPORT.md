@@ -99,12 +99,14 @@ parse. (7 truly-blank prints aside, now fixed via OCR.)
    merchant/keyword patterns). Long-tail / unknown merchants still land
    uncategorized by design (a wrong category is worse than none); growing
    the rule table is the incremental follow-up.
-4. **Balance is a point-in-time stamp.** `current_balance` is set from the last
-   import; there's no "balance over time derived from transactions". *Partially
-   addressed:* `services/continuity.rs` now chains the per-statement running
-   balances at confirm time and warns about likely-missing months (a balance
-   jump between sequential statements). It's in-batch + advisory only — not a
-   persisted balance history (would need a `balance_after` column).
+4. ~~**Balance is a point-in-time stamp.**~~ **DONE** — `balance_after` is now a
+   persisted column (migration `2026060102`), backfilled on re-import via the
+   confirm upsert. `GET /api/imports/continuity` chains every stored statement
+   per account and reports likely-missing months across the WHOLE history (not
+   just one batch); surfaced as a "Statement coverage" panel in Import Cleanup.
+   The in-batch confirm-time warning (`services/continuity.rs`) still fires too.
+   Balance-over-time charting is now derivable from the stored column (not yet
+   built).
 5. **5 banks now** (Banamex, BBVA, Santander, Nu, CetesDirecto). Adding a
    bank = a new layout parser; the architecture makes this incremental.
    **Caveat:** the BBVA + Santander parsers were built and unit-tested
@@ -113,8 +115,11 @@ parse. (7 truly-blank prints aside, now fixed via OCR.)
    vocabulary is plausible, not lifted from a confirmed personal PDF).
    Validate column geometry + sign bucketing against a real personal
    statement when one is available before fully trusting them.
-6. **OCR has no confidence signal.** A misread amount/date imports silently
-   (the preview is the only guard).
+6. **OCR confidence** — ~~a misread amount/date imports silently~~ rows whose
+   text came from OCR are now flagged: `ParsedTransaction.from_ocr` is set in
+   `detect_and_parse` when OCR was used, and the preview shows an "OCR — verify"
+   badge so the user eyeballs those rows. Still coarse (per-document, not
+   per-word tesseract confidence) — that refinement remains open.
 
 ---
 
@@ -138,8 +143,12 @@ the preview is the guard); a friendlier auto-derived label than the ordinal.
 → Plaid PFC primary code, reusing the `category.dart` taxonomy. Wired into
 `polish_all` (parse time → preview chip + round-trip) with a confirm-time
 safety net. Tests in `categorize.rs` + `parser/tests.rs`.
-**Remaining follow-up:** grow the merchant rule table; a "learn from my
-edits" pass that promotes user re-categorizations into rules.
+**Follow-ups SHIPPED:** the merchant rule table was grown substantially
+(fuel, telecom, grocers, streaming, SaaS, marketplaces); and **learn-from-
+edits** — at confirm, the user's manually-set `user_category` is mapped by a
+coarse `merchant_key` and carried onto matching new imports (`imports.rs` +
+`categorize::merchant_key`). **Still open:** a balance-anchored content hash;
+per-word OCR confidence.
 
 ### 3. Statement continuity / gap detection  ★ medium — ✅ SHIPPED (in-batch)
 `services/continuity.rs`: at confirm time, groups the imported rows by
@@ -179,7 +188,12 @@ within this item:** validate BBVA + Santander + Nu against a real *personal*
 statement (current fixtures use plausible personal-account description
 vocab — see Known-limitation #5).
 
-### 6. OCR confidence + review flagging  ★ low
+### 6. OCR confidence + review flagging  ★ low — ✅ SHIPPED (coarse)
+OCR-sourced rows are flagged for review: `from_ocr` is set when
+`detect_and_parse` used OCR, and the preview shows an "OCR — verify" badge.
+**Remaining (the original finer-grained idea):** per-word tesseract
+confidence (TSV) to flag only the genuinely low-confidence rows.
+<!-- original scope below -->
 **Why:** Catch OCR misreads before they pollute the ledger.
 **Scope:** tesseract can emit per-word confidence (TSV output). Flag rows whose
 amount/date came from low-confidence OCR; surface them pre-checked-but-marked in
