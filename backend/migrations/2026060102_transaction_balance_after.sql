@@ -1,0 +1,11 @@
+-- Persist the running balance (the statement's SALDO column) per imported
+-- transaction. The parsers already compute it (ParsedTransaction.balance_after)
+-- and the import sets the account's current_balance from the latest row, but
+-- the per-row value was thrown away. Storing it lets statement continuity be
+-- checked across the user's WHOLE history (not just within one import batch)
+-- and unlocks deriving balance-over-time.
+--
+-- Nullable: Plaid-synced rows, CSV imports without a balance column, and
+-- pre-existing rows have none. Re-importing a statement backfills it for
+-- already-present rows (the confirm upsert COALESCEs it in).
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS balance_after NUMERIC;

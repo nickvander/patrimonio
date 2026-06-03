@@ -18,6 +18,10 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
   final ApiService _api = ApiService();
   List<dynamic> _batches = [];
   List<dynamic> _accounts = [];
+  // Per-account statement-continuity status (gaps across the whole imported
+  // history). Each: {account_name, institution_name, statement_count,
+  // warnings[]}.
+  List<dynamic> _continuity = [];
   bool _loading = true;
 
   // Bulk form state.
@@ -39,9 +43,11 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
     try {
       final batches = await _api.getImportBatches();
       final overview = await _api.getDashboardOverview();
+      final continuity = await _api.getImportContinuity();
       if (!mounted) return;
       setState(() {
         _batches = batches;
+        _continuity = continuity;
         _accounts = (overview['accounts'] as List<dynamic>?) ?? [];
         _bulkAccountId ??=
             _accounts.isNotEmpty ? _accounts.first['id']?.toString() : null;
@@ -155,6 +161,7 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final es = Localizations.localeOf(context).languageCode == 'es';
     return Scaffold(
       appBar: AppBar(title: Text(l.impCleanupTitle)),
       body: _loading
@@ -171,6 +178,20 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
                       style: TextStyle(color: context.textSubtle))
                 else
                   ..._batches.map((b) => _batchCard(b as Map, l)),
+                if (_continuity.isNotEmpty) ...[
+                  const SizedBox(height: 32),
+                  Text(es ? 'Cobertura de estados de cuenta' : 'Statement coverage',
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text(
+                      es
+                          ? 'Revisa si falta algún estado de cuenta (saltos en el saldo entre meses).'
+                          : 'Flags likely-missing statements — a balance jump between sequential months.',
+                      style: TextStyle(fontSize: 12, color: context.textSubtle)),
+                  const SizedBox(height: 12),
+                  ..._continuity.map((c) => _coverageCard(c as Map, es)),
+                ],
                 const SizedBox(height: 32),
                 Text(l.impBulkDelete,
                     style: const TextStyle(
@@ -182,6 +203,57 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
                 _bulkForm(l),
               ],
             ),
+    );
+  }
+
+  Widget _coverageCard(Map c, bool es) {
+    final name = (c['account_name'] ?? '').toString();
+    final inst = c['institution_name']?.toString();
+    final title = (inst != null && inst.isNotEmpty) ? '$inst · $name' : name;
+    final count = (c['statement_count'] as num?)?.toInt() ?? 0;
+    final warnings =
+        (c['warnings'] as List?)?.map((e) => e.toString()).toList() ?? const [];
+    final ok = warnings.isEmpty;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  ok ? Icons.check_circle_outline : Icons.warning_amber_rounded,
+                  size: 18,
+                  color: ok ? context.positive : context.warning,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(title,
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              ok
+                  ? '$count ${es ? "estados de cuenta · continuo" : "statements · continuous"}'
+                  : '$count ${es ? "estados de cuenta" : "statements"} · ${warnings.length} ${es ? "posible(s) hueco(s)" : "possible gap(s)"}',
+              style: TextStyle(fontSize: 12, color: context.textSubtle),
+            ),
+            if (!ok) ...[
+              const SizedBox(height: 8),
+              for (final w in warnings)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text('• $w',
+                      style: const TextStyle(fontSize: 12.5, height: 1.35)),
+                ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 

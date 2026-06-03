@@ -1316,6 +1316,18 @@ class ApiService {
     return const [];
   }
 
+  /// Per-account statement-continuity status over the whole imported
+  /// history: each is {account_id, account_name, institution_name,
+  /// statement_count, warnings[]}. Empty `warnings` = no detected gaps.
+  Future<List<dynamic>> getImportContinuity() async {
+    final res = await _get(Uri.parse('$_baseUrl/imports/continuity'));
+    if (res.statusCode == 200) {
+      final body = json.decode(res.body) as Map<String, dynamic>;
+      return (body['accounts'] as List?) ?? const [];
+    }
+    return const [];
+  }
+
   /// Undo an import — delete every transaction it created. Returns the
   /// number removed.
   Future<int> undoImportBatch(String batchId) async {

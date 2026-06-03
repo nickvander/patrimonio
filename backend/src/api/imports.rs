@@ -66,6 +66,10 @@ pub fn router() -> Router<AppState> {
         .route("/check-duplicates", post(check_duplicates_handler))
         // Import cleanup: list past import batches, undo one, or bulk-
         // delete transactions in an account + date range.
+        // Full-history statement continuity: per account, chain the stored
+        // running balances across every imported statement and report likely
+        // missing months. Complements the in-batch check done at confirm.
+        .route("/continuity", get(continuity_handler))
         .route("/batches", get(list_batches_handler))
         .route("/batches/{id}", axum::routing::delete(undo_batch_handler))
         .route("/transactions/bulk-delete", post(bulk_delete_handler))
@@ -155,6 +159,79 @@ async fn check_duplicates_handler(
         .collect();
 
     Json(serde_json::json!({ "duplicate_indices": duplicate_indices })).into_response()
+}
+
+/// GET /api/imports/continuity — per account, chain the stored running
+/// balances across every imported statement and report likely-missing
+/// months (a balance jump between sequential statements). Only considers
+/// rows that carry both a `balance_after` and an `import_file`; Plaid-synced
+/// rows and pre-`balance_after` imports are excluded.
+async fn continuity_handler(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Response {
+    let rows = sqlx::query(
+        "SELECT a.id AS account_id, a.name AS account_name, \
+                a.institution_name AS institution_name, \
+                t.import_file AS import_file, t.date AS date, \
+                t.amount AS amount, t.balance_after AS balance_after \
+         FROM transactions t \
+         JOIN accounts a ON a.id = t.account_id \
+         WHERE t.user_id = $1 AND t.balance_after IS NOT NULL \
+               AND t.import_file IS NOT NULL \
+         ORDER BY a.id, t.date",
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    // Group rows per account, preserving the (account-ordered) query order.
+    struct Acct {
+        name: String,
+        institution: Option<String>,
+        files: std::collections::HashSet<String>,
+        rows: Vec<crate::services::continuity::Row>,
+    }
+    let mut order: Vec<Uuid> = Vec::new();
+    let mut by_acct: HashMap<Uuid, Acct> = HashMap::new();
+    for r in &rows {
+        let id: Uuid = r.get("account_id");
+        let acct = by_acct.entry(id).or_insert_with(|| {
+            order.push(id);
+            Acct {
+                name: r.get("account_name"),
+                institution: r.try_get("institution_name").ok(),
+                files: std::collections::HashSet::new(),
+                rows: Vec::new(),
+            }
+        });
+        let file: String = r.get("import_file");
+        acct.files.insert(file.clone());
+        acct.rows.push(crate::services::continuity::Row {
+            file,
+            date: r.get("date"),
+            amount: r.get("amount"),
+            balance_after: r.try_get("balance_after").ok(),
+        });
+    }
+
+    let accounts: Vec<serde_json::Value> = order
+        .into_iter()
+        .map(|id| {
+            let a = &by_acct[&id];
+            let warnings = crate::services::continuity::continuity_warnings(&a.rows);
+            serde_json::json!({
+                "account_id": id,
+                "account_name": a.name,
+                "institution_name": a.institution,
+                "statement_count": a.files.len(),
+                "warnings": warnings,
+            })
+        })
+        .collect();
+
+    Json(serde_json::json!({ "accounts": accounts })).into_response()
 }
 
 /// Snapshot of one in-flight upload. `terminal` becomes true once
@@ -384,6 +461,32 @@ async fn confirm_handler(
             .map(|ct| (ct.tx.date, ct.tx.amount, ct.tx.description.clone())),
     );
 
+    // Learn from edits: a map of the categories the user has manually
+    // assigned (user_category), keyed by a coarse merchant key, so a
+    // re-import inherits their own labeling instead of the generic rule
+    // guess. Built once; most-recent edit wins per merchant.
+    let learned: HashMap<String, String> = {
+        let labeled = sqlx::query(
+            "SELECT description, user_category FROM transactions \
+             WHERE user_id = $1 AND user_category IS NOT NULL AND user_category <> '' \
+             ORDER BY created_at DESC NULLS LAST",
+        )
+        .bind(ctx.user_id)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
+        let mut m: HashMap<String, String> = HashMap::new();
+        for r in &labeled {
+            let desc: String = r.get("description");
+            let uc: String = r.get("user_category");
+            let key = crate::services::categorize::merchant_key(&desc);
+            if !key.is_empty() {
+                m.entry(key).or_insert(uc); // DESC order → keep most recent
+            }
+        }
+        m
+    };
+
     // Closing balance = the running SALDO of the latest-dated row that
     // carries one (Banamex statements do). Used to set the account's
     // current balance after the import — idempotent on re-import.
@@ -402,10 +505,22 @@ async fn confirm_handler(
         // `polish_all`, but if the previewed tx round-tripped without a
         // category (older client, edited row), classify it here so the
         // ledger isn't left uncategorized.
+        let basis = tx.original_description.clone().unwrap_or_else(|| tx.description.clone());
         let category = tx.category.clone().or_else(|| {
-            let basis = tx.original_description.as_deref().unwrap_or(&tx.description);
-            crate::services::categorize::categorize(basis, tx.amount)
+            crate::services::categorize::categorize(&basis, tx.amount)
         });
+        // Learn-from-edits override: if the user has labeled this merchant
+        // before, carry their label onto the new row (display prefers
+        // user_category). Only on fresh inserts — the conflict path never
+        // clobbers an existing manual edit.
+        let user_category = {
+            let key = crate::services::categorize::merchant_key(&basis);
+            if key.is_empty() {
+                None
+            } else {
+                learned.get(&key).cloned()
+            }
+        };
 
         // The parser stashes the pre-polish raw line in
         // `original_description` only when polish_description
@@ -414,10 +529,18 @@ async fn confirm_handler(
         // ("DEPOSITO BANAMEX MERCH XYZ" → "BANAMEX MERCH XYZ" with
         // the original kept as the fallback). NULL when polishing
         // was a no-op — saves a column-equal-column copy.
+        // ON CONFLICT DO UPDATE (rather than DO NOTHING) so a re-import
+        // BACKFILLS balance_after onto rows imported before this column
+        // existed — giving the full-history continuity check real data to
+        // chain. COALESCE keeps any value already set. `RETURNING (xmax = 0)`
+        // tells insert (true) from conflict-update (false) so the new-vs-
+        // duplicate counts stay accurate despite the upsert.
         let result = sqlx::query(
-            "INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, source, source_id, user_id, original_description, import_batch_id, import_file)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 'csv', $8, $9, $10, $11, $12)
-             ON CONFLICT (account_id, external_id) DO NOTHING",
+            "INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, source, source_id, user_id, original_description, import_batch_id, import_file, balance_after, user_category)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'csv', $8, $9, $10, $11, $12, $13, $14)
+             ON CONFLICT (account_id, external_id) DO UPDATE
+                 SET balance_after = COALESCE(transactions.balance_after, EXCLUDED.balance_after)
+             RETURNING (xmax = 0) AS inserted",
         )
         .bind(payload.account_id)
         .bind(signature.as_str())
@@ -431,17 +554,20 @@ async fn confirm_handler(
         .bind(tx.original_description.as_deref())
         .bind(batch_id)
         .bind(source_file.as_deref())
-        .execute(&state.db)
+        .bind(tx.balance_after)
+        .bind(user_category)
+        .fetch_optional(&state.db)
         .await;
 
         match result {
-            Ok(res) => {
-                if res.rows_affected() > 0 {
+            Ok(Some(row)) => {
+                if row.try_get::<bool, _>("inserted").unwrap_or(true) {
                     imported_count += 1;
                 } else {
                     duplicate_count += 1;
                 }
             }
+            Ok(None) => duplicate_count += 1,
             Err(e) => {
                 error!("Failed to insert transaction: {}", e);
             }
