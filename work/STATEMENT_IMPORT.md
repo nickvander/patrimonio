@@ -88,10 +88,12 @@ parse. (7 truly-blank prints aside, now fixed via OCR.)
    **Caveat:** built/tested against a fixture; the secondary-section row
    fidelity (the delta parser on sparse savings rows) should be eyeballed in
    the preview against a real multi-account statement.
-2. **Dedup signature is fuzzy.** `manual:{date}:{amount}:{desc[:50]}` — two
-   genuinely-distinct same-day/same-amount/same-desc rows collapse to one; and
-   a description that parses slightly differently across versions re-imports.
-   No per-occurrence index. No dedup vs Plaid-synced rows.
+2. **Dedup signature is fuzzy.** ~~two genuinely-distinct same-day/same-amount/
+   same-desc rows collapse to one~~ **FIXED** — `batch_signatures` adds a `#N`
+   occurrence suffix to the 2nd+ exact-duplicate in a batch (first keeps the
+   bare legacy signature, so already-imported history still dedups). Still
+   open: a description that parses slightly differently across parser versions
+   re-imports; no dedup vs Plaid-synced rows.
 3. ~~**Imported rows aren't categorized.**~~ **DONE** — `services/categorize.rs`
    now assigns a Plaid PFC primary code at parse time (rule-based, Spanish
    merchant/keyword patterns). Long-tail / unknown merchants still land
@@ -151,13 +153,17 @@ no-balance cases.
 advisory. A full-history check would need a persisted `balance_after` column
 on `transactions` + a `/imports/continuity` endpoint over stored data.
 
-### 4. Harden the dedup signature  ★ medium
-**Why:** Avoid the false-merge of legitimate same-day/same-amount rows and the
-re-import-on-description-drift.
-**Scope:** Add a per-(date,amount,desc) occurrence index to the signature; OR
-switch to a content hash that's stable across parser versions (date + amount +
-balance_after is a near-unique key for statement rows). Keep `tx_signature`
-shared between preview-dedup and confirm. **Where:** `imports.rs::tx_signature`.
+### 4. Harden the dedup signature  ★ medium — ✅ SHIPPED (occurrence index)
+`imports.rs::batch_signatures` adds a per-(date,amount,desc) occurrence
+index: the 2nd+ exact duplicate in a batch gets a `#N` suffix so distinct
+same-day/same-amount/same-desc rows survive, while the first keeps the bare
+legacy signature (already-imported history still dedups, re-imports stay
+idempotent). Shared by check-duplicates (preview) + confirm. Tests in
+`imports.rs`.
+**Remaining:** re-import-on-description-drift (a row whose description parses
+slightly differently across parser versions gets a new signature → re-imports
+as a new row); dedup vs Plaid-synced rows. A balance-anchored content hash
+(date+amount+balance_after) would address the drift case.
 
 ### 5. More banks  ★ medium, incremental — BBVA + Santander SHIPPED
 **Done:** `bbva_layout.rs` + `santander_layout.rs` (+ shared `layout_util.rs`),

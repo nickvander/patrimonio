@@ -83,6 +83,38 @@ fn tx_signature(date: &chrono::NaiveDate, amount: &rust_decimal::Decimal, descri
     )
 }
 
+/// Occurrence-aware signatures for an ordered batch of rows.
+///
+/// The bare `tx_signature` collapses two genuinely-distinct rows that share a
+/// date + amount + (first 50 chars of) description into one external_id — so
+/// the second was silently dropped on import (ON CONFLICT DO NOTHING). This
+/// disambiguates exact duplicates WITHIN the batch by an occurrence suffix.
+///
+/// Backward-compatibility is load-bearing: the FIRST occurrence keeps the
+/// legacy bare signature, so the user's entire already-imported history
+/// (written under the old scheme) still matches and re-imports stay
+/// idempotent. Only the 2nd+ identical row in a batch gets a `#N` suffix,
+/// which recovers the previously-lost duplicate without duplicating anything
+/// that already exists.
+fn batch_signatures(
+    rows: impl IntoIterator<Item = (chrono::NaiveDate, rust_decimal::Decimal, String)>,
+) -> Vec<String> {
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    rows.into_iter()
+        .map(|(date, amount, desc)| {
+            let base = tx_signature(&date, &amount, &desc);
+            let n = seen.entry(base.clone()).or_insert(0);
+            let sig = if *n == 0 {
+                base.clone()
+            } else {
+                format!("{base}#{n}")
+            };
+            *n += 1;
+            sig
+        })
+        .collect()
+}
+
 #[derive(Deserialize)]
 struct CheckDuplicatesRequest {
     account_id: uuid::Uuid,
@@ -97,11 +129,11 @@ async fn check_duplicates_handler(
     Extension(ctx): Extension<AuthContext>,
     Json(req): Json<CheckDuplicatesRequest>,
 ) -> Response {
-    let sigs: Vec<String> = req
-        .transactions
-        .iter()
-        .map(|t| tx_signature(&t.date, &t.amount, &t.description))
-        .collect();
+    let sigs: Vec<String> = batch_signatures(
+        req.transactions
+            .iter()
+            .map(|t| (t.date, t.amount, t.description.clone())),
+    );
 
     let existing: Vec<String> = sqlx::query_scalar(
         "SELECT external_id FROM transactions \
@@ -341,19 +373,30 @@ async fn confirm_handler(
     let continuity_warnings =
         crate::services::continuity::continuity_warnings(&continuity_rows);
 
+    // Occurrence-aware external_ids: distinct same-day/same-amount/same-desc
+    // rows get a `#N` suffix so the second isn't silently dropped, while the
+    // first keeps the legacy bare signature (re-imports stay idempotent).
+    // MUST match what check_duplicates computed for the preview.
+    let signatures = batch_signatures(
+        payload
+            .transactions
+            .iter()
+            .map(|ct| (ct.tx.date, ct.tx.amount, ct.tx.description.clone())),
+    );
+
     // Closing balance = the running SALDO of the latest-dated row that
     // carries one (Banamex statements do). Used to set the account's
     // current balance after the import — idempotent on re-import.
     let mut closing: Option<(chrono::NaiveDate, rust_decimal::Decimal)> = None;
 
-    for ct in payload.transactions {
+    for (i, ct) in payload.transactions.into_iter().enumerate() {
         let ConfirmTx { tx, source_file } = ct;
         if let Some(bal) = tx.balance_after {
             if closing.map(|(d, _)| tx.date >= d).unwrap_or(true) {
                 closing = Some((tx.date, bal));
             }
         }
-        let signature = tx_signature(&tx.date, &tx.amount, &tx.description);
+        let signature = &signatures[i];
 
         // Safety net: parse-time categorization already runs in
         // `polish_all`, but if the previewed tx round-tripped without a
@@ -377,7 +420,7 @@ async fn confirm_handler(
              ON CONFLICT (account_id, external_id) DO NOTHING",
         )
         .bind(payload.account_id)
-        .bind(&signature)
+        .bind(signature.as_str())
         .bind(tx.date)
         .bind(&tx.description)
         .bind(tx.amount)
@@ -907,5 +950,59 @@ async fn bulk_delete_handler(
             error!("bulk_delete failed: {e}");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::NaiveDate;
+    use rust_decimal::Decimal;
+    use std::str::FromStr;
+
+    fn d(y: i32, m: u32, day: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(y, m, day).unwrap()
+    }
+    fn dec(s: &str) -> Decimal {
+        Decimal::from_str(s).unwrap()
+    }
+
+    #[test]
+    fn first_occurrence_keeps_the_legacy_bare_signature() {
+        // Backward-compat: a lone row's signature is byte-identical to the
+        // old scheme, so already-imported history still dedups.
+        let date = d(2024, 3, 15);
+        let amt = dec("-50.00");
+        let sigs = batch_signatures([(date, amt, "COMPRA OXXO".to_string())]);
+        assert_eq!(sigs, vec![tx_signature(&date, &amt, "COMPRA OXXO")]);
+    }
+
+    #[test]
+    fn exact_duplicates_get_distinct_occurrence_suffixes() {
+        // Two genuinely-distinct identical rows (e.g. two same-price coffees
+        // the same day) must NOT collapse to one external_id.
+        let date = d(2024, 3, 15);
+        let amt = dec("-50.00");
+        let sigs = batch_signatures(vec![
+            (date, amt, "STARBUCKS".to_string()),
+            (date, amt, "STARBUCKS".to_string()),
+            (date, amt, "STARBUCKS".to_string()),
+        ]);
+        let base = tx_signature(&date, &amt, "STARBUCKS");
+        assert_eq!(sigs, vec![base.clone(), format!("{base}#1"), format!("{base}#2")]);
+        // All distinct → all three survive ON CONFLICT.
+        let unique: std::collections::HashSet<_> = sigs.iter().collect();
+        assert_eq!(unique.len(), 3);
+    }
+
+    #[test]
+    fn distinct_rows_are_unaffected() {
+        let sigs = batch_signatures(vec![
+            (d(2024, 3, 15), dec("-50.00"), "OXXO".to_string()),
+            (d(2024, 3, 16), dec("-50.00"), "OXXO".to_string()),
+            (d(2024, 3, 15), dec("-51.00"), "OXXO".to_string()),
+        ]);
+        let unique: std::collections::HashSet<_> = sigs.iter().collect();
+        assert_eq!(unique.len(), 3, "distinct rows keep distinct bare sigs");
     }
 }
