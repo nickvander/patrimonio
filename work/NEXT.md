@@ -76,7 +76,28 @@ from the trailing 4–5 sprints (all on `main`):
 * **README auth section:** documents TOTP enroll / recovery
   codes / passkey register flows + the hardening defaults.
 
-## Top 3 for the next session — ALL SHIPPED (2026-05-30)
+## Top priorities for the next session (2026-06-02)
+
+**Statement import was overhauled this sprint** (Banamex multi-format —
+text PDFs, Firefox-print-to-image, scanned — + OCR, multi-account handling,
+preview dedup, inline account creation, import cleanup/undo, account balance
+from closing SALDO). The full as-built map **and the prioritized
+next-feature backlog** live in **[work/STATEMENT_IMPORT.md](STATEMENT_IMPORT.md)**.
+
+Top 3 from that backlog, by impact-per-effort:
+1. **Import the secondary (Pagaré/Ahorro) account as its own account** — we
+   currently drop it, so that savings balance is invisible in net worth.
+2. **Auto-categorize imported transactions** — ~1,600 uncategorized rows are
+   low-value until categorized; unblocks spending/trends views.
+3. **Statement continuity / gap detection** — verify opening[N] == closing[N-1]
+   across months to catch missing statements or parse errors.
+
+Also shipped this sprint (lending): borrower payment-plan PDF/CSV export,
+solve-for-term ("set the payment") calc, guided loan-style form.
+
+---
+
+## Top 3 (2026-05-30) — ALL SHIPPED
 
 The previous Top-3 are done. Verified green: backend 126 tests
 (`./scripts/test.sh`), frontend 94 tests (`flutter test`).
