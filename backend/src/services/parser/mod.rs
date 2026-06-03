@@ -5,6 +5,9 @@ pub mod cetes;
 pub mod cetes_pdf;
 pub mod banamex_pdf;
 pub mod banamex_layout;
+pub mod bbva_layout;
+pub mod santander_layout;
+pub mod layout_util;
 pub mod generic_pdf;
 
 #[cfg(test)]
@@ -272,9 +275,18 @@ fn polish_all(result: Result<Vec<ParsedTransaction>>) -> Result<Vec<ParsedTransa
                 // across two columns when the original was already
                 // clean.
                 if polished != raw && !raw.is_empty() {
-                    t.original_description = Some(raw);
+                    t.original_description = Some(raw.clone());
                 }
                 t.description = polished;
+                // Auto-categorize when the parser didn't already set one.
+                // We classify against the RAW bank line (it still carries
+                // the "COMPRA" / "PAGO" / "SPEI" signal words that
+                // polish_description strips), so the preview shows a
+                // category and it round-trips to confirm.
+                if t.category.is_none() {
+                    let basis = if raw.is_empty() { &t.description } else { &raw };
+                    t.category = crate::services::categorize::categorize(basis, t.amount);
+                }
                 t
             })
             .collect()
@@ -447,6 +459,32 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
             try_rows!(banamex_pdf::parse(data).unwrap_or_default(), "banamex-lopdf");
         }
 
+        // BBVA México (BBVA Bancomer): the "Detalle de Movimientos
+        // Realizados" column layout over pdftotext/OCR text.
+        let looks_bbva = lower_name.contains("bbva")
+            || lower_name.contains("bancomer")
+            || sample_text.contains("BBVA")
+            || sample_text.contains("BANCOMER")
+            || sample_text.contains("BBA830831LJ2");
+        if looks_bbva {
+            try_rows!(
+                bbva_layout::parse_text(&best).unwrap_or_default(),
+                "bbva-layout"
+            );
+        }
+
+        // Santander México ("Estado de Cuenta Integral").
+        let looks_santander = lower_name.contains("santander")
+            || sample_text.contains("SANTANDER")
+            || sample_text.contains("BSM970519DU8")
+            || sample_text.contains("ESTADO DE CUENTA INTEGRAL");
+        if looks_santander {
+            try_rows!(
+                santander_layout::parse_text(&best).unwrap_or_default(),
+                "santander-layout"
+            );
+        }
+
         // Cetes / Nu — their PDFs differ; keep the existing lopdf parsers.
         if lower_name.contains("cetes")
             || sample_text.contains("CETESDIRECTO")
@@ -487,10 +525,10 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
         return Err(anyhow!(
             "Couldn't find any transactions in '{}'. If this is a real statement, its layout \
              isn't supported yet — share a sample and we can add it. (Built-in support: Nu, \
-             Banamex, CetesDirecto, plus CSV exports.)",
+             Banamex, BBVA, Santander, CetesDirecto, plus CSV exports.)",
             file_name
         ));
     }
 
-    Err(anyhow!("Could not identify institution for file: {}. Please ensure the file is a supported PDF or CSV from Nu, Banamex, or CetesDirecto.", file_name))
+    Err(anyhow!("Could not identify institution for file: {}. Please ensure the file is a supported PDF or CSV from Nu, Banamex, BBVA, Santander, or CetesDirecto.", file_name))
 }

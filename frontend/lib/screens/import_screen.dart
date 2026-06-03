@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../utils/supported_banks.dart';
 import '../utils/theme_colors.dart';
 import '../utils/currency.dart';
+import '../utils/category.dart';
 import '../widgets/add_account_dialog.dart';
 import 'import_cleanup_screen.dart';
 import 'package:file_picker/file_picker.dart';
@@ -1072,6 +1073,26 @@ class _ImportScreenState extends State<ImportScreen> {
                                   Flexible(
                                     child: Text(
                                       '· ${tx['source_file']}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: context.textFaint,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                // Auto-assigned category (rule-based at
+                                // import time). Shown as a faint chip so the
+                                // user can sanity-check the bucketing before
+                                // confirming.
+                                if ((tx['category'] ?? '')
+                                    .toString()
+                                    .isNotEmpty) ...[
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      '· ${prettyCategory(primary: tx['category'].toString())}',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(

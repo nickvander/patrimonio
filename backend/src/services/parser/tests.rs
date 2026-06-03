@@ -40,6 +40,19 @@ fn test_detect_and_parse_routing() {
 }
 
 #[test]
+fn detect_and_parse_auto_categorizes() {
+    // A CSV routed through detect_and_parse should come back categorized
+    // via polish_all → categorize, so imported rows aren't all
+    // "Uncategorized".
+    let data = "Fecha,Concepto,Monto\n15/03/2024,COMPRA OXXO COL CENTRO,-50.00\n16/03/2024,SPEI RECIBIDO NOMINA,12000.00".as_bytes();
+    let result = detect_and_parse("banamex_statement.csv", data, None).unwrap();
+    assert_eq!(result.len(), 2);
+    assert_eq!(result[0].category.as_deref(), Some("FOOD_AND_DRINK"));
+    // "NOMINA" wins over the SPEI transfer rule → income.
+    assert_eq!(result[1].category.as_deref(), Some("INCOME"));
+}
+
+#[test]
 fn test_cetes_csv() {
     let data = "Fecha,Descripción,Monto\n2024-03-15,BONOS,1000.00".as_bytes();
     let result = cetes::parse_csv(data).unwrap();

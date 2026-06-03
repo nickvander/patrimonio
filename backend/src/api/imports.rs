@@ -337,6 +337,15 @@ async fn confirm_handler(
         }
         let signature = tx_signature(&tx.date, &tx.amount, &tx.description);
 
+        // Safety net: parse-time categorization already runs in
+        // `polish_all`, but if the previewed tx round-tripped without a
+        // category (older client, edited row), classify it here so the
+        // ledger isn't left uncategorized.
+        let category = tx.category.clone().or_else(|| {
+            let basis = tx.original_description.as_deref().unwrap_or(&tx.description);
+            crate::services::categorize::categorize(basis, tx.amount)
+        });
+
         // The parser stashes the pre-polish raw line in
         // `original_description` only when polish_description
         // meaningfully changed it. Persist verbatim so the
@@ -355,7 +364,7 @@ async fn confirm_handler(
         .bind(&tx.description)
         .bind(tx.amount)
         .bind(&tx.currency)
-        .bind(tx.category)
+        .bind(category)
         .bind("csv_import")
         .bind(ctx.user_id)
         .bind(tx.original_description.as_deref())

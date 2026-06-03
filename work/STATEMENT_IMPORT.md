@@ -32,8 +32,31 @@ with a layered extraction + parse pipeline. Entry: `POST /api/imports/upload`
   daily-interest noise); ignores `%` rates and amounts embedded in page-footer
   codes; cross-year date resolution from the "Período" line; emits
   `balance_after` (running SALDO).
+- `bbva_layout.rs` — BBVA México ("Estado de Cuenta"). Parses the
+  `Detalle de Movimientos Realizados` table: `OPER LIQ COD` lead-in,
+  `DD/MMM` dates (year from the `Periodo` header), and CARGOS / ABONOS /
+  OPERACIÓN / LIQUIDACIÓN columns bucketed by **column position** (debit vs
+  credit is positional, not signed). Tolerates the "balance only on the
+  day's last row" quirk. Routed by `BBVA`/`BANCOMER`/RFC `BBA830831LJ2`.
+- `santander_layout.rs` — Santander México ("Estado de Cuenta Integral").
+  `DD-MMM-AAAA` dates (year in the row), DEPOSITOS / RETIROS / SALDO
+  positional columns, `SALDO FINAL DEL PERIODO ANTERIOR` opener skipped,
+  abbreviation-legend furniture filtered. Routed by `SANTANDER`/RFC
+  `BSM970519DU8`/`ESTADO DE CUENTA INTEGRAL`.
+- `layout_util.rs` — shared column-bucketing helpers (`amounts_with_pos`
+  with char-column centres, `col_of`, `month_abbr`, `strip_amounts`) used
+  by the BBVA + Santander layout parsers.
 - `banamex_pdf.rs` (legacy lopdf), `nu_mexico*.rs`, `cetes*.rs`, and
   `generic_pdf.rs` (heuristic fallback for unknown text-layer PDFs).
+
+**Auto-categorization** (`services/categorize.rs`): a high-precision
+rule pass maps a Spanish description (+ amount sign for transfers) to a
+Plaid PFC **primary** code (`FOOD_AND_DRINK`, `TRANSFER_IN`, `BANK_FEES`,
+…) so imported rows render through the SAME `prettyCategory` map as
+Plaid-synced rows. Runs at parse time in `polish_all` (so the preview
+shows it and it round-trips to confirm) with a confirm-time safety net.
+Unknown rows stay honestly uncategorized (None). Preview rows now show
+the assigned category as a faint chip.
 
 **Preview/confirm UX** (`frontend/lib/screens/import_screen.dart`):
 - Auto-batches uploads under the 100 MB cap; per-file checklist
@@ -65,13 +88,22 @@ parse. (7 truly-blank prints aside, now fixed via OCR.)
    genuinely-distinct same-day/same-amount/same-desc rows collapse to one; and
    a description that parses slightly differently across versions re-imports.
    No per-occurrence index. No dedup vs Plaid-synced rows.
-3. **Imported rows aren't categorized.** `category` is left null; everything
-   lands uncategorized.
+3. ~~**Imported rows aren't categorized.**~~ **DONE** — `services/categorize.rs`
+   now assigns a Plaid PFC primary code at parse time (rule-based, Spanish
+   merchant/keyword patterns). Long-tail / unknown merchants still land
+   uncategorized by design (a wrong category is worse than none); growing
+   the rule table is the incremental follow-up.
 4. **Balance is a point-in-time stamp.** `current_balance` is set from the last
    import; there's no "balance over time derived from transactions" or a check
    that the imported running balance is continuous across months.
-5. **Only 3 banks.** Adding a bank = a new layout parser; the architecture now
-   makes this incremental, but each is real work.
+5. **5 banks now** (Banamex, BBVA, Santander, Nu, CetesDirecto). Adding a
+   bank = a new layout parser; the architecture makes this incremental.
+   **Caveat:** the BBVA + Santander parsers were built and unit-tested
+   against `pdftotext -layout` fixtures *reconstructed from real
+   transparency-portal statements* (the personal-account description
+   vocabulary is plausible, not lifted from a confirmed personal PDF).
+   Validate column geometry + sign bucketing against a real personal
+   statement when one is available before fully trusting them.
 6. **OCR has no confidence signal.** A misread amount/date imports silently
    (the preview is the only guard).
 
@@ -92,14 +124,13 @@ the cross-account transfer mirrors. **Where:** `banamex_layout.rs` (section
 split), `imports.rs` (multi-account confirm), `import_screen.dart` (per-section
 account picker).
 
-### 2. Auto-categorize imported transactions  ★ high
-**Why:** 1,600 uncategorized rows are low-value until categorized; the dashboard
-spending/trends views need categories.
-**Scope:** A rules pass at confirm time (merchant/keyword → category), reusing
-any existing category taxonomy (`category.dart`, the Plaid category mapping).
-Spanish merchant patterns (OXXO, DLOCAL\*SPOTIFY, CFE, etc.). Optionally a
-"learn from my edits" pass. **Where:** new `services/categorize.rs`, wired in
-`confirm_handler`; the existing `transactions` category columns.
+### 2. Auto-categorize imported transactions  ★ high — ✅ SHIPPED
+`services/categorize.rs`: rule pass (Spanish merchant/keyword + amount sign)
+→ Plaid PFC primary code, reusing the `category.dart` taxonomy. Wired into
+`polish_all` (parse time → preview chip + round-trip) with a confirm-time
+safety net. Tests in `categorize.rs` + `parser/tests.rs`.
+**Remaining follow-up:** grow the merchant rule table; a "learn from my
+edits" pass that promotes user re-categorizations into rules.
 
 ### 3. Statement continuity / gap detection  ★ medium
 **Why:** Confidence that the import is complete + correct. The SALDO ANTERIOR of
@@ -119,11 +150,14 @@ switch to a content hash that's stable across parser versions (date + amount +
 balance_after is a near-unique key for statement rows). Keep `tx_signature`
 shared between preview-dedup and confirm. **Where:** `imports.rs::tx_signature`.
 
-### 5. More banks (BBVA, Santander, HSBC, Nu-PDF)  ★ medium, incremental
-**Why:** Broaden beyond Banamex; the user has BBVA/Santander counterparties.
-**Scope:** One layout parser per bank, same shape as `banamex_layout` (the
-pipeline already routes by content signature). Validate against real samples.
-The `fuchsia-spec-differ`-style approach doesn't apply; this is sample-driven.
+### 5. More banks  ★ medium, incremental — BBVA + Santander SHIPPED
+**Done:** `bbva_layout.rs` + `santander_layout.rs` (+ shared `layout_util.rs`),
+routed by content signature, unit-tested against reconstructed-from-real
+fixtures. **Remaining:** HSBC, Banorte, Scotiabank, a Nu *PDF* parser
+(Nu currently CSV-only). Same shape as the new layout parsers. **Highest
+priority within this item:** validate BBVA + Santander against a real
+*personal* statement (current fixtures use plausible personal-account
+description vocab — see Known-limitation #5).
 
 ### 6. OCR confidence + review flagging  ★ low
 **Why:** Catch OCR misreads before they pollute the ledger.
