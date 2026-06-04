@@ -20,6 +20,7 @@ pub fn router() -> Router<AppState> {
         .route("/holdings", get(holdings))
         .route("/allocation", get(asset_allocation))
         .route("/trends", get(cash_flow_trends))
+        .route("/spending-by-category", get(spending_by_category))
         .route("/credit-utilization", get(credit_utilization))
         .route("/sync-status", get(sync_status))
         .route("/transactions", get(recent_transactions))
@@ -1118,6 +1119,165 @@ async fn cash_flow_trends(
             })
             .collect(),
     )
+}
+
+#[derive(Deserialize)]
+struct SpendingByCategoryQuery {
+    /// Trailing window in months (default 6). Clamped to 1..=24.
+    months: Option<i64>,
+    /// Max categories returned; the rest fold into "OTHER". Default 8.
+    top: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct CategoryMonthAmount {
+    month: String,
+    amount: f64,
+}
+
+#[derive(Serialize)]
+struct CategorySpending {
+    /// PFC primary code or the user's manual override (frontend prettifies).
+    category: String,
+    total: f64,
+    monthly: Vec<CategoryMonthAmount>,
+}
+
+#[derive(Serialize)]
+struct SpendingByCategoryResponse {
+    /// Chronological YYYY-MM buckets in the window (only months with data).
+    months: Vec<String>,
+    categories: Vec<CategorySpending>,
+}
+
+/// Per-category spending over the trailing N months — the "where's my money
+/// going" view. Same cash-flow hygiene as `cash_flow_trends` (USD-normalized,
+/// excludes internal transfers / CC payments / lending legs / split parents),
+/// but grouped by category so each month can be broken down. The top-`top`
+/// categories by total are returned verbatim; everything else folds into a
+/// single "OTHER" bucket so the stacked chart stays legible.
+async fn spending_by_category(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Query(q): Query<SpendingByCategoryQuery>,
+) -> Json<SpendingByCategoryResponse> {
+    let months = q.months.unwrap_or(6).clamp(1, 24);
+    let top = q.top.unwrap_or(8).clamp(1, 30) as usize;
+
+    let rows = sqlx::query(
+        r#"
+        WITH latest_fx AS (
+            SELECT rate FROM exchange_rates
+            WHERE base_currency = 'USD' AND target_currency = 'MXN'
+            ORDER BY recorded_at DESC LIMIT 1
+        )
+        SELECT TO_CHAR(t.date, 'YYYY-MM') AS month,
+               COALESCE(NULLIF(t.user_category, ''), t.category, 'UNCATEGORIZED') AS category,
+               SUM(CASE WHEN a.currency = 'MXN'
+                        THEN ABS(t.amount) / COALESCE((SELECT rate FROM latest_fx), 20.0)
+                        ELSE ABS(t.amount) END) AS amount
+        FROM transactions t
+        JOIN accounts a ON a.id = t.account_id
+        WHERE t.amount < 0
+          AND t.date >= (DATE_TRUNC('month', CURRENT_DATE) - make_interval(months => ($2::int - 1)))
+          AND t.user_id = $1
+          AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
+          AND COALESCE(t.category, '') NOT IN ('TRANSFER_IN', 'TRANSFER_OUT')
+          AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
+          AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
+          AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
+        GROUP BY TO_CHAR(t.date, 'YYYY-MM'),
+                 COALESCE(NULLIF(t.user_category, ''), t.category, 'UNCATEGORIZED')
+        ORDER BY month ASC
+        "#,
+    )
+    .bind(ctx.user_id)
+    .bind(months as i32)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    // (category -> (month -> amount)) plus per-category totals and the set of
+    // months actually present, so the response only carries populated buckets.
+    let mut by_cat: HashMap<String, HashMap<String, f64>> = HashMap::new();
+    let mut totals: HashMap<String, f64> = HashMap::new();
+    let mut month_set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+
+    for r in &rows {
+        let month: String = r.get("month");
+        let category: String = r.get("category");
+        let amount: f64 = r
+            .try_get::<rust_decimal::Decimal, _>("amount")
+            .ok()
+            .map(|d| d.to_string().parse().unwrap_or(0.0))
+            .unwrap_or(0.0);
+        month_set.insert(month.clone());
+        *totals.entry(category.clone()).or_insert(0.0) += amount;
+        *by_cat
+            .entry(category)
+            .or_default()
+            .entry(month)
+            .or_insert(0.0) += amount;
+    }
+
+    let months_vec: Vec<String> = month_set.into_iter().collect();
+
+    // Rank categories by total; keep the top N, fold the rest into OTHER.
+    let mut ranked: Vec<(String, f64)> = totals.iter().map(|(k, v)| (k.clone(), *v)).collect();
+    ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    let keep: std::collections::HashSet<String> =
+        ranked.iter().take(top).map(|(k, _)| k.clone()).collect();
+
+    // Accumulate OTHER across both totals and per-month so the stacked bars
+    // still sum to real monthly spending.
+    let mut other_total = 0.0;
+    let mut other_monthly: HashMap<String, f64> = HashMap::new();
+    let mut categories: Vec<CategorySpending> = Vec::new();
+
+    for (cat, per_month) in &by_cat {
+        if keep.contains(cat) {
+            let monthly = months_vec
+                .iter()
+                .map(|m| CategoryMonthAmount {
+                    month: m.clone(),
+                    amount: *per_month.get(m).unwrap_or(&0.0),
+                })
+                .collect();
+            categories.push(CategorySpending {
+                category: cat.clone(),
+                total: *totals.get(cat).unwrap_or(&0.0),
+                monthly,
+            });
+        } else {
+            other_total += *totals.get(cat).unwrap_or(&0.0);
+            for (m, v) in per_month {
+                *other_monthly.entry(m.clone()).or_insert(0.0) += *v;
+            }
+        }
+    }
+
+    categories.sort_by(|a, b| b.total.partial_cmp(&a.total).unwrap_or(std::cmp::Ordering::Equal));
+
+    if other_total > 0.0 {
+        let monthly = months_vec
+            .iter()
+            .map(|m| CategoryMonthAmount {
+                month: m.clone(),
+                amount: *other_monthly.get(m).unwrap_or(&0.0),
+            })
+            .collect();
+        categories.push(CategorySpending {
+            category: "OTHER".to_string(),
+            total: other_total,
+            monthly,
+        });
+    }
+
+    Json(SpendingByCategoryResponse {
+        months: months_vec,
+        categories,
+    })
 }
 
 #[derive(Serialize)]

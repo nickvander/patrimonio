@@ -1235,6 +1235,15 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get spendByCatTitle => 'Spending by category';
+
+  @override
+  String get spendByCatEmpty => 'No spending recorded in this period yet.';
+
+  @override
+  String get spendByCatTotal => 'Total';
+
+  @override
   String get cfBudgetsTitle => 'Budgets this month';
 
   @override

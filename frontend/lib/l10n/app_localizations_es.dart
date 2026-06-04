@@ -1253,6 +1253,16 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get spendByCatTitle => 'Gasto por categoría';
+
+  @override
+  String get spendByCatEmpty =>
+      'Aún no hay gastos registrados en este periodo.';
+
+  @override
+  String get spendByCatTotal => 'Total';
+
+  @override
   String get cfBudgetsTitle => 'Presupuestos de este mes';
 
   @override

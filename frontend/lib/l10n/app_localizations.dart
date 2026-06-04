@@ -2126,6 +2126,24 @@ abstract class AppLocalizations {
   /// **'+{count} more'**
   String cfPlusNMore(Object count);
 
+  /// No description provided for @spendByCatTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Spending by category'**
+  String get spendByCatTitle;
+
+  /// No description provided for @spendByCatEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No spending recorded in this period yet.'**
+  String get spendByCatEmpty;
+
+  /// No description provided for @spendByCatTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'Total'**
+  String get spendByCatTotal;
+
   /// No description provided for @cfBudgetsTitle.
   ///
   /// In en, this message translates to:

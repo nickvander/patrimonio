@@ -1,0 +1,318 @@
+import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
+import '../services/api_service.dart';
+import '../utils/category.dart';
+import '../utils/theme_colors.dart';
+import '../l10n/app_localizations.dart';
+
+/// "Where's my money going?" — per-category spending stacked by month.
+///
+/// Reads `/dashboard/spending-by-category`, which already applies the same
+/// cash-flow hygiene as the income/spend trends (USD-normalized, excludes
+/// internal transfers, CC payments and lending legs). Top categories are
+/// stacked per month with a "OTHER" rollup; a 3/6/12-month range selector
+/// refetches.
+class SpendingByCategoryCard extends StatefulWidget {
+  final ApiService apiService;
+  final double conversionFactor;
+  final NumberFormat currencyFormat;
+
+  const SpendingByCategoryCard({
+    super.key,
+    required this.apiService,
+    required this.conversionFactor,
+    required this.currencyFormat,
+  });
+
+  @override
+  State<SpendingByCategoryCard> createState() => _SpendingByCategoryCardState();
+}
+
+class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
+  int _months = 6;
+  bool _loading = true;
+  Map<String, dynamic>? _data;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final data =
+          await widget.apiService.getSpendingByCategory(months: _months, top: 6);
+      if (mounted) setState(() => _data = data);
+    } catch (_) {
+      // Leave _data as-is; the empty state renders below.
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  // Stable per-index palette. Index order follows the backend's
+  // total-descending category order, so the biggest spender is always green.
+  List<Color> _palette(BuildContext context) => [
+        context.positive,
+        context.tealAccent,
+        context.info,
+        context.purpleAccent,
+        context.pinkAccent,
+        context.yellowAccent,
+        context.warning,
+        context.textFaint, // OTHER rollup tail
+      ];
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final months = (_data?['months'] as List<dynamic>?) ?? const [];
+    final cats = (_data?['categories'] as List<dynamic>?) ?? const [];
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.bar_chart_rounded,
+                    color: context.tealAccent, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    l.spendByCatTitle,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: context.textPrimary,
+                    ),
+                  ),
+                ),
+                _rangeSelector(),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (_loading)
+              const SizedBox(
+                height: 220,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (months.isEmpty || cats.isEmpty)
+              SizedBox(
+                height: 180,
+                child: Center(
+                  child: Text(
+                    l.spendByCatEmpty,
+                    style: TextStyle(color: context.textMuted),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              )
+            else ...[
+              SizedBox(height: 240, child: _buildChart(months, cats)),
+              const SizedBox(height: 16),
+              _buildLegend(cats),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _rangeSelector() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [3, 6, 12].map((m) {
+        final selected = m == _months;
+        return Padding(
+          padding: const EdgeInsets.only(left: 6),
+          child: ChoiceChip(
+            label: Text('${m}M'),
+            selected: selected,
+            labelStyle: TextStyle(
+              fontSize: 12,
+              color: selected ? context.positive : context.textMuted,
+              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+            ),
+            showCheckmark: false,
+            onSelected: (_) {
+              if (m == _months) return;
+              setState(() => _months = m);
+              _load();
+            },
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildChart(List<dynamic> months, List<dynamic> cats) {
+    final palette = _palette(context);
+
+    // category -> month -> amount (USD).
+    final lookup = <int, Map<String, double>>{};
+    for (var i = 0; i < cats.length; i++) {
+      final monthly = (cats[i]['monthly'] as List<dynamic>?) ?? const [];
+      final m = <String, double>{};
+      for (final e in monthly) {
+        m[e['month'].toString()] = (e['amount'] as num?)?.toDouble() ?? 0.0;
+      }
+      lookup[i] = m;
+    }
+
+    double maxTotal = 0;
+    final groups = <BarChartGroupData>[];
+    for (var x = 0; x < months.length; x++) {
+      final monthKey = months[x].toString();
+      final stack = <BarChartRodStackItem>[];
+      var running = 0.0;
+      for (var i = 0; i < cats.length; i++) {
+        final amt = (lookup[i]?[monthKey] ?? 0.0) * widget.conversionFactor;
+        if (amt <= 0) continue;
+        stack.add(BarChartRodStackItem(
+          running,
+          running + amt,
+          palette[i % palette.length],
+        ));
+        running += amt;
+      }
+      if (running > maxTotal) maxTotal = running;
+      groups.add(
+        BarChartGroupData(
+          x: x,
+          barRods: [
+            BarChartRodData(
+              toY: running,
+              width: 22,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+              rodStackItems: stack,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return BarChart(
+      BarChartData(
+        alignment: BarChartAlignment.spaceAround,
+        maxY: maxTotal <= 0 ? 1 : maxTotal * 1.15,
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          getDrawingHorizontalLine: (v) =>
+              FlLine(color: context.hairline, strokeWidth: 1),
+        ),
+        borderData: FlBorderData(show: false),
+        titlesData: FlTitlesData(
+          rightTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 44,
+              getTitlesWidget: (value, meta) {
+                if (value <= meta.min || value >= meta.max) {
+                  return const SizedBox.shrink();
+                }
+                return Text(
+                  NumberFormat.compact().format(value),
+                  style: TextStyle(color: context.textSubtle, fontSize: 10),
+                );
+              },
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                final idx = value.toInt();
+                if (idx < 0 || idx >= months.length) {
+                  return const SizedBox.shrink();
+                }
+                final parsed = DateTime.tryParse('${months[idx]}-01');
+                final label = parsed == null
+                    ? months[idx].toString()
+                    : DateFormat.MMM().format(parsed);
+                return Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    label,
+                    style: TextStyle(color: context.textSubtle, fontSize: 11),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        barTouchData: BarTouchData(
+          touchTooltipData: BarTouchTooltipData(
+            getTooltipColor: (_) => context.tooltipSurface,
+            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+              return BarTooltipItem(
+                widget.currencyFormat.format(rod.toY),
+                TextStyle(
+                  color: context.tooltipOnSurface,
+                  fontWeight: FontWeight.bold,
+                ),
+              );
+            },
+          ),
+        ),
+        barGroups: groups,
+      ),
+    );
+  }
+
+  Widget _buildLegend(List<dynamic> cats) {
+    final palette = _palette(context);
+    return Wrap(
+      spacing: 16,
+      runSpacing: 8,
+      children: [
+        for (var i = 0; i < cats.length; i++)
+          _legendItem(
+            palette[i % palette.length],
+            prettyCategory(primary: cats[i]['category']?.toString()),
+            (cats[i]['total'] as num?)?.toDouble() ?? 0.0,
+          ),
+      ],
+    );
+  }
+
+  Widget _legendItem(Color color, String label, double totalUsd) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration:
+              BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: TextStyle(color: context.textMuted, fontSize: 12),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          widget.currencyFormat.format(totalUsd * widget.conversionFactor),
+          style: TextStyle(
+            color: context.textPrimary,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}

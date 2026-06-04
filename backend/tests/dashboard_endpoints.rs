@@ -2252,6 +2252,100 @@ async fn loan_disbursement_and_repayment_excluded_from_cash_flow() {
         "post-link April income should exclude the repayment (3000), got {}", april["income"]);
 }
 
+// Insert an expense with an explicit PFC category at a date relative to
+// CURRENT_DATE (so the test is independent of the wall clock). `months_ago`
+// counts whole calendar months back from today.
+async fn seed_categorized_expense(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    category: &str,
+    amount: &str,
+    months_ago: i32,
+) {
+    sqlx::query(
+        "INSERT INTO transactions (account_id, date, description, amount, currency, category, source, user_id) \
+         VALUES ($1, (CURRENT_DATE - make_interval(months => $2))::date, $3, $4, 'USD', $5, 'manual', $6)",
+    )
+    .bind(account_id)
+    .bind(months_ago)
+    .bind(format!("{category} spend"))
+    .bind(Decimal::from_str(amount).unwrap())
+    .bind(category)
+    .bind(user_id)
+    .execute(pool)
+    .await
+    .expect("seed categorized expense");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn spending_by_category_groups_and_excludes() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+
+    // This month: 200 + 100 food, 50 merchandise.
+    seed_categorized_expense(&pool, user_id, acct, "FOOD_AND_DRINK", "-200.00", 0).await;
+    seed_categorized_expense(&pool, user_id, acct, "FOOD_AND_DRINK", "-100.00", 0).await;
+    seed_categorized_expense(&pool, user_id, acct, "GENERAL_MERCHANDISE", "-50.00", 0).await;
+    // Last month: 150 food.
+    seed_categorized_expense(&pool, user_id, acct, "FOOD_AND_DRINK", "-150.00", 1).await;
+    // Noise that must be excluded: income (positive) and an internal transfer.
+    seed_categorized_expense(&pool, user_id, acct, "TRANSFER_OUT", "-500.00", 0).await;
+    sqlx::query(
+        "INSERT INTO transactions (account_id, date, description, amount, currency, category, source, user_id) \
+         VALUES ($1, CURRENT_DATE, 'paycheck', 3000.00, 'USD', 'INCOME', 'manual', $2)",
+    )
+    .bind(acct)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/spending-by-category?months=3&top=8",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+
+    let cats = body["categories"].as_array().unwrap();
+    let food = cats
+        .iter()
+        .find(|c| c["category"] == "FOOD_AND_DRINK")
+        .expect("food category present");
+    // 200 + 100 (this month) + 150 (last month) = 450, transfer/income excluded.
+    assert!(
+        (food["total"].as_f64().unwrap() - 450.0).abs() < 0.01,
+        "food total should be 450, got {}",
+        food["total"]
+    );
+    let merch = cats
+        .iter()
+        .find(|c| c["category"] == "GENERAL_MERCHANDISE")
+        .expect("merchandise present");
+    assert!((merch["total"].as_f64().unwrap() - 50.0).abs() < 0.01);
+
+    // The internal transfer must not appear as a spending category.
+    assert!(
+        !cats.iter().any(|c| c["category"] == "TRANSFER_OUT"),
+        "internal transfers must be excluded"
+    );
+    // Food ranks first (highest total).
+    assert_eq!(cats[0]["category"], "FOOD_AND_DRINK");
+    // Two distinct months present.
+    assert_eq!(body["months"].as_array().unwrap().len(), 2);
+}
+
 #[tokio::test]
 #[serial_test::serial]
 async fn loan_suggest_disbursement_matches_and_rejects() {

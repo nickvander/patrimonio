@@ -574,6 +574,25 @@ class ApiService {
     }, forceRefresh: forceRefresh);
   }
 
+  /// Per-category spending over the trailing [months] months. Returns the
+  /// `{months: [...], categories: [...]}` shape from the backend, with the
+  /// top categories kept verbatim and the rest folded into "OTHER".
+  Future<Map<String, dynamic>> getSpendingByCategory({
+    int months = 6,
+    int top = 6,
+    bool forceRefresh = false,
+  }) {
+    return _cachedGet('spending-by-category-$months-$top', () async {
+      final response = await _get(Uri.parse(
+          '$_baseUrl/dashboard/spending-by-category?months=$months&top=$top'));
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+      throw Exception(_t('Failed to load spending by category',
+          'No se pudo cargar el gasto por categoría'));
+    }, forceRefresh: forceRefresh);
+  }
+
   Future<Map<String, dynamic>> getHoldings({bool forceRefresh = false}) {
     return _cachedGet('holdings', () async {
       final response = await _get(Uri.parse('$_baseUrl/dashboard/holdings'));
