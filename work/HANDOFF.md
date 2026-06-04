@@ -1,12 +1,44 @@
 # Handoff — start here
 
-> **Last updated:** 2026-06-03 (end of the statement-import deepening sprint)
+> **Last updated:** 2026-06-03 (projection rebuild + spending-trends sprint)
 > **Purpose:** The single "where are we, what's next" doc to pick up cold.
 > For the full import architecture + backlog see
 > [work/STATEMENT_IMPORT.md](STATEMENT_IMPORT.md); for the older broader
 > backlog see [work/NEXT.md](NEXT.md) and [work/FUTURE.md](FUTURE.md).
 
-## Where we are
+## Latest sprint (2026-06-03) — projection rebuild + spending trends
+
+On `main` (`origin/main` @ `072d862`). Verified green: backend
+`./scripts/test.sh` (110 lib unit incl. 10 new projection tests + 73
+dashboard integration), `flutter analyze` clean, `flutter test` (148).
+
+1. **Wealth projection rewritten** ([services/projections.rs](../backend/src/services/projections.rs)):
+   real (today's) dollars via the Fisher relation, accumulation +
+   **decumulation** phases, **Monte Carlo** (lognormal real returns,
+   `-σ²/2` drift, default 1000 trials → success rate + p10/p25/p50/p75/p90
+   yearly fan), **Coast/Barista FIRE**. New `GET /api/projections/defaults`
+   derives contribution/expenses from trailing-12mo tracked cash flow.
+   Frontend ([wealth_projection_screen.dart](../frontend/lib/screens/wealth_projection_screen.dart))
+   shows the MC band, a success-rate card, a Coast/Barista strip, and
+   inflation/volatility/retirement-age controls. Removed the old
+   client-side scenario formula that disagreed with the backend.
+2. **Per-category spending trends**: `GET /api/dashboard/spending-by-category`
+   + `SpendingByCategoryCard` (stacked bars by month, 3/6/12-mo selector)
+   in the cash-flow tab.
+
+**Note for the next agent:** the audit's claim that "budgets are
+localStorage-only" is **wrong** — `BudgetsCard` already round-trips through
+the `budgets` app_setting (localStorage is just a fast-paint cache). Don't
+redo that.
+
+**Suggested next (from the feature audit, by impact-per-effort):**
+realized gains/losses dashboard (surface the `lot_disposals` data that's
+captured but never shown) · balance-over-time chart per account (uses the
+persisted `balance_after`) · debt-payoff simulator (avalanche/snowball on
+`loan_schedule`) · projection Tier 3 (Social Security/pension income
+streams, withdrawal guardrails, tax drag).
+
+## Where we are (previous sprint: statement import)
 
 All work below is **on `main` and pushed** (`origin/main` @ `d65a7f6`).
 Everything verified green: backend `./scripts/test.sh` (100 lib unit +
