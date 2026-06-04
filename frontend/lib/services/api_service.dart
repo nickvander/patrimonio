@@ -1644,6 +1644,11 @@ class ApiService {
     required double annualExpenses,
     required double withdrawalRate,
     int years = 30,
+    double annualInflationRate = 0.03,
+    double returnVolatility = 0.13,
+    int? yearsToRetirement,
+    int monteCarloTrials = 1000,
+    double baristaMonthlyIncome = 0.0,
   }) async {
     final queryParams = {
       'start_balance': startBalance.toString(),
@@ -1652,6 +1657,12 @@ class ApiService {
       'annual_expenses': annualExpenses.toString(),
       'withdrawal_rate': withdrawalRate.toString(),
       'years': years.toString(),
+      'annual_inflation_rate': annualInflationRate.toString(),
+      'return_volatility': returnVolatility.toString(),
+      'monte_carlo_trials': monteCarloTrials.toString(),
+      'barista_monthly_income': baristaMonthlyIncome.toString(),
+      if (yearsToRetirement != null)
+        'years_to_retirement': yearsToRetirement.toString(),
     };
 
     final uri = Uri.parse(
@@ -1664,6 +1675,22 @@ class ApiService {
     }
     throw Exception(_t('Failed to load wealth projection',
         'No se pudo cargar la proyección de patrimonio'));
+  }
+
+  /// Projection inputs derived from the user's tracked cash flow (USD).
+  /// Returns null on any error so the screen falls back to static defaults.
+  Future<Map<String, dynamic>?> getProjectionDefaults() async {
+    try {
+      final response =
+          await _get(Uri.parse('$_baseUrl/projections/defaults'));
+      if (response.statusCode == 200) {
+        final decoded = json.decode(response.body);
+        return decoded is Map<String, dynamic> ? decoded : null;
+      }
+    } catch (_) {
+      // Best-effort prefill; the screen has sensible static defaults.
+    }
+    return null;
   }
 
   Future<void> linkCryptoInstitution({

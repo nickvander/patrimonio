@@ -2110,6 +2110,64 @@ class AppLocalizationsEn extends AppLocalizations {
   String get projMonthlyAtWithdrawalRate => 'Monthly @ withdrawal rate';
 
   @override
+  String get projInflation => 'Inflation';
+
+  @override
+  String get projYearsToRetirement => 'Years to retirement';
+
+  @override
+  String get projVolatility => 'Return volatility';
+
+  @override
+  String get projExpectedReturnNominal => 'Expected return (nominal)';
+
+  @override
+  String get projRange => 'Range';
+
+  @override
+  String get projRealNote => 'All figures in today\'s dollars';
+
+  @override
+  String get projSuccessRate => 'Success rate';
+
+  @override
+  String get projSuccessRateSub => 'Chance the plan lasts the horizon';
+
+  @override
+  String get projMedian => 'Median outcome';
+
+  @override
+  String get projMedianSub => 'Most likely path (50th pct)';
+
+  @override
+  String get projCoastReached => 'Coast FIRE reached';
+
+  @override
+  String get projCoastReachedSub =>
+      'Growth alone reaches your goal — you can stop contributing.';
+
+  @override
+  String projCoastNeed(Object amount) {
+    return 'Coast FIRE: need $amount invested today';
+  }
+
+  @override
+  String get projCoastNeedSub =>
+      'Invest this much now and growth alone gets you to FI by retirement.';
+
+  @override
+  String get projBaristaFi => 'Barista FI number';
+
+  @override
+  String get projBaristaIncome => 'Part-time income';
+
+  @override
+  String get projFromYourData => 'From your tracked spending';
+
+  @override
+  String get projBandLegend => '10th–90th percentile range';
+
+  @override
   String get taxTitle => 'Tax planning';
 
   @override

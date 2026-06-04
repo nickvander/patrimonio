@@ -2132,6 +2132,65 @@ class AppLocalizationsEs extends AppLocalizations {
   String get projMonthlyAtWithdrawalRate => 'Mensual a la tasa de retiro';
 
   @override
+  String get projInflation => 'Inflación';
+
+  @override
+  String get projYearsToRetirement => 'Años para el retiro';
+
+  @override
+  String get projVolatility => 'Volatilidad del rendimiento';
+
+  @override
+  String get projExpectedReturnNominal => 'Rendimiento esperado (nominal)';
+
+  @override
+  String get projRange => 'Rango';
+
+  @override
+  String get projRealNote => 'Cifras en dólares de hoy';
+
+  @override
+  String get projSuccessRate => 'Tasa de éxito';
+
+  @override
+  String get projSuccessRateSub =>
+      'Probabilidad de que el plan dure el horizonte';
+
+  @override
+  String get projMedian => 'Resultado mediano';
+
+  @override
+  String get projMedianSub => 'Trayectoria más probable (pct. 50)';
+
+  @override
+  String get projCoastReached => 'Coast FIRE alcanzado';
+
+  @override
+  String get projCoastReachedSub =>
+      'Solo el crecimiento alcanza tu meta — puedes dejar de aportar.';
+
+  @override
+  String projCoastNeed(Object amount) {
+    return 'Coast FIRE: necesitas $amount invertidos hoy';
+  }
+
+  @override
+  String get projCoastNeedSub =>
+      'Invierte esto ahora y solo el crecimiento te lleva a la IF en el retiro.';
+
+  @override
+  String get projBaristaFi => 'Número FI Barista';
+
+  @override
+  String get projBaristaIncome => 'Ingreso de medio tiempo';
+
+  @override
+  String get projFromYourData => 'De tus gastos registrados';
+
+  @override
+  String get projBandLegend => 'Rango percentil 10–90';
+
+  @override
   String get taxTitle => 'Planeación fiscal';
 
   @override

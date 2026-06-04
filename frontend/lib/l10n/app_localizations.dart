@@ -3566,6 +3566,114 @@ abstract class AppLocalizations {
   /// **'Monthly @ withdrawal rate'**
   String get projMonthlyAtWithdrawalRate;
 
+  /// No description provided for @projInflation.
+  ///
+  /// In en, this message translates to:
+  /// **'Inflation'**
+  String get projInflation;
+
+  /// No description provided for @projYearsToRetirement.
+  ///
+  /// In en, this message translates to:
+  /// **'Years to retirement'**
+  String get projYearsToRetirement;
+
+  /// No description provided for @projVolatility.
+  ///
+  /// In en, this message translates to:
+  /// **'Return volatility'**
+  String get projVolatility;
+
+  /// No description provided for @projExpectedReturnNominal.
+  ///
+  /// In en, this message translates to:
+  /// **'Expected return (nominal)'**
+  String get projExpectedReturnNominal;
+
+  /// No description provided for @projRange.
+  ///
+  /// In en, this message translates to:
+  /// **'Range'**
+  String get projRange;
+
+  /// No description provided for @projRealNote.
+  ///
+  /// In en, this message translates to:
+  /// **'All figures in today\'s dollars'**
+  String get projRealNote;
+
+  /// No description provided for @projSuccessRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Success rate'**
+  String get projSuccessRate;
+
+  /// No description provided for @projSuccessRateSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Chance the plan lasts the horizon'**
+  String get projSuccessRateSub;
+
+  /// No description provided for @projMedian.
+  ///
+  /// In en, this message translates to:
+  /// **'Median outcome'**
+  String get projMedian;
+
+  /// No description provided for @projMedianSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Most likely path (50th pct)'**
+  String get projMedianSub;
+
+  /// No description provided for @projCoastReached.
+  ///
+  /// In en, this message translates to:
+  /// **'Coast FIRE reached'**
+  String get projCoastReached;
+
+  /// No description provided for @projCoastReachedSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Growth alone reaches your goal — you can stop contributing.'**
+  String get projCoastReachedSub;
+
+  /// No description provided for @projCoastNeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Coast FIRE: need {amount} invested today'**
+  String projCoastNeed(Object amount);
+
+  /// No description provided for @projCoastNeedSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Invest this much now and growth alone gets you to FI by retirement.'**
+  String get projCoastNeedSub;
+
+  /// No description provided for @projBaristaFi.
+  ///
+  /// In en, this message translates to:
+  /// **'Barista FI number'**
+  String get projBaristaFi;
+
+  /// No description provided for @projBaristaIncome.
+  ///
+  /// In en, this message translates to:
+  /// **'Part-time income'**
+  String get projBaristaIncome;
+
+  /// No description provided for @projFromYourData.
+  ///
+  /// In en, this message translates to:
+  /// **'From your tracked spending'**
+  String get projFromYourData;
+
+  /// No description provided for @projBandLegend.
+  ///
+  /// In en, this message translates to:
+  /// **'10th–90th percentile range'**
+  String get projBandLegend;
+
   /// No description provided for @taxTitle.
   ///
   /// In en, this message translates to:
