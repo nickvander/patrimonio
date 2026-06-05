@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../utils/currency.dart';
 import '../widgets/transactions_tab.dart';
+import '../widgets/account_balance_chart.dart';
 import '../l10n/app_localizations.dart';
 
 /// Per-account transaction history. Rendered as the body of a slide-from-
@@ -46,6 +47,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   bool _isLoading = true;
   String? _error;
   List<dynamic>? _transactions;
+  List<dynamic> _balanceHistory = const [];
 
   /// Locally-tracked balance and nickname so this screen can reflect an edit
   /// immediately without writing back into the parent's shared map. The
@@ -60,6 +62,13 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         ((widget.account['current_balance'] as num?)?.toDouble()) ?? 0.0;
     _nickname = (widget.account['nickname'] ?? '').toString();
     _fetchTransactions();
+    _fetchBalanceHistory();
+  }
+
+  Future<void> _fetchBalanceHistory() async {
+    final history =
+        await _apiService.getAccountBalanceHistory(widget.account['id'].toString());
+    if (mounted) setState(() => _balanceHistory = history);
   }
 
   @override
@@ -69,6 +78,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       _currentBalance =
           ((widget.account['current_balance'] as num?)?.toDouble()) ?? 0.0;
       _nickname = (widget.account['nickname'] ?? '').toString();
+      _fetchBalanceHistory();
     }
   }
 
@@ -446,10 +456,22 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       );
     }
 
+    final sourceCurrency =
+        (widget.account['currency'] ?? widget.targetCurrency).toString();
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      child: TransactionsTab(
-        transactions: _transactions!,
+      child: Column(
+        children: [
+          if (_balanceHistory.length >= 2) ...[
+            AccountBalanceChart(
+              points: _balanceHistory,
+              currency: sourceCurrency,
+            ),
+            const SizedBox(height: 12),
+          ],
+          Expanded(
+            child: TransactionsTab(
+              transactions: _transactions!,
         accounts: widget.allAccounts,
         conversionFactor: widget.conversionFactor,
         currencyFormat: widget.currencyFormat,
@@ -476,6 +498,9 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
           await _apiService.deleteTransaction(id);
           _fetchTransactions();
         },
+            ),
+          ),
+        ],
       ),
     );
   }

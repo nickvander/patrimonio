@@ -635,6 +635,7 @@
   "acctxUpdateBalance": "Actualizar saldo",
   "acctxLoadError": "Error al cargar las transacciones: {error}",
   "acctxRetry": "Reintentar",
+  "acctxBalanceOverTime": "Saldo a lo largo del tiempo",
   "acctxNoTransactionsTitle": "Aún no hay transacciones",
   "acctxNoTransactionsBody": "Es posible que los registros apenas comiencen, o que las cuentas sin conexión no tengan historial.",
   "acctxUpdateFailed": "No se pudo actualizar la transacción: {error}",

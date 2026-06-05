@@ -700,6 +700,7 @@
   "acctxUpdateBalance": "Update balance",
   "acctxLoadError": "Error loading transactions: {error}",
   "acctxRetry": "Retry",
+  "acctxBalanceOverTime": "Balance over time",
   "acctxNoTransactionsTitle": "No transactions yet",
   "acctxNoTransactionsBody": "Records might just be starting, or offline accounts have no history.",
   "acctxUpdateFailed": "Failed to update transaction: {error}",

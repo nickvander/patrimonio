@@ -6,11 +6,29 @@
 > [work/STATEMENT_IMPORT.md](STATEMENT_IMPORT.md); for the older broader
 > backlog see [work/NEXT.md](NEXT.md) and [work/FUTURE.md](FUTURE.md).
 
-## Latest sprint (2026-06-03) — projection rebuild + spending trends
+## Latest sprint (2026-06-03) — projection rebuild + insight layer
 
-On `main` (`origin/main` @ `072d862`). Verified green: backend
-`./scripts/test.sh` (110 lib unit incl. 10 new projection tests + 73
-dashboard integration), `flutter analyze` clean, `flutter test` (148).
+On `main`. Verified green: backend `./scripts/test.sh` (109 lib unit incl.
+11 projection tests + 75 dashboard integration), `flutter analyze` clean,
+`flutter test` (148).
+
+Shipped this session, in order: projection rebuild → spending-by-category
+→ realized gains/losses → retirement-income in the projection sim →
+account balance-over-time. Newer items below.
+
+- **Realized gains/losses**: `GET /api/dashboard/realized-gains[?year=]`
+  surfaces `lot_disposals` (YTD/all-time summary, per-year totals, disposal
+  list with USD proceeds/cost + long-term flag). `RealizedGainsCard` in the
+  investments tab; renders nothing when there are no realized sells.
+- **Retirement income in the projection**: the "Retirement income
+  (SS/pension)" input now offsets spending in the decumulation phase
+  (deterministic + Monte Carlo), not just the Barista badge.
+- **Balance-over-time per account**: `GET /api/dashboard/account-balance-history?account_id=`
+  (monthly closing balance from the persisted `balance_after`, native
+  currency). `AccountBalanceChart` at the top of the account screen;
+  only shows for statement-imported accounts (Plaid-only → no data).
+
+### Earlier this sprint
 
 1. **Wealth projection rewritten** ([services/projections.rs](../backend/src/services/projections.rs)):
    real (today's) dollars via the Fisher relation, accumulation +
@@ -32,11 +50,12 @@ the `budgets` app_setting (localStorage is just a fast-paint cache). Don't
 redo that.
 
 **Suggested next (from the feature audit, by impact-per-effort):**
-realized gains/losses dashboard (surface the `lot_disposals` data that's
-captured but never shown) · balance-over-time chart per account (uses the
-persisted `balance_after`) · debt-payoff simulator (avalanche/snowball on
-`loan_schedule`) · projection Tier 3 (Social Security/pension income
-streams, withdrawal guardrails, tax drag).
+recurring-bill / subscription 12-month forecast (subscription detector is
+already there) · category budget-vs-actual alerts on top of the new
+spending-by-category data · projection withdrawal guardrails
+(Guyton-Klinger) and an effective tax drag · investment performance vs a
+benchmark (S&P 500). Already shipped this sprint: realized gains, balance-
+over-time, retirement-income, projection rebuild — don't redo.
 
 ## Where we are (previous sprint: statement import)
 

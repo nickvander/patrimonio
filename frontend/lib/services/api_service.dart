@@ -593,6 +593,22 @@ class ApiService {
     }, forceRefresh: forceRefresh);
   }
 
+  /// Monthly closing balances for one account (native currency), derived from
+  /// the persisted statement `balance_after`. Empty for Plaid-only accounts.
+  Future<List<dynamic>> getAccountBalanceHistory(String accountId) async {
+    try {
+      final response = await _get(Uri.parse(
+          '$_baseUrl/dashboard/account-balance-history?account_id=$accountId'));
+      if (response.statusCode == 200) {
+        final decoded = json.decode(response.body);
+        return decoded is List ? decoded : const [];
+      }
+    } catch (_) {
+      // Best-effort; the chart simply won't render.
+    }
+    return const [];
+  }
+
   /// Realized capital gains/losses from lot disposals. Optional [year]
   /// narrows the disposal list; the summary + by-year always cover history.
   Future<Map<String, dynamic>> getRealizedGains({

@@ -3914,6 +3914,12 @@ abstract class AppLocalizations {
   /// **'Retry'**
   String get acctxRetry;
 
+  /// No description provided for @acctxBalanceOverTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Balance over time'**
+  String get acctxBalanceOverTime;
+
   /// No description provided for @acctxNoTransactionsTitle.
   ///
   /// In en, this message translates to:

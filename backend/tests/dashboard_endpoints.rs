@@ -2348,6 +2348,74 @@ async fn spending_by_category_groups_and_excludes() {
 
 #[tokio::test]
 #[serial_test::serial]
+async fn account_balance_history_returns_monthly_closing() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+
+    // Two months of statement rows with a running balance_after. The endpoint
+    // should return the LAST balance in each month.
+    let insert = |date: &'static str, amount: &'static str, bal: &'static str| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query(
+                "INSERT INTO transactions (account_id, date, description, amount, currency, balance_after, source, user_id) \
+                 VALUES ($1, $2::date, 'row', $3, 'USD', $4, 'manual', $5)",
+            )
+            .bind(acct)
+            .bind(date)
+            .bind(Decimal::from_str(amount).unwrap())
+            .bind(Decimal::from_str(bal).unwrap())
+            .bind(user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+    };
+    insert("2026-03-05", "-100.00", "900.00").await;
+    insert("2026-03-20", "-50.00", "850.00").await; // latest in March
+    insert("2026-04-10", "200.00", "1050.00").await; // latest in April
+    // A row with no balance_after must be ignored.
+    seed_tx_dated(&pool, user_id, acct, "no balance", "-10.00", "2026-04-15").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/dashboard/account-balance-history?account_id={acct}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    let arr = body.as_array().unwrap();
+    assert_eq!(arr.len(), 2, "two months expected");
+    assert_eq!(arr[0]["month"], "2026-03");
+    assert!((arr[0]["balance"].as_f64().unwrap() - 850.0).abs() < 0.01);
+    assert_eq!(arr[1]["month"], "2026-04");
+    assert!((arr[1]["balance"].as_f64().unwrap() - 1050.0).abs() < 0.01);
+
+    // Tenant isolation: a bogus account id yields an empty series, not data.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/account-balance-history?account_id=not-a-uuid",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body.as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn realized_gains_summary_and_long_term_flag() {
     let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
         return;

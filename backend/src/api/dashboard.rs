@@ -22,6 +22,7 @@ pub fn router() -> Router<AppState> {
         .route("/trends", get(cash_flow_trends))
         .route("/spending-by-category", get(spending_by_category))
         .route("/realized-gains", get(realized_gains))
+        .route("/account-balance-history", get(account_balance_history))
         .route("/credit-utilization", get(credit_utilization))
         .route("/sync-status", get(sync_status))
         .route("/transactions", get(recent_transactions))
@@ -1279,6 +1280,63 @@ async fn spending_by_category(
         months: months_vec,
         categories,
     })
+}
+
+#[derive(Deserialize)]
+struct AccountBalanceHistoryQuery {
+    account_id: String,
+}
+
+#[derive(Serialize)]
+struct BalancePoint {
+    month: String,
+    balance: f64,
+}
+
+/// Monthly closing balance for one account, derived from the persisted
+/// `balance_after` (the statement SALDO captured at import). Returns the latest
+/// in-month balance per month, in the account's native currency. Only accounts
+/// with statement-imported rows have this data; Plaid-only accounts return [].
+async fn account_balance_history(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Query(q): Query<AccountBalanceHistoryQuery>,
+) -> Json<Vec<BalancePoint>> {
+    let account_id = match uuid::Uuid::parse_str(&q.account_id) {
+        Ok(id) => id,
+        Err(_) => return Json(Vec::new()),
+    };
+
+    let rows = sqlx::query(
+        r#"
+        SELECT DISTINCT ON (TO_CHAR(t.date, 'YYYY-MM'))
+               TO_CHAR(t.date, 'YYYY-MM') AS month,
+               t.balance_after AS balance
+        FROM transactions t
+        WHERE t.account_id = $1
+          AND t.user_id = $2
+          AND t.balance_after IS NOT NULL
+        ORDER BY TO_CHAR(t.date, 'YYYY-MM') ASC, t.date DESC, t.id DESC
+        "#,
+    )
+    .bind(account_id)
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    Json(
+        rows.iter()
+            .map(|r| BalancePoint {
+                month: r.get("month"),
+                balance: r
+                    .try_get::<rust_decimal::Decimal, _>("balance")
+                    .ok()
+                    .map(|d| d.to_string().parse().unwrap_or(0.0))
+                    .unwrap_or(0.0),
+            })
+            .collect(),
+    )
 }
 
 #[derive(Deserialize)]

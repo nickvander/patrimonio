@@ -2304,6 +2304,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get acctxRetry => 'Retry';
 
   @override
+  String get acctxBalanceOverTime => 'Balance over time';
+
+  @override
   String get acctxNoTransactionsTitle => 'No transactions yet';
 
   @override

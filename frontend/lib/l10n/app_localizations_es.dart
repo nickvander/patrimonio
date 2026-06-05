@@ -2329,6 +2329,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get acctxRetry => 'Reintentar';
 
   @override
+  String get acctxBalanceOverTime => 'Saldo a lo largo del tiempo';
+
+  @override
   String get acctxNoTransactionsTitle => 'Aún no hay transacciones';
 
   @override
