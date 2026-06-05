@@ -1,12 +1,12 @@
-/// Forward projection of recurring bills, built from the backend's detected
-/// subscriptions. Pure + dependency-free so it can be unit-tested.
-///
-/// Each subscription carries `monthly_usd` (normalized monthly burn),
-/// `cadence_days` (gap between charges), `last_charge_date`, and `status`.
-/// We step forward from the last charge by the cadence, dropping each
-/// projected charge into its calendar-month bucket. A per-charge amount of
-/// `monthly_usd * cadence_days / 30.4375` keeps the annual total consistent
-/// with the monthly burn while still landing annual renewals in one month.
+// Forward projection of recurring bills, built from the backend's detected
+// subscriptions. Pure + dependency-free so it can be unit-tested.
+//
+// Each subscription carries `monthly_usd` (normalized monthly burn),
+// `cadence_days` (gap between charges), `last_charge_date`, and `status`.
+// We step forward from the last charge by the cadence, dropping each
+// projected charge into its calendar-month bucket. A per-charge amount of
+// `monthly_usd * cadence_days / 30.4375` keeps the annual total consistent
+// with the monthly burn while still landing annual renewals in one month.
 
 class BillMonth {
   /// First day of the bucket month.

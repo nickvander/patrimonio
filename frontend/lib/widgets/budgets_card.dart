@@ -92,6 +92,21 @@ class _BudgetsCardState extends State<BudgetsCard> {
     final spend = _monthlySpendByCategory();
     final hasBudgets = _budgets.isNotEmpty;
 
+    // Budget-vs-actual alert state: how many categories are over budget (and
+    // by how much in total) vs merely approaching it (>85%).
+    var overCount = 0;
+    var overTotalUsd = 0.0;
+    var nearCount = 0;
+    for (final e in _budgets.entries) {
+      final spent = spend[e.key] ?? 0.0;
+      if (spent > e.value) {
+        overCount++;
+        overTotalUsd += spent - e.value;
+      } else if (e.value > 0 && spent / e.value > 0.85) {
+        nearCount++;
+      }
+    }
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -121,6 +136,10 @@ class _BudgetsCardState extends State<BudgetsCard> {
               ],
             ),
             const SizedBox(height: 12),
+            if (hasBudgets && (overCount > 0 || nearCount > 0)) ...[
+              _alertBanner(context, l, overCount, overTotalUsd, nearCount),
+              const SizedBox(height: 12),
+            ],
             if (!hasBudgets)
               Text(
                 l.cfBudgetsEmpty,
@@ -190,12 +209,71 @@ class _BudgetsCardState extends State<BudgetsCard> {
                           minHeight: 8,
                         ),
                       ),
+                      const SizedBox(height: 3),
+                      Text(
+                        over
+                            ? l.cfBudgetsOverBy(widget.currencyFormat.format(
+                                (spentUsd - budgetUsd) *
+                                    widget.conversionFactor))
+                            : l.cfBudgetsLeft(widget.currencyFormat.format(
+                                (budgetUsd - spentUsd).clamp(0, double.infinity) *
+                                    widget.conversionFactor)),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: over ? context.pinkAccent : context.textFaint,
+                        ),
+                      ),
                     ],
                   ),
                 );
               }),
           ],
         ),
+      ),
+    );
+  }
+
+  // Prominent budget-vs-actual alert. Red when any category is over budget
+  // (with the total overage), amber when categories are merely approaching it.
+  Widget _alertBanner(
+    BuildContext context,
+    AppLocalizations l,
+    int overCount,
+    double overTotalUsd,
+    int nearCount,
+  ) {
+    final isOver = overCount > 0;
+    final color = isOver ? context.pinkAccent : context.warning;
+    final text = isOver
+        ? l.cfBudgetsOverAlert(
+            overCount,
+            widget.currencyFormat
+                .format(overTotalUsd * widget.conversionFactor),
+          )
+        : l.cfBudgetsNearAlert(nearCount);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(isOver ? Icons.warning_amber_rounded : Icons.info_outline,
+              color: color, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w600,
+                fontSize: 12.5,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
