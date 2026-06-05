@@ -190,4 +190,37 @@ class Preferences {
         .join(', ');
     _write('account_balance_alerts', '{$parts}');
   }
+
+  /// Per-account interest rates (account id -> annual APR as a decimal, e.g.
+  /// 0.1999), for the debt-payoff simulator. Same flat-JSON encoding.
+  static Map<String, double> getAccountAprs() {
+    final raw = _read('account_aprs');
+    if (raw == null || raw.isEmpty || !raw.startsWith('{')) return const {};
+    try {
+      final map = <String, double>{};
+      final inner = raw.substring(1, raw.length - 1);
+      if (inner.isEmpty) return const {};
+      for (final entry in inner.split(',')) {
+        final parts = entry.split(':');
+        if (parts.length != 2) continue;
+        final key = parts[0].trim().replaceAll('"', '');
+        final value = double.tryParse(parts[1].trim());
+        if (key.isNotEmpty && value != null) map[key] = value;
+      }
+      return map;
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  static void setAccountAprs(Map<String, double> aprs) {
+    if (aprs.isEmpty) {
+      _write('account_aprs', '{}');
+      return;
+    }
+    final parts = aprs.entries
+        .map((e) => '"${e.key.replaceAll('"', '')}": ${e.value}')
+        .join(', ');
+    _write('account_aprs', '{$parts}');
+  }
 }

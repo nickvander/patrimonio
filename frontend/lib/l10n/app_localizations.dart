@@ -2126,6 +2126,96 @@ abstract class AppLocalizations {
   /// **'+{count} more'**
   String cfPlusNMore(Object count);
 
+  /// No description provided for @dpTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Debt payoff'**
+  String get dpTitle;
+
+  /// No description provided for @dpMonthlyPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly payment'**
+  String get dpMonthlyPayment;
+
+  /// No description provided for @dpAvalanche.
+  ///
+  /// In en, this message translates to:
+  /// **'Avalanche'**
+  String get dpAvalanche;
+
+  /// No description provided for @dpSnowball.
+  ///
+  /// In en, this message translates to:
+  /// **'Snowball'**
+  String get dpSnowball;
+
+  /// No description provided for @dpAvalancheSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Highest rate first'**
+  String get dpAvalancheSub;
+
+  /// No description provided for @dpSnowballSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Smallest balance first'**
+  String get dpSnowballSub;
+
+  /// No description provided for @dpDebtFree.
+  ///
+  /// In en, this message translates to:
+  /// **'{months} mo to debt-free'**
+  String dpDebtFree(Object months);
+
+  /// No description provided for @dpInterest.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} interest'**
+  String dpInterest(Object amount);
+
+  /// No description provided for @dpRecommended.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended'**
+  String get dpRecommended;
+
+  /// No description provided for @dpSaves.
+  ///
+  /// In en, this message translates to:
+  /// **'Saves {amount} vs snowball'**
+  String dpSaves(Object amount);
+
+  /// No description provided for @dpInfeasible.
+  ///
+  /// In en, this message translates to:
+  /// **'Increase the monthly payment to cover minimums.'**
+  String get dpInfeasible;
+
+  /// No description provided for @dpSetApr.
+  ///
+  /// In en, this message translates to:
+  /// **'Set APR'**
+  String get dpSetApr;
+
+  /// No description provided for @dpAprDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest rate (APR)'**
+  String get dpAprDialogTitle;
+
+  /// No description provided for @dpAprLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Annual rate'**
+  String get dpAprLabel;
+
+  /// No description provided for @dpEditApr.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} rate'**
+  String dpEditApr(Object name);
+
   /// No description provided for @efTitle.
   ///
   /// In en, this message translates to:

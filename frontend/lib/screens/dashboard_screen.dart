@@ -18,6 +18,7 @@ import '../widgets/budgets_card.dart';
 import '../widgets/spending_by_category_card.dart';
 import '../widgets/realized_gains_card.dart';
 import '../widgets/upcoming_bills_card.dart';
+import '../widgets/debt_payoff_card.dart';
 import '../widgets/net_worth_goal_tile.dart';
 import '../widgets/emergency_fund_card.dart';
 import '../widgets/accounts_breakdown_card.dart';
@@ -236,6 +237,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (_) {
       // localStorage seed stands.
     }
+  }
+
+  // Re-read thresholds from localStorage after the account panel saves one, so
+  // the notifications bell reflects the change without a full reload.
+  void _reloadAccountAlerts() {
+    if (mounted) setState(() => _accountAlerts = Preferences.getAccountAlerts());
   }
 
   @override
@@ -561,6 +568,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _loadAllData(silent: true);
             } catch (_) {}
           },
+          onAlertsChanged: _reloadAccountAlerts,
         ),
       ));
     }
@@ -1783,6 +1791,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         _loadAllData(silent: true);
                       } catch (_) {}
                     },
+                    onAlertsChanged: _reloadAccountAlerts,
                   ),
                 ),
               ),
@@ -1993,6 +2002,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             targetCurrency: _targetCurrency,
             usdMxnRate: fxRate,
             onAddAccount: _openAddAccount,
+            onAlertsChanged: _reloadAccountAlerts,
             onBalanceUpdate: (id, bal) async {
               try {
                 await _apiService.updateAccountBalance(id, bal);
@@ -2765,6 +2775,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             conversionFactor: conversionFactor,
             currencyFormat: currencyFormat,
             apiService: _apiService,
+          ),
+          const SizedBox(height: 24),
+          DebtPayoffCard(
+            accounts: (_overview?['accounts'] as List?) ?? const [],
+            apiService: _apiService,
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
           ),
         ],
       ),

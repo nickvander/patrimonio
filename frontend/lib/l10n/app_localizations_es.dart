@@ -1253,6 +1253,59 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get dpTitle => 'Pago de deudas';
+
+  @override
+  String get dpMonthlyPayment => 'Pago mensual';
+
+  @override
+  String get dpAvalanche => 'Avalancha';
+
+  @override
+  String get dpSnowball => 'Bola de nieve';
+
+  @override
+  String get dpAvalancheSub => 'Mayor tasa primero';
+
+  @override
+  String get dpSnowballSub => 'Menor saldo primero';
+
+  @override
+  String dpDebtFree(Object months) {
+    return '$months meses para liquidar';
+  }
+
+  @override
+  String dpInterest(Object amount) {
+    return '$amount de interés';
+  }
+
+  @override
+  String get dpRecommended => 'Recomendado';
+
+  @override
+  String dpSaves(Object amount) {
+    return 'Ahorra $amount vs bola de nieve';
+  }
+
+  @override
+  String get dpInfeasible => 'Aumenta el pago mensual para cubrir los mínimos.';
+
+  @override
+  String get dpSetApr => 'Definir TAE';
+
+  @override
+  String get dpAprDialogTitle => 'Tasa de interés (TAE)';
+
+  @override
+  String get dpAprLabel => 'Tasa anual';
+
+  @override
+  String dpEditApr(Object name) {
+    return 'Tasa de $name';
+  }
+
+  @override
   String get efTitle => 'Fondo de emergencia';
 
   @override

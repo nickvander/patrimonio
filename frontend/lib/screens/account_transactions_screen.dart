@@ -26,6 +26,9 @@ class AccountTransactionsScreen extends StatefulWidget {
   /// nickname without leaving the panel.
   final Future<void> Function(String accountId, String nickname)?
       onRenameAccount;
+  /// Fired after a low-balance threshold is saved/removed so the opener
+  /// (e.g. the dashboard) can refresh its notifications bell immediately.
+  final VoidCallback? onAlertsChanged;
 
   const AccountTransactionsScreen({
     super.key,
@@ -37,6 +40,7 @@ class AccountTransactionsScreen extends StatefulWidget {
     required this.usdMxnRate,
     this.onBalanceUpdate,
     this.onRenameAccount,
+    this.onAlertsChanged,
   });
 
   @override
@@ -165,6 +169,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     setState(() => _accountAlerts = next);
     Preferences.setAccountAlerts(next);
     _apiService.putSetting('account_balance_alerts', next).catchError((_) {});
+    widget.onAlertsChanged?.call();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -681,6 +686,7 @@ Future<void> showAccountTransactionsPanel(
   required double usdMxnRate,
   Function(String, double)? onBalanceUpdate,
   Future<void> Function(String, String)? onRenameAccount,
+  VoidCallback? onAlertsChanged,
 }) {
   final size = MediaQuery.sizeOf(context);
   final isNarrow = size.width < 700;
@@ -722,6 +728,7 @@ Future<void> showAccountTransactionsPanel(
               usdMxnRate: usdMxnRate,
               onBalanceUpdate: onBalanceUpdate,
               onRenameAccount: onRenameAccount,
+              onAlertsChanged: onAlertsChanged,
             ),
           ),
         ),

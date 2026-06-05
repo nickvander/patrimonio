@@ -1235,6 +1235,59 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get dpTitle => 'Debt payoff';
+
+  @override
+  String get dpMonthlyPayment => 'Monthly payment';
+
+  @override
+  String get dpAvalanche => 'Avalanche';
+
+  @override
+  String get dpSnowball => 'Snowball';
+
+  @override
+  String get dpAvalancheSub => 'Highest rate first';
+
+  @override
+  String get dpSnowballSub => 'Smallest balance first';
+
+  @override
+  String dpDebtFree(Object months) {
+    return '$months mo to debt-free';
+  }
+
+  @override
+  String dpInterest(Object amount) {
+    return '$amount interest';
+  }
+
+  @override
+  String get dpRecommended => 'Recommended';
+
+  @override
+  String dpSaves(Object amount) {
+    return 'Saves $amount vs snowball';
+  }
+
+  @override
+  String get dpInfeasible => 'Increase the monthly payment to cover minimums.';
+
+  @override
+  String get dpSetApr => 'Set APR';
+
+  @override
+  String get dpAprDialogTitle => 'Interest rate (APR)';
+
+  @override
+  String get dpAprLabel => 'Annual rate';
+
+  @override
+  String dpEditApr(Object name) {
+    return '$name rate';
+  }
+
+  @override
   String get efTitle => 'Emergency fund';
 
   @override

@@ -24,6 +24,9 @@ class AccountsListWidget extends StatelessWidget {
   /// Opens the Add-account dialog directly from the empty state's
   /// "Add an account" button (instead of bouncing to Settings).
   final VoidCallback? onAddAccount;
+  /// Forwarded to the account panel so a low-balance threshold change
+  /// refreshes the dashboard's notifications bell immediately.
+  final VoidCallback? onAlertsChanged;
 
   const AccountsListWidget({
     super.key,
@@ -37,6 +40,7 @@ class AccountsListWidget extends StatelessWidget {
     this.onRenameAccount,
     this.onRevalueAccount,
     this.onAddAccount,
+    this.onAlertsChanged,
   });
 
   @override
@@ -539,6 +543,7 @@ class AccountsListWidget extends StatelessWidget {
           onRenameAccount: onRenameAccount == null
               ? null
               : (id, nickname) async => onRenameAccount!(id, nickname),
+          onAlertsChanged: onAlertsChanged,
         );
       },
       child: Padding(
@@ -785,6 +790,7 @@ class AccountsListWidget extends StatelessWidget {
           onRenameAccount: onRenameAccount == null
               ? null
               : (id, nickname) async => onRenameAccount!(id, nickname),
+          onAlertsChanged: onAlertsChanged,
         );
       },
       child: LayoutBuilder(
