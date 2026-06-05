@@ -37,10 +37,15 @@ portals, run through `pdftotext -layout`, fed to the parsers via the new
     (Dec-2017): 145 txns parse correctly, but that older layout rarely prints a
     per-row SALDO — `balance_after` is nullable, so this is fine.
   * **HSBC**: the only public sample has a broken embedded font (the words
-    aren't even in the `pdftotext` output), so the parser correctly extracts
-    **0** rather than garbage — such files need OCR or a clean PDF. Unshifting
-    the +29 font offset recovers letters but NOT digits, so it wouldn't help;
-    OCR (already in the pipeline) is the path. HSBC still awaits a clean PDF.
+    aren't even in the `pdftotext` output). Added a **garbled→OCR guard**
+    (`looks_garbled`: lots of alpha but none of the statement anchor words →
+    route to OCR, which rasterizes the visually-correct page). Verified on the
+    real broken-font HSBC PDF: the pipeline went from 0 rows (garbled text) to
+    OCR engaging and the parser extracting a row. Full HSBC fidelity is still
+    limited by OCR noise on that scanned doc + the unconfirmed date token, so
+    HSBC stays unadvertised pending a clean PDF — but broken-font files now
+    route to OCR instead of failing. (Prod Dockerfile already ships
+    tesseract-ocr-spa + poppler-utils, so this works deployed.)
   * Fix from validation: descriptions now truncate at the `▼` expander glyph
     (Banorte footers were leaking in).
 

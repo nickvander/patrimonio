@@ -101,6 +101,36 @@ fn pdftotext_layout(data: &[u8]) -> String {
     }
 }
 
+/// Words that appear in essentially every Mexican bank statement. Used to tell
+/// a real text extraction from a garbled (broken-font) one.
+const STATEMENT_ANCHORS: &[&str] = &[
+    "SALDO",
+    "CUENTA",
+    "MOVIMIENT",
+    "PERIODO",
+    "PERÍODO",
+    "FECHA",
+    "RFC",
+    "PESOS",
+    "ESTADO DE CUENTA",
+];
+
+fn has_statement_anchor(text: &str) -> bool {
+    let upper = text.to_uppercase();
+    STATEMENT_ANCHORS.iter().any(|w| upper.contains(w))
+}
+
+/// A "garbled" extraction has plenty of letters but none of the vocabulary a
+/// statement always contains — the signature of a broken embedded-font CMap
+/// (e.g. some HSBC PDFs) where `pdftotext` shifts every glyph into gibberish.
+/// Such files need OCR of the (visually-correct) rendered page. We require a
+/// fair amount of alpha first so genuinely sparse/short text falls to the
+/// existing length-based OCR trigger instead.
+fn looks_garbled(text: &str) -> bool {
+    let alpha = text.chars().filter(|c| c.is_alphabetic()).count();
+    alpha >= 200 && !has_statement_anchor(text)
+}
+
 /// OCR an image-only / scanned PDF (incl. browser "Print to PDF"
 /// statements whose only text layer is the "about:blank" header — the
 /// real content is in page images). Tries the EXTRACTED page images first
@@ -413,20 +443,41 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
         };
 
         // Run OCR when the extracted text is either sparse (image-only /
-        // scanned) OR is just a browser "Print to PDF" header. Firefox
-        // print-to-PDF statements render the real content as page images
-        // and leave only "about:blank … N of M" in the text layer — there
-        // are *enough* header letters to clear a simple length check, so we
-        // trigger on the marker too. OCR (slow) only as a last resort.
+        // scanned) OR is just a browser "Print to PDF" header OR is GARBLED.
+        // Firefox print-to-PDF statements render the real content as page
+        // images and leave only "about:blank … N of M" in the text layer —
+        // enough header letters to clear a length check, so we trigger on the
+        // marker too. Garbled = a broken embedded-font CMap (e.g. some HSBC
+        // PDFs) where `pdftotext` emits lots of letters but they're shifted
+        // into gibberish — plenty of alpha, yet none of the words every
+        // statement contains. OCR rasterizes the *rendered* page, which is
+        // visually correct, so it recovers the real text. OCR (slow) only as a
+        // last resort.
         let alpha = |s: &str| s.chars().filter(|c| c.is_alphabetic()).count();
         let is_browser_print = best.to_uppercase().contains("ABOUT:BLANK");
+        let garbled = looks_garbled(&best);
         // Track whether the text we ultimately parse came from OCR, so the
         // preview can flag those rows for review (OCR can misread a digit).
         let mut ocr_used = false;
-        if is_browser_print || alpha(&best) < 100 {
-            info!("PDF '{}' looks image-only — running OCR…", file_name);
+        if is_browser_print || alpha(&best) < 100 || garbled {
+            info!(
+                "PDF '{}' needs OCR (browser_print={}, sparse={}, garbled={}) — running…",
+                file_name,
+                is_browser_print,
+                alpha(&best) < 100,
+                garbled
+            );
             let ocr = ocr_extract(data);
-            if alpha(&ocr) > alpha(&best) {
+            // Normally adopt OCR when it recovered more letters. But a garbled
+            // extraction already has *lots* of (junk) alpha, so for that case
+            // prefer OCR when it recovered real statement vocabulary the
+            // garbled text lacks.
+            let adopt = if garbled {
+                has_statement_anchor(&ocr) && !has_statement_anchor(&best)
+            } else {
+                alpha(&ocr) > alpha(&best)
+            };
+            if adopt {
                 info!("OCR recovered {} chars for '{}'", ocr.len(), file_name);
                 best = ocr;
                 ocr_used = true;

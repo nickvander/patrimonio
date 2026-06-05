@@ -17,18 +17,26 @@ fn main() -> anyhow::Result<()> {
         std::process::exit(2);
     }
     let bank = args[1].to_lowercase();
-    let text = fs::read_to_string(&args[2])?;
+    let path = &args[2];
 
-    let txs = match bank.as_str() {
-        "banorte" => banorte_layout::parse_text(&text)?,
-        "scotiabank" | "scotia" => scotiabank_layout::parse_text(&text)?,
-        "hsbc" => hsbc_layout::parse_text(&text)?,
-        "santander" => santander_layout::parse_text(&text)?,
-        "bbva" => bbva_layout::parse_text(&text)?,
-        "banamex" => banamex_layout::parse_text(&text)?,
-        other => {
-            eprintln!("unknown bank: {other}");
-            std::process::exit(2);
+    // A .pdf runs the FULL detect/extract/OCR pipeline (so we can validate the
+    // garbled→OCR routing); a .txt runs one bank's layout parser directly.
+    let txs = if path.to_lowercase().ends_with(".pdf") {
+        let data = fs::read(path)?;
+        patrimonio::services::parser::detect_and_parse(path, &data, None)?
+    } else {
+        let text = fs::read_to_string(path)?;
+        match bank.as_str() {
+            "banorte" => banorte_layout::parse_text(&text)?,
+            "scotiabank" | "scotia" => scotiabank_layout::parse_text(&text)?,
+            "hsbc" => hsbc_layout::parse_text(&text)?,
+            "santander" => santander_layout::parse_text(&text)?,
+            "bbva" => bbva_layout::parse_text(&text)?,
+            "banamex" => banamex_layout::parse_text(&text)?,
+            other => {
+                eprintln!("unknown bank: {other}");
+                std::process::exit(2);
+            }
         }
     };
 

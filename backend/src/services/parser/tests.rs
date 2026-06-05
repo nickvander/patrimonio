@@ -300,3 +300,19 @@ fn test_polish_description_idempotent() {
     assert_eq!(once, twice);
     assert_eq!(once, "OXXO");
 }
+
+#[test]
+fn garbled_extraction_detected_for_ocr() {
+    // Plenty of letters but none of the statement vocabulary → broken-font
+    // gibberish that must be routed to OCR.
+    let gibberish = "zxq wbk plf vnt grd hjm ".repeat(40); // >200 alpha, no anchors
+    assert!(super::looks_garbled(&gibberish));
+
+    // A normal extraction with real statement words is NOT garbled.
+    let real = "ESTADO DE CUENTA\nFECHA DESCRIPCION SALDO\n01-FEB-21 DEPOSITO 1,000.00";
+    assert!(!super::looks_garbled(real));
+    assert!(super::has_statement_anchor(real));
+
+    // Genuinely sparse text falls to the length-based OCR trigger, not here.
+    assert!(!super::looks_garbled("HSBC"));
+}
