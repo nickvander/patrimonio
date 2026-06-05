@@ -81,11 +81,11 @@ pub fn bucket_no_header(line: &str) -> (Option<Decimal>, Option<Decimal>, Option
     }
 }
 
-/// Collapse runs of whitespace in a joined description.
+/// Join + collapse whitespace in a description, and truncate at the `▼`
+/// expander glyph some banks (Banorte) print to mark an inline footer/detail
+/// section — everything after it is page furniture, not part of the movement.
 pub fn normalize_desc(parts: &[String]) -> String {
-    parts
-        .join(" ")
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
+    let joined = parts.join(" ");
+    let body = joined.split('▼').next().unwrap_or(&joined);
+    body.split_whitespace().collect::<Vec<_>>().join(" ")
 }

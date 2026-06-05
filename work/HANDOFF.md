@@ -28,9 +28,25 @@ clean, `flutter test` 157.
   DB. (Note: the investments tab doesn't wheel-scroll under browser automation,
   so the card wasn't screenshotted — verified via DB + endpoint test instead.)
 
-**Remaining Tier-2/3 ideas:** validate HSBC + the other parsers against real
-personal PDFs (the highest-value QA step); a true time-weighted return for the
-benchmark (current overlay uses net worth, which includes contributions).
+**Validated against REAL statements** (downloaded from public transparency
+portals, run through `pdftotext -layout`, fed to the parsers via the new
+`cargo run --bin parse_check <bank> <file.txt>` dev tool):
+  * **Banorte** (Feb-2021): 4,138 transactions, correct dates/amounts/signs and
+    a running balance on every row. ✅
+  * **Scotiabank** (Mar-2024): 19 txns, correct signs + per-row balances. ✅
+    (Dec-2017): 145 txns parse correctly, but that older layout rarely prints a
+    per-row SALDO — `balance_after` is nullable, so this is fine.
+  * **HSBC**: the only public sample has a broken embedded font (the words
+    aren't even in the `pdftotext` output), so the parser correctly extracts
+    **0** rather than garbage — such files need OCR or a clean PDF. Unshifting
+    the +29 font offset recovers letters but NOT digits, so it wouldn't help;
+    OCR (already in the pipeline) is the path. HSBC still awaits a clean PDF.
+  * Fix from validation: descriptions now truncate at the `▼` expander glyph
+    (Banorte footers were leaking in).
+
+**Remaining Tier-2/3 ideas:** get a clean/real HSBC PDF to confirm its date
+token; a true time-weighted return for the benchmark (current overlay uses net
+worth, which includes contributions).
 
 ## Earlier (2026-06-03) — Tier 2: debt payoff + instant bell (browser-verified)
 

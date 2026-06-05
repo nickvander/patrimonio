@@ -49,6 +49,7 @@ fn is_furniture(upper: &str) -> bool {
         "SALDO AL CORTE",
         "SALDO FINAL",
         "SIN MOVIMIENTOS",
+        "INFORME DE",
         "LA FECHA DE CORTE",
         "400,000 UDI",
         "PAGINA",
