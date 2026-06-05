@@ -593,6 +593,23 @@ class ApiService {
     }, forceRefresh: forceRefresh);
   }
 
+  /// S&P 500 daily closes (for the net-worth-vs-market overlay). [from] is an
+  /// ISO date string. Returns the `{symbol, points:[{date,close}]}` shape;
+  /// empty list on any error so the card simply hides.
+  Future<Map<String, dynamic>?> getBenchmarkSeries({String? from}) async {
+    try {
+      final q = from != null ? '?from=$from' : '';
+      final r = await _get(Uri.parse('$_baseUrl/dashboard/benchmark$q'));
+      if (r.statusCode == 200) {
+        final decoded = json.decode(r.body);
+        return decoded is Map<String, dynamic> ? decoded : null;
+      }
+    } catch (_) {
+      // best-effort; card hides
+    }
+    return null;
+  }
+
   /// Emergency-fund runway: liquid cash / trailing monthly spend (USD).
   Future<Map<String, dynamic>> getEmergencyFund({bool forceRefresh = false}) {
     return _cachedGet('emergency-fund', () async {

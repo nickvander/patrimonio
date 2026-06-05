@@ -24,6 +24,7 @@ pub fn router() -> Router<AppState> {
         .route("/realized-gains", get(realized_gains))
         .route("/account-balance-history", get(account_balance_history))
         .route("/emergency-fund", get(emergency_fund))
+        .route("/benchmark", get(benchmark_series))
         .route("/credit-utilization", get(credit_utilization))
         .route("/sync-status", get(sync_status))
         .route("/transactions", get(recent_transactions))
@@ -1280,6 +1281,58 @@ async fn spending_by_category(
     Json(SpendingByCategoryResponse {
         months: months_vec,
         categories,
+    })
+}
+
+#[derive(Deserialize)]
+struct BenchmarkQuery {
+    /// ISO date (YYYY-MM-DD) to start the series from. Defaults to ~3 years ago.
+    from: Option<String>,
+}
+
+#[derive(Serialize)]
+struct BenchmarkPoint {
+    date: String,
+    close: f64,
+}
+
+#[derive(Serialize)]
+struct BenchmarkResponse {
+    symbol: String,
+    points: Vec<BenchmarkPoint>,
+}
+
+/// S&P 500 daily closes for overlaying "net worth vs the market". Lazily
+/// refreshes from the free Yahoo feed when stale, then serves from our table.
+/// Not user-scoped — the index is the same for everyone — but still behind
+/// auth like the rest of the dashboard.
+async fn benchmark_series(
+    State(state): State<AppState>,
+    Extension(_ctx): Extension<AuthContext>,
+    Query(q): Query<BenchmarkQuery>,
+) -> Json<BenchmarkResponse> {
+    use crate::services::benchmark;
+    // Best-effort freshness; on failure we still serve whatever is stored.
+    let _ = benchmark::ensure_fresh(&state.db).await;
+
+    let from = q
+        .from
+        .as_deref()
+        .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok())
+        .unwrap_or_else(|| chrono::Utc::now().date_naive() - chrono::Duration::days(365 * 3));
+
+    let points = benchmark::series(&state.db, benchmark::SP500, from)
+        .await
+        .into_iter()
+        .map(|(d, c)| BenchmarkPoint {
+            date: d.format("%Y-%m-%d").to_string(),
+            close: c,
+        })
+        .collect();
+
+    Json(BenchmarkResponse {
+        symbol: benchmark::SP500.to_string(),
+        points,
     })
 }
 

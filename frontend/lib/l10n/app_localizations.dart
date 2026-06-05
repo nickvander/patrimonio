@@ -2126,6 +2126,42 @@ abstract class AppLocalizations {
   /// **'+{count} more'**
   String cfPlusNMore(Object count);
 
+  /// No description provided for @bmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Net worth vs S&P 500'**
+  String get bmTitle;
+
+  /// No description provided for @bmSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Indexed to 100 at the start · your net worth includes contributions'**
+  String get bmSubtitle;
+
+  /// No description provided for @bmYou.
+  ///
+  /// In en, this message translates to:
+  /// **'You'**
+  String get bmYou;
+
+  /// No description provided for @bmSp500.
+  ///
+  /// In en, this message translates to:
+  /// **'S&P 500'**
+  String get bmSp500;
+
+  /// No description provided for @bmAhead.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re ahead of the market by {pct}'**
+  String bmAhead(Object pct);
+
+  /// No description provided for @bmBehind.
+  ///
+  /// In en, this message translates to:
+  /// **'The market is ahead by {pct}'**
+  String bmBehind(Object pct);
+
   /// No description provided for @dpTitle.
   ///
   /// In en, this message translates to:

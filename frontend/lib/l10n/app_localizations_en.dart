@@ -1235,6 +1235,29 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get bmTitle => 'Net worth vs S&P 500';
+
+  @override
+  String get bmSubtitle =>
+      'Indexed to 100 at the start · your net worth includes contributions';
+
+  @override
+  String get bmYou => 'You';
+
+  @override
+  String get bmSp500 => 'S&P 500';
+
+  @override
+  String bmAhead(Object pct) {
+    return 'You\'re ahead of the market by $pct';
+  }
+
+  @override
+  String bmBehind(Object pct) {
+    return 'The market is ahead by $pct';
+  }
+
+  @override
   String get dpTitle => 'Debt payoff';
 
   @override

@@ -2348,6 +2348,50 @@ async fn spending_by_category_groups_and_excludes() {
 
 #[tokio::test]
 #[serial_test::serial]
+async fn benchmark_series_returns_stored_sp500() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user_id) = bootstrap(&app, &pool).await;
+
+    // Seed recent S&P 500 closes so ensure_fresh treats the series as fresh
+    // and never touches the network during the test.
+    for (offset, close) in [(2, "5000.00"), (1, "5050.00"), (0, "5100.00")] {
+        sqlx::query(
+            "INSERT INTO benchmark_prices (symbol, price_date, close) \
+             VALUES ('SP500', (CURRENT_DATE - make_interval(days => $1))::date, $2) \
+             ON CONFLICT (symbol, price_date) DO UPDATE SET close = EXCLUDED.close",
+        )
+        .bind(offset)
+        .bind(Decimal::from_str(close).unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/benchmark?from=2000-01-01",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+
+    assert_eq!(body["symbol"], "SP500");
+    let pts = body["points"].as_array().unwrap();
+    assert_eq!(pts.len(), 3, "three seeded closes, got {:#?}", pts);
+    // Ascending by date → last point is today's 5100.00.
+    assert!((pts[2]["close"].as_f64().unwrap() - 5100.0).abs() < 0.01);
+    assert!((pts[0]["close"].as_f64().unwrap() - 5000.0).abs() < 0.01);
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn emergency_fund_runway_from_cash_and_spend() {
     let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
         return;

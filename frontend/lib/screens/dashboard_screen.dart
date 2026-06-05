@@ -17,6 +17,7 @@ import '../widgets/monthly_cash_flow_card.dart';
 import '../widgets/budgets_card.dart';
 import '../widgets/spending_by_category_card.dart';
 import '../widgets/realized_gains_card.dart';
+import '../widgets/benchmark_card.dart';
 import '../widgets/upcoming_bills_card.dart';
 import '../widgets/debt_payoff_card.dart';
 import '../widgets/net_worth_goal_tile.dart';
@@ -2503,6 +2504,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             apiService: _apiService,
             conversionFactor: conversionFactor,
             currencyFormat: currencyFormat,
+          ),
+          BenchmarkCard(
+            apiService: _apiService,
+            netWorthHistory: _netWorthHistory ?? const [],
           ),
           const SizedBox(height: 24),
           AccountsBreakdownCard(
