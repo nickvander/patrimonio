@@ -222,16 +222,43 @@ class _NetWorthCardState extends State<NetWorthCard> {
         // user scrub the chart. Computed from history; hidden when we
         // don't have a comparable point >= 7 days back.
         Builder(builder: (context) {
-          final delta = _computeDelta(history);
-          if (delta == null) return const SizedBox.shrink();
+          final deltas = _computeMomYoyDeltas(history);
+          final chips = <Widget>[
+            if (deltas.mom != null)
+              _DeltaChip(
+                amount: deltas.mom!.amount * conversionFactor,
+                percentage: deltas.mom!.percentage,
+                label: deltas.mom!.windowLabel,
+                periodTag: deltas.mom!.windowLabel,
+                currencyFormat: currencyFormat,
+              ),
+            if (deltas.yoy != null)
+              _DeltaChip(
+                amount: deltas.yoy!.amount * conversionFactor,
+                percentage: deltas.yoy!.percentage,
+                label: deltas.yoy!.windowLabel,
+                periodTag: deltas.yoy!.windowLabel,
+                currencyFormat: currencyFormat,
+              ),
+          ];
+          // Fall back to the legacy 30d/7d chip when we don't yet have a
+          // month of history (keeps the early-onboarding read useful).
+          if (chips.isEmpty) {
+            final delta = _computeDelta(history);
+            if (delta == null) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: _DeltaChip(
+                amount: delta.amount * conversionFactor,
+                percentage: delta.percentage,
+                label: delta.windowLabel,
+                currencyFormat: currencyFormat,
+              ),
+            );
+          }
           return Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: _DeltaChip(
-              amount: delta.amount * conversionFactor,
-              percentage: delta.percentage,
-              label: delta.windowLabel,
-              currencyFormat: currencyFormat,
-            ),
+            child: Wrap(spacing: 8, runSpacing: 6, children: chips),
           );
         }),
         if (sourceBreakdown.isNotEmpty) ...[
@@ -801,6 +828,55 @@ _NetWorthDelta? _computeDelta(List<dynamic> history) {
   return null;
 }
 
+/// Month-over-month and year-over-year deltas vs the same calendar date one
+/// month / one year before the latest snapshot. Computed over the FULL history
+/// (independent of the chart's range chip) with a +/-5 day tolerance so a
+/// missing snapshot doesn't kill the figure. Either may be null when there
+/// isn't a comparable point that far back.
+({_NetWorthDelta? mom, _NetWorthDelta? yoy}) _computeMomYoyDeltas(
+    List<dynamic> history) {
+  final points = <_DeltaPoint>[];
+  for (final raw in history) {
+    final m = raw as Map<String, dynamic>;
+    final ds = m['date']?.toString();
+    if (ds == null) continue;
+    final dt = DateTime.tryParse(ds);
+    if (dt == null) continue;
+    final nw = (m['net_worth'] as num?)?.toDouble();
+    if (nw == null) continue;
+    points.add(_DeltaPoint(date: dt, value: nw));
+  }
+  if (points.length < 2) return (mom: null, yoy: null);
+  points.sort((a, b) => a.date.compareTo(b.date));
+  final latest = points.last;
+
+  _NetWorthDelta? deltaTo(DateTime targetDate, String label) {
+    _DeltaPoint? best;
+    int? bestDist;
+    for (final p in points) {
+      if (identical(p, latest)) continue;
+      final dist = p.date.difference(targetDate).inDays.abs();
+      if (dist <= 5 && (bestDist == null || dist < bestDist)) {
+        best = p;
+        bestDist = dist;
+      }
+    }
+    if (best == null || best.value == 0) return null;
+    final amount = latest.value - best.value;
+    return _NetWorthDelta(
+      amount: amount,
+      percentage: (amount / best.value) * 100,
+      windowLabel: label,
+    );
+  }
+
+  final d = latest.date;
+  return (
+    mom: deltaTo(DateTime(d.year, d.month - 1, d.day), 'MoM'),
+    yoy: deltaTo(DateTime(d.year - 1, d.month, d.day), 'YoY'),
+  );
+}
+
 class _DeltaPoint {
   final DateTime date;
   final double value;
@@ -824,11 +900,16 @@ class _DeltaChip extends StatelessWidget {
   final String label;
   final NumberFormat currencyFormat;
 
+  /// Optional short period tag rendered as a leading pill (e.g. "MoM" /
+  /// "YoY"). When set it replaces the "vs 30d ago" trailing copy.
+  final String? periodTag;
+
   const _DeltaChip({
     required this.amount,
     required this.percentage,
     required this.label,
     required this.currencyFormat,
+    this.periodTag,
   });
 
   @override
@@ -844,6 +925,18 @@ class _DeltaChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (periodTag != null) ...[
+            Text(
+              periodTag!,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: context.textSubtle,
+                letterSpacing: 0.4,
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
           Icon(
             isUp ? Icons.arrow_upward : Icons.arrow_downward,
             color: color,
@@ -852,9 +945,12 @@ class _DeltaChip extends StatelessWidget {
           const SizedBox(width: 4),
           Flexible(
             child: Text(
-              '${isUp ? '+' : '−'}${currencyFormat.format(amount.abs())} '
-              '(${isUp ? '+' : ''}${percentage.toStringAsFixed(2)}%) '
-              '${AppLocalizations.of(context).pfDeltaVsAgo(label)}',
+              periodTag != null
+                  ? '${isUp ? '+' : '−'}${currencyFormat.format(amount.abs())} '
+                      '(${isUp ? '+' : ''}${percentage.toStringAsFixed(1)}%)'
+                  : '${isUp ? '+' : '−'}${currencyFormat.format(amount.abs())} '
+                      '(${isUp ? '+' : ''}${percentage.toStringAsFixed(2)}%) '
+                      '${AppLocalizations.of(context).pfDeltaVsAgo(label)}',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,

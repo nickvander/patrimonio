@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../utils/theme_colors.dart';
+import '../utils/account_category.dart';
 import '../l10n/app_localizations.dart';
 
 /// One notification row shown in the bell-icon popover.
@@ -37,6 +38,12 @@ List<AppNotification> deriveNotifications({
   List<dynamic> loanReminders = const [],
   /// Jump to the Lending tab when a loan reminder is tapped.
   VoidCallback? onJumpToLending,
+  /// All accounts (from the dashboard overview) for low-balance alerts.
+  List<dynamic> accounts = const [],
+  /// account_id -> low-balance threshold in that account's native currency.
+  Map<String, double> accountAlerts = const {},
+  /// Opens an account's detail panel when its low-balance row is tapped.
+  void Function(Map<String, dynamic> account)? onJumpToAccount,
 }) {
   final out = <AppNotification>[];
 
@@ -73,6 +80,38 @@ List<AppNotification> deriveNotifications({
         title: l.lwNotifRepaymentDueTitle(borrower, until),
         detail: l.lwNotifRepaymentDueDetail(n, money(amount, cur), dueStr),
         onTap: onJumpToLending,
+      ));
+    }
+  }
+
+  // 0b) Low-balance alerts — accounts whose balance has fallen to or below
+  //     the user's per-account threshold. Credit/loan accounts are skipped
+  //     (a low balance there is good news, not a warning).
+  if (accountAlerts.isNotEmpty) {
+    for (final raw in accounts) {
+      if (raw is! Map) continue;
+      final id = raw['id']?.toString();
+      if (id == null) continue;
+      final threshold = accountAlerts[id];
+      if (threshold == null) continue;
+      final cat = categorizeAccount(raw['account_type']?.toString());
+      if (cat == AccountCategory.credit || cat == AccountCategory.loan) {
+        continue;
+      }
+      final bal = (raw['current_balance'] as num?)?.toDouble() ?? 0.0;
+      if (bal > threshold) continue;
+      final name = (raw['nickname']?.toString().trim().isNotEmpty ?? false)
+          ? raw['nickname'].toString()
+          : (raw['name'] ?? l.lwNotifAccountFallback).toString();
+      final cur = (raw['currency'] ?? 'USD').toString();
+      out.add(AppNotification(
+        icon: Icons.account_balance_wallet_outlined,
+        accent: Colors.amber,
+        title: l.lwNotifLowBalanceTitle(name),
+        detail: l.lwNotifLowBalanceDetail(money(bal, cur), money(threshold, cur)),
+        onTap: onJumpToAccount == null
+            ? null
+            : () => onJumpToAccount(Map<String, dynamic>.from(raw)),
       ));
     }
   }

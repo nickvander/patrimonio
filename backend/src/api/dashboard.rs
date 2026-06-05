@@ -23,6 +23,7 @@ pub fn router() -> Router<AppState> {
         .route("/spending-by-category", get(spending_by_category))
         .route("/realized-gains", get(realized_gains))
         .route("/account-balance-history", get(account_balance_history))
+        .route("/emergency-fund", get(emergency_fund))
         .route("/credit-utilization", get(credit_utilization))
         .route("/sync-status", get(sync_status))
         .route("/transactions", get(recent_transactions))
@@ -1279,6 +1280,123 @@ async fn spending_by_category(
     Json(SpendingByCategoryResponse {
         months: months_vec,
         categories,
+    })
+}
+
+#[derive(Serialize)]
+struct EmergencyFundResponse {
+    /// Total liquid cash across checking/savings/cash accounts, USD.
+    liquid_cash_usd: f64,
+    /// Trailing average monthly spending, USD (same hygiene as cash-flow).
+    monthly_spend_usd: f64,
+    /// liquid_cash / monthly_spend; 0 when there's no spend signal yet.
+    months_covered: f64,
+    /// Distinct months of spending data backing the estimate.
+    months_of_data: i32,
+}
+
+/// Emergency-fund runway: how many months of tracked spending the user's liquid
+/// cash would cover. Cash is USD-normalized like the rest of the dashboard;
+/// spend reuses the cash-flow exclusions (no transfers / CC payments / lending
+/// legs / split parents), annualized over however many months exist.
+async fn emergency_fund(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<EmergencyFundResponse> {
+    let fx = sqlx::query(
+        "SELECT rate FROM exchange_rates WHERE base_currency = 'USD' AND target_currency = 'MXN' \
+         ORDER BY recorded_at DESC LIMIT 1",
+    )
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()
+    .and_then(|r| r.try_get::<rust_decimal::Decimal, _>("rate").ok())
+    .and_then(|d| d.to_string().parse::<f64>().ok())
+    .filter(|r| *r > 0.0)
+    .unwrap_or(20.0);
+
+    let cash_row = sqlx::query(
+        r#"
+        SELECT COALESCE(SUM(
+            CASE WHEN currency = 'MXN' THEN current_balance / $2::numeric
+                 ELSE current_balance END), 0) AS cash
+        FROM accounts
+        WHERE user_id = $1
+          AND account_type IN ('checking', 'savings', 'cash', 'cash management', 'cd', 'money market')
+        "#,
+    )
+    .bind(ctx.user_id)
+    .bind(fx)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
+    let liquid_cash_usd = cash_row
+        .and_then(|r| r.try_get::<rust_decimal::Decimal, _>("cash").ok())
+        .map(|d| d.to_string().parse().unwrap_or(0.0))
+        .unwrap_or(0.0);
+
+    // Trailing spend + month count, mirroring projection_defaults / cash-flow.
+    let spend_row = sqlx::query(
+        r#"
+        WITH latest_fx AS (
+            SELECT rate FROM exchange_rates
+            WHERE base_currency = 'USD' AND target_currency = 'MXN'
+            ORDER BY recorded_at DESC LIMIT 1
+        )
+        SELECT
+            COALESCE(SUM(CASE WHEN a.currency = 'MXN'
+                     THEN ABS(t.amount) / COALESCE((SELECT rate FROM latest_fx), 20.0)
+                     ELSE ABS(t.amount) END), 0) AS spending,
+            COUNT(DISTINCT TO_CHAR(t.date, 'YYYY-MM')) AS months
+        FROM transactions t
+        JOIN accounts a ON a.id = t.account_id
+        WHERE t.amount < 0
+          AND t.date >= CURRENT_DATE - INTERVAL '12 months'
+          AND t.user_id = $1
+          AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
+          AND COALESCE(t.category, '') NOT IN ('TRANSFER_IN', 'TRANSFER_OUT')
+          AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
+          AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
+          AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
+        "#,
+    )
+    .bind(ctx.user_id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
+
+    let (spending, months) = match spend_row {
+        Some(r) => {
+            let s: f64 = r
+                .try_get::<rust_decimal::Decimal, _>("spending")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0);
+            let m: i64 = r.try_get("months").unwrap_or(0);
+            (s, m.max(0))
+        }
+        None => (0.0, 0),
+    };
+
+    let monthly_spend_usd = if months > 0 {
+        spending / months as f64
+    } else {
+        0.0
+    };
+    let months_covered = if monthly_spend_usd > 0.0 {
+        liquid_cash_usd / monthly_spend_usd
+    } else {
+        0.0
+    };
+
+    Json(EmergencyFundResponse {
+        liquid_cash_usd,
+        monthly_spend_usd,
+        months_covered,
+        months_of_data: months as i32,
     })
 }
 

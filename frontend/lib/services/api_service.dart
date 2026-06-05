@@ -593,6 +593,18 @@ class ApiService {
     }, forceRefresh: forceRefresh);
   }
 
+  /// Emergency-fund runway: liquid cash / trailing monthly spend (USD).
+  Future<Map<String, dynamic>> getEmergencyFund({bool forceRefresh = false}) {
+    return _cachedGet('emergency-fund', () async {
+      final r = await _get(Uri.parse('$_baseUrl/dashboard/emergency-fund'));
+      if (r.statusCode == 200) {
+        return json.decode(r.body) as Map<String, dynamic>;
+      }
+      throw Exception(_t('Failed to load emergency fund',
+          'No se pudo cargar el fondo de emergencia'));
+    }, forceRefresh: forceRefresh);
+  }
+
   /// Monthly closing balances for one account (native currency), derived from
   /// the persisted statement `balance_after`. Empty for Plaid-only accounts.
   Future<List<dynamic>> getAccountBalanceHistory(String accountId) async {

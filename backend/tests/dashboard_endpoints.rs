@@ -2348,6 +2348,67 @@ async fn spending_by_category_groups_and_excludes() {
 
 #[tokio::test]
 #[serial_test::serial]
+async fn emergency_fund_runway_from_cash_and_spend() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (inst, _acct) = seed_account(&pool, user_id).await;
+
+    // A checking account (counts as liquid cash) with $6,000.
+    let cash_acct: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO accounts (institution_id, name, account_type, currency, current_balance, user_id) \
+         VALUES ($1, 'Checking', 'checking', 'USD', 6000.00, $2) RETURNING id",
+    )
+    .bind(inst)
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    // Two months of spending: $1,000 + $1,000 over 2 distinct months → $1,000/mo.
+    seed_categorized_expense(&pool, user_id, cash_acct, "FOOD_AND_DRINK", "-1000.00", 0).await;
+    seed_categorized_expense(&pool, user_id, cash_acct, "GENERAL_MERCHANDISE", "-1000.00", 1).await;
+    // An income row + an internal transfer must NOT reduce the runway.
+    sqlx::query(
+        "INSERT INTO transactions (account_id, date, description, amount, currency, category, source, user_id) \
+         VALUES ($1, CURRENT_DATE, 'pay', 5000.00, 'USD', 'INCOME', 'manual', $2)",
+    )
+    .bind(cash_acct)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    seed_categorized_expense(&pool, user_id, cash_acct, "TRANSFER_OUT", "-9999.00", 0).await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/emergency-fund", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+
+    // $6,000 cash, $1,000/mo spend → 6.0 months.
+    assert!(
+        (body["liquid_cash_usd"].as_f64().unwrap() - 6000.0).abs() < 0.01,
+        "liquid cash should be 6000, got {}",
+        body["liquid_cash_usd"]
+    );
+    assert!(
+        (body["monthly_spend_usd"].as_f64().unwrap() - 1000.0).abs() < 0.01,
+        "monthly spend should be 1000 (transfer/income excluded), got {}",
+        body["monthly_spend_usd"]
+    );
+    assert!(
+        (body["months_covered"].as_f64().unwrap() - 6.0).abs() < 0.05,
+        "runway should be ~6 months, got {}",
+        body["months_covered"]
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn account_balance_history_returns_monthly_closing() {
     let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
         return;

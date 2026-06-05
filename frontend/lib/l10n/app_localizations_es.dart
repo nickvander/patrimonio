@@ -1253,6 +1253,51 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get efTitle => 'Fondo de emergencia';
+
+  @override
+  String get efMonthsUnit => 'meses de gastos';
+
+  @override
+  String get efStatusHealthy => 'Totalmente fondeado';
+
+  @override
+  String get efStatusOnTrack => 'En camino';
+
+  @override
+  String get efStatusBuilding => 'Sigue ahorrando';
+
+  @override
+  String efCashLabel(Object amount) {
+    return '$amount en efectivo líquido';
+  }
+
+  @override
+  String efSpendLabel(Object amount) {
+    return '$amount / mes promedio';
+  }
+
+  @override
+  String get efScale0 => '0';
+
+  @override
+  String get efScale3 => '3 m';
+
+  @override
+  String get efScale6 => '6 m+';
+
+  @override
+  String get efNoSpendTitle => 'Aún no hay estimación';
+
+  @override
+  String get efNoSpendBody =>
+      'Cuando tengas alrededor de un mes de transacciones, estimaremos cuánto duraría tu efectivo.';
+
+  @override
+  String get efNoCashHint =>
+      'No se detectó efectivo líquido — vincula una cuenta de cheques o ahorros para ver tu cobertura.';
+
+  @override
   String get billsTitle => 'Próximos pagos recurrentes';
 
   @override
@@ -2371,6 +2416,36 @@ class AppLocalizationsEs extends AppLocalizations {
   String get acctxBalanceOverTime => 'Saldo a lo largo del tiempo';
 
   @override
+  String get acctxSetLowBalanceAlert => 'Crear alerta de saldo bajo';
+
+  @override
+  String get acctxEditLowBalanceAlert => 'Editar alerta de saldo bajo';
+
+  @override
+  String get acctxLowBalanceAlertTitle => 'Alerta de saldo bajo';
+
+  @override
+  String get acctxLowBalanceAlertBody =>
+      'Marcaremos esta cuenta y agregaremos una notificación cuando su saldo baje a este monto o menos.';
+
+  @override
+  String get acctxThresholdLabel => 'Avísame por debajo de';
+
+  @override
+  String get acctxRemoveAlert => 'Quitar alerta';
+
+  @override
+  String get acctxAlertSaved => 'Alerta de saldo bajo guardada';
+
+  @override
+  String get acctxAlertRemoved => 'Alerta de saldo bajo eliminada';
+
+  @override
+  String acctxLowBalanceBanner(Object amount) {
+    return 'El saldo está en o por debajo de tu alerta de $amount';
+  }
+
+  @override
   String get acctxNoTransactionsTitle => 'Aún no hay transacciones';
 
   @override
@@ -3219,6 +3294,19 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get lwNotifInstitutionFallback => 'Institución';
+
+  @override
+  String get lwNotifAccountFallback => 'Cuenta';
+
+  @override
+  String lwNotifLowBalanceTitle(Object account) {
+    return '$account está por agotarse';
+  }
+
+  @override
+  String lwNotifLowBalanceDetail(Object balance, Object threshold) {
+    return 'El saldo $balance está en o por debajo de tu alerta de $threshold.';
+  }
 
   @override
   String lwNotifRepaymentOverdueTitle(Object borrower) {

@@ -156,4 +156,38 @@ class Preferences {
         .join(', ');
     _write('budgets', '{$parts}');
   }
+
+  /// Per-account low-balance alert thresholds, keyed by account id, in the
+  /// account's native currency (same units as current_balance). Same flat-JSON
+  /// encoding as budgets (account ids are UUIDs — no `:` / `,`).
+  static Map<String, double> getAccountAlerts() {
+    final raw = _read('account_balance_alerts');
+    if (raw == null || raw.isEmpty || !raw.startsWith('{')) return const {};
+    try {
+      final map = <String, double>{};
+      final inner = raw.substring(1, raw.length - 1);
+      if (inner.isEmpty) return const {};
+      for (final entry in inner.split(',')) {
+        final parts = entry.split(':');
+        if (parts.length != 2) continue;
+        final key = parts[0].trim().replaceAll('"', '');
+        final value = double.tryParse(parts[1].trim());
+        if (key.isNotEmpty && value != null) map[key] = value;
+      }
+      return map;
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  static void setAccountAlerts(Map<String, double> alerts) {
+    if (alerts.isEmpty) {
+      _write('account_balance_alerts', '{}');
+      return;
+    }
+    final parts = alerts.entries
+        .map((e) => '"${e.key.replaceAll('"', '')}": ${e.value}')
+        .join(', ');
+    _write('account_balance_alerts', '{$parts}');
+  }
 }

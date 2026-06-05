@@ -1235,6 +1235,51 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get efTitle => 'Emergency fund';
+
+  @override
+  String get efMonthsUnit => 'months of expenses';
+
+  @override
+  String get efStatusHealthy => 'Fully funded';
+
+  @override
+  String get efStatusOnTrack => 'On track';
+
+  @override
+  String get efStatusBuilding => 'Keep building';
+
+  @override
+  String efCashLabel(Object amount) {
+    return '$amount liquid cash';
+  }
+
+  @override
+  String efSpendLabel(Object amount) {
+    return '$amount / mo avg';
+  }
+
+  @override
+  String get efScale0 => '0';
+
+  @override
+  String get efScale3 => '3 mo';
+
+  @override
+  String get efScale6 => '6 mo+';
+
+  @override
+  String get efNoSpendTitle => 'Runway not available yet';
+
+  @override
+  String get efNoSpendBody =>
+      'Once you have about a month of transactions, we\'ll estimate how long your cash would last.';
+
+  @override
+  String get efNoCashHint =>
+      'No liquid cash detected — link a checking or savings account to track your runway.';
+
+  @override
   String get billsTitle => 'Upcoming recurring bills';
 
   @override
@@ -2346,6 +2391,36 @@ class AppLocalizationsEn extends AppLocalizations {
   String get acctxBalanceOverTime => 'Balance over time';
 
   @override
+  String get acctxSetLowBalanceAlert => 'Set low-balance alert';
+
+  @override
+  String get acctxEditLowBalanceAlert => 'Edit low-balance alert';
+
+  @override
+  String get acctxLowBalanceAlertTitle => 'Low-balance alert';
+
+  @override
+  String get acctxLowBalanceAlertBody =>
+      'We\'ll flag this account and add a notification when its balance drops to or below this amount.';
+
+  @override
+  String get acctxThresholdLabel => 'Alert me below';
+
+  @override
+  String get acctxRemoveAlert => 'Remove alert';
+
+  @override
+  String get acctxAlertSaved => 'Low-balance alert saved';
+
+  @override
+  String get acctxAlertRemoved => 'Low-balance alert removed';
+
+  @override
+  String acctxLowBalanceBanner(Object amount) {
+    return 'Balance is at or below your $amount alert';
+  }
+
+  @override
   String get acctxNoTransactionsTitle => 'No transactions yet';
 
   @override
@@ -3187,6 +3262,19 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lwNotifInstitutionFallback => 'Institution';
+
+  @override
+  String get lwNotifAccountFallback => 'Account';
+
+  @override
+  String lwNotifLowBalanceTitle(Object account) {
+    return '$account is running low';
+  }
+
+  @override
+  String lwNotifLowBalanceDetail(Object balance, Object threshold) {
+    return 'Balance $balance is at or below your $threshold alert.';
+  }
 
   @override
   String lwNotifRepaymentOverdueTitle(Object borrower) {

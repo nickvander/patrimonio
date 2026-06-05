@@ -2126,6 +2126,84 @@ abstract class AppLocalizations {
   /// **'+{count} more'**
   String cfPlusNMore(Object count);
 
+  /// No description provided for @efTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Emergency fund'**
+  String get efTitle;
+
+  /// No description provided for @efMonthsUnit.
+  ///
+  /// In en, this message translates to:
+  /// **'months of expenses'**
+  String get efMonthsUnit;
+
+  /// No description provided for @efStatusHealthy.
+  ///
+  /// In en, this message translates to:
+  /// **'Fully funded'**
+  String get efStatusHealthy;
+
+  /// No description provided for @efStatusOnTrack.
+  ///
+  /// In en, this message translates to:
+  /// **'On track'**
+  String get efStatusOnTrack;
+
+  /// No description provided for @efStatusBuilding.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep building'**
+  String get efStatusBuilding;
+
+  /// No description provided for @efCashLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} liquid cash'**
+  String efCashLabel(Object amount);
+
+  /// No description provided for @efSpendLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} / mo avg'**
+  String efSpendLabel(Object amount);
+
+  /// No description provided for @efScale0.
+  ///
+  /// In en, this message translates to:
+  /// **'0'**
+  String get efScale0;
+
+  /// No description provided for @efScale3.
+  ///
+  /// In en, this message translates to:
+  /// **'3 mo'**
+  String get efScale3;
+
+  /// No description provided for @efScale6.
+  ///
+  /// In en, this message translates to:
+  /// **'6 mo+'**
+  String get efScale6;
+
+  /// No description provided for @efNoSpendTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Runway not available yet'**
+  String get efNoSpendTitle;
+
+  /// No description provided for @efNoSpendBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Once you have about a month of transactions, we\'ll estimate how long your cash would last.'**
+  String get efNoSpendBody;
+
+  /// No description provided for @efNoCashHint.
+  ///
+  /// In en, this message translates to:
+  /// **'No liquid cash detected — link a checking or savings account to track your runway.'**
+  String get efNoCashHint;
+
   /// No description provided for @billsTitle.
   ///
   /// In en, this message translates to:
@@ -3980,6 +4058,60 @@ abstract class AppLocalizations {
   /// **'Balance over time'**
   String get acctxBalanceOverTime;
 
+  /// No description provided for @acctxSetLowBalanceAlert.
+  ///
+  /// In en, this message translates to:
+  /// **'Set low-balance alert'**
+  String get acctxSetLowBalanceAlert;
+
+  /// No description provided for @acctxEditLowBalanceAlert.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit low-balance alert'**
+  String get acctxEditLowBalanceAlert;
+
+  /// No description provided for @acctxLowBalanceAlertTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Low-balance alert'**
+  String get acctxLowBalanceAlertTitle;
+
+  /// No description provided for @acctxLowBalanceAlertBody.
+  ///
+  /// In en, this message translates to:
+  /// **'We\'ll flag this account and add a notification when its balance drops to or below this amount.'**
+  String get acctxLowBalanceAlertBody;
+
+  /// No description provided for @acctxThresholdLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Alert me below'**
+  String get acctxThresholdLabel;
+
+  /// No description provided for @acctxRemoveAlert.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove alert'**
+  String get acctxRemoveAlert;
+
+  /// No description provided for @acctxAlertSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Low-balance alert saved'**
+  String get acctxAlertSaved;
+
+  /// No description provided for @acctxAlertRemoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Low-balance alert removed'**
+  String get acctxAlertRemoved;
+
+  /// No description provided for @acctxLowBalanceBanner.
+  ///
+  /// In en, this message translates to:
+  /// **'Balance is at or below your {amount} alert'**
+  String acctxLowBalanceBanner(Object amount);
+
   /// No description provided for @acctxNoTransactionsTitle.
   ///
   /// In en, this message translates to:
@@ -5299,6 +5431,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Institution'**
   String get lwNotifInstitutionFallback;
+
+  /// No description provided for @lwNotifAccountFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get lwNotifAccountFallback;
+
+  /// No description provided for @lwNotifLowBalanceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{account} is running low'**
+  String lwNotifLowBalanceTitle(Object account);
+
+  /// No description provided for @lwNotifLowBalanceDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Balance {balance} is at or below your {threshold} alert.'**
+  String lwNotifLowBalanceDetail(Object balance, Object threshold);
 
   /// No description provided for @lwNotifRepaymentOverdueTitle.
   ///

@@ -6,6 +6,8 @@ import '../services/api_service.dart';
 import '../utils/currency.dart';
 import '../widgets/transactions_tab.dart';
 import '../widgets/account_balance_chart.dart';
+import '../services/preferences.dart';
+import '../utils/account_category.dart';
 import '../l10n/app_localizations.dart';
 
 /// Per-account transaction history. Rendered as the body of a slide-from-
@@ -48,6 +50,8 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   String? _error;
   List<dynamic>? _transactions;
   List<dynamic> _balanceHistory = const [];
+  // Low-balance alert thresholds (account id -> native-currency amount).
+  Map<String, double> _accountAlerts = const {};
 
   /// Locally-tracked balance and nickname so this screen can reflect an edit
   /// immediately without writing back into the parent's shared map. The
@@ -61,8 +65,112 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     _currentBalance =
         ((widget.account['current_balance'] as num?)?.toDouble()) ?? 0.0;
     _nickname = (widget.account['nickname'] ?? '').toString();
+    _accountAlerts = Preferences.getAccountAlerts();
     _fetchTransactions();
     _fetchBalanceHistory();
+    _hydrateAlerts();
+  }
+
+  Future<void> _hydrateAlerts() async {
+    try {
+      final raw = await _apiService.getSetting('account_balance_alerts');
+      if (!mounted || raw is! Map) return;
+      final next = <String, double>{};
+      raw.forEach((k, v) {
+        final d = v is num ? v.toDouble() : double.tryParse('$v');
+        if (d != null && d > 0) next[k.toString()] = d;
+      });
+      setState(() => _accountAlerts = next);
+      Preferences.setAccountAlerts(next);
+    } catch (_) {
+      // localStorage seed stands.
+    }
+  }
+
+  bool get _alertEligible {
+    final cat = categorizeAccount(widget.account['account_type']?.toString());
+    return cat != AccountCategory.credit && cat != AccountCategory.loan;
+  }
+
+  String get _accountId => widget.account['id'].toString();
+
+  void _showThresholdDialog() {
+    final l = AppLocalizations.of(context);
+    final currency =
+        (widget.account['currency'] ?? 'USD').toString().toUpperCase();
+    final existing = _accountAlerts[_accountId];
+    final controller = TextEditingController(
+      text: existing == null ? '' : existing.toStringAsFixed(0),
+    );
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: Text(l.acctxLowBalanceAlertTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              l.acctxLowBalanceAlertBody,
+              style: TextStyle(color: context.textMuted, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: l.acctxThresholdLabel,
+                prefixText: r'$ ',
+                suffixText: currency,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          if (existing != null)
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _saveThreshold(null);
+              },
+              child: Text(l.acctxRemoveAlert),
+            ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l.actionCancel),
+          ),
+          FilledButton(
+            onPressed: () {
+              final v = double.tryParse(controller.text);
+              Navigator.pop(context);
+              if (v != null && v > 0) _saveThreshold(v);
+            },
+            child: Text(l.actionSave),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _saveThreshold(double? value) {
+    final next = Map<String, double>.from(_accountAlerts);
+    final l = AppLocalizations.of(context);
+    if (value == null) {
+      next.remove(_accountId);
+    } else {
+      next[_accountId] = value;
+    }
+    setState(() => _accountAlerts = next);
+    Preferences.setAccountAlerts(next);
+    _apiService.putSetting('account_balance_alerts', next).catchError((_) {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+            value == null ? l.acctxAlertRemoved : l.acctxAlertSaved),
+      ),
+    );
   }
 
   Future<void> _fetchBalanceHistory() async {
@@ -343,6 +451,8 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                       _showEditBalanceDialog();
                     case 'rename':
                       _showRenameDialog();
+                    case 'alert':
+                      _showThresholdDialog();
                   }
                 },
                 itemBuilder: (_) => [
@@ -361,6 +471,18 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                         dense: true,
                         leading: const Icon(Icons.drive_file_rename_outline),
                         title: Text(l.acctxRenameAccount),
+                      ),
+                    ),
+                  if (_alertEligible)
+                    PopupMenuItem(
+                      value: 'alert',
+                      child: ListTile(
+                        dense: true,
+                        leading:
+                            const Icon(Icons.notifications_active_outlined),
+                        title: Text(_accountAlerts.containsKey(_accountId)
+                            ? l.acctxEditLowBalanceAlert
+                            : l.acctxSetLowBalanceAlert),
                       ),
                     ),
                 ],
@@ -402,7 +524,48 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             ],
           ),
           _buildBalanceSparkline(),
+          _buildLowBalanceBanner(),
         ],
+      ),
+    );
+  }
+
+  // Amber heads-up when the balance has fallen to/below the user's threshold.
+  Widget _buildLowBalanceBanner() {
+    final threshold = _accountAlerts[_accountId];
+    if (threshold == null || _currentBalance > threshold) {
+      return const SizedBox.shrink();
+    }
+    final l = AppLocalizations.of(context);
+    final currency =
+        (widget.account['currency'] ?? widget.targetCurrency).toString();
+    final color = context.warning;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: color, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                l.acctxLowBalanceBanner(
+                    formatCurrencyAmount(threshold, currency)),
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12.5,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -19,6 +19,7 @@ import '../widgets/spending_by_category_card.dart';
 import '../widgets/realized_gains_card.dart';
 import '../widgets/upcoming_bills_card.dart';
 import '../widgets/net_worth_goal_tile.dart';
+import '../widgets/emergency_fund_card.dart';
 import '../widgets/accounts_breakdown_card.dart';
 import '../widgets/portfolio_card.dart';
 import '../widgets/fx_widget.dart';
@@ -129,6 +130,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _lendingEnabled = true; // on by default; user can opt out in Settings
   // Upcoming + overdue loan installments for the notifications bell.
   List<dynamic> _loanReminders = const [];
+  // Per-account low-balance thresholds (account id -> native-currency amount),
+  // for the notifications bell. Seeded from localStorage, hydrated from backend.
+  Map<String, double> _accountAlerts = const {};
   // Configurable reminder lead time (days before due). Server-stored
   // (app_settings 'lending_reminder_lead_days'), surfaced in the
   // Management-tab Modules card.
@@ -201,6 +205,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // once _destinations is final (so a saved "Lending" lands correctly).
     _pendingRestore = _navIdFromName(Preferences.getLastSection());
     _section = _indexOfNav(_pendingRestore) ?? 0;
+    // Low-balance alert thresholds: instant from localStorage, then reconcile
+    // with the backend setting (source of truth across devices).
+    _accountAlerts = Preferences.getAccountAlerts();
+    _hydrateAccountAlerts();
     _loadAllData();
     _checkRedirectStatus();
     _resumePlaidOAuthIfNeeded();
@@ -210,6 +218,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // and forget until logout.
     _realtime.connect();
     _realtimeSub = _realtime.events.listen(_handleRealtimeEvent);
+  }
+
+  // Pull low-balance thresholds from the backend setting and merge over the
+  // localStorage seed so the bell reflects changes made on other devices.
+  Future<void> _hydrateAccountAlerts() async {
+    try {
+      final raw = await _apiService.getSetting('account_balance_alerts');
+      if (!mounted || raw is! Map) return;
+      final next = <String, double>{};
+      raw.forEach((k, v) {
+        final d = v is num ? v.toDouble() : double.tryParse('$v');
+        if (d != null && d > 0) next[k.toString()] = d;
+      });
+      setState(() => _accountAlerts = next);
+      Preferences.setAccountAlerts(next);
+    } catch (_) {
+      // localStorage seed stands.
+    }
   }
 
   @override
@@ -1677,6 +1703,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final l = AppLocalizations.of(context);
     final isCompact = MediaQuery.sizeOf(context).width < 720;
 
+    // Currency context for AppBar-level surfaces (notifications bell jump-to
+    // account panel). Mirrors the per-tab computation used deeper in build.
+    final fxRate = (_fxRate?['rate'] as num?)?.toDouble() ?? 1.0;
+    final conversionFactor = _targetCurrency == 'MXN' ? fxRate : 1.0;
+    final currencyFormat = moneyFormat(_targetCurrency);
+
     // During the first-run state we strip the chrome: tab bar (every tab
     // would be empty) and currency / FX controls (no balances to convert).
     final firstRun = _isFirstRun;
@@ -1728,6 +1760,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   // No-op when lending is off (the section isn't visible);
                   // the bell only surfaces loan reminders when it's on.
                   onJumpToLending: () => _goToNav(NavId.lending),
+                  accounts: (_overview?['accounts'] as List?) ?? const [],
+                  accountAlerts: _accountAlerts,
+                  onJumpToAccount: (account) => showAccountTransactionsPanel(
+                    context,
+                    account: account,
+                    allAccounts:
+                        (_overview?['accounts'] as List?) ?? const [],
+                    conversionFactor: conversionFactor,
+                    currencyFormat: currencyFormat,
+                    targetCurrency: _targetCurrency,
+                    usdMxnRate: fxRate,
+                    onBalanceUpdate: (id, bal) async {
+                      try {
+                        await _apiService.updateAccountBalance(id, bal);
+                        _loadAllData(silent: true);
+                      } catch (_) {}
+                    },
+                    onRenameAccount: (id, nickname) async {
+                      try {
+                        await _apiService.renameAccount(id, nickname);
+                        _loadAllData(silent: true);
+                      } catch (_) {}
+                    },
+                  ),
                 ),
               ),
             ],
@@ -2386,6 +2442,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               NetWorthGoalTile(
                 netWorthUsd:
                     (_overview?['net_worth'] as num?)?.toDouble() ?? 0.0,
+                conversionFactor: conversionFactor,
+                currencyFormat: currencyFormat,
+              ),
+              const SizedBox(height: 24),
+              EmergencyFundCard(
+                apiService: _apiService,
                 conversionFactor: conversionFactor,
                 currencyFormat: currencyFormat,
               ),
