@@ -1308,6 +1308,26 @@ class AppLocalizationsEs extends AppLocalizations {
   String get cfBudgetsDialogTitle => 'Editar presupuestos mensuales';
 
   @override
+  String cfBudgetsOverAlert(Object amount, Object count) {
+    return 'Sobre presupuesto en $count — $amount de más';
+  }
+
+  @override
+  String cfBudgetsNearAlert(Object count) {
+    return 'Cerca del presupuesto en $count';
+  }
+
+  @override
+  String cfBudgetsOverBy(Object amount) {
+    return '$amount de más';
+  }
+
+  @override
+  String cfBudgetsLeft(Object amount) {
+    return '$amount disponible';
+  }
+
+  @override
   String get cfTransfersTitle => 'Transferencias entre divisas';
 
   @override
@@ -2231,6 +2251,19 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get projBandLegend => 'Rango percentil 10–90';
+
+  @override
+  String get projTaxDrag => 'Carga fiscal';
+
+  @override
+  String get projGuardrails => 'Barandillas de gasto';
+
+  @override
+  String get projGuardrailsOn =>
+      'Barandillas activas — el gasto se ajusta al mercado';
+
+  @override
+  String get projGuardrailsOff => 'Gasto fijo — sin ajuste en caídas';
 
   @override
   String get taxTitle => 'Planeación fiscal';

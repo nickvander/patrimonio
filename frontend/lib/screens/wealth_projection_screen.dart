@@ -35,6 +35,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   double _withdrawalRate = 0.04;
   double _returnVolatility = 0.13;
   double _baristaMonthlyIncome = 0.0;
+  double _annualTaxDrag = 0.0;
+  bool _withdrawalGuardrails = false;
   int _yearsToRetirement = 20;
   int _projectionYears = 30;
 
@@ -127,6 +129,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         returnVolatility: _returnVolatility,
         yearsToRetirement: _yearsToRetirement.clamp(0, _projectionYears),
         baristaMonthlyIncome: _baristaMonthlyIncome,
+        annualTaxDrag: _annualTaxDrag,
+        withdrawalGuardrails: _withdrawalGuardrails,
       );
       setState(() {
         _projectionData = data;
@@ -312,6 +316,18 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         ),
         Divider(height: 32, color: context.hairline),
         _buildSliderControl(
+          label: l.projTaxDrag,
+          value: _annualTaxDrag,
+          min: 0,
+          max: 0.03,
+          isPercent: true,
+          onChanged: (val) => setState(() => _annualTaxDrag = val),
+          onChangeEnd: (_) => _fetchProjection(),
+        ),
+        Divider(height: 32, color: context.hairline),
+        _buildGuardrailsToggle(),
+        Divider(height: 32, color: context.hairline),
+        _buildSliderControl(
           label: l.projYearsToRetirement,
           value: _yearsToRetirement.toDouble().clamp(
                 0,
@@ -426,6 +442,43 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           inactiveColor: context.hairline,
           onChanged: onChanged,
           onChangeEnd: onChangeEnd,
+        ),
+      ],
+    );
+  }
+
+  // Guyton-Klinger guardrails toggle: when on, the Monte Carlo flexes
+  // retirement spending with the market, which lifts the success rate.
+  Widget _buildGuardrailsToggle() {
+    final l = AppLocalizations.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l.projGuardrails,
+                style: TextStyle(color: context.textMuted, fontSize: 14),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                _withdrawalGuardrails
+                    ? l.projGuardrailsOn
+                    : l.projGuardrailsOff,
+                style: TextStyle(color: context.textFaint, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+        Switch(
+          value: _withdrawalGuardrails,
+          activeThumbColor: context.positive,
+          onChanged: (v) {
+            setState(() => _withdrawalGuardrails = v);
+            _fetchProjection();
+          },
         ),
       ],
     );

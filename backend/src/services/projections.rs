@@ -43,6 +43,18 @@ pub struct ProjectionRequest {
     /// Part-time income in retirement for the Barista-FIRE number (today's $/mo).
     #[serde(default)]
     pub barista_monthly_income: Option<f64>,
+    /// Effective annual tax drag on returns (e.g. 0.015 = 1.5pp haircut). A
+    /// deliberate simplification — real tax hits withdrawals/gains, but a flat
+    /// return haircut is a defensible first-order model. Default 0.
+    #[serde(default)]
+    pub annual_tax_drag: Option<f64>,
+    /// When true, the Monte Carlo applies Guyton-Klinger guardrails in
+    /// retirement: cut spending 10% when the withdrawal rate drifts >20% above
+    /// the initial rate (portfolio fell), raise it 10% when it drifts >20%
+    /// below (portfolio grew). Models spending flexibility, which lifts the
+    /// success rate. Default false (fixed real spending).
+    #[serde(default)]
+    pub withdrawal_guardrails: Option<bool>,
     /// Optional RNG seed so tests are deterministic. Omit in production.
     #[serde(default)]
     pub mc_seed: Option<u64>,
@@ -131,7 +143,9 @@ fn real_return(nominal: f64, inflation: f64) -> f64 {
 
 /// Calculate a wealth projection in real (today's) dollars.
 pub fn calculate_projection(req: &ProjectionRequest) -> ProjectionResponse {
-    let real = req.real_return();
+    // Tax drag lowers the effective real return everywhere it's applied
+    // (growth, FI-date, coast discount, Monte Carlo).
+    let real = req.real_return() - req.annual_tax_drag.unwrap_or(0.0).max(0.0);
     let monthly_rate = (1.0 + real).powf(1.0 / 12.0) - 1.0;
     let retire_month = req.retire_year() * 12;
     // Guaranteed retirement income (Social Security / pension / part-time)
@@ -305,6 +319,9 @@ fn run_monte_carlo(req: &ProjectionRequest, real: f64) -> MonteCarloResult {
     // Net of guaranteed retirement income (see deterministic path above).
     let annual_spend = req.annual_expenses - req.barista_monthly_income.unwrap_or(0.0) * 12.0;
     let drift = (1.0 + real).ln() - 0.5 * sigma * sigma;
+    // Guardrails only make sense when the portfolio is actually being drawn
+    // down (net positive spend).
+    let guardrails = req.withdrawal_guardrails.unwrap_or(false) && annual_spend > 0.0;
 
     let mut rng = match req.mc_seed {
         Some(s) => StdRng::seed_from_u64(s),
@@ -318,13 +335,31 @@ fn run_monte_carlo(req: &ProjectionRequest, real: f64) -> MonteCarloResult {
     for _ in 0..trials {
         let mut bal = req.start_balance;
         by_year[0].push(bal);
+        // Guyton-Klinger state: the current (possibly adjusted) withdrawal and
+        // the initial withdrawal rate captured at the start of retirement.
+        let mut withdrawal = annual_spend;
+        let mut initial_rate: Option<f64> = None;
         for y in 1..=horizon {
             let z = standard_normal(&mut rng);
             let growth = (drift + sigma * z).exp();
             if (y as i32) <= retire_year {
                 bal = bal * growth + annual_contribution;
             } else {
-                bal = bal * growth - annual_spend;
+                if guardrails && bal > 0.0 {
+                    match initial_rate {
+                        None => initial_rate = Some(withdrawal / bal),
+                        Some(ir) => {
+                            let cur = withdrawal / bal;
+                            if cur > ir * 1.2 {
+                                withdrawal *= 0.9; // capital-preservation cut
+                            } else if cur < ir * 0.8 {
+                                withdrawal *= 1.1; // prosperity raise
+                            }
+                        }
+                    }
+                }
+                let spend = if guardrails { withdrawal } else { annual_spend };
+                bal = bal * growth - spend;
             }
             if bal < 0.0 {
                 bal = 0.0;
@@ -407,6 +442,8 @@ mod tests {
             years_to_retirement: Some(20),
             monte_carlo_trials: Some(500),
             barista_monthly_income: Some(1000.0),
+            annual_tax_drag: None,
+            withdrawal_guardrails: None,
             mc_seed: Some(42),
         }
     }
@@ -552,6 +589,47 @@ mod tests {
         // Deterministic path: the final balance is higher with income too.
         assert!(
             with.points.last().unwrap().balance > without.points.last().unwrap().balance
+        );
+    }
+
+    #[test]
+    fn tax_drag_lowers_returns_and_ending_balance() {
+        let mut req = base_req();
+        req.annual_tax_drag = Some(0.0);
+        let no_tax = calculate_projection(&req);
+        req.annual_tax_drag = Some(0.015);
+        let taxed = calculate_projection(&req);
+        assert!(
+            taxed.fire_metrics.real_return_rate < no_tax.fire_metrics.real_return_rate,
+            "tax drag must lower the effective real return"
+        );
+        assert!(
+            taxed.points.last().unwrap().balance < no_tax.points.last().unwrap().balance,
+            "tax drag must lower the projected ending balance"
+        );
+    }
+
+    #[test]
+    fn guardrails_improve_success_on_stressed_plan() {
+        // 6% withdrawal off the bat with no contributions — a plan stressed
+        // enough that spending flexibility clearly helps.
+        let mut req = base_req();
+        req.start_balance = 600_000.0;
+        req.monthly_contribution = 0.0;
+        req.annual_expenses = 36_000.0;
+        req.barista_monthly_income = Some(0.0);
+        req.years_to_retirement = Some(0); // retire immediately
+        req.years = 40;
+        req.monte_carlo_trials = Some(1000);
+
+        req.withdrawal_guardrails = Some(false);
+        let fixed = calculate_projection(&req).monte_carlo.success_rate;
+        req.withdrawal_guardrails = Some(true);
+        let guarded = calculate_projection(&req).monte_carlo.success_rate;
+
+        assert!(
+            guarded > fixed,
+            "guardrails should raise success on a stressed plan: {guarded} vs {fixed}"
         );
     }
 

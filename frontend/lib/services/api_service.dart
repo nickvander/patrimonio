@@ -1702,6 +1702,8 @@ class ApiService {
     int? yearsToRetirement,
     int monteCarloTrials = 1000,
     double baristaMonthlyIncome = 0.0,
+    double annualTaxDrag = 0.0,
+    bool withdrawalGuardrails = false,
   }) async {
     final queryParams = {
       'start_balance': startBalance.toString(),
@@ -1714,6 +1716,8 @@ class ApiService {
       'return_volatility': returnVolatility.toString(),
       'monte_carlo_trials': monteCarloTrials.toString(),
       'barista_monthly_income': baristaMonthlyIncome.toString(),
+      'annual_tax_drag': annualTaxDrag.toString(),
+      'withdrawal_guardrails': withdrawalGuardrails.toString(),
       if (yearsToRetirement != null)
         'years_to_retirement': yearsToRetirement.toString(),
     };

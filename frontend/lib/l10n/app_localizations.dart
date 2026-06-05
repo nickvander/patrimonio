@@ -2228,6 +2228,30 @@ abstract class AppLocalizations {
   /// **'Edit monthly budgets'**
   String get cfBudgetsDialogTitle;
 
+  /// No description provided for @cfBudgetsOverAlert.
+  ///
+  /// In en, this message translates to:
+  /// **'Over budget in {count} — {amount} over total'**
+  String cfBudgetsOverAlert(Object amount, Object count);
+
+  /// No description provided for @cfBudgetsNearAlert.
+  ///
+  /// In en, this message translates to:
+  /// **'Approaching budget in {count}'**
+  String cfBudgetsNearAlert(Object count);
+
+  /// No description provided for @cfBudgetsOverBy.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} over'**
+  String cfBudgetsOverBy(Object amount);
+
+  /// No description provided for @cfBudgetsLeft.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} left'**
+  String cfBudgetsLeft(Object amount);
+
   /// No description provided for @cfTransfersTitle.
   ///
   /// In en, this message translates to:
@@ -3751,6 +3775,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'10th–90th percentile range'**
   String get projBandLegend;
+
+  /// No description provided for @projTaxDrag.
+  ///
+  /// In en, this message translates to:
+  /// **'Tax drag'**
+  String get projTaxDrag;
+
+  /// No description provided for @projGuardrails.
+  ///
+  /// In en, this message translates to:
+  /// **'Spending guardrails'**
+  String get projGuardrails;
+
+  /// No description provided for @projGuardrailsOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Guardrails on — spending flexes with the market'**
+  String get projGuardrailsOn;
+
+  /// No description provided for @projGuardrailsOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Fixed spending — no adjustment in downturns'**
+  String get projGuardrailsOff;
 
   /// No description provided for @taxTitle.
   ///

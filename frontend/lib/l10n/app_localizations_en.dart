@@ -1289,6 +1289,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cfBudgetsDialogTitle => 'Edit monthly budgets';
 
   @override
+  String cfBudgetsOverAlert(Object amount, Object count) {
+    return 'Over budget in $count — $amount over total';
+  }
+
+  @override
+  String cfBudgetsNearAlert(Object count) {
+    return 'Approaching budget in $count';
+  }
+
+  @override
+  String cfBudgetsOverBy(Object amount) {
+    return '$amount over';
+  }
+
+  @override
+  String cfBudgetsLeft(Object amount) {
+    return '$amount left';
+  }
+
+  @override
   String get cfTransfersTitle => 'Cross-currency transfers';
 
   @override
@@ -2207,6 +2227,19 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get projBandLegend => '10th–90th percentile range';
+
+  @override
+  String get projTaxDrag => 'Tax drag';
+
+  @override
+  String get projGuardrails => 'Spending guardrails';
+
+  @override
+  String get projGuardrailsOn =>
+      'Guardrails on — spending flexes with the market';
+
+  @override
+  String get projGuardrailsOff => 'Fixed spending — no adjustment in downturns';
 
   @override
   String get taxTitle => 'Tax planning';
