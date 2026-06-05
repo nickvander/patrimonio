@@ -2348,6 +2348,109 @@ async fn spending_by_category_groups_and_excludes() {
 
 #[tokio::test]
 #[serial_test::serial]
+async fn realized_gains_summary_and_long_term_flag() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+
+    let holding_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO holdings (account_id, symbol, name, currency, user_id) \
+         VALUES ($1, 'VTI', 'Vanguard Total Market', 'USD', $2) RETURNING id",
+    )
+    .bind(acct)
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let lot_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO holding_lots \
+         (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) \
+         VALUES ($1, $2, $3, (CURRENT_DATE - INTERVAL '3 years')::date, 10, 60, 'USD', 1.0, 'lot-1') RETURNING id",
+    )
+    .bind(holding_id)
+    .bind(acct)
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    // This-year disposal: held ~3 years (long-term), +400 gain.
+    sqlx::query(
+        "INSERT INTO lot_disposals \
+         (user_id, holding_id, account_id, lot_id, sell_source_id, qty_sold, sell_price_per_unit, \
+          sell_currency, sell_fx_rate, sell_date, cost_per_unit, cost_fx_rate, realized_pnl_usd) \
+         VALUES ($1, $2, $3, $4, 'sell-1', 10, 100, 'USD', 1.0, CURRENT_DATE, 60, 1.0, 400)",
+    )
+    .bind(user_id)
+    .bind(holding_id)
+    .bind(acct)
+    .bind(lot_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Prior-year disposal: lot since deleted (lot_id NULL), -150 loss.
+    sqlx::query(
+        "INSERT INTO lot_disposals \
+         (user_id, holding_id, account_id, lot_id, sell_source_id, qty_sold, sell_price_per_unit, \
+          sell_currency, sell_fx_rate, sell_date, cost_per_unit, cost_fx_rate, realized_pnl_usd) \
+         VALUES ($1, $2, $3, NULL, 'sell-2', 5, 50, 'USD', 1.0, (CURRENT_DATE - INTERVAL '2 years')::date, 80, 1.0, -150)",
+    )
+    .bind(user_id)
+    .bind(holding_id)
+    .bind(acct)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/realized-gains", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+
+    // Summary: all-time = 400 - 150 = 250; YTD = 400 (this-year only).
+    assert!((body["summary"]["total_realized_usd"].as_f64().unwrap() - 250.0).abs() < 0.01);
+    assert!((body["summary"]["ytd_realized_usd"].as_f64().unwrap() - 400.0).abs() < 0.01);
+    assert_eq!(body["summary"]["count"].as_i64().unwrap(), 2);
+    assert_eq!(body["by_year"].as_array().unwrap().len(), 2);
+
+    // Most recent disposal first: the long-term gain with USD proceeds/cost.
+    let d0 = &body["disposals"][0];
+    assert_eq!(d0["symbol"], "VTI");
+    assert!((d0["realized_pnl_usd"].as_f64().unwrap() - 400.0).abs() < 0.01);
+    assert!((d0["proceeds_usd"].as_f64().unwrap() - 1000.0).abs() < 0.01);
+    assert!((d0["cost_usd"].as_f64().unwrap() - 600.0).abs() < 0.01);
+    assert_eq!(d0["long_term"], serde_json::json!(true));
+    assert!(d0["holding_days"].as_i64().unwrap() > 365);
+    // The deleted-lot disposal has an unknown holding period.
+    let d1 = &body["disposals"][1];
+    assert!(d1["long_term"].is_null());
+
+    // Year filter narrows the list to the current year only.
+    let this_year = &d0["sell_date"].as_str().unwrap()[..4];
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/dashboard/realized-gains?year={this_year}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["summary"]["count"].as_i64().unwrap(), 1);
+    assert_eq!(body["disposals"].as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn loan_suggest_disbursement_matches_and_rejects() {
     let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
         return;

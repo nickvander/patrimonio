@@ -16,6 +16,7 @@ import '../widgets/assets_liabilities_bar.dart';
 import '../widgets/monthly_cash_flow_card.dart';
 import '../widgets/budgets_card.dart';
 import '../widgets/spending_by_category_card.dart';
+import '../widgets/realized_gains_card.dart';
 import '../widgets/net_worth_goal_tile.dart';
 import '../widgets/accounts_breakdown_card.dart';
 import '../widgets/portfolio_card.dart';
@@ -2424,6 +2425,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onClearCategoryFilter: () =>
                 setState(() => _portfolioCategoryFilter = null),
             searchOverride: _portfolioSearchOverride,
+          ),
+          RealizedGainsCard(
+            apiService: _apiService,
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
           ),
           const SizedBox(height: 24),
           AccountsBreakdownCard(

@@ -2126,6 +2126,54 @@ abstract class AppLocalizations {
   /// **'+{count} more'**
   String cfPlusNMore(Object count);
 
+  /// No description provided for @rgTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Realized gains'**
+  String get rgTitle;
+
+  /// No description provided for @rgThisYear.
+  ///
+  /// In en, this message translates to:
+  /// **'This year'**
+  String get rgThisYear;
+
+  /// No description provided for @rgAllTime.
+  ///
+  /// In en, this message translates to:
+  /// **'All time'**
+  String get rgAllTime;
+
+  /// No description provided for @rgProceeds.
+  ///
+  /// In en, this message translates to:
+  /// **'Proceeds'**
+  String get rgProceeds;
+
+  /// No description provided for @rgCost.
+  ///
+  /// In en, this message translates to:
+  /// **'Cost'**
+  String get rgCost;
+
+  /// No description provided for @rgLongTerm.
+  ///
+  /// In en, this message translates to:
+  /// **'LT'**
+  String get rgLongTerm;
+
+  /// No description provided for @rgShortTerm.
+  ///
+  /// In en, this message translates to:
+  /// **'ST'**
+  String get rgShortTerm;
+
+  /// No description provided for @rgMoreCount.
+  ///
+  /// In en, this message translates to:
+  /// **'+{count} more disposals'**
+  String rgMoreCount(Object count);
+
   /// No description provided for @spendByCatTitle.
   ///
   /// In en, this message translates to:

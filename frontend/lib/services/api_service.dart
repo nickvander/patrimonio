@@ -593,6 +593,24 @@ class ApiService {
     }, forceRefresh: forceRefresh);
   }
 
+  /// Realized capital gains/losses from lot disposals. Optional [year]
+  /// narrows the disposal list; the summary + by-year always cover history.
+  Future<Map<String, dynamic>> getRealizedGains({
+    int? year,
+    bool forceRefresh = false,
+  }) {
+    return _cachedGet('realized-gains-${year ?? 'all'}', () async {
+      final q = year != null ? '?year=$year' : '';
+      final response =
+          await _get(Uri.parse('$_baseUrl/dashboard/realized-gains$q'));
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+      throw Exception(_t('Failed to load realized gains',
+          'No se pudieron cargar las ganancias realizadas'));
+    }, forceRefresh: forceRefresh);
+  }
+
   Future<Map<String, dynamic>> getHoldings({bool forceRefresh = false}) {
     return _cachedGet('holdings', () async {
       final response = await _get(Uri.parse('$_baseUrl/dashboard/holdings'));

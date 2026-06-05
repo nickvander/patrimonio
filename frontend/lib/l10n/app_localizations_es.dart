@@ -1253,6 +1253,32 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get rgTitle => 'Ganancias realizadas';
+
+  @override
+  String get rgThisYear => 'Este año';
+
+  @override
+  String get rgAllTime => 'Histórico';
+
+  @override
+  String get rgProceeds => 'Ingresos';
+
+  @override
+  String get rgCost => 'Costo';
+
+  @override
+  String get rgLongTerm => 'LP';
+
+  @override
+  String get rgShortTerm => 'CP';
+
+  @override
+  String rgMoreCount(Object count) {
+    return '+$count ventas más';
+  }
+
+  @override
   String get spendByCatTitle => 'Gasto por categoría';
 
   @override

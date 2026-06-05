@@ -21,6 +21,7 @@ pub fn router() -> Router<AppState> {
         .route("/allocation", get(asset_allocation))
         .route("/trends", get(cash_flow_trends))
         .route("/spending-by-category", get(spending_by_category))
+        .route("/realized-gains", get(realized_gains))
         .route("/credit-utilization", get(credit_utilization))
         .route("/sync-status", get(sync_status))
         .route("/transactions", get(recent_transactions))
@@ -1277,6 +1278,181 @@ async fn spending_by_category(
     Json(SpendingByCategoryResponse {
         months: months_vec,
         categories,
+    })
+}
+
+#[derive(Deserialize)]
+struct RealizedGainsQuery {
+    /// Optional calendar-year filter on the disposal list (the summary +
+    /// by-year chart always cover all history).
+    year: Option<i32>,
+}
+
+#[derive(Serialize)]
+struct RealizedDisposal {
+    symbol: String,
+    name: String,
+    sell_date: String,
+    qty_sold: f64,
+    proceeds_usd: f64,
+    cost_usd: f64,
+    realized_pnl_usd: f64,
+    /// Holding period in days (null when the source lot was later deleted).
+    holding_days: Option<i32>,
+    /// IRS long-term threshold: held > 365 days. Null when unknown.
+    long_term: Option<bool>,
+}
+
+#[derive(Serialize)]
+struct RealizedYear {
+    year: i32,
+    realized_usd: f64,
+}
+
+#[derive(Serialize)]
+struct RealizedGainsSummary {
+    ytd_realized_usd: f64,
+    total_realized_usd: f64,
+    /// Count of disposal rows in the (optionally year-filtered) list.
+    count: i64,
+    /// The year filter applied to the list, if any.
+    year: Option<i32>,
+}
+
+#[derive(Serialize)]
+struct RealizedGainsResponse {
+    summary: RealizedGainsSummary,
+    by_year: Vec<RealizedYear>,
+    disposals: Vec<RealizedDisposal>,
+}
+
+/// Realized capital gains/losses from `lot_disposals` — the per-sell P&L the
+/// FIFO engine crystallizes but the holdings view never surfaces. Each row is
+/// one (sell event, depleted lot) pair; `realized_pnl_usd` is pre-computed at
+/// sync time. We add USD proceeds/cost for display and a long-term flag (held
+/// > 365 days) for tax context, joining the source lot for the acquisition
+/// date when it still exists.
+async fn realized_gains(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Query(q): Query<RealizedGainsQuery>,
+) -> Json<RealizedGainsResponse> {
+    let dec = |r: &sqlx::postgres::PgRow, col: &str| -> f64 {
+        r.try_get::<rust_decimal::Decimal, _>(col)
+            .ok()
+            .map(|d| d.to_string().parse().unwrap_or(0.0))
+            .unwrap_or(0.0)
+    };
+
+    let rows = sqlx::query(
+        r#"
+        SELECT TO_CHAR(d.sell_date, 'YYYY-MM-DD') AS sell_date,
+               d.qty_sold, d.sell_price_per_unit, d.sell_fx_rate,
+               d.cost_per_unit, d.cost_fx_rate, d.realized_pnl_usd,
+               h.symbol, h.name,
+               (d.sell_date - l.acquired_at) AS holding_days
+        FROM lot_disposals d
+        JOIN holdings h ON h.id = d.holding_id
+        LEFT JOIN holding_lots l ON l.id = d.lot_id
+        WHERE d.user_id = $1
+          AND ($2::int IS NULL OR EXTRACT(YEAR FROM d.sell_date)::int = $2)
+        ORDER BY d.sell_date DESC
+        LIMIT 500
+        "#,
+    )
+    .bind(ctx.user_id)
+    .bind(q.year)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let disposals: Vec<RealizedDisposal> = rows
+        .iter()
+        .map(|r| {
+            let qty = dec(r, "qty_sold");
+            let sell_px = dec(r, "sell_price_per_unit");
+            let sell_fx = dec(r, "sell_fx_rate");
+            let cost_px = dec(r, "cost_per_unit");
+            let cost_fx = dec(r, "cost_fx_rate");
+            // fx rate is native-units-per-USD (1.0 for USD securities), so
+            // divide native amounts by it to land in USD.
+            let proceeds_usd = if sell_fx > 0.0 {
+                qty * sell_px / sell_fx
+            } else {
+                qty * sell_px
+            };
+            let cost_usd = if cost_fx > 0.0 {
+                qty * cost_px / cost_fx
+            } else {
+                qty * cost_px
+            };
+            let holding_days: Option<i32> = r.try_get("holding_days").ok();
+            RealizedDisposal {
+                symbol: r.get("symbol"),
+                name: r.get("name"),
+                sell_date: r.get("sell_date"),
+                qty_sold: qty,
+                proceeds_usd,
+                cost_usd,
+                realized_pnl_usd: dec(r, "realized_pnl_usd"),
+                holding_days,
+                long_term: holding_days.map(|d| d > 365),
+            }
+        })
+        .collect();
+
+    let count = disposals.len() as i64;
+
+    // By-year totals across ALL history (independent of the list filter).
+    let year_rows = sqlx::query(
+        r#"
+        SELECT EXTRACT(YEAR FROM sell_date)::int AS year,
+               COALESCE(SUM(realized_pnl_usd), 0) AS total
+        FROM lot_disposals
+        WHERE user_id = $1
+        GROUP BY year
+        ORDER BY year ASC
+        "#,
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let by_year: Vec<RealizedYear> = year_rows
+        .iter()
+        .map(|r| RealizedYear {
+            year: r.try_get("year").unwrap_or(0),
+            realized_usd: dec(r, "total"),
+        })
+        .collect();
+
+    let total_realized_usd: f64 = by_year.iter().map(|y| y.realized_usd).sum();
+
+    let ytd_row = sqlx::query(
+        r#"
+        SELECT COALESCE(SUM(realized_pnl_usd), 0) AS total
+        FROM lot_disposals
+        WHERE user_id = $1
+          AND EXTRACT(YEAR FROM sell_date) = EXTRACT(YEAR FROM CURRENT_DATE)
+        "#,
+    )
+    .bind(ctx.user_id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
+    let ytd_realized_usd = ytd_row.as_ref().map(|r| dec(r, "total")).unwrap_or(0.0);
+
+    Json(RealizedGainsResponse {
+        summary: RealizedGainsSummary {
+            ytd_realized_usd,
+            total_realized_usd,
+            count,
+            year: q.year,
+        },
+        by_year,
+        disposals,
     })
 }
 

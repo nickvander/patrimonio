@@ -1235,6 +1235,32 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get rgTitle => 'Realized gains';
+
+  @override
+  String get rgThisYear => 'This year';
+
+  @override
+  String get rgAllTime => 'All time';
+
+  @override
+  String get rgProceeds => 'Proceeds';
+
+  @override
+  String get rgCost => 'Cost';
+
+  @override
+  String get rgLongTerm => 'LT';
+
+  @override
+  String get rgShortTerm => 'ST';
+
+  @override
+  String rgMoreCount(Object count) {
+    return '+$count more disposals';
+  }
+
+  @override
   String get spendByCatTitle => 'Spending by category';
 
   @override
