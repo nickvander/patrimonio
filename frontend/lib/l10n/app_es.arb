@@ -603,7 +603,7 @@
   "projCoastNeed": "Coast FIRE: necesitas {amount} invertidos hoy",
   "projCoastNeedSub": "Invierte esto ahora y solo el crecimiento te lleva a la IF en el retiro.",
   "projBaristaFi": "Número FI Barista",
-  "projBaristaIncome": "Ingreso de medio tiempo",
+  "projBaristaIncome": "Ingreso en retiro (SS/pensión)",
   "projFromYourData": "De tus gastos registrados",
   "projBandLegend": "Rango percentil 10–90",
   "taxTitle": "Planeación fiscal",

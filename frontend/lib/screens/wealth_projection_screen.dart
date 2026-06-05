@@ -305,7 +305,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           label: l.projBaristaIncome,
           value: _baristaMonthlyIncome,
           min: 0,
-          max: 5000,
+          max: 10000,
           isCurrency: true,
           onChanged: (val) => setState(() => _baristaMonthlyIncome = val),
           onChangeEnd: (_) => _fetchProjection(),

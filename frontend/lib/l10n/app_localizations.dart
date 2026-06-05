@@ -3725,7 +3725,7 @@ abstract class AppLocalizations {
   /// No description provided for @projBaristaIncome.
   ///
   /// In en, this message translates to:
-  /// **'Part-time income'**
+  /// **'Retirement income (SS/pension)'**
   String get projBaristaIncome;
 
   /// No description provided for @projFromYourData.

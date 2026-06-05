@@ -134,7 +134,12 @@ pub fn calculate_projection(req: &ProjectionRequest) -> ProjectionResponse {
     let real = req.real_return();
     let monthly_rate = (1.0 + real).powf(1.0 / 12.0) - 1.0;
     let retire_month = req.retire_year() * 12;
-    let monthly_withdrawal = req.annual_expenses / 12.0;
+    // Guaranteed retirement income (Social Security / pension / part-time)
+    // offsets spending during decumulation, so the portfolio only has to fund
+    // the shortfall. Net can go negative (surplus reinvested) when income
+    // exceeds expenses.
+    let other_monthly_income = req.barista_monthly_income.unwrap_or(0.0);
+    let monthly_withdrawal = req.annual_expenses / 12.0 - other_monthly_income;
 
     let mut points = Vec::new();
     let mut balance = req.start_balance;
@@ -297,7 +302,8 @@ fn run_monte_carlo(req: &ProjectionRequest, real: f64) -> MonteCarloResult {
     let retire_year = req.retire_year();
     let sigma = req.volatility();
     let annual_contribution = req.monthly_contribution * 12.0;
-    let annual_spend = req.annual_expenses;
+    // Net of guaranteed retirement income (see deterministic path above).
+    let annual_spend = req.annual_expenses - req.barista_monthly_income.unwrap_or(0.0) * 12.0;
     let drift = (1.0 + real).ln() - 0.5 * sigma * sigma;
 
     let mut rng = match req.mc_seed {
@@ -510,6 +516,42 @@ mod tests {
             res.monte_carlo.success_rate > 0.8,
             "expected >80% success, got {}",
             res.monte_carlo.success_rate
+        );
+    }
+
+    #[test]
+    fn retirement_income_improves_success_and_ending_balance() {
+        // A plan that leans on the portfolio for all spending vs the same plan
+        // with guaranteed retirement income covering part of it. The income
+        // must raise both the Monte Carlo success rate and the median ending
+        // balance (same seed → apples to apples).
+        let mut req = base_req();
+        req.start_balance = 400_000.0;
+        req.monthly_contribution = 500.0;
+        req.annual_expenses = 60_000.0;
+        req.years_to_retirement = Some(10);
+        req.years = 40;
+
+        req.barista_monthly_income = Some(0.0);
+        let without = calculate_projection(&req);
+
+        req.barista_monthly_income = Some(3000.0); // covers $36k of the $60k spend
+        let with = calculate_projection(&req);
+
+        assert!(
+            with.monte_carlo.success_rate > without.monte_carlo.success_rate,
+            "income should raise success: {} vs {}",
+            with.monte_carlo.success_rate,
+            without.monte_carlo.success_rate
+        );
+        assert!(
+            with.monte_carlo.median_ending_balance
+                > without.monte_carlo.median_ending_balance,
+            "income should raise the median ending balance"
+        );
+        // Deterministic path: the final balance is higher with income too.
+        assert!(
+            with.points.last().unwrap().balance > without.points.last().unwrap().balance
         );
     }
 

@@ -2194,7 +2194,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get projBaristaFi => 'Barista FI number';
 
   @override
-  String get projBaristaIncome => 'Part-time income';
+  String get projBaristaIncome => 'Retirement income (SS/pension)';
 
   @override
   String get projFromYourData => 'From your tracked spending';
