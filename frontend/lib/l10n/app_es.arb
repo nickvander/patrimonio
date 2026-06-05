@@ -337,6 +337,8 @@
   "cfWasPerMonth": "era {amount} / mes",
   "cfNotASubscription": "No es una suscripción: ocultar este renglón",
   "cfPlusNMore": "+{count} más",
+  "billsTitle": "Próximos pagos recurrentes",
+  "billsNext12": "Proyectado · próximos 12 meses",
   "rgTitle": "Ganancias realizadas",
   "rgThisYear": "Este año",
   "rgAllTime": "Histórico",

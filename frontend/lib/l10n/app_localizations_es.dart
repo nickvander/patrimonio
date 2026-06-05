@@ -1253,6 +1253,12 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get billsTitle => 'Próximos pagos recurrentes';
+
+  @override
+  String get billsNext12 => 'Proyectado · próximos 12 meses';
+
+  @override
   String get rgTitle => 'Ganancias realizadas';
 
   @override

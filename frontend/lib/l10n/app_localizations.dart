@@ -2126,6 +2126,18 @@ abstract class AppLocalizations {
   /// **'+{count} more'**
   String cfPlusNMore(Object count);
 
+  /// No description provided for @billsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Upcoming recurring bills'**
+  String get billsTitle;
+
+  /// No description provided for @billsNext12.
+  ///
+  /// In en, this message translates to:
+  /// **'Projected · next 12 months'**
+  String get billsNext12;
+
   /// No description provided for @rgTitle.
   ///
   /// In en, this message translates to:

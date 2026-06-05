@@ -395,6 +395,8 @@
   "cfWasPerMonth": "was {amount} / mo",
   "cfNotASubscription": "Not a subscription — hide this row",
   "cfPlusNMore": "+{count} more",
+  "billsTitle": "Upcoming recurring bills",
+  "billsNext12": "Projected · next 12 months",
   "rgTitle": "Realized gains",
   "rgThisYear": "This year",
   "rgAllTime": "All time",
