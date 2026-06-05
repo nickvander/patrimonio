@@ -6,7 +6,25 @@
 > [work/STATEMENT_IMPORT.md](STATEMENT_IMPORT.md); for the older broader
 > backlog see [work/NEXT.md](NEXT.md) and [work/FUTURE.md](FUTURE.md).
 
-## Latest (2026-06-03) — Tier 1 insight features (UX-spec'd, browser-verified)
+## Latest (2026-06-03) — Tier 2: debt payoff + instant bell (browser-verified)
+
+On `main`. `flutter analyze` clean, `flutter test` 157 (5 new), live browser pass.
+
+- **Instant notifications-bell update**: setting/removing a low-balance
+  threshold now fires `onAlertsChanged` (threaded through
+  `showAccountTransactionsPanel` + `AccountsListWidget`); the dashboard
+  re-reads thresholds so the bell updates without a reload. Verified live.
+- **Debt-payoff simulator** (`utils/debt_payoff.dart` + `DebtPayoffCard` on the
+  Cash-flow tab): avalanche vs snowball, per-debt editable APR (persisted in
+  `account_aprs` setting + Preferences), monthly-payment slider, recommends the
+  lower-interest plan. Pure engine has 5 unit tests. Verified live (APR edit
+  recomputes, slider recomputes).
+
+**Tier 2 remaining (not done):** investment performance vs an S&P 500
+benchmark (needs an external benchmark price-history source — API key/network,
+the reason it was deferred); more MX bank parsers (Banorte/HSBC/Scotiabank).
+
+## Earlier (2026-06-03) — Tier 1 insight features (UX-spec'd, browser-verified)
 
 On `main`. Verified: backend lib + 76 dashboard integration, `flutter analyze`
 clean, `flutter test` 152, and a live browser pass of all three.
