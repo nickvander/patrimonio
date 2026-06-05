@@ -7,6 +7,10 @@ pub mod banamex_pdf;
 pub mod banamex_layout;
 pub mod bbva_layout;
 pub mod santander_layout;
+pub mod banorte_layout;
+pub mod scotiabank_layout;
+pub mod hsbc_layout;
+pub mod column_table;
 pub mod layout_util;
 pub mod generic_pdf;
 
@@ -492,6 +496,43 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
             try_rows!(
                 santander_layout::parse_text(&best).unwrap_or_default(),
                 "santander-layout"
+            );
+        }
+
+        // Banorte (Banco Mercantil del Norte).
+        let looks_banorte = lower_name.contains("banorte")
+            || sample_text.contains("BANORTE")
+            || sample_text.contains("BANCO MERCANTIL DEL NORTE")
+            || sample_text.contains("BMN930209927");
+        if looks_banorte {
+            try_rows!(
+                banorte_layout::parse_text(&best).unwrap_or_default(),
+                "banorte-layout"
+            );
+        }
+
+        // Scotiabank México (Scotiabank Inverlat). The bank RFC isn't printed
+        // on the statement, so route on the legal name / UNE contact.
+        let looks_scotia = lower_name.contains("scotia")
+            || sample_text.contains("SCOTIABANK")
+            || sample_text.contains("INVERLAT")
+            || sample_text.contains("UNE@SCOTIABANK")
+            || sample_text.contains("DETALLE DE TUS MOVIMIENTOS");
+        if looks_scotia {
+            try_rows!(
+                scotiabank_layout::parse_text(&best).unwrap_or_default(),
+                "scotiabank-layout"
+            );
+        }
+
+        // HSBC México.
+        let looks_hsbc = lower_name.contains("hsbc")
+            || sample_text.contains("HSBC")
+            || sample_text.contains("HMI950125KG8");
+        if looks_hsbc {
+            try_rows!(
+                hsbc_layout::parse_text(&best).unwrap_or_default(),
+                "hsbc-layout"
             );
         }
 

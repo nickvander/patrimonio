@@ -2,15 +2,27 @@
 ///
 /// Why this exists: the onboarding hero and the import screen each used to
 /// carry their own hand-written bank list, and they drifted — the hero
-/// advertised Bancomer/Santander/Banorte (which have NO backend parser)
-/// while omitting the ones that actually work. The set below mirrors the
-/// live parsers in `backend/src/services/parser/mod.rs` (nu_mexico, banamex,
-/// cetes + their PDF variants). Both user-facing copies render from this
-/// constant so they can never disagree again.
-const List<String> kSupportedMxBanks = ['Nu México', 'Banamex', 'Cetesdirecto'];
+/// advertised banks with NO backend parser while omitting the ones that
+/// actually work. The set below is the curated list we advertise: banks whose
+/// `pdftotext -layout` parsers were built/validated against REAL statements
+/// (Banorte & Scotiabank from public statements; Banamex/Nu/Cetes mature).
+/// Both user-facing copies render from this constant so they can never
+/// disagree again.
+///
+/// Note: `backend/src/services/parser/mod.rs` also dispatches BBVA, Santander
+/// and HSBC parsers, but those were validated against reconstructed/decoded
+/// fixtures rather than real personal PDFs (HSBC's date format is still
+/// unconfirmed), so we don't advertise them yet — they still run, guarded by
+/// the import preview, if such a file is uploaded.
+const List<String> kSupportedMxBanks = [
+  'Nu México',
+  'Banamex',
+  'Banorte',
+  'Scotiabank',
+  'Cetesdirecto',
+];
 
-/// "Nu México, Banamex, or Cetesdirecto" — an Oxford-style human list of the
-/// supported institutions for use in body copy.
+/// An Oxford-style human list of the supported institutions for body copy.
 String supportedMxBanksSentence() {
   final banks = kSupportedMxBanks;
   if (banks.length == 1) return banks.first;
