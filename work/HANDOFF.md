@@ -6,7 +6,33 @@
 > [work/STATEMENT_IMPORT.md](STATEMENT_IMPORT.md); for the older broader
 > backlog see [work/NEXT.md](NEXT.md) and [work/FUTURE.md](FUTURE.md).
 
-## Latest (2026-06-03) — Tier 2: debt payoff + instant bell (browser-verified)
+## Latest (2026-06-03) — more bank parsers + S&P 500 benchmark
+
+On `main`. Backend full suite green (118 lib + 77 dashboard), `flutter analyze`
+clean, `flutter test` 157.
+
+- **3 more MX statement parsers** — Banorte, Scotiabank, HSBC, built from real
+  statements pulled off public transparency portals (HSBC's sample had a broken
+  font, so its date token is unconfirmed — flagged in code). New shared
+  `parser/column_table.rs` does header-geometry detection + **nearest-column
+  bucketing**, which handles HSBC's reversed (withdrawal-before-deposit) layout.
+  Dispatch by name/RFC/heading in `parser/mod.rs`. Banorte + Scotiabank are
+  advertised in `kSupportedMxBanks`; HSBC runs via dispatch but isn't advertised
+  until validated against a real PDF.
+- **S&P 500 benchmark** — `services/benchmark.rs` lazily fetches ~5y of daily
+  closes from the free, keyless Yahoo Finance v8 chart API (FX-service pattern:
+  `benchmark_prices` table + 4-day freshness gate). `GET /api/dashboard/benchmark`
+  serves the stored series. `BenchmarkCard` on the investments tab overlays "You"
+  (net worth) vs "S&P 500", indexed to 100, with an ahead/behind verdict.
+  Verified end-to-end: the live Yahoo fetch populated 1,254 real closes in the
+  DB. (Note: the investments tab doesn't wheel-scroll under browser automation,
+  so the card wasn't screenshotted — verified via DB + endpoint test instead.)
+
+**Remaining Tier-2/3 ideas:** validate HSBC + the other parsers against real
+personal PDFs (the highest-value QA step); a true time-weighted return for the
+benchmark (current overlay uses net worth, which includes contributions).
+
+## Earlier (2026-06-03) — Tier 2: debt payoff + instant bell (browser-verified)
 
 On `main`. `flutter analyze` clean, `flutter test` 157 (5 new), live browser pass.
 
