@@ -6,7 +6,27 @@
 > [work/STATEMENT_IMPORT.md](STATEMENT_IMPORT.md); for the older broader
 > backlog see [work/NEXT.md](NEXT.md) and [work/FUTURE.md](FUTURE.md).
 
-## Latest sprint (2026-06-03) — projection rebuild + insight layer
+## Latest (2026-06-03) — Tier 1 insight features (UX-spec'd, browser-verified)
+
+On `main`. Verified: backend lib + 76 dashboard integration, `flutter analyze`
+clean, `flutter test` 152, and a live browser pass of all three.
+
+- **Net-worth growth rates**: the hero delta chip is now a MoM + YoY pair
+  (`net_worth_card.dart`, `_computeMomYoyDeltas`), calendar-month/year targets,
+  ±5-day tolerance, falls back to the legacy 30d/7d chip under a month of
+  history. (Note: current test data only has ~3 weeks of snapshots, so the
+  fallback chip shows until ≥1 month of history accrues.)
+- **Emergency-fund gauge**: `GET /api/dashboard/emergency-fund` (liquid cash /
+  trailing monthly spend) + `EmergencyFundCard` on Overview (runway, 0→6mo
+  gauge, status ladder). Integration-tested.
+- **Account-balance alerts**: per-account low-balance thresholds (native
+  currency) in the `account_balance_alerts` setting + Preferences. Account
+  overflow menu → set/edit/remove; amber inline banner when breached; amber
+  bell rows that deep-link to the account. Bell reads dashboard-level state
+  hydrated at load (a freshly-set threshold shows in the bell after the next
+  load/realtime refresh; the inline banner is immediate).
+
+## Earlier (2026-06-03) — projection rebuild + insight layer
 
 On `main`. Verified green: backend `./scripts/test.sh` (109 lib unit incl.
 11 projection tests + 75 dashboard integration), `flutter analyze` clean,
