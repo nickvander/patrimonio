@@ -413,6 +413,12 @@
   "cfBudgetsEmpty": "Set a monthly budget for any category to track spending against it here.",
   "cfBudgetsDialogTitle": "Edit monthly budgets",
   "cfBudgetsOverAlert": "Over budget in {count} — {amount} over total",
+  "@cfBudgetsOverAlert": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "amount": { "type": "String" }
+    }
+  },
   "cfBudgetsNearAlert": "Approaching budget in {count}",
   "cfBudgetsOverBy": "{amount} over",
   "cfBudgetsLeft": "{amount} left",

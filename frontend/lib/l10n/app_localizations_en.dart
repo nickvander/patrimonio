@@ -1289,7 +1289,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cfBudgetsDialogTitle => 'Edit monthly budgets';
 
   @override
-  String cfBudgetsOverAlert(Object amount, Object count) {
+  String cfBudgetsOverAlert(int count, String amount) {
     return 'Over budget in $count — $amount over total';
   }
 

@@ -1308,7 +1308,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get cfBudgetsDialogTitle => 'Editar presupuestos mensuales';
 
   @override
-  String cfBudgetsOverAlert(Object amount, Object count) {
+  String cfBudgetsOverAlert(int count, String amount) {
     return 'Sobre presupuesto en $count — $amount de más';
   }
 

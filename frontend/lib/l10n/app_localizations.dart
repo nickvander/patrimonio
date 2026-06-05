@@ -2232,7 +2232,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'Over budget in {count} — {amount} over total'**
-  String cfBudgetsOverAlert(Object amount, Object count);
+  String cfBudgetsOverAlert(int count, String amount);
 
   /// No description provided for @cfBudgetsNearAlert.
   ///
