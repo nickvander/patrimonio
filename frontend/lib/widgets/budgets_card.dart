@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/preferences.dart';
+import '../utils/budget_suggestions.dart';
 import '../utils/category.dart';
 import '../utils/theme_colors.dart';
 
@@ -79,39 +80,10 @@ class _BudgetsCardState extends State<BudgetsCard> {
     try {
       final data = await api.getSpendingInsights();
       final cats = data['categories'];
-      // Aggregate trailing averages by display label (multiple raw category
-      // groups can prettify to the same label, e.g. a user override + the
-      // Plaid code).
-      const skip = {'UNCATEGORIZED', 'OTHER', 'OTHER_OTHER'};
-      final byLabel = <String, double>{};
-      if (cats is List) {
-        for (final raw in cats) {
-          if (raw is! Map) continue;
-          final avg = (raw['trailing_avg'] as num?)?.toDouble() ?? 0.0;
-          if (avg <= 0) continue;
-          final code = (raw['user_category'] ??
-                  raw['category_detailed'] ??
-                  raw['category'] ??
-                  '')
-              .toString()
-              .trim()
-              .toUpperCase();
-          if (skip.contains(code)) continue;
-          final label = prettyCategory(
-            userCategory: raw['user_category']?.toString(),
-            detailed: raw['category_detailed']?.toString(),
-            primary: raw['category']?.toString(),
-          );
-          byLabel[label] = (byLabel[label] ?? 0.0) + avg;
-        }
-      }
-      // Fill only unbudgeted categories with at least $10 of typical spend,
-      // rounded up to the next $10 (USD storage unit).
-      final additions = <String, double>{};
-      byLabel.forEach((label, avg) {
-        if (_budgets.containsKey(label) || avg < 10.0) return;
-        additions[label] = (avg / 10.0).ceil() * 10.0;
-      });
+      final additions = suggestBudgetsFromInsights(
+        categories: cats is List ? cats : const [],
+        existing: _budgets,
+      );
       if (additions.isEmpty) {
         messenger.showSnackBar(
           SnackBar(content: Text(l.cfBudgetsSuggestNone)),
