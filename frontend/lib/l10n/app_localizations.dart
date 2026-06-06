@@ -2129,14 +2129,26 @@ abstract class AppLocalizations {
   /// No description provided for @bmTitle.
   ///
   /// In en, this message translates to:
-  /// **'Net worth vs S&P 500'**
+  /// **'Investments vs S&P 500'**
   String get bmTitle;
 
   /// No description provided for @bmSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Indexed to 100 at the start · your net worth includes contributions'**
+  /// **'If your contributions had bought the index, by purchase date'**
   String get bmSubtitle;
+
+  /// No description provided for @bmAheadPts.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re ahead of the index by {pts} pts'**
+  String bmAheadPts(Object pts);
+
+  /// No description provided for @bmBehindPts.
+  ///
+  /// In en, this message translates to:
+  /// **'The index is ahead by {pts} pts'**
+  String bmBehindPts(Object pts);
 
   /// No description provided for @bmYou.
   ///

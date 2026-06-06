@@ -1253,11 +1253,21 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get bmTitle => 'Patrimonio vs S&P 500';
+  String get bmTitle => 'Inversiones vs S&P 500';
 
   @override
   String get bmSubtitle =>
-      'Indexado a 100 al inicio · tu patrimonio incluye aportaciones';
+      'Si tus aportaciones hubieran comprado el índice, por fecha de compra';
+
+  @override
+  String bmAheadPts(Object pts) {
+    return 'Vas por encima del índice por $pts pts';
+  }
+
+  @override
+  String bmBehindPts(Object pts) {
+    return 'El índice va por encima por $pts pts';
+  }
 
   @override
   String get bmYou => 'Tú';
