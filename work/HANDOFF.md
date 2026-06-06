@@ -1,6 +1,6 @@
 # Handoff — start here
 
-> **Last updated:** 2026-06-03 (analytics + import-breadth + taxes/benchmark sprint)
+> **Last updated:** 2026-06-06 (Tier B: spending-insight notifications + budget auto-suggest)
 > **Purpose:** The single "where are we, what's next" doc to pick up cold.
 > For the full import architecture see [work/STATEMENT_IMPORT.md](STATEMENT_IMPORT.md);
 > for the older broader backlog see [work/NEXT.md](NEXT.md) and
@@ -8,12 +8,20 @@
 
 ## TL;DR — current state
 
-Everything below is **on `main` and pushed** (`origin/main` @ `0b0e8eb`),
+Everything below is **on `main` and pushed** (`origin/main` @ `f62a973`),
 tree clean. All verified green: backend `./scripts/test.sh` (full suite,
-incl. 79 dashboard integration), `flutter analyze` clean, `flutter test`
-(157). Flutter MUST run via docker — see the gotchas at the bottom.
+incl. 80 dashboard integration), `flutter analyze` clean, `flutter test`
+(164). Flutter MUST run via docker — see the gotchas at the bottom.
 
 **Shipped this sprint (newest first):**
+- Tier B — spending-insight notifications + budget auto-suggest. New
+  `GET /api/dashboard/spending-insights` (per-category recent-complete-month
+  vs trailing-average deltas; same cash-flow exclusion SQL). Bell surfaces
+  "Rent up 103% vs your 3-month average" rows + a "subscription's price
+  increased" row derived client-side from the existing subscription
+  detector (a price change splits a merchant into two amount-band clusters).
+  BudgetsCard gets a "Suggest" button that seeds the `budgets` setting from
+  trailing-average spend. Browser-verified: the spending-up rows render live.
 - Realized gains → tax planning: real `lot_disposals` split short/long-term,
   proper LTCG 0/15/20% brackets stacked on ordinary income (was a blended
   cost-basis guess). True contribution-weighted S&P benchmark
@@ -35,14 +43,7 @@ incl. 79 dashboard integration), `flutter analyze` clean, `flutter test`
   Carlo success rate + percentile fan, Coast/Barista FIRE, tax drag +
   Guyton-Klinger guardrails, retirement-income, data-derived defaults.
 
-**Next up — recommended (Tier B):**
-1. **Spending-insight notifications** — "groceries up 40% vs your 3-mo avg",
-   "a subscription's price increased". Wire `/dashboard/spending-by-category`
-   + the subscription detector into `deriveNotifications` (the bell).
-2. **Budget auto-suggestions** — seed `budgets` from trailing-average spend per
-   category (data already in spending-by-category).
-
-**Then (Tier C / QA):**
+**Next up (Tier C / QA):**
 - Validate BBVA & Santander parsers against REAL PDFs (still on reconstructed
   fixtures) using `parse_check`, then advertise them in `kSupportedMxBanks`.
 - More banks: Banregio, Inbursa, Banco Azteca (same `column_table` pattern).
@@ -68,6 +69,46 @@ incl. 79 dashboard integration), `flutter analyze` clean, `flutter test`
 - Adding a row to `dashboard_endpoints.rs` integration tests: remember the
   TRUNCATE list at the top + that a new table must be added to it (S&P
   `benchmark_prices` leak bug was exactly this).
+
+## Latest (2026-06-06) — Tier B: spending-insight notifications + budget auto-suggest
+
+On `main` (`f62a973`). Backend full suite green (80 dashboard incl. 1 new),
+`flutter analyze` clean, `flutter test` 164 (7 new). Browser-verified live:
+the spending-up notification rows render in the bell with real demo data.
+
+- **`GET /api/dashboard/spending-insights?lookback=N`** (`api/dashboard.rs`):
+  per-category spend for the most recent **complete** calendar month vs the
+  trailing N-month baseline (default 3). The current partial month is excluded
+  from the comparison so a 6th-of-the-month read doesn't report everything as
+  "down". Same cash-flow hygiene as `cash_flow_trends` / `spending_by_category`
+  (USD-normalized; excludes internal transfers, CC payments, lending legs,
+  split parents). Groups on the raw `(user_category, category_detailed,
+  category)` triple so the frontend can prettify identically to the budgets
+  card. Returns `recent` / `previous_avg` / `trailing_avg` per category.
+  Integration test asserts exact values + current-month exclusion + ranking.
+  No new table → TRUNCATE list unchanged.
+- **Spending-spike notifications** (`deriveNotifications` in
+  `notifications_panel.dart`): a category whose recent complete month ran ≥25%
+  above its trailing average, with a ≥$50 baseline floor and at most the 3
+  biggest jumps. Tapping jumps to the Cash-flow tab. The dashboard fetches the
+  endpoint best-effort (a failure just drops the rows).
+- **Subscription price-increase notifications**: derived **client-side** from
+  the existing `/dashboard/subscriptions` detector — a price change splits one
+  merchant into two amount-band clusters, so when an active cluster's last
+  charge is newer + pricier than an earlier same-merchant/-currency cluster
+  (≥8% and ≥$1), that's a hike. No backend change. Capped at 3.
+- **Budget auto-suggest** (`budgets_card.dart`): a "Suggest" button seeds the
+  `budgets` app_setting from `spending-insights` `trailing_avg`, rounded up to
+  the next $10. Only fills **unbudgeted** categories (never overwrites) and
+  keys them by the same `prettyCategory` labels the card groups spend by, so
+  suggested rows track real spending. Round-trips via `putSetting` +
+  `Preferences` like the editor. *Not* browser-verified — the canvaskit
+  freeze on the cash-flow tab blocked scrolling to it; covered by clean
+  analyze + it reuses the proven editor save path.
+
+Note: the spending-insight amounts are USD-normalized (like the cash-flow
+card), so the bell shows them in USD even for an MXN-viewing user — consistent
+with the rest of the cash-flow surfaces.
 
 ## Latest (2026-06-03) — Tier A: realized gains in tax + true benchmark return
 
