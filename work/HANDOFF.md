@@ -8,20 +8,23 @@
 
 ## TL;DR — current state
 
-Everything below is **on `main` and pushed** (`origin/main` @ `8b41ac5`),
+Everything below is **on `main` and pushed** (`origin/main` @ `10fbf62`),
 tree clean. All verified green: backend `./scripts/test.sh` (full suite,
 incl. 81 dashboard integration), `flutter analyze` clean, `flutter test`
-(169). Flutter MUST run via docker — see the gotchas at the bottom.
+(170). Flutter MUST run via docker — see the gotchas at the bottom.
 
 **Shipped this sprint (newest first):**
+- Budget **Suggest** UX overhaul (browser-verified end-to-end): a review
+  dialog (ranked by spend, top 6 pre-checked, "averages $X/mo", Add N) instead
+  of dumping every category; long budget lists collapse behind "Show N more";
+  the Suggest icon now renders (see the icon-glyph quirk below). Pure logic in
+  `utils/budget_suggestions.dart` (`suggestBudgetsFromInsights` → ranked
+  `List<BudgetSuggestion>`), 6 unit tests.
 - Tax exports now carry the realized-gains **ST/LT breakdown**: CSV is a
   3-section Form 8949-style export (income txns · per-lot disposals · summary
   with ST/LT split + liabilities + basis note); PDF lists ST/LT lines under
   Capital Gains. `TaxService::get_lot_disposals` + frontend CSV now passes
   `&status=`. (Backlog item cleared.)
-- Budget auto-suggest logic pulled into a pure, unit-tested util
-  (`utils/budget_suggestions.dart`) — was inline + unverifiable behind the
-  cash-flow canvaskit freeze; now pinned by 5 unit tests.
 - Tier B — spending-insight notifications + budget auto-suggest. New
   `GET /api/dashboard/spending-insights` (per-category recent-complete-month
   vs trailing-average deltas; same cash-flow exclusion SQL). Bell surfaces
@@ -67,10 +70,21 @@ incl. 81 dashboard integration), `flutter analyze` clean, `flutter test`
   (`utils/budget_suggestions.dart`).
 
 **Known quirks (don't re-investigate from scratch):**
+- **Material icon glyphs:** some "newer" Material icons render BLANK in the
+  web build (the constant compiles, `flutter analyze` is happy, but the glyph
+  isn't in the MaterialIcons font this image bundles). Confirmed blank:
+  `auto_awesome_outlined`, `auto_fix_high`, `lightbulb_outline`. Confirmed
+  rendering: `add_circle_outline`, `edit_outlined`, `donut_small`,
+  `info_outline`, `warning_amber_rounded`, `trending_up`. It is NOT
+  tree-shaking or caching (single-use `donut_small` renders; the bundle is
+  fetched fresh). When adding an icon, prefer a classic glyph already used in
+  the app, and eyeball it in the browser. (Cost us a long debug loop on the
+  budgets Suggest button.)
 - Flutter canvaskit intermittently FREEZES the renderer on heavy Portfolio
   scrolling (browser automation times out on screenshot). Workaround for QA:
   filter the holdings list to one ticker to collapse it, or reload. Tracked in
-  FUTURE.md.
+  FUTURE.md. (Note: a SHORTER browser window — e.g. 1280x900 — scrolls the
+  cash-flow tab without freezing, where a tall window froze; handy for QA.)
 - The S&P benchmark card ("Investments vs S&P 500", `benchmark_card.dart`) now
   shows ONLY the contribution-weighted comparison (each lot's cost grown by the
   index from its purchase date vs the lot's actual value). The old
