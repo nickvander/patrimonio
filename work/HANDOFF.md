@@ -8,12 +8,19 @@
 
 ## TL;DR — current state
 
-Everything below is **on `main` and pushed** (`origin/main` @ `de54930`),
+Everything below is **on `main` and pushed** (`origin/main` @ `bef9ece`),
 tree clean. All verified green: backend `./scripts/test.sh` (full suite,
-incl. 81 dashboard integration), `flutter analyze` clean, `flutter test`
+incl. 82 dashboard integration), `flutter analyze` clean, `flutter test`
 (170). Flutter MUST run via docker — see the gotchas at the bottom.
 
 **Shipped this sprint (newest first):**
+- Portfolio "Asset distribution" UX pass (browser-verified): aligned
+  per-holding rows (name · value · within-class %) with top-4 + "Show N
+  more" instead of the inline ticker-chip wall (no longer duplicates the
+  holdings table); the allocation endpoint INITCAPs `holding_type` so the
+  two duplicate "Cash" bands merge into one; colour map covers Equity/Mutual
+  Fund so bands aren't all grey. (`allocation_heatmap.dart`,
+  `api/dashboard.rs` asset_allocation, dashboard colour map.)
 - Portfolio pie-chart legend no longer overflows: long fund names clamp to
   one ellipsised line (+ hover tooltip), so the legend can't overlap the cards
   below (`portfolio_card.dart` `_buildLegendItem`). Browser-verified.
