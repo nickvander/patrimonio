@@ -306,19 +306,17 @@ class _BudgetsCardState extends State<BudgetsCard> {
                   ),
                 ),
                 if (widget.apiService != null)
-                  Tooltip(
-                    message: l.cfBudgetsSuggestTooltip,
-                    child: TextButton.icon(
-                      onPressed: _suggesting ? null : _suggestBudgets,
-                      icon: _suggesting
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.lightbulb_outline, size: 16),
-                      label: Text(l.cfBudgetsSuggest),
-                    ),
+                  // NB: use a glyph that's actually in this build's bundled
+                  // MaterialIcons font. The "magic/idea" icons
+                  // (auto_awesome_outlined, auto_fix_high, lightbulb_outline)
+                  // render blank here — their glyphs aren't present in the
+                  // SDK font this image builds with — whereas the classic set
+                  // (add_circle_outline, edit_outlined, donut_small) render
+                  // fine. add_circle_outline reads as "add budgets".
+                  TextButton.icon(
+                    onPressed: _suggesting ? null : _suggestBudgets,
+                    icon: const Icon(Icons.add_circle_outline, size: 16),
+                    label: Text(l.cfBudgetsSuggest),
                   ),
                 TextButton.icon(
                   onPressed: () => _openEditor(spend),
