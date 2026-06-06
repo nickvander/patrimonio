@@ -54,9 +54,14 @@ incl. 79 dashboard integration), `flutter analyze` clean, `flutter test`
   scrolling (browser automation times out on screenshot). Workaround for QA:
   filter the holdings list to one ticker to collapse it, or reload. Tracked in
   FUTURE.md.
-- The net-worth-vs-S&P overlay's indexed % is distorted when the net-worth
-  history starts from a near-zero snapshot (shows huge %). The
-  contribution-weighted "By contribution date" block is the honest read.
+- The S&P benchmark card ("Investments vs S&P 500", `benchmark_card.dart`) now
+  shows ONLY the contribution-weighted comparison (each lot's cost grown by the
+  index from its purchase date vs the lot's actual value). The old
+  net-worth-indexed overlay was REMOVED because it reported absurd returns
+  (+3479%) — net worth ramps from ~0 as accounts first sync, so indexing to the
+  first snapshot conflates contributions with market gains. **Do not re-add
+  net-worth-vs-index indexing**; a real time-series comparison would need a
+  time-weighted return (periodic investment value + cashflow dates).
 - Budgets / account-alerts / account-APRs persist in `app_settings`
   (`budgets`, `account_balance_alerts`, `account_aprs`) AND localStorage;
   don't "fix" the localStorage-only assumption — it's already backend-synced.
