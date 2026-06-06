@@ -8,12 +8,15 @@
 
 ## TL;DR — current state
 
-Everything below is **on `main` and pushed** (`origin/main` @ `10fbf62`),
+Everything below is **on `main` and pushed** (`origin/main` @ `de54930`),
 tree clean. All verified green: backend `./scripts/test.sh` (full suite,
 incl. 81 dashboard integration), `flutter analyze` clean, `flutter test`
 (170). Flutter MUST run via docker — see the gotchas at the bottom.
 
 **Shipped this sprint (newest first):**
+- Portfolio pie-chart legend no longer overflows: long fund names clamp to
+  one ellipsised line (+ hover tooltip), so the legend can't overlap the cards
+  below (`portfolio_card.dart` `_buildLegendItem`). Browser-verified.
 - Budget **Suggest** UX overhaul (browser-verified end-to-end): a review
   dialog (ranked by spend, top 6 pre-checked, "averages $X/mo", Add N) instead
   of dumping every category; long budget lists collapse behind "Show N more";
