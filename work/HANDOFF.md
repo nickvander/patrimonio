@@ -8,12 +8,20 @@
 
 ## TL;DR — current state
 
-Everything below is **on `main` and pushed** (`origin/main` @ `f62a973`),
+Everything below is **on `main` and pushed** (`origin/main` @ `8b41ac5`),
 tree clean. All verified green: backend `./scripts/test.sh` (full suite,
-incl. 80 dashboard integration), `flutter analyze` clean, `flutter test`
-(164). Flutter MUST run via docker — see the gotchas at the bottom.
+incl. 81 dashboard integration), `flutter analyze` clean, `flutter test`
+(169). Flutter MUST run via docker — see the gotchas at the bottom.
 
 **Shipped this sprint (newest first):**
+- Tax exports now carry the realized-gains **ST/LT breakdown**: CSV is a
+  3-section Form 8949-style export (income txns · per-lot disposals · summary
+  with ST/LT split + liabilities + basis note); PDF lists ST/LT lines under
+  Capital Gains. `TaxService::get_lot_disposals` + frontend CSV now passes
+  `&status=`. (Backlog item cleared.)
+- Budget auto-suggest logic pulled into a pure, unit-tested util
+  (`utils/budget_suggestions.dart`) — was inline + unverifiable behind the
+  cash-flow canvaskit freeze; now pinned by 5 unit tests.
 - Tier B — spending-insight notifications + budget auto-suggest. New
   `GET /api/dashboard/spending-insights` (per-category recent-complete-month
   vs trailing-average deltas; same cash-flow exclusion SQL). Bell surfaces
@@ -46,9 +54,17 @@ incl. 80 dashboard integration), `flutter analyze` clean, `flutter test`
 **Next up (Tier C / QA):**
 - Validate BBVA & Santander parsers against REAL PDFs (still on reconstructed
   fixtures) using `parse_check`, then advertise them in `kSupportedMxBanks`.
-- More banks: Banregio, Inbursa, Banco Azteca (same `column_table` pattern).
-- Connect realized-gains ST/LT into the tax SCREEN's exports (CSV/PDF).
-- Get a clean HSBC PDF to confirm its date token; advertise HSBC.
+  **Blocked: user doesn't have real BBVA/Santander PDFs to test against.**
+- More banks: Banregio, Inbursa, Banco Azteca (same `column_table` pattern) —
+  needs real/public sample statements.
+- Get a clean HSBC PDF to confirm its date token; advertise HSBC. **Blocked on
+  a clean PDF.**
+
+**Recently shipped (no longer backlog):**
+- ✅ Realized-gains ST/LT now flows into the tax SCREEN's exports (CSV is a
+  3-section Form 8949-style export; PDF lists ST/LT lines). See 2026-06-06 (2).
+- ✅ Budget auto-suggest logic extracted to a pure, unit-tested util
+  (`utils/budget_suggestions.dart`).
 
 **Known quirks (don't re-investigate from scratch):**
 - Flutter canvaskit intermittently FREEZES the renderer on heavy Portfolio
@@ -69,6 +85,34 @@ incl. 80 dashboard integration), `flutter analyze` clean, `flutter test`
 - Adding a row to `dashboard_endpoints.rs` integration tests: remember the
   TRUNCATE list at the top + that a new table must be added to it (S&P
   `benchmark_prices` leak bug was exactly this).
+
+## Latest (2026-06-06) (2) — tax export ST/LT + budget-suggest hardening
+
+On `main` (`8b41ac5`). Backend full suite green (81 dashboard incl. 1 new),
+`flutter analyze` clean, `flutter test` 169 (5 new util tests).
+
+- **Realized-gains ST/LT in the tax exports** (`services/tax.rs`, `api/tax.rs`,
+  `tax_planning_screen.dart`): the CSV/PDF previously showed only the aggregate
+  capital-gains figure. New `TaxService::get_lot_disposals(year, user)` returns
+  per-disposal detail (symbol, acquired/sold dates, term, USD proceeds/cost/
+  gain; USD math mirrors `/dashboard/realized-gains`). The **CSV** is now three
+  sections — taxable income transactions, a Form 8949-style realized-gains
+  table (one row per lot disposal, ST/LT term column), and a summary block
+  (ST/LT split, totals, est. US/MX liability, "precise lot disposals" vs
+  "blended estimate" basis note). Uses a *flexible* CSV writer (section headers
+  and data rows differ in width — the default writer errors on that). The
+  **PDF** lists Short-term (ordinary) and Long-term (preferential) lines under
+  Capital Gains, built with a y-cursor helper so layout isn't hardcoded
+  per-coordinate. Frontend CSV now passes `&status=` (the summary liability is
+  status-dependent, like the PDF). Integration test seeds an ST + LT disposal
+  and asserts the CSV detail + ST/LT/total summary rows + a valid PDF body.
+- **Budget-suggest hardening**: the auto-suggest computation moved from inline
+  in `BudgetsCard` to a pure `utils/budget_suggestions.dart`
+  (`suggestBudgetsFromInsights`), matching the `debt_payoff` / `bill_forecast`
+  pure-util pattern. This was the piece I couldn't browser-verify last round
+  (the canvaskit freeze on the cash-flow tab blocks scrolling to the card); the
+  5 new unit tests pin rounding (up to next $10), never-overwrite, same-label
+  aggregation, tiny/uninformative-bucket skipping, and locale-aware labels.
 
 ## Latest (2026-06-06) — Tier B: spending-insight notifications + budget auto-suggest
 
