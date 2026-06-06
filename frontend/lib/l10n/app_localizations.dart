@@ -2507,7 +2507,7 @@ abstract class AppLocalizations {
   /// No description provided for @cfBudgetsSuggestedSnack.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, one{Suggested a budget for {count} category} other{Suggested budgets for {count} categories}}'**
+  /// **'{count, plural, one{Added a budget for {count} category} other{Added budgets for {count} categories}}'**
   String cfBudgetsSuggestedSnack(int count);
 
   /// No description provided for @cfBudgetsSuggestNone.
@@ -2515,6 +2515,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No new suggestions — these are already budgeted, or there isn\'t enough recent spending to suggest from.'**
   String get cfBudgetsSuggestNone;
+
+  /// No description provided for @cfBudgetsSuggestDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested budgets'**
+  String get cfBudgetsSuggestDialogTitle;
+
+  /// No description provided for @cfBudgetsSuggestDialogSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Based on your last {months} months of spending. Pick the ones to add.'**
+  String cfBudgetsSuggestDialogSubtitle(int months);
+
+  /// No description provided for @cfBudgetsSuggestAvg.
+  ///
+  /// In en, this message translates to:
+  /// **'Averages {amount}/mo'**
+  String cfBudgetsSuggestAvg(String amount);
+
+  /// No description provided for @cfBudgetsSuggestSelectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get cfBudgetsSuggestSelectAll;
+
+  /// No description provided for @cfBudgetsSuggestClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get cfBudgetsSuggestClear;
+
+  /// No description provided for @cfBudgetsSuggestApply.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{Add} other{Add {count}}}'**
+  String cfBudgetsSuggestApply(int count);
+
+  /// No description provided for @cfBudgetsShowAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Show {count} more'**
+  String cfBudgetsShowAll(int count);
+
+  /// No description provided for @cfBudgetsShowFewer.
+  ///
+  /// In en, this message translates to:
+  /// **'Show fewer'**
+  String get cfBudgetsShowFewer;
 
   /// No description provided for @cfTransfersTitle.
   ///

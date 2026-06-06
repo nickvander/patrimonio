@@ -32,12 +32,19 @@ class BudgetsCard extends StatefulWidget {
   State<BudgetsCard> createState() => _BudgetsCardState();
 }
 
+// How many suggestions start checked in the review dialog (the top N by spend).
+const _kSuggestPreselect = 6;
+// Budget rows shown before the list collapses behind a "show all" toggle.
+const _kBudgetCollapseLimit = 6;
+
 class _BudgetsCardState extends State<BudgetsCard> {
   // Seed from localStorage so first paint is instant. The backend value
   // (canonical) overrides this once the GET resolves.
   late Map<String, double> _budgets = Preferences.getBudgets();
   // Guards the "Suggest" action so a double-tap can't fire two fetches.
   bool _suggesting = false;
+  // Expands the budget list past [_kBudgetCollapseLimit] rows.
+  bool _showAllBudgets = false;
 
   @override
   void initState() {
@@ -65,46 +72,171 @@ class _BudgetsCardState extends State<BudgetsCard> {
     }
   }
 
-  /// Seed budgets from the user's trailing-average spend per category
-  /// (GET /api/dashboard/spending-insights). Only fills categories that
-  /// aren't already budgeted — existing budgets are never overwritten — and
-  /// rounds each up to the next $10 so the seeded number reads cleanly and
-  /// leaves a little headroom over the average. Keys are prettified the same
-  /// way the card groups spend, so suggested rows track real spending.
+  /// Suggest budgets from the user's trailing-average spend per category
+  /// (GET /api/dashboard/spending-insights), then open a review dialog so the
+  /// user picks which to add — the most material categories are pre-selected,
+  /// the rest are theirs to opt into. Only unbudgeted categories are offered
+  /// (existing budgets are never touched); each amount is the trailing average
+  /// rounded up to the next $10. Keys are prettified the same way the card
+  /// groups spend, so suggested rows track real spending.
   Future<void> _suggestBudgets() async {
     final api = widget.apiService;
     if (api == null || _suggesting) return;
     final l = AppLocalizations.of(context);
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _suggesting = true);
+
+    List<BudgetSuggestion> suggestions = const [];
+    var months = 3;
     try {
       final data = await api.getSpendingInsights();
+      months = (data['lookback'] as num?)?.toInt() ?? 3;
       final cats = data['categories'];
-      final additions = suggestBudgetsFromInsights(
+      suggestions = suggestBudgetsFromInsights(
         categories: cats is List ? cats : const [],
         existing: _budgets,
       );
-      if (additions.isEmpty) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(l.cfBudgetsSuggestNone)),
-        );
-        return;
-      }
-      final next = {..._budgets, ...additions};
-      setState(() => _budgets = next);
-      Preferences.setBudgets(next);
-      // Fire-and-forget backend save; localStorage above is the cache.
-      api.putSetting('budgets', next).catchError((_) {});
-      messenger.showSnackBar(
-        SnackBar(content: Text(l.cfBudgetsSuggestedSnack(additions.length))),
-      );
     } catch (_) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(l.cfBudgetsSuggestNone)),
-      );
+      // Leave suggestions empty → handled below.
     } finally {
       if (mounted) setState(() => _suggesting = false);
     }
+    if (!mounted) return;
+    if (suggestions.isEmpty) {
+      messenger.showSnackBar(SnackBar(content: Text(l.cfBudgetsSuggestNone)));
+      return;
+    }
+
+    final chosen = await _showSuggestDialog(suggestions, months);
+    if (chosen == null || chosen.isEmpty) return;
+
+    final next = {
+      ..._budgets,
+      for (final s in chosen) s.label: s.amount,
+    };
+    setState(() => _budgets = next);
+    Preferences.setBudgets(next);
+    // Fire-and-forget backend save; localStorage above is the cache.
+    api.putSetting('budgets', next).catchError((_) {});
+    messenger.showSnackBar(
+      SnackBar(content: Text(l.cfBudgetsSuggestedSnack(chosen.length))),
+    );
+  }
+
+  /// Review dialog for the suggestions. Returns the chosen subset, or null if
+  /// the user cancelled. The top [_kSuggestPreselect] by spend start checked.
+  Future<List<BudgetSuggestion>?> _showSuggestDialog(
+    List<BudgetSuggestion> suggestions,
+    int months,
+  ) {
+    final l = AppLocalizations.of(context);
+    final selected = <String>{
+      for (final s in suggestions.take(_kSuggestPreselect)) s.label,
+    };
+
+    return showDialog<List<BudgetSuggestion>>(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (dialogCtx, setLocal) {
+            return AlertDialog(
+              title: Text(l.cfBudgetsSuggestDialogTitle),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l.cfBudgetsSuggestDialogSubtitle(months),
+                      style: TextStyle(
+                          fontSize: 12.5, color: context.textMuted),
+                    ),
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => setLocal(() {
+                          if (selected.length == suggestions.length) {
+                            selected.clear();
+                          } else {
+                            selected
+                              ..clear()
+                              ..addAll(suggestions.map((s) => s.label));
+                          }
+                        }),
+                        child: Text(selected.length == suggestions.length
+                            ? l.cfBudgetsSuggestClear
+                            : l.cfBudgetsSuggestSelectAll),
+                      ),
+                    ),
+                    Flexible(
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: suggestions.map((s) {
+                          final checked = selected.contains(s.label);
+                          return CheckboxListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            controlAffinity:
+                                ListTileControlAffinity.leading,
+                            value: checked,
+                            onChanged: (v) => setLocal(() {
+                              if (v == true) {
+                                selected.add(s.label);
+                              } else {
+                                selected.remove(s.label);
+                              }
+                            }),
+                            title: Text(s.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis),
+                            subtitle: Text(
+                              l.cfBudgetsSuggestAvg(widget.currencyFormat
+                                  .format(s.monthlyAvg *
+                                      widget.conversionFactor)),
+                              style: TextStyle(
+                                  fontSize: 11, color: context.textFaint),
+                            ),
+                            secondary: Text(
+                              widget.currencyFormat.format(
+                                  s.amount * widget.conversionFactor),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontFeatures: [
+                                  FontFeature.tabularFigures()
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: Text(l.actionCancel),
+                ),
+                FilledButton(
+                  onPressed: selected.isEmpty
+                      ? null
+                      : () => Navigator.pop(
+                            dialogCtx,
+                            suggestions
+                                .where((s) => selected.contains(s.label))
+                                .toList(),
+                          ),
+                  child: Text(l.cfBudgetsSuggestApply(selected.length)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   /// Sum positive-amount transactions in the current month by prettified
@@ -184,7 +316,7 @@ class _BudgetsCardState extends State<BudgetsCard> {
                               height: 16,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Icon(Icons.auto_awesome_outlined, size: 16),
+                          : const Icon(Icons.auto_fix_high, size: 16),
                       label: Text(l.cfBudgetsSuggest),
                     ),
                   ),
@@ -205,8 +337,11 @@ class _BudgetsCardState extends State<BudgetsCard> {
                 l.cfBudgetsEmpty,
                 style: TextStyle(color: context.textMuted, fontSize: 13),
               )
-            else
-              ..._budgets.entries.map((e) {
+            else ...[
+              ...(_showAllBudgets
+                      ? _budgets.entries
+                      : _budgets.entries.take(_kBudgetCollapseLimit))
+                  .map((e) {
                 final cat = e.key;
                 final budgetUsd = e.value;
                 final spentUsd = spend[cat] ?? 0.0;
@@ -287,6 +422,21 @@ class _BudgetsCardState extends State<BudgetsCard> {
                   ),
                 );
               }),
+              // Collapse a long budget list so the card doesn't dominate the
+              // cash-flow tab — show the first few, with a toggle for the rest.
+              if (_budgets.length > _kBudgetCollapseLimit)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: () =>
+                        setState(() => _showAllBudgets = !_showAllBudgets),
+                    child: Text(_showAllBudgets
+                        ? l.cfBudgetsShowFewer
+                        : l.cfBudgetsShowAll(
+                            _budgets.length - _kBudgetCollapseLimit)),
+                  ),
+                ),
+            ],
           ],
         ),
       ),

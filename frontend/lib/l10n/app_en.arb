@@ -464,13 +464,41 @@
   "cfBudgetsLeft": "{amount} left",
   "cfBudgetsSuggest": "Suggest",
   "cfBudgetsSuggestTooltip": "Fill in budgets from your recent average spending",
-  "cfBudgetsSuggestedSnack": "{count, plural, one{Suggested a budget for {count} category} other{Suggested budgets for {count} categories}}",
+  "cfBudgetsSuggestedSnack": "{count, plural, one{Added a budget for {count} category} other{Added budgets for {count} categories}}",
   "@cfBudgetsSuggestedSnack": {
     "placeholders": {
       "count": { "type": "int" }
     }
   },
   "cfBudgetsSuggestNone": "No new suggestions — these are already budgeted, or there isn't enough recent spending to suggest from.",
+  "cfBudgetsSuggestDialogTitle": "Suggested budgets",
+  "cfBudgetsSuggestDialogSubtitle": "Based on your last {months} months of spending. Pick the ones to add.",
+  "@cfBudgetsSuggestDialogSubtitle": {
+    "placeholders": {
+      "months": { "type": "int" }
+    }
+  },
+  "cfBudgetsSuggestAvg": "Averages {amount}/mo",
+  "@cfBudgetsSuggestAvg": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "cfBudgetsSuggestSelectAll": "Select all",
+  "cfBudgetsSuggestClear": "Clear",
+  "cfBudgetsSuggestApply": "{count, plural, =0{Add} other{Add {count}}}",
+  "@cfBudgetsSuggestApply": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "cfBudgetsShowAll": "Show {count} more",
+  "@cfBudgetsShowAll": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "cfBudgetsShowFewer": "Show fewer",
   "cfTransfersTitle": "Cross-currency transfers",
   "cfTransfersSubtitle": "Linked Wise / Remitly / wire pairs. Implied rate is the effective FX the service used; spot is the market rate on the source date.",
   "cfTransfersSpot": "spot {rate}",

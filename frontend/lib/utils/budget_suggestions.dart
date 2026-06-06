@@ -1,5 +1,20 @@
 import 'category.dart';
 
+/// One proposed budget for a category, ready to show in the review dialog.
+class BudgetSuggestion {
+  /// Display label (already prettified, matching how the card groups spend).
+  final String label;
+
+  /// Suggested monthly budget in USD (trailing average rounded up to $10).
+  final double amount;
+
+  /// Trailing-average monthly spend in USD — used for ranking and to show
+  /// "you've averaged $X" context next to the suggestion.
+  final double monthlyAvg;
+
+  const BudgetSuggestion(this.label, this.amount, this.monthlyAvg);
+}
+
 /// Build budget suggestions from a `/dashboard/spending-insights` `categories`
 /// list. Pure (no I/O) so it's unit-testable independent of the widget and the
 /// ApiService.
@@ -12,11 +27,12 @@ import 'category.dart';
 ///   * has at least \$10 of typical spend, and
 ///   * isn't an uninformative bucket (Uncategorized / Other).
 ///
-/// Each suggestion is the trailing average rounded UP to the next \$10 (USD,
-/// the storage unit) so the seeded number reads cleanly and leaves a little
-/// headroom over the average. Amounts in [existing] and the returned map are
-/// USD, matching the budgets app_setting storage convention.
-Map<String, double> suggestBudgetsFromInsights({
+/// Each suggestion's [amount] is the trailing average rounded UP to the next
+/// \$10 (USD, the storage unit) so the seeded number reads cleanly and leaves a
+/// little headroom over the average. The list is sorted by trailing spend
+/// descending, so the most material categories lead — the UI pre-selects the
+/// top few and the user picks the rest, rather than dumping every category.
+List<BudgetSuggestion> suggestBudgetsFromInsights({
   required List<dynamic> categories,
   required Map<String, double> existing,
 }) {
@@ -43,10 +59,11 @@ Map<String, double> suggestBudgetsFromInsights({
     );
     byLabel[label] = (byLabel[label] ?? 0.0) + avg;
   }
-  final additions = <String, double>{};
+  final out = <BudgetSuggestion>[];
   byLabel.forEach((label, avg) {
     if (existing.containsKey(label) || avg < 10.0) return;
-    additions[label] = (avg / 10.0).ceil() * 10.0;
+    out.add(BudgetSuggestion(label, (avg / 10.0).ceil() * 10.0, avg));
   });
-  return additions;
+  out.sort((a, b) => b.monthlyAvg.compareTo(a.monthlyAvg));
+  return out;
 }

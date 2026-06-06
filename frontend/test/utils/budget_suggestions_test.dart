@@ -11,6 +11,9 @@ void main() {
 
   List<Map<String, dynamic>> cats(List<Map<String, dynamic>> c) => c;
 
+  double amountFor(List<BudgetSuggestion> out, String label) =>
+      out.firstWhere((s) => s.label == label).amount;
+
   test('seeds unbudgeted categories, rounded up to the next \$10', () {
     final out = suggestBudgetsFromInsights(
       categories: cats([
@@ -19,8 +22,20 @@ void main() {
       ]),
       existing: const {},
     );
-    expect(out['Groceries'], 300.0); // 291 → next $10
-    expect(out['Rent & utilities'], 1500.0); // already a multiple of 10
+    expect(amountFor(out, 'Groceries'), 300.0); // 291 → next $10
+    expect(amountFor(out, 'Rent & utilities'), 1500.0); // already a multiple of 10
+  });
+
+  test('ranks suggestions by trailing spend, highest first', () {
+    final out = suggestBudgetsFromInsights(
+      categories: cats([
+        {'category_detailed': 'FOOD_AND_DRINK_GROCERIES', 'trailing_avg': 291.0},
+        {'category': 'RENT_AND_UTILITIES', 'trailing_avg': 1500.0},
+      ]),
+      existing: const {},
+    );
+    expect(out.first.label, 'Rent & utilities');
+    expect(out.last.label, 'Groceries');
   });
 
   test('never overwrites an existing budget', () {
@@ -30,7 +45,7 @@ void main() {
       ]),
       existing: const {'Groceries': 250.0},
     );
-    expect(out.containsKey('Groceries'), isFalse);
+    expect(out.any((s) => s.label == 'Groceries'), isFalse);
   });
 
   test('aggregates groups that prettify to the same label', () {
@@ -42,7 +57,8 @@ void main() {
       ]),
       existing: const {},
     );
-    expect(out['Groceries'], 160.0); // (100 + 55) = 155 → next $10
+    expect(out, hasLength(1));
+    expect(amountFor(out, 'Groceries'), 160.0); // (100 + 55) = 155 → next $10
   });
 
   test('skips tiny spend and uninformative buckets', () {
@@ -65,6 +81,6 @@ void main() {
       ]),
       existing: const {},
     );
-    expect(out['Supermercado'], 200.0);
+    expect(amountFor(out, 'Supermercado'), 200.0);
   });
 }

@@ -1484,8 +1484,8 @@ class AppLocalizationsEs extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Se sugirieron presupuestos para $count categorías',
-      one: 'Se sugirió un presupuesto para $count categoría',
+      other: 'Se agregaron presupuestos para $count categorías',
+      one: 'Se agregó un presupuesto para $count categoría',
     );
     return '$_temp0';
   }
@@ -1493,6 +1493,44 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get cfBudgetsSuggestNone =>
       'No hay nuevas sugerencias: ya tienen presupuesto o no hay suficiente gasto reciente para sugerir.';
+
+  @override
+  String get cfBudgetsSuggestDialogTitle => 'Presupuestos sugeridos';
+
+  @override
+  String cfBudgetsSuggestDialogSubtitle(int months) {
+    return 'Según tu gasto de los últimos $months meses. Elige cuáles agregar.';
+  }
+
+  @override
+  String cfBudgetsSuggestAvg(String amount) {
+    return 'Promedia $amount/mes';
+  }
+
+  @override
+  String get cfBudgetsSuggestSelectAll => 'Seleccionar todo';
+
+  @override
+  String get cfBudgetsSuggestClear => 'Limpiar';
+
+  @override
+  String cfBudgetsSuggestApply(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Agregar $count',
+      zero: 'Agregar',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String cfBudgetsShowAll(int count) {
+    return 'Ver $count más';
+  }
+
+  @override
+  String get cfBudgetsShowFewer => 'Ver menos';
 
   @override
   String get cfTransfersTitle => 'Transferencias entre divisas';
