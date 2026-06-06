@@ -2428,6 +2428,67 @@ async fn spending_insights_recent_vs_trailing_average() {
 
 #[tokio::test]
 #[serial_test::serial]
+async fn allocation_merges_cash_holdings_with_cash_accounts() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (inst, acct) = seed_account(&pool, user_id).await;
+
+    // A money-market HOLDING stored with lower-case holding_type 'cash', plus
+    // an 'equity' holding.
+    sqlx::query(
+        "INSERT INTO holdings (account_id, symbol, name, currency, holding_type, quantity, value, user_id) \
+         VALUES ($1,'VMFXX','Vanguard MM','USD','cash',100,5000,$2), \
+                ($1,'AAPL','Apple','USD','equity',10,1000,$2)",
+    )
+    .bind(acct)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    // A cash ACCOUNT (checking) → the union hard-codes Title-Case 'Cash'.
+    sqlx::query(
+        "INSERT INTO accounts (institution_id, name, account_type, currency, current_balance, user_id) \
+         VALUES ($1, 'Checking', 'checking', 'USD', 2000.00, $2)",
+    )
+    .bind(inst)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/allocation", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    let rows = body.as_array().unwrap();
+
+    // Every category is Title-Cased: the 'cash' holding became 'Cash' (merging
+    // with the checking account) and 'equity' became 'Equity'.
+    assert!(
+        !rows.iter().any(|r| r["category"] == "cash" || r["category"] == "equity"),
+        "categories should be normalized to Title-Case, got {rows:#?}"
+    );
+    // Both the money-market holding (VMFXX) and the checking account sit under a
+    // single 'Cash' category — no duplicate lower/Title-case split.
+    let cash_subs: Vec<&str> = rows
+        .iter()
+        .filter(|r| r["category"] == "Cash")
+        .filter_map(|r| r["sub_category"].as_str())
+        .collect();
+    // VMFXX is a short all-caps symbol, so the endpoint surfaces it as the
+    // symbol rather than the long fund name.
+    assert!(cash_subs.contains(&"VMFXX"), "MM holding under Cash: {cash_subs:?}");
+    assert!(cash_subs.contains(&"Checking"), "checking under Cash: {cash_subs:?}");
+    assert!(rows.iter().any(|r| r["category"] == "Equity"));
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn benchmark_series_returns_stored_sp500() {
     let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
         return;

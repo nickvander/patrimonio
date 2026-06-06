@@ -973,7 +973,16 @@ async fn asset_allocation(
         r#"
         SELECT category, sub_category, SUM(value_usd) as value, SUM(qty) as quantity
         FROM (
-            SELECT COALESCE(holding_type, 'Stocks/ETFs') as category,
+            -- Normalize holding_type casing so it groups consistently. Source
+            -- data stores lower-case types ('cash', 'equity', 'mutual fund')
+            -- while the accounts/crypto unions below use Title-Case literals;
+            -- without INITCAP a 'cash' money-market holding and a 'Cash' bank
+            -- account render as two separate "Cash" bands. NULL/'' keeps the
+            -- 'Stocks/ETFs' default verbatim (INITCAP would mangle the slash).
+            SELECT CASE
+                       WHEN holding_type IS NULL OR holding_type = '' THEN 'Stocks/ETFs'
+                       ELSE INITCAP(holding_type)
+                   END as category,
                    CASE
                        WHEN symbol IS NULL THEN name
                        WHEN LENGTH(symbol) > 8 OR (symbol <> UPPER(symbol) AND LENGTH(symbol) > 4)
