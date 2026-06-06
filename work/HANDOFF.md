@@ -6,7 +6,35 @@
 > [work/STATEMENT_IMPORT.md](STATEMENT_IMPORT.md); for the older broader
 > backlog see [work/NEXT.md](NEXT.md) and [work/FUTURE.md](FUTURE.md).
 
-## Latest (2026-06-03) — more bank parsers + S&P 500 benchmark
+## Latest (2026-06-03) — Tier A: realized gains in tax + true benchmark return
+
+On `main`. Backend full suite green (79 dashboard incl. 2 new), `flutter
+analyze` clean, `flutter test` 157.
+
+- **Realized gains → tax planning** (`services/tax.rs`): the cap-gains estimate
+  now uses real `lot_disposals`, split short-term (held <=1yr → ordinary
+  brackets) vs long-term (preferential LTCG 0/15/20% stacked on ordinary
+  income). Falls back to the old blended cost-basis estimate when there are no
+  disposals. `gains_from_lots` / `short_term_gains` / `long_term_gains` added
+  to the response + an ST/LT line on the tax screen. 4 LTCG unit tests + an
+  integration test.
+- **True benchmark return**: `GET /api/dashboard/benchmark-comparison` +
+  `benchmark::contribution_comparison` — a dollar-weighted "you vs the index"
+  over tracked holding lots (each lot's cost grown by the S&P from its
+  acquisition date vs the lot's actual current value). Shown as a "By
+  contribution date" block on the BenchmarkCard, alongside the existing
+  net-worth overlay. Integration test with exact values.
+- Test-infra fix: `benchmark_prices` added to the dashboard-test TRUNCATE set
+  (it was leaking S&P rows between tests).
+
+Note: this round's browser pass was blocked by a Chrome-extension
+screenshot-permission glitch after a container rebuild (nav worked, capture
+didn't). Verified via the automated suite + live 401 route checks instead. The
+tax ST/LT line only renders when lot_disposals exist (none in the current demo
+data — it's covered by the integration test); the benchmark contribution block
+renders from the 48 real holding_lots.
+
+## Earlier (2026-06-03) — more bank parsers + S&P 500 benchmark
 
 On `main`. Backend full suite green (118 lib + 77 dashboard), `flutter analyze`
 clean, `flutter test` 157.
