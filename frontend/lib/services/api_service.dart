@@ -593,6 +593,25 @@ class ApiService {
     }, forceRefresh: forceRefresh);
   }
 
+  /// Per-category month-over-month-vs-trailing-average spend deltas. Returns
+  /// the `{recent_month, lookback, categories:[{user_category, category_detailed,
+  /// category, recent, previous_avg, trailing_avg}]}` shape. Powers the
+  /// spending-insight notifications and the budget auto-suggestions.
+  Future<Map<String, dynamic>> getSpendingInsights({
+    int lookback = 3,
+    bool forceRefresh = false,
+  }) {
+    return _cachedGet('spending-insights-$lookback', () async {
+      final response = await _get(Uri.parse(
+          '$_baseUrl/dashboard/spending-insights?lookback=$lookback'));
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+      throw Exception(_t('Failed to load spending insights',
+          'No se pudieron cargar los análisis de gasto'));
+    }, forceRefresh: forceRefresh);
+  }
+
   /// S&P 500 daily closes (for the net-worth-vs-market overlay). [from] is an
   /// ISO date string. Returns the `{symbol, points:[{date,close}]}` shape;
   /// empty list on any error so the card simply hides.

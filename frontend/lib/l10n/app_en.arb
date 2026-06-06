@@ -462,6 +462,15 @@
   "cfBudgetsNearAlert": "Approaching budget in {count}",
   "cfBudgetsOverBy": "{amount} over",
   "cfBudgetsLeft": "{amount} left",
+  "cfBudgetsSuggest": "Suggest",
+  "cfBudgetsSuggestTooltip": "Fill in budgets from your recent average spending",
+  "cfBudgetsSuggestedSnack": "{count, plural, one{Suggested a budget for {count} category} other{Suggested budgets for {count} categories}}",
+  "@cfBudgetsSuggestedSnack": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "cfBudgetsSuggestNone": "No new suggestions — these are already budgeted, or there isn't enough recent spending to suggest from.",
   "cfTransfersTitle": "Cross-currency transfers",
   "cfTransfersSubtitle": "Linked Wise / Remitly / wire pairs. Implied rate is the effective FX the service used; spot is the market rate on the source date.",
   "cfTransfersSpot": "spot {rate}",
@@ -1073,6 +1082,33 @@
   "lwNotifStaleSyncDetail": "Trigger a sync to pull in transactions and balance updates.",
   "lwNotifNetWorthDropTitle": "Net worth dropped {pct} in 30 days",
   "lwNotifNetWorthDropDetail": "Latest {latest} vs {reference}.",
+  "lwNotifSpendingUpTitle": "{category} up {pct}",
+  "@lwNotifSpendingUpTitle": {
+    "placeholders": {
+      "category": { "type": "String" },
+      "pct": { "type": "String" }
+    }
+  },
+  "lwNotifSpendingUpDetail": "vs your {months}-month average of {avg}",
+  "@lwNotifSpendingUpDetail": {
+    "placeholders": {
+      "months": { "type": "int" },
+      "avg": { "type": "String" }
+    }
+  },
+  "lwNotifSubPriceUpTitle": "{merchant} price increased",
+  "@lwNotifSubPriceUpTitle": {
+    "placeholders": {
+      "merchant": { "type": "String" }
+    }
+  },
+  "lwNotifSubPriceUpDetail": "Now {newAmount}, was {oldAmount}",
+  "@lwNotifSubPriceUpDetail": {
+    "placeholders": {
+      "newAmount": { "type": "String" },
+      "oldAmount": { "type": "String" }
+    }
+  },
   "lwNotifTooltipNone": "Notifications",
   "lwNotifTooltipCount": "{count, plural, one{{count} alert} other{{count} alerts}}",
   "@lwNotifTooltipCount": {

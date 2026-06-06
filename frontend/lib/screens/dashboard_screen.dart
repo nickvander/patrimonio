@@ -124,6 +124,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic>? _sinceLastLogin;
   List<dynamic>? _subscriptions;
   List<dynamic>? _ignoredSubscriptions;
+  // Per-category MoM-vs-trailing-average spend deltas (spending-insight
+  // notifications). Best-effort: null when the fetch fails — the bell just
+  // omits the spending-up rows.
+  Map<String, dynamic>? _spendingInsights;
   // Opt-in personal-lending module. Server-side per-user setting
   // (app_settings 'lending_enabled'), fetched in _loadAllData. When
   // true, a "Lending" section is inserted into [_destinations] (between
@@ -1588,6 +1592,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _apiService
             .getSetting('lending_reminder_lead_days')
             .catchError((_) => null),
+        // Spending-insight deltas for the notifications bell. Best-effort —
+        // a failure just drops the spending-up rows, never the dashboard.
+        _apiService
+            .getSpendingInsights(forceRefresh: forceRefresh)
+            .catchError((_) => <String, dynamic>{}),
       ]);
 
       debugPrint("All data loaded successfully");
@@ -1657,6 +1666,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (leadRaw is num) {
           _lendingReminderLeadDays = leadRaw.toInt().clamp(0, 60);
         }
+        final insightsRaw = results[17];
+        _spendingInsights = insightsRaw is Map<String, dynamic> ? insightsRaw : null;
         _isLoading = false;
       });
 
@@ -1771,6 +1782,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   onJumpToLending: () => _goToNav(NavId.lending),
                   accounts: (_overview?['accounts'] as List?) ?? const [],
                   accountAlerts: _accountAlerts,
+                  spendingInsights: _spendingInsights,
+                  subscriptions: _subscriptions ?? const [],
+                  onJumpToSpending: () => _goToNav(NavId.cashFlow),
                   onJumpToAccount: (account) => showAccountTransactionsPanel(
                     context,
                     account: account,

@@ -1473,6 +1473,28 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get cfBudgetsSuggest => 'Sugerir';
+
+  @override
+  String get cfBudgetsSuggestTooltip =>
+      'Llena los presupuestos con tu gasto promedio reciente';
+
+  @override
+  String cfBudgetsSuggestedSnack(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Se sugirieron presupuestos para $count categorías',
+      one: 'Se sugirió un presupuesto para $count categoría',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get cfBudgetsSuggestNone =>
+      'No hay nuevas sugerencias: ya tienen presupuesto o no hay suficiente gasto reciente para sugerir.';
+
+  @override
   String get cfTransfersTitle => 'Transferencias entre divisas';
 
   @override
@@ -3476,6 +3498,26 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String lwNotifNetWorthDropDetail(Object latest, Object reference) {
     return 'Más reciente $latest vs $reference.';
+  }
+
+  @override
+  String lwNotifSpendingUpTitle(String category, String pct) {
+    return '$category subió $pct';
+  }
+
+  @override
+  String lwNotifSpendingUpDetail(int months, String avg) {
+    return 'vs tu promedio de $months meses de $avg';
+  }
+
+  @override
+  String lwNotifSubPriceUpTitle(String merchant) {
+    return 'Subió el precio de $merchant';
+  }
+
+  @override
+  String lwNotifSubPriceUpDetail(String newAmount, String oldAmount) {
+    return 'Ahora $newAmount, antes $oldAmount';
   }
 
   @override

@@ -2492,6 +2492,30 @@ abstract class AppLocalizations {
   /// **'{amount} left'**
   String cfBudgetsLeft(Object amount);
 
+  /// No description provided for @cfBudgetsSuggest.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggest'**
+  String get cfBudgetsSuggest;
+
+  /// No description provided for @cfBudgetsSuggestTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Fill in budgets from your recent average spending'**
+  String get cfBudgetsSuggestTooltip;
+
+  /// No description provided for @cfBudgetsSuggestedSnack.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Suggested a budget for {count} category} other{Suggested budgets for {count} categories}}'**
+  String cfBudgetsSuggestedSnack(int count);
+
+  /// No description provided for @cfBudgetsSuggestNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No new suggestions — these are already budgeted, or there isn\'t enough recent spending to suggest from.'**
+  String get cfBudgetsSuggestNone;
+
   /// No description provided for @cfTransfersTitle.
   ///
   /// In en, this message translates to:
@@ -5698,6 +5722,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Latest {latest} vs {reference}.'**
   String lwNotifNetWorthDropDetail(Object latest, Object reference);
+
+  /// No description provided for @lwNotifSpendingUpTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{category} up {pct}'**
+  String lwNotifSpendingUpTitle(String category, String pct);
+
+  /// No description provided for @lwNotifSpendingUpDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'vs your {months}-month average of {avg}'**
+  String lwNotifSpendingUpDetail(int months, String avg);
+
+  /// No description provided for @lwNotifSubPriceUpTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{merchant} price increased'**
+  String lwNotifSubPriceUpTitle(String merchant);
+
+  /// No description provided for @lwNotifSubPriceUpDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Now {newAmount}, was {oldAmount}'**
+  String lwNotifSubPriceUpDetail(String newAmount, String oldAmount);
 
   /// No description provided for @lwNotifTooltipNone.
   ///

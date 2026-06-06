@@ -35,6 +35,8 @@ class _BudgetsCardState extends State<BudgetsCard> {
   // Seed from localStorage so first paint is instant. The backend value
   // (canonical) overrides this once the GET resolves.
   late Map<String, double> _budgets = Preferences.getBudgets();
+  // Guards the "Suggest" action so a double-tap can't fire two fetches.
+  bool _suggesting = false;
 
   @override
   void initState() {
@@ -59,6 +61,77 @@ class _BudgetsCardState extends State<BudgetsCard> {
       Preferences.setBudgets(next);
     } catch (_) {
       // Network errors fall back silently to the localStorage seed.
+    }
+  }
+
+  /// Seed budgets from the user's trailing-average spend per category
+  /// (GET /api/dashboard/spending-insights). Only fills categories that
+  /// aren't already budgeted — existing budgets are never overwritten — and
+  /// rounds each up to the next $10 so the seeded number reads cleanly and
+  /// leaves a little headroom over the average. Keys are prettified the same
+  /// way the card groups spend, so suggested rows track real spending.
+  Future<void> _suggestBudgets() async {
+    final api = widget.apiService;
+    if (api == null || _suggesting) return;
+    final l = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _suggesting = true);
+    try {
+      final data = await api.getSpendingInsights();
+      final cats = data['categories'];
+      // Aggregate trailing averages by display label (multiple raw category
+      // groups can prettify to the same label, e.g. a user override + the
+      // Plaid code).
+      const skip = {'UNCATEGORIZED', 'OTHER', 'OTHER_OTHER'};
+      final byLabel = <String, double>{};
+      if (cats is List) {
+        for (final raw in cats) {
+          if (raw is! Map) continue;
+          final avg = (raw['trailing_avg'] as num?)?.toDouble() ?? 0.0;
+          if (avg <= 0) continue;
+          final code = (raw['user_category'] ??
+                  raw['category_detailed'] ??
+                  raw['category'] ??
+                  '')
+              .toString()
+              .trim()
+              .toUpperCase();
+          if (skip.contains(code)) continue;
+          final label = prettyCategory(
+            userCategory: raw['user_category']?.toString(),
+            detailed: raw['category_detailed']?.toString(),
+            primary: raw['category']?.toString(),
+          );
+          byLabel[label] = (byLabel[label] ?? 0.0) + avg;
+        }
+      }
+      // Fill only unbudgeted categories with at least $10 of typical spend,
+      // rounded up to the next $10 (USD storage unit).
+      final additions = <String, double>{};
+      byLabel.forEach((label, avg) {
+        if (_budgets.containsKey(label) || avg < 10.0) return;
+        additions[label] = (avg / 10.0).ceil() * 10.0;
+      });
+      if (additions.isEmpty) {
+        messenger.showSnackBar(
+          SnackBar(content: Text(l.cfBudgetsSuggestNone)),
+        );
+        return;
+      }
+      final next = {..._budgets, ...additions};
+      setState(() => _budgets = next);
+      Preferences.setBudgets(next);
+      // Fire-and-forget backend save; localStorage above is the cache.
+      api.putSetting('budgets', next).catchError((_) {});
+      messenger.showSnackBar(
+        SnackBar(content: Text(l.cfBudgetsSuggestedSnack(additions.length))),
+      );
+    } catch (_) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(l.cfBudgetsSuggestNone)),
+      );
+    } finally {
+      if (mounted) setState(() => _suggesting = false);
     }
   }
 
@@ -128,6 +201,21 @@ class _BudgetsCardState extends State<BudgetsCard> {
                     ),
                   ),
                 ),
+                if (widget.apiService != null)
+                  Tooltip(
+                    message: l.cfBudgetsSuggestTooltip,
+                    child: TextButton.icon(
+                      onPressed: _suggesting ? null : _suggestBudgets,
+                      icon: _suggesting
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.auto_awesome_outlined, size: 16),
+                      label: Text(l.cfBudgetsSuggest),
+                    ),
+                  ),
                 TextButton.icon(
                   onPressed: () => _openEditor(spend),
                   icon: const Icon(Icons.edit_outlined, size: 16),

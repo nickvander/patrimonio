@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../utils/theme_colors.dart';
 import '../utils/account_category.dart';
+import '../utils/category.dart';
 import '../l10n/app_localizations.dart';
 
 /// One notification row shown in the bell-icon popover.
@@ -44,6 +45,18 @@ List<AppNotification> deriveNotifications({
   Map<String, double> accountAlerts = const {},
   /// Opens an account's detail panel when its low-balance row is tapped.
   void Function(Map<String, dynamic> account)? onJumpToAccount,
+  /// Per-category spend deltas from GET /api/dashboard/spending-insights:
+  /// {recent_month, lookback, categories:[{user_category, category_detailed,
+  /// category, recent, previous_avg, trailing_avg}]}. Null/absent when the
+  /// fetch failed — the spending-up rows simply don't appear.
+  Map<String, dynamic>? spendingInsights,
+  /// Detected recurring outflows from GET /api/dashboard/subscriptions, used
+  /// to surface a subscription whose price went up (a higher-priced cluster
+  /// supersedes a same-merchant lower-priced one).
+  List<dynamic> subscriptions = const [],
+  /// Jump to the Cash-flow tab when a spending-insight / subscription row is
+  /// tapped.
+  VoidCallback? onJumpToSpending,
 }) {
   final out = <AppNotification>[];
 
@@ -200,6 +213,127 @@ List<AppNotification> deriveNotifications({
           ));
         }
       }
+    }
+  }
+
+  // 3) Spending spikes — a category whose most-recent complete month ran
+  //    meaningfully above its trailing average. Amounts are USD-normalised by
+  //    the backend (same as the cash-flow card). Thresholds keep the signal
+  //    actionable: a baseline of at least $50 (so a $2→$6 coffee doesn't
+  //    scream), a ≥25% jump, and at most the three biggest increases.
+  final lookback = (spendingInsights?['lookback'] as num?)?.toInt() ?? 3;
+  final insightCats = spendingInsights?['categories'];
+  if (insightCats is List) {
+    const minBaseline = 50.0;
+    const minJump = 0.25;
+    // Raw category codes that aren't worth nagging about — they have no
+    // single actionable merchant/behaviour behind them.
+    const skip = {'UNCATEGORIZED', 'OTHER', 'OTHER_OTHER'};
+    final spikes = <({String label, double pct, double avg})>[];
+    for (final raw in insightCats) {
+      if (raw is! Map) continue;
+      final recent = (raw['recent'] as num?)?.toDouble() ?? 0.0;
+      final prev = (raw['previous_avg'] as num?)?.toDouble() ?? 0.0;
+      if (prev < minBaseline || recent <= prev) continue;
+      final pct = (recent - prev) / prev;
+      if (pct < minJump) continue;
+      final code = (raw['user_category'] ?? raw['category_detailed'] ?? raw['category'] ?? '')
+          .toString()
+          .trim()
+          .toUpperCase();
+      if (skip.contains(code)) continue;
+      final label = prettyCategory(
+        userCategory: raw['user_category']?.toString(),
+        detailed: raw['category_detailed']?.toString(),
+        primary: raw['category']?.toString(),
+      );
+      spikes.add((label: label, pct: pct, avg: prev));
+    }
+    // Biggest absolute increase first; cap at three so the bell stays calm.
+    spikes.sort((a, b) => (b.pct * b.avg).compareTo(a.pct * a.avg));
+    for (final s in spikes.take(3)) {
+      out.add(AppNotification(
+        icon: Icons.trending_up,
+        accent: Colors.orangeAccent,
+        title: l.lwNotifSpendingUpTitle(
+            s.label, '${(s.pct * 100).round()}%'),
+        detail: l.lwNotifSpendingUpDetail(lookback, money(s.avg, 'USD')),
+        onTap: onJumpToSpending,
+      ));
+    }
+  }
+
+  // 4) Subscription price increase — the detector clusters recurring charges
+  //    by (merchant, rounded amount), so a price change splits one merchant
+  //    into two clusters. When an active (current) cluster's last charge is
+  //    both newer and pricier than an earlier same-merchant cluster, that's a
+  //    price hike. Compare within a single currency; require a ≥8% / ≥$1 jump.
+  if (subscriptions.isNotEmpty) {
+    // merchant key -> list of its clusters.
+    final byMerchant = <String, List<Map>>{};
+    for (final raw in subscriptions) {
+      if (raw is! Map) continue;
+      final m = (raw['merchant'] ?? '').toString().trim();
+      if (m.isEmpty) continue;
+      byMerchant.putIfAbsent(m.toLowerCase(), () => []).add(raw);
+    }
+    final hikes = <({String merchant, double now, double was, String cur})>[];
+    byMerchant.forEach((_, clusters) {
+      if (clusters.length < 2) return;
+      // Current = the active cluster with the most recent last charge.
+      Map? current;
+      for (final c in clusters) {
+        if (c['status'] != 'active') continue;
+        if (current == null ||
+            (c['last_charge_date'] ?? '').toString().compareTo(
+                    (current['last_charge_date'] ?? '').toString()) >
+                0) {
+          current = c;
+        }
+      }
+      if (current == null) return;
+      final curAmt = (current['last_amount'] as num?)?.toDouble() ?? 0.0;
+      final curCur = (current['currency'] ?? 'USD').toString();
+      final curDate = (current['last_charge_date'] ?? '').toString();
+      // Prior price = the highest-priced earlier same-currency cluster that's
+      // still cheaper than the current one (the closest previous price).
+      Map? prior;
+      for (final c in clusters) {
+        if (identical(c, current)) continue;
+        if ((c['currency'] ?? 'USD').toString() != curCur) continue;
+        final amt = (c['last_amount'] as num?)?.toDouble() ?? 0.0;
+        if (amt >= curAmt) continue;
+        if ((c['last_charge_date'] ?? '').toString().compareTo(curDate) >= 0) {
+          continue;
+        }
+        if (prior == null ||
+            amt > ((prior['last_amount'] as num?)?.toDouble() ?? 0.0)) {
+          prior = c;
+        }
+      }
+      if (prior == null) return;
+      final priorAmt = (prior['last_amount'] as num?)?.toDouble() ?? 0.0;
+      if (priorAmt <= 0) return;
+      final jump = (curAmt - priorAmt) / priorAmt;
+      if (jump < 0.08 || (curAmt - priorAmt) < 1.0) return;
+      hikes.add((
+        merchant: (current['merchant'] ?? '').toString(),
+        now: curAmt,
+        was: priorAmt,
+        cur: curCur,
+      ));
+    });
+    // Largest absolute increase first; cap at three.
+    hikes.sort((a, b) => (b.now - b.was).compareTo(a.now - a.was));
+    for (final h in hikes.take(3)) {
+      out.add(AppNotification(
+        icon: Icons.price_change_outlined,
+        accent: Colors.amber,
+        title: l.lwNotifSubPriceUpTitle(h.merchant),
+        detail: l.lwNotifSubPriceUpDetail(
+            money(h.now, h.cur), money(h.was, h.cur)),
+        onTap: onJumpToSpending,
+      ));
     }
   }
 
