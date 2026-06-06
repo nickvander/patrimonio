@@ -83,7 +83,11 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
 
   void _exportCsv() async {
     final String baseUrl = _apiService.baseUrl;
-    final url = Uri.parse('$baseUrl/tax/export?year=$_selectedYear');
+    // Pass the filing status too: the CSV's summary block includes the
+    // estimated liability, which is status-dependent (same as the PDF).
+    final url = Uri.parse(
+      '$baseUrl/tax/export?year=$_selectedYear&status=$_filingStatus',
+    );
     if (await canLaunchUrl(url)) {
       await launchUrl(url);
     } else {

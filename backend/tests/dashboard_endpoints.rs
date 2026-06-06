@@ -2645,6 +2645,106 @@ async fn tax_summary_splits_short_and_long_term_from_lots() {
 
 #[tokio::test]
 #[serial_test::serial]
+async fn tax_csv_export_includes_realized_gains_and_st_lt_summary() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+
+    let holding_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO holdings (account_id, symbol, name, currency, user_id) \
+         VALUES ($1, 'VTI', 'Vanguard', 'USD', $2) RETURNING id",
+    )
+    .bind(acct)
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    // One short-term lot (held <1yr) and one long-term lot (held >1yr), both
+    // sold in 2026.
+    let st_lot: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) \
+         VALUES ($1,$2,$3,'2026-01-01',10,60,'USD',1.0,'st') RETURNING id",
+    )
+    .bind(holding_id).bind(acct).bind(user_id).fetch_one(&pool).await.unwrap();
+    let lt_lot: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) \
+         VALUES ($1,$2,$3,'2022-01-01',10,40,'USD',1.0,'lt') RETURNING id",
+    )
+    .bind(holding_id).bind(acct).bind(user_id).fetch_one(&pool).await.unwrap();
+
+    for (lot, src, pnl) in [(st_lot, "sell-st", "500"), (lt_lot, "sell-lt", "3000")] {
+        sqlx::query(
+            "INSERT INTO lot_disposals \
+             (user_id, holding_id, account_id, lot_id, sell_source_id, qty_sold, sell_price_per_unit, \
+              sell_currency, sell_fx_rate, sell_date, cost_per_unit, cost_fx_rate, realized_pnl_usd) \
+             VALUES ($1,$2,$3,$4,$5,10,100,'USD',1.0,'2026-06-01',60,1.0,$6)",
+        )
+        .bind(user_id).bind(holding_id).bind(acct).bind(lot).bind(src)
+        .bind(Decimal::from_str(pnl).unwrap())
+        .execute(&pool).await.unwrap();
+    }
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/export?year=2026&status=Single",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(
+        res.headers().get(header::CONTENT_TYPE).unwrap(),
+        "text/csv"
+    );
+    let bytes = to_bytes(res.into_body(), 1024 * 256).await.unwrap();
+    let csv = String::from_utf8(bytes.to_vec()).unwrap();
+
+    // The Form 8949-style section + per-disposal detail.
+    assert!(csv.contains("Realized capital gains (lot disposals)"), "csv:\n{csv}");
+    assert!(csv.contains("Date acquired"), "header present");
+    assert!(csv.contains("VTI"), "disposal symbol present");
+    assert!(csv.contains("Short-term"), "ST term label present");
+    assert!(csv.contains("Long-term"), "LT term label present");
+    assert!(csv.contains("2022-01-01"), "LT acquisition date present");
+    // Derived USD proceeds (10*100) and cost (10*60).
+    assert!(csv.contains("1000.00"), "proceeds present");
+    assert!(csv.contains("600.00"), "cost basis present");
+
+    // The summary block with the ST/LT split.
+    assert!(csv.contains("Short-term gains (USD),500.00"), "csv:\n{csv}");
+    assert!(csv.contains("Long-term gains (USD),3000.00"), "csv:\n{csv}");
+    assert!(csv.contains("Total capital gains (USD),3500.00"));
+    assert!(csv.contains("Precise lot disposals"), "basis note present");
+
+    // The PDF export still renders (200 + a non-empty application/pdf body).
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/export/pdf?year=2026&status=Single",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(
+        res.headers().get(header::CONTENT_TYPE).unwrap(),
+        "application/pdf"
+    );
+    let pdf = to_bytes(res.into_body(), 1024 * 1024).await.unwrap();
+    assert!(pdf.len() > 200, "pdf body should be non-trivial");
+    assert_eq!(&pdf[0..4], b"%PDF", "starts with the PDF magic header");
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn account_balance_history_returns_monthly_closing() {
     let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
         return;

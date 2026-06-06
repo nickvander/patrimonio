@@ -324,6 +324,92 @@ impl TaxService {
 
         Ok(rows)
     }
+
+    /// Per-disposal realized capital gains for a year — the Form 8949-style
+    /// detail behind `short_term_gains` / `long_term_gains`. USD proceeds and
+    /// cost basis are derived from the stored per-unit prices and FX rates the
+    /// same way `/dashboard/realized-gains` does (fx is native-units-per-USD, so
+    /// divide native amounts by it). Long-term = held > 365 days; null when the
+    /// source lot's acquisition date is no longer on file.
+    pub async fn get_lot_disposals(
+        db: &PgPool,
+        year: i32,
+        user_id: uuid::Uuid,
+    ) -> Result<Vec<TaxDisposal>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT h.symbol, h.name,
+                   TO_CHAR(l.acquired_at, 'YYYY-MM-DD') AS acquired_date,
+                   TO_CHAR(d.sell_date, 'YYYY-MM-DD') AS sell_date,
+                   d.qty_sold, d.sell_price_per_unit, d.sell_fx_rate,
+                   d.cost_per_unit, d.cost_fx_rate, d.realized_pnl_usd,
+                   (d.sell_date - l.acquired_at) AS holding_days
+            FROM lot_disposals d
+            JOIN holdings h ON h.id = d.holding_id
+            LEFT JOIN holding_lots l ON l.id = d.lot_id
+            WHERE d.user_id = $1
+              AND EXTRACT(YEAR FROM d.sell_date)::int = $2
+            ORDER BY d.sell_date ASC
+            "#,
+        )
+        .bind(user_id)
+        .bind(year)
+        .fetch_all(db)
+        .await?;
+
+        let dec = |r: &sqlx::postgres::PgRow, col: &str| -> Decimal {
+            r.try_get::<Decimal, _>(col).unwrap_or_default()
+        };
+
+        Ok(rows
+            .iter()
+            .map(|r| {
+                let qty = dec(r, "qty_sold");
+                let sell_px = dec(r, "sell_price_per_unit");
+                let sell_fx = dec(r, "sell_fx_rate");
+                let cost_px = dec(r, "cost_per_unit");
+                let cost_fx = dec(r, "cost_fx_rate");
+                let proceeds_usd = if sell_fx > Decimal::ZERO {
+                    qty * sell_px / sell_fx
+                } else {
+                    qty * sell_px
+                };
+                let cost_usd = if cost_fx > Decimal::ZERO {
+                    qty * cost_px / cost_fx
+                } else {
+                    qty * cost_px
+                };
+                let holding_days: Option<i32> = r.try_get("holding_days").ok();
+                TaxDisposal {
+                    symbol: r.try_get("symbol").unwrap_or_default(),
+                    name: r.try_get("name").unwrap_or_default(),
+                    acquired_date: r.try_get("acquired_date").ok(),
+                    sell_date: r.try_get("sell_date").unwrap_or_default(),
+                    qty_sold: qty,
+                    proceeds_usd,
+                    cost_usd,
+                    gain_usd: dec(r, "realized_pnl_usd"),
+                    long_term: holding_days.map(|d| d > 365),
+                }
+            })
+            .collect())
+    }
+}
+
+/// One realized capital-gains disposal row for the tax exports.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TaxDisposal {
+    pub symbol: String,
+    pub name: String,
+    /// Acquisition date (YYYY-MM-DD), or None when the source lot is gone.
+    pub acquired_date: Option<String>,
+    pub sell_date: String,
+    pub qty_sold: Decimal,
+    pub proceeds_usd: Decimal,
+    pub cost_usd: Decimal,
+    pub gain_usd: Decimal,
+    /// True = long-term (held > 365d), false = short-term, None = unknown term.
+    pub long_term: Option<bool>,
 }
 
 #[cfg(test)]
