@@ -2349,6 +2349,85 @@ async fn spending_by_category_groups_and_excludes() {
 
 #[tokio::test]
 #[serial_test::serial]
+async fn spending_insights_recent_vs_trailing_average() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+
+    // FOOD: $400 in the most recent complete month (1mo ago), $200 in each of
+    // the three baseline months (2/3/4mo ago). recent=400, previous_avg=200
+    // (+100%), trailing_avg = (400+600)/4 = 250.
+    seed_categorized_expense(&pool, user_id, acct, "FOOD_AND_DRINK", "-400.00", 1).await;
+    seed_categorized_expense(&pool, user_id, acct, "FOOD_AND_DRINK", "-200.00", 2).await;
+    seed_categorized_expense(&pool, user_id, acct, "FOOD_AND_DRINK", "-200.00", 3).await;
+    seed_categorized_expense(&pool, user_id, acct, "FOOD_AND_DRINK", "-200.00", 4).await;
+    // Current (partial) month must be EXCLUDED from the comparison entirely.
+    seed_categorized_expense(&pool, user_id, acct, "FOOD_AND_DRINK", "-999.00", 0).await;
+    // A smaller category present only in a baseline month.
+    seed_categorized_expense(&pool, user_id, acct, "GENERAL_MERCHANDISE", "-60.00", 2).await;
+    // Noise: an internal transfer + income must never surface as spend.
+    seed_categorized_expense(&pool, user_id, acct, "TRANSFER_OUT", "-500.00", 1).await;
+    sqlx::query(
+        "INSERT INTO transactions (account_id, date, description, amount, currency, category, source, user_id) \
+         VALUES ($1, (CURRENT_DATE - make_interval(months => 1))::date, 'paycheck', 3000.00, 'USD', 'INCOME', 'manual', $2)",
+    )
+    .bind(acct)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/spending-insights?lookback=3",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+
+    assert_eq!(body["lookback"], 3);
+    // recent_month is the most recent *complete* calendar month (last month).
+    let expected_recent: String =
+        sqlx::query_scalar("SELECT TO_CHAR(DATE_TRUNC('month', CURRENT_DATE) - interval '1 month', 'YYYY-MM')")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(body["recent_month"], expected_recent);
+
+    let cats = body["categories"].as_array().unwrap();
+    // FOOD has the largest trailing spend → ranked first.
+    assert_eq!(cats[0]["category"], "FOOD_AND_DRINK");
+    let food = &cats[0];
+    assert!((food["recent"].as_f64().unwrap() - 400.0).abs() < 0.01,
+        "recent should be 400 (current month's 999 excluded), got {}", food["recent"]);
+    assert!((food["previous_avg"].as_f64().unwrap() - 200.0).abs() < 0.01,
+        "previous_avg should be 200, got {}", food["previous_avg"]);
+    assert!((food["trailing_avg"].as_f64().unwrap() - 250.0).abs() < 0.01,
+        "trailing_avg should be 250, got {}", food["trailing_avg"]);
+
+    let merch = cats
+        .iter()
+        .find(|c| c["category"] == "GENERAL_MERCHANDISE")
+        .expect("merchandise present");
+    // Only a baseline month → recent 0, previous_avg = 60/3 = 20, trailing = 60/4 = 15.
+    assert!((merch["recent"].as_f64().unwrap()).abs() < 0.01);
+    assert!((merch["previous_avg"].as_f64().unwrap() - 20.0).abs() < 0.01);
+    assert!((merch["trailing_avg"].as_f64().unwrap() - 15.0).abs() < 0.01);
+
+    // Internal transfers and income are never spending categories.
+    assert!(!cats.iter().any(|c| c["category"] == "TRANSFER_OUT"));
+    assert!(!cats.iter().any(|c| c["category"] == "INCOME"));
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn benchmark_series_returns_stored_sp500() {
     let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
         return;

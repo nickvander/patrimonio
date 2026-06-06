@@ -21,6 +21,7 @@ pub fn router() -> Router<AppState> {
         .route("/allocation", get(asset_allocation))
         .route("/trends", get(cash_flow_trends))
         .route("/spending-by-category", get(spending_by_category))
+        .route("/spending-insights", get(spending_insights))
         .route("/realized-gains", get(realized_gains))
         .route("/account-balance-history", get(account_balance_history))
         .route("/emergency-fund", get(emergency_fund))
@@ -1281,6 +1282,189 @@ async fn spending_by_category(
 
     Json(SpendingByCategoryResponse {
         months: months_vec,
+        categories,
+    })
+}
+
+#[derive(Deserialize)]
+struct SpendingInsightsQuery {
+    /// Number of trailing *complete* months to average over (the baseline).
+    /// The comparison month is the most recent complete calendar month; the
+    /// baseline is the `lookback` complete months immediately before it.
+    /// Default 3, clamped 1..=12.
+    lookback: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct CategoryInsight {
+    // Raw category fields so the frontend can prettify identically to the
+    // budgets card / spending screen (prettyCategory prefers user_category,
+    // then category_detailed, then category). Returning the codes rather than
+    // a pre-formatted label keeps the (locale-aware) labelling in one place.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    user_category: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    category_detailed: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    category: Option<String>,
+    /// Spend in the most recent complete calendar month, USD.
+    recent: f64,
+    /// Average monthly spend over the `lookback` months *before* `recent`, USD.
+    /// 0 when there's no baseline history for the category.
+    previous_avg: f64,
+    /// Average monthly spend over the recent + baseline window
+    /// (`lookback` + 1 complete months), USD. Used to seed budget suggestions.
+    trailing_avg: f64,
+}
+
+#[derive(Serialize)]
+struct SpendingInsightsResponse {
+    /// YYYY-MM of the most recent complete calendar month (the comparison month).
+    recent_month: String,
+    lookback: i64,
+    categories: Vec<CategoryInsight>,
+}
+
+/// Per-category month-over-month-vs-trailing-average spend deltas. Powers the
+/// "groceries up 40% vs your 3-month average" notifications and the budget
+/// auto-suggestion. Same cash-flow hygiene as `cash_flow_trends` /
+/// `spending_by_category` (USD-normalized, excludes internal transfers, CC
+/// payments, lending legs, split parents).
+///
+/// The comparison month is the most recent **complete** calendar month — the
+/// current (partial) month is deliberately excluded so a 6th-of-the-month read
+/// doesn't report every category as "down". Each category is grouped on the
+/// raw (user_category, category_detailed, category) triple; the frontend
+/// collapses those to display labels so the keys line up with the budgets card.
+async fn spending_insights(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Query(q): Query<SpendingInsightsQuery>,
+) -> Json<SpendingInsightsResponse> {
+    let lookback = q.lookback.unwrap_or(3).clamp(1, 12);
+    // Window = recent + baseline = lookback + 1 complete months.
+    let window = lookback + 1;
+
+    // DB-anchored month labels for the window, newest first (n=1 → recent).
+    // Anchoring to the DB's CURRENT_DATE (rather than chrono::Utc) keeps the
+    // recent/baseline split consistent with the WHERE-clause below across any
+    // server/UTC timezone skew at a month boundary.
+    let month_rows = sqlx::query(
+        r#"
+        SELECT gs.n AS n,
+               TO_CHAR(DATE_TRUNC('month', CURRENT_DATE) - make_interval(months => gs.n), 'YYYY-MM') AS m
+        FROM generate_series(1, $1::int) AS gs(n)
+        ORDER BY gs.n
+        "#,
+    )
+    .bind(window as i32)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let window_months: Vec<String> = month_rows.iter().map(|r| r.get::<String, _>("m")).collect();
+    let recent_month = window_months.first().cloned().unwrap_or_default();
+
+    let rows = sqlx::query(
+        r#"
+        WITH latest_fx AS (
+            SELECT rate FROM exchange_rates
+            WHERE base_currency = 'USD' AND target_currency = 'MXN'
+            ORDER BY recorded_at DESC LIMIT 1
+        )
+        SELECT TO_CHAR(t.date, 'YYYY-MM') AS month,
+               t.user_category AS user_category,
+               t.category_detailed AS category_detailed,
+               t.category AS category,
+               SUM(CASE WHEN a.currency = 'MXN'
+                        THEN ABS(t.amount) / COALESCE((SELECT rate FROM latest_fx), 20.0)
+                        ELSE ABS(t.amount) END) AS amount
+        FROM transactions t
+        JOIN accounts a ON a.id = t.account_id
+        WHERE t.amount < 0
+          AND t.date >= DATE_TRUNC('month', CURRENT_DATE) - make_interval(months => $2::int)
+          AND t.date <  DATE_TRUNC('month', CURRENT_DATE)
+          AND t.user_id = $1
+          AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
+          AND COALESCE(t.category, '') NOT IN ('TRANSFER_IN', 'TRANSFER_OUT')
+          AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
+          AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
+          AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
+        GROUP BY month, t.user_category, t.category_detailed, t.category
+        "#,
+    )
+    .bind(ctx.user_id)
+    .bind(window as i32)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    // Accumulate per (user_category, category_detailed, category) → (month → amount).
+    type CatKey = (Option<String>, Option<String>, Option<String>);
+    let mut by_cat: HashMap<CatKey, HashMap<String, f64>> = HashMap::new();
+    for r in &rows {
+        let month: String = r.get("month");
+        // Treat an empty-string user_category as absent so it folds in with
+        // the NULL group (both prettify to the detailed/primary label).
+        let user_category: Option<String> = r
+            .try_get::<Option<String>, _>("user_category")
+            .ok()
+            .flatten()
+            .filter(|s| !s.trim().is_empty());
+        let category_detailed: Option<String> = r
+            .try_get::<Option<String>, _>("category_detailed")
+            .ok()
+            .flatten()
+            .filter(|s| !s.trim().is_empty());
+        let category: Option<String> = r
+            .try_get::<Option<String>, _>("category")
+            .ok()
+            .flatten()
+            .filter(|s| !s.trim().is_empty());
+        let amount: f64 = r
+            .try_get::<rust_decimal::Decimal, _>("amount")
+            .ok()
+            .and_then(|d| d.to_string().parse().ok())
+            .unwrap_or(0.0);
+        *by_cat
+            .entry((user_category, category_detailed, category))
+            .or_default()
+            .entry(month)
+            .or_insert(0.0) += amount;
+    }
+
+    let baseline_months = &window_months[1.min(window_months.len())..];
+    let lookback_f = lookback as f64;
+    let window_f = window as f64;
+
+    let mut categories: Vec<CategoryInsight> = by_cat
+        .into_iter()
+        .map(|((uc, cd, c), per_month)| {
+            let recent = *per_month.get(&recent_month).unwrap_or(&0.0);
+            let baseline_sum: f64 =
+                baseline_months.iter().map(|m| *per_month.get(m).unwrap_or(&0.0)).sum();
+            CategoryInsight {
+                user_category: uc,
+                category_detailed: cd,
+                category: c,
+                recent,
+                previous_avg: if lookback_f > 0.0 { baseline_sum / lookback_f } else { 0.0 },
+                trailing_avg: (recent + baseline_sum) / window_f,
+            }
+        })
+        .collect();
+
+    // Largest trailing spend first — the most material categories lead, which
+    // is what both the notification ranking and the budget seed want.
+    categories.sort_by(|a, b| {
+        b.trailing_avg
+            .partial_cmp(&a.trailing_avg)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    Json(SpendingInsightsResponse {
+        recent_month,
+        lookback,
         categories,
     })
 }
