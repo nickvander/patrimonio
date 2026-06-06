@@ -1237,7 +1237,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
   ) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
-      padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+      padding: const EdgeInsets.symmetric(vertical: 3.0, horizontal: 8.0),
       decoration: BoxDecoration(
         color: isTouched ? color.withValues(alpha: 0.1) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
@@ -1245,8 +1245,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
       child: Row(
         children: [
           Container(
-            width: 12,
-            height: 12,
+            width: 10,
+            height: 10,
             decoration: BoxDecoration(
               color: color,
               shape: BoxShape.circle,
@@ -1261,20 +1261,34 @@ class _PortfolioCardState extends State<PortfolioCard> {
             ),
           ),
           const SizedBox(width: 8),
+          // Fund names can be very long ("Vanguard Specialized Funds -
+          // Vanguard Real Estate Index Fd USD Cls INST"). Clamp to a single
+          // ellipsised line so the legend can't grow past the chart height and
+          // overlap the cards below; the full name is available on hover.
           Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontWeight: isTouched ? FontWeight.bold : FontWeight.w600,
-                color: isTouched ? color : context.textPrimary,
+            child: Tooltip(
+              message: label,
+              waitDuration: const Duration(milliseconds: 400),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: isTouched ? FontWeight.bold : FontWeight.w600,
+                  color: isTouched ? color : context.textPrimary,
+                ),
               ),
             ),
           ),
+          const SizedBox(width: 6),
           Text(
             '${(percentage * 100).toStringAsFixed(1)}%',
             style: TextStyle(
+              fontSize: 12.5,
               color: isTouched ? color : Colors.grey,
               fontWeight: FontWeight.bold,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
         ],
