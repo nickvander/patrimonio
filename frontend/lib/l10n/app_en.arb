@@ -401,6 +401,10 @@
   "bmSp500": "S&P 500",
   "bmAhead": "You're ahead of the market by {pct}",
   "bmBehind": "The market is ahead by {pct}",
+  "bmContribTitle": "By contribution date",
+  "bmContribYou": "Your tracked lots",
+  "bmContribIndex": "Same money in S&P 500",
+  "bmContribNote": "{count} purchases · {invested} invested",
   "dpTitle": "Debt payoff",
   "dpMonthlyPayment": "Monthly payment",
   "dpAvalanche": "Avalanche",
@@ -734,6 +738,13 @@
   "taxTotalTaxableIncome": "Total taxable income",
   "taxOrdinaryIncome": "Ordinary income: {amount}",
   "taxCapitalGains": "Capital gains: {amount}",
+  "taxStLtBreakdown": "Short-term {st} · Long-term {lt}",
+  "@taxStLtBreakdown": {
+    "placeholders": {
+      "st": { "type": "String" },
+      "lt": { "type": "String" }
+    }
+  },
   "taxUsEstimatedLiability": "US estimated liability (IRS)",
   "taxMxEstimatedLiability": "MX estimated liability (SAT)",
   "taxEffectiveRate": "Effective rate: {rate}%",

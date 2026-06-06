@@ -2162,6 +2162,30 @@ abstract class AppLocalizations {
   /// **'The market is ahead by {pct}'**
   String bmBehind(Object pct);
 
+  /// No description provided for @bmContribTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'By contribution date'**
+  String get bmContribTitle;
+
+  /// No description provided for @bmContribYou.
+  ///
+  /// In en, this message translates to:
+  /// **'Your tracked lots'**
+  String get bmContribYou;
+
+  /// No description provided for @bmContribIndex.
+  ///
+  /// In en, this message translates to:
+  /// **'Same money in S&P 500'**
+  String get bmContribIndex;
+
+  /// No description provided for @bmContribNote.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} purchases · {invested} invested'**
+  String bmContribNote(Object count, Object invested);
+
   /// No description provided for @dpTitle.
   ///
   /// In en, this message translates to:
@@ -4081,6 +4105,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Capital gains: {amount}'**
   String taxCapitalGains(Object amount);
+
+  /// No description provided for @taxStLtBreakdown.
+  ///
+  /// In en, this message translates to:
+  /// **'Short-term {st} · Long-term {lt}'**
+  String taxStLtBreakdown(String st, String lt);
 
   /// No description provided for @taxUsEstimatedLiability.
   ///

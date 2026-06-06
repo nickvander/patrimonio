@@ -20,6 +20,15 @@ pub struct TaxEstimation {
     pub ordinary_income: Decimal,
     #[serde(with = "rust_decimal::serde::float")]
     pub capital_gains: Decimal,
+    /// Short-term realized gains (held <= 1 year) — taxed as ordinary income.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub short_term_gains: Decimal,
+    /// Long-term realized gains (held > 1 year) — preferential LTCG rates.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub long_term_gains: Decimal,
+    /// True when the gains came from precise lot-disposal records rather than
+    /// the blended cost-basis fallback.
+    pub gains_from_lots: bool,
     #[serde(with = "rust_decimal::serde::float")]
     pub total_taxable: Decimal,
     #[serde(with = "rust_decimal::serde::float")]
@@ -114,6 +123,29 @@ impl TaxService {
         dec!(0)
     }
 
+    /// Long-term capital-gains tax (US, 2026 approx). LT gains stack ON TOP of
+    /// ordinary taxable income to find the 0% / 15% / 20% bands. Only positive
+    /// gains are taxed (loss handling is left to the ordinary-income side).
+    pub fn calculate_us_ltcg(gain: Decimal, ordinary_taxable: Decimal, status: &str) -> Decimal {
+        if gain <= dec!(0) {
+            return dec!(0);
+        }
+        // (top of 0% band, top of 15% band) by filing status.
+        let (t0, t15) = match status {
+            "Married" => (dec!(96700), dec!(600050)),
+            "Head of Household" => (dec!(64750), dec!(566700)),
+            _ => (dec!(48350), dec!(533400)),
+        };
+        let start = ordinary_taxable.max(dec!(0));
+        let end = start + gain;
+        let band = |lo: Decimal, hi: Decimal| -> Decimal {
+            (end.min(hi) - start.max(lo)).max(dec!(0))
+        };
+        let in15 = band(t0, t15);
+        let in20 = band(t15, Decimal::MAX);
+        in15 * dec!(0.15) + in20 * dec!(0.20)
+    }
+
     pub fn calculate_mx_tax(income: Decimal) -> Decimal {
          if income <= dec!(0) {
             return dec!(0);
@@ -159,53 +191,93 @@ impl TaxService {
 
         let ordinary_income: Decimal = income_row.try_get("total_income").unwrap_or_default();
 
-        // 2. Realized Capital Gains (Blended Cost Basis Approach) — scoped to user.
-        let basis_row = sqlx::query(
+        // 2. Realized capital gains. Prefer PRECISE lot disposals (actual P&L
+        //    with holding periods) and split short- vs long-term; fall back to
+        //    the blended cost-basis estimate when no lot data exists.
+        let disp = sqlx::query(
             r#"
-            SELECT COALESCE(SUM(cost_basis), 0) as total_basis, COALESCE(SUM(value), 0) as total_value
-            FROM holdings
-            WHERE value > 0 AND cost_basis IS NOT NULL AND user_id = $1
-            "#
+            SELECT
+                COALESCE(SUM(CASE WHEN l.acquired_at IS NOT NULL
+                                   AND (d.sell_date - l.acquired_at) <= 365
+                              THEN d.realized_pnl_usd ELSE 0 END), 0) AS short_term,
+                -- Long-term: held > 1 year, OR holding period unknown (the
+                -- source lot was deleted) — most brokerage lots are long-term,
+                -- so this is the conservative default.
+                COALESCE(SUM(CASE WHEN l.acquired_at IS NULL
+                                   OR (d.sell_date - l.acquired_at) > 365
+                              THEN d.realized_pnl_usd ELSE 0 END), 0) AS long_term,
+                COUNT(*) AS n
+            FROM lot_disposals d
+            LEFT JOIN holding_lots l ON l.id = d.lot_id
+            WHERE d.user_id = $1
+              AND EXTRACT(YEAR FROM d.sell_date)::int = $2
+            "#,
         )
         .bind(user_id)
+        .bind(year)
         .fetch_one(db)
         .await?;
 
-        let total_basis: Decimal = basis_row.try_get("total_basis").unwrap_or_default();
-        let total_value: Decimal = basis_row.try_get("total_value").unwrap_or_default();
+        let disposal_count: i64 = disp.try_get("n").unwrap_or(0);
+        let gains_from_lots = disposal_count > 0;
 
-        let mut cost_basis_ratio = dec!(0.8);
-        if total_value > dec!(0) {
-            let actual_ratio = total_basis / total_value;
-            if actual_ratio > dec!(0) && actual_ratio <= dec!(1) {
-                cost_basis_ratio = actual_ratio;
+        let (short_term_gains, long_term_gains) = if gains_from_lots {
+            (
+                disp.try_get::<Decimal, _>("short_term").unwrap_or_default(),
+                disp.try_get::<Decimal, _>("long_term").unwrap_or_default(),
+            )
+        } else {
+            // Fallback: blended cost-basis estimate from "Investment Sale" rows,
+            // treated as long-term (the prior behaviour).
+            let basis_row = sqlx::query(
+                r#"
+                SELECT COALESCE(SUM(cost_basis), 0) as total_basis, COALESCE(SUM(value), 0) as total_value
+                FROM holdings
+                WHERE value > 0 AND cost_basis IS NOT NULL AND user_id = $1
+                "#,
+            )
+            .bind(user_id)
+            .fetch_one(db)
+            .await?;
+            let total_basis: Decimal = basis_row.try_get("total_basis").unwrap_or_default();
+            let total_value: Decimal = basis_row.try_get("total_value").unwrap_or_default();
+            let mut cost_basis_ratio = dec!(0.8);
+            if total_value > dec!(0) {
+                let actual_ratio = total_basis / total_value;
+                if actual_ratio > dec!(0) && actual_ratio <= dec!(1) {
+                    cost_basis_ratio = actual_ratio;
+                }
             }
-        }
+            let gains_row = sqlx::query(
+                r#"
+                SELECT COALESCE(SUM(amount), 0) as total_gains
+                FROM transactions
+                WHERE date >= $1 AND date <= $2
+                AND amount > 0
+                AND category = 'Investment Sale'
+                AND user_id = $3
+                "#,
+            )
+            .bind(start_date)
+            .bind(end_date)
+            .bind(user_id)
+            .fetch_one(db)
+            .await?;
+            let sale_proceeds: Decimal = gains_row.try_get("total_gains").unwrap_or_default();
+            (dec!(0), sale_proceeds * (dec!(1) - cost_basis_ratio))
+        };
 
-        let gains_row = sqlx::query(
-            r#"
-            SELECT COALESCE(SUM(amount), 0) as total_gains
-            FROM transactions
-            WHERE date >= $1 AND date <= $2
-            AND amount > 0
-            AND category = 'Investment Sale'
-            AND user_id = $3
-            "#
-        )
-        .bind(start_date)
-        .bind(end_date)
-        .bind(user_id)
-        .fetch_one(db)
-        .await?;
-        
-        let sale_proceeds: Decimal = gains_row.try_get("total_gains").unwrap_or_default();
-        
-        // Capital gains = Proceeds - estimated Cost Basis mapped to those proceeds
-        let capital_gains = sale_proceeds * (dec!(1) - cost_basis_ratio);
+        let capital_gains = short_term_gains + long_term_gains;
 
+        // US: short-term gains stack onto ordinary income (ordinary brackets);
+        // long-term gains get the preferential LTCG rates on top of that.
+        let ordinary_taxable = ordinary_income + short_term_gains;
+        let estimated_liability_us = Self::calculate_us_tax(ordinary_taxable, status)
+            + Self::calculate_us_ltcg(long_term_gains, ordinary_taxable, status);
+
+        // MX: no preferential split here — everything flows through the ISR
+        // brackets (a deliberate simplification).
         let total_taxable = ordinary_income + capital_gains;
-
-        let estimated_liability_us = Self::calculate_us_tax(total_taxable, status);
         let estimated_liability_mx = Self::calculate_mx_tax(total_taxable);
 
         let effective_rate_us = if total_taxable > dec!(0) { estimated_liability_us / total_taxable } else { dec!(0) };
@@ -214,6 +286,9 @@ impl TaxService {
         Ok(TaxEstimation {
             ordinary_income,
             capital_gains,
+            short_term_gains,
+            long_term_gains,
+            gains_from_lots,
             total_taxable,
             estimated_liability_us,
             estimated_liability_mx,
@@ -248,5 +323,42 @@ impl TaxService {
         .await?;
 
         Ok(rows)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ltcg_zero_bracket_when_income_low() {
+        // Single, no other income, $40k LT gain — entirely in the 0% band.
+        assert_eq!(
+            TaxService::calculate_us_ltcg(dec!(40000), dec!(0), "Single"),
+            dec!(0)
+        );
+    }
+
+    #[test]
+    fn ltcg_stacks_on_ordinary_income() {
+        // Single, $40k ordinary taxable, $20k LT gain: stacked 40k→60k. The 0%
+        // band tops out at 48,350, so 8,350 is free and 11,650 is taxed at 15%.
+        let tax = TaxService::calculate_us_ltcg(dec!(20000), dec!(40000), "Single");
+        assert_eq!(tax, dec!(1747.50));
+    }
+
+    #[test]
+    fn ltcg_twenty_percent_top_band() {
+        // High earner: a $10k gain entirely above the 15% ceiling → 20%.
+        let tax = TaxService::calculate_us_ltcg(dec!(10000), dec!(600000), "Single");
+        assert_eq!(tax, dec!(2000));
+    }
+
+    #[test]
+    fn ltcg_ignores_losses() {
+        assert_eq!(
+            TaxService::calculate_us_ltcg(dec!(-5000), dec!(50000), "Single"),
+            dec!(0)
+        );
     }
 }

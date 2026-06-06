@@ -2508,6 +2508,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           BenchmarkCard(
             apiService: _apiService,
             netWorthHistory: _netWorthHistory ?? const [],
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
           ),
           const SizedBox(height: 24),
           AccountsBreakdownCard(

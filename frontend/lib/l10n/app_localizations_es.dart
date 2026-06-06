@@ -1276,6 +1276,20 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get bmContribTitle => 'Por fecha de aportación';
+
+  @override
+  String get bmContribYou => 'Tus lotes registrados';
+
+  @override
+  String get bmContribIndex => 'Lo mismo en el S&P 500';
+
+  @override
+  String bmContribNote(Object count, Object invested) {
+    return '$count compras · $invested invertido';
+  }
+
+  @override
   String get dpTitle => 'Pago de deudas';
 
   @override
@@ -2429,6 +2443,11 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String taxCapitalGains(Object amount) {
     return 'Ganancias de capital: $amount';
+  }
+
+  @override
+  String taxStLtBreakdown(String st, String lt) {
+    return 'Corto plazo $st · Largo plazo $lt';
   }
 
   @override

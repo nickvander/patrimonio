@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../utils/theme_colors.dart';
 import '../l10n/app_localizations.dart';
@@ -14,11 +15,15 @@ class BenchmarkCard extends StatefulWidget {
 
   /// The dashboard's net-worth history: [{date: "YYYY-MM-DD", net_worth: num}].
   final List<dynamic> netWorthHistory;
+  final double conversionFactor;
+  final NumberFormat currencyFormat;
 
   const BenchmarkCard({
     super.key,
     required this.apiService,
     required this.netWorthHistory,
+    required this.conversionFactor,
+    required this.currencyFormat,
   });
 
   @override
@@ -36,6 +41,7 @@ class _Series {
 class _BenchmarkCardState extends State<BenchmarkCard> {
   bool _loading = true;
   List<dynamic> _benchmark = const [];
+  Map<String, dynamic>? _comparison;
 
   @override
   void initState() {
@@ -60,16 +66,88 @@ class _BenchmarkCardState extends State<BenchmarkCard> {
     }
     final from = _iso(nw.first.key);
     try {
-      final data = await widget.apiService.getBenchmarkSeries(from: from);
+      final results = await Future.wait([
+        widget.apiService.getBenchmarkSeries(from: from),
+        widget.apiService.getBenchmarkComparison(),
+      ]);
       if (mounted) {
         setState(() {
-          _benchmark = (data?['points'] as List<dynamic>?) ?? const [];
+          _benchmark =
+              (results[0]?['points'] as List<dynamic>?) ?? const [];
+          _comparison = results[1];
           _loading = false;
         });
       }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// The contribution-weighted comparison block, shown when we have tracked
+  /// lots. Returns null when there's nothing to show.
+  Widget? _contributionBlock() {
+    final c = _comparison;
+    if (c == null) return null;
+    final invested = (c['invested_usd'] as num?)?.toDouble() ?? 0;
+    final lots = (c['lot_count'] as num?)?.toInt() ?? 0;
+    if (invested <= 0 || lots <= 0) return null;
+    final yourVal = (c['your_value_usd'] as num?)?.toDouble() ?? 0;
+    final benchVal = (c['benchmark_value_usd'] as num?)?.toDouble() ?? 0;
+    final youPct = (yourVal / invested - 1) * 100;
+    final benchPct = (benchVal / invested - 1) * 100;
+    final l = AppLocalizations.of(context);
+    final fmt = widget.currencyFormat;
+
+    String pct(double p) => '${p >= 0 ? '+' : ''}${p.toStringAsFixed(1)}%';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Divider(height: 28, color: context.hairline),
+        Text(
+          l.bmContribTitle,
+          style: TextStyle(
+              color: context.textMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _contribStat(
+                  l.bmContribYou, pct(youPct), context.positive),
+            ),
+            Expanded(
+              child:
+                  _contribStat(l.bmContribIndex, pct(benchPct), context.info),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          l.bmContribNote(
+              lots, fmt.format(invested * widget.conversionFactor)),
+          style: TextStyle(color: context.textFaint, fontSize: 11),
+        ),
+      ],
+    );
+  }
+
+  Widget _contribStat(String label, String value, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: TextStyle(color: context.textSubtle, fontSize: 11)),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: TextStyle(
+              color: color, fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+      ],
+    );
   }
 
   List<MapEntry<DateTime, double>> _parsed(List<dynamic> raw, String key) {
@@ -179,6 +257,7 @@ class _BenchmarkCardState extends State<BenchmarkCard> {
                   fontSize: 12.5,
                 ),
               ),
+              ?_contributionBlock(),
             ],
           ),
         ),

@@ -250,6 +250,13 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     final capitalGains =
         ((_taxSummary?['capital_gains'] as num?)?.toDouble() ?? 0) *
         widget.conversionFactor;
+    final shortTermGains =
+        ((_taxSummary?['short_term_gains'] as num?)?.toDouble() ?? 0) *
+        widget.conversionFactor;
+    final longTermGains =
+        ((_taxSummary?['long_term_gains'] as num?)?.toDouble() ?? 0) *
+        widget.conversionFactor;
+    final gainsFromLots = _taxSummary?['gains_from_lots'] == true;
     final totalTaxable =
         ((_taxSummary?['total_taxable'] as num?)?.toDouble() ?? 0) *
         widget.conversionFactor;
@@ -386,6 +393,21 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                           ),
                         ],
                       ),
+                      // Short- vs long-term breakdown, shown only when it comes
+                      // from precise lot disposals (not the blended estimate).
+                      if (gainsFromLots) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          l.taxStLtBreakdown(
+                            widget.currencyFormat.format(shortTermGains),
+                            widget.currencyFormat.format(longTermGains),
+                          ),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: context.textFaint,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

@@ -108,6 +108,117 @@ pub async fn ensure_fresh(db: &PgPool) -> Result<()> {
     Ok(())
 }
 
+/// Contribution-timed "you vs the index" comparison over the user's tracked
+/// holding lots: if each lot's cost had instead bought the S&P 500 on its
+/// acquisition date, what would it be worth now — vs what those lots are
+/// actually worth. This is a dollar-weighted (not net-worth) comparison, so it
+/// only covers holdings we have lot history for.
+#[derive(Debug, serde::Serialize)]
+pub struct ContributionComparison {
+    pub invested_usd: f64,
+    pub your_value_usd: f64,
+    pub benchmark_value_usd: f64,
+    pub lot_count: i64,
+}
+
+pub async fn contribution_comparison(
+    db: &PgPool,
+    user_id: uuid::Uuid,
+) -> ContributionComparison {
+    let zero = ContributionComparison {
+        invested_usd: 0.0,
+        your_value_usd: 0.0,
+        benchmark_value_usd: 0.0,
+        lot_count: 0,
+    };
+
+    // Full S&P series, ascending, for date lookups.
+    let sp = series(db, SP500, NaiveDate::from_ymd_opt(2000, 1, 1).unwrap()).await;
+    let Some(&(_, latest_close)) = sp.last() else {
+        return zero;
+    };
+    if latest_close <= 0.0 {
+        return zero;
+    }
+    // S&P close on or just before `d`; falls back to the earliest close when
+    // the lot predates our stored series.
+    let close_on = |d: NaiveDate| -> f64 {
+        match sp.binary_search_by(|(pd, _)| pd.cmp(&d)) {
+            Ok(i) => sp[i].1,
+            Err(0) => sp[0].1,
+            Err(i) => sp[i - 1].1,
+        }
+    };
+
+    let rows = sqlx::query(
+        r#"
+        SELECT l.qty, l.cost_per_unit, l.usd_fx_rate, l.acquired_at,
+               h.value AS h_value, h.quantity AS h_qty
+        FROM holding_lots l
+        JOIN holdings h ON h.id = l.holding_id
+        WHERE l.user_id = $1 AND l.qty > 0
+        "#,
+    )
+    .bind(user_id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+
+    let dec = |r: &sqlx::postgres::PgRow, c: &str| -> f64 {
+        r.try_get::<rust_decimal::Decimal, _>(c)
+            .ok()
+            .map(|d| d.to_string().parse().unwrap_or(0.0))
+            .unwrap_or(0.0)
+    };
+
+    let mut invested = 0.0;
+    let mut your_value = 0.0;
+    let mut benchmark_value = 0.0;
+    let mut count = 0i64;
+    for r in &rows {
+        let qty = dec(r, "qty");
+        let cost_per_unit = dec(r, "cost_per_unit");
+        let fx = dec(r, "usd_fx_rate");
+        let h_value = dec(r, "h_value");
+        let h_qty = dec(r, "h_qty");
+        let acquired: Option<NaiveDate> = r.try_get("acquired_at").ok();
+        let Some(acquired) = acquired else { continue };
+
+        let cost_usd = if fx > 0.0 {
+            qty * cost_per_unit / fx
+        } else {
+            qty * cost_per_unit
+        };
+        if cost_usd <= 0.0 {
+            continue;
+        }
+        // Current value of this lot, USD: lot's share of the holding's value.
+        let cur_usd = if h_qty > 0.0 {
+            qty * (h_value / h_qty)
+        } else {
+            0.0
+        };
+        let entry = close_on(acquired);
+        let bench_usd = if entry > 0.0 {
+            cost_usd * (latest_close / entry)
+        } else {
+            cost_usd
+        };
+
+        invested += cost_usd;
+        your_value += cur_usd;
+        benchmark_value += bench_usd;
+        count += 1;
+    }
+
+    ContributionComparison {
+        invested_usd: invested,
+        your_value_usd: your_value,
+        benchmark_value_usd: benchmark_value,
+        lot_count: count,
+    }
+}
+
 /// Daily closes for `symbol` on or after `from`, ascending.
 pub async fn series(db: &PgPool, symbol: &str, from: NaiveDate) -> Vec<(NaiveDate, f64)> {
     let rows = sqlx::query(

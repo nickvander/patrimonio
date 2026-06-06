@@ -76,7 +76,7 @@ async fn try_setup(
         "TRUNCATE \
          loan_payments, loans, people, \
          cash_fx_transfers, ignored_subscription_merchants, \
-         exchange_rates, lot_disposals, holding_lots, holdings, \
+         exchange_rates, benchmark_prices, lot_disposals, holding_lots, holdings, \
          auth_audit, user_sessions, app_settings, \
          transactions, balance_snapshots, accounts, institutions, \
          users RESTART IDENTITY CASCADE",
@@ -137,6 +137,7 @@ async fn try_setup(
         .nest("/api/institutions", patrimonio::api::institutions::router())
         .nest("/api/dashboard", patrimonio::api::dashboard::router())
         .nest("/api/imports", patrimonio::api::imports::router())
+        .nest("/api/tax", patrimonio::api::tax::router())
         .nest("/api/loans", patrimonio::api::loans::router())
         .layer(axum::middleware::from_fn(
             patrimonio::api::session::require_owner,
@@ -2448,6 +2449,118 @@ async fn emergency_fund_runway_from_cash_and_spend() {
         (body["months_covered"].as_f64().unwrap() - 6.0).abs() < 0.05,
         "runway should be ~6 months, got {}",
         body["months_covered"]
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn benchmark_comparison_contribution_weighted() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+
+    // S&P at the acquisition date (5000) and today (6000) → factor 1.2.
+    sqlx::query(
+        "INSERT INTO benchmark_prices (symbol, price_date, close) VALUES \
+         ('SP500','2026-01-01',5000),('SP500',CURRENT_DATE,6000) \
+         ON CONFLICT (symbol, price_date) DO UPDATE SET close = EXCLUDED.close",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // A holding worth $2,400 (10 sh @ $240) with one lot bought at $100/sh.
+    let holding_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO holdings (account_id, symbol, name, currency, quantity, value, user_id) \
+         VALUES ($1,'VTI','Vanguard','USD',10,2400,$2) RETURNING id",
+    )
+    .bind(acct).bind(user_id).fetch_one(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) \
+         VALUES ($1,$2,$3,'2026-01-01',10,100,'USD',1.0,'l1')",
+    )
+    .bind(holding_id).bind(acct).bind(user_id).execute(&pool).await.unwrap();
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/benchmark-comparison", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+
+    assert_eq!(body["lot_count"].as_i64().unwrap(), 1);
+    assert!((body["invested_usd"].as_f64().unwrap() - 1000.0).abs() < 0.01);
+    assert!((body["your_value_usd"].as_f64().unwrap() - 2400.0).abs() < 0.01);
+    // $1,000 invested in the index (5000→6000 = +20%) → $1,200.
+    assert!((body["benchmark_value_usd"].as_f64().unwrap() - 1200.0).abs() < 0.01);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_summary_splits_short_and_long_term_from_lots() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+
+    let holding_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO holdings (account_id, symbol, name, currency, user_id) \
+         VALUES ($1, 'VTI', 'Vanguard', 'USD', $2) RETURNING id",
+    )
+    .bind(acct)
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    // A short-term lot (acquired 2026-01, sold 2026-06 → < 1yr) and a long-term
+    // lot (acquired 2022, sold 2026-06 → > 1yr).
+    let st_lot: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) \
+         VALUES ($1,$2,$3,'2026-01-01',10,60,'USD',1.0,'st') RETURNING id",
+    )
+    .bind(holding_id).bind(acct).bind(user_id).fetch_one(&pool).await.unwrap();
+    let lt_lot: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) \
+         VALUES ($1,$2,$3,'2022-01-01',10,40,'USD',1.0,'lt') RETURNING id",
+    )
+    .bind(holding_id).bind(acct).bind(user_id).fetch_one(&pool).await.unwrap();
+
+    for (lot, src, pnl) in [(st_lot, "sell-st", "500"), (lt_lot, "sell-lt", "3000")] {
+        sqlx::query(
+            "INSERT INTO lot_disposals \
+             (user_id, holding_id, account_id, lot_id, sell_source_id, qty_sold, sell_price_per_unit, \
+              sell_currency, sell_fx_rate, sell_date, cost_per_unit, cost_fx_rate, realized_pnl_usd) \
+             VALUES ($1,$2,$3,$4,$5,10,100,'USD',1.0,'2026-06-01',60,1.0,$6)",
+        )
+        .bind(user_id).bind(holding_id).bind(acct).bind(lot).bind(src)
+        .bind(Decimal::from_str(pnl).unwrap())
+        .execute(&pool).await.unwrap();
+    }
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/tax/summary?year=2026&status=Single", None, Some(&token)))
+        .await
+        .unwrap();
+    let status = res.status();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(status, StatusCode::OK, "tax summary body: {body}");
+
+    assert_eq!(body["gains_from_lots"], serde_json::json!(true));
+    assert!((body["short_term_gains"].as_f64().unwrap() - 500.0).abs() < 0.01);
+    assert!((body["long_term_gains"].as_f64().unwrap() - 3000.0).abs() < 0.01);
+    assert!((body["capital_gains"].as_f64().unwrap() - 3500.0).abs() < 0.01);
+    // No ordinary income: ST ($500) taxed at the 10% bracket = $50; the $3,000
+    // LT gain stacks under the 0% LTCG band → $0. So US liability ≈ $50.
+    assert!(
+        (body["estimated_liability_us"].as_f64().unwrap() - 50.0).abs() < 0.5,
+        "expected ~$50 US liability, got {}",
+        body["estimated_liability_us"]
     );
 }
 

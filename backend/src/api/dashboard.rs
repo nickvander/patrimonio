@@ -25,6 +25,7 @@ pub fn router() -> Router<AppState> {
         .route("/account-balance-history", get(account_balance_history))
         .route("/emergency-fund", get(emergency_fund))
         .route("/benchmark", get(benchmark_series))
+        .route("/benchmark-comparison", get(benchmark_comparison))
         .route("/credit-utilization", get(credit_utilization))
         .route("/sync-status", get(sync_status))
         .route("/transactions", get(recent_transactions))
@@ -1334,6 +1335,15 @@ async fn benchmark_series(
         symbol: benchmark::SP500.to_string(),
         points,
     })
+}
+
+/// Dollar-weighted "you vs the S&P 500" over the user's tracked holding lots.
+async fn benchmark_comparison(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<crate::services::benchmark::ContributionComparison> {
+    let _ = crate::services::benchmark::ensure_fresh(&state.db).await;
+    Json(crate::services::benchmark::contribution_comparison(&state.db, ctx.user_id).await)
 }
 
 #[derive(Serialize)]

@@ -610,6 +610,20 @@ class ApiService {
     return null;
   }
 
+  /// Contribution-weighted "you vs S&P 500" over tracked holding lots.
+  /// Returns {invested_usd, your_value_usd, benchmark_value_usd, lot_count}.
+  Future<Map<String, dynamic>?> getBenchmarkComparison() async {
+    try {
+      final r = await _get(
+          Uri.parse('$_baseUrl/dashboard/benchmark-comparison'));
+      if (r.statusCode == 200) {
+        final decoded = json.decode(r.body);
+        return decoded is Map<String, dynamic> ? decoded : null;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   /// Emergency-fund runway: liquid cash / trailing monthly spend (USD).
   Future<Map<String, dynamic>> getEmergencyFund({bool forceRefresh = false}) {
     return _cachedGet('emergency-fund', () async {
