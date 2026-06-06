@@ -316,7 +316,7 @@ class _BudgetsCardState extends State<BudgetsCard> {
                               height: 16,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Icon(Icons.auto_fix_high, size: 16),
+                          : const Icon(Icons.lightbulb_outline, size: 16),
                       label: Text(l.cfBudgetsSuggest),
                     ),
                   ),
