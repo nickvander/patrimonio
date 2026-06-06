@@ -3632,6 +3632,14 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String lwAllocShowMore(int count) {
+    return 'Show $count more';
+  }
+
+  @override
+  String get lwAllocShowFewer => 'Show fewer';
+
+  @override
   String get lwAllocFilteringHint =>
       'Filtering holdings to this category — tap again to clear';
 

@@ -969,6 +969,8 @@
   "lwAllocOtherCategory": "Otros",
   "lwAllocHoldingsCount": "{count, plural, one{{count} posición} other{{count} posiciones}}",
   "lwAllocSharesSuffix": "{qty} tít.",
+  "lwAllocShowMore": "Ver {count} más",
+  "lwAllocShowFewer": "Ver menos",
   "lwAllocFilteringHint": "Filtrando posiciones a esta categoría: toca de nuevo para quitar el filtro",
   "lwAllocSemanticLabel": "{count, plural, one{{category}, {pct} del portafolio, {count} posición} other{{category}, {pct} del portafolio, {count} posiciones}}",
   "lwRangeOneMonth": "1M",

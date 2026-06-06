@@ -1189,6 +1189,13 @@
     }
   },
   "lwAllocSharesSuffix": "{qty} sh",
+  "lwAllocShowMore": "Show {count} more",
+  "@lwAllocShowMore": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "lwAllocShowFewer": "Show fewer",
   "lwAllocFilteringHint": "Filtering holdings to this category — tap again to clear",
   "lwAllocSemanticLabel": "{count, plural, one{{category}, {pct} of portfolio, {count} holding} other{{category}, {pct} of portfolio, {count} holdings}}",
   "@lwAllocSemanticLabel": {

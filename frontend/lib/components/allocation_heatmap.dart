@@ -3,24 +3,6 @@ import '../utils/theme_colors.dart';
 import '../l10n/app_localizations.dart';
 import 'package:intl/intl.dart';
 
-/// Trim trailing zeros and pick a sensible precision based on the
-/// magnitude of the share count (mirrors the formatter in portfolio_card).
-String _formatQty(double q) {
-  if (q == q.roundToDouble() && q.abs() < 1e9) {
-    return q.toInt().toString();
-  }
-  if (q.abs() >= 1) {
-    return q
-        .toStringAsFixed(2)
-        .replaceAll(RegExp(r'0+$'), '')
-        .replaceAll(RegExp(r'\.$'), '');
-  }
-  return q
-      .toStringAsFixed(4)
-      .replaceAll(RegExp(r'0+$'), '')
-      .replaceAll(RegExp(r'\.$'), '');
-}
-
 class AllocationData {
   final String category;
   final String subCategory;
@@ -37,14 +19,42 @@ class AllocationData {
   });
 }
 
-class AllocationHeatmap extends StatelessWidget {
+/// Render raw backend categories ("mutual fund", "fixed income") as
+/// sentence-cased labels with common acronyms preserved (ETF, REIT).
+String _displayCategory(String raw, AppLocalizations l) {
+  if (raw.isEmpty) return l.lwAllocOtherCategory;
+  const acronyms = {'etf', 'reit', 'cd', 'ira'};
+  return raw
+      .split(' ')
+      .map((word) {
+        if (word.isEmpty) return word;
+        if (acronyms.contains(word.toLowerCase())) return word.toUpperCase();
+        if (word.contains('/')) {
+          // e.g. "stocks/etfs" → "Stocks/ETFs"
+          return word
+              .split('/')
+              .map((p) {
+                if (p.isEmpty) return p;
+                if (acronyms.contains(p.toLowerCase())) return p.toUpperCase();
+                return p[0].toUpperCase() + p.substring(1).toLowerCase();
+              })
+              .join('/');
+        }
+        return word[0].toUpperCase() + word.substring(1).toLowerCase();
+      })
+      .join(' ');
+}
+
+class AllocationHeatmap extends StatefulWidget {
   final List<AllocationData> data;
   final double conversionFactor;
   final NumberFormat currencyFormat;
+
   /// Optional callback fired when the user taps a category band. Lets the
   /// parent filter the holdings table below — wiring is opt-in so the
   /// component remains usable in standalone contexts.
   final ValueChanged<String>? onCategorySelected;
+
   /// Highlighted category, drawn with a brighter ring so the user can see
   /// which slice is currently driving the active filter.
   final String? activeCategory;
@@ -58,40 +68,28 @@ class AllocationHeatmap extends StatelessWidget {
     this.activeCategory,
   });
 
-  /// Render raw backend categories ("mutual fund", "fixed income") as
-  /// sentence-cased labels with common acronyms preserved (ETF, REIT).
-  static String _displayCategory(String raw, AppLocalizations l) {
-    if (raw.isEmpty) return l.lwAllocOtherCategory;
-    const acronyms = {'etf', 'reit', 'cd', 'ira'};
-    return raw
-        .split(' ')
-        .map((word) {
-          if (word.isEmpty) return word;
-          if (acronyms.contains(word.toLowerCase())) return word.toUpperCase();
-          if (word.contains('/')) {
-            // e.g. "stocks/etfs" → "Stocks/ETFs"
-            return word
-                .split('/')
-                .map((p) {
-                  if (p.isEmpty) return p;
-                  if (acronyms.contains(p.toLowerCase())) return p.toUpperCase();
-                  return p[0].toUpperCase() + p.substring(1).toLowerCase();
-                })
-                .join('/');
-          }
-          return word[0].toUpperCase() + word.substring(1).toLowerCase();
-        })
-        .join(' ');
-  }
+  @override
+  State<AllocationHeatmap> createState() => _AllocationHeatmapState();
+}
+
+class _AllocationHeatmapState extends State<AllocationHeatmap> {
+  // How many holdings each category shows before the "show more" toggle. The
+  // full per-holding detail lives in the holdings table below — this card is
+  // the allocation glance, so it previews the biggest positions only.
+  static const _previewCount = 4;
+
+  // Categories the user has expanded to show all holdings.
+  final Set<String> _expanded = {};
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final data = widget.data;
     if (data.isEmpty) return const SizedBox.shrink();
 
     final totalValue = data.fold<double>(0, (sum, item) => sum + item.value);
 
-    // Group data by category
+    // Group data by category.
     final groupedData = <String, List<AllocationData>>{};
     final categoryColors = <String, Color>{};
     for (var item in data) {
@@ -99,17 +97,13 @@ class AllocationHeatmap extends StatelessWidget {
       categoryColors[item.category] = item.color;
     }
 
-    // Sort categories by total value descending
+    // Sort categories by total value descending.
     final sortedCategories = groupedData.keys.toList()
       ..sort((a, b) {
-        final sumA = groupedData[a]!.fold<double>(
-          0,
-          (sum, item) => sum + item.value,
-        );
-        final sumB = groupedData[b]!.fold<double>(
-          0,
-          (sum, item) => sum + item.value,
-        );
+        final sumA =
+            groupedData[a]!.fold<double>(0, (sum, item) => sum + item.value);
+        final sumB =
+            groupedData[b]!.fold<double>(0, (sum, item) => sum + item.value);
         return sumB.compareTo(sumA);
       });
 
@@ -140,8 +134,8 @@ class AllocationHeatmap extends StatelessWidget {
                 const SizedBox(width: 12),
                 Flexible(
                   child: Text(
-                    l.lwAllocTotal(
-                        currencyFormat.format(totalValue * conversionFactor)),
+                    l.lwAllocTotal(widget.currencyFormat
+                        .format(totalValue * widget.conversionFactor)),
                     style: const TextStyle(
                       fontSize: 14,
                       color: Colors.grey,
@@ -156,14 +150,14 @@ class AllocationHeatmap extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 24),
-            // The "Tree-like" Horizontal Bar View
+            // The "tree-like" horizontal-bar view, one band per category.
             ...sortedCategories.map((cat) {
               final items = groupedData[cat]!;
               final catTotal = items.fold<double>(0, (sum, i) => sum + i.value);
-              final catPercentage = catTotal / totalValue;
+              final catPercentage = totalValue > 0 ? catTotal / totalValue : 0.0;
               final color = categoryColors[cat]!;
-              final isActive = activeCategory == cat;
-              final canTap = onCategorySelected != null;
+              final isActive = widget.activeCategory == cat;
+              final canTap = widget.onCategorySelected != null;
 
               final inner = Padding(
                 padding: const EdgeInsets.only(bottom: 24.0),
@@ -230,7 +224,7 @@ class AllocationHeatmap extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    // Main Category Bar
+                    // Main category bar.
                     Stack(
                       children: [
                         Container(
@@ -263,7 +257,6 @@ class AllocationHeatmap extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    // Sub-items (the "Tree" detail)
                     if (isActive)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
@@ -276,66 +269,15 @@ class AllocationHeatmap extends StatelessWidget {
                           ),
                         ),
                       ),
-                    Wrap(
-                      spacing: 16,
-                      runSpacing: 8,
-                      children: items.map((item) {
-                        return Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 4,
-                              height: 4,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.withValues(alpha: 0.5),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              item.subCategory,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: context.textMuted,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            if (item.quantity > 0) ...[
-                              const SizedBox(width: 4),
-                              Text(
-                                '· ${l.lwAllocSharesSuffix(_formatQty(item.quantity))}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: context.textFaint,
-                                  fontFeatures: [
-                                    const FontFeature.tabularFigures(),
-                                  ],
-                                ),
-                              ),
-                            ],
-                            const SizedBox(width: 6),
-                            Text(
-                              currencyFormat.format(
-                                item.value * conversionFactor,
-                              ),
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: context.textPrimary,
-                                fontWeight: FontWeight.w600,
-                                fontFeatures: [const FontFeature.tabularFigures()],
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                    ),
+                    // Top holdings as aligned rows (biggest first), with a
+                    // toggle for the rest. Replaces the old inline chip flow
+                    // so values line up in a column and the band can't grow
+                    // unbounded / duplicate the full holdings table.
+                    _holdingsPreview(cat, items, catTotal, color, l),
                   ],
                 ),
               );
 
-              // Screen-reader label for the category band: name + share of
-              // total + holding count. Applied whether or not the band is
-              // tappable so non-interactive views are still announced.
               final semanticLabel = l.lwAllocSemanticLabel(
                 _displayCategory(cat, l),
                 '${(catPercentage * 100).toStringAsFixed(1)}%',
@@ -345,31 +287,133 @@ class AllocationHeatmap extends StatelessWidget {
               if (!canTap) {
                 return Semantics(label: semanticLabel, child: inner);
               }
-              // InkWell wraps each per-category block so the entire band
-              // (bar + label + sub-items) is tappable, not just the icon.
               return Semantics(
                 button: true,
                 label: semanticLabel,
                 child: InkWell(
-                onTap: () => onCategorySelected!(cat),
-                borderRadius: BorderRadius.circular(12),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  decoration: BoxDecoration(
-                    color: isActive
-                        ? color.withValues(alpha: 0.06)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
+                  onTap: () => widget.onCategorySelected!(cat),
+                  borderRadius: BorderRadius.circular(12),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? color.withValues(alpha: 0.06)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: inner,
                   ),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  child: inner,
                 ),
-              ),
               );
             }),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _holdingsPreview(
+    String cat,
+    List<AllocationData> items,
+    double catTotal,
+    Color color,
+    AppLocalizations l,
+  ) {
+    final sorted = [...items]..sort((a, b) => b.value.compareTo(a.value));
+    final expanded = _expanded.contains(cat);
+    final visible = expanded ? sorted : sorted.take(_previewCount).toList();
+    final remaining = sorted.length - _previewCount;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ...visible.map((item) => _holdingRow(item, catTotal)),
+        if (remaining > 0)
+          // Inner tap target wins the gesture arena over the band's filter
+          // InkWell, so expanding doesn't also toggle the category filter.
+          InkWell(
+            onTap: () => setState(() {
+              if (expanded) {
+                _expanded.remove(cat);
+              } else {
+                _expanded.add(cat);
+              }
+            }),
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+              child: Text(
+                expanded ? l.lwAllocShowFewer : l.lwAllocShowMore(remaining),
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _holdingRow(AllocationData item, double catTotal) {
+    final weight = catTotal > 0 ? item.value / catTotal : 0.0;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3.0, horizontal: 12.0),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.withValues(alpha: 0.5),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Name — clamped to one line so long fund names can't push the
+          // value/percent columns out of alignment.
+          Expanded(
+            child: Text(
+              item.subCategory,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12.5,
+                color: context.textMuted,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            widget.currencyFormat.format(item.value * widget.conversionFactor),
+            style: TextStyle(
+              fontSize: 12,
+              color: context.textPrimary,
+              fontWeight: FontWeight.w600,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Share of this category (drill-down to the band's % of total).
+          SizedBox(
+            width: 40,
+            child: Text(
+              '${(weight * 100).toStringAsFixed(0)}%',
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 11,
+                color: context.textFaint,
+                fontWeight: FontWeight.w600,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -3665,6 +3665,14 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String lwAllocShowMore(int count) {
+    return 'Ver $count más';
+  }
+
+  @override
+  String get lwAllocShowFewer => 'Ver menos';
+
+  @override
   String get lwAllocFilteringHint =>
       'Filtrando posiciones a esta categoría: toca de nuevo para quitar el filtro';
 

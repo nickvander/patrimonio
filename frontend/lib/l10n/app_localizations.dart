@@ -5932,6 +5932,18 @@ abstract class AppLocalizations {
   /// **'{qty} sh'**
   String lwAllocSharesSuffix(Object qty);
 
+  /// No description provided for @lwAllocShowMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Show {count} more'**
+  String lwAllocShowMore(int count);
+
+  /// No description provided for @lwAllocShowFewer.
+  ///
+  /// In en, this message translates to:
+  /// **'Show fewer'**
+  String get lwAllocShowFewer;
+
   /// No description provided for @lwAllocFilteringHint.
   ///
   /// In en, this message translates to:

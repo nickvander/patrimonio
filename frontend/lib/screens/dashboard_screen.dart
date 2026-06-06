@@ -1608,12 +1608,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // pie reads against a white card in light mode without each slice
       // having to be hand-tuned. The 6 categories map 1:1 to the
       // semantic accents already exposed by BrandPalette.
+      // Keys are the Title-Cased categories the allocation endpoint emits
+      // (INITCAP'd holding_type + the Cash/Crypto union literals). Keep
+      // Equity/Mutual Fund here too or those bands fall back to grey.
       final categoryColors = {
         'Cash': BrandPalette.info(brightness),
         'Stocks/ETFs': BrandPalette.teal(brightness),
+        'Equity': BrandPalette.teal(brightness),
+        'Mutual Fund': BrandPalette.yellow(brightness),
         'Investment': BrandPalette.positive(brightness),
         'Crypto': BrandPalette.purple(brightness),
-        'Fixed Income': BrandPalette.yellow(brightness),
+        'Fixed Income': BrandPalette.positive(brightness),
         'Other': BrandPalette.negative(brightness),
       };
 
