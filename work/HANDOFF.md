@@ -1,10 +1,68 @@
 # Handoff — start here
 
-> **Last updated:** 2026-06-03 (projection rebuild + spending-trends sprint)
+> **Last updated:** 2026-06-03 (analytics + import-breadth + taxes/benchmark sprint)
 > **Purpose:** The single "where are we, what's next" doc to pick up cold.
-> For the full import architecture + backlog see
-> [work/STATEMENT_IMPORT.md](STATEMENT_IMPORT.md); for the older broader
-> backlog see [work/NEXT.md](NEXT.md) and [work/FUTURE.md](FUTURE.md).
+> For the full import architecture see [work/STATEMENT_IMPORT.md](STATEMENT_IMPORT.md);
+> for the older broader backlog see [work/NEXT.md](NEXT.md) and
+> [work/FUTURE.md](FUTURE.md).
+
+## TL;DR — current state
+
+Everything below is **on `main` and pushed** (`origin/main` @ `0b0e8eb`),
+tree clean. All verified green: backend `./scripts/test.sh` (full suite,
+incl. 79 dashboard integration), `flutter analyze` clean, `flutter test`
+(157). Flutter MUST run via docker — see the gotchas at the bottom.
+
+**Shipped this sprint (newest first):**
+- Realized gains → tax planning: real `lot_disposals` split short/long-term,
+  proper LTCG 0/15/20% brackets stacked on ordinary income (was a blended
+  cost-basis guess). True contribution-weighted S&P benchmark
+  (`/dashboard/benchmark-comparison`) on the BenchmarkCard.
+- Broken-font PDFs now auto-route to OCR (`looks_garbled` in parser/mod.rs);
+  validated parsers against REAL Banorte/Scotiabank statements (`cargo run
+  --bin parse_check <bank> <file>`).
+- 3 more MX bank parsers: Banorte, Scotiabank, HSBC (shared
+  `parser/column_table.rs`, nearest-column bucketing handles HSBC's reversed
+  layout). Banorte+Scotiabank advertised; HSBC unadvertised (needs a clean PDF).
+- S&P 500 benchmark (`services/benchmark.rs`, free keyless Yahoo feed,
+  FX-style cache) + net-worth-vs-market overlay card.
+- Debt-payoff simulator (avalanche vs snowball, `utils/debt_payoff.dart`);
+  instant notifications-bell update on low-balance alert change.
+- Tier-1 insights: net-worth MoM/YoY growth chips, emergency-fund gauge,
+  per-account low-balance alerts, per-category spending trends, 12-month
+  recurring-bill forecast, realized-gains card, balance-over-time per account.
+- Projection rebuild: real dollars + inflation, decumulation phase, Monte
+  Carlo success rate + percentile fan, Coast/Barista FIRE, tax drag +
+  Guyton-Klinger guardrails, retirement-income, data-derived defaults.
+
+**Next up — recommended (Tier B):**
+1. **Spending-insight notifications** — "groceries up 40% vs your 3-mo avg",
+   "a subscription's price increased". Wire `/dashboard/spending-by-category`
+   + the subscription detector into `deriveNotifications` (the bell).
+2. **Budget auto-suggestions** — seed `budgets` from trailing-average spend per
+   category (data already in spending-by-category).
+
+**Then (Tier C / QA):**
+- Validate BBVA & Santander parsers against REAL PDFs (still on reconstructed
+  fixtures) using `parse_check`, then advertise them in `kSupportedMxBanks`.
+- More banks: Banregio, Inbursa, Banco Azteca (same `column_table` pattern).
+- Connect realized-gains ST/LT into the tax SCREEN's exports (CSV/PDF).
+- Get a clean HSBC PDF to confirm its date token; advertise HSBC.
+
+**Known quirks (don't re-investigate from scratch):**
+- Flutter canvaskit intermittently FREEZES the renderer on heavy Portfolio
+  scrolling (browser automation times out on screenshot). Workaround for QA:
+  filter the holdings list to one ticker to collapse it, or reload. Tracked in
+  FUTURE.md.
+- The net-worth-vs-S&P overlay's indexed % is distorted when the net-worth
+  history starts from a near-zero snapshot (shows huge %). The
+  contribution-weighted "By contribution date" block is the honest read.
+- Budgets / account-alerts / account-APRs persist in `app_settings`
+  (`budgets`, `account_balance_alerts`, `account_aprs`) AND localStorage;
+  don't "fix" the localStorage-only assumption — it's already backend-synced.
+- Adding a row to `dashboard_endpoints.rs` integration tests: remember the
+  TRUNCATE list at the top + that a new table must be added to it (S&P
+  `benchmark_prices` leak bug was exactly this).
 
 ## Latest (2026-06-03) — Tier A: realized gains in tax + true benchmark return
 
