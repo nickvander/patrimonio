@@ -859,6 +859,48 @@ class _ImportScreenState extends State<ImportScreen> {
     );
   }
 
+  /// Loud teal callout when the statement bundles extra accounts beyond the
+  /// primary one — Nu cajitas (savings vaults) or a Banamex Pagaré/Ahorro
+  /// section. Each needs its own destination below or it's skipped; the bare
+  /// secondary panel was easy to miss, which read as "it only made one
+  /// account". Hidden when there are no bundled sections.
+  Widget _buildSecondaryHint() {
+    if (_secondaryLabels.isEmpty) return const SizedBox.shrink();
+    final es = Localizations.localeOf(context).languageCode == 'es';
+    final names = _secondaryLabels.join(', ');
+    final n = _secondaryLabels.length;
+    final text = es
+        ? 'Este estado de cuenta también incluye $n cajita(s)/cuenta(s): '
+            '$names. Asígnalas (o crea una subcuenta) en la tarjeta de abajo, '
+            'o esos movimientos no se importarán.'
+        : 'This statement also bundles $n cajita(s)/account(s): $names. '
+            'Assign each (or create a sub-account) in the card below, or those '
+            "rows won't be imported.";
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.tealAccent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.tealAccent.withValues(alpha: 0.40)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.savings_outlined, size: 18, color: context.tealAccent),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                  fontSize: 12.5, height: 1.35, color: context.textPrimary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Stat strip at the top of the review screen: transactions found, total
   /// inflow / outflow, and the covered date range — the at-a-glance "here's
   /// what this statement holds" that the bare dropdown never gave.
@@ -1488,6 +1530,11 @@ class _ImportScreenState extends State<ImportScreen> {
                   // covered period) so the review screen leads with context.
                   _buildImportSummary(l),
                   const SizedBox(height: 20),
+                  // Loud pointer when the statement bundles extra accounts
+                  // (Nu cajitas / Banamex Pagaré) — these need their own
+                  // destination or they're silently skipped, and the old
+                  // secondary panel was easy to miss.
+                  _buildSecondaryHint(),
                   // Destination-account assignment, grouped in one panel:
                   // dropdown + match cue + inline-create + any bundled
                   // secondary sections.
