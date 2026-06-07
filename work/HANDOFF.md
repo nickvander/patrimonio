@@ -8,12 +8,29 @@
 
 ## TL;DR — current state
 
-Everything below is **on `main` and pushed** (`origin/main` @ `5486b7a`),
+Everything below is **on `main` and pushed** (`origin/main` @ `06f866c`),
 tree clean. All verified green: backend `./scripts/test.sh` (full suite,
-incl. 82 dashboard integration), `flutter analyze` clean, `flutter test`
+incl. 83 dashboard integration), `flutter analyze` clean, `flutter test`
 (170). Flutter MUST run via docker — see the gotchas at the bottom.
 
 **Shipped this sprint (newest first):**
+- Portfolio **drill-down + performance merge** (browser-verified end-to-end):
+  · Tapping ANY allocation band (class / account type / institution) filters
+    the holdings table — the band passes its raw value, matched against the
+    holding's holding_type / account_type / institution_name (holdings
+    response now carries `account_type`). Verified: tap Vanguard → table shows
+    only Vanguard accounts.
+  · New **PerformanceCard** replaces the standalone benchmark card: a value-
+    over-time line chart + range selector (1M/YTD/1Y/5Y/ALL) with the
+    contribution-weighted "vs S&P 500" block folded in. New
+    `GET /dashboard/portfolio-value-history` (sums balance_snapshots of
+    accounts that hold investments). **No misleading first→last % return** —
+    early history ramps from ~0 as accounts sync, so only the honest
+    contribution-weighted return is shown (the value line is labelled
+    "includes contributions"). Deleted benchmark_card.dart.
+- Overview net-worth chart (detailed mode): legend chips clamped + capped at
+  4 institutions so the legend stays one line and stops squishing the
+  fixed-height chart.
 - Portfolio allocation unified into ONE card with a dimension toggle
   (**Asset class · Account type · Institution**, browser-verified all three).
   Asset class keeps grouped bars + top-N holding rows + tap-to-filter +
@@ -29,14 +46,8 @@ incl. 82 dashboard integration), `flutter analyze` clean, `flutter test`
   Added a concentration risk flag (">=20% in one position"). Full-tab scroll
   is smooth now; **NOTE**: the headless screenshot capture can still time out
   when the holdings table is centered (CDP-vs-canvaskit artifact, not a user
-  scroll hang).
-  **Remaining (proposed, not done):** (a) drill-down filter for the
-  type/institution dimensions (tap a band → filter the holdings table; only
-  wired for asset class today); (b) merge the Benchmark card into a single
-  performance/time chart with a range selector (needs a portfolio
-  value-over-time series — bigger backend+chart work). Per the 2026 UX
-  research: overview → performance → one allocation view → signals → one
-  holdings table.
+  scroll hang). (Drill-down for all dimensions + the benchmark→performance
+  merge from this list are now DONE — see the top bullet.)
 - Portfolio "Asset distribution" UX pass (browser-verified): aligned
   per-holding rows (name · value · within-class %) with top-4 + "Show N
   more" instead of the inline ticker-chip wall (no longer duplicates the
