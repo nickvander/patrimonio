@@ -115,6 +115,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // backstop (see _scheduleSyncPollIfNeeded). Bounded by _syncPollAttempts.
   Timer? _syncPollTimer;
   int _syncPollAttempts = 0;
+  // True while a manual "Sync all accounts" is in flight — drives the inline
+  // spinner on the Settings sync button (instead of a blocking SnackBar).
+  bool _isSyncing = false;
   Map<String, dynamic>? _setupStatus;
   Map<String, dynamic>? _fxRate;
   List<dynamic>? _transactions;
@@ -2148,35 +2151,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     Future<void> runSync() async {
-      // Don't flip the page into the full-screen loading spinner — the user
-      // experiences that as a hard refresh. Show a transient SnackBar
-      // instead and silently refresh data when the call completes.
+      // Progress shows INLINE on the Sync button (spinner + "Syncing…",
+      // disabled), not as a long bottom SnackBar — a 30s snackbar sat on top
+      // of the Link Coinbase / Connect Bitso buttons right below it and blocked
+      // them. We keep only short (2s) completion/failure toasts, and refresh
+      // the data silently when the call returns.
+      if (_isSyncing) return;
+      setState(() => _isSyncing = true);
       final messenger = ScaffoldMessenger.of(context);
-      messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor:
-                      AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(l.dashSyncingAll),
-            ],
-          ),
-          duration: const Duration(seconds: 30),
-        ),
-      );
       try {
         await _apiService.syncInstitutions();
         if (!mounted) return;
-        messenger.hideCurrentSnackBar();
         messenger.showSnackBar(
           SnackBar(
             content: Text(l.dashSyncComplete),
@@ -2186,10 +2171,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       } catch (e) {
         debugPrint("Sync error: $e");
         if (!mounted) return;
-        messenger.hideCurrentSnackBar();
         messenger.showSnackBar(
           SnackBar(content: Text(l.dashSyncFailed(e.toString()))),
         );
+      } finally {
+        if (mounted) setState(() => _isSyncing = false);
       }
       // Reload without flipping _isLoading — just refresh the data fields.
       await _refreshData();
@@ -3032,8 +3018,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
               spacing: 16,
               runSpacing: 16,
               children: [
-                tile(Icons.sync, l.dashSyncAllAccounts,
-                    bg: context.accentSoft(context.info), onPressed: runSync),
+                // Sync shows its progress inline (spinner + disabled) rather
+                // than a long bottom SnackBar that covered the crypto buttons.
+                SizedBox(
+                  width: tileWidth,
+                  child: ElevatedButton.icon(
+                    icon: _isSyncing
+                        ? SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                  context.textPrimary),
+                            ),
+                          )
+                        : const Icon(Icons.sync),
+                    label: Text(
+                      _isSyncing ? l.dashSyncingAll : l.dashSyncAllAccounts,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      backgroundColor: context.accentSoft(context.info),
+                      foregroundColor: context.textPrimary,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    onPressed: _isSyncing ? null : runSync,
+                  ),
+                ),
                 tile(
                   Icons.add_link,
                   l.dashLinkPlaidUsBanks,
