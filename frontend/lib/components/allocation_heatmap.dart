@@ -30,7 +30,6 @@ String _displayCategory(String raw, AppLocalizations l) {
         if (word.isEmpty) return word;
         if (acronyms.contains(word.toLowerCase())) return word.toUpperCase();
         if (word.contains('/')) {
-          // e.g. "stocks/etfs" → "Stocks/ETFs"
           return word
               .split('/')
               .map((p) {
@@ -45,18 +44,70 @@ String _displayCategory(String raw, AppLocalizations l) {
       .join(' ');
 }
 
+/// Account-type / institution labels: replace separators, sentence-case,
+/// keep short acronyms (IRA, ETF) uppercase.
+String _prettyLabel(String raw, AppLocalizations l) {
+  if (raw.isEmpty) return l.pfOther;
+  final normalised = raw.replaceAll('_', ' ').replaceAll('-', ' ').trim();
+  return normalised
+      .split(' ')
+      .where((p) => p.isNotEmpty)
+      .map((p) {
+        final upper = p.toUpperCase();
+        if (upper == p && p.length <= 4) return p; // already an acronym
+        return p[0].toUpperCase() + p.substring(1).toLowerCase();
+      })
+      .join(' ');
+}
+
+/// One renderable allocation band (a category / account-type / institution).
+class _Band {
+  final String label;
+  final double value;
+  final Color color;
+
+  /// Holdings inside this band — only populated for the asset-class
+  /// dimension, where we show a top-N preview. Empty for type/institution.
+  final List<AllocationData> items;
+
+  /// Raw category key, used to drive the holdings-table filter on tap.
+  /// Null for type/institution bands (no drill-down wired for those).
+  final String? rawCategory;
+
+  /// Holdings count shown as a chip (asset-class dimension only).
+  final int? holdingsCount;
+
+  _Band({
+    required this.label,
+    required this.value,
+    required this.color,
+    this.items = const [],
+    this.rawCategory,
+    this.holdingsCount,
+  });
+}
+
+/// Single allocation card with a dimension toggle (Asset class · Account
+/// type · Institution). Consolidates what used to be three separate cards
+/// (the class heatmap, the donut, and the by-type/by-institution breakdown)
+/// into one part-to-whole view — the 2026 best-practice "one allocation
+/// widget with a dimension control + details on demand".
 class AllocationHeatmap extends StatefulWidget {
   final List<AllocationData> data;
+
+  /// `/dashboard/overview` `type_breakdown` rows ({account_type, total_usd,
+  /// count}). When non-empty, an "Account type" toggle appears.
+  final List<dynamic> typeBreakdown;
+
+  /// `/dashboard/overview` `institution_breakdown` rows ({name, total_usd,
+  /// account_count}). When non-empty, an "Institution" toggle appears.
+  final List<dynamic> institutionBreakdown;
+
   final double conversionFactor;
   final NumberFormat currencyFormat;
 
-  /// Optional callback fired when the user taps a category band. Lets the
-  /// parent filter the holdings table below — wiring is opt-in so the
-  /// component remains usable in standalone contexts.
+  /// Fired when an asset-class band is tapped — filters the holdings table.
   final ValueChanged<String>? onCategorySelected;
-
-  /// Highlighted category, drawn with a brighter ring so the user can see
-  /// which slice is currently driving the active filter.
   final String? activeCategory;
 
   const AllocationHeatmap({
@@ -64,6 +115,8 @@ class AllocationHeatmap extends StatefulWidget {
     required this.data,
     required this.conversionFactor,
     required this.currencyFormat,
+    this.typeBreakdown = const [],
+    this.institutionBreakdown = const [],
     this.onCategorySelected,
     this.activeCategory,
   });
@@ -73,53 +126,46 @@ class AllocationHeatmap extends StatefulWidget {
 }
 
 class _AllocationHeatmapState extends State<AllocationHeatmap> {
-  // How many holdings each category shows before the "show more" toggle. The
-  // full per-holding detail lives in the holdings table below — this card is
-  // the allocation glance, so it previews the biggest positions only.
   static const _previewCount = 4;
 
-  // Categories the user has expanded to show all holdings.
+  // Categories expanded to show all holdings (asset-class dimension).
   final Set<String> _expanded = {};
+
+  // Active dimension: 0 = asset class, 1 = account type, 2 = institution.
+  int _dim = 0;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final data = widget.data;
-    if (data.isEmpty) return const SizedBox.shrink();
+    final classData = widget.data;
+    if (classData.isEmpty) return const SizedBox.shrink();
 
-    final totalValue = data.fold<double>(0, (sum, item) => sum + item.value);
+    final hasType = widget.typeBreakdown.isNotEmpty;
+    final hasInst = widget.institutionBreakdown.isNotEmpty;
+    final hasToggle = hasType || hasInst;
 
-    // Concentration signal: flag the single largest position when it's >= 20%
-    // of the whole portfolio — the industry "concentrated" threshold (>5%
-    // notable, >10% real risk, >=20% concentrated). Cheap, high-signal, and
-    // the kind of risk flag dedicated trackers (e.g. Ghostfolio X-ray) surface.
+    // Clamp the active dimension to one that actually has data.
+    var dim = _dim;
+    if (dim == 1 && !hasType) dim = 0;
+    if (dim == 2 && !hasInst) dim = 0;
+
+    // Concentration signal is always computed from the underlying holdings
+    // (asset-class data), regardless of which dimension is on screen:
+    // >5% notable, >10% real risk, >=20% concentrated.
     AllocationData? topHolding;
-    for (final item in data) {
+    for (final item in classData) {
       if (topHolding == null || item.value > topHolding.value) {
         topHolding = item;
       }
     }
+    final classTotal =
+        classData.fold<double>(0, (sum, item) => sum + item.value);
     final topShare =
-        (topHolding != null && totalValue > 0) ? topHolding.value / totalValue : 0.0;
+        (topHolding != null && classTotal > 0) ? topHolding.value / classTotal : 0.0;
     final showConcentration = topShare >= 0.20;
 
-    // Group data by category.
-    final groupedData = <String, List<AllocationData>>{};
-    final categoryColors = <String, Color>{};
-    for (var item in data) {
-      groupedData.putIfAbsent(item.category, () => []).add(item);
-      categoryColors[item.category] = item.color;
-    }
-
-    // Sort categories by total value descending.
-    final sortedCategories = groupedData.keys.toList()
-      ..sort((a, b) {
-        final sumA =
-            groupedData[a]!.fold<double>(0, (sum, item) => sum + item.value);
-        final sumB =
-            groupedData[b]!.fold<double>(0, (sum, item) => sum + item.value);
-        return sumB.compareTo(sumA);
-      });
+    final bands = _bandsFor(dim, l);
+    final activeTotal = bands.fold<double>(0, (sum, b) => sum + b.value);
 
     return Card(
       elevation: 6,
@@ -149,7 +195,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
                 Flexible(
                   child: Text(
                     l.lwAllocTotal(widget.currencyFormat
-                        .format(totalValue * widget.conversionFactor)),
+                        .format(activeTotal * widget.conversionFactor)),
                     style: const TextStyle(
                       fontSize: 14,
                       color: Colors.grey,
@@ -163,156 +209,270 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
                 ),
               ],
             ),
+            if (hasToggle) ...[
+              const SizedBox(height: 16),
+              _dimensionToggle(dim, hasType, hasInst, l),
+            ],
             if (showConcentration && topHolding != null) ...[
               const SizedBox(height: 16),
               _concentrationBanner(context, l, topHolding.subCategory, topShare),
             ],
             const SizedBox(height: 24),
-            // The "tree-like" horizontal-bar view, one band per category.
-            ...sortedCategories.map((cat) {
-              final items = groupedData[cat]!;
-              final catTotal = items.fold<double>(0, (sum, i) => sum + i.value);
-              final catPercentage = totalValue > 0 ? catTotal / totalValue : 0.0;
-              final color = categoryColors[cat]!;
-              final isActive = widget.activeCategory == cat;
-              final canTap = widget.onCategorySelected != null;
+            ...bands.map((b) => _bandWidget(b, activeTotal, dim, l)),
+          ],
+        ),
+      ),
+    );
+  }
 
-              final inner = Padding(
-                padding: const EdgeInsets.only(bottom: 24.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+  /// Build the bands for the active dimension.
+  List<_Band> _bandsFor(int dim, AppLocalizations l) {
+    final palette = <Color>[
+      context.tealAccent,
+      context.info,
+      context.yellowAccent,
+      context.purpleAccent,
+      context.pinkAccent,
+      context.positive,
+      context.warning,
+    ];
+    Color paletteAt(int i) => palette[i % palette.length];
+
+    if (dim == 0) {
+      final grouped = <String, List<AllocationData>>{};
+      final colors = <String, Color>{};
+      for (final item in widget.data) {
+        grouped.putIfAbsent(item.category, () => []).add(item);
+        colors[item.category] = item.color;
+      }
+      final cats = grouped.keys.toList()
+        ..sort((a, b) {
+          final sa = grouped[a]!.fold<double>(0, (s, i) => s + i.value);
+          final sb = grouped[b]!.fold<double>(0, (s, i) => s + i.value);
+          return sb.compareTo(sa);
+        });
+      return cats.map((cat) {
+        final items = grouped[cat]!;
+        return _Band(
+          label: _displayCategory(cat, l),
+          value: items.fold<double>(0, (s, i) => s + i.value),
+          color: colors[cat]!,
+          items: items,
+          rawCategory: cat,
+          holdingsCount: items.length,
+        );
+      }).toList();
+    }
+
+    final rows = dim == 1 ? widget.typeBreakdown : widget.institutionBreakdown;
+    final bands = <_Band>[];
+    for (final raw in rows) {
+      if (raw is! Map) continue;
+      final value = ((raw['total_usd'] ?? raw['total'] ?? 0) as num).toDouble();
+      if (value <= 0) continue;
+      final label = dim == 1
+          ? _prettyLabel((raw['account_type'] ?? '').toString(), l)
+          : (raw['name'] ?? l.pfOther).toString();
+      bands.add(_Band(label: label, value: value, color: paletteAt(bands.length)));
+    }
+    bands.sort((a, b) => b.value.compareTo(a.value));
+    // Re-color after sorting so the biggest bands get the lead palette colors.
+    return [
+      for (var i = 0; i < bands.length; i++)
+        _Band(label: bands[i].label, value: bands[i].value, color: paletteAt(i)),
+    ];
+  }
+
+  Widget _dimensionToggle(int dim, bool hasType, bool hasInst, AppLocalizations l) {
+    Widget chip(String label, int idx) {
+      final active = dim == idx;
+      return InkWell(
+        onTap: () => setState(() => _dim = idx),
+        borderRadius: BorderRadius.circular(20),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          decoration: BoxDecoration(
+            color: active
+                ? context.tealAccent.withValues(alpha: 0.15)
+                : context.tileSurface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: active
+                  ? context.tealAccent.withValues(alpha: 0.5)
+                  : Colors.transparent,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+              color: active ? context.tealAccent : context.textMuted,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        chip(l.lwAllocDimClass, 0),
+        if (hasType) chip(l.lwAllocDimType, 1),
+        if (hasInst) chip(l.lwAllocDimInstitution, 2),
+      ],
+    );
+  }
+
+  Widget _bandWidget(_Band b, double total, int dim, AppLocalizations l) {
+    final pct = total > 0 ? b.value / total : 0.0;
+    final isActive = widget.activeCategory == b.rawCategory && b.rawCategory != null;
+    final canTap = dim == 0 && b.rawCategory != null && widget.onCategorySelected != null;
+
+    final inner = Padding(
+      padding: const EdgeInsets.only(bottom: 24.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Row(
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 12,
-                                height: 12,
-                                decoration: BoxDecoration(
-                                  color: color,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Flexible(
-                                child: Text(
-                                  _displayCategory(cat, l),
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: context.textPrimary,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                l.lwAllocHoldingsCount(items.length),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: context.textFaint,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '${(catPercentage * 100).toStringAsFixed(1)}%',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: color,
-                          ),
-                        ),
-                      ],
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration:
+                          BoxDecoration(color: b.color, shape: BoxShape.circle),
                     ),
-                    const SizedBox(height: 12),
-                    // Main category bar.
-                    Stack(
-                      children: [
-                        Container(
-                          height: 12,
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: context.hairline,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Text(
+                        b.label,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: context.textPrimary,
                         ),
-                        FractionallySizedBox(
-                          widthFactor: catPercentage.clamp(0.0, 1.0),
-                          child: Container(
-                            height: 12,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [color, color.withValues(alpha: 0.7)],
-                              ),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    if (isActive)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          l.lwAllocFilteringHint,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: color,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    // Top holdings as aligned rows (biggest first), with a
-                    // toggle for the rest. Replaces the old inline chip flow
-                    // so values line up in a column and the band can't grow
-                    // unbounded / duplicate the full holdings table.
-                    _holdingsPreview(cat, items, catTotal, color, l),
+                    ),
+                    if (b.holdingsCount != null) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        l.lwAllocHoldingsCount(b.holdingsCount!),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: context.textFaint,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ],
                 ),
-              );
-
-              final semanticLabel = l.lwAllocSemanticLabel(
-                _displayCategory(cat, l),
-                '${(catPercentage * 100).toStringAsFixed(1)}%',
-                items.length,
-              );
-
-              if (!canTap) {
-                return Semantics(label: semanticLabel, child: inner);
-              }
-              return Semantics(
-                button: true,
-                label: semanticLabel,
-                child: InkWell(
-                  onTap: () => widget.onCategorySelected!(cat),
-                  borderRadius: BorderRadius.circular(12),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    decoration: BoxDecoration(
-                      color: isActive
-                          ? color.withValues(alpha: 0.06)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${(pct * 100).toStringAsFixed(1)}%',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: b.color,
                     ),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: inner,
+                  ),
+                  Text(
+                    widget.currencyFormat
+                        .format(b.value * widget.conversionFactor),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.textFaint,
+                      fontWeight: FontWeight.w600,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Stack(
+            children: [
+              Container(
+                height: 12,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: context.hairline,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+              FractionallySizedBox(
+                widthFactor: pct.clamp(0.0, 1.0),
+                child: Container(
+                  height: 12,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [b.color, b.color.withValues(alpha: 0.7)],
+                    ),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                 ),
-              );
-            }),
+              ),
+            ],
+          ),
+          if (b.items.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            if (isActive)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  l.lwAllocFilteringHint,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: b.color,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+            _holdingsPreview(b.rawCategory!, b.items, b.value, b.color, l),
           ],
+        ],
+      ),
+    );
+
+    final semanticLabel = l.lwAllocSemanticLabel(
+      b.label,
+      '${(pct * 100).toStringAsFixed(1)}%',
+      b.holdingsCount ?? 0,
+    );
+
+    if (!canTap) {
+      return Semantics(label: semanticLabel, child: inner);
+    }
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      child: InkWell(
+        onTap: () => widget.onCategorySelected!(b.rawCategory!),
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          decoration: BoxDecoration(
+            color: isActive
+                ? b.color.withValues(alpha: 0.06)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: inner,
         ),
       ),
     );
@@ -369,8 +529,6 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
       children: [
         ...visible.map((item) => _holdingRow(item, catTotal)),
         if (remaining > 0)
-          // Inner tap target wins the gesture arena over the band's filter
-          // InkWell, so expanding doesn't also toggle the category filter.
           InkWell(
             onTap: () => setState(() {
               if (expanded) {
@@ -412,8 +570,6 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
             ),
           ),
           const SizedBox(width: 10),
-          // Name — clamped to one line so long fund names can't push the
-          // value/percent columns out of alignment.
           Expanded(
             child: Text(
               item.subCategory,
@@ -437,7 +593,6 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
             ),
           ),
           const SizedBox(width: 10),
-          // Share of this category (drill-down to the band's % of total).
           SizedBox(
             width: 40,
             child: Text(

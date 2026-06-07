@@ -3681,6 +3681,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get lwAllocShowFewer => 'Ver menos';
 
   @override
+  String get lwAllocDimClass => 'Clase de activo';
+
+  @override
+  String get lwAllocDimType => 'Tipo de cuenta';
+
+  @override
+  String get lwAllocDimInstitution => 'Institución';
+
+  @override
   String lwAllocConcentration(String holding, String pct) {
     return '$holding es $pct de tu portafolio — una posición concentrada.';
   }

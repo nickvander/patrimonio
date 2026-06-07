@@ -1203,6 +1203,9 @@
     }
   },
   "lwAllocShowFewer": "Show fewer",
+  "lwAllocDimClass": "Asset class",
+  "lwAllocDimType": "Account type",
+  "lwAllocDimInstitution": "Institution",
   "lwAllocConcentration": "{holding} is {pct} of your portfolio — a concentrated position.",
   "@lwAllocConcentration": {
     "placeholders": {

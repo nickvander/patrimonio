@@ -5956,6 +5956,24 @@ abstract class AppLocalizations {
   /// **'Show fewer'**
   String get lwAllocShowFewer;
 
+  /// No description provided for @lwAllocDimClass.
+  ///
+  /// In en, this message translates to:
+  /// **'Asset class'**
+  String get lwAllocDimClass;
+
+  /// No description provided for @lwAllocDimType.
+  ///
+  /// In en, this message translates to:
+  /// **'Account type'**
+  String get lwAllocDimType;
+
+  /// No description provided for @lwAllocDimInstitution.
+  ///
+  /// In en, this message translates to:
+  /// **'Institution'**
+  String get lwAllocDimInstitution;
+
   /// No description provided for @lwAllocConcentration.
   ///
   /// In en, this message translates to:

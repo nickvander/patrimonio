@@ -3648,6 +3648,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lwAllocShowFewer => 'Show fewer';
 
   @override
+  String get lwAllocDimClass => 'Asset class';
+
+  @override
+  String get lwAllocDimType => 'Account type';
+
+  @override
+  String get lwAllocDimInstitution => 'Institution';
+
+  @override
   String lwAllocConcentration(String holding, String pct) {
     return '$holding is $pct of your portfolio — a concentrated position.';
   }

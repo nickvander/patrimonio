@@ -22,7 +22,6 @@ import '../widgets/upcoming_bills_card.dart';
 import '../widgets/debt_payoff_card.dart';
 import '../widgets/net_worth_goal_tile.dart';
 import '../widgets/emergency_fund_card.dart';
-import '../widgets/accounts_breakdown_card.dart';
 import '../widgets/portfolio_card.dart';
 import '../widgets/fx_widget.dart';
 import '../widgets/credit_utilization_card.dart';
@@ -2502,6 +2501,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   data: _allocationData!,
                   conversionFactor: conversionFactor,
                   currencyFormat: currencyFormat,
+                  // Fold the old "Asset breakdown" card in as toggle
+                  // dimensions (one allocation widget, not three).
+                  typeBreakdown:
+                      (_overview?['type_breakdown'] as List?) ?? const [],
+                  institutionBreakdown:
+                      (_overview?['institution_breakdown'] as List?) ?? const [],
                   activeCategory: _portfolioCategoryFilter,
                   onCategorySelected: (cat) => setState(() {
                     // Tapping the active band clears the filter — saves a
@@ -2535,13 +2540,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               currencyFormat: currencyFormat,
             ),
           ),
-          const SizedBox(height: 24),
-          AccountsBreakdownCard(
-            typeBreakdown: _overview?['type_breakdown'] ?? [],
-            institutionBreakdown: _overview?['institution_breakdown'] ?? [],
-            conversionFactor: conversionFactor,
-            currencyFormat: currencyFormat,
-          ),
+          // (The standalone "Asset breakdown" card is gone — its by-type /
+          // by-institution views are now dimensions of the allocation card
+          // above.)
         ],
       ),
     );
