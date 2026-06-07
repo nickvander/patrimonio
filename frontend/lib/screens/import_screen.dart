@@ -1215,9 +1215,11 @@ class _ImportScreenState extends State<ImportScreen> {
                           activeColor: context.positive,
                           checkColor: Colors.white,
                           contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16.0,
-                            vertical: 4.0,
+                            horizontal: 12.0,
+                            vertical: 6.0,
                           ),
+                          dense: true,
+                          visualDensity: VisualDensity.compact,
                           onChanged: (val) {
                             if (val != null) {
                               setState(() {
@@ -1236,12 +1238,18 @@ class _ImportScreenState extends State<ImportScreen> {
                               Flexible(
                                 child: Text(
                                   tx['description'] ?? '',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                    color: isSelected ? null : Colors.grey,
-                                    decoration: isSelected
-                                        ? null
-                                        : TextDecoration.lineThrough,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.2,
+                                    // Deselected rows are de-emphasised by
+                                    // colour (faint) rather than a noisy
+                                    // strikethrough.
+                                    color: isSelected
+                                        ? context.textPrimary
+                                        : context.textFaint,
                                   ),
                                 ),
                               ),
@@ -1295,15 +1303,20 @@ class _ImportScreenState extends State<ImportScreen> {
                             ],
                           ),
                           subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 4.0),
+                            padding: const EdgeInsets.only(top: 3.0),
                             child: Row(
                               children: [
                                 Text(
                                   tx['date'] ?? '',
                                   style: TextStyle(
+                                    fontSize: 11,
+                                    height: 1.3,
                                     color: isSelected
-                                        ? Colors.grey[400]
-                                        : Colors.grey[600],
+                                        ? context.textSubtle
+                                        : context.textFaint,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures()
+                                    ],
                                   ),
                                 ),
                                 // Which file this row came from — so a
@@ -1350,22 +1363,32 @@ class _ImportScreenState extends State<ImportScreen> {
                                     (tx['currency'] ?? 'MXN').toString(),
                                   ),
                                   style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: isSelected
-                                        ? Colors.white
-                                        : Colors.grey,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    // Income green / expense neutral when
+                                    // selected; faint when deselected.
+                                    color: !isSelected
+                                        ? context.textFaint
+                                        : ((double.tryParse(
+                                                        '${tx['amount']}') ??
+                                                    0) >=
+                                                0
+                                            ? context.positive
+                                            : context.textPrimary),
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures()
+                                    ],
                                   ),
                                 ),
                                 if (isAutoDeselected) ...[
-                                  const SizedBox(width: 12),
+                                  const SizedBox(width: 10),
                                   Tooltip(
                                     message: l.impAutoDeselectedTooltip,
                                     child: Icon(
                                       Icons.info_outline,
-                                      size: 16,
-                                      color: Colors.amber.withValues(
-                                        alpha: 0.7,
-                                      ),
+                                      size: 15,
+                                      color: context.warning
+                                          .withValues(alpha: 0.8),
                                     ),
                                   ),
                                 ],

@@ -1939,13 +1939,13 @@ class _TransactionsTabState extends State<TransactionsTab> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 5, vertical: 1),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.15),
+                        color: context.warning.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(3),
                       ),
                       child: Text(
                         l.txStatusPending,
-                        style: const TextStyle(
-                          color: Colors.orange,
+                        style: TextStyle(
+                          color: context.warning,
                           fontSize: 9,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 0.3,
