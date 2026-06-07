@@ -967,6 +967,13 @@
   "pfByAccount": "By account",
   "pfNoHoldingsYet": "No holdings yet",
   "pfNoHoldingsBody": "Once you link a brokerage with Plaid (or import a CSV) your\npositions will appear here.",
+  "pfHoldingsShowAll": "Show all {count} holdings",
+  "@pfHoldingsShowAll": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "pfHoldingsShowFewer": "Show fewer",
   "pfColAsset": "Asset",
   "pfColShares": "Shares",
   "pfColPrice": "Price",
@@ -1196,6 +1203,13 @@
     }
   },
   "lwAllocShowFewer": "Show fewer",
+  "lwAllocConcentration": "{holding} is {pct} of your portfolio — a concentrated position.",
+  "@lwAllocConcentration": {
+    "placeholders": {
+      "holding": { "type": "String" },
+      "pct": { "type": "String" }
+    }
+  },
   "lwAllocFilteringHint": "Filtering holdings to this category — tap again to clear",
   "lwAllocSemanticLabel": "{count, plural, one{{category}, {pct} of portfolio, {count} holding} other{{category}, {pct} of portfolio, {count} holdings}}",
   "@lwAllocSemanticLabel": {

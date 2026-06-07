@@ -3033,6 +3033,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Once you link a brokerage with Plaid (or import a CSV) your\npositions will appear here.';
 
   @override
+  String pfHoldingsShowAll(int count) {
+    return 'Show all $count holdings';
+  }
+
+  @override
+  String get pfHoldingsShowFewer => 'Show fewer';
+
+  @override
   String get pfColAsset => 'Asset';
 
   @override
@@ -3638,6 +3646,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lwAllocShowFewer => 'Show fewer';
+
+  @override
+  String lwAllocConcentration(String holding, String pct) {
+    return '$holding is $pct of your portfolio — a concentrated position.';
+  }
 
   @override
   String get lwAllocFilteringHint =>

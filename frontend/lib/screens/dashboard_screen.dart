@@ -2495,17 +2495,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (_allocationData != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 24.0),
-              child: AllocationHeatmap(
-                data: _allocationData!,
-                conversionFactor: conversionFactor,
-                currencyFormat: currencyFormat,
-                activeCategory: _portfolioCategoryFilter,
-                onCategorySelected: (cat) => setState(() {
-                  // Tapping the active band clears the filter — saves a
-                  // round-trip through the chip's X button.
-                  _portfolioCategoryFilter =
-                      _portfolioCategoryFilter == cat ? null : cat;
-                }),
+              // RepaintBoundary so this big card is cached as a layer and
+              // doesn't re-raster on every page-scroll frame.
+              child: RepaintBoundary(
+                child: AllocationHeatmap(
+                  data: _allocationData!,
+                  conversionFactor: conversionFactor,
+                  currencyFormat: currencyFormat,
+                  activeCategory: _portfolioCategoryFilter,
+                  onCategorySelected: (cat) => setState(() {
+                    // Tapping the active band clears the filter — saves a
+                    // round-trip through the chip's X button.
+                    _portfolioCategoryFilter =
+                        _portfolioCategoryFilter == cat ? null : cat;
+                  }),
+                ),
               ),
             ),
           PortfolioCard(
@@ -2524,10 +2528,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             conversionFactor: conversionFactor,
             currencyFormat: currencyFormat,
           ),
-          BenchmarkCard(
-            apiService: _apiService,
-            conversionFactor: conversionFactor,
-            currencyFormat: currencyFormat,
+          RepaintBoundary(
+            child: BenchmarkCard(
+              apiService: _apiService,
+              conversionFactor: conversionFactor,
+              currencyFormat: currencyFormat,
+            ),
           ),
           const SizedBox(height: 24),
           AccountsBreakdownCard(

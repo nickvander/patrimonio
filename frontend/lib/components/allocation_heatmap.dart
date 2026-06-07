@@ -89,6 +89,20 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
 
     final totalValue = data.fold<double>(0, (sum, item) => sum + item.value);
 
+    // Concentration signal: flag the single largest position when it's >= 20%
+    // of the whole portfolio — the industry "concentrated" threshold (>5%
+    // notable, >10% real risk, >=20% concentrated). Cheap, high-signal, and
+    // the kind of risk flag dedicated trackers (e.g. Ghostfolio X-ray) surface.
+    AllocationData? topHolding;
+    for (final item in data) {
+      if (topHolding == null || item.value > topHolding.value) {
+        topHolding = item;
+      }
+    }
+    final topShare =
+        (topHolding != null && totalValue > 0) ? topHolding.value / totalValue : 0.0;
+    final showConcentration = topShare >= 0.20;
+
     // Group data by category.
     final groupedData = <String, List<AllocationData>>{};
     final categoryColors = <String, Color>{};
@@ -149,6 +163,10 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
                 ),
               ],
             ),
+            if (showConcentration && topHolding != null) ...[
+              const SizedBox(height: 16),
+              _concentrationBanner(context, l, topHolding.subCategory, topShare),
+            ],
             const SizedBox(height: 24),
             // The "tree-like" horizontal-bar view, one band per category.
             ...sortedCategories.map((cat) {
@@ -176,13 +194,6 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
                                 decoration: BoxDecoration(
                                   color: color,
                                   shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: color.withValues(alpha: 0.4),
-                                      blurRadius: 8,
-                                      spreadRadius: 1,
-                                    ),
-                                  ],
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -244,13 +255,6 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
                                 colors: [color, color.withValues(alpha: 0.7)],
                               ),
                               borderRadius: BorderRadius.circular(6),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: color.withValues(alpha: 0.3),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
                             ),
                           ),
                         ),
@@ -310,6 +314,40 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
             }),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _concentrationBanner(
+    BuildContext context,
+    AppLocalizations l,
+    String holding,
+    double share,
+  ) {
+    final color = context.warning;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: color, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              l.lwAllocConcentration(
+                  holding, '${(share * 100).toStringAsFixed(0)}%'),
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w600,
+                fontSize: 12.5,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

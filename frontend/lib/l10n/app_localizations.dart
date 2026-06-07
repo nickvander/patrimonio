@@ -5030,6 +5030,18 @@ abstract class AppLocalizations {
   /// **'Once you link a brokerage with Plaid (or import a CSV) your\npositions will appear here.'**
   String get pfNoHoldingsBody;
 
+  /// No description provided for @pfHoldingsShowAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Show all {count} holdings'**
+  String pfHoldingsShowAll(int count);
+
+  /// No description provided for @pfHoldingsShowFewer.
+  ///
+  /// In en, this message translates to:
+  /// **'Show fewer'**
+  String get pfHoldingsShowFewer;
+
   /// No description provided for @pfColAsset.
   ///
   /// In en, this message translates to:
@@ -5943,6 +5955,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show fewer'**
   String get lwAllocShowFewer;
+
+  /// No description provided for @lwAllocConcentration.
+  ///
+  /// In en, this message translates to:
+  /// **'{holding} is {pct} of your portfolio — a concentrated position.'**
+  String lwAllocConcentration(String holding, String pct);
 
   /// No description provided for @lwAllocFilteringHint.
   ///

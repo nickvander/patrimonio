@@ -3063,6 +3063,14 @@ class AppLocalizationsEs extends AppLocalizations {
       'Cuando vincules una casa de bolsa con Plaid (o importes un CSV)\ntus posiciones aparecerán aquí.';
 
   @override
+  String pfHoldingsShowAll(int count) {
+    return 'Ver las $count posiciones';
+  }
+
+  @override
+  String get pfHoldingsShowFewer => 'Ver menos';
+
+  @override
   String get pfColAsset => 'Activo';
 
   @override
@@ -3671,6 +3679,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get lwAllocShowFewer => 'Ver menos';
+
+  @override
+  String lwAllocConcentration(String holding, String pct) {
+    return '$holding es $pct de tu portafolio — una posición concentrada.';
+  }
 
   @override
   String get lwAllocFilteringHint =>

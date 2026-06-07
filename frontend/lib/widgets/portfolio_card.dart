@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/preferences.dart';
@@ -46,9 +45,13 @@ class _PortfolioCardState extends State<PortfolioCard> {
   bool _isAscending = false;
   late List<dynamic> _allHoldings;
   late List<dynamic> _holdings;
-  int _touchedIndex = -1;
   String _searchQuery = '';
   bool _groupByAccount = false;
+  // Holdings shown before the "show all" expander. Capping the rows that are
+  // actually built (vs. a nested scrollable ListView) is what keeps canvaskit
+  // from re-rastering the whole table on every page-scroll frame.
+  bool _showAllHoldings = false;
+  static const _kHoldingsPreview = 12;
 
   // Mirror for the externally-pushed search query; we track it
   // separately from `_searchQuery` so user typing still wins after a
@@ -209,11 +212,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             LayoutBuilder(builder: (context, c) {
-              // Below ~680px the hero (Expanded summary + Expanded chart)
-              // squeezes both panels. Stack instead, and shrink the big
-              // total-value number so a long "USD 1,234,567.89" still
-              // fits a phone-width card without wrapping or ellipsis.
-              final isNarrow = c.maxWidth < 680;
+              // Shrink the big total-value number so a long "USD 1,234,567.89"
+              // still fits a phone-width card without wrapping or ellipsis.
               final heroFontSize = c.maxWidth < 400
                   ? 30.0
                   : c.maxWidth < 520
@@ -304,27 +304,12 @@ class _PortfolioCardState extends State<PortfolioCard> {
                   ),
                 ],
               );
-              final chart = SizedBox(
-                height: isNarrow ? 200 : 220,
-                child: _buildAllocationChart(),
-              );
-              if (isNarrow) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    summary,
-                    const SizedBox(height: 24),
-                    chart,
-                  ],
-                );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(child: summary),
-                  Expanded(child: chart),
-                ],
-              );
+              // The donut-by-holding chart was removed: it duplicated the
+              // "Asset distribution" allocation card (two part-to-whole
+              // encodings of the same data) and the holdings table. The hero
+              // now owns the headline number + change; allocation lives in the
+              // one allocation card, per-holding detail in the table below.
+              return summary;
             }),
             const SizedBox(height: 24),
             _buildKpiStrip(),
@@ -975,12 +960,16 @@ class _PortfolioCardState extends State<PortfolioCard> {
             ? available
             : _kTableNaturalWidth;
 
-        // Cap the scrollable body so the inner viewport fits the page.
-        // Below the cap, we hug the data so short portfolios don't show
-        // a giant whitespace pad under the rows.
-        final bodyHeight = _holdings.length * _kRowHeight > _kMaxBodyHeight
-            ? _kMaxBodyHeight
-            : _holdings.length * _kRowHeight;
+        // Rows flow in the page's single scroll view rather than a nested
+        // fixed-height ListView+Scrollbar. The old nested same-axis scroll
+        // made canvaskit re-raster the inner viewport on every page-scroll
+        // frame, stalling the renderer (the "Portfolio freeze"). We instead
+        // build only the first N rows by default and let the user expand —
+        // details-on-demand, and a much lighter scene.
+        final showAll =
+            _showAllHoldings || _holdings.length <= _kHoldingsPreview;
+        final visibleHoldings =
+            showAll ? _holdings : _holdings.sublist(0, _kHoldingsPreview);
 
         final table = SizedBox(
           width: tableWidth,
@@ -990,22 +979,26 @@ class _PortfolioCardState extends State<PortfolioCard> {
             children: [
               _buildTableHeader(),
               Divider(color: context.hairline, height: 1, thickness: 1),
-              SizedBox(
-                height: bodyHeight,
-                child: Scrollbar(
-                  thumbVisibility: true,
-                  child: ListView.builder(
-                    itemCount: _holdings.length,
-                    itemExtent: _kRowHeight,
-                    itemBuilder: (ctx, i) => _HoldingRowTile(
-                      holding: _holdings[i],
+              ...visibleHoldings.map((h) => SizedBox(
+                    height: _kRowHeight,
+                    child: _HoldingRowTile(
+                      holding: h,
                       format: widget.currencyFormat,
                       targetCurrency: widget.targetCurrency,
                       usdMxnRate: widget.usdMxnRate,
                     ),
+                  )),
+              if (_holdings.length > _kHoldingsPreview)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: () =>
+                        setState(() => _showAllHoldings = !_showAllHoldings),
+                    child: Text(showAll
+                        ? l.pfHoldingsShowFewer
+                        : l.pfHoldingsShowAll(_holdings.length)),
                   ),
                 ),
-              ),
             ],
           ),
         );
@@ -1025,7 +1018,9 @@ class _PortfolioCardState extends State<PortfolioCard> {
           children: [
             _buildSearchAndToolbar(),
             const SizedBox(height: 12),
-            body,
+            // Cache the table as its own layer so page-scroll frames don't
+            // re-raster every row (a chunk of the old "Portfolio freeze").
+            RepaintBoundary(child: body),
           ],
         );
       },
@@ -1088,213 +1083,6 @@ class _PortfolioCardState extends State<PortfolioCard> {
     );
   }
 
-  Widget _buildAllocationChart() {
-    if (_holdings.isEmpty) return const SizedBox.shrink();
-
-    // Allocation slice colours route through the brand chart-series
-    // helper so the pie reads against a white card in light mode.
-    final colors = [
-      context.tealAccent,
-      context.purpleAccent,
-      context.pinkAccent,
-      context.yellowAccent,
-      context.info,
-    ];
-
-    final sortedHoldings = List.from(_holdings)
-      ..sort(
-        (a, b) =>
-            ((b['value'] ?? 0) as num).compareTo((a['value'] ?? 0) as num),
-      );
-
-    List<PieChartSectionData> sections = [];
-    List<Widget> legendItems = [];
-    double otherValue = 0.0;
-
-    for (int i = 0; i < sortedHoldings.length; i++) {
-      final h = sortedHoldings[i];
-      final value = (h['value'] ?? 0.0).toDouble();
-
-      if (value <= 0) continue;
-      final percentage = value / widget.portfolioData['total_value'];
-      final isTouched = i == _touchedIndex;
-      final radius = isTouched ? 60.0 : 50.0;
-
-      if (i < 4) {
-        final color = colors[i % colors.length];
-        sections.add(
-          PieChartSectionData(
-            color: color,
-            value: value,
-            title: isTouched ? '${(percentage * 100).toStringAsFixed(1)}%' : '',
-            radius: radius,
-            titleStyle: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w900,
-              color: context.textPrimary,
-              shadows: [const Shadow(color: Colors.black, blurRadius: 6)],
-            ),
-            badgeWidget: isTouched
-                ? Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: color.withValues(alpha: 0.6),
-                          blurRadius: 10,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                    child: Icon(Icons.show_chart, color: color, size: 14),
-                  )
-                : null,
-            badgePositionPercentageOffset: 1.15,
-          ),
-        );
-        legendItems.add(
-          _buildLegendItem(
-            color,
-            h['name'] ?? h['symbol'] ?? '?',
-            percentage,
-            isTouched,
-          ),
-        );
-      } else {
-        otherValue += value;
-      }
-    }
-
-    if (otherValue > 0) {
-      final percentage = otherValue / widget.portfolioData['total_value'];
-      final isTouched = _touchedIndex == 4;
-      final radius = isTouched ? 60.0 : 50.0;
-      sections.add(
-        PieChartSectionData(
-          color: Colors.grey.shade700,
-          value: otherValue,
-          title: isTouched ? '${(percentage * 100).toStringAsFixed(1)}%' : '',
-          radius: radius,
-          titleStyle: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: context.textPrimary,
-          ),
-        ),
-      );
-      legendItems.add(
-        _buildLegendItem(Colors.grey.shade700,
-            AppLocalizations.of(context).pfOther, percentage, isTouched),
-      );
-    }
-
-    return Row(
-      children: [
-        Expanded(
-          flex: 3,
-          child: PieChart(
-            PieChartData(
-              pieTouchData: PieTouchData(
-                touchCallback: (FlTouchEvent event, pieTouchResponse) {
-                  setState(() {
-                    if (!event.isInterestedForInteractions ||
-                        pieTouchResponse == null ||
-                        pieTouchResponse.touchedSection == null) {
-                      _touchedIndex = -1;
-                      return;
-                    }
-                    _touchedIndex =
-                        pieTouchResponse.touchedSection!.touchedSectionIndex;
-                  });
-                },
-              ),
-              sections: sections,
-              centerSpaceRadius: 50,
-              sectionsSpace: 4,
-            ),
-          ),
-        ),
-        const SizedBox(width: 24),
-        Expanded(
-          flex: 2,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: legendItems,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLegendItem(
-    Color color,
-    String label,
-    double percentage,
-    bool isTouched,
-  ) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      padding: const EdgeInsets.symmetric(vertical: 3.0, horizontal: 8.0),
-      decoration: BoxDecoration(
-        color: isTouched ? color.withValues(alpha: 0.1) : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-              boxShadow: isTouched
-                  ? [
-                      BoxShadow(
-                        color: color.withValues(alpha: 0.5),
-                        blurRadius: 4,
-                      ),
-                    ]
-                  : [],
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Fund names can be very long ("Vanguard Specialized Funds -
-          // Vanguard Real Estate Index Fd USD Cls INST"). Clamp to a single
-          // ellipsised line so the legend can't grow past the chart height and
-          // overlap the cards below; the full name is available on hover.
-          Expanded(
-            child: Tooltip(
-              message: label,
-              waitDuration: const Duration(milliseconds: 400),
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: isTouched ? FontWeight.bold : FontWeight.w600,
-                  color: isTouched ? color : context.textPrimary,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            '${(percentage * 100).toStringAsFixed(1)}%',
-            style: TextStyle(
-              fontSize: 12.5,
-              color: isTouched ? color : Colors.grey,
-              fontWeight: FontWeight.bold,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 /// Trim trailing zeros and pick a sensible precision based on the
@@ -1321,7 +1109,6 @@ String _formatQuantity(double q) {
 // scrolls. The natural width sits around 1080; below that the table
 // scrolls horizontally instead of squeezing columns.
 const double _kRowHeight = 60.0;
-const double _kMaxBodyHeight = 600.0;
 const double _kTableNaturalWidth = 1080.0;
 const double _kHMargin = 20.0;
 const double _kColShares = 100.0;
