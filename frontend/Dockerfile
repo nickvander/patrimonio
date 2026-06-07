@@ -6,7 +6,12 @@ COPY pubspec.yaml pubspec.lock ./
 RUN flutter pub get
 
 COPY . .
-RUN flutter build web --release
+# --pwa-strategy=none disables Flutter's offline service worker. This app is a
+# self-hosted, always-online dashboard, so the SW buys nothing — and its
+# CacheStorage caches assets independently of nginx's no-cache headers, which
+# repeatedly served stale bundles after a rebuild (an updated fix looked like
+# it "didn't take"). nginx already controls freshness; drop the SW.
+RUN flutter build web --release --pwa-strategy=none
 
 FROM nginx:1.27-alpine
 
