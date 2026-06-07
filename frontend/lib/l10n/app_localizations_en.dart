@@ -3260,6 +3260,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dlgRecoveryCopied => 'Copied';
 
   @override
+  String get dlgClabeCopied => 'CLABE copied to clipboard';
+
+  @override
+  String get dlgCopyClabe => 'Copy CLABE';
+
+  @override
   String get dlgRecoveryCopyAll => 'Copy all';
 
   @override

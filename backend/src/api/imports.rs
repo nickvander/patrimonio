@@ -38,6 +38,10 @@ pub struct ImportResponse {
     pub status: String,
     pub transactions_count: usize,
     pub transactions: Vec<PreviewTx>,
+    /// Account metadata lifted from the newest statement (CLABE, holder,
+    /// suggested name + balance) so the import UI can pre-fill a new account.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub account_info: Option<parser::AccountInfo>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -661,6 +665,7 @@ async fn upload_handler(
                         status: "error".to_string(),
                         transactions_count: 0,
                         transactions: vec![],
+                        account_info: None,
                     }),
                 )
                     .into_response();
@@ -710,6 +715,7 @@ async fn upload_handler(
                             status: "error".to_string(),
                             transactions_count: 0,
                             transactions: vec![],
+                            account_info: None,
                         }),
                     )
                         .into_response();
@@ -726,6 +732,7 @@ async fn upload_handler(
                 status: "error".to_string(),
                 transactions_count: 0,
                 transactions: vec![],
+                account_info: None,
             }),
         )
             .into_response();
@@ -763,6 +770,7 @@ async fn upload_handler(
     let mut set: tokio::task::JoinSet<(
         String,
         anyhow::Result<Vec<ParsedTransaction>>,
+        Option<parser::AccountInfo>,
     )> = tokio::task::JoinSet::new();
     for (file_name, file_data) in files {
         info!(
@@ -775,19 +783,39 @@ async fn upload_handler(
         set.spawn_blocking(move || {
             let result =
                 parser::detect_and_parse(&name_for_task, &file_data, pwd_owned.as_deref());
-            (name_for_task, result)
+            // Lift account-identifying metadata (CLABE, holder, suggested
+            // balance/name) so the preview can pre-fill a new account.
+            let info =
+                parser::parse_account_info(&name_for_task, &file_data, pwd_owned.as_deref());
+            (name_for_task, result, info)
         });
     }
 
+    // The newest statement's account info wins (current balance, latest CLABE).
+    let mut account_info: Option<parser::AccountInfo> = None;
     while let Some(join_result) = set.join_next().await {
-        let (file_name, parse_result) = match join_result {
-            Ok(pair) => pair,
+        let (file_name, parse_result, info) = match join_result {
+            Ok(triple) => triple,
             Err(e) => {
                 error!("Parse task join failed: {}", e);
                 errors.push(format!("internal join error: {}", e));
                 continue;
             }
         };
+        if let Some(info) = info {
+            let newer = match (&account_info, &info.period_end) {
+                (None, _) => true,
+                (Some(cur), Some(end)) => cur
+                    .period_end
+                    .as_deref()
+                    .map(|c| end.as_str() > c)
+                    .unwrap_or(true),
+                (Some(_), None) => false,
+            };
+            if newer {
+                account_info = Some(info);
+            }
+        }
         let succeeded;
         let mut parsed_count = 0;
         match parse_result {
@@ -843,6 +871,7 @@ async fn upload_handler(
                 status: "password_required".to_string(),
                 transactions_count: 0,
                 transactions: vec![],
+                account_info: None,
             }),
         )
             .into_response();
@@ -901,6 +930,7 @@ async fn upload_handler(
             status: status_str.to_string(),
             transactions_count: all_transactions.len(),
             transactions: all_transactions,
+            account_info,
         }),
     )
         .into_response()

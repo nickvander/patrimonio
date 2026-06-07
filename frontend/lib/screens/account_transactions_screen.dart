@@ -6,6 +6,7 @@ import '../services/api_service.dart';
 import '../utils/currency.dart';
 import '../widgets/transactions_tab.dart';
 import '../widgets/account_balance_chart.dart';
+import '../widgets/clabe_info.dart';
 import '../services/preferences.dart';
 import '../utils/account_category.dart';
 import '../l10n/app_localizations.dart';
@@ -630,6 +631,13 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       child: Column(
         children: [
+          if ((widget.account['clabe'] ?? '').toString().isNotEmpty) ...[
+            ClabeInfoCard(
+              clabe: widget.account['clabe'].toString(),
+              holder: widget.account['holder_name']?.toString(),
+            ),
+            const SizedBox(height: 12),
+          ],
           if (_balanceHistory.length >= 2) ...[
             AccountBalanceChart(
               points: _balanceHistory,

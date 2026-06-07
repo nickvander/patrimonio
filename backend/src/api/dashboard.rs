@@ -92,7 +92,8 @@ async fn dashboard_overview(
         sqlx::query(
             r#"
             SELECT a.id, a.name, a.nickname, a.account_type, a.current_balance, a.currency,
-                   i.name as institution_name, a.ticker_symbol, a.crypto_amount
+                   i.name as institution_name, a.ticker_symbol, a.crypto_amount,
+                   a.clabe, a.holder_name
             FROM accounts a
             JOIN institutions i ON a.institution_id = i.id
             WHERE a.user_id = $1
@@ -211,6 +212,8 @@ async fn dashboard_overview(
             ticker_symbol: r.get("ticker_symbol"),
             crypto_amount: r.try_get::<rust_decimal::Decimal, _>("crypto_amount")
                 .ok().map(|d| d.to_string().parse().unwrap_or(0.0)),
+            clabe: r.try_get::<Option<String>, _>("clabe").ok().flatten(),
+            holder_name: r.try_get::<Option<String>, _>("holder_name").ok().flatten(),
         })
         .collect();
 
@@ -1971,6 +1974,12 @@ struct AccountDetail {
     currency: String,
     ticker_symbol: Option<String>,
     crypto_amount: Option<f64>,
+    /// Mexican CLABE (18-digit interbank number) when known — surfaced so the
+    /// account view can show and copy it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    clabe: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    holder_name: Option<String>,
 }
 
 #[derive(Serialize)]

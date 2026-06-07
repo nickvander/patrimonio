@@ -287,6 +287,12 @@ pub struct CreateAccountRequest {
     pub currency: String,
     pub institution_id: Option<uuid::Uuid>,
     pub initial_balance: rust_decimal::Decimal,
+    /// Optional statement-derived identity (CLABE / holder), e.g. when the
+    /// account is created inline during a Nu / cetesdirecto import.
+    #[serde(default)]
+    pub clabe: Option<String>,
+    #[serde(default)]
+    pub holder_name: Option<String>,
 }
 
 async fn create_account(
@@ -350,10 +356,21 @@ async fn create_account(
 
     // 2. Insert the account, stamped with the owner.
     let account_id = uuid::Uuid::new_v4();
+    // Normalise CLABE to digits-only (18) so it stores/copies cleanly.
+    let clabe = payload.clabe.as_ref().and_then(|c| {
+        let digits: String = c.chars().filter(|ch| ch.is_ascii_digit()).collect();
+        (digits.len() == 18).then_some(digits)
+    });
+    let holder = payload
+        .holder_name
+        .as_ref()
+        .map(|h| h.trim())
+        .filter(|h| !h.is_empty());
+
     let result = sqlx::query(
         r#"
-        INSERT INTO accounts (id, institution_id, name, account_type, currency, current_balance, updated_at, user_id)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)
+        INSERT INTO accounts (id, institution_id, name, account_type, currency, current_balance, updated_at, user_id, clabe, holder_name)
+        VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9)
         "#
     )
     .bind(account_id)
@@ -363,6 +380,8 @@ async fn create_account(
     .bind(&payload.currency)
     .bind(payload.initial_balance)
     .bind(ctx.user_id)
+    .bind(&clabe)
+    .bind(holder)
     .execute(&state.db)
     .await;
 

@@ -689,3 +689,166 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
 
     Err(anyhow!("Could not identify institution for file: {}. Please ensure the file is a supported PDF or CSV from Nu, Banamex, BBVA, Santander, or CetesDirecto.", file_name))
 }
+
+/// Account-level metadata lifted from a statement's header/summary so the
+/// import flow can pre-fill a new account (name + balance) and keep the
+/// account's identifying details (CLABE, holder, RFC) in one place.
+///
+/// `suggested_balance` is the figure that belongs in net worth: the cetes
+/// portfolio "Total final" (not its ~0 cash), or Nu's "En su Cuenta". For
+/// Banamex it's left None — those statements carry a per-row running balance,
+/// so the import already sets the account balance from the closing row.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct AccountInfo {
+    pub institution: Option<String>,
+    pub holder_name: Option<String>,
+    pub clabe: Option<String>,
+    pub rfc: Option<String>,
+    pub suggested_name: Option<String>,
+    pub suggested_balance: Option<f64>,
+    pub currency: Option<String>,
+    /// ISO `YYYY-MM-DD` period end, used to pick the newest statement's info.
+    pub period_end: Option<String>,
+}
+
+fn re_cap(pattern: &str, text: &str) -> Option<String> {
+    regex::Regex::new(pattern)
+        .ok()?
+        .captures(text)
+        .and_then(|c| c.get(1))
+        .map(|m| m.as_str().trim().to_string())
+}
+
+fn clean_clabe(raw: &str) -> Option<String> {
+    let digits: String = raw.chars().filter(|c| c.is_ascii_digit()).collect();
+    (digits.len() == 18).then_some(digits)
+}
+
+/// Extract account-identifying metadata from a statement PDF. Best-effort and
+/// header-only (no OCR) — returns None for CSVs, encrypted-without-password,
+/// or unrecognised layouts.
+pub fn parse_account_info(
+    file_name: &str,
+    original_data: &[u8],
+    password: Option<&str>,
+) -> Option<AccountInfo> {
+    if !file_name.to_lowercase().ends_with(".pdf") {
+        return None;
+    }
+    let mut data = original_data.to_vec();
+    if let Some(pwd) = password {
+        if let Ok(dec) = try_decrypt_with_qpdf(&data, pwd) {
+            data = dec;
+        }
+    }
+    let text = pdftotext_layout(&data);
+    if text.trim().is_empty() {
+        return None;
+    }
+    let upper = text.to_uppercase();
+
+    if upper.contains("NU MÉXICO FINANCIERA")
+        || upper.contains("CUENTA NU")
+        || upper.contains("DETALLE DE MOVIMIENTOS EN TU CUENTA")
+    {
+        return Some(nu_account_info(&text));
+    }
+    if upper.contains("CETESDIRECTO")
+        || upper.contains("MOVIMIENTOS DEL PERÍODO")
+        || (upper.contains("NACIONAL FINANCIERA") && upper.contains("CETES"))
+    {
+        return Some(cetes_account_info(&text));
+    }
+    if upper.contains("BANAMEX")
+        || upper.contains("CITIBANAMEX")
+        || upper.contains("BANCO NACIONAL DE MEXICO")
+    {
+        return Some(banamex_account_info(&text));
+    }
+    None
+}
+
+fn nu_account_info(text: &str) -> AccountInfo {
+    let summary = nu_mexico_pdf::parse_account_summary(text);
+    let bal = summary
+        .en_su_cuenta
+        .or(summary.saldo_total)
+        .and_then(|d| d.to_string().parse::<f64>().ok());
+    // Holder is the line just above "Cuenta Nu:".
+    let holder = {
+        let lines: Vec<&str> = text.lines().collect();
+        let mut found = None;
+        for (i, l) in lines.iter().enumerate() {
+            if l.to_uppercase().contains("CUENTA NU") && i > 0 {
+                for j in (0..i).rev() {
+                    let t = lines[j].trim();
+                    if !t.is_empty() {
+                        found = Some(t.to_string());
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+        found
+    };
+    AccountInfo {
+        institution: Some("Nu México".into()),
+        holder_name: holder,
+        clabe: re_cap(r"(?i)CLABE:\s*([\d ]{18,25})", text).and_then(|s| clean_clabe(&s)),
+        rfc: re_cap(r"(?i)RFC:\s*([A-Z0-9]{10,13})", text),
+        suggested_name: Some("Nu — Cuenta".into()),
+        suggested_balance: bal,
+        currency: Some("MXN".into()),
+        period_end: nu_period_end(text),
+    }
+}
+
+fn nu_period_end(text: &str) -> Option<String> {
+    // "Periodo: del 01 al 30 sep 2025"
+    let c = regex::Regex::new(r"(?i)periodo:?\s*del\s+\d{1,2}\s+al\s+(\d{1,2})\s+(\w+)\s+(\d{4})")
+        .ok()?
+        .captures(text)?;
+    let day: u32 = c[1].parse().ok()?;
+    let month = match c[2].to_lowercase().chars().take(3).collect::<String>().as_str() {
+        "ene" => 1, "feb" => 2, "mar" => 3, "abr" => 4, "may" => 5, "jun" => 6,
+        "jul" => 7, "ago" => 8, "sep" => 9, "oct" => 10, "nov" => 11, "dic" => 12,
+        _ => return None,
+    };
+    let year: i32 = c[3].parse().ok()?;
+    Some(format!("{year:04}-{month:02}-{day:02}"))
+}
+
+fn cetes_account_info(text: &str) -> AccountInfo {
+    let bal = cetes_pdf::parse_portfolio_total(text)
+        .and_then(|d| d.to_string().parse::<f64>().ok());
+    AccountInfo {
+        institution: Some("CetesDirecto".into()),
+        holder_name: re_cap(r"(?i)Nombre:\s*(.+)", text),
+        clabe: re_cap(r"(?i)Contrato/Cuenta CLABE:\s*(\d{18})", text)
+            .or_else(|| re_cap(r"(?i)CLABE:\s*(\d{18})", text)),
+        rfc: re_cap(r"(?i)RFC:\s*([A-Z0-9]{10,13})", text),
+        suggested_name: Some("CetesDirecto".into()),
+        suggested_balance: bal,
+        currency: Some("MXN".into()),
+        // "Período del: 01/04/2024 al 30/04/2024" → 2024-04-30.
+        period_end: regex::Regex::new(r"(?i)al\s+(\d{2})/(\d{2})/(\d{4})")
+            .ok()
+            .and_then(|re| re.captures(text))
+            .map(|c| format!("{}-{}-{}", &c[3], &c[2], &c[1])),
+    }
+}
+
+fn banamex_account_info(text: &str) -> AccountInfo {
+    AccountInfo {
+        institution: Some("Banamex".into()),
+        holder_name: None,
+        clabe: re_cap(r"(?i)CLABE[:\s]*([\d ]{18,25})", text).and_then(|s| clean_clabe(&s)),
+        rfc: re_cap(r"(?i)RFC:\s*([A-Z0-9]{10,13})", text),
+        suggested_name: Some("Banamex".into()),
+        // Banamex statements carry a per-row balance; confirm sets it.
+        suggested_balance: None,
+        currency: Some("MXN".into()),
+        period_end: None,
+    }
+}

@@ -5432,6 +5432,18 @@ abstract class AppLocalizations {
   /// **'Copied'**
   String get dlgRecoveryCopied;
 
+  /// No description provided for @dlgClabeCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'CLABE copied to clipboard'**
+  String get dlgClabeCopied;
+
+  /// No description provided for @dlgCopyClabe.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy CLABE'**
+  String get dlgCopyClabe;
+
   /// No description provided for @dlgRecoveryCopyAll.
   ///
   /// In en, this message translates to:

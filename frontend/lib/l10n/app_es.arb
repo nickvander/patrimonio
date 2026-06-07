@@ -888,6 +888,8 @@
   "dlgRecoveryTitle": "Guarda tus códigos de recuperación",
   "dlgRecoveryWarning": "Estos códigos NO se mostrarán de nuevo. Cada uno es de un solo uso; usa uno si pierdes tu contraseña.",
   "dlgRecoveryCopied": "Copiado",
+  "dlgClabeCopied": "CLABE copiada al portapapeles",
+  "dlgCopyClabe": "Copiar CLABE",
   "dlgRecoveryCopyAll": "Copiar todo",
   "dlgRecoverySavedConfirm": "Guardé estos códigos en un lugar seguro",
   "dlgRecoveryContinue": "Continuar",

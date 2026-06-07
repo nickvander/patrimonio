@@ -45,6 +45,10 @@ class _ImportScreenState extends State<ImportScreen> {
   // section is routed to its own account instead of being dropped.
   List<String> _secondaryLabels = [];
   final Map<String, String?> _secondaryAccountIds = {};
+  // Statement-derived account metadata from the latest parsed statement
+  // (suggested name + balance, CLABE, holder). Used to pre-fill the primary
+  // account when creating one inline during import.
+  Map<String, dynamic>? _accountInfo;
   String? _message;
   /// Whether `_message` represents a failure. Tracked explicitly rather
   /// than sniffing the message text for "failed" — the copy is now
@@ -335,6 +339,11 @@ class _ImportScreenState extends State<ImportScreen> {
           _messageIsError = false;
         } else if (response['status'] == 'success') {
           _previewTransactions = response['transactions'];
+          // Statement-derived account metadata (CLABE, holder, suggested
+          // name + balance) for pre-filling a new primary account.
+          _accountInfo = response['account_info'] is Map<String, dynamic>
+              ? response['account_info'] as Map<String, dynamic>
+              : null;
           _initializeSelection();
           _messageIsError = false;
         } else {
@@ -399,14 +408,23 @@ class _ImportScreenState extends State<ImportScreen> {
       return s;
     }
 
+    // Primary account: prefer the statement's parsed account info — the real
+    // portfolio/account balance + name + CLABE — over the cash-net heuristic
+    // (which is ~0 for a cetesdirecto statement). Secondary sections (Nu
+    // cajitas) keep the per-section net + the cajita label as the name.
+    final info = secondaryLabel == null ? _accountInfo : null;
+    final infoBalance = (info?['suggested_balance'] as num?)?.toDouble();
+    final infoName = info?['suggested_name'] as String?;
+    final infoCurrency = (info?['currency'] as String?)?.toUpperCase();
+
     await showDialog<void>(
       context: context,
       builder: (_) => AddAccountDialog(
-        defaultCurrency: cur,
-        suggestedBalance: sectionNet(secondaryLabel),
-        // For a bundled section (e.g. a Nu cajita) pre-fill the name with the
-        // cajita label; leave the primary account for the user to name.
-        suggestedName: secondaryLabel,
+        defaultCurrency: infoCurrency ?? cur,
+        suggestedBalance: infoBalance ?? sectionNet(secondaryLabel),
+        suggestedName: infoName ?? secondaryLabel,
+        suggestedClabe: info?['clabe'] as String?,
+        suggestedHolder: info?['holder_name'] as String?,
         onAccountCreated: () =>
             _selectNewlyCreatedAccount(existingIds, secondaryLabel),
       ),

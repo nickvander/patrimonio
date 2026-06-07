@@ -1766,6 +1766,8 @@ class ApiService {
     required String type,
     required String currency,
     required double initialBalance,
+    String? clabe,
+    String? holderName,
   }) async {
     final response = await _post(
       Uri.parse('$_baseUrl/accounts'),
@@ -1775,6 +1777,8 @@ class ApiService {
         'account_type': type,
         'currency': currency,
         'initial_balance': initialBalance,
+        if (clabe != null && clabe.isNotEmpty) 'clabe': clabe,
+        if (holderName != null && holderName.isNotEmpty) 'holder_name': holderName,
       }),
     );
     if (response.statusCode != 201) {

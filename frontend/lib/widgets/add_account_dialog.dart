@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/theme_colors.dart';
 import '../services/api_service.dart';
+import 'clabe_info.dart';
 
 class AddAccountDialog extends StatefulWidget {
   final VoidCallback onAccountCreated;
@@ -18,12 +19,19 @@ class AddAccountDialog extends StatefulWidget {
   /// Optional pre-filled account name (e.g. "Nu — Ahorro" for a cajita).
   final String? suggestedName;
 
+  /// Optional statement-derived identity to store with the account and show
+  /// for copying (e.g. from a Nu / cetesdirecto import).
+  final String? suggestedClabe;
+  final String? suggestedHolder;
+
   const AddAccountDialog({
     super.key,
     required this.onAccountCreated,
     this.defaultCurrency = 'USD',
     this.suggestedBalance,
     this.suggestedName,
+    this.suggestedClabe,
+    this.suggestedHolder,
   });
 
   @override
@@ -192,6 +200,16 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                   return null;
                 },
               ),
+              // Statement-derived identity (CLABE / holder) when creating an
+              // account from an import — stored with the account and copyable.
+              if (widget.suggestedClabe != null &&
+                  widget.suggestedClabe!.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                ClabeInfoCard(
+                  clabe: widget.suggestedClabe!,
+                  holder: widget.suggestedHolder,
+                ),
+              ],
             ],
           ),
         ),
@@ -227,6 +245,8 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
         type: _type,
         currency: _currency,
         initialBalance: double.parse(_balanceController.text),
+        clabe: widget.suggestedClabe,
+        holderName: widget.suggestedHolder,
       );
 
       widget.onAccountCreated();

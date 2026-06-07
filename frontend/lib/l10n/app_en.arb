@@ -1039,6 +1039,8 @@
   "dlgRecoveryTitle": "Save your recovery codes",
   "dlgRecoveryWarning": "These codes will NOT be shown again. Each is single-use; use one if you lose your password.",
   "dlgRecoveryCopied": "Copied",
+  "dlgClabeCopied": "CLABE copied to clipboard",
+  "dlgCopyClabe": "Copy CLABE",
   "dlgRecoveryCopyAll": "Copy all",
   "dlgRecoverySavedConfirm": "I've saved these codes somewhere safe",
   "dlgRecoveryContinue": "Continue",
