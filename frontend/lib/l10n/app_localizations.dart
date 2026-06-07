@@ -5312,6 +5312,36 @@ abstract class AppLocalizations {
   /// **'No existing account matches this statement — create one below.'**
   String get impNoAccountMatch;
 
+  /// No description provided for @impAccountCreatedCue.
+  ///
+  /// In en, this message translates to:
+  /// **'Created {account} — importing here'**
+  String impAccountCreatedCue(Object account);
+
+  /// No description provided for @impSummaryFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Found'**
+  String get impSummaryFound;
+
+  /// No description provided for @impSummaryInflow.
+  ///
+  /// In en, this message translates to:
+  /// **'Inflow'**
+  String get impSummaryInflow;
+
+  /// No description provided for @impSummaryOutflow.
+  ///
+  /// In en, this message translates to:
+  /// **'Outflow'**
+  String get impSummaryOutflow;
+
+  /// No description provided for @impSummaryFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file} other{{count} files}}'**
+  String impSummaryFiles(int count);
+
   /// No description provided for @dlgAccountCurrency.
   ///
   /// In en, this message translates to:

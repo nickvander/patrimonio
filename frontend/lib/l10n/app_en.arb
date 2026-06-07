@@ -1022,6 +1022,17 @@
     "placeholders": { "account": { "type": "Object" } }
   },
   "impNoAccountMatch": "No existing account matches this statement — create one below.",
+  "impAccountCreatedCue": "Created {account} — importing here",
+  "@impAccountCreatedCue": {
+    "placeholders": { "account": { "type": "Object" } }
+  },
+  "impSummaryFound": "Found",
+  "impSummaryInflow": "Inflow",
+  "impSummaryOutflow": "Outflow",
+  "impSummaryFiles": "{count, plural, =1{1 file} other{{count} files}}",
+  "@impSummaryFiles": {
+    "placeholders": { "count": { "type": "int" } }
+  },
   "dlgAccountCurrency": "Currency",
   "dlgAccountInitialBalance": "Initial balance",
   "dlgAccountBalanceHelper": "For credit cards / loans, enter the amount owed as a positive number.",

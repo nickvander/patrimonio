@@ -9,7 +9,14 @@ import 'import_cleanup_screen.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/api_service.dart';
 import '../services/file_drop_web.dart';
+import '../theme/typography.dart';
 import '../l10n/app_localizations.dart';
+
+/// Outcome of the post-parse account auto-match, surfaced as a cue under
+/// the destination dropdown so the selection (or its absence) is never
+/// silent. `created` is the inline "I just made the account it asked for"
+/// state — distinct from `matched` so the copy can say so.
+enum _AccountCue { none, matched, created, noMatch }
 
 class ImportScreen extends StatefulWidget {
   const ImportScreen({super.key});
@@ -49,10 +56,17 @@ class _ImportScreenState extends State<ImportScreen> {
   // (suggested name + balance, CLABE, holder). Used to pre-fill the primary
   // account when creating one inline during import.
   Map<String, dynamic>? _accountInfo;
-  // Auto-match outcome for the cue under the account dropdown:
-  // true = matched an existing account, false = recognised statement but no
-  // match (prompt to create), null = no parsed account info.
-  bool? _accountMatched;
+  // Auto-match outcome for the cue under the account dropdown (see
+  // [_AccountCue]). Drives the green "matched/created" or amber "no match"
+  // line so the dropdown never silently goes blank.
+  _AccountCue _accountCue = _AccountCue.none;
+  // Statement summary, computed once when the preview loads (in
+  // [_initializeSelection]) and rendered as the stat strip at the top of the
+  // review screen: total inflow / outflow and the covered date range.
+  double _sumInflow = 0;
+  double _sumOutflow = 0;
+  DateTime? _minDate;
+  DateTime? _maxDate;
   String? _message;
   /// Whether `_message` represents a failure. Tracked explicitly rather
   /// than sniffing the message text for "failed" — the copy is now
@@ -277,6 +291,29 @@ class _ImportScreenState extends State<ImportScreen> {
     }
     _secondaryLabels = labels.toList()..sort();
     _secondaryAccountIds.removeWhere((k, _) => !labels.contains(k));
+
+    // Statement summary (inflow / outflow / covered date range) for the
+    // review-screen stat strip. Computed once here over every parsed row —
+    // a stable "here's what we found", independent of the live selection.
+    double inflow = 0, outflow = 0;
+    DateTime? minD, maxD;
+    for (final tx in _previewTransactions!) {
+      final amt = double.tryParse('${tx['amount']}') ?? 0.0;
+      if (amt >= 0) {
+        inflow += amt;
+      } else {
+        outflow += amt;
+      }
+      final d = DateTime.tryParse((tx['date'] ?? '').toString());
+      if (d != null) {
+        if (minD == null || d.isBefore(minD)) minD = d;
+        if (maxD == null || d.isAfter(maxD)) maxD = d;
+      }
+    }
+    _sumInflow = inflow;
+    _sumOutflow = outflow;
+    _minDate = minD;
+    _maxDate = maxD;
   }
 
   /// Backend caps the multipart body at 100 MB (DefaultBodyLimit in
@@ -453,6 +490,9 @@ class _ImportScreenState extends State<ImportScreen> {
         setState(() {
           if (secondaryLabel == null) {
             _selectedAccountId = id;
+            // The account they were prompted to create now exists and is the
+            // destination — flip the amber "no match" cue to a green "created".
+            _accountCue = _AccountCue.created;
           } else {
             _secondaryAccountIds[secondaryLabel] = id;
           }
@@ -679,7 +719,7 @@ class _ImportScreenState extends State<ImportScreen> {
   /// the default (first account) when nothing matches — the user can still
   /// pick or create one (which pre-fills from the parsed account info).
   void _autoSelectMatchingAccount() {
-    _accountMatched = null;
+    _accountCue = _AccountCue.none;
     final info = _accountInfo;
     final accounts = _accounts;
     if (info == null || accounts == null || accounts.isEmpty) return;
@@ -691,7 +731,7 @@ class _ImportScreenState extends State<ImportScreen> {
         final ac = (a['clabe'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
         if (ac.isNotEmpty && ac == clabe) {
           _selectedAccountId = a['id']?.toString();
-          _accountMatched = true;
+          _accountCue = _AccountCue.matched;
           return;
         }
       }
@@ -703,7 +743,7 @@ class _ImportScreenState extends State<ImportScreen> {
             '${a['institution_name'] ?? ''} ${a['name'] ?? ''}'.toLowerCase();
         if (key.length >= 2 && hay.contains(key)) {
           _selectedAccountId = a['id']?.toString();
-          _accountMatched = true;
+          _accountCue = _AccountCue.matched;
           return;
         }
       }
@@ -714,7 +754,7 @@ class _ImportScreenState extends State<ImportScreen> {
     // e.g. a US Plaid one) so the user is nudged to create the right account
     // (which pre-fills name/balance/CLABE) — and flag it for the cue below.
     _selectedAccountId = null;
-    _accountMatched = false;
+    _accountCue = _AccountCue.noMatch;
   }
 
   /// Name of the currently-selected account, for the "matched" cue.
@@ -727,6 +767,227 @@ class _ImportScreenState extends State<ImportScreen> {
     final inst = (a['institution_name'] ?? '').toString();
     final name = (a['name'] ?? '').toString();
     return inst.isNotEmpty ? '$inst · $name' : name;
+  }
+
+  static const _monthsEn = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+  static const _monthsEs = [
+    'ene', 'feb', 'mar', 'abr', 'may', 'jun', //
+    'jul', 'ago', 'sep', 'oct', 'nov', 'dic'
+  ];
+
+  /// Compact, localized date-range label ("Jan – Dec 2025", "ene – dic 2025",
+  /// "Jan 2024 – Mar 2025"). Built from a small month table rather than
+  /// `DateFormat(locale)` — the app never initializes intl locale data, so a
+  /// localized DateFormat would throw.
+  String _formatDateRange(DateTime a, DateTime b, bool es) {
+    final m = es ? _monthsEs : _monthsEn;
+    String my(DateTime d) => '${m[d.month - 1]} ${d.year}';
+    if (a.year == b.year) {
+      if (a.month == b.month) return my(a);
+      return '${m[a.month - 1]} – ${my(b)}';
+    }
+    return '${my(a)} – ${my(b)}';
+  }
+
+  /// One compact stat tile for the import-summary strip — mirrors the
+  /// dashboard's `_StatTile` (tiny caps label + ledger-figure value) so the
+  /// review screen reads as native app surface, not a bespoke import widget.
+  Widget _statTile(
+    String label,
+    String value,
+    Color accent, {
+    bool emphasized = false,
+    Color? valueColor,
+  }) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(emphasized ? 16 : 14, 11, 14, 11),
+      decoration: BoxDecoration(
+        color: emphasized
+            ? accent.withValues(alpha: 0.06)
+            : context.tileSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: emphasized ? accent.withValues(alpha: 0.32) : context.hairline,
+          width: emphasized ? 1.2 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (!emphasized) ...[
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration:
+                      BoxDecoration(color: accent, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 6),
+              ],
+              Flexible(
+                child: Text(
+                  label.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10,
+                    letterSpacing: 1.0,
+                    fontWeight: FontWeight.w700,
+                    color: emphasized ? accent : context.textSubtle,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: brandDisplayStyle(
+              fontSize: emphasized ? 19 : 16,
+              fontWeight: FontWeight.w700,
+              color: valueColor ?? context.textPrimary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Stat strip at the top of the review screen: transactions found, total
+  /// inflow / outflow, and the covered date range — the at-a-glance "here's
+  /// what this statement holds" that the bare dropdown never gave.
+  Widget _buildImportSummary(AppLocalizations l) {
+    final txns = _previewTransactions;
+    if (txns == null || txns.isEmpty) return const SizedBox.shrink();
+    final es = Localizations.localeOf(context).languageCode == 'es';
+    final cur = (txns.first['currency'] ?? 'MXN').toString();
+    final fmt = moneyFormat(cur);
+    final nFiles = _fileGroups.isEmpty ? _selectedFiles.length : _fileGroups.length;
+    final range = (_minDate != null && _maxDate != null)
+        ? _formatDateRange(_minDate!, _maxDate!, es)
+        : null;
+
+    final tiles = <Widget>[
+      _statTile(
+        l.impSummaryFound,
+        '${txns.length}',
+        context.info,
+        emphasized: true,
+        valueColor: context.info,
+      ),
+      _statTile(
+        l.impSummaryInflow,
+        fmt.format(_sumInflow),
+        context.positive,
+        valueColor: context.positive,
+      ),
+      _statTile(
+        l.impSummaryOutflow,
+        fmt.format(_sumOutflow),
+        context.negative,
+        valueColor: context.negative,
+      ),
+    ];
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: context.hairline),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            LayoutBuilder(builder: (ctx, c) {
+              final n = tiles.length;
+              double width(double max) => max >= 620
+                  ? (max - (n - 1) * 10) / n
+                  : max >= 420
+                      ? (max - 10) / 2 - 0.5
+                      : max;
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: tiles
+                    .map((t) =>
+                        SizedBox(width: width(c.maxWidth), child: t))
+                    .toList(),
+              );
+            }),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.description_outlined,
+                    size: 14, color: context.textFaint),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    [
+                      l.impSummaryFiles(nFiles),
+                      ?range,
+                    ].join('  ·  '),
+                    style: TextStyle(fontSize: 12, color: context.textSubtle),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Green "matched / created" or amber "no match" line under the
+  /// destination dropdown, driven by [_accountCue].
+  Widget _buildAccountCue(AppLocalizations l) {
+    switch (_accountCue) {
+      case _AccountCue.matched:
+      case _AccountCue.created:
+        final text = _accountCue == _AccountCue.created
+            ? l.impAccountCreatedCue(_selectedAccountName())
+            : l.impAccountMatched(_selectedAccountName());
+        return Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(
+            children: [
+              Icon(Icons.check_circle, size: 14, color: context.positive),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  text,
+                  style: TextStyle(fontSize: 12, color: context.positive),
+                ),
+              ),
+            ],
+          ),
+        );
+      case _AccountCue.noMatch:
+        return Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, size: 14, color: context.warning),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  l.impNoAccountMatch,
+                  style: TextStyle(fontSize: 12, color: context.warning),
+                ),
+              ),
+            ],
+          ),
+        );
+      case _AccountCue.none:
+        return const SizedBox.shrink();
+    }
   }
 
   Widget _buildSelectedHeader(AppLocalizations l) {
@@ -1156,90 +1417,88 @@ class _ImportScreenState extends State<ImportScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    l.impAssignToAccount,
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  if (_accounts != null)
-                    DropdownButtonFormField<String>(
-                      initialValue: _selectedAccountId,
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: context.tint(0.05),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                  // At-a-glance statement summary (count + inflow/outflow +
+                  // covered period) so the review screen leads with context.
+                  _buildImportSummary(l),
+                  const SizedBox(height: 20),
+                  // Destination-account assignment, grouped in one panel:
+                  // dropdown + match cue + inline-create + any bundled
+                  // secondary sections.
+                  Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(color: context.hairline),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(18),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l.impAssignToAccount,
+                            style: const TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 12),
+                          if (_accounts != null)
+                            DropdownButtonFormField<String>(
+                              initialValue: _selectedAccountId,
+                              isExpanded: true,
+                              decoration: InputDecoration(
+                                filled: true,
+                                fillColor: context.tint(0.05),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              items: _accounts!.map((acc) {
+                                final cur = (acc['currency'] as String? ?? '')
+                                    .toUpperCase();
+                                final label = cur.isNotEmpty
+                                    ? '${acc['institution_name']} - ${acc['name']} ($cur)'
+                                    : '${acc['institution_name']} - ${acc['name']}';
+                                return DropdownMenuItem<String>(
+                                  value: acc['id'],
+                                  child: Text(label),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                setState(() {
+                                  _selectedAccountId = val;
+                                  // A manual pick supersedes the auto-match
+                                  // cue — clear it rather than show stale copy.
+                                  _accountCue = _AccountCue.none;
+                                });
+                                _recheckDuplicates();
+                              },
+                            )
+                          else
+                            const CircularProgressIndicator(),
+                          // Cue so an auto-match (or the lack of one) is
+                          // obvious, instead of the dropdown silently blanking.
+                          _buildAccountCue(l),
+                          const SizedBox(height: 8),
+                          // Statements from a bank you haven't linked (e.g.
+                          // Banamex) have no destination yet — let the user
+                          // make one inline, pre-set to the statements' currency.
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: _openCreateAccount,
+                              icon: const Icon(Icons.add, size: 18),
+                              label: Text(l.impCreateAccountForImport),
+                            ),
+                          ),
+                          // Per-section destination pickers when a statement
+                          // bundles more than one account (Banamex primary +
+                          // Pagaré/Ahorro).
+                          if (_secondaryLabels.isNotEmpty)
+                            ..._buildSecondaryPickers(context),
+                        ],
                       ),
-                      items: _accounts!.map((acc) {
-                        final cur = (acc['currency'] as String? ?? '').toUpperCase();
-                        final label = cur.isNotEmpty
-                            ? '${acc['institution_name']} - ${acc['name']} ($cur)'
-                            : '${acc['institution_name']} - ${acc['name']}';
-                        return DropdownMenuItem<String>(
-                          value: acc['id'],
-                          child: Text(label),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        setState(() => _selectedAccountId = val);
-                        _recheckDuplicates();
-                      },
-                    )
-                  else
-                    const CircularProgressIndicator(),
-                  // Cue so an auto-match (or the lack of one) is obvious,
-                  // instead of the dropdown silently going blank.
-                  if (_accountMatched == true) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Icon(Icons.check_circle,
-                            size: 14, color: context.positive),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            l.impAccountMatched(_selectedAccountName()),
-                            style: TextStyle(
-                                fontSize: 12, color: context.positive),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ] else if (_accountMatched == false) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Icon(Icons.info_outline,
-                            size: 14, color: context.warning),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            l.impNoAccountMatch,
-                            style: TextStyle(
-                                fontSize: 12, color: context.warning),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  // Statements from a bank you haven't linked (e.g. Banamex)
-                  // have no destination account yet — let the user make one
-                  // inline, pre-set to the statements' currency.
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: _openCreateAccount,
-                      icon: const Icon(Icons.add, size: 18),
-                      label: Text(l.impCreateAccountForImport),
                     ),
                   ),
-                  // Per-section destination pickers when a statement bundles
-                  // more than one account (Banamex primary + Pagaré/Ahorro).
-                  if (_secondaryLabels.isNotEmpty)
-                    ..._buildSecondaryPickers(context),
                   const SizedBox(height: 24),
 
                   // Header row with title and selection controls

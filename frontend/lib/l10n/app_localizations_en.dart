@@ -3182,6 +3182,31 @@ class AppLocalizationsEn extends AppLocalizations {
       'No existing account matches this statement — create one below.';
 
   @override
+  String impAccountCreatedCue(Object account) {
+    return 'Created $account — importing here';
+  }
+
+  @override
+  String get impSummaryFound => 'Found';
+
+  @override
+  String get impSummaryInflow => 'Inflow';
+
+  @override
+  String get impSummaryOutflow => 'Outflow';
+
+  @override
+  String impSummaryFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files',
+      one: '1 file',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get dlgAccountCurrency => 'Currency';
 
   @override

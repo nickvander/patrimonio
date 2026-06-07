@@ -871,6 +871,17 @@
     "placeholders": { "account": { "type": "Object" } }
   },
   "impNoAccountMatch": "Ninguna cuenta existente coincide con este estado de cuenta — crea una abajo.",
+  "impAccountCreatedCue": "Cuenta {account} creada — se importará aquí",
+  "@impAccountCreatedCue": {
+    "placeholders": { "account": { "type": "Object" } }
+  },
+  "impSummaryFound": "Encontradas",
+  "impSummaryInflow": "Ingresos",
+  "impSummaryOutflow": "Egresos",
+  "impSummaryFiles": "{count, plural, =1{1 archivo} other{{count} archivos}}",
+  "@impSummaryFiles": {
+    "placeholders": { "count": { "type": "int" } }
+  },
   "dlgAccountCurrency": "Moneda",
   "dlgAccountInitialBalance": "Saldo inicial",
   "dlgAccountBalanceHelper": "Para tarjetas de crédito o préstamos, ingresa el monto adeudado como número positivo.",

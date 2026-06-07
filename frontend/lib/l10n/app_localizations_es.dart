@@ -3212,6 +3212,31 @@ class AppLocalizationsEs extends AppLocalizations {
       'Ninguna cuenta existente coincide con este estado de cuenta — crea una abajo.';
 
   @override
+  String impAccountCreatedCue(Object account) {
+    return 'Cuenta $account creada — se importará aquí';
+  }
+
+  @override
+  String get impSummaryFound => 'Encontradas';
+
+  @override
+  String get impSummaryInflow => 'Ingresos';
+
+  @override
+  String get impSummaryOutflow => 'Egresos';
+
+  @override
+  String impSummaryFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count archivos',
+      one: '1 archivo',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get dlgAccountCurrency => 'Moneda';
 
   @override
