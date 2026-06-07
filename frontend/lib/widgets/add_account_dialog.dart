@@ -11,10 +11,19 @@ class AddAccountDialog extends StatefulWidget {
   /// the new account matches and the confirm currency-guard accepts it.
   final String defaultCurrency;
 
+  /// Optional pre-filled balance (e.g. a statement import suggesting a
+  /// starting balance for a new account/cajita). Editable by the user.
+  final double? suggestedBalance;
+
+  /// Optional pre-filled account name (e.g. "Nu — Ahorro" for a cajita).
+  final String? suggestedName;
+
   const AddAccountDialog({
     super.key,
     required this.onAccountCreated,
     this.defaultCurrency = 'USD',
+    this.suggestedBalance,
+    this.suggestedName,
   });
 
   @override
@@ -31,6 +40,20 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
   String _type = 'Checking';
   late String _currency = widget.defaultCurrency;
   bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.suggestedName != null && widget.suggestedName!.isNotEmpty) {
+      _nameController.text = widget.suggestedName!;
+    }
+    // Pre-fill a suggested starting balance (e.g. a cajita's reconstructed
+    // balance from an import). Only positive suggestions; the user edits.
+    final sb = widget.suggestedBalance;
+    if (sb != null && sb > 0) {
+      _balanceController.text = sb.toStringAsFixed(2);
+    }
+  }
 
   // Grouped type list. Section labels are rendered as disabled
   // entries so the user sees the structure (Cash / Investments / …)

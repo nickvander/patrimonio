@@ -31,6 +31,10 @@ services:
       # ports be bound to loopback only — see the postgres/redis blocks —
       # so the DB and session store are never exposed on 0.0.0.0.
       DATABASE_URL: postgres://patrimonio:${POSTGRES_PASSWORD:-patrimonio}@postgres:5432/patrimonio
+      # Debug-only: when set, statement-import writes each upload's extracted
+      # text here (inside the container) so a new bank layout can be added by
+      # inspecting what the parser sees. Empty/unset = off (production default).
+      IMPORT_DEBUG_DUMP_DIR: ${IMPORT_DEBUG_DUMP_DIR:-}
       REDIS_URL: redis://:${REDIS_PASSWORD:-patrimonio}@redis:6379
       PLAID_CLIENT_ID: ${PLAID_CLIENT_ID:-}
       PLAID_SECRET: ${PLAID_SECRET:-}

@@ -383,10 +383,30 @@ class _ImportScreenState extends State<ImportScreen> {
         : 'MXN';
     final existingIds =
         (_accounts ?? const []).map((a) => a['id']).toSet();
+
+    // Suggest a starting balance from this section's movements. Statements
+    // like Nu don't print a per-row balance, but the net of a section's rows
+    // approximates its balance when the history starts from the account's
+    // inception (the common case for a cajita). The dialog clamps negatives
+    // and lets the user edit, so a rough suggestion never silently misleads.
+    double sectionNet(String? label) {
+      double s = 0;
+      for (final tx in _previewTransactions ?? const []) {
+        final l = (tx['account_label'] ?? '').toString();
+        final match = label == null ? l.isEmpty : l == label;
+        if (match) s += (tx['amount'] as num?)?.toDouble() ?? 0.0;
+      }
+      return s;
+    }
+
     await showDialog<void>(
       context: context,
       builder: (_) => AddAccountDialog(
         defaultCurrency: cur,
+        suggestedBalance: sectionNet(secondaryLabel),
+        // For a bundled section (e.g. a Nu cajita) pre-fill the name with the
+        // cajita label; leave the primary account for the user to name.
+        suggestedName: secondaryLabel,
         onAccountCreated: () =>
             _selectNewlyCreatedAccount(existingIds, secondaryLabel),
       ),

@@ -487,6 +487,26 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
             info!("PDF '{}' is unreadable: {}", file_name, reason);
             return Err(anyhow!(reason));
         }
+        // Opt-in debug dump: when IMPORT_DEBUG_DUMP_DIR is set, write the
+        // extracted layout text to a file there. Off by default (the env var
+        // is unset in production) — used to add support for a new bank layout
+        // by inspecting exactly what the parser sees, without persisting any
+        // statement in normal operation.
+        if let Ok(dir) = std::env::var("IMPORT_DEBUG_DUMP_DIR") {
+            if !dir.is_empty() {
+                let safe: String = file_name
+                    .chars()
+                    .map(|c| if c.is_alphanumeric() || c == '.' || c == '-' { c } else { '_' })
+                    .collect();
+                let _ = std::fs::create_dir_all(&dir);
+                let path = std::path::Path::new(&dir).join(format!("{safe}.txt"));
+                if let Err(e) = std::fs::write(&path, best.as_bytes()) {
+                    tracing::warn!("IMPORT_DEBUG_DUMP_DIR write failed for {}: {}", file_name, e);
+                } else {
+                    info!("debug-dumped extracted text for '{}' to {:?}", file_name, path);
+                }
+            }
+        }
         let sample_text = best.to_uppercase();
         info!("PDF '{}': {} chars of usable text", file_name, best.len());
 
@@ -507,6 +527,22 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
                     return Ok(polished);
                 }
             }};
+        }
+
+        // Nu México — checked FIRST, by issuer-specific markers. Nu's debit
+        // statements routinely mention other banks (BANAMEX, BBVA…) inside
+        // SPEI transfer descriptions, which would otherwise trip the broad
+        // `contains("BANAMEX")` check below and misroute the whole file to the
+        // Banamex parser. These markers only appear in Nu's own chrome.
+        let looks_nu = lower_name.contains("nu méxico")
+            || lower_name.contains("nu mexico")
+            || sample_text.contains("NU MÉXICO FINANCIERA")
+            || sample_text.contains("CUENTA NU")
+            || sample_text.contains("DETALLE DE MOVIMIENTOS EN TU CUENTA")
+            || sample_text.contains("DETALLE DE MOVIMIENTOS DE TUS CAJITAS");
+        if looks_nu {
+            try_rows!(nu_mexico_pdf::parse_text(&best).unwrap_or_default(), "nu-layout");
+            try_rows!(nu_mexico_pdf::parse(data).unwrap_or_default(), "nu-lopdf");
         }
 
         let looks_banamex = lower_name.contains("banamex")

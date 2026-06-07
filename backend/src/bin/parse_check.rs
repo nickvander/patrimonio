@@ -5,7 +5,8 @@
 //   cargo run --bin parse_check -- <banorte|scotiabank|hsbc|santander|bbva|banamex> <file.txt>
 
 use patrimonio::services::parser::{
-    banamex_layout, banorte_layout, bbva_layout, hsbc_layout, santander_layout, scotiabank_layout,
+    banamex_layout, banorte_layout, bbva_layout, hsbc_layout, nu_mexico_pdf, santander_layout,
+    scotiabank_layout,
 };
 use std::env;
 use std::fs;
@@ -33,6 +34,7 @@ fn main() -> anyhow::Result<()> {
             "santander" => santander_layout::parse_text(&text)?,
             "bbva" => bbva_layout::parse_text(&text)?,
             "banamex" => banamex_layout::parse_text(&text)?,
+            "nu" => nu_mexico_pdf::parse_text(&text)?,
             other => {
                 eprintln!("unknown bank: {other}");
                 std::process::exit(2);
@@ -42,14 +44,15 @@ fn main() -> anyhow::Result<()> {
 
     println!("=== {bank}: {} transactions ===", txs.len());
     let show = |t: &patrimonio::models::import::ParsedTransaction| {
-        let desc: String = t.description.chars().take(48).collect();
+        let desc: String = t.description.chars().take(40).collect();
         println!(
-            "  {}  {:>14}  bal={:>14}  {}",
+            "  {}  {:>14}  bal={:>10}  [{}]  {}",
             t.date,
             t.amount.to_string(),
             t.balance_after
                 .map(|b| b.to_string())
                 .unwrap_or_else(|| "-".into()),
+            t.account_label.as_deref().unwrap_or("main"),
             desc
         );
     };
@@ -70,5 +73,19 @@ fn main() -> anyhow::Result<()> {
     println!(
         "  deposits={deposits} withdrawals={withdrawals} with_balance={with_balance}"
     );
+
+    // Per-account_label breakdown (for multi-section statements like Nu cajitas).
+    use std::collections::BTreeMap;
+    let mut by_label: BTreeMap<String, (usize, rust_decimal::Decimal)> = BTreeMap::new();
+    for t in &txs {
+        let key = t.account_label.clone().unwrap_or_else(|| "main".into());
+        let e = by_label.entry(key).or_insert((0, rust_decimal::Decimal::ZERO));
+        e.0 += 1;
+        e.1 += t.amount;
+    }
+    println!("  by account_label:");
+    for (label, (n, net)) in &by_label {
+        println!("    {label:<24} {n:>4} txns   net={net}");
+    }
     Ok(())
 }
