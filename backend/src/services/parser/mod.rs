@@ -545,6 +545,20 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
             try_rows!(nu_mexico_pdf::parse(data).unwrap_or_default(), "nu-lopdf");
         }
 
+        // cetesdirecto (Nacional Financiera / NAFIN) — also checked before the
+        // broad Mexican-bank fallback, since its "Movimientos del período"
+        // table would otherwise be fed to the Banamex layout parser. Its
+        // 2-date / Cargo-Abono-Saldo columns are unlike any bank ledger.
+        let looks_cetes = lower_name.contains("cetes")
+            || sample_text.contains("CETESDIRECTO")
+            || sample_text.contains("MOVIMIENTOS DEL PERÍODO")
+            || sample_text.contains("MOVIMIENTOS DEL PERIODO")
+            || (sample_text.contains("NACIONAL FINANCIERA") && sample_text.contains("CETES"));
+        if looks_cetes {
+            try_rows!(cetes_pdf::parse_text(&best).unwrap_or_default(), "cetes-layout");
+            try_rows!(cetes_pdf::parse(data).unwrap_or_default(), "cetes-lopdf");
+        }
+
         let looks_banamex = lower_name.contains("banamex")
             || sample_text.contains("BANAMEX")
             || sample_text.contains("BANCO NACIONAL DE MEXICO")

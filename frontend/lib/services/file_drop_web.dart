@@ -23,7 +23,10 @@ typedef DragStateCallback = void Function(bool isDragging);
 /// until every file finished. The count is the raw size of the
 /// browser-supplied FileList — pre-filter, so non-CSV/PDF entries
 /// the user dropped by accident still contribute to it.
-typedef ReadingStartCallback = void Function(int fileCount);
+/// [fileCount] is null when the total isn't known yet — e.g. while a dropped
+/// directory is still being walked — so the host can show a generic
+/// "Reading files…" until the real count arrives.
+typedef ReadingStartCallback = void Function(int? fileCount);
 
 /// Attaches drag-and-drop listeners to the document so files can be
 /// dropped anywhere on the page and routed into the existing import
@@ -114,9 +117,14 @@ class GlobalFileDropListener {
         if (f != null) flat.add(f);
       }
 
-      // Initial estimate; refined to the true file count after directories
-      // are expanded (see _collectAndDispatch).
-      onReadingStart?.call(entries.isNotEmpty ? entries.length : flat.length);
+      // Initial count. A dropped directory's contents aren't known until it's
+      // walked, so report null ("Reading files…") rather than a misleading
+      // "1" (the folder entry); _collectAndDispatch refines it to the true
+      // count once expansion finishes.
+      final hasDir = entries.any((e) => e.isDirectory);
+      onReadingStart?.call(
+        entries.isEmpty ? flat.length : (hasDir ? null : entries.length),
+      );
       // Fire-and-forget — readers complete on microtasks, the host gets the
       // list once everything (incl. nested directory files) is loaded.
       unawaited(_collectAndDispatch(entries, flat));

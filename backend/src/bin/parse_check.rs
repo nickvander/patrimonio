@@ -5,8 +5,8 @@
 //   cargo run --bin parse_check -- <banorte|scotiabank|hsbc|santander|bbva|banamex> <file.txt>
 
 use patrimonio::services::parser::{
-    banamex_layout, banorte_layout, bbva_layout, hsbc_layout, nu_mexico_pdf, santander_layout,
-    scotiabank_layout,
+    banamex_layout, banorte_layout, bbva_layout, cetes_pdf, hsbc_layout, nu_mexico_pdf,
+    santander_layout, scotiabank_layout,
 };
 use std::env;
 use std::fs;
@@ -35,6 +35,7 @@ fn main() -> anyhow::Result<()> {
             "bbva" => bbva_layout::parse_text(&text)?,
             "banamex" => banamex_layout::parse_text(&text)?,
             "nu" => nu_mexico_pdf::parse_text(&text)?,
+            "cetes" => cetes_pdf::parse_text(&text)?,
             other => {
                 eprintln!("unknown bank: {other}");
                 std::process::exit(2);

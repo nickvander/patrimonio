@@ -76,12 +76,19 @@ fn test_parse_nu_mexico_pdf_text() {
 
 #[test]
 fn test_parse_cetes_pdf_text() {
-    let text = "15/03/2024 COMPRA CETES 28 DIAS $ 1,000.00\n16/03/2024 VENTA BONOS $ 5,500.25";
+    // Real cetesdirecto "Movimientos del período" layout: two DD/MM/YY dates,
+    // folio+code, emisora, serie, then Cargo / Abono / Saldo efectivo.
+    let text = "Movimientos del período\n\
+        15/03/24   15/03/24   SVD111COMPRA   CETES   240725   1,000   9.74100300   86   11.30   9,741.00   0.00   -9,740.10\n\
+        16/03/24   16/03/24   SVD112VTASI    BONDDIA PF2      5,500   1.94000000  0    0.00    0.00       5,500.25   0.15\n\
+        Saldo final   0.15";
     let result = cetes_pdf::parse_text(text).unwrap();
-    
-    assert_eq!(result.len(), 2);
-    assert_eq!(result[0].description, "COMPRA CETES 28 DIAS");
-    assert_eq!(result[0].amount, Decimal::from_str("1000.00").unwrap());
+
+    assert_eq!(result.len(), 2, "got {:#?}", result);
+    // Buy CETES → Cargo, negative.
+    assert_eq!(result[0].amount, Decimal::from_str("-9741.00").unwrap());
+    assert!(result[0].description.contains("CETES"));
+    // Sell → Abono, positive.
     assert_eq!(result[1].amount, Decimal::from_str("5500.25").unwrap());
 }
 
