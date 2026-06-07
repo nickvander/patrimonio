@@ -1996,6 +1996,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final currencyFormat = moneyFormat(_targetCurrency);
     Widget buildTabContainer(Widget child, {bool scrollable = true}) {
       final padding = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+      // Extra scrollable space at the very bottom so a transient SnackBar
+      // (notably the 30s "Syncing…" one) never sits on top of the last
+      // interactive controls — e.g. the Link Coinbase / Connect Bitso
+      // buttons at the foot of Settings. The user can always scroll those
+      // clear of the snackbar instead of having it block the tap target.
+      const snackbarClearance = 88.0;
       final content = Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1600),
@@ -2005,7 +2011,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       return scrollable
           ? SingleChildScrollView(
-              padding: EdgeInsets.all(padding),
+              padding: EdgeInsets.fromLTRB(
+                  padding, padding, padding, padding + snackbarClearance),
               child: content,
             )
           : Padding(padding: EdgeInsets.all(padding), child: content);
