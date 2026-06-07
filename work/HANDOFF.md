@@ -8,12 +8,27 @@
 
 ## TL;DR — current state
 
-Everything below is **on `main` and pushed** (`origin/main` @ `bef9ece`),
+Everything below is **on `main` and pushed** (`origin/main` @ `8fc0e82`),
 tree clean. All verified green: backend `./scripts/test.sh` (full suite,
 incl. 82 dashboard integration), `flutter analyze` clean, `flutter test`
 (170). Flutter MUST run via docker — see the gotchas at the bottom.
 
 **Shipped this sprint (newest first):**
+- Portfolio freeze fix + overlap trim (research-backed; see work/ research
+  notes in the 2026-06-07 section). Holdings table no longer nests a
+  fixed-height ListView/Scrollbar inside the page scroll (that nested
+  same-axis scroll was the "freeze") — rows flow in the page scroll, capped
+  at 12 + "Show all N"; RepaintBoundary around table/heatmap/benchmark;
+  dropped per-band blur shadows. Removed the redundant donut-by-holding chart
+  (kept value/change/KPIs/table). Added a concentration risk flag
+  (">=20% in one position"). Full-tab scroll is smooth now; **NOTE**: the
+  headless screenshot capture can still time out when the holdings table is
+  centered (CDP-vs-canvaskit artifact, not a user scroll hang).
+  **Remaining (proposed, not done):** fold "Asset breakdown" (by type/
+  institution) into ONE allocation widget with a dimension toggle (Class ·
+  Type · Institution) + drill-down to filter the table; merge the Benchmark
+  card into a single performance/time chart. (Per the 2026 UX research:
+  overview → performance → one allocation view → signals → one holdings table.)
 - Portfolio "Asset distribution" UX pass (browser-verified): aligned
   per-holding rows (name · value · within-class %) with top-4 + "Show N
   more" instead of the inline ticker-chip wall (no longer duplicates the
