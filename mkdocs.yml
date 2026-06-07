@@ -55,3 +55,5 @@ nav:
   - Frontend: frontend.md
   - Database: database.md
   - Deployment: deployment.md
+  - Operations: operations.md
+  - Migration (homelab): migration.md

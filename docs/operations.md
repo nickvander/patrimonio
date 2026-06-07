@@ -9,6 +9,12 @@ If you only read one section, read **[Backup setup](#backup-setup)** —
 your Plaid tokens, TOTP secrets, and every transaction sit on a single
 Docker volume. One `docker volume prune --force` and you start over.
 
+Moving to a new box (e.g. a homelab) without re-linking Plaid? See the
+**[migration runbook](migration.md)** — it builds on the backup/restore
+scripts here and covers the secrets that must travel with the dump. Locked
+out? There's an offline break-glass CLI (`cargo run --bin admin_reset`,
+documented in the migration runbook's last section).
+
 ---
 
 ## Backup strategy
