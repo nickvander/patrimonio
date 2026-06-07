@@ -1234,5 +1234,6 @@
   "lwRangeFiveYears": "5Y",
   "lwRangeAll": "ALL",
   "lwPerfTitle": "Performance",
+  "lwPerfValueSubtitle": "Investment value over time (includes contributions)",
   "lwPerfNotEnough": "Not enough history yet to chart your portfolio value over time."
 }

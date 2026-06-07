@@ -985,5 +985,6 @@
   "lwRangeFiveYears": "5A",
   "lwRangeAll": "TODO",
   "lwPerfTitle": "Rendimiento",
+  "lwPerfValueSubtitle": "Valor de inversión a lo largo del tiempo (incluye aportaciones)",
   "lwPerfNotEnough": "Aún no hay suficiente historial para graficar el valor de tu portafolio."
 }

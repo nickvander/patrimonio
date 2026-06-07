@@ -97,7 +97,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
             // view is actually being shown — saves a meaningful chunk of
             // work on the simple path.
             final institutions = _detailed
-                ? _topInstitutions(context, filtered)
+                ? _topInstitutions(context, filtered, max: 4)
                 : const <MapEntry<String, Color>>[];
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -367,6 +367,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
 
   Widget _legendItem(String label, Color color) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           width: 12,
@@ -374,7 +375,18 @@ class _NetWorthCardState extends State<NetWorthCard> {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 4),
-        Text(label, style: TextStyle(fontSize: 10, color: context.textSubtle)),
+        // Institution names can be very long ("Morgan Stanley - StockPlan
+        // Connect / Benefit Access"); clamp each chip so the legend stays a
+        // line or two and doesn't steal height from the fixed-height chart.
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 110),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 10, color: context.textSubtle),
+          ),
+        ),
       ],
     );
   }

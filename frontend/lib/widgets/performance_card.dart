@@ -173,45 +173,31 @@ class _PerformanceCardState extends State<PerformanceCard> {
     final last = filtered.isNotEmpty
         ? (filtered.last['value_usd'] as num?)?.toDouble() ?? 0.0
         : 0.0;
-    final delta = last - first;
-    final deltaPct = first > 0 ? (delta / first) * 100 : 0.0;
-    final up = delta >= 0;
-    final color = up ? context.positive : context.negative;
+    // Line colour follows the overall direction over the range. We deliberately
+    // DON'T show a first→last % "return" here: early history ramps from ~0 as
+    // accounts first sync, so that % conflates contributions with market gains
+    // (the absurd "+13000%" read). The honest return is the contribution-
+    // weighted "vs S&P 500" block below.
+    final color = last >= first ? context.positive : context.negative;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Flexible(
-              child: Text(
-                _money(last),
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  color: context.textPrimary,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 8),
-            if (filtered.length >= 2)
-              Text(
-                '${up ? '+' : ''}${_money(delta)} (${deltaPct.toStringAsFixed(1)}%)',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-          ],
+        Text(
+          _money(last),
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            color: context.textPrimary,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          l.lwPerfValueSubtitle,
+          style: TextStyle(color: context.textFaint, fontSize: 11),
         ),
         const SizedBox(height: 14),
         RepaintBoundary(

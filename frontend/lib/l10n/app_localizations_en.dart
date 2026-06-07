@@ -3695,6 +3695,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lwPerfTitle => 'Performance';
 
   @override
+  String get lwPerfValueSubtitle =>
+      'Investment value over time (includes contributions)';
+
+  @override
   String get lwPerfNotEnough =>
       'Not enough history yet to chart your portfolio value over time.';
 }

@@ -6028,6 +6028,12 @@ abstract class AppLocalizations {
   /// **'Performance'**
   String get lwPerfTitle;
 
+  /// No description provided for @lwPerfValueSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Investment value over time (includes contributions)'**
+  String get lwPerfValueSubtitle;
+
   /// No description provided for @lwPerfNotEnough.
   ///
   /// In en, this message translates to:
