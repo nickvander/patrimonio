@@ -49,6 +49,10 @@ class _ImportScreenState extends State<ImportScreen> {
   // (suggested name + balance, CLABE, holder). Used to pre-fill the primary
   // account when creating one inline during import.
   Map<String, dynamic>? _accountInfo;
+  // Auto-match outcome for the cue under the account dropdown:
+  // true = matched an existing account, false = recognised statement but no
+  // match (prompt to create), null = no parsed account info.
+  bool? _accountMatched;
   String? _message;
   /// Whether `_message` represents a failure. Tracked explicitly rather
   /// than sniffing the message text for "failed" — the copy is now
@@ -675,6 +679,7 @@ class _ImportScreenState extends State<ImportScreen> {
   /// the default (first account) when nothing matches — the user can still
   /// pick or create one (which pre-fills from the parsed account info).
   void _autoSelectMatchingAccount() {
+    _accountMatched = null;
     final info = _accountInfo;
     final accounts = _accounts;
     if (info == null || accounts == null || accounts.isEmpty) return;
@@ -686,6 +691,7 @@ class _ImportScreenState extends State<ImportScreen> {
         final ac = (a['clabe'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
         if (ac.isNotEmpty && ac == clabe) {
           _selectedAccountId = a['id']?.toString();
+          _accountMatched = true;
           return;
         }
       }
@@ -697,17 +703,30 @@ class _ImportScreenState extends State<ImportScreen> {
             '${a['institution_name'] ?? ''} ${a['name'] ?? ''}'.toLowerCase();
         if (key.length >= 2 && hay.contains(key)) {
           _selectedAccountId = a['id']?.toString();
+          _accountMatched = true;
           return;
         }
       }
     }
 
-    // We have a recognised statement but no matching account (common on the
-    // first import of a new bank). Clear the default selection — which is just
-    // the first account, likely an unrelated one — so the user is nudged to
-    // create the right account (which pre-fills name/balance/CLABE) instead of
-    // silently importing into, say, a US Plaid account.
+    // Recognised statement but no matching account (common on the first import
+    // of a new bank). Clear the default (the first account, likely unrelated,
+    // e.g. a US Plaid one) so the user is nudged to create the right account
+    // (which pre-fills name/balance/CLABE) — and flag it for the cue below.
     _selectedAccountId = null;
+    _accountMatched = false;
+  }
+
+  /// Name of the currently-selected account, for the "matched" cue.
+  String _selectedAccountName() {
+    final a = (_accounts ?? const []).cast<dynamic>().firstWhere(
+          (a) => a['id']?.toString() == _selectedAccountId,
+          orElse: () => null,
+        );
+    if (a == null) return '';
+    final inst = (a['institution_name'] ?? '').toString();
+    final name = (a['name'] ?? '').toString();
+    return inst.isNotEmpty ? '$inst · $name' : name;
   }
 
   Widget _buildSelectedHeader(AppLocalizations l) {
@@ -1170,6 +1189,41 @@ class _ImportScreenState extends State<ImportScreen> {
                     )
                   else
                     const CircularProgressIndicator(),
+                  // Cue so an auto-match (or the lack of one) is obvious,
+                  // instead of the dropdown silently going blank.
+                  if (_accountMatched == true) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(Icons.check_circle,
+                            size: 14, color: context.positive),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            l.impAccountMatched(_selectedAccountName()),
+                            style: TextStyle(
+                                fontSize: 12, color: context.positive),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else if (_accountMatched == false) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(Icons.info_outline,
+                            size: 14, color: context.warning),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            l.impNoAccountMatch,
+                            style: TextStyle(
+                                fontSize: 12, color: context.warning),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   // Statements from a bank you haven't linked (e.g. Banamex)
                   // have no destination account yet — let the user make one

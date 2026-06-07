@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/theme_colors.dart';
 import '../services/api_service.dart';
-import 'clabe_info.dart';
 
 class AddAccountDialog extends StatefulWidget {
   final VoidCallback onAccountCreated;
@@ -44,10 +43,19 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
   // Default to 0 — most accounts (and every statement import, where the
   // balance is set from the imported closing balance) start there.
   final _balanceController = TextEditingController(text: '0');
+  // Statement-derived identity, editable so the user can fix a mis-read.
+  final _clabeController = TextEditingController();
+  final _holderController = TextEditingController();
 
   String _type = 'Checking';
   late String _currency = widget.defaultCurrency;
   bool _isSubmitting = false;
+
+  /// Whether to show the editable CLABE / holder fields — only when the
+  /// dialog was opened from an import that parsed account identity.
+  bool get _hasIdentity =>
+      (widget.suggestedClabe?.isNotEmpty ?? false) ||
+      (widget.suggestedHolder?.isNotEmpty ?? false);
 
   @override
   void initState() {
@@ -61,6 +69,21 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
     if (sb != null && sb > 0) {
       _balanceController.text = sb.toStringAsFixed(2);
     }
+    if (widget.suggestedClabe != null) {
+      _clabeController.text = widget.suggestedClabe!;
+    }
+    if (widget.suggestedHolder != null) {
+      _holderController.text = widget.suggestedHolder!;
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _balanceController.dispose();
+    _clabeController.dispose();
+    _holderController.dispose();
+    super.dispose();
   }
 
   // Grouped type list. Section labels are rendered as disabled
@@ -82,6 +105,49 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
     ]),
     ('liabilities', ['Credit Card', 'Loan', 'Mortgage', 'Other Liability']),
   ];
+
+  /// Localised display label for an account-type VALUE. The value stays
+  /// English (it's data sent to the API); only the label is translated.
+  String _typeLabel(AppLocalizations l, String type) {
+    switch (type) {
+      case 'Checking':
+        return l.acctTypeChecking;
+      case 'Savings':
+        return l.acctTypeSavings;
+      case 'CD':
+        return l.acctTypeCD;
+      case 'Brokerage':
+        return l.acctTypeBrokerage;
+      case 'Investment':
+        return l.acctTypeInvestment;
+      case 'IRA':
+        return l.acctTypeIRA;
+      case '401k':
+        return l.acctType401k;
+      case 'Crypto':
+        return l.acctTypeCrypto;
+      case 'Real Estate':
+        return l.acctTypeRealEstate;
+      case 'Vehicle':
+        return l.acctTypeVehicle;
+      case 'Private Equity':
+        return l.acctTypePrivateEquity;
+      case 'Collectibles':
+        return l.acctTypeCollectibles;
+      case 'Other Asset':
+        return l.acctTypeOtherAsset;
+      case 'Credit Card':
+        return l.acctTypeCreditCard;
+      case 'Loan':
+        return l.acctTypeLoan;
+      case 'Mortgage':
+        return l.acctTypeMortgage;
+      case 'Other Liability':
+        return l.acctTypeOtherLiability;
+      default:
+        return type;
+    }
+  }
 
   String _groupLabel(AppLocalizations l, String key) {
     switch (key) {
@@ -158,7 +224,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                           value: t,
                           child: Padding(
                             padding: const EdgeInsets.only(left: 12),
-                            child: Text(t),
+                            child: Text(_typeLabel(l, t)),
                           ),
                         )),
                   ],
@@ -200,14 +266,28 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                   return null;
                 },
               ),
-              // Statement-derived identity (CLABE / holder) when creating an
-              // account from an import — stored with the account and copyable.
-              if (widget.suggestedClabe != null &&
-                  widget.suggestedClabe!.isNotEmpty) ...[
+              // Statement-derived identity (holder / CLABE) — editable so a
+              // mis-read can be corrected before it's saved on the account.
+              if (_hasIdentity) ...[
                 const SizedBox(height: 16),
-                ClabeInfoCard(
-                  clabe: widget.suggestedClabe!,
-                  holder: widget.suggestedHolder,
+                TextFormField(
+                  controller: _holderController,
+                  style: TextStyle(color: context.textPrimary),
+                  decoration: InputDecoration(labelText: l.dlgAccountHolder),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _clabeController,
+                  style: TextStyle(color: context.textPrimary),
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(labelText: l.dlgAccountClabe),
+                  validator: (v) {
+                    final digits =
+                        (v ?? '').replaceAll(RegExp(r'\D'), '');
+                    // Optional, but if present must be a full 18-digit CLABE.
+                    if (digits.isEmpty || digits.length == 18) return null;
+                    return l.dlgAccountClabeInvalid;
+                  },
                 ),
               ],
             ],
@@ -245,8 +325,8 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
         type: _type,
         currency: _currency,
         initialBalance: double.parse(_balanceController.text),
-        clabe: widget.suggestedClabe,
-        holderName: widget.suggestedHolder,
+        clabe: _clabeController.text,
+        holderName: _holderController.text,
       );
 
       widget.onAccountCreated();

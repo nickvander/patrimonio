@@ -3113,6 +3113,75 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dlgAccountType => 'Account type';
 
   @override
+  String get dlgAccountClabe => 'CLABE';
+
+  @override
+  String get dlgAccountHolder => 'Account holder';
+
+  @override
+  String get dlgAccountClabeInvalid => 'CLABE must be 18 digits';
+
+  @override
+  String get acctTypeChecking => 'Checking';
+
+  @override
+  String get acctTypeSavings => 'Savings';
+
+  @override
+  String get acctTypeCD => 'Certificate of deposit';
+
+  @override
+  String get acctTypeBrokerage => 'Brokerage';
+
+  @override
+  String get acctTypeInvestment => 'Investment';
+
+  @override
+  String get acctTypeIRA => 'IRA';
+
+  @override
+  String get acctType401k => '401(k)';
+
+  @override
+  String get acctTypeCrypto => 'Crypto';
+
+  @override
+  String get acctTypeRealEstate => 'Real estate';
+
+  @override
+  String get acctTypeVehicle => 'Vehicle';
+
+  @override
+  String get acctTypePrivateEquity => 'Private equity';
+
+  @override
+  String get acctTypeCollectibles => 'Collectibles';
+
+  @override
+  String get acctTypeOtherAsset => 'Other asset';
+
+  @override
+  String get acctTypeCreditCard => 'Credit card';
+
+  @override
+  String get acctTypeLoan => 'Loan';
+
+  @override
+  String get acctTypeMortgage => 'Mortgage';
+
+  @override
+  String get acctTypeOtherLiability => 'Other liability';
+
+  @override
+  String impAccountMatched(Object account) {
+    return 'Matched to $account from the statement';
+  }
+
+  @override
+  String get impNoAccountMatch =>
+      'No existing account matches this statement — create one below.';
+
+  @override
   String get dlgAccountCurrency => 'Currency';
 
   @override

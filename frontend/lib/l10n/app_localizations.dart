@@ -5180,6 +5180,138 @@ abstract class AppLocalizations {
   /// **'Account type'**
   String get dlgAccountType;
 
+  /// No description provided for @dlgAccountClabe.
+  ///
+  /// In en, this message translates to:
+  /// **'CLABE'**
+  String get dlgAccountClabe;
+
+  /// No description provided for @dlgAccountHolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Account holder'**
+  String get dlgAccountHolder;
+
+  /// No description provided for @dlgAccountClabeInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'CLABE must be 18 digits'**
+  String get dlgAccountClabeInvalid;
+
+  /// No description provided for @acctTypeChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking'**
+  String get acctTypeChecking;
+
+  /// No description provided for @acctTypeSavings.
+  ///
+  /// In en, this message translates to:
+  /// **'Savings'**
+  String get acctTypeSavings;
+
+  /// No description provided for @acctTypeCD.
+  ///
+  /// In en, this message translates to:
+  /// **'Certificate of deposit'**
+  String get acctTypeCD;
+
+  /// No description provided for @acctTypeBrokerage.
+  ///
+  /// In en, this message translates to:
+  /// **'Brokerage'**
+  String get acctTypeBrokerage;
+
+  /// No description provided for @acctTypeInvestment.
+  ///
+  /// In en, this message translates to:
+  /// **'Investment'**
+  String get acctTypeInvestment;
+
+  /// No description provided for @acctTypeIRA.
+  ///
+  /// In en, this message translates to:
+  /// **'IRA'**
+  String get acctTypeIRA;
+
+  /// No description provided for @acctType401k.
+  ///
+  /// In en, this message translates to:
+  /// **'401(k)'**
+  String get acctType401k;
+
+  /// No description provided for @acctTypeCrypto.
+  ///
+  /// In en, this message translates to:
+  /// **'Crypto'**
+  String get acctTypeCrypto;
+
+  /// No description provided for @acctTypeRealEstate.
+  ///
+  /// In en, this message translates to:
+  /// **'Real estate'**
+  String get acctTypeRealEstate;
+
+  /// No description provided for @acctTypeVehicle.
+  ///
+  /// In en, this message translates to:
+  /// **'Vehicle'**
+  String get acctTypeVehicle;
+
+  /// No description provided for @acctTypePrivateEquity.
+  ///
+  /// In en, this message translates to:
+  /// **'Private equity'**
+  String get acctTypePrivateEquity;
+
+  /// No description provided for @acctTypeCollectibles.
+  ///
+  /// In en, this message translates to:
+  /// **'Collectibles'**
+  String get acctTypeCollectibles;
+
+  /// No description provided for @acctTypeOtherAsset.
+  ///
+  /// In en, this message translates to:
+  /// **'Other asset'**
+  String get acctTypeOtherAsset;
+
+  /// No description provided for @acctTypeCreditCard.
+  ///
+  /// In en, this message translates to:
+  /// **'Credit card'**
+  String get acctTypeCreditCard;
+
+  /// No description provided for @acctTypeLoan.
+  ///
+  /// In en, this message translates to:
+  /// **'Loan'**
+  String get acctTypeLoan;
+
+  /// No description provided for @acctTypeMortgage.
+  ///
+  /// In en, this message translates to:
+  /// **'Mortgage'**
+  String get acctTypeMortgage;
+
+  /// No description provided for @acctTypeOtherLiability.
+  ///
+  /// In en, this message translates to:
+  /// **'Other liability'**
+  String get acctTypeOtherLiability;
+
+  /// No description provided for @impAccountMatched.
+  ///
+  /// In en, this message translates to:
+  /// **'Matched to {account} from the statement'**
+  String impAccountMatched(Object account);
+
+  /// No description provided for @impNoAccountMatch.
+  ///
+  /// In en, this message translates to:
+  /// **'No existing account matches this statement — create one below.'**
+  String get impNoAccountMatch;
+
   /// No description provided for @dlgAccountCurrency.
   ///
   /// In en, this message translates to:

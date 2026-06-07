@@ -3143,6 +3143,75 @@ class AppLocalizationsEs extends AppLocalizations {
   String get dlgAccountType => 'Tipo de cuenta';
 
   @override
+  String get dlgAccountClabe => 'CLABE';
+
+  @override
+  String get dlgAccountHolder => 'Titular de la cuenta';
+
+  @override
+  String get dlgAccountClabeInvalid => 'La CLABE debe tener 18 dígitos';
+
+  @override
+  String get acctTypeChecking => 'Cheques';
+
+  @override
+  String get acctTypeSavings => 'Ahorros';
+
+  @override
+  String get acctTypeCD => 'Depósito a plazo';
+
+  @override
+  String get acctTypeBrokerage => 'Casa de bolsa';
+
+  @override
+  String get acctTypeInvestment => 'Inversión';
+
+  @override
+  String get acctTypeIRA => 'IRA';
+
+  @override
+  String get acctType401k => '401(k)';
+
+  @override
+  String get acctTypeCrypto => 'Cripto';
+
+  @override
+  String get acctTypeRealEstate => 'Bienes raíces';
+
+  @override
+  String get acctTypeVehicle => 'Vehículo';
+
+  @override
+  String get acctTypePrivateEquity => 'Capital privado';
+
+  @override
+  String get acctTypeCollectibles => 'Coleccionables';
+
+  @override
+  String get acctTypeOtherAsset => 'Otro activo';
+
+  @override
+  String get acctTypeCreditCard => 'Tarjeta de crédito';
+
+  @override
+  String get acctTypeLoan => 'Préstamo';
+
+  @override
+  String get acctTypeMortgage => 'Hipoteca';
+
+  @override
+  String get acctTypeOtherLiability => 'Otro pasivo';
+
+  @override
+  String impAccountMatched(Object account) {
+    return 'Coincide con $account del estado de cuenta';
+  }
+
+  @override
+  String get impNoAccountMatch =>
+      'Ninguna cuenta existente coincide con este estado de cuenta — crea una abajo.';
+
+  @override
   String get dlgAccountCurrency => 'Moneda';
 
   @override
