@@ -567,114 +567,228 @@ class _ImportScreenState extends State<ImportScreen> {
     });
   }
 
-  /// Live multi-PDF progress: a header count plus a checklist with one
-  /// row per file (waiting → parsing → ✓ count / skipped).
-  Widget _buildUploadProgress(AppLocalizations l) {
+  /// Upload header: "Processing X of Y" + a DETERMINATE bar + the running
+  /// transaction count. A bar scales to any batch size (118 files read
+  /// cleanly), unlike a 3-digit count crammed inside a spinner ring.
+  Widget _buildUploadHeader(AppLocalizations l) {
     final total =
         _fileStatuses.isEmpty ? _selectedFiles.length : _fileStatuses.length;
     final done = _fileStatuses.where((s) => s.isDone).length;
+    final txns = _fileStatuses
+        .where((s) => s.status == 'ok')
+        .fold<int>(0, (a, s) => a + s.count);
     return Column(
       children: [
-        Text(
-          total == 1
-              ? l.impProcessingOneFile
-              : (done > 0
-                  ? l.impProcessingProgress(done, total)
-                  : l.impProcessingNFiles(total)),
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: context.info,
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (_fileStatuses.isNotEmpty)
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 220, maxWidth: 440),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final s in _fileStatuses) _buildFileRow(l, s),
-                ],
-              ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
             ),
-          ),
-        const SizedBox(height: 12),
-        // Scanned / photographed statements have no text layer, so the
-        // server reads them with OCR — that's the slow step. Call it out so
-        // a file sitting on "parsing…" reads as working, not stuck.
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.document_scanner_outlined,
-                  size: 14, color: context.textFaint),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  l.impOcrHint,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      fontSize: 11.5, color: context.textSubtle, height: 1.3),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                total == 1
+                    ? l.impProcessingOneFile
+                    : l.impProcessingProgress(done, total),
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: context.info,
                 ),
               ),
-            ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: total > 0 ? done / total : null,
+            minHeight: 6,
+            backgroundColor: context.tint(0.08),
+            valueColor: AlwaysStoppedAnimation<Color>(context.info),
           ),
         ),
-        const SizedBox(height: 16),
+        if (txns > 0) ...[
+          const SizedBox(height: 6),
+          Text(
+            l.impFileTransactions(txns),
+            style: TextStyle(fontSize: 12, color: context.textSubtle),
+          ),
+        ],
       ],
     );
   }
 
-  Widget _buildFileRow(AppLocalizations l, ImportFileStatus s) {
+  /// Scanned / photographed statements are read with OCR — the slow step.
+  Widget _buildOcrHint(AppLocalizations l) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.document_scanner_outlined,
+              size: 14, color: context.textFaint),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              l.impOcrHint,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 11.5, color: context.textSubtle, height: 1.3),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _fmtSize(int bytes) {
+    if (bytes >= 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / 1024).toStringAsFixed(0)} KB';
+  }
+
+  Widget _buildSelectedHeader(AppLocalizations l) {
+    final totalBytes = _selectedFiles.fold<int>(0, (a, f) => a + f.size);
+    final count = _selectedFiles.length == 1
+        ? l.impOneFileSelected
+        : l.impNFilesSelected(_selectedFiles.length);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Text(
+        '$count · ${_fmtSize(totalBytes)}',
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: context.textPrimary,
+        ),
+      ),
+    );
+  }
+
+  /// ONE unified file list. Idle rows show size + a remove button; during
+  /// upload the same rows show live status (waiting → parsing → ✓ count /
+  /// skipped) — no more two separate lists. Virtualised so 100+ files stay
+  /// smooth.
+  Widget _buildFileList(AppLocalizations l, {required bool uploading}) {
+    final statusByName = {for (final s in _fileStatuses) s.name: s};
+    const rowExtent = 39.0;
+    final height =
+        (_selectedFiles.length * rowExtent + 6).clamp(rowExtent, 280).toDouble();
+    return Container(
+      height: height,
+      decoration: BoxDecoration(
+        color: context.tint(0.03),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: context.hairline),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Scrollbar(
+        child: ListView.separated(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          itemCount: _selectedFiles.length,
+          separatorBuilder: (_, _) => Divider(
+            height: 1,
+            indent: 38,
+            color: context.hairline.withValues(alpha: 0.5),
+          ),
+          itemBuilder: (_, i) => _fileListRow(
+            l,
+            _selectedFiles[i],
+            statusByName[_selectedFiles[i].name],
+            uploading,
+            i,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _fileListRow(
+    AppLocalizations l,
+    PlatformFile file,
+    ImportFileStatus? st,
+    bool uploading,
+    int index,
+  ) {
     final Widget leading;
-    final String trailing;
-    final Color trailingColor;
-    switch (s.status) {
-      case 'ok':
-        leading = Icon(Icons.check_circle, size: 16, color: context.positive);
-        trailing = l.impFileTransactions(s.count);
-        trailingColor = context.textSubtle;
-        break;
-      case 'failed':
-        leading = Icon(Icons.error_outline, size: 16, color: context.warning);
-        trailing = l.impFileSkipped;
-        trailingColor = context.warning;
-        break;
-      case 'parsing':
-        leading = const SizedBox(
-          width: 14,
-          height: 14,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        );
-        trailing = l.impFileParsing;
-        trailingColor = context.textSubtle;
-        break;
-      default: // waiting
-        leading =
-            Icon(Icons.schedule_outlined, size: 16, color: context.textFaint);
-        trailing = l.impFileWaiting;
-        trailingColor = context.textFaint;
+    final Widget trailing;
+    if (uploading) {
+      switch (st?.status) {
+        case 'ok':
+          leading = Icon(Icons.check_circle, size: 16, color: context.positive);
+          trailing = Text(l.impFileTransactions(st!.count),
+              style: TextStyle(fontSize: 12, color: context.textSubtle));
+          break;
+        case 'failed':
+          leading =
+              Icon(Icons.error_outline, size: 16, color: context.warning);
+          trailing = Text(l.impFileSkipped,
+              style: TextStyle(fontSize: 12, color: context.warning));
+          break;
+        case 'parsing':
+          leading = const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2));
+          trailing = Text(l.impFileParsing,
+              style: TextStyle(fontSize: 12, color: context.textSubtle));
+          break;
+        default:
+          leading = Icon(Icons.schedule_outlined,
+              size: 16, color: context.textFaint);
+          trailing = Text(l.impFileWaiting,
+              style: TextStyle(fontSize: 12, color: context.textFaint));
+      }
+    } else {
+      leading = Icon(Icons.insert_drive_file_outlined,
+          size: 16, color: context.textSubtle);
+      trailing = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            _fmtSize(file.size),
+            style: TextStyle(
+              fontSize: 11,
+              color: context.textFaint,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 15),
+            tooltip: l.impRemoveFile,
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.only(left: 6),
+            constraints: const BoxConstraints(),
+            color: context.textFaint,
+            onPressed: (_isUploading || _isReadingFiles)
+                ? null
+                : () => _removeFileAt(index),
+          ),
+        ],
+      );
     }
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       child: Row(
         children: [
           SizedBox(width: 18, child: Center(child: leading)),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              s.name,
+              file.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 13, color: context.textPrimary),
             ),
           ),
           const SizedBox(width: 8),
-          Text(trailing,
-              style: TextStyle(fontSize: 12, color: trailingColor)),
+          trailing,
         ],
       ),
     );
@@ -876,159 +990,71 @@ class _ImportScreenState extends State<ImportScreen> {
                       //      PDFs can take 60-120 s.
                       //   3. Dragging  → upload icon, accent green.
                       //   4. Idle      → upload icon, accent green.
-                      if (_isUploading || _isReadingFiles)
-                        SizedBox(
-                          width: 64,
-                          height: 64,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              CircularProgressIndicator(
-                                strokeWidth: 4,
-                                color: context.info,
-                              ),
-                              Text(
-                                _isReadingFiles
-                                    ? (_readingFileCount?.toString() ?? '…')
-                                    : '${_selectedFiles.length}',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
-                                  color: context.info,
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures()
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                      else
-                        Icon(
-                          Icons.upload_file,
-                          size: 64,
-                          color: context.positive,
-                        ),
-                      const SizedBox(height: 16),
-                      if (_isReadingFiles)
-                        Column(
-                          children: [
-                            Text(
-                              _readingFileCount == null
-                                  ? l.impReadingFiles
-                                  : _readingFileCount == 1
-                                      ? l.impReadingOneFile
-                                      : l.impReadingNFiles(_readingFileCount!),
-                              style: TextStyle(
+                      // Idle → upload icon + helper text + the unified file
+                      // list. Reading → small spinner + text. Uploading →
+                      // header + DETERMINATE bar + the same unified list with
+                      // live per-file status. The file count lives in text,
+                      // never crammed inside a ring, so 100+ files read cleanly.
+                      if (!_isUploading && !_isReadingFiles) ...[
+                        Icon(Icons.upload_file,
+                            size: 56, color: context.positive),
+                        const SizedBox(height: 14),
+                        if (_isDragging)
+                          Text(
+                            l.impDropToImport,
+                            style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
-                                color: context.info,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              l.impReadingHint,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: context.textSubtle,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 16),
-                          ],
-                        )
-                      else if (_isUploading)
-                        _buildUploadProgress(l),
-                      // Drag / idle helper text — hidden while
-                      // uploading OR reading so the status block
-                      // above owns the user's attention.
-                      if (!_isUploading && !_isReadingFiles && _isDragging)
+                                color: context.positive),
+                          )
+                        else if (kIsWeb && _selectedFiles.isEmpty)
+                          Text(
+                            l.impDropHint,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                fontSize: 13, color: context.textSubtle),
+                          )
+                        else if (!kIsWeb && _selectedFiles.isEmpty)
+                          Text(l.impNoFilesSelected),
+                        if (_selectedFiles.isNotEmpty) ...[
+                          _buildSelectedHeader(l),
+                          const SizedBox(height: 8),
+                          _buildFileList(l, uploading: false),
+                        ],
+                      ],
+                      if (_isReadingFiles) ...[
+                        const SizedBox(
+                          width: 34,
+                          height: 34,
+                          child: CircularProgressIndicator(strokeWidth: 3),
+                        ),
+                        const SizedBox(height: 14),
                         Text(
-                          l.impDropToImport,
+                          _readingFileCount == null
+                              ? l.impReadingFiles
+                              : _readingFileCount == 1
+                                  ? l.impReadingOneFile
+                                  : l.impReadingNFiles(_readingFileCount!),
                           style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: context.positive,
-                          ),
-                        )
-                      else if (!_isUploading &&
-                          !_isReadingFiles &&
-                          kIsWeb &&
-                          _selectedFiles.isEmpty)
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: context.info),
+                        ),
+                        const SizedBox(height: 4),
                         Text(
-                          l.impDropHint,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: context.textSubtle,
-                          ),
+                          l.impReadingHint,
                           textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 12, color: context.textSubtle),
                         ),
-                      if (!_isUploading &&
-                          !_isReadingFiles &&
-                          (_isDragging || (kIsWeb && _selectedFiles.isEmpty)))
-                        const SizedBox(height: 16),
-                      if (!_isUploading &&
-                          !_isReadingFiles &&
-                          _selectedFiles.isEmpty &&
-                          !kIsWeb &&
-                          !_isDragging)
-                        Text(l.impNoFilesSelected),
-                      if (_selectedFiles.isNotEmpty)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _selectedFiles.length == 1
-                                  ? l.impOneFileSelected
-                                  : l.impNFilesSelected(_selectedFiles.length),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxHeight: 200),
-                              child: SingleChildScrollView(
-                                child: Column(
-                                  children: [
-                                    for (var i = 0; i < _selectedFiles.length; i++)
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(vertical: 2),
-                                        child: Row(
-                                          children: [
-                                            const Icon(Icons.insert_drive_file_outlined, size: 16),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: Text(
-                                                _selectedFiles[i].name,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(fontSize: 13),
-                                              ),
-                                            ),
-                                            Text(
-                                              '${(_selectedFiles[i].size / 1024).toStringAsFixed(1)} KB',
-                                              style: const TextStyle(
-                                                color: Colors.grey,
-                                                fontSize: 11,
-                                              ),
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(Icons.close, size: 16),
-                                              tooltip: l.impRemoveFile,
-                                              visualDensity: VisualDensity.compact,
-                                              onPressed: (_isUploading || _isReadingFiles)
-                                                  ? null
-                                                  : () => _removeFileAt(i),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                      ],
+                      if (_isUploading) ...[
+                        _buildUploadHeader(l),
+                        const SizedBox(height: 14),
+                        _buildOcrHint(l),
+                        const SizedBox(height: 14),
+                        _buildFileList(l, uploading: true),
+                      ],
                       const SizedBox(height: 24),
                       ElevatedButton.icon(
                         onPressed: (_isUploading || _isReadingFiles)
