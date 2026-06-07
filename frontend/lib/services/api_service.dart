@@ -1055,6 +1055,10 @@ class ApiService {
     emit(); // initial all-waiting render
 
     final merged = <dynamic>[];
+    // Account metadata (CLABE, holder, suggested name + balance) from the
+    // newest statement across all batches — the batch wrapper must carry this
+    // through or the preview can't pre-fill / match an account.
+    Map<String, dynamic>? accountInfo;
     var sawSuccess = false;
     for (final batch in batches) {
       // Files in the in-flight batch all start at once on the server's
@@ -1091,6 +1095,16 @@ class ApiService {
       if (txs is List) {
         merged.addAll(txs);
         if (txs.isNotEmpty) sawSuccess = true;
+      }
+      final ai = resp['account_info'];
+      if (ai is Map<String, dynamic>) {
+        final curEnd = accountInfo?['period_end']?.toString();
+        final newEnd = ai['period_end']?.toString();
+        if (accountInfo == null ||
+            (newEnd != null &&
+                (curEnd == null || newEnd.compareTo(curEnd) > 0))) {
+          accountInfo = ai;
+        }
       }
     }
 
@@ -1140,6 +1154,7 @@ class ApiService {
       'message': message,
       'transactions_count': merged.length,
       'transactions': merged,
+      if (accountInfo != null) 'account_info': accountInfo,
     };
   }
 
