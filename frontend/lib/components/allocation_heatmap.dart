@@ -70,9 +70,14 @@ class _Band {
   /// dimension, where we show a top-N preview. Empty for type/institution.
   final List<AllocationData> items;
 
-  /// Raw category key, used to drive the holdings-table filter on tap.
-  /// Null for type/institution bands (no drill-down wired for those).
+  /// Raw category key for the asset-class dimension — keys the holdings
+  /// preview / expand state. Null for type/institution bands.
   final String? rawCategory;
+
+  /// Raw value tapping this band filters the holdings table by (matched
+  /// against the holding's holding_type / account_type / institution_name).
+  /// Empty = not tappable.
+  final String filterValue;
 
   /// Holdings count shown as a chip (asset-class dimension only).
   final int? holdingsCount;
@@ -83,6 +88,7 @@ class _Band {
     required this.color,
     this.items = const [],
     this.rawCategory,
+    this.filterValue = '',
     this.holdingsCount,
   });
 }
@@ -106,8 +112,12 @@ class AllocationHeatmap extends StatefulWidget {
   final double conversionFactor;
   final NumberFormat currencyFormat;
 
-  /// Fired when an asset-class band is tapped — filters the holdings table.
+  /// Fired when any band is tapped — passes the band's raw value to filter
+  /// the holdings table (matched against holding_type / account_type /
+  /// institution_name, whichever dimension is active).
   final ValueChanged<String>? onCategorySelected;
+
+  /// The currently-applied filter value, so the matching band highlights.
   final String? activeCategory;
 
   const AllocationHeatmap({
@@ -218,7 +228,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
               _concentrationBanner(context, l, topHolding.subCategory, topShare),
             ],
             const SizedBox(height: 24),
-            ...bands.map((b) => _bandWidget(b, activeTotal, dim, l)),
+            ...bands.map((b) => _bandWidget(b, activeTotal, l)),
           ],
         ),
       ),
@@ -259,6 +269,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
           color: colors[cat]!,
           items: items,
           rawCategory: cat,
+          filterValue: cat,
           holdingsCount: items.length,
         );
       }).toList();
@@ -270,16 +281,26 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
       if (raw is! Map) continue;
       final value = ((raw['total_usd'] ?? raw['total'] ?? 0) as num).toDouble();
       if (value <= 0) continue;
-      final label = dim == 1
-          ? _prettyLabel((raw['account_type'] ?? '').toString(), l)
-          : (raw['name'] ?? l.pfOther).toString();
-      bands.add(_Band(label: label, value: value, color: paletteAt(bands.length)));
+      // Keep the RAW value for filtering (matches holdings' account_type /
+      // institution_name); prettify only the display label.
+      final rawValue = dim == 1
+          ? (raw['account_type'] ?? '').toString()
+          : (raw['name'] ?? '').toString();
+      final label =
+          dim == 1 ? _prettyLabel(rawValue, l) : (rawValue.isEmpty ? l.pfOther : rawValue);
+      bands.add(_Band(
+          label: label, value: value, color: Colors.transparent, filterValue: rawValue));
     }
     bands.sort((a, b) => b.value.compareTo(a.value));
-    // Re-color after sorting so the biggest bands get the lead palette colors.
+    // Assign palette colors after sorting so the biggest bands lead.
     return [
       for (var i = 0; i < bands.length; i++)
-        _Band(label: bands[i].label, value: bands[i].value, color: paletteAt(i)),
+        _Band(
+          label: bands[i].label,
+          value: bands[i].value,
+          color: paletteAt(i),
+          filterValue: bands[i].filterValue,
+        ),
     ];
   }
 
@@ -326,10 +347,10 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
     );
   }
 
-  Widget _bandWidget(_Band b, double total, int dim, AppLocalizations l) {
+  Widget _bandWidget(_Band b, double total, AppLocalizations l) {
     final pct = total > 0 ? b.value / total : 0.0;
-    final isActive = widget.activeCategory == b.rawCategory && b.rawCategory != null;
-    final canTap = dim == 0 && b.rawCategory != null && widget.onCategorySelected != null;
+    final isActive = b.filterValue.isNotEmpty && widget.activeCategory == b.filterValue;
+    final canTap = b.filterValue.isNotEmpty && widget.onCategorySelected != null;
 
     final inner = Padding(
       padding: const EdgeInsets.only(bottom: 24.0),
@@ -428,20 +449,19 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
               ),
             ],
           ),
-          if (b.items.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            if (isActive)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  l.lwAllocFilteringHint,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: b.color,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
+          if (isActive) ...[
+            const SizedBox(height: 8),
+            Text(
+              l.lwAllocFilteringHint,
+              style: TextStyle(
+                fontSize: 10,
+                color: b.color,
+                fontStyle: FontStyle.italic,
               ),
+            ),
+          ],
+          if (b.items.isNotEmpty && b.rawCategory != null) ...[
+            const SizedBox(height: 12),
             _holdingsPreview(b.rawCategory!, b.items, b.value, b.color, l),
           ],
         ],
@@ -461,7 +481,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
       button: true,
       label: semanticLabel,
       child: InkWell(
-        onTap: () => widget.onCategorySelected!(b.rawCategory!),
+        onTap: () => widget.onCategorySelected!(b.filterValue),
         borderRadius: BorderRadius.circular(12),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),

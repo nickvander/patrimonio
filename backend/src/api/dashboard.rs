@@ -354,7 +354,7 @@ async fn holdings(
     let rows = sqlx::query(
         r#"
         SELECT h.id, h.symbol, h.name, h.quantity, h.price, h.value,
-               h.cost_basis, h.currency, h.holding_type,
+               h.cost_basis, h.currency, h.holding_type, a.account_type,
                COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
                i.name as institution_name
         FROM holdings h
@@ -491,6 +491,7 @@ async fn holdings(
                 gain_loss_mxn: value_mxn - cost_basis_mxn,
                 currency,
                 holding_type: r.try_get::<String, _>("holding_type").unwrap_or_default(),
+                account_type: r.try_get::<String, _>("account_type").unwrap_or_default(),
                 account_name: r.get("account_name"),
                 institution_name: r.get("institution_name"),
                 lots: lot_details_by_holding.remove(&id).unwrap_or_default(),
@@ -1996,6 +1997,9 @@ struct HoldingDetail {
     gain_loss_mxn: f64,
     currency: String,
     holding_type: String,
+    /// Owning account's type (e.g. "401k", "brokerage") — lets the frontend
+    /// filter the table when an account-type allocation band is tapped.
+    account_type: String,
     account_name: String,
     institution_name: String,
     /// Per-lot breakdown when `holding_lots` rows exist for this

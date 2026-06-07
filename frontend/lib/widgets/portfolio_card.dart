@@ -110,11 +110,20 @@ class _PortfolioCardState extends State<PortfolioCard> {
     final catFilter = widget.categoryFilter?.toLowerCase().trim() ?? '';
     bool matchesCat(Map h) {
       if (catFilter.isEmpty) return true;
-      // The heatmap groups by both 'category' and 'sub_category' so we
-      // accept a match on either to keep the filter intuitive.
+      // The allocation card can filter by asset class, account type, or
+      // institution; the tapped raw value matches whichever field the
+      // holding carries (value spaces don't collide). Keep category /
+      // sub_category too for backwards compatibility.
+      final ht = (h['holding_type'] ?? '').toString().toLowerCase();
+      final at = (h['account_type'] ?? '').toString().toLowerCase();
+      final inst = (h['institution_name'] ?? '').toString().toLowerCase();
       final cat = (h['category'] ?? '').toString().toLowerCase();
       final sub = (h['sub_category'] ?? '').toString().toLowerCase();
-      return cat == catFilter || sub == catFilter;
+      return ht == catFilter ||
+          at == catFilter ||
+          inst == catFilter ||
+          cat == catFilter ||
+          sub == catFilter;
     }
 
     final base = _allHoldings.where((h) => matchesCat(h as Map)).toList();
