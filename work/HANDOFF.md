@@ -1,6 +1,6 @@
 # Handoff — start here
 
-> **Last updated:** 2026-06-06 (Tier B: spending-insight notifications + budget auto-suggest)
+> **Last updated:** 2026-06-06 (Portfolio restructure + signals strip + mobile holdings + true TWR)
 > **Purpose:** The single "where are we, what's next" doc to pick up cold.
 > For the full import architecture see [work/STATEMENT_IMPORT.md](STATEMENT_IMPORT.md);
 > for the older broader backlog see [work/NEXT.md](NEXT.md) and
@@ -8,12 +8,49 @@
 
 ## TL;DR — current state
 
-Everything below is **on `main` and pushed** (`origin/main` @ `06f866c`),
+Everything below is **on `main` and pushed** (`origin/main` @ `53e16e2`),
 tree clean. All verified green: backend `./scripts/test.sh` (full suite,
-incl. 83 dashboard integration), `flutter analyze` clean, `flutter test`
+incl. 84 dashboard integration), `flutter analyze` clean, `flutter test`
 (170). Flutter MUST run via docker — see the gotchas at the bottom.
 
 **Shipped this sprint (newest first):**
+- **True time-weighted return (TWR)** on the Performance card — the value
+  line finally carries an honest return + a legitimate S&P overlay (live-
+  browser-verified: "Your portfolio +100.2%" vs "S&P 500 +26.5%", and the
+  math spot-checks — GOOG, the dominant covered position, ran 167.71→365.76
+  = +118%; S&P 5970→7553 = +26.5% exactly). Design notes:
+  · `benchmark.rs` generalized into a per-symbol daily quote cache
+    (`refresh_yahoo` / `ensure_symbol_fresh`) over the SAME `benchmark_prices`
+    table — keyed by any symbol now; `refresh_sp500`/`ensure_fresh` are thin
+    wrappers. (So a held symbol's quotes live in `benchmark_prices` too.)
+  · `services/twr.rs` = GIPS daily-valuation method. **Key correctness move:**
+    `holding_lots` is SPARSE (lots don't sum to current share counts — GOOG
+    has thousands of shares, ~zero lot qty), so we treat CURRENT quantity as
+    ground truth and walk backward: `shares(t) = current − future buys +
+    future sells`; everything before the first lot is the opening position
+    valued at start-date prices (NO ramp-from-zero — that was the old +3479%
+    bug). Flows are the incremental lot buys/sells. Coverage-aware: prices
+    USD tickers it can quote, reports `coverage_pct` of portfolio value
+    (≈68% on demo — opaque Plaid security_ids / non-USD are uncovered).
+  · `GET /dashboard/portfolio-twr` returns a daily growth index (your TWR +
+    S&P, start=1.0) so any sub-range re-bases by division. Frontend
+    `PerformanceCard` plots indexed TWR-vs-S&P over the selected range with
+    return pills + coverage caption; falls back to the dollar line when
+    nothing is priceable; TWR loads non-blocking (cold Yahoo fetch is slow).
+    Integration test seeds a mid-window contribution and asserts TWR = +21%
+    (contribution divided out) not the ~+102% a naive value change shows.
+- **Portfolio research-canonical flow + signals strip + mobile holdings**
+  (`12d2e31`): tab reordered to **overview → performance → allocation →
+  signals → holdings**. `PortfolioCard` is now section-driven
+  (`PortfolioSection.{summary,signals,holdings}`, one widget, shared
+  `portfolioData['holdings']`). New thin **signals strip** (biggest gainer /
+  loser / concentration ≥20% of one position) — moved out of the KPI grid.
+  Holdings table **collapses below 560px** to tap-to-expand rows (name +
+  value + change → reveal shares/price/cost/gain + lot breakdown);
+  `showLotBreakdown` extracted to a top-level helper. Browser-verified the
+  overview slice (split KPIs) + allocation; signals/holdings region blocked
+  by the canvaskit screenshot freeze (investments tab also doesn't
+  wheel-scroll under automation — known, see quirks).
 - Portfolio **drill-down + performance merge** (browser-verified end-to-end):
   · Tapping ANY allocation band (class / account type / institution) filters
     the holdings table — the band passes its raw value, matched against the
@@ -99,6 +136,15 @@ incl. 83 dashboard integration), `flutter analyze` clean, `flutter test`
   Guyton-Klinger guardrails, retirement-income, data-derived defaults.
 
 **Next up (Tier C / QA):**
+- **TWR follow-ups** (raise coverage above ~68%): map non-USD holdings via a
+  per-day USDMXN series (USDMXN=X is already fetchable through the same Yahoo
+  path) so MXN-priced securities can be priced; map opaque Plaid security_ids
+  to real tickers so those funds become priceable. Both are coverage_pct
+  wins, not correctness fixes.
+- **Banregio / Inbursa / Banco Azteca parsers** (Portfolio backlog item) —
+  same `parser/column_table.rs` pattern as Banorte/Scotiabank; needs sourcing
+  real/public sample statements, then `cargo run --bin parse_check <bank>
+  <file>` before advertising in `kSupportedMxBanks`.
 - Validate BBVA & Santander parsers against REAL PDFs (still on reconstructed
   fixtures) using `parse_check`, then advertise them in `kSupportedMxBanks`.
   **Blocked: user doesn't have real BBVA/Santander PDFs to test against.**
@@ -129,14 +175,15 @@ incl. 83 dashboard integration), `flutter analyze` clean, `flutter test`
   filter the holdings list to one ticker to collapse it, or reload. Tracked in
   FUTURE.md. (Note: a SHORTER browser window — e.g. 1280x900 — scrolls the
   cash-flow tab without freezing, where a tall window froze; handy for QA.)
-- The S&P benchmark card ("Investments vs S&P 500", `benchmark_card.dart`) now
-  shows ONLY the contribution-weighted comparison (each lot's cost grown by the
-  index from its purchase date vs the lot's actual value). The old
-  net-worth-indexed overlay was REMOVED because it reported absurd returns
-  (+3479%) — net worth ramps from ~0 as accounts first sync, so indexing to the
-  first snapshot conflates contributions with market gains. **Do not re-add
-  net-worth-vs-index indexing**; a real time-series comparison would need a
-  time-weighted return (periodic investment value + cashflow dates).
+- **`PerformanceCard` now has TWR** (the time-weighted return that the old
+  note below said "would be needed"). The performance line shows the real TWR
+  + an S&P overlay (legit because cashflows are divided out); the
+  contribution-weighted block stays below as the dollar-weighted read.
+  **Still do NOT re-add net-worth/value-vs-index indexing** — that's the
+  +3479% bug (net worth/value ramps from ~0 as accounts sync). The TWR path
+  in `services/twr.rs` is the correct way (opening position valued at
+  start-date prices, flows divided out). (`benchmark_card.dart` was deleted a
+  sprint ago; the S&P comparisons live in `performance_card.dart`.)
 - Budgets / account-alerts / account-APRs persist in `app_settings`
   (`budgets`, `account_balance_alerts`, `account_aprs`) AND localStorage;
   don't "fix" the localStorage-only assumption — it's already backend-synced.
@@ -284,8 +331,7 @@ portals, run through `pdftotext -layout`, fed to the parsers via the new
     (Banorte footers were leaking in).
 
 **Remaining Tier-2/3 ideas:** get a clean/real HSBC PDF to confirm its date
-token; a true time-weighted return for the benchmark (current overlay uses net
-worth, which includes contributions).
+token. (✅ true time-weighted return now shipped — see the TL;DR top bullet.)
 
 ## Earlier (2026-06-03) — Tier 2: debt payoff + instant bell (browser-verified)
 
