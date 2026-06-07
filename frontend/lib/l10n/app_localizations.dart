@@ -6021,6 +6021,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'ALL'**
   String get lwRangeAll;
+
+  /// No description provided for @lwPerfTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Performance'**
+  String get lwPerfTitle;
+
+  /// No description provided for @lwPerfNotEnough.
+  ///
+  /// In en, this message translates to:
+  /// **'Not enough history yet to chart your portfolio value over time.'**
+  String get lwPerfNotEnough;
 }
 
 class _AppLocalizationsDelegate

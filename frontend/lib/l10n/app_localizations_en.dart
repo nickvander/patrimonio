@@ -3690,4 +3690,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lwRangeAll => 'ALL';
+
+  @override
+  String get lwPerfTitle => 'Performance';
+
+  @override
+  String get lwPerfNotEnough =>
+      'Not enough history yet to chart your portfolio value over time.';
 }

@@ -3723,4 +3723,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get lwRangeAll => 'TODO';
+
+  @override
+  String get lwPerfTitle => 'Rendimiento';
+
+  @override
+  String get lwPerfNotEnough =>
+      'Aún no hay suficiente historial para graficar el valor de tu portafolio.';
 }

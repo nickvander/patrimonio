@@ -983,5 +983,7 @@
   "lwRangeYearToDate": "YTD",
   "lwRangeOneYear": "1A",
   "lwRangeFiveYears": "5A",
-  "lwRangeAll": "TODO"
+  "lwRangeAll": "TODO",
+  "lwPerfTitle": "Rendimiento",
+  "lwPerfNotEnough": "Aún no hay suficiente historial para graficar el valor de tu portafolio."
 }

@@ -2428,6 +2428,81 @@ async fn spending_insights_recent_vs_trailing_average() {
 
 #[tokio::test]
 #[serial_test::serial]
+async fn portfolio_value_history_sums_only_investment_accounts() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (inst, _acct) = seed_account(&pool, user_id).await;
+
+    // An investment account (it has a holding) and a cash account (none).
+    let invest: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO accounts (institution_id, name, account_type, currency, current_balance, user_id) \
+         VALUES ($1, 'Brokerage', 'brokerage', 'USD', 6000.00, $2) RETURNING id",
+    )
+    .bind(inst)
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO holdings (account_id, symbol, name, currency, holding_type, quantity, value, user_id) \
+         VALUES ($1,'VTI','Vanguard','USD','equity',10,6000,$2)",
+    )
+    .bind(invest)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let cash: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO accounts (institution_id, name, account_type, currency, current_balance, user_id) \
+         VALUES ($1, 'Checking', 'checking', 'USD', 2500.00, $2) RETURNING id",
+    )
+    .bind(inst)
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    // Two snapshot dates for BOTH accounts; only the investment account's
+    // value should be summed into the series.
+    for (acct, d, usd) in [
+        (invest, "2026-04-01", "5000"),
+        (cash, "2026-04-01", "2000"),
+        (invest, "2026-05-01", "6000"),
+        (cash, "2026-05-01", "2500"),
+    ] {
+        sqlx::query(
+            "INSERT INTO balance_snapshots (account_id, balance, balance_usd, as_of_date, currency, user_id) \
+             VALUES ($1, $2, $2, $3::date, 'USD', $4)",
+        )
+        .bind(acct)
+        .bind(Decimal::from_str(usd).unwrap())
+        .bind(d)
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/portfolio-value-history", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    let pts = body.as_array().unwrap();
+    assert_eq!(pts.len(), 2, "two snapshot dates, got {pts:#?}");
+    assert_eq!(pts[0]["date"], "2026-04-01");
+    assert!((pts[0]["value_usd"].as_f64().unwrap() - 5000.0).abs() < 0.01,
+        "Apr should be the investment account only (5000), got {}", pts[0]["value_usd"]);
+    assert!((pts[1]["value_usd"].as_f64().unwrap() - 6000.0).abs() < 0.01,
+        "May should be 6000, got {}", pts[1]["value_usd"]);
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn allocation_merges_cash_holdings_with_cash_accounts() {
     let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
         return;

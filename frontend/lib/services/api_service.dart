@@ -612,6 +612,21 @@ class ApiService {
     }, forceRefresh: forceRefresh);
   }
 
+  /// Investment portfolio value over time: `[{date, value_usd}]` (USD), from
+  /// balance snapshots of accounts that hold investments. Powers the
+  /// performance chart. Empty list on error so the card simply hides.
+  Future<List<dynamic>> getPortfolioValueHistory({bool forceRefresh = false}) {
+    return _cachedGet('portfolio-value-history', () async {
+      final response =
+          await _get(Uri.parse('$_baseUrl/dashboard/portfolio-value-history'));
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as List<dynamic>;
+      }
+      throw Exception(_t('Failed to load portfolio value history',
+          'No se pudo cargar el historial de valor del portafolio'));
+    }, forceRefresh: forceRefresh);
+  }
+
   /// S&P 500 daily closes (for the net-worth-vs-market overlay). [from] is an
   /// ISO date string. Returns the `{symbol, points:[{date,close}]}` shape;
   /// empty list on any error so the card simply hides.

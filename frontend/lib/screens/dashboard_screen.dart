@@ -17,7 +17,7 @@ import '../widgets/monthly_cash_flow_card.dart';
 import '../widgets/budgets_card.dart';
 import '../widgets/spending_by_category_card.dart';
 import '../widgets/realized_gains_card.dart';
-import '../widgets/benchmark_card.dart';
+import '../widgets/performance_card.dart';
 import '../widgets/upcoming_bills_card.dart';
 import '../widgets/debt_payoff_card.dart';
 import '../widgets/net_worth_goal_tile.dart';
@@ -2534,7 +2534,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             currencyFormat: currencyFormat,
           ),
           RepaintBoundary(
-            child: BenchmarkCard(
+            child: PerformanceCard(
               apiService: _apiService,
               conversionFactor: conversionFactor,
               currencyFormat: currencyFormat,

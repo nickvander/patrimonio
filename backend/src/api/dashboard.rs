@@ -17,6 +17,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/overview", get(dashboard_overview))
         .route("/net-worth-history", get(net_worth_history))
+        .route("/portfolio-value-history", get(portfolio_value_history))
         .route("/holdings", get(holdings))
         .route("/allocation", get(asset_allocation))
         .route("/trends", get(cash_flow_trends))
@@ -318,6 +319,53 @@ async fn net_worth_history(
                     net_worth,
                     by_institution,
                 })
+            })
+            .collect(),
+    )
+}
+
+#[derive(Serialize)]
+struct PortfolioValuePoint {
+    date: String,
+    value_usd: f64,
+}
+
+/// Investment portfolio value over time: per balance-snapshot date, the total
+/// USD value of accounts that actually hold investments (any account with at
+/// least one `holdings` row). This is deliberately NOT net worth — it excludes
+/// cash, liabilities, and non-investment accounts — and it is NOT indexed
+/// against any benchmark (see BenchmarkCard: indexing net-worth-from-~0 to the
+/// S&P reports absurd returns by conflating contributions with market gains).
+/// The honest "vs market" read is the contribution-weighted comparison.
+async fn portfolio_value_history(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<Vec<PortfolioValuePoint>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT bs.as_of_date AS d,
+               COALESCE(SUM(bs.balance_usd), 0)::float8 AS value_usd
+        FROM balance_snapshots bs
+        JOIN accounts a ON bs.account_id = a.id
+        WHERE bs.user_id = $1
+          AND EXISTS (SELECT 1 FROM holdings h WHERE h.account_id = a.id)
+        GROUP BY bs.as_of_date
+        ORDER BY bs.as_of_date ASC
+        "#,
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    Json(
+        rows.iter()
+            .map(|r| PortfolioValuePoint {
+                date: r
+                    .try_get::<chrono::NaiveDate, _>("d")
+                    .map(|x| x.to_string())
+                    .unwrap_or_default(),
+                value_usd: r.try_get("value_usd").unwrap_or(0.0),
             })
             .collect(),
     )

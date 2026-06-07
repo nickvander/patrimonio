@@ -1232,5 +1232,7 @@
   "lwRangeYearToDate": "YTD",
   "lwRangeOneYear": "1Y",
   "lwRangeFiveYears": "5Y",
-  "lwRangeAll": "ALL"
+  "lwRangeAll": "ALL",
+  "lwPerfTitle": "Performance",
+  "lwPerfNotEnough": "Not enough history yet to chart your portfolio value over time."
 }
