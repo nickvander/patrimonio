@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:js_interop';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -94,14 +93,33 @@ class GlobalFileDropListener {
       final dragEvent = e as web.DragEvent;
       final dt = dragEvent.dataTransfer;
       if (dt == null) return;
-      // Notify the host that reading is about to start so it can
-      // surface a "Reading N files…" loading state — for a year of
-      // monthly Banamex PDFs this read phase takes seconds and was
-      // previously silent.
-      onReadingStart?.call(dt.files.length);
-      // Fire-and-forget — readers complete on microtasks, the host
-      // gets the list once everything is loaded.
-      unawaited(_readAndDispatch(dt.files));
+
+      // Capture FileSystemEntry handles SYNCHRONOUSLY — the DataTransfer
+      // items are only valid during this event. A dropped DIRECTORY shows up
+      // here as a directory entry we walk recursively (a plain `dt.files`
+      // would contain a single unreadable directory pseudo-file, which is why
+      // dropping a folder used to hang on "Reading 1 file…"). Browsers
+      // without the entries API return null entries → we fall back to the
+      // flat file list captured below.
+      final entries = <web.FileSystemEntry>[];
+      final items = dt.items;
+      for (var i = 0; i < items.length; i++) {
+        final entry = items[i].webkitGetAsEntry();
+        if (entry != null) entries.add(entry);
+      }
+      final flat = <web.File>[];
+      final fl = dt.files;
+      for (var i = 0; i < fl.length; i++) {
+        final f = fl.item(i);
+        if (f != null) flat.add(f);
+      }
+
+      // Initial estimate; refined to the true file count after directories
+      // are expanded (see _collectAndDispatch).
+      onReadingStart?.call(entries.isNotEmpty ? entries.length : flat.length);
+      // Fire-and-forget — readers complete on microtasks, the host gets the
+      // list once everything (incl. nested directory files) is loaded.
+      unawaited(_collectAndDispatch(entries, flat));
     }).toJS;
   }
 
@@ -125,12 +143,69 @@ class GlobalFileDropListener {
     _attached = false;
   }
 
-  Future<void> _readAndDispatch(web.FileList files) async {
+  /// Expand any dropped directories into their files, then read + dispatch.
+  Future<void> _collectAndDispatch(
+    List<web.FileSystemEntry> entries,
+    List<web.File> flat,
+  ) async {
+    final files = <web.File>[];
+    if (entries.isNotEmpty) {
+      for (final entry in entries) {
+        await _collectEntry(entry, files);
+      }
+    } else {
+      files.addAll(flat);
+    }
+    // Now that directories are expanded, refine the "Reading N files…" count.
+    onReadingStart?.call(files.length);
+    await _readAndDispatch(files);
+  }
+
+  /// Recursively walk a FileSystemEntry, appending every file it contains to
+  /// [out]. Directories are read in batches (browsers cap `readEntries` at
+  /// ~100 per call, so we loop until it returns empty).
+  Future<void> _collectEntry(
+    web.FileSystemEntry entry,
+    List<web.File> out,
+  ) async {
+    if (entry.isFile) {
+      final fileEntry = entry as web.FileSystemFileEntry;
+      final c = Completer<web.File?>();
+      fileEntry.file(
+        ((web.File f) => c.complete(f)).toJS,
+        ((web.DOMException _) => c.complete(null)).toJS,
+      );
+      final f = await c.future;
+      if (f != null) out.add(f);
+    } else if (entry.isDirectory) {
+      final reader = (entry as web.FileSystemDirectoryEntry).createReader();
+      while (true) {
+        final batch = await _readBatch(reader);
+        if (batch.isEmpty) break;
+        for (final child in batch) {
+          await _collectEntry(child, out);
+        }
+      }
+    }
+  }
+
+  Future<List<web.FileSystemEntry>> _readBatch(
+    web.FileSystemDirectoryReader reader,
+  ) {
+    final c = Completer<List<web.FileSystemEntry>>();
+    reader.readEntries(
+      ((JSArray<web.FileSystemEntry> entries) {
+        c.complete(entries.toDart);
+      }).toJS,
+      ((web.DOMException _) => c.complete(const [])).toJS,
+    );
+    return c.future;
+  }
+
+  Future<void> _readAndDispatch(List<web.File> files) async {
     final accepted = <PlatformFile>[];
     final rejected = <String>[];
-    for (var i = 0; i < files.length; i++) {
-      final file = files.item(i);
-      if (file == null) continue;
+    for (final file in files) {
       final lower = file.name.toLowerCase();
       final matches =
           allowedExtensions.any((ext) => lower.endsWith('.${ext.toLowerCase()}'));
@@ -152,7 +227,10 @@ class GlobalFileDropListener {
     if (rejected.isNotEmpty) {
       debugPrint('Rejected non-importable files: ${rejected.join(", ")}');
     }
-    if (accepted.isNotEmpty) onFiles(accepted);
+    // ALWAYS dispatch — even an empty list — so the host clears its
+    // "Reading…" state instead of hanging when a drop yields no importable
+    // files (the bug that froze "Reading 1 file…" on a dropped folder).
+    onFiles(accepted);
   }
 
   Future<Uint8List> _readFileBytes(web.File file) async {
