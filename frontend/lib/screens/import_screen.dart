@@ -344,6 +344,7 @@ class _ImportScreenState extends State<ImportScreen> {
           _accountInfo = response['account_info'] is Map<String, dynamic>
               ? response['account_info'] as Map<String, dynamic>
               : null;
+          _autoSelectMatchingAccount();
           _initializeSelection();
           _messageIsError = false;
         } else {
@@ -651,6 +652,62 @@ class _ImportScreenState extends State<ImportScreen> {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
     }
     return '${(bytes / 1024).toStringAsFixed(0)} KB';
+  }
+
+  /// Tiny pill used on a preview row (duplicate / OCR flags).
+  Widget _miniBadge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        text,
+        style:
+            TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: color),
+      ),
+    );
+  }
+
+  /// After a parse, auto-select the destination account that matches the
+  /// statement: first by exact CLABE, then by institution/name. Falls back to
+  /// the default (first account) when nothing matches — the user can still
+  /// pick or create one (which pre-fills from the parsed account info).
+  void _autoSelectMatchingAccount() {
+    final info = _accountInfo;
+    final accounts = _accounts;
+    if (info == null || accounts == null || accounts.isEmpty) return;
+    final clabe = (info['clabe'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
+    final inst = (info['institution'] ?? '').toString().toLowerCase();
+
+    if (clabe.isNotEmpty) {
+      for (final a in accounts) {
+        final ac = (a['clabe'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
+        if (ac.isNotEmpty && ac == clabe) {
+          _selectedAccountId = a['id']?.toString();
+          return;
+        }
+      }
+    }
+    if (inst.isNotEmpty) {
+      final key = inst.split(RegExp(r'[ —-]')).first; // "nu" / "cetesdirecto"
+      for (final a in accounts) {
+        final hay =
+            '${a['institution_name'] ?? ''} ${a['name'] ?? ''}'.toLowerCase();
+        if (key.length >= 2 && hay.contains(key)) {
+          _selectedAccountId = a['id']?.toString();
+          return;
+        }
+      }
+    }
+
+    // We have a recognised statement but no matching account (common on the
+    // first import of a new bank). Clear the default selection — which is just
+    // the first account, likely an unrelated one — so the user is nudged to
+    // create the right account (which pre-fills name/balance/CLABE) instead of
+    // silently importing into, say, a US Plaid account.
+    _selectedAccountId = null;
   }
 
   Widget _buildSelectedHeader(AppLocalizations l) {
@@ -1239,205 +1296,137 @@ class _ImportScreenState extends State<ImportScreen> {
                       );
                       final isDuplicate = _duplicateIndices.contains(index);
 
-                      return Card(
-                        color: isSelected
-                            ? context.tint(0.05)
-                            : Colors.transparent,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          side: BorderSide(
+                      final amount =
+                          double.tryParse('${tx['amount']}') ?? 0.0;
+                      final isIncome = amount >= 0;
+                      void toggle() => setState(() {
+                            final s = Set<int>.from(_selectedIndices);
+                            isSelected ? s.remove(index) : s.add(index);
+                            _selectedIndices = s;
+                          });
+                      final meta = [
+                        (tx['date'] ?? '').toString(),
+                        if (tx['source_file'] != null)
+                          tx['source_file'].toString(),
+                        if ((tx['category'] ?? '').toString().isNotEmpty)
+                          prettyCategory(primary: tx['category'].toString()),
+                      ].where((s) => s.isNotEmpty).join('  ·  ');
+                      // Dense, divider-separated row matching the main
+                      // transactions list (no bulky per-row Card). Tap the row
+                      // or the checkbox to toggle.
+                      return InkWell(
+                        onTap: toggle,
+                        child: Container(
+                          decoration: BoxDecoration(
                             color: isSelected
-                                ? context.positive.withValues(alpha: 0.5)
-                                : context.hairline,
-                            width: 1,
+                                ? context.tint(0.04)
+                                : Colors.transparent,
+                            border: Border(
+                              bottom: BorderSide(
+                                color: context.hairline.withValues(alpha: 0.5),
+                              ),
+                            ),
                           ),
-                        ),
-                        margin: const EdgeInsets.only(bottom: 8.0),
-                        child: CheckboxListTile(
-                          value: isSelected,
-                          activeColor: context.positive,
-                          checkColor: Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12.0,
-                            vertical: 6.0,
-                          ),
-                          dense: true,
-                          visualDensity: VisualDensity.compact,
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() {
-                                final newSet = Set<int>.from(_selectedIndices);
-                                if (val) {
-                                  newSet.add(index);
-                                } else {
-                                  newSet.remove(index);
-                                }
-                                _selectedIndices = newSet;
-                              });
-                            }
-                          },
-                          title: Row(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 2, vertical: 7),
+                          child: Row(
                             children: [
-                              Flexible(
-                                child: Text(
-                                  tx['description'] ?? '',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    height: 1.2,
-                                    // Deselected rows are de-emphasised by
-                                    // colour (faint) rather than a noisy
-                                    // strikethrough.
-                                    color: isSelected
-                                        ? context.textPrimary
-                                        : context.textFaint,
-                                  ),
+                              SizedBox(
+                                width: 26,
+                                height: 26,
+                                child: Checkbox(
+                                  value: isSelected,
+                                  activeColor: context.positive,
+                                  visualDensity: VisualDensity.compact,
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  onChanged: (_) => toggle(),
                                 ),
                               ),
-                              if (isDuplicate) ...[
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: context.warning.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    l.impAlreadyImported,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: context.warning,
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            tx['description'] ?? '',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 13.5,
+                                              fontWeight: FontWeight.w600,
+                                              height: 1.2,
+                                              color: isSelected
+                                                  ? context.textPrimary
+                                                  : context.textFaint,
+                                            ),
+                                          ),
+                                        ),
+                                        if (isDuplicate) ...[
+                                          const SizedBox(width: 6),
+                                          _miniBadge(
+                                              l.impAlreadyImported,
+                                              context.warning),
+                                        ],
+                                        if (tx['from_ocr'] == true) ...[
+                                          const SizedBox(width: 6),
+                                          _miniBadge('OCR', context.info),
+                                        ],
+                                      ],
                                     ),
-                                  ),
-                                ),
-                              ],
-                              // OCR-sourced rows can have misread amounts/
-                              // dates — badge them so the user verifies.
-                              if (tx['from_ocr'] == true) ...[
-                                const SizedBox(width: 8),
-                                Tooltip(
-                                  message: Localizations.localeOf(context)
-                                              .languageCode ==
-                                          'es'
-                                      ? 'Leído por OCR (escaneado) — verifica el monto y la fecha'
-                                      : 'Read by OCR (scanned) — verify the amount and date',
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: context.info.withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      'OCR',
+                                    const SizedBox(height: 1),
+                                    Text(
+                                      meta,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                        color: context.info,
+                                        fontSize: 11,
+                                        height: 1.3,
+                                        color: isSelected
+                                            ? context.textSubtle
+                                            : context.textFaint,
+                                        fontFeatures: const [
+                                          FontFeature.tabularFigures()
+                                        ],
                                       ),
                                     ),
-                                  ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                formatCurrencyAmount(
+                                  amount,
+                                  (tx['currency'] ?? 'MXN').toString(),
+                                ),
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: !isSelected
+                                      ? context.textFaint
+                                      : (isIncome
+                                          ? context.positive
+                                          : context.textPrimary),
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures()
+                                  ],
+                                ),
+                              ),
+                              if (isAutoDeselected) ...[
+                                const SizedBox(width: 8),
+                                Tooltip(
+                                  message: l.impAutoDeselectedTooltip,
+                                  child: Icon(Icons.info_outline,
+                                      size: 15,
+                                      color: context.warning
+                                          .withValues(alpha: 0.8)),
                                 ),
                               ],
                             ],
-                          ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 3.0),
-                            child: Row(
-                              children: [
-                                Text(
-                                  tx['date'] ?? '',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    height: 1.3,
-                                    color: isSelected
-                                        ? context.textSubtle
-                                        : context.textFaint,
-                                    fontFeatures: const [
-                                      FontFeature.tabularFigures()
-                                    ],
-                                  ),
-                                ),
-                                // Which file this row came from — so a
-                                // mis-parsed file is easy to spot (and
-                                // exclude via the chips above).
-                                if (tx['source_file'] != null) ...[
-                                  const SizedBox(width: 8),
-                                  Flexible(
-                                    child: Text(
-                                      '· ${tx['source_file']}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: context.textFaint,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                                // Auto-assigned category (rule-based at
-                                // import time). Shown as a faint chip so the
-                                // user can sanity-check the bucketing before
-                                // confirming.
-                                if ((tx['category'] ?? '')
-                                    .toString()
-                                    .isNotEmpty) ...[
-                                  const SizedBox(width: 8),
-                                  Flexible(
-                                    child: Text(
-                                      '· ${prettyCategory(primary: tx['category'].toString())}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: context.textFaint,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                                const Spacer(),
-                                Text(
-                                  formatCurrencyAmount(
-                                    double.tryParse('${tx['amount']}') ?? 0,
-                                    (tx['currency'] ?? 'MXN').toString(),
-                                  ),
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    // Income green / expense neutral when
-                                    // selected; faint when deselected.
-                                    color: !isSelected
-                                        ? context.textFaint
-                                        : ((double.tryParse(
-                                                        '${tx['amount']}') ??
-                                                    0) >=
-                                                0
-                                            ? context.positive
-                                            : context.textPrimary),
-                                    fontFeatures: const [
-                                      FontFeature.tabularFigures()
-                                    ],
-                                  ),
-                                ),
-                                if (isAutoDeselected) ...[
-                                  const SizedBox(width: 10),
-                                  Tooltip(
-                                    message: l.impAutoDeselectedTooltip,
-                                    child: Icon(
-                                      Icons.info_outline,
-                                      size: 15,
-                                      color: context.warning
-                                          .withValues(alpha: 0.8),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
                           ),
                         ),
                       );
