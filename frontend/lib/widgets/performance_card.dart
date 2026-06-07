@@ -52,7 +52,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
   }
 
   Future<void> _load() async {
-    // All best-effort; whichever resolves shows its section.
+    // History + contribution comparison are quick; both best-effort.
     final results = await Future.wait([
       widget.apiService
           .getPortfolioValueHistory()
@@ -60,18 +60,24 @@ class _PerformanceCardState extends State<PerformanceCard> {
       widget.apiService
           .getBenchmarkComparison()
           .catchError((_) => <String, dynamic>{}),
-      widget.apiService
-          .getPortfolioTwr()
-          .catchError((_) => <String, dynamic>{}),
     ]);
     if (!mounted) return;
     setState(() {
       _history = results[0] as List<dynamic>;
       final c = results[1] as Map<String, dynamic>;
       _comparison = c.isEmpty ? null : c;
-      final t = results[2] as Map<String, dynamic>?;
-      _twr = (t == null || t.isEmpty) ? null : t;
       _loading = false;
+    });
+
+    // TWR is loaded separately: on a cold quote cache it triggers a per-symbol
+    // Yahoo fetch and can take many seconds, so we paint the card immediately
+    // (dollar line) and upgrade to the time-weighted view when it resolves.
+    final t = await widget.apiService
+        .getPortfolioTwr()
+        .catchError((_) => <String, dynamic>{});
+    if (!mounted) return;
+    setState(() {
+      _twr = (t == null || t.isEmpty) ? null : t;
     });
   }
 
