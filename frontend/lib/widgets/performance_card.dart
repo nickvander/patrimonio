@@ -13,10 +13,15 @@ import '../l10n/app_localizations.dart';
 /// the same question — "how is my portfolio doing?" — at the canonical place
 /// in the screen hierarchy (overview → performance → allocation → holdings).
 ///
-/// IMPORTANT: the value line is shown in dollars and is NOT indexed against the
-/// S&P. Indexing net-worth/value-from-~0 to the index reports absurd returns
-/// (it conflates contributions with market gains), so the honest "vs market"
-/// read stays the contribution-weighted block below — never an indexed overlay.
+/// The performance line is a TRUE time-weighted return (cashflows divided out,
+/// re-based to the selected range), shown against the S&P 500 indexed over the
+/// same dates. This indexed overlay is legitimate precisely because TWR removes
+/// contribution timing/size — unlike naively indexing dollar value (or net
+/// worth) from ~0, which reports absurd returns by conflating contributions
+/// with market gains. When the portfolio can't be priced historically (no
+/// quote coverage) it falls back to the dollars-only line with no % (see the
+/// note in `_valueSection`). The contribution-weighted "vs S&P" block below is
+/// the complementary dollar-weighted read.
 class PerformanceCard extends StatefulWidget {
   final ApiService apiService;
   final double conversionFactor;
@@ -37,6 +42,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
   bool _loading = true;
   List<dynamic> _history = const [];
   Map<String, dynamic>? _comparison;
+  Map<String, dynamic>? _twr;
   DateRange _range = DateRange.all;
 
   @override
@@ -46,7 +52,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
   }
 
   Future<void> _load() async {
-    // Both are best-effort; whichever resolves shows its section.
+    // All best-effort; whichever resolves shows its section.
     final results = await Future.wait([
       widget.apiService
           .getPortfolioValueHistory()
@@ -54,14 +60,27 @@ class _PerformanceCardState extends State<PerformanceCard> {
       widget.apiService
           .getBenchmarkComparison()
           .catchError((_) => <String, dynamic>{}),
+      widget.apiService
+          .getPortfolioTwr()
+          .catchError((_) => <String, dynamic>{}),
     ]);
     if (!mounted) return;
     setState(() {
       _history = results[0] as List<dynamic>;
       final c = results[1] as Map<String, dynamic>;
       _comparison = c.isEmpty ? null : c;
+      final t = results[2] as Map<String, dynamic>?;
+      _twr = (t == null || t.isEmpty) ? null : t;
       _loading = false;
     });
+  }
+
+  /// TWR points are available + cover at least a sliver of the portfolio.
+  bool get _hasTwr {
+    final pts = _twr?['points'];
+    return pts is List &&
+        pts.length >= 2 &&
+        ((_twr?['coverage_pct'] as num?)?.toDouble() ?? 0) > 0;
   }
 
   String _money(double usd) =>
@@ -106,9 +125,10 @@ class _PerformanceCardState extends State<PerformanceCard> {
     final hasBenchmark = c != null && invested > 0 && lots > 0;
 
     final hasHistory = _history.length >= 2;
+    final showValue = hasHistory || _hasTwr;
 
     // Nothing to show → don't render an empty card.
-    if (!hasHistory && !hasBenchmark) return const SizedBox.shrink();
+    if (!showValue && !hasBenchmark) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(top: 24),
@@ -137,7 +157,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
                 ],
               ),
               const SizedBox(height: 18),
-              if (hasHistory)
+              if (showValue)
                 _valueSection(context, l)
               else
                 Text(
@@ -145,7 +165,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
                   style: TextStyle(color: context.textFaint, fontSize: 12),
                 ),
               if (hasBenchmark) ...[
-                if (hasHistory) ...[
+                if (showValue) ...[
                   const SizedBox(height: 20),
                   Divider(color: context.hairline, height: 1),
                   const SizedBox(height: 16),
@@ -160,45 +180,54 @@ class _PerformanceCardState extends State<PerformanceCard> {
   }
 
   Widget _valueSection(BuildContext context, AppLocalizations l) {
+    // Headline dollar value: the current portfolio value (last point of the
+    // value history; falls back to the TWR total when history is sparse).
+    final headlineValue = _history.isNotEmpty
+        ? (_history.last['value_usd'] as num?)?.toDouble() ?? 0.0
+        : (_twr?['total_value_usd'] as num?)?.toDouble() ?? 0.0;
+
+    // Preferred: an honest time-weighted return (cashflows divided out) plotted
+    // against the S&P 500, both indexed to the range start. This is what lets
+    // the performance line finally carry a real return — unlike the dollar
+    // line, which ramps from ~0 as accounts sync and so can't be %-ed.
+    if (_hasTwr) {
+      final twrBody = _twrBody(context, l);
+      if (twrBody != null) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _headline(context, headlineValue, l.lwPerfTwrReturn),
+            const SizedBox(height: 14),
+            twrBody,
+            const SizedBox(height: 8),
+            _rangeSelector(),
+          ],
+        );
+      }
+    }
+
+    // Fallback: dollars-only line. We deliberately DON'T show a first→last %
+    // here — early history ramps from ~0 as accounts first sync, conflating
+    // contributions with market gains. The honest return is the TWR (above,
+    // when priceable) or the contribution-weighted block below.
     final filtered = _filterByRange(_history);
     final spots = <FlSpot>[];
     for (var i = 0; i < filtered.length; i++) {
       final v = (filtered[i]['value_usd'] as num?)?.toDouble() ?? 0.0;
       spots.add(FlSpot(i.toDouble(), v * widget.conversionFactor));
     }
-
-    final first = filtered.isNotEmpty
+    final firstV = filtered.isNotEmpty
         ? (filtered.first['value_usd'] as num?)?.toDouble() ?? 0.0
         : 0.0;
-    final last = filtered.isNotEmpty
+    final lastV = filtered.isNotEmpty
         ? (filtered.last['value_usd'] as num?)?.toDouble() ?? 0.0
         : 0.0;
-    // Line colour follows the overall direction over the range. We deliberately
-    // DON'T show a first→last % "return" here: early history ramps from ~0 as
-    // accounts first sync, so that % conflates contributions with market gains
-    // (the absurd "+13000%" read). The honest return is the contribution-
-    // weighted "vs S&P 500" block below.
-    final color = last >= first ? context.positive : context.negative;
+    final color = lastV >= firstV ? context.positive : context.negative;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          _money(last),
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w800,
-            color: context.textPrimary,
-            fontFeatures: const [FontFeature.tabularFigures()],
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        const SizedBox(height: 2),
-        Text(
-          l.lwPerfValueSubtitle,
-          style: TextStyle(color: context.textFaint, fontSize: 11),
-        ),
+        _headline(context, lastV, l.lwPerfValueSubtitle),
         const SizedBox(height: 14),
         RepaintBoundary(
           child: SizedBox(
@@ -239,15 +268,176 @@ class _PerformanceCardState extends State<PerformanceCard> {
           ),
         ),
         const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerRight,
-          child: DateRangeSelector(
-            selectedRange: _range,
-            onRangeChanged: (r) => setState(() => _range = r),
-          ),
-        ),
+        _rangeSelector(),
       ],
     );
+  }
+
+  Widget _headline(BuildContext context, double valueUsd, String subtitle) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _money(valueUsd),
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            color: context.textPrimary,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 2),
+        Text(subtitle, style: TextStyle(color: context.textFaint, fontSize: 11)),
+      ],
+    );
+  }
+
+  Widget _rangeSelector() {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: DateRangeSelector(
+        selectedRange: _range,
+        onRangeChanged: (r) => setState(() => _range = r),
+      ),
+    );
+  }
+
+  /// The TWR return pills + indexed your-vs-S&P chart + coverage caption for
+  /// the selected range. Returns null when the range is too short to plot.
+  Widget? _twrBody(BuildContext context, AppLocalizations l) {
+    final pts = (_twr!['points'] as List).cast<dynamic>();
+    var filtered = _filterByRange(pts);
+    if (filtered.length < 2) return null;
+    // Keep the scene light (canvaskit dislikes thousands of spots).
+    filtered = _downsample(filtered, 180);
+
+    // Re-base both series to the range's first point so the return is for the
+    // selected window: TWR[a,b] = index(b)/index(a) − 1.
+    final baseT = (filtered.first['twr'] as num?)?.toDouble() ?? 1.0;
+    final baseS = (filtered.first['sp'] as num?)?.toDouble() ?? 1.0;
+    final yourSpots = <FlSpot>[];
+    final spSpots = <FlSpot>[];
+    for (var i = 0; i < filtered.length; i++) {
+      final t = (filtered[i]['twr'] as num?)?.toDouble() ?? baseT;
+      final s = (filtered[i]['sp'] as num?)?.toDouble() ?? baseS;
+      yourSpots.add(FlSpot(i.toDouble(), baseT != 0 ? (t / baseT - 1) * 100 : 0));
+      spSpots.add(FlSpot(i.toDouble(), baseS != 0 ? (s / baseS - 1) * 100 : 0));
+    }
+    final yourPct = yourSpots.last.y;
+    final spPct = spSpots.last.y;
+    final coverage = (_twr!['coverage_pct'] as num?)?.toDouble() ?? 1.0;
+    final yourColor = yourPct >= 0 ? context.positive : context.negative;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+                child: _twrPill(context, l.lwPerfTwrYou, yourPct, yourColor)),
+            const SizedBox(width: 12),
+            Expanded(
+                child: _twrPill(context, l.lwPerfTwrSp, spPct, context.info)),
+          ],
+        ),
+        const SizedBox(height: 14),
+        RepaintBoundary(
+          child: SizedBox(
+            height: 150,
+            child: LineChart(
+              LineChartData(
+                gridData: const FlGridData(show: false),
+                titlesData: const FlTitlesData(show: false),
+                borderData: FlBorderData(show: false),
+                lineTouchData: const LineTouchData(enabled: false),
+                minX: 0,
+                maxX: (yourSpots.length - 1).toDouble(),
+                lineBarsData: [
+                  // S&P first (drawn under), dashed + muted.
+                  LineChartBarData(
+                    spots: spSpots,
+                    isCurved: true,
+                    curveSmoothness: 0.2,
+                    color: context.info.withValues(alpha: 0.7),
+                    barWidth: 2,
+                    dashArray: const [5, 4],
+                    dotData: const FlDotData(show: false),
+                  ),
+                  LineChartBarData(
+                    spots: yourSpots,
+                    isCurved: true,
+                    curveSmoothness: 0.2,
+                    color: yourColor,
+                    barWidth: 2.5,
+                    dotData: const FlDotData(show: false),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          yourColor.withValues(alpha: 0.18),
+                          yourColor.withValues(alpha: 0.0),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (coverage < 0.99) ...[
+          const SizedBox(height: 8),
+          Text(
+            l.lwPerfTwrCoverage('${(coverage * 100).round()}%'),
+            style: TextStyle(color: context.textFaint, fontSize: 11),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _twrPill(
+      BuildContext context, String label, double pct, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(color: context.textSubtle, fontSize: 11)),
+          const SizedBox(height: 4),
+          Text(
+            '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(1)}%',
+            style: TextStyle(
+              color: color,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Stride-sample a list down to at most [maxPoints], always keeping the last.
+  List<dynamic> _downsample(List<dynamic> data, int maxPoints) {
+    if (data.length <= maxPoints) return data;
+    final step = data.length / maxPoints;
+    final out = <dynamic>[];
+    for (var i = 0; i < maxPoints; i++) {
+      out.add(data[(i * step).floor()]);
+    }
+    if (!identical(out.last, data.last)) out.add(data.last);
+    return out;
   }
 
   Widget _benchmarkSection(

@@ -658,6 +658,22 @@ class ApiService {
     return null;
   }
 
+  /// True time-weighted return: daily growth index of the portfolio (cashflows
+  /// divided out) + the S&P 500 over the same dates, plus `coverage_pct`.
+  /// Returns the `{start_date, end_date, coverage_pct, your_twr, sp_twr,
+  /// points:[{date, twr, sp}], ...}` shape; null on any error so the card
+  /// falls back to the dollar-value line.
+  Future<Map<String, dynamic>?> getPortfolioTwr() async {
+    try {
+      final r = await _get(Uri.parse('$_baseUrl/dashboard/portfolio-twr'));
+      if (r.statusCode == 200) {
+        final decoded = json.decode(r.body);
+        return decoded is Map<String, dynamic> ? decoded : null;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   /// Emergency-fund runway: liquid cash / trailing monthly spend (USD).
   Future<Map<String, dynamic>> getEmergencyFund({bool forceRefresh = false}) {
     return _cachedGet('emergency-fund', () async {

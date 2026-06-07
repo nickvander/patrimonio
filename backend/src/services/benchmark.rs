@@ -30,7 +30,21 @@ pub async fn latest_date(db: &PgPool, symbol: &str) -> Option<NaiveDate> {
 /// Returns how many rows were written. Network failures bubble up so the
 /// caller can fall back to whatever is already stored.
 pub async fn refresh_sp500(db: &PgPool) -> Result<usize> {
-    let url = "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?range=5y&interval=1d";
+    // `%5E` is the URL-encoded caret in Yahoo's index ticker `^GSPC`.
+    refresh_yahoo(db, "%5EGSPC", SP500).await
+}
+
+/// Fetch ~5 years of daily closes for `yahoo_symbol` from the Yahoo v8 chart
+/// API and upsert them into `benchmark_prices` under `store_as`. This is the
+/// generic engine behind both the S&P benchmark and the per-holding quote
+/// cache used by the time-weighted-return computation — same table, same
+/// freshness gate, just a different symbol. Returns how many rows were
+/// written; network/parse failures bubble up so callers can fall back to
+/// whatever is already stored.
+pub async fn refresh_yahoo(db: &PgPool, yahoo_symbol: &str, store_as: &str) -> Result<usize> {
+    let url = format!(
+        "https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}?range=5y&interval=1d"
+    );
     let client = Client::new();
     let body = client
         .get(url)
@@ -67,7 +81,7 @@ pub async fn refresh_sp500(db: &PgPool) -> Result<usize> {
         }
     }
     if rows.is_empty() {
-        return Err(anyhow!("Yahoo returned no usable S&P 500 points"));
+        return Err(anyhow!("Yahoo returned no usable points for {store_as}"));
     }
 
     // Multi-row upsert in chunks (Postgres caps bind params at 65535).
@@ -77,14 +91,14 @@ pub async fn refresh_sp500(db: &PgPool) -> Result<usize> {
             "INSERT INTO benchmark_prices (symbol, price_date, close) ",
         );
         qb.push_values(chunk, |mut b, (date, close)| {
-            b.push_bind(SP500).push_bind(date).push_bind(close);
+            b.push_bind(store_as).push_bind(date).push_bind(close);
         });
         qb.push(" ON CONFLICT (symbol, price_date) DO UPDATE SET close = EXCLUDED.close, recorded_at = NOW()");
         qb.build().execute(db).await?;
         written += chunk.len();
     }
 
-    tracing::info!("Refreshed S&P 500 benchmark: {} daily closes", written);
+    tracing::info!("Refreshed {} quote series: {} daily closes", store_as, written);
     Ok(written)
 }
 
@@ -92,17 +106,29 @@ pub async fn refresh_sp500(db: &PgPool) -> Result<usize> {
 /// covering weekends/holidays), refreshing from the network if not. Tolerates
 /// network failure as long as *some* data already exists.
 pub async fn ensure_fresh(db: &PgPool) -> Result<()> {
-    let stale = match latest_date(db, SP500).await {
+    ensure_symbol_fresh(db, "%5EGSPC", SP500).await
+}
+
+/// Generic freshness gate for any cached quote series. Refreshes
+/// `store_as` from `yahoo_symbol` when the newest stored close is more than
+/// ~4 days old (covering weekends/holidays). Tolerates network failure as
+/// long as *some* data is already stored for `store_as`.
+pub async fn ensure_symbol_fresh(
+    db: &PgPool,
+    yahoo_symbol: &str,
+    store_as: &str,
+) -> Result<()> {
+    let stale = match latest_date(db, store_as).await {
         Some(d) => Utc::now().date_naive() - d > Duration::days(4),
         None => true,
     };
     if stale {
-        if let Err(e) = refresh_sp500(db).await {
+        if let Err(e) = refresh_yahoo(db, yahoo_symbol, store_as).await {
             // Only hard-fail when we have nothing to serve at all.
-            if latest_date(db, SP500).await.is_none() {
+            if latest_date(db, store_as).await.is_none() {
                 return Err(e);
             }
-            tracing::warn!("S&P 500 refresh failed, serving cached series: {e}");
+            tracing::warn!("{store_as} quote refresh failed, serving cached series: {e}");
         }
     }
     Ok(())

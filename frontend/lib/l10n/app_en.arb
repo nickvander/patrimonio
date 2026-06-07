@@ -1238,5 +1238,14 @@
   "lwRangeAll": "ALL",
   "lwPerfTitle": "Performance",
   "lwPerfValueSubtitle": "Investment value over time (includes contributions)",
-  "lwPerfNotEnough": "Not enough history yet to chart your portfolio value over time."
+  "lwPerfNotEnough": "Not enough history yet to chart your portfolio value over time.",
+  "lwPerfTwrReturn": "Time-weighted return",
+  "lwPerfTwrYou": "Your portfolio",
+  "lwPerfTwrSp": "S&P 500",
+  "lwPerfTwrCoverage": "Reflects {pct} of your portfolio we can price daily",
+  "@lwPerfTwrCoverage": {
+    "placeholders": {
+      "pct": { "type": "Object" }
+    }
+  }
 }

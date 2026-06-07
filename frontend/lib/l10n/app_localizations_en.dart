@@ -3710,4 +3710,18 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get lwPerfNotEnough =>
       'Not enough history yet to chart your portfolio value over time.';
+
+  @override
+  String get lwPerfTwrReturn => 'Time-weighted return';
+
+  @override
+  String get lwPerfTwrYou => 'Your portfolio';
+
+  @override
+  String get lwPerfTwrSp => 'S&P 500';
+
+  @override
+  String lwPerfTwrCoverage(Object pct) {
+    return 'Reflects $pct of your portfolio we can price daily';
+  }
 }

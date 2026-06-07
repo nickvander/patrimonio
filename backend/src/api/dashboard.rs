@@ -28,6 +28,7 @@ pub fn router() -> Router<AppState> {
         .route("/emergency-fund", get(emergency_fund))
         .route("/benchmark", get(benchmark_series))
         .route("/benchmark-comparison", get(benchmark_comparison))
+        .route("/portfolio-twr", get(portfolio_twr))
         .route("/credit-utilization", get(credit_utilization))
         .route("/sync-status", get(sync_status))
         .route("/transactions", get(recent_transactions))
@@ -1586,6 +1587,16 @@ async fn benchmark_comparison(
 ) -> Json<crate::services::benchmark::ContributionComparison> {
     let _ = crate::services::benchmark::ensure_fresh(&state.db).await;
     Json(crate::services::benchmark::contribution_comparison(&state.db, ctx.user_id).await)
+}
+
+/// True time-weighted return: a daily growth index of the investment
+/// portfolio (cashflows divided out) + the S&P 500 over the same dates, plus
+/// how much of the portfolio we can price historically (`coverage_pct`).
+async fn portfolio_twr(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<crate::services::twr::TwrResult> {
+    Json(crate::services::twr::portfolio_twr(&state.db, ctx.user_id).await)
 }
 
 #[derive(Serialize)]

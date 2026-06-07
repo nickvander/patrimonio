@@ -6057,6 +6057,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not enough history yet to chart your portfolio value over time.'**
   String get lwPerfNotEnough;
+
+  /// No description provided for @lwPerfTwrReturn.
+  ///
+  /// In en, this message translates to:
+  /// **'Time-weighted return'**
+  String get lwPerfTwrReturn;
+
+  /// No description provided for @lwPerfTwrYou.
+  ///
+  /// In en, this message translates to:
+  /// **'Your portfolio'**
+  String get lwPerfTwrYou;
+
+  /// No description provided for @lwPerfTwrSp.
+  ///
+  /// In en, this message translates to:
+  /// **'S&P 500'**
+  String get lwPerfTwrSp;
+
+  /// No description provided for @lwPerfTwrCoverage.
+  ///
+  /// In en, this message translates to:
+  /// **'Reflects {pct} of your portfolio we can price daily'**
+  String lwPerfTwrCoverage(Object pct);
 }
 
 class _AppLocalizationsDelegate

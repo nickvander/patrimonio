@@ -989,5 +989,14 @@
   "lwRangeAll": "TODO",
   "lwPerfTitle": "Rendimiento",
   "lwPerfValueSubtitle": "Valor de inversión a lo largo del tiempo (incluye aportaciones)",
-  "lwPerfNotEnough": "Aún no hay suficiente historial para graficar el valor de tu portafolio."
+  "lwPerfNotEnough": "Aún no hay suficiente historial para graficar el valor de tu portafolio.",
+  "lwPerfTwrReturn": "Rendimiento ponderado por tiempo",
+  "lwPerfTwrYou": "Tu portafolio",
+  "lwPerfTwrSp": "S&P 500",
+  "lwPerfTwrCoverage": "Refleja el {pct} de tu portafolio que podemos cotizar a diario",
+  "@lwPerfTwrCoverage": {
+    "placeholders": {
+      "pct": { "type": "Object" }
+    }
+  }
 }

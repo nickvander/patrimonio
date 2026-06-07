@@ -2713,6 +2713,96 @@ async fn benchmark_comparison_contribution_weighted() {
     assert!((body["benchmark_value_usd"].as_f64().unwrap() - 1200.0).abs() < 0.01);
 }
 
+/// True time-weighted return divides out the contribution: a mid-window buy
+/// must NOT inflate the return the way a naive (end-start)/start would. We
+/// hand-build a price path where the honest TWR is +21% even though the
+/// dollar value more than doubled (because most of the value came from the
+/// contribution, not the market).
+#[tokio::test]
+#[serial_test::serial]
+async fn portfolio_twr_divides_out_contributions() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+
+    // Quote path for AAPL: 100 (D-60) → 110 (D-30) → 121 (today), i.e. two
+    // +10% legs = +21% compounded. S&P: 1000 (D-60) → 1100 (today) = +10%.
+    // Dates are CURRENT_DATE-relative so the seeded series reads as "fresh"
+    // and the freshness gate doesn't reach out to Yahoo during the test.
+    sqlx::query(
+        "INSERT INTO benchmark_prices (symbol, price_date, close) VALUES \
+         ('AAPL', CURRENT_DATE - 60, 100), \
+         ('AAPL', CURRENT_DATE - 30, 110), \
+         ('AAPL', CURRENT_DATE,      121), \
+         ('SP500', CURRENT_DATE - 60, 1000), \
+         ('SP500', CURRENT_DATE,      1100) \
+         ON CONFLICT (symbol, price_date) DO UPDATE SET close = EXCLUDED.close",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Current position: 10 shares worth 10 × 121 = 1210.
+    let holding_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO holdings (account_id, symbol, name, currency, quantity, value, user_id) \
+         VALUES ($1,'AAPL','Apple','USD',10,1210,$2) RETURNING id",
+    )
+    .bind(acct)
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    // Opening lot of 6 @ 100 on D-60, then a contribution of 4 @ 110 on D-30.
+    // 6 + 4 = the 10 shares held today.
+    sqlx::query(
+        "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) VALUES \
+         ($1,$2,$3, CURRENT_DATE - 60, 6, 100, 'USD', 1.0, 'open'), \
+         ($1,$2,$3, CURRENT_DATE - 30, 4, 110, 'USD', 1.0, 'add')",
+    )
+    .bind(holding_id)
+    .bind(acct)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/portfolio-twr", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+
+    // Whole portfolio is the priceable AAPL position.
+    assert!(
+        (body["coverage_pct"].as_f64().unwrap() - 1.0).abs() < 0.001,
+        "coverage should be 100%, got {}",
+        body["coverage_pct"]
+    );
+    assert!((body["total_value_usd"].as_f64().unwrap() - 1210.0).abs() < 0.5);
+    // The honest TWR is +21% — NOT the ~+102% a naive value change would show
+    // (1210 vs the 600 opening value includes the 440 contribution).
+    assert!(
+        (body["your_twr"].as_f64().unwrap() - 0.21).abs() < 0.005,
+        "TWR should be ~0.21 (contribution divided out), got {}",
+        body["your_twr"]
+    );
+    assert!(
+        (body["sp_twr"].as_f64().unwrap() - 0.10).abs() < 0.005,
+        "S&P TWR should be ~0.10, got {}",
+        body["sp_twr"]
+    );
+    // Daily growth index: starts at 1.0, ends at ~1.21 / ~1.10.
+    let points = body["points"].as_array().unwrap();
+    assert!(points.len() > 50, "expected a daily series, got {}", points.len());
+    let last = points.last().unwrap();
+    assert!((last["twr"].as_f64().unwrap() - 1.21).abs() < 0.005);
+    assert!((last["sp"].as_f64().unwrap() - 1.10).abs() < 0.005);
+}
+
 #[tokio::test]
 #[serial_test::serial]
 async fn tax_summary_splits_short_and_long_term_from_lots() {

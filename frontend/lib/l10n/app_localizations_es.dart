@@ -3743,4 +3743,18 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get lwPerfNotEnough =>
       'Aún no hay suficiente historial para graficar el valor de tu portafolio.';
+
+  @override
+  String get lwPerfTwrReturn => 'Rendimiento ponderado por tiempo';
+
+  @override
+  String get lwPerfTwrYou => 'Tu portafolio';
+
+  @override
+  String get lwPerfTwrSp => 'S&P 500';
+
+  @override
+  String lwPerfTwrCoverage(Object pct) {
+    return 'Refleja el $pct de tu portafolio que podemos cotizar a diario';
+  }
 }
