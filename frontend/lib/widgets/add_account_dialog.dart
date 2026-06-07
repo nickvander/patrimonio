@@ -23,6 +23,11 @@ class AddAccountDialog extends StatefulWidget {
   final String? suggestedClabe;
   final String? suggestedHolder;
 
+  /// Optional statement-derived bank name ("CetesDirecto", "Nu México"). When
+  /// set, the new account is filed under that institution instead of the
+  /// generic "Manual" bucket.
+  final String? institutionName;
+
   const AddAccountDialog({
     super.key,
     required this.onAccountCreated,
@@ -31,6 +36,7 @@ class AddAccountDialog extends StatefulWidget {
     this.suggestedName,
     this.suggestedClabe,
     this.suggestedHolder,
+    this.institutionName,
   });
 
   @override
@@ -327,6 +333,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
         initialBalance: double.parse(_balanceController.text),
         clabe: _clabeController.text,
         holderName: _holderController.text,
+        institutionName: widget.institutionName,
       );
 
       widget.onAccountCreated();

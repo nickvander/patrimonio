@@ -293,6 +293,12 @@ pub struct CreateAccountRequest {
     pub clabe: Option<String>,
     #[serde(default)]
     pub holder_name: Option<String>,
+    /// Optional statement-derived institution (e.g. "CetesDirecto", "Nu
+    /// México"). When set, the account is filed under a per-user institution
+    /// with this name instead of the generic "Manual" bucket, so imported
+    /// accounts group under their real bank.
+    #[serde(default)]
+    pub institution_name: Option<String>,
 }
 
 async fn create_account(
@@ -323,10 +329,21 @@ async fn create_account(
             }
         }
     } else {
-        // Find this user's Manual institution.
+        // File the account under a per-user institution. Statement imports
+        // pass the real bank name ("CetesDirecto", "Nu México") so the account
+        // groups under its bank; everything else falls back to "Manual".
+        let inst_name = payload
+            .institution_name
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .unwrap_or("Manual")
+            .to_string();
+        // Find this user's institution with that name (find-or-create).
         let inst = sqlx::query(
-            "SELECT id FROM institutions WHERE name = 'Manual' AND user_id = $1"
+            "SELECT id FROM institutions WHERE name = $1 AND user_id = $2"
         )
+        .bind(&inst_name)
         .bind(ctx.user_id)
         .fetch_optional(&state.db)
         .await;
@@ -335,20 +352,21 @@ async fn create_account(
             Ok(None) => {
                 let new_inst_id = uuid::Uuid::new_v4();
                 let created = sqlx::query(
-                    "INSERT INTO institutions (id, name, institution_type, country, integration_type, user_id) VALUES ($1, 'Manual', 'manual', 'MX', 'manual', $2)"
+                    "INSERT INTO institutions (id, name, institution_type, country, integration_type, user_id) VALUES ($1, $2, 'manual', 'MX', 'manual', $3)"
                 )
                 .bind(new_inst_id)
+                .bind(&inst_name)
                 .bind(ctx.user_id)
                 .execute(&state.db)
                 .await;
                 if let Err(e) = created {
-                    error!("Failed to create per-user Manual institution: {}", e);
+                    error!("Failed to create per-user institution '{}': {}", inst_name, e);
                     return StatusCode::INTERNAL_SERVER_ERROR.into_response();
                 }
                 new_inst_id
             }
             Err(e) => {
-                error!("Database error finding Manual institution: {}", e);
+                error!("Database error finding institution '{}': {}", inst_name, e);
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
         }

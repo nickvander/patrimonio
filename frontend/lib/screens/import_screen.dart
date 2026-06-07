@@ -458,6 +458,11 @@ class _ImportScreenState extends State<ImportScreen> {
     final infoBalance = (info?['suggested_balance'] as num?)?.toDouble();
     final infoName = info?['suggested_name'] as String?;
     final infoCurrency = (info?['currency'] as String?)?.toUpperCase();
+    // The bank is the same for the primary account and its bundled cajitas, so
+    // file them all under the statement's institution (e.g. "Nu México")
+    // rather than the generic "Manual" bucket — read from _accountInfo even
+    // for secondary sections (where `info` is intentionally null).
+    final institutionName = _accountInfo?['institution'] as String?;
 
     await showDialog<void>(
       context: context,
@@ -467,6 +472,7 @@ class _ImportScreenState extends State<ImportScreen> {
         suggestedName: infoName ?? secondaryLabel,
         suggestedClabe: info?['clabe'] as String?,
         suggestedHolder: info?['holder_name'] as String?,
+        institutionName: institutionName,
         onAccountCreated: () =>
             _selectNewlyCreatedAccount(existingIds, secondaryLabel),
       ),
