@@ -2488,37 +2488,74 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
 
+    // Canonical 2026-research portfolio flow:
+    //   overview → performance → allocation → signals → holdings.
+    // The overview / signals / holdings slices are sections of one
+    // PortfolioCard (same data, same holdings list); performance and
+    // allocation are their own widgets between them.
+    final portfolioData = _portfolioData ?? {};
     final portfolioTab = buildTabContainer(
       Column(
         children: [
-          if (_allocationData != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 24.0),
-              // RepaintBoundary so this big card is cached as a layer and
-              // doesn't re-raster on every page-scroll frame.
-              child: RepaintBoundary(
-                child: AllocationHeatmap(
-                  data: _allocationData!,
-                  conversionFactor: conversionFactor,
-                  currencyFormat: currencyFormat,
-                  // Fold the old "Asset breakdown" card in as toggle
-                  // dimensions (one allocation widget, not three).
-                  typeBreakdown:
-                      (_overview?['type_breakdown'] as List?) ?? const [],
-                  institutionBreakdown:
-                      (_overview?['institution_breakdown'] as List?) ?? const [],
-                  activeCategory: _portfolioCategoryFilter,
-                  onCategorySelected: (cat) => setState(() {
-                    // Tapping the active band clears the filter — saves a
-                    // round-trip through the chip's X button.
-                    _portfolioCategoryFilter =
-                        _portfolioCategoryFilter == cat ? null : cat;
-                  }),
-                ),
+          // 1 · Overview — hero total value, change, dual-currency, KPIs.
+          PortfolioCard(
+            section: PortfolioSection.summary,
+            portfolioData: portfolioData,
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
+            targetCurrency: _targetCurrency,
+            usdMxnRate: fxRate,
+          ),
+          const SizedBox(height: 24),
+          // 2 · Performance — value-over-time + contribution-weighted return.
+          RepaintBoundary(
+            child: PerformanceCard(
+              apiService: _apiService,
+              conversionFactor: conversionFactor,
+              currencyFormat: currencyFormat,
+            ),
+          ),
+          const SizedBox(height: 24),
+          // 3 · Allocation — heatmap with dimension toggle + tap-to-filter.
+          if (_allocationData != null) ...[
+            // RepaintBoundary so this big card is cached as a layer and
+            // doesn't re-raster on every page-scroll frame.
+            RepaintBoundary(
+              child: AllocationHeatmap(
+                data: _allocationData!,
+                conversionFactor: conversionFactor,
+                currencyFormat: currencyFormat,
+                // Fold the old "Asset breakdown" card in as toggle
+                // dimensions (one allocation widget, not three).
+                typeBreakdown:
+                    (_overview?['type_breakdown'] as List?) ?? const [],
+                institutionBreakdown:
+                    (_overview?['institution_breakdown'] as List?) ?? const [],
+                activeCategory: _portfolioCategoryFilter,
+                onCategorySelected: (cat) => setState(() {
+                  // Tapping the active band clears the filter — saves a
+                  // round-trip through the chip's X button.
+                  _portfolioCategoryFilter =
+                      _portfolioCategoryFilter == cat ? null : cat;
+                }),
               ),
             ),
+            const SizedBox(height: 24),
+          ],
+          // 4 · Signals — biggest gainer / loser + concentration flag.
           PortfolioCard(
-            portfolioData: _portfolioData ?? {},
+            section: PortfolioSection.signals,
+            portfolioData: portfolioData,
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
+            targetCurrency: _targetCurrency,
+            usdMxnRate: fxRate,
+          ),
+          const SizedBox(height: 24),
+          // 5 · Holdings — searchable table, drill-down filter from above.
+          PortfolioCard(
+            section: PortfolioSection.holdings,
+            portfolioData: portfolioData,
             conversionFactor: conversionFactor,
             currencyFormat: currencyFormat,
             targetCurrency: _targetCurrency,
@@ -2528,21 +2565,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 setState(() => _portfolioCategoryFilter = null),
             searchOverride: _portfolioSearchOverride,
           ),
+          const SizedBox(height: 24),
           RealizedGainsCard(
             apiService: _apiService,
             conversionFactor: conversionFactor,
             currencyFormat: currencyFormat,
           ),
-          RepaintBoundary(
-            child: PerformanceCard(
-              apiService: _apiService,
-              conversionFactor: conversionFactor,
-              currencyFormat: currencyFormat,
-            ),
-          ),
-          // (The standalone "Asset breakdown" card is gone — its by-type /
-          // by-institution views are now dimensions of the allocation card
-          // above.)
         ],
       ),
     );

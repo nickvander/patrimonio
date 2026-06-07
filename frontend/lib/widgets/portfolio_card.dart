@@ -5,7 +5,29 @@ import '../services/preferences.dart';
 import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
+/// Which slice of the portfolio surface a [PortfolioCard] instance renders.
+///
+/// The portfolio tab follows the 2026 research flow
+/// overview → performance → allocation → signals → holdings. Performance and
+/// allocation are their own widgets; the remaining three are slices of the
+/// same underlying data (and the same holdings list), so they share one
+/// widget driven by this enum. Each instance owns its own state, but reads
+/// the same `portfolioData['holdings']`, so there's nothing to keep in sync.
+enum PortfolioSection {
+  /// Hero total value + change + dual-currency panel + headline KPIs.
+  summary,
+
+  /// Thin scannable strip: biggest gainer, biggest loser, concentration flag.
+  signals,
+
+  /// Search/toolbar + the holdings table (flat or grouped-by-account).
+  holdings,
+}
+
 class PortfolioCard extends StatefulWidget {
+  /// Which slice of the portfolio this instance renders. Defaults to
+  /// [PortfolioSection.holdings] so older single-card call sites keep working.
+  final PortfolioSection section;
   final Map<String, dynamic> portfolioData;
   final double conversionFactor;
   final NumberFormat currencyFormat;
@@ -26,6 +48,7 @@ class PortfolioCard extends StatefulWidget {
 
   const PortfolioCard({
     super.key,
+    this.section = PortfolioSection.holdings,
     required this.portfolioData,
     required this.conversionFactor,
     required this.currencyFormat,
@@ -199,6 +222,19 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
   @override
   Widget build(BuildContext context) {
+    switch (widget.section) {
+      case PortfolioSection.summary:
+        return _buildSummaryCard(context);
+      case PortfolioSection.signals:
+        return _buildSignalsCard(context);
+      case PortfolioSection.holdings:
+        return _buildHoldingsCard(context);
+    }
+  }
+
+  /// Overview slice: hero total value + change badge, headline KPIs, and the
+  /// dual-currency panel.
+  Widget _buildSummaryCard(BuildContext context) {
     final l = AppLocalizations.of(context);
     final totalValue =
         ((widget.portfolioData['total_value'] as num?)?.toDouble() ?? 0.0) *
@@ -321,25 +357,35 @@ class _PortfolioCardState extends State<PortfolioCard> {
               return summary;
             }),
             const SizedBox(height: 24),
-            _buildKpiStrip(),
+            _buildSummaryKpis(),
             const SizedBox(height: 16),
             _buildDualCurrencyPanel(),
-            const SizedBox(height: 20),
-            Theme(
-              data: Theme.of(context).copyWith(
-                cardTheme: CardThemeData(
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-                dividerColor: context.hairline,
-              ),
-              child: _groupByAccount
-                  ? _buildGroupedHoldings()
-                  : _buildHoldingsTable(),
-            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Holdings slice: search/toolbar + the holdings table (flat or grouped).
+  Widget _buildHoldingsCard(BuildContext context) {
+    return Card(
+      elevation: 6,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Theme(
+          data: Theme.of(context).copyWith(
+            cardTheme: CardThemeData(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            dividerColor: context.hairline,
+          ),
+          child: _groupByAccount
+              ? _buildGroupedHoldings()
+              : _buildHoldingsTable(),
         ),
       ),
     );
@@ -531,21 +577,34 @@ class _PortfolioCardState extends State<PortfolioCard> {
     );
   }
 
-  /// Four-tile compact stat strip above the holdings table.
-  /// Surfaces at-a-glance facts about the portfolio so the user doesn't
-  /// have to mentally scan the whole table.
-  Widget _buildKpiStrip() {
-    if (_allHoldings.isEmpty) return const SizedBox.shrink();
+  /// Ticker label for a holding, hiding Plaid `security_id` hashes by
+  /// falling back to the security name. Shared by the summary KPIs and the
+  /// signals strip.
+  String _displayTicker(Map<String, dynamic> h) {
+    final sym = (h['symbol'] ?? '').toString();
+    final name = (h['name'] ?? '').toString();
+    if (sym.length > 8 || (sym != sym.toUpperCase() && sym.length > 4)) {
+      return name.isNotEmpty ? name : '—';
+    }
+    return sym.isEmpty ? (name.isNotEmpty ? name : '?') : sym;
+  }
 
-    final l = AppLocalizations.of(context);
-    final cf = widget.conversionFactor;
+  /// The largest position (by value) plus the biggest gainer / loser by
+  /// return %. Computed once and reused by the summary KPIs (top position)
+  /// and the signals strip (movers + concentration).
+  ({
+    Map<String, dynamic>? top,
+    Map<String, dynamic>? gainer,
+    Map<String, dynamic>? loser,
+  }) _computeMovers() {
     Map<String, dynamic>? top;
     Map<String, dynamic>? gainer;
     Map<String, dynamic>? loser;
-
     for (final h in _allHoldings) {
-      final v = ((h['value'] as num?)?.toDouble() ?? 0.0);
-      if (top == null || v > ((top['value'] as num).toDouble())) top = h;
+      final v = (h['value'] as num?)?.toDouble() ?? 0.0;
+      if (top == null || v > ((top['value'] as num?)?.toDouble() ?? 0)) {
+        top = h;
+      }
       final pct = (h['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
       if (gainer == null ||
           pct > ((gainer['gain_loss_pct'] as num?)?.toDouble() ?? 0)) {
@@ -556,17 +615,19 @@ class _PortfolioCardState extends State<PortfolioCard> {
         loser = h;
       }
     }
+    return (top: top, gainer: gainer, loser: loser);
+  }
 
-    String displayTicker(Map<String, dynamic> h) {
-      final sym = (h['symbol'] ?? '').toString();
-      final name = (h['name'] ?? '').toString();
-      // Hide Plaid security_id hashes — fall back to security name.
-      if (sym.length > 8 ||
-          (sym != sym.toUpperCase() && sym.length > 4)) {
-        return name.isNotEmpty ? name : '—';
-      }
-      return sym.isEmpty ? (name.isNotEmpty ? name : '?') : sym;
-    }
+  /// Headline facts for the overview card: holdings count and top position.
+  /// The biggest gainer/loser moved to the dedicated signals strip (which
+  /// sits between allocation and holdings in the research flow).
+  Widget _buildSummaryKpis() {
+    if (_allHoldings.isEmpty) return const SizedBox.shrink();
+
+    final l = AppLocalizations.of(context);
+    final cf = widget.conversionFactor;
+    final movers = _computeMovers();
+    final top = movers.top;
 
     final tiles = <_KpiTile>[
       _KpiTile(
@@ -581,48 +642,189 @@ class _PortfolioCardState extends State<PortfolioCard> {
       if (top != null)
         _KpiTile(
           label: l.pfTopPosition,
-          value: displayTicker(top),
+          value: _displayTicker(top),
           sub: widget.currencyFormat
               .format(((top['value'] as num).toDouble()) * cf),
           accent: context.tealAccent,
         ),
-      if (gainer != null &&
-          ((gainer['gain_loss_pct'] as num?)?.toDouble() ?? 0) > 0)
-        _KpiTile(
-          label: l.pfBiggestGainer,
-          value: displayTicker(gainer),
-          sub:
-              '+${((gainer['gain_loss_pct'] as num).toDouble()).toStringAsFixed(2)}%',
-          accent: context.positive,
-        ),
-      if (loser != null &&
-          ((loser['gain_loss_pct'] as num?)?.toDouble() ?? 0) < 0)
-        _KpiTile(
-          label: l.pfBiggestLoser,
-          value: displayTicker(loser),
-          sub:
-              '${((loser['gain_loss_pct'] as num).toDouble()).toStringAsFixed(2)}%',
-          accent: context.negative,
-        ),
     ];
 
     return LayoutBuilder(builder: (ctx, c) {
-      // 4-up at wide, 2-up at medium, stacked at narrow.
-      final width = c.maxWidth;
-      final perRow = width >= 880
-          ? 4
-          : width >= 520
-              ? 2
-              : 1;
-      final tileWidth = (width - 12 * (perRow - 1)) / perRow;
+      final perRow = c.maxWidth >= 520 ? 2 : 1;
+      final tileWidth = (c.maxWidth - 12 * (perRow - 1)) / perRow;
       return Wrap(
         spacing: 12,
         runSpacing: 12,
-        children: tiles
-            .map((t) => SizedBox(width: tileWidth, child: t))
-            .toList(),
+        children:
+            tiles.map((t) => SizedBox(width: tileWidth, child: t)).toList(),
       );
     });
+  }
+
+  /// Signals slice: a thin, scannable strip surfacing the biggest gainer,
+  /// the biggest loser, and a concentration flag when a single position is
+  /// >=20% of the portfolio. These were previously buried in the KPI grid;
+  /// the research flow wants them as their own quick-glance row between
+  /// allocation and the holdings table.
+  Widget _buildSignalsCard(BuildContext context) {
+    if (_allHoldings.isEmpty) return const SizedBox.shrink();
+
+    final l = AppLocalizations.of(context);
+    final movers = _computeMovers();
+    final gainer = movers.gainer;
+    final loser = movers.loser;
+    final top = movers.top;
+
+    final gainerPct = (gainer?['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
+    final loserPct = (loser?['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
+
+    // Concentration is the single largest position's share of total value.
+    final totalValue =
+        (widget.portfolioData['total_value'] as num?)?.toDouble() ?? 0.0;
+    final topValue = (top?['value'] as num?)?.toDouble() ?? 0.0;
+    final topShare = totalValue > 0 ? topValue / totalValue : 0.0;
+    final concentrated = top != null && topShare >= 0.20;
+
+    final chips = <Widget>[
+      if (gainer != null && gainerPct > 0)
+        _signalChip(
+          icon: Icons.trending_up,
+          color: context.positive,
+          label: l.pfBiggestGainer,
+          value: _displayTicker(gainer),
+          trailing: '+${gainerPct.toStringAsFixed(2)}%',
+        ),
+      if (loser != null && loserPct < 0)
+        _signalChip(
+          icon: Icons.trending_down,
+          color: context.negative,
+          label: l.pfBiggestLoser,
+          value: _displayTicker(loser),
+          trailing: '${loserPct.toStringAsFixed(2)}%',
+        ),
+      if (concentrated)
+        _signalChip(
+          icon: Icons.warning_amber_rounded,
+          color: context.warning,
+          label: l.pfConcentrated,
+          value: _displayTicker(top),
+          trailing: '${(topShare * 100).toStringAsFixed(0)}%',
+        ),
+    ];
+
+    // Nothing worth flagging (no winners/losers, well diversified) — render
+    // nothing rather than an empty card.
+    if (chips.isEmpty) return const SizedBox.shrink();
+
+    return Card(
+      elevation: 6,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              l.pfSignalsTitle,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.4,
+                color: context.textSubtle,
+              ),
+            ),
+            const SizedBox(height: 10),
+            LayoutBuilder(builder: (ctx, c) {
+              // Side-by-side on wide screens, stacked on phone widths.
+              final perRow = c.maxWidth >= 560 ? chips.length : 1;
+              if (perRow == 1) {
+                return Column(
+                  children: [
+                    for (var i = 0; i < chips.length; i++) ...[
+                      if (i > 0) const SizedBox(height: 8),
+                      chips[i],
+                    ],
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  for (var i = 0; i < chips.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 12),
+                    Expanded(child: chips[i]),
+                  ],
+                ],
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// One compact signal chip: a coloured icon, a small label, the subject
+  /// (ticker), and a trailing figure (return % or concentration share).
+  Widget _signalChip({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required String value,
+    required String trailing,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.20)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3,
+                    color: context.textSubtle,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: context.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            trailing.trim(),
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: color,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Collapses the holdings list into one section per account, with a
@@ -963,11 +1165,6 @@ class _PortfolioCardState extends State<PortfolioCard> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final available = constraints.maxWidth;
-        // Use the larger of (natural width, available) so on wide screens
-        // we don't leave a giant gap on the right.
-        final tableWidth = available > _kTableNaturalWidth
-            ? available
-            : _kTableNaturalWidth;
 
         // Rows flow in the page's single scroll view rather than a nested
         // fixed-height ListView+Scrollbar. The old nested same-axis scroll
@@ -980,47 +1177,76 @@ class _PortfolioCardState extends State<PortfolioCard> {
         final visibleHoldings =
             showAll ? _holdings : _holdings.sublist(0, _kHoldingsPreview);
 
-        final table = SizedBox(
-          width: tableWidth,
-          child: Column(
+        final expander = _holdings.length > _kHoldingsPreview
+            ? Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () =>
+                      setState(() => _showAllHoldings = !_showAllHoldings),
+                  child: Text(showAll
+                      ? l.pfHoldingsShowFewer
+                      : l.pfHoldingsShowAll(_holdings.length)),
+                ),
+              )
+            : null;
+
+        final Widget body;
+        if (available < _kMobileBreakpoint) {
+          // Mobile: a 7-column table can't fit a phone without a sideways
+          // scroll the thumb can't reach. Collapse each row to the three
+          // facts that matter at a glance — name, value, change — and let a
+          // tap reveal shares/price/cost/gain (details-on-demand).
+          body = Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildTableHeader(),
-              Divider(color: context.hairline, height: 1, thickness: 1),
-              ...visibleHoldings.map((h) => SizedBox(
-                    height: _kRowHeight,
-                    child: _HoldingRowTile(
-                      holding: h,
-                      format: widget.currencyFormat,
-                      targetCurrency: widget.targetCurrency,
-                      usdMxnRate: widget.usdMxnRate,
-                    ),
-                  )),
-              if (_holdings.length > _kHoldingsPreview)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    onPressed: () =>
-                        setState(() => _showAllHoldings = !_showAllHoldings),
-                    child: Text(showAll
-                        ? l.pfHoldingsShowFewer
-                        : l.pfHoldingsShowAll(_holdings.length)),
-                  ),
+              for (final h in visibleHoldings)
+                _MobileHoldingRow(
+                  holding: h,
+                  format: widget.currencyFormat,
+                  targetCurrency: widget.targetCurrency,
+                  usdMxnRate: widget.usdMxnRate,
                 ),
+              ?expander,
             ],
-          ),
-        );
+          );
+        } else {
+          // Use the larger of (natural width, available) so on wide screens
+          // we don't leave a giant gap on the right.
+          final tableWidth = available > _kTableNaturalWidth
+              ? available
+              : _kTableNaturalWidth;
+          final table = SizedBox(
+            width: tableWidth,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildTableHeader(),
+                Divider(color: context.hairline, height: 1, thickness: 1),
+                ...visibleHoldings.map((h) => SizedBox(
+                      height: _kRowHeight,
+                      child: _HoldingRowTile(
+                        holding: h,
+                        format: widget.currencyFormat,
+                        targetCurrency: widget.targetCurrency,
+                        usdMxnRate: widget.usdMxnRate,
+                      ),
+                    )),
+                ?expander,
+              ],
+            ),
+          );
 
-        // Horizontal scroll only when the viewport is narrower than the
-        // table's natural width. On wide screens the table fills the
-        // container and the asset column gets the extra space.
-        final body = available < _kTableNaturalWidth
-            ? SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: table,
-              )
-            : table;
+          // Horizontal scroll only when the viewport is narrower than the
+          // table's natural width (but still above the mobile breakpoint).
+          body = available < _kTableNaturalWidth
+              ? SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: table,
+                )
+              : table;
+        }
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1119,6 +1345,9 @@ String _formatQuantity(double q) {
 // scrolls horizontally instead of squeezing columns.
 const double _kRowHeight = 60.0;
 const double _kTableNaturalWidth = 1080.0;
+// Below this viewport width the wide 7-column table collapses to the
+// tap-to-expand mobile row (name + value + change).
+const double _kMobileBreakpoint = 560.0;
 const double _kHMargin = 20.0;
 const double _kColShares = 100.0;
 const double _kColPrice = 124.0;
@@ -1416,7 +1645,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
         // non-investment holdings, show no clickable affordance.
         // InkWell (over GestureDetector) makes the row keyboard-focusable
         // and Enter/Space-activatable for screen-reader users.
-        onTap: hasLots ? () => _showLotBreakdown(context) : null,
+        onTap: hasLots ? () => showLotBreakdown(context, widget.holding) : null,
         child: Container(
           color:
               _hover ? context.tint(0.05) : Colors.transparent,
@@ -1433,16 +1662,16 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
       ),
     );
   }
+}
 
-  /// Modal showing the per-lot FIFO breakdown for this holding —
-  /// each lot's acquisition date, qty, native cost-per-unit, the
-  /// USD/MXN FX rate at acquisition, and the USD cost. Answers the
-  /// power-user question "why does my MXN P&L differ from a naive
-  /// current-FX conversion of my native cost basis?" — the FX rate
-  /// column shows exactly what's different.
-  void _showLotBreakdown(BuildContext context) {
+/// Modal showing the per-lot FIFO breakdown for a holding — each lot's
+/// acquisition date, qty, native cost-per-unit, the USD/MXN FX rate at
+/// acquisition, and the USD cost. Answers the power-user question "why does
+/// my MXN P&L differ from a naive current-FX conversion of my native cost
+/// basis?" — the FX rate column shows exactly what's different. Top-level so
+/// both the desktop row and the mobile collapsed row can open it.
+void showLotBreakdown(BuildContext context, dynamic h) {
     final l = AppLocalizations.of(context);
-    final h = widget.holding;
     final lots = ((h['lots'] as List?) ?? const []).cast<dynamic>();
     final symbol = (h['symbol'] ?? '').toString();
     final name = (h['name'] ?? '').toString();
@@ -1520,7 +1749,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
                     child: ListView.separated(
                       shrinkWrap: true,
                       itemCount: lots.length,
-                      separatorBuilder: (_, __) =>
+                      separatorBuilder: (_, _) =>
                           Divider(height: 1, color: context.hairline.withValues(alpha: 0.5)),
                       itemBuilder: (_, i) {
                         final lot = lots[i] as Map;
@@ -1623,6 +1852,223 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
+      ),
+    );
+}
+
+/// Phone-width holding row: collapses to the three facts that matter at a
+/// glance — name, value, change — and reveals shares / price / cost basis /
+/// gain (and a lot breakdown, when lots exist) on tap. Replaces the wide
+/// 7-column table below [_kMobileBreakpoint], where a sideways scroll the
+/// thumb can't reach isn't a usable interaction.
+class _MobileHoldingRow extends StatefulWidget {
+  final dynamic holding;
+  final NumberFormat format;
+  final String targetCurrency;
+  final double usdMxnRate;
+
+  const _MobileHoldingRow({
+    required this.holding,
+    required this.format,
+    required this.targetCurrency,
+    required this.usdMxnRate,
+  });
+
+  @override
+  State<_MobileHoldingRow> createState() => _MobileHoldingRowState();
+}
+
+class _MobileHoldingRowState extends State<_MobileHoldingRow> {
+  bool _expanded = false;
+
+  double _conv(double v, String from) => convertCurrency(
+        v,
+        from: from,
+        to: widget.targetCurrency,
+        usdMxnRate: widget.usdMxnRate,
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final h = widget.holding;
+    final sourceCurrency = (h['currency'] ?? widget.targetCurrency).toString();
+    final quantity = (h['quantity'] as num?)?.toDouble() ?? 0.0;
+    final value = _conv((h['value'] as num?)?.toDouble() ?? 0.0, sourceCurrency);
+    final price = _conv((h['price'] as num?)?.toDouble() ?? 0.0, sourceCurrency);
+    final costBasisSource = (h['cost_basis'] as num?)?.toDouble() ?? 0.0;
+    final costBasis = _conv(costBasisSource, sourceCurrency);
+    final gain = (h['gain_loss'] as num?)?.toDouble() ?? 0.0;
+    final gainConverted = _conv(gain, sourceCurrency);
+    final gainPct = (h['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
+    final isGain = gain >= 0;
+
+    final rawSymbol = (h['symbol'] ?? '').toString();
+    final rawName = (h['name'] ?? '').toString();
+    final acctName = (h['account_name'] ?? '').toString();
+    final instName = (h['institution_name'] ?? '').toString();
+    final isOpaqueSecurityId = rawSymbol.length > 8 ||
+        (rawSymbol != rawSymbol.toUpperCase() && rawSymbol.length > 4);
+    final displaySymbol = isOpaqueSecurityId
+        ? (rawName.isNotEmpty ? rawName : '—')
+        : (rawSymbol.isEmpty
+            ? (rawName.isNotEmpty ? rawName : '?')
+            : rawSymbol);
+    final secondaryParts = <String>[
+      if (!isOpaqueSecurityId && rawName.isNotEmpty) rawName,
+      if (instName.isNotEmpty) instName,
+      if (acctName.isNotEmpty && acctName != instName) acctName,
+    ];
+    final secondaryLabel = secondaryParts.join(' · ');
+
+    final lots = (h['lots'] as List?) ?? const [];
+    final hasLots = lots.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: context.tileSurface,
+                  radius: 16,
+                  child: Text(
+                    displaySymbol.isEmpty
+                        ? '?'
+                        : displaySymbol.substring(0, 1).toUpperCase(),
+                    style: TextStyle(
+                      color: context.textPrimary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        displaySymbol,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (secondaryLabel.isNotEmpty)
+                        Text(
+                          secondaryLabel,
+                          style: const TextStyle(
+                              fontSize: 11, color: Colors.grey),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.format.format(value),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${isGain ? '+' : ''}${gainPct.toStringAsFixed(2)}%',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: isGain ? context.positive : context.negative,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+                Icon(
+                  _expanded ? Icons.expand_less : Icons.expand_more,
+                  size: 20,
+                  color: context.textSubtle,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_expanded)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(56, 0, 4, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _detailRow(l.pfColShares, _formatQuantity(quantity)),
+                _detailRow(l.pfColPrice, widget.format.format(price)),
+                _detailRow(
+                  l.pfColCostBasis,
+                  costBasisSource == 0 ? '—' : widget.format.format(costBasis),
+                ),
+                _detailRow(
+                  l.pfColGain,
+                  gain == 0
+                      ? '—'
+                      : '${isGain ? '+' : ''}${widget.format.format(gainConverted)}',
+                  color: gain == 0
+                      ? null
+                      : (isGain ? context.positive : context.negative),
+                ),
+                if (hasLots)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () => showLotBreakdown(context, h),
+                      icon: const Icon(Icons.receipt_long, size: 16),
+                      label: Text(l.pfViewLots),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        Divider(color: context.hairline, height: 1),
+      ],
+    );
+  }
+
+  Widget _detailRow(String label, String value, {Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 12, color: context.textSubtle),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: color ?? context.textPrimary,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
       ),
     );
   }

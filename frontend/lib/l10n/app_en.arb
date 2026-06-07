@@ -936,6 +936,9 @@
   "pfTopPosition": "Top position",
   "pfBiggestGainer": "Biggest gainer",
   "pfBiggestLoser": "Biggest loser",
+  "pfSignalsTitle": "Signals",
+  "pfConcentrated": "Concentrated",
+  "pfViewLots": "View lots",
   "pfUnknown": "Unknown",
   "pfInstPositions": "{inst} · {count, plural, =1{1 position} other{{count} positions}}",
   "@pfInstPositions": {

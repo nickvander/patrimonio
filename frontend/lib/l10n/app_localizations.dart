@@ -4964,6 +4964,24 @@ abstract class AppLocalizations {
   /// **'Biggest loser'**
   String get pfBiggestLoser;
 
+  /// No description provided for @pfSignalsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Signals'**
+  String get pfSignalsTitle;
+
+  /// No description provided for @pfConcentrated.
+  ///
+  /// In en, this message translates to:
+  /// **'Concentrated'**
+  String get pfConcentrated;
+
+  /// No description provided for @pfViewLots.
+  ///
+  /// In en, this message translates to:
+  /// **'View lots'**
+  String get pfViewLots;
+
   /// No description provided for @pfUnknown.
   ///
   /// In en, this message translates to:

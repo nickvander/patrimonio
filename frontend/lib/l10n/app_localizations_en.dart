@@ -2971,6 +2971,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pfBiggestLoser => 'Biggest loser';
 
   @override
+  String get pfSignalsTitle => 'Signals';
+
+  @override
+  String get pfConcentrated => 'Concentrated';
+
+  @override
+  String get pfViewLots => 'View lots';
+
+  @override
   String get pfUnknown => 'Unknown';
 
   @override

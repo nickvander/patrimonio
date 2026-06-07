@@ -3001,6 +3001,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get pfBiggestLoser => 'Mayor perdedora';
 
   @override
+  String get pfSignalsTitle => 'Señales';
+
+  @override
+  String get pfConcentrated => 'Concentrado';
+
+  @override
+  String get pfViewLots => 'Ver lotes';
+
+  @override
   String get pfUnknown => 'Desconocida';
 
   @override
