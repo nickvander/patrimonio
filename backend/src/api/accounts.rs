@@ -367,6 +367,14 @@ async fn create_account(
         .map(|h| h.trim())
         .filter(|h| !h.is_empty());
 
+    // Normalise the type to lowercase so manual/imported accounts share the
+    // same convention as Plaid-synced ones (which arrive lowercase, e.g.
+    // "checking", "credit card"). Without this, an imported "Checking" and a
+    // synced "checking" form two separate buckets in the dashboard's
+    // GROUP BY account_type breakdown. Classification is already
+    // case-insensitive, so this is purely about display/grouping hygiene.
+    let account_type = payload.account_type.trim().to_lowercase();
+
     let result = sqlx::query(
         r#"
         INSERT INTO accounts (id, institution_id, name, account_type, currency, current_balance, updated_at, user_id, clabe, holder_name)
@@ -376,7 +384,7 @@ async fn create_account(
     .bind(account_id)
     .bind(institution_id)
     .bind(&payload.name)
-    .bind(&payload.account_type)
+    .bind(&account_type)
     .bind(&payload.currency)
     .bind(payload.initial_balance)
     .bind(ctx.user_id)

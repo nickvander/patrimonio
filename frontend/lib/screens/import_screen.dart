@@ -1257,6 +1257,69 @@ class _ImportScreenState extends State<ImportScreen> {
     );
   }
 
+  /// Pinned bottom action bar shown during review: Cancel + the primary
+  /// "Import N transactions" button, always visible regardless of how far
+  /// the preview list has scrolled.
+  Widget _buildImportActionBar(AppLocalizations l) {
+    final n = _selectedIndices.length;
+    return Material(
+      elevation: 8,
+      color: Theme.of(context).colorScheme.surface,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: context.hairline)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
+          child: Row(
+            children: [
+              TextButton(
+                onPressed: _isUploading
+                    ? null
+                    : () => setState(() => _previewTransactions = null),
+                child: Text(
+                  l.actionCancel,
+                  style: TextStyle(color: context.textSubtle),
+                ),
+              ),
+              const Spacer(),
+              Flexible(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: context.positive,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor:
+                        context.positive.withValues(alpha: 0.4),
+                    disabledForegroundColor: Colors.white70,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 14),
+                  ),
+                  onPressed: (_isUploading || n == 0) ? null : _confirmImport,
+                  icon: _isUploading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.download_done, size: 18),
+                  label: Text(
+                    n == 1
+                        ? l.impImportOneTransaction
+                        : l.impImportNTransactions(n),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -1275,6 +1338,10 @@ class _ImportScreenState extends State<ImportScreen> {
           ),
         ],
       ),
+      // Pinned action bar during review so "Import N" is always visible
+      // instead of buried under the (tall) preview list.
+      bottomNavigationBar:
+          _previewTransactions == null ? null : _buildImportActionBar(l),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -1746,35 +1813,10 @@ class _ImportScreenState extends State<ImportScreen> {
                     },
                     ),
                   ),
-                  const SizedBox(height: 32),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: context.positive,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      onPressed: _confirmImport,
-                      child: Text(
-                        _selectedIndices.length == 1
-                            ? l.impImportOneTransaction
-                            : l.impImportNTransactions(_selectedIndices.length),
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: () =>
-                        setState(() => _previewTransactions = null),
-                    child: Center(
-                      child: Text(
-                        l.actionCancel,
-                        style: const TextStyle(color: Colors.grey),
-                      ),
-                    ),
-                  ),
+                  // Primary "Import" + Cancel now live in the pinned bottom
+                  // action bar (see _buildImportActionBar) so they're always
+                  // reachable without scrolling past the long preview list.
+                  const SizedBox(height: 8),
                 ],
               ),
             const SizedBox(height: 32),
