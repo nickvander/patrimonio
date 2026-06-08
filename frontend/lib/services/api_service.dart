@@ -1857,6 +1857,18 @@ class ApiService {
     return body is List ? body : const [];
   }
 
+  /// Re-price every manual stock holding the user has (across all manual
+  /// accounts) from the live quote cache. Returns counts; best-effort.
+  Future<Map<String, dynamic>> refreshAllStockPrices() async {
+    final res = await _post(
+      Uri.parse('$_baseUrl/accounts/holdings/refresh-all'),
+      headers: _withCsrf({}),
+    );
+    if (res.statusCode != 200) return const {};
+    final body = json.decode(res.body);
+    return body is Map<String, dynamic> ? body : const {};
+  }
+
   /// Per-holding dividend info (annual rate, yield, est. next ex-date,
   /// projected annual income). Best-effort — empty on failure.
   Future<List<dynamic>> getHoldingsDividends(String accountId) async {

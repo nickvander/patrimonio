@@ -87,6 +87,11 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       categorizeAccount(widget.account['account_type']?.toString()) ==
       AccountCategory.investment;
 
+  /// Holdings can only be hand-edited on a manual account — a Plaid-synced
+  /// account's holdings are read-only (the institution owns them).
+  bool get _isManualAccount =>
+      (widget.account['integration_type'] ?? '').toString() == 'manual';
+
   Future<void> _fetchHoldings() async {
     if (!_isInvestment) return;
     try {
@@ -663,7 +668,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                     color: context.textSubtle),
               ),
               const Spacer(),
-              if (_holdings.isNotEmpty)
+              if (_holdings.isNotEmpty && _isManualAccount)
                 IconButton(
                   tooltip: es ? 'Actualizar precios' : 'Refresh prices',
                   visualDensity: VisualDensity.compact,
@@ -675,20 +680,23 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                       : Icon(Icons.refresh, size: 18, color: context.tealAccent),
                   onPressed: _refreshingHoldings ? null : _refreshHoldings,
                 ),
-              TextButton.icon(
-                onPressed: _addHolding,
-                icon: const Icon(Icons.add, size: 16),
-                label: Text(es ? 'Agregar' : 'Add'),
-              ),
+              if (_isManualAccount)
+                TextButton.icon(
+                  onPressed: _addHolding,
+                  icon: const Icon(Icons.add, size: 16),
+                  label: Text(es ? 'Agregar' : 'Add'),
+                ),
             ],
           ),
           if (_holdings.isEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(0, 4, 8, 4),
               child: Text(
-                es
-                    ? 'Sin posiciones todavía. Agrega acciones por símbolo (ticker).'
-                    : 'No holdings yet. Add shares by ticker.',
+                _isManualAccount
+                    ? (es
+                        ? 'Sin posiciones todavía. Agrega acciones por símbolo (ticker).'
+                        : 'No holdings yet. Add shares by ticker.')
+                    : (es ? 'Sin posiciones.' : 'No holdings.'),
                 style: TextStyle(fontSize: 12.5, color: context.textFaint),
               ),
             )
@@ -817,12 +825,13 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                 color: value != null ? context.textPrimary : context.warning,
                 fontFeatures: const [FontFeature.tabularFigures()]),
           ),
-          IconButton(
-            icon: Icon(Icons.close, size: 15, color: context.textFaint),
-            visualDensity: VisualDensity.compact,
-            tooltip: es ? 'Eliminar' : 'Remove',
-            onPressed: () => _deleteHolding(h),
-          ),
+          if (_isManualAccount)
+            IconButton(
+              icon: Icon(Icons.close, size: 15, color: context.textFaint),
+              visualDensity: VisualDensity.compact,
+              tooltip: es ? 'Eliminar' : 'Remove',
+              onPressed: () => _deleteHolding(h),
+            ),
         ],
       ),
     );

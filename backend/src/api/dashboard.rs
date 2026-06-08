@@ -92,7 +92,7 @@ async fn dashboard_overview(
         sqlx::query(
             r#"
             SELECT a.id, a.name, a.nickname, a.account_type, a.current_balance, a.currency,
-                   i.name as institution_name, a.ticker_symbol, a.crypto_amount,
+                   i.name as institution_name, i.integration_type, a.ticker_symbol, a.crypto_amount,
                    a.clabe, a.holder_name
             FROM accounts a
             JOIN institutions i ON a.institution_id = i.id
@@ -214,6 +214,7 @@ async fn dashboard_overview(
                 .ok().map(|d| d.to_string().parse().unwrap_or(0.0)),
             clabe: r.try_get::<Option<String>, _>("clabe").ok().flatten(),
             holder_name: r.try_get::<Option<String>, _>("holder_name").ok().flatten(),
+            integration_type: r.try_get::<String, _>("integration_type").unwrap_or_default(),
         })
         .collect();
 
@@ -1980,6 +1981,10 @@ struct AccountDetail {
     clabe: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     holder_name: Option<String>,
+    /// "manual" for hand-added / statement-imported accounts, else the bank's
+    /// integration (e.g. "plaid"). Lets the UI offer manual-holding editing
+    /// only where it's safe (never on a Plaid-synced account).
+    integration_type: String,
 }
 
 #[derive(Serialize)]

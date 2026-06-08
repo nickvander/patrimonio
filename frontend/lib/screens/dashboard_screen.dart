@@ -1386,8 +1386,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   /// Explicit user-initiated refresh (pull-to-refresh, "sync everything",
   /// post-mutation reloads). Bypasses the response cache so the user who
-  /// just asked for fresh data gets exactly that.
-  Future<void> _refreshData() => _loadAllData(silent: true, forceRefresh: true);
+  /// just asked for fresh data gets exactly that. Re-prices manual stock
+  /// holdings (Oracle etc.) live too — the stock analog of the FX refresh.
+  Future<void> _refreshData() async {
+    try {
+      await _apiService.refreshAllStockPrices();
+    } catch (_) {/* best-effort; data reload still proceeds */}
+    await _loadAllData(silent: true, forceRefresh: true);
+  }
 
   Future<void> _loadMoreTransactions() async {
     final offset = _transactions?.length ?? 0;

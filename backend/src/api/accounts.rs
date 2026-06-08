@@ -18,6 +18,10 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_accounts).post(create_account))
         .route("/summary", get(accounts_summary))
+        // Global "refresh all my stock prices" — re-prices every manual
+        // holding from the live quote cache. Static path, declared before the
+        // dynamic `/{id}` routes.
+        .route("/holdings/refresh-all", post(refresh_all_holdings))
         .route("/{id}", delete(delete_account))
         .route("/{id}/balance", patch(update_account_balance))
         .route("/{id}/nickname", patch(update_account_nickname))
@@ -1409,6 +1413,26 @@ async fn account_owned(
     )
 }
 
+/// True only for an owned, MANUAL account. Holdings can only be hand-edited on
+/// manual accounts — never a Plaid-synced one, where balance + holdings are
+/// authoritative from the institution (we'd corrupt them and fight the sync).
+async fn account_is_manual(
+    db: &sqlx::PgPool,
+    account_id: uuid::Uuid,
+    user_id: uuid::Uuid,
+) -> bool {
+    matches!(
+        sqlx::query_scalar::<_, String>(
+            "SELECT i.integration_type FROM accounts a JOIN institutions i ON i.id = a.institution_id WHERE a.id = $1 AND a.user_id = $2",
+        )
+        .bind(account_id)
+        .bind(user_id)
+        .fetch_optional(db)
+        .await,
+        Ok(Some(ref t)) if t == "manual"
+    )
+}
+
 const HOLDING_COLS: &str =
     "id, account_id, symbol, name, quantity, price, value, cost_basis, currency, holding_type, updated_at";
 
@@ -1418,8 +1442,12 @@ async fn create_holding(
     Path(account_id): Path<uuid::Uuid>,
     Json(payload): Json<CreateHoldingRequest>,
 ) -> impl IntoResponse {
-    if !account_owned(&state.db, account_id, ctx.user_id).await {
-        return StatusCode::NOT_FOUND.into_response();
+    if !account_is_manual(&state.db, account_id, ctx.user_id).await {
+        return (
+            StatusCode::FORBIDDEN,
+            "holdings can only be added to a manual account",
+        )
+            .into_response();
     }
     let symbol = payload.symbol.trim().to_uppercase();
     if symbol.is_empty() {
@@ -1493,6 +1521,9 @@ async fn delete_holding(
     Extension(ctx): Extension<AuthContext>,
     Path((account_id, hid)): Path<(uuid::Uuid, uuid::Uuid)>,
 ) -> impl IntoResponse {
+    if !account_is_manual(&state.db, account_id, ctx.user_id).await {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     let res = sqlx::query(
         "DELETE FROM holdings WHERE id = $1 AND account_id = $2 AND user_id = $3",
     )
@@ -1522,8 +1553,8 @@ async fn refresh_holdings(
     Extension(ctx): Extension<AuthContext>,
     Path(account_id): Path<uuid::Uuid>,
 ) -> impl IntoResponse {
-    if !account_owned(&state.db, account_id, ctx.user_id).await {
-        return StatusCode::NOT_FOUND.into_response();
+    if !account_is_manual(&state.db, account_id, ctx.user_id).await {
+        return StatusCode::FORBIDDEN.into_response();
     }
     let symbols: Vec<String> = sqlx::query_scalar(
         "SELECT DISTINCT symbol FROM holdings WHERE account_id = $1 AND user_id = $2",
@@ -1602,6 +1633,60 @@ async fn holdings_dividends(
         }));
     }
     Json(out).into_response()
+}
+
+/// Re-price every manual holding the user has (across all their manual
+/// accounts) and recompute those account balances. The portfolio-wide analog
+/// of the per-account refresh button.
+async fn refresh_all_holdings(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> impl IntoResponse {
+    let accounts: Vec<uuid::Uuid> = sqlx::query_scalar(
+        r#"
+        SELECT DISTINCT a.id
+        FROM accounts a
+        JOIN institutions i ON i.id = a.institution_id
+        JOIN holdings h ON h.account_id = a.id
+        WHERE a.user_id = $1 AND i.integration_type = 'manual'
+        "#,
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let mut symbols_priced = 0;
+    for account_id in &accounts {
+        let symbols: Vec<String> = sqlx::query_scalar(
+            "SELECT DISTINCT symbol FROM holdings WHERE account_id = $1 AND user_id = $2",
+        )
+        .bind(account_id)
+        .bind(ctx.user_id)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
+        for sym in &symbols {
+            if let Some(price) = latest_price(&state.db, sym).await {
+                let _ = sqlx::query(
+                    "UPDATE holdings SET price = $1, value = ROUND(quantity * $1, 2), updated_at = NOW() WHERE symbol = $2 AND account_id = $3 AND user_id = $4",
+                )
+                .bind(price)
+                .bind(sym)
+                .bind(account_id)
+                .bind(ctx.user_id)
+                .execute(&state.db)
+                .await;
+                symbols_priced += 1;
+            }
+        }
+        let _ = recompute_holding_balance(&state.db, *account_id, ctx.user_id).await;
+    }
+    Json(serde_json::json!({
+        "accounts_refreshed": accounts.len(),
+        "symbols_priced": symbols_priced,
+    }))
+    .into_response()
 }
 
 /// (annual_rate, last_ex_date, est_next_ex_date, per_year) for a symbol, or
