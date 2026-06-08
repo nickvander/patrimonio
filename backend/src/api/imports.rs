@@ -598,6 +598,43 @@ async fn confirm_handler(
         .await;
     }
 
+    // Back-fill historical net-worth snapshots from the per-row running balance
+    // (Banamex-style statements carry one). One snapshot per month — the last
+    // balance of that month — so the net-worth chart reflects the imported
+    // history instead of starting at onboarding. MXN is converted at the
+    // current rate (an approximation for old months; no historical FX stored).
+    // Accounts without a running balance (Cetes / Nu) yield no rows. Idempotent:
+    // ON CONFLICT preserves any existing daily snapshot.
+    let _ = sqlx::query(
+        r#"
+        WITH rate AS (
+            SELECT rate FROM exchange_rates
+            WHERE base_currency='USD' AND target_currency='MXN'
+            ORDER BY recorded_at DESC LIMIT 1
+        ),
+        monthly AS (
+            SELECT DISTINCT ON (date_trunc('month', t.date))
+                   t.date AS d, t.balance_after AS bal
+            FROM transactions t
+            WHERE t.account_id = $1 AND t.user_id = $2 AND t.balance_after IS NOT NULL
+            ORDER BY date_trunc('month', t.date), t.date DESC, t.id DESC
+        )
+        INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd, user_id)
+        SELECT $1, m.bal, m.d, a.currency,
+               CASE WHEN a.currency = 'MXN' AND r.rate IS NOT NULL AND r.rate <> 0
+                    THEN ROUND(m.bal / r.rate, 2) ELSE m.bal END,
+               $2
+        FROM monthly m
+        JOIN accounts a ON a.id = $1
+        LEFT JOIN rate r ON TRUE
+        ON CONFLICT (account_id, as_of_date) DO NOTHING
+        "#,
+    )
+    .bind(payload.account_id)
+    .bind(ctx.user_id)
+    .execute(&state.db)
+    .await;
+
     if imported_count > 0 || closing.is_some() {
         state
             .realtime
