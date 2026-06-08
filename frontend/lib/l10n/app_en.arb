@@ -1006,6 +1006,7 @@
   "acctTypeBrokerage": "Brokerage",
   "acctTypeInvestment": "Investment",
   "acctTypeBonds": "Bonds",
+  "acctTypeStockPlan": "Stock plan",
   "acctTypeIRA": "IRA",
   "acctType401k": "401(k)",
   "acctTypeCrypto": "Crypto",

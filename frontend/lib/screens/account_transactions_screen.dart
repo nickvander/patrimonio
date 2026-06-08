@@ -7,6 +7,7 @@ import '../utils/currency.dart';
 import '../widgets/transactions_tab.dart';
 import '../widgets/account_balance_chart.dart';
 import '../widgets/clabe_info.dart';
+import '../widgets/add_holding_dialog.dart';
 import '../services/preferences.dart';
 import '../utils/account_category.dart';
 import '../l10n/app_localizations.dart';
@@ -55,6 +56,9 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   String? _error;
   List<dynamic>? _transactions;
   List<dynamic> _balanceHistory = const [];
+  // Equity holdings (Plaid-synced or manually added by ticker + quantity).
+  List<dynamic> _holdings = const [];
+  bool _refreshingHoldings = false;
   // Low-balance alert thresholds (account id -> native-currency amount).
   Map<String, double> _accountAlerts = const {};
 
@@ -73,7 +77,45 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     _accountAlerts = Preferences.getAccountAlerts();
     _fetchTransactions();
     _fetchBalanceHistory();
+    _fetchHoldings();
     _hydrateAlerts();
+  }
+
+  bool get _isInvestment =>
+      categorizeAccount(widget.account['account_type']?.toString()) ==
+      AccountCategory.investment;
+
+  Future<void> _fetchHoldings() async {
+    if (!_isInvestment) return;
+    try {
+      final h = await _apiService.getAccountHoldings(_accountId);
+      if (mounted) setState(() => _holdings = h);
+    } catch (_) {/* best-effort */}
+  }
+
+  Future<void> _addHolding() async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AddHoldingDialog(
+        accountId: _accountId,
+        onAdded: () {
+          _fetchHoldings();
+          _fetchBalanceHistory();
+        },
+      ),
+    );
+  }
+
+  Future<void> _refreshHoldings() async {
+    setState(() => _refreshingHoldings = true);
+    try {
+      final h = await _apiService.refreshHoldings(_accountId);
+      if (mounted) setState(() => _holdings = h);
+      _fetchBalanceHistory();
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _refreshingHoldings = false);
+    }
   }
 
   Future<void> _hydrateAlerts() async {
@@ -576,6 +618,155 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     );
   }
 
+  Widget _buildHoldings(String currency) {
+    final es = Localizations.localeOf(context).languageCode == 'es';
+    final fmt = moneyFormat(currency);
+    double total = 0;
+    for (final h in _holdings) {
+      total += (h['value'] is num)
+          ? (h['value'] as num).toDouble()
+          : double.tryParse('${h['value']}') ?? 0;
+    }
+    return Container(
+      decoration: BoxDecoration(
+        color: context.tileSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: context.hairline),
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 10, 6, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                es ? 'POSICIONES' : 'HOLDINGS',
+                style: TextStyle(
+                    fontSize: 11,
+                    letterSpacing: 1.2,
+                    fontWeight: FontWeight.w700,
+                    color: context.textSubtle),
+              ),
+              const Spacer(),
+              if (_holdings.isNotEmpty)
+                IconButton(
+                  tooltip: es ? 'Actualizar precios' : 'Refresh prices',
+                  visualDensity: VisualDensity.compact,
+                  icon: _refreshingHoldings
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : Icon(Icons.refresh, size: 18, color: context.tealAccent),
+                  onPressed: _refreshingHoldings ? null : _refreshHoldings,
+                ),
+              TextButton.icon(
+                onPressed: _addHolding,
+                icon: const Icon(Icons.add, size: 16),
+                label: Text(es ? 'Agregar' : 'Add'),
+              ),
+            ],
+          ),
+          if (_holdings.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(0, 4, 8, 4),
+              child: Text(
+                es
+                    ? 'Sin posiciones todavía. Agrega acciones por símbolo (ticker).'
+                    : 'No holdings yet. Add shares by ticker.',
+                style: TextStyle(fontSize: 12.5, color: context.textFaint),
+              ),
+            )
+          else ...[
+            for (final h in _holdings) _holdingRow(h, fmt, es),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Column(children: [
+                const Divider(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(es ? 'Total' : 'Total',
+                        style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: context.textSubtle)),
+                    Text(fmt.format(total),
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: context.textPrimary,
+                            fontFeatures: const [FontFeature.tabularFigures()])),
+                  ],
+                ),
+              ]),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _holdingRow(dynamic h, NumberFormat fmt, bool es) {
+    final symbol = (h['symbol'] ?? '').toString();
+    final qty = (h['quantity'] is num)
+        ? (h['quantity'] as num).toDouble()
+        : double.tryParse('${h['quantity']}') ?? 0;
+    final price = (h['price'] is num)
+        ? (h['price'] as num).toDouble()
+        : double.tryParse('${h['price'] ?? ''}');
+    final value = (h['value'] is num)
+        ? (h['value'] as num).toDouble()
+        : double.tryParse('${h['value'] ?? ''}');
+    final qtyStr =
+        qty == qty.roundToDouble() ? qty.toStringAsFixed(0) : qty.toStringAsFixed(2);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, right: 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(symbol,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700, color: context.textPrimary)),
+                Text(
+                  '$qtyStr ${es ? 'acciones' : 'shares'}'
+                  '${price != null ? ' · ${fmt.format(price)}' : ''}',
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      color: context.textSubtle,
+                      fontFeatures: const [FontFeature.tabularFigures()]),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            value != null ? fmt.format(value) : (es ? 'sin precio' : 'no price'),
+            style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: value != null ? context.textPrimary : context.warning,
+                fontFeatures: const [FontFeature.tabularFigures()]),
+          ),
+          IconButton(
+            icon: Icon(Icons.close, size: 15, color: context.textFaint),
+            visualDensity: VisualDensity.compact,
+            tooltip: es ? 'Eliminar' : 'Remove',
+            onPressed: () => _deleteHolding(h),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteHolding(dynamic h) async {
+    try {
+      await _apiService.deleteHolding(_accountId, (h['id'] ?? '').toString());
+      _fetchHoldings();
+      _fetchBalanceHistory();
+    } catch (_) {/* best-effort */}
+  }
+
   Widget _buildBody() {
     final l = AppLocalizations.of(context);
     if (_isLoading) {
@@ -604,6 +795,18 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     }
 
     if (_transactions == null || _transactions!.isEmpty) {
+      // An investment account (e.g. a manual stock-plan / NetBenefits position)
+      // may hold shares but have no cash transactions — show the holdings view
+      // instead of a bare "no transactions" message.
+      if (_isInvestment) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 8, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [_buildHoldings('USD')],
+          ),
+        );
+      }
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -646,6 +849,10 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
               points: _balanceHistory,
               currency: sourceCurrency,
             ),
+            const SizedBox(height: 12),
+          ],
+          if (_isInvestment && _holdings.isNotEmpty) ...[
+            _buildHoldings('USD'),
             const SizedBox(height: 12),
           ],
           Expanded(

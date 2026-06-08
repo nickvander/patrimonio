@@ -5234,6 +5234,12 @@ abstract class AppLocalizations {
   /// **'Bonds'**
   String get acctTypeBonds;
 
+  /// No description provided for @acctTypeStockPlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Stock plan'**
+  String get acctTypeStockPlan;
+
   /// No description provided for @acctTypeIRA.
   ///
   /// In en, this message translates to:

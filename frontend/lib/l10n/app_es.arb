@@ -855,6 +855,7 @@
   "acctTypeBrokerage": "Casa de bolsa",
   "acctTypeInvestment": "Inversión",
   "acctTypeBonds": "Bonos",
+  "acctTypeStockPlan": "Plan de acciones",
   "acctTypeIRA": "IRA",
   "acctType401k": "401(k)",
   "acctTypeCrypto": "Cripto",

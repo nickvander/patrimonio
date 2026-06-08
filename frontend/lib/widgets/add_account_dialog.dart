@@ -111,7 +111,8 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
   // account-type VALUES (which are data sent to the API) stay fixed.
   static const _typeGroups = <(String, List<String>)>[
     ('cashBanking', ['Checking', 'Savings', 'CD']),
-    ('investments', ['Brokerage', 'Investment', 'Bonds', 'IRA', '401k']),
+    ('investments',
+        ['Brokerage', 'Stock plan', 'Investment', 'Bonds', 'IRA', '401k']),
     ('crypto', ['Crypto']),
     ('realAssets', [
       'Real Estate',
@@ -139,6 +140,8 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
         return l.acctTypeInvestment;
       case 'Bonds':
         return l.acctTypeBonds;
+      case 'Stock plan':
+        return l.acctTypeStockPlan;
       case 'IRA':
         return l.acctTypeIRA;
       case '401k':

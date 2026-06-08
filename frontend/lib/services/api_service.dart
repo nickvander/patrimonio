@@ -1805,6 +1805,58 @@ class ApiService {
     }
   }
 
+  // --- Manual holdings (ticker + share quantity, live-priced) ---------------
+
+  Future<List<dynamic>> getAccountHoldings(String accountId) async {
+    final res = await _get(Uri.parse('$_baseUrl/accounts/$accountId/holdings'));
+    if (res.statusCode != 200) return const [];
+    final body = json.decode(res.body);
+    return body is List ? body : const [];
+  }
+
+  Future<Map<String, dynamic>> createHolding(
+    String accountId, {
+    required String symbol,
+    required double quantity,
+    String? name,
+    double? costBasis,
+  }) async {
+    final res = await _post(
+      Uri.parse('$_baseUrl/accounts/$accountId/holdings'),
+      headers: _withCsrf({'Content-Type': 'application/json'}),
+      body: json.encode({
+        'symbol': symbol,
+        'quantity': quantity,
+        if (name != null && name.isNotEmpty) 'name': name,
+        if (costBasis != null) 'cost_basis': costBasis,
+      }),
+    );
+    if (res.statusCode != 201) {
+      throw Exception(_t('Failed to add holding: ${res.body}',
+          'No se pudo agregar la posición: ${res.body}'));
+    }
+    return json.decode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<void> deleteHolding(String accountId, String holdingId) async {
+    final res = await _delete(
+      Uri.parse('$_baseUrl/accounts/$accountId/holdings/$holdingId'),
+    );
+    if (res.statusCode != 204 && res.statusCode != 200) {
+      throw Exception(_t('Failed to remove holding', 'No se pudo eliminar la posición'));
+    }
+  }
+
+  Future<List<dynamic>> refreshHoldings(String accountId) async {
+    final res = await _post(
+      Uri.parse('$_baseUrl/accounts/$accountId/holdings/refresh'),
+      headers: _withCsrf({}),
+    );
+    if (res.statusCode != 200) return const [];
+    final body = json.decode(res.body);
+    return body is List ? body : const [];
+  }
+
   Future<Map<String, dynamic>> getWealthProjection({
     required double startBalance,
     required double monthlyContribution,

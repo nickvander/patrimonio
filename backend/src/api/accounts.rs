@@ -2,7 +2,7 @@ use axum::{
     extract::{Extension, Path, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{get, patch, delete},
+    routing::{get, patch, post, delete},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -10,6 +10,8 @@ use sqlx::Row;
 use tracing::{error, info};
 
 use crate::api::session::AuthContext;
+use crate::models::holding::Holding;
+use crate::services::benchmark;
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -19,6 +21,11 @@ pub fn router() -> Router<AppState> {
         .route("/{id}", delete(delete_account))
         .route("/{id}/balance", patch(update_account_balance))
         .route("/{id}/nickname", patch(update_account_nickname))
+        // Manual holdings (e.g. a Fidelity NetBenefits ESPP position not on
+        // Plaid): add shares by ticker, priced live from the Yahoo quote cache.
+        .route("/{id}/holdings", get(list_holdings).post(create_holding))
+        .route("/{id}/holdings/refresh", post(refresh_holdings))
+        .route("/{id}/holdings/{hid}", delete(delete_holding))
         .route("/{id}/transactions", get(get_account_transactions))
         // Static segment must precede the dynamic `/{tx_id}` route so
         // `/transactions/batch` isn't swallowed as a tx_id path param.
@@ -1285,5 +1292,263 @@ async fn replace_splits(
             "inserted": payload.splits.len(),
         })),
     )
+        .into_response()
+}
+
+// ---------------------------------------------------------------------------
+// Manual holdings (ticker + share quantity), priced from the Yahoo quote cache
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub struct CreateHoldingRequest {
+    /// Ticker symbol, e.g. "ORCL". Used verbatim as the Yahoo symbol.
+    pub symbol: String,
+    /// Display name; defaults to the symbol.
+    pub name: Option<String>,
+    pub quantity: rust_decimal::Decimal,
+    /// Optional total cost basis (what you paid), for gain/loss.
+    pub cost_basis: Option<rust_decimal::Decimal>,
+}
+
+/// Latest cached close for a symbol (after a best-effort Yahoo refresh).
+async fn latest_price(
+    db: &sqlx::PgPool,
+    symbol: &str,
+) -> Option<rust_decimal::Decimal> {
+    // ensure_symbol_fresh refreshes from Yahoo when stale and tolerates a
+    // network failure as long as some cached data already exists.
+    let _ = benchmark::ensure_symbol_fresh(db, symbol, symbol).await;
+    sqlx::query_scalar::<_, rust_decimal::Decimal>(
+        "SELECT close FROM benchmark_prices WHERE symbol = $1 ORDER BY price_date DESC LIMIT 1",
+    )
+    .bind(symbol)
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten()
+}
+
+/// Recompute a holdings-backed account's balance as the sum of its holdings'
+/// values, and snapshot it (FX-aware) so it flows into net worth — the same
+/// way a Plaid investment account's balance is the sum of its holdings.
+async fn recompute_holding_balance(
+    db: &sqlx::PgPool,
+    account_id: uuid::Uuid,
+    user_id: uuid::Uuid,
+) -> Result<(), sqlx::Error> {
+    let total: Option<rust_decimal::Decimal> = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(value), 0) FROM holdings WHERE account_id = $1 AND user_id = $2",
+    )
+    .bind(account_id)
+    .bind(user_id)
+    .fetch_one(db)
+    .await?;
+    let total = total.unwrap_or_default();
+
+    sqlx::query(
+        "UPDATE accounts SET current_balance = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3",
+    )
+    .bind(total)
+    .bind(account_id)
+    .bind(user_id)
+    .execute(db)
+    .await?;
+
+    let currency: String =
+        sqlx::query_scalar("SELECT currency FROM accounts WHERE id = $1")
+            .bind(account_id)
+            .fetch_one(db)
+            .await?;
+    let balance_usd = if currency == "MXN" {
+        let rate: Option<rust_decimal::Decimal> = sqlx::query_scalar(
+            "SELECT rate FROM exchange_rates WHERE base_currency='USD' AND target_currency='MXN' ORDER BY recorded_at DESC LIMIT 1",
+        )
+        .fetch_optional(db)
+        .await?;
+        match rate {
+            Some(r) if !r.is_zero() => (total / r).round_dp(2),
+            _ => total,
+        }
+    } else {
+        total
+    };
+
+    sqlx::query(
+        r#"
+        INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd, user_id)
+        VALUES ($1, $2, CURRENT_DATE, $3, $4, $5)
+        ON CONFLICT (account_id, as_of_date)
+        DO UPDATE SET balance = EXCLUDED.balance, balance_usd = EXCLUDED.balance_usd, created_at = NOW()
+        "#,
+    )
+    .bind(account_id)
+    .bind(total)
+    .bind(&currency)
+    .bind(balance_usd)
+    .bind(user_id)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+async fn account_owned(
+    db: &sqlx::PgPool,
+    account_id: uuid::Uuid,
+    user_id: uuid::Uuid,
+) -> bool {
+    matches!(
+        sqlx::query_scalar::<_, uuid::Uuid>(
+            "SELECT id FROM accounts WHERE id = $1 AND user_id = $2",
+        )
+        .bind(account_id)
+        .bind(user_id)
+        .fetch_optional(db)
+        .await,
+        Ok(Some(_))
+    )
+}
+
+const HOLDING_COLS: &str =
+    "id, account_id, symbol, name, quantity, price, value, cost_basis, currency, holding_type, updated_at";
+
+async fn create_holding(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path(account_id): Path<uuid::Uuid>,
+    Json(payload): Json<CreateHoldingRequest>,
+) -> impl IntoResponse {
+    if !account_owned(&state.db, account_id, ctx.user_id).await {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let symbol = payload.symbol.trim().to_uppercase();
+    if symbol.is_empty() {
+        return (StatusCode::BAD_REQUEST, "symbol required").into_response();
+    }
+    let name = payload
+        .name
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| symbol.clone());
+
+    let price = latest_price(&state.db, &symbol).await;
+    let value = price.map(|p| (p * payload.quantity).round_dp(2));
+
+    let id = uuid::Uuid::new_v4();
+    let insert = sqlx::query(
+        r#"
+        INSERT INTO holdings (id, account_id, user_id, symbol, name, quantity, price, value, cost_basis, currency, holding_type, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'USD', 'equity', NOW())
+        "#,
+    )
+    .bind(id)
+    .bind(account_id)
+    .bind(ctx.user_id)
+    .bind(&symbol)
+    .bind(&name)
+    .bind(payload.quantity)
+    .bind(price)
+    .bind(value)
+    .bind(payload.cost_basis)
+    .execute(&state.db)
+    .await;
+    if let Err(e) = insert {
+        error!("Failed to insert holding: {}", e);
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+    if let Err(e) = recompute_holding_balance(&state.db, account_id, ctx.user_id).await {
+        error!("Failed to recompute holding balance: {}", e);
+    }
+    match sqlx::query_as::<_, Holding>(&format!(
+        "SELECT {HOLDING_COLS} FROM holdings WHERE id = $1"
+    ))
+    .bind(id)
+    .fetch_one(&state.db)
+    .await
+    {
+        Ok(h) => (StatusCode::CREATED, Json(h)).into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
+async fn list_holdings(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path(account_id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    let rows = sqlx::query_as::<_, Holding>(&format!(
+        "SELECT {HOLDING_COLS} FROM holdings WHERE account_id = $1 AND user_id = $2 ORDER BY value DESC NULLS LAST"
+    ))
+    .bind(account_id)
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+    Json(rows).into_response()
+}
+
+async fn delete_holding(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path((account_id, hid)): Path<(uuid::Uuid, uuid::Uuid)>,
+) -> impl IntoResponse {
+    let res = sqlx::query(
+        "DELETE FROM holdings WHERE id = $1 AND account_id = $2 AND user_id = $3",
+    )
+    .bind(hid)
+    .bind(account_id)
+    .bind(ctx.user_id)
+    .execute(&state.db)
+    .await;
+    match res {
+        Ok(r) if r.rows_affected() > 0 => {
+            let _ = recompute_holding_balance(&state.db, account_id, ctx.user_id).await;
+            StatusCode::NO_CONTENT.into_response()
+        }
+        Ok(_) => StatusCode::NOT_FOUND.into_response(),
+        Err(e) => {
+            error!("Failed to delete holding: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// Re-price every holding in the account from the live Yahoo cache and
+/// recompute the account balance. Lets the user refresh on demand until the
+/// daily price job lands.
+async fn refresh_holdings(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path(account_id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    if !account_owned(&state.db, account_id, ctx.user_id).await {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let symbols: Vec<String> = sqlx::query_scalar(
+        "SELECT DISTINCT symbol FROM holdings WHERE account_id = $1 AND user_id = $2",
+    )
+    .bind(account_id)
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+    for sym in &symbols {
+        if let Some(price) = latest_price(&state.db, sym).await {
+            let _ = sqlx::query(
+                "UPDATE holdings SET price = $1, value = ROUND(quantity * $1, 2), updated_at = NOW() WHERE symbol = $2 AND account_id = $3 AND user_id = $4",
+            )
+            .bind(price)
+            .bind(sym)
+            .bind(account_id)
+            .bind(ctx.user_id)
+            .execute(&state.db)
+            .await;
+        }
+    }
+    if let Err(e) = recompute_holding_balance(&state.db, account_id, ctx.user_id).await {
+        error!("Failed to recompute after refresh: {}", e);
+    }
+    list_holdings(State(state), Extension(ctx), Path(account_id))
+        .await
         .into_response()
 }

@@ -3140,6 +3140,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get acctTypeBonds => 'Bonds';
 
   @override
+  String get acctTypeStockPlan => 'Stock plan';
+
+  @override
   String get acctTypeIRA => 'IRA';
 
   @override
