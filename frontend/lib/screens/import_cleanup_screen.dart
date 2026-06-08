@@ -23,6 +23,10 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
   // history). Each: {account_name, institution_name, statement_count,
   // warnings[]}.
   List<dynamic> _continuity = [];
+  // Gaps the user has acknowledged as unobtainable (e.g. a statement they can
+  // no longer download). Keyed "account|from_file→to_file"; persisted so they
+  // stop showing as warnings. Loaded from a user setting.
+  Set<String> _dismissedGaps = {};
   bool _loading = true;
 
   // Bulk form state.
@@ -45,10 +49,14 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
       final batches = await _api.getImportBatches();
       final overview = await _api.getDashboardOverview();
       final continuity = await _api.getImportContinuity();
+      final dismissed = await _api.getSetting('dismissed_continuity_gaps');
       if (!mounted) return;
       setState(() {
         _batches = batches;
         _continuity = continuity;
+        _dismissedGaps = dismissed is List
+            ? dismissed.map((e) => e.toString()).toSet()
+            : {};
         _accounts = (overview['accounts'] as List<dynamic>?) ?? [];
         _bulkAccountId ??=
             _accounts.isNotEmpty ? _accounts.first['id']?.toString() : null;
@@ -207,6 +215,16 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
     );
   }
 
+  String _gapKey(String account, Map gap) =>
+      '$account|${gap['from_file'] ?? ''}→${gap['to_file'] ?? ''}';
+
+  Future<void> _dismissGap(String key) async {
+    setState(() => _dismissedGaps = {..._dismissedGaps, key});
+    try {
+      await _api.putSetting('dismissed_continuity_gaps', _dismissedGaps.toList());
+    } catch (_) {/* localStorage / next load reconciles */}
+  }
+
   Widget _coverageCard(Map c, bool es, AppLocalizations l) {
     final name = (c['account_name'] ?? '').toString();
     final inst = c['institution_name']?.toString();
@@ -219,23 +237,24 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
           : formatCurrencyAmount(v, 'MXN');
     }
 
-    // Structured continuity gaps, localized client-side (the backend has no
-    // locale). Tolerate any legacy string entries by passing them through.
-    final warnings = (c['warnings'] as List?)
-            ?.map((e) => e is Map
-                ? l.impContinuityGap(
-                    (e['from_file'] ?? '').toString(),
-                    money(e['from_balance']),
-                    (e['from_date'] ?? '').toString(),
-                    (e['to_file'] ?? '').toString(),
-                    money(e['to_balance']),
-                    (e['to_date'] ?? '').toString(),
-                    money(e['diff']),
-                  )
-                : e.toString())
-            .toList() ??
-        const [];
-    final ok = warnings.isEmpty;
+    String line(Map e) => l.impContinuityGap(
+          (e['from_file'] ?? '').toString(),
+          money(e['from_balance']),
+          (e['from_date'] ?? '').toString(),
+          (e['to_file'] ?? '').toString(),
+          money(e['to_balance']),
+          (e['to_date'] ?? '').toString(),
+          money(e['diff']),
+        );
+
+    final allGaps = ((c['warnings'] as List?) ?? const [])
+        .whereType<Map>()
+        .toList();
+    final gaps = allGaps
+        .where((g) => !_dismissedGaps.contains(_gapKey(name, g)))
+        .toList();
+    final dismissedHere = allGaps.length - gaps.length;
+    final ok = gaps.isEmpty;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
@@ -261,16 +280,35 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
             Text(
               ok
                   ? '$count ${es ? "estados de cuenta · continuo" : "statements · continuous"}'
-                  : '$count ${es ? "estados de cuenta" : "statements"} · ${warnings.length} ${es ? "posible(s) hueco(s)" : "possible gap(s)"}',
+                      '${dismissedHere > 0 ? ' · ${es ? "$dismissedHere ignorado(s)" : "$dismissedHere dismissed"}' : ''}'
+                  : '$count ${es ? "estados de cuenta" : "statements"} · ${gaps.length} ${es ? "posible(s) hueco(s)" : "possible gap(s)"}',
               style: TextStyle(fontSize: 12, color: context.textSubtle),
             ),
             if (!ok) ...[
               const SizedBox(height: 8),
-              for (final w in warnings)
+              for (final g in gaps)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Text('• $w',
-                      style: const TextStyle(fontSize: 12.5, height: 1.35)),
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text('• ${line(g)}',
+                            style:
+                                const TextStyle(fontSize: 12.5, height: 1.35)),
+                      ),
+                      TextButton(
+                        onPressed: () => _dismissGap(_gapKey(name, g)),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          minimumSize: const Size(0, 32),
+                          foregroundColor: context.textSubtle,
+                        ),
+                        child: Text(es ? 'Ignorar' : 'Dismiss',
+                            style: const TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                  ),
                 ),
             ],
           ],
