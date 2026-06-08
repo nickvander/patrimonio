@@ -12,7 +12,7 @@
 //! to the same ledger. The result is advisory: a list of human-readable
 //! warnings the UI surfaces after the import ("looks like Feb is missing").
 
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 use rust_decimal::Decimal;
 
 /// Minimal view of an imported row needed for the continuity check.
@@ -110,7 +110,6 @@ pub fn continuity_warnings(rows: &[Row]) -> Vec<ContinuityGap> {
     // regardless of upload order.
     summaries.sort_by(|a, b| a.start.cmp(&b.start).then(a.end.cmp(&b.end)));
 
-    let tol = Decimal::new(1, 2); // 0.01 — ignore sub-cent rounding.
     let mut warnings = Vec::new();
     for pair in summaries.windows(2) {
         let (cur, next) = (&pair[0], &pair[1]);
@@ -120,18 +119,28 @@ pub fn continuity_warnings(rows: &[Row]) -> Vec<ContinuityGap> {
         if next.start <= cur.end {
             continue;
         }
-        let diff = next.opening - cur.closing;
-        if diff.abs() > tol {
-            warnings.push(ContinuityGap {
-                from_file: cur.file.clone(),
-                to_file: next.file.clone(),
-                from_balance: cur.closing.round_dp(2).to_string(),
-                to_balance: next.opening.round_dp(2).to_string(),
-                from_date: cur.end.to_string(),
-                to_date: next.start.to_string(),
-                diff: diff.round_dp(2).to_string(),
-            });
+        // A genuine "missing statement" is a SKIPPED CALENDAR MONTH between two
+        // consecutive statements. A bare balance mismatch is too noisy: bank
+        // per-row balances don't chain across statement cutoffs (the last
+        // transaction isn't the period-end "saldo al corte", and gap-days /
+        // same-day ordering shift it), so nearly every consecutive pair looks
+        // mismatched. Requiring a skipped month drops that noise and surfaces
+        // only the real holes the user can go fetch.
+        let months = (next.start.year() - cur.end.year()) * 12
+            + (next.start.month() as i32 - cur.end.month() as i32);
+        if months <= 1 {
+            continue;
         }
+        let diff = next.opening - cur.closing;
+        warnings.push(ContinuityGap {
+            from_file: cur.file.clone(),
+            to_file: next.file.clone(),
+            from_balance: cur.closing.round_dp(2).to_string(),
+            to_balance: next.opening.round_dp(2).to_string(),
+            from_date: cur.end.to_string(),
+            to_date: next.start.to_string(),
+            diff: diff.round_dp(2).to_string(),
+        });
     }
     warnings
 }
@@ -154,6 +163,23 @@ mod tests {
             amount: dec(amount),
             balance_after: Some(dec(bal)),
         }
+    }
+
+    #[test]
+    fn consecutive_months_with_balance_mismatch_are_not_flagged() {
+        // Real banks: month N's last transaction balance won't equal month
+        // N+1's first — statement cutoffs, gap-days, same-day ordering. As
+        // long as no calendar month is skipped, that's NOT a missing
+        // statement, so it must not warn (this is the Banamex-noise case).
+        let rows = vec![
+            row("jan.pdf", d(2024, 1, 20), "500.00", "9000.00"),
+            row("feb.pdf", d(2024, 2, 3), "200.00", "1200.00"), // opens at 1000, not 9000
+            row("mar.pdf", d(2024, 3, 2), "100.00", "5100.00"), // opens at 5000
+        ];
+        assert!(
+            continuity_warnings(&rows).is_empty(),
+            "consecutive months must not warn on a mere balance mismatch"
+        );
     }
 
     #[test]
