@@ -39,3 +39,9 @@ redisdata/
 
 # Claude Code harness state
 .claude/
+
+# Local-only statement samples for parser development (personal financial
+# data — never commit these). Drop real HealthEquity/Fidelity/etc. PDFs here.
+/work/healthequity/*.pdf
+/work/healthequity/*.PDF
+/work/healthequity/*.csv
