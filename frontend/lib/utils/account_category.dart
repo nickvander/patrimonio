@@ -67,7 +67,13 @@ AccountCategory categorizeAccount(String? rawType) {
       t.contains('rsu') ||
       t.contains('mutual') ||
       t.contains('sep') ||
-      t.contains('529')) {
+      t.contains('529') ||
+      // Fixed income: bonds, treasuries, and Mexican CETES (government
+      // T-bills with a maturity) — securities, not cash.
+      t.contains('bond') ||
+      t.contains('fixed income') ||
+      t.contains('treasury') ||
+      t.contains('cetes')) {
     return AccountCategory.investment;
   }
   if (t.contains('checking') ||

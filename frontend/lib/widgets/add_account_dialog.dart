@@ -18,6 +18,10 @@ class AddAccountDialog extends StatefulWidget {
   /// Optional pre-filled account name (e.g. "Nu — Ahorro" for a cajita).
   final String? suggestedName;
 
+  /// Optional pre-selected account type VALUE (e.g. "Bonds" for a cetesdirecto
+  /// import — those are fixed-income securities, not a checking account).
+  final String? suggestedType;
+
   /// Optional statement-derived identity to store with the account and show
   /// for copying (e.g. from a Nu / cetesdirecto import).
   final String? suggestedClabe;
@@ -34,6 +38,7 @@ class AddAccountDialog extends StatefulWidget {
     this.defaultCurrency = 'USD',
     this.suggestedBalance,
     this.suggestedName,
+    this.suggestedType,
     this.suggestedClabe,
     this.suggestedHolder,
     this.institutionName,
@@ -81,6 +86,12 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
     if (widget.suggestedHolder != null) {
       _holderController.text = widget.suggestedHolder!;
     }
+    // Pre-select the suggested type (e.g. "Bonds" for a cetesdirecto import)
+    // when it's one of the known values.
+    final st = widget.suggestedType;
+    if (st != null && _typeGroups.any((g) => g.$2.contains(st))) {
+      _type = st;
+    }
   }
 
   @override
@@ -100,7 +111,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
   // account-type VALUES (which are data sent to the API) stay fixed.
   static const _typeGroups = <(String, List<String>)>[
     ('cashBanking', ['Checking', 'Savings', 'CD']),
-    ('investments', ['Brokerage', 'Investment', 'IRA', '401k']),
+    ('investments', ['Brokerage', 'Investment', 'Bonds', 'IRA', '401k']),
     ('crypto', ['Crypto']),
     ('realAssets', [
       'Real Estate',
@@ -126,6 +137,8 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
         return l.acctTypeBrokerage;
       case 'Investment':
         return l.acctTypeInvestment;
+      case 'Bonds':
+        return l.acctTypeBonds;
       case 'IRA':
         return l.acctTypeIRA;
       case '401k':

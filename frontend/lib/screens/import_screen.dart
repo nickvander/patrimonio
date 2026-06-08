@@ -470,6 +470,10 @@ class _ImportScreenState extends State<ImportScreen> {
         defaultCurrency: infoCurrency ?? cur,
         suggestedBalance: infoBalance ?? sectionNet(secondaryLabel),
         suggestedName: infoName ?? secondaryLabel,
+        // Cetes imports default to "Bonds"; cajitas (secondary) default to
+        // "Savings" since they're savings vaults.
+        suggestedType: (info?['account_type'] as String?) ??
+            (secondaryLabel != null ? 'Savings' : null),
         suggestedClabe: info?['clabe'] as String?,
         suggestedHolder: info?['holder_name'] as String?,
         institutionName: institutionName,

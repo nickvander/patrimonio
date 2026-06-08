@@ -5228,6 +5228,12 @@ abstract class AppLocalizations {
   /// **'Investment'**
   String get acctTypeInvestment;
 
+  /// No description provided for @acctTypeBonds.
+  ///
+  /// In en, this message translates to:
+  /// **'Bonds'**
+  String get acctTypeBonds;
+
   /// No description provided for @acctTypeIRA.
   ///
   /// In en, this message translates to:

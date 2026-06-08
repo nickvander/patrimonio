@@ -1005,6 +1005,7 @@
   "acctTypeCD": "Certificate of deposit",
   "acctTypeBrokerage": "Brokerage",
   "acctTypeInvestment": "Investment",
+  "acctTypeBonds": "Bonds",
   "acctTypeIRA": "IRA",
   "acctType401k": "401(k)",
   "acctTypeCrypto": "Crypto",

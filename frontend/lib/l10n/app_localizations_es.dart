@@ -3167,6 +3167,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get acctTypeInvestment => 'Inversión';
 
   @override
+  String get acctTypeBonds => 'Bonos';
+
+  @override
   String get acctTypeIRA => 'IRA';
 
   @override

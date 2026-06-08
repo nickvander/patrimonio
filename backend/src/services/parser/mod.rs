@@ -707,6 +707,11 @@ pub struct AccountInfo {
     pub suggested_name: Option<String>,
     pub suggested_balance: Option<f64>,
     pub currency: Option<String>,
+    /// Suggested account-type VALUE for the create dialog (e.g. "Bonds" for a
+    /// cetesdirecto portfolio — fixed-income securities, not cash). None lets
+    /// the dialog keep its default.
+    #[serde(default)]
+    pub account_type: Option<String>,
     /// ISO `YYYY-MM-DD` period end, used to pick the newest statement's info.
     pub period_end: Option<String>,
 }
@@ -800,6 +805,7 @@ fn nu_account_info(text: &str) -> AccountInfo {
         suggested_name: Some("Nu — Cuenta".into()),
         suggested_balance: bal,
         currency: Some("MXN".into()),
+        account_type: Some("Checking".into()),
         period_end: nu_period_end(text),
     }
 }
@@ -831,6 +837,8 @@ fn cetes_account_info(text: &str) -> AccountInfo {
         suggested_name: Some("CetesDirecto".into()),
         suggested_balance: bal,
         currency: Some("MXN".into()),
+        // CETES are government T-bills (fixed income), not a cash account.
+        account_type: Some("Bonds".into()),
         // "Período del: 01/04/2024 al 30/04/2024" → 2024-04-30.
         period_end: regex::Regex::new(r"(?i)al\s+(\d{2})/(\d{2})/(\d{4})")
             .ok()
@@ -849,6 +857,7 @@ fn banamex_account_info(text: &str) -> AccountInfo {
         // Banamex statements carry a per-row balance; confirm sets it.
         suggested_balance: None,
         currency: Some("MXN".into()),
+        account_type: Some("Checking".into()),
         period_end: None,
     }
 }
