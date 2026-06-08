@@ -2525,6 +2525,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               currencyFormat: currencyFormat,
               reportingCurrency: _targetCurrency,
               sourceBreakdown: _overview?['currency_breakdown'] ?? [],
+              usdMxnRate: fxRate,
               selectedRange: _selectedRange,
             ),
           ),
@@ -3573,112 +3574,65 @@ class _StatTile extends StatelessWidget {
   final String label;
   final String value;
   final Color accent;
-  /// When true, this tile gets the hero treatment — slightly tinted
-  /// background + a thin accent bar on the left edge. The Net Worth
-  /// tile uses this so it visually anchors the row instead of
-  /// competing with the four secondary stats.
-  final bool emphasized;
 
   const _StatTile({
     required this.label,
     required this.value,
     required this.accent,
-    this.emphasized = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Hero: faint accent wash on the background + a 3px accent bar on
-    // the left. The label gets the accent colour as a subtle
-    // identifier; the value stays in textPrimary so the number is
-    // what reads first.
-    //
-    // Secondary: shared hairline border, identical background, label
-    // in textSubtle. A small accent dot on the leading edge of the
-    // label gives the eye a category cue without painting the whole
-    // label in a loud neon.
-    final isHero = emphasized;
-
+    // Secondary stat: shared hairline border, tile surface, label in
+    // textSubtle with a small accent dot on its leading edge — a category
+    // cue without painting the whole label in a loud neon. (The net-worth
+    // hero treatment now lives in _buildNetWorthHero, above the row, so
+    // these tiles are uniformly secondary.)
     return Container(
-      padding: EdgeInsets.fromLTRB(isHero ? 18 : 16, 14, 16, 14),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: isHero
-            ? accent.withValues(alpha: 0.06)
-            : context.tileSurface,
+        color: context.tileSurface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isHero
-              ? accent.withValues(alpha: 0.32)
-              : context.hairline,
-          width: isHero ? 1.2 : 1,
-        ),
+        border: Border.all(color: context.hairline),
       ),
-      child: Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Hero gets a left-edge accent bar; secondary tiles render
-          // a small inline dot beside the label instead (handled
-          // below in the label Row).
-          if (isHero)
-            Positioned.fill(
-              left: -18,
-              right: null,
-              child: SizedBox(
-                width: 3,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: accent,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(14),
-                      bottomLeft: Radius.circular(14),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
             children: [
-              Row(
-                children: [
-                  if (!isHero) ...[
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: accent,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                  Text(
-                    label.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 10,
-                      letterSpacing: 1.2,
-                      fontWeight: FontWeight.w700,
-                      color: isHero
-                          ? accent
-                          : context.textSubtle,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                value,
-                // JetBrains Mono "ledger" figures — same treatment as the
-                // net-worth hero so the dashboard's big numbers share one
-                // consistent identity (bundled up to Bold/w700).
-                style: brandDisplayStyle(
-                  fontSize: isHero ? 22 : 18,
-                  fontWeight: FontWeight.w700,
-                  color: context.textPrimary,
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: accent,
+                  shape: BoxShape.circle,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 10,
+                  letterSpacing: 1.2,
+                  fontWeight: FontWeight.w700,
+                  color: context.textSubtle,
+                ),
               ),
             ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            // JetBrains Mono "ledger" figures — same treatment as the
+            // net-worth hero so the dashboard's big numbers share one
+            // consistent identity (bundled up to Bold/w700).
+            style: brandDisplayStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: context.textPrimary,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

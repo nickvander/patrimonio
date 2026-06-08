@@ -15,6 +15,10 @@ class NetWorthCard extends StatefulWidget {
   final NumberFormat currencyFormat;
   final String reportingCurrency;
   final List<dynamic> sourceBreakdown;
+  /// USD↔MXN rate, so a native-currency chip can show its reporting-currency
+  /// worth ("MXN 56,344.00 ≈ $3,238") — `conversionFactor` only covers
+  /// USD→reporting, not the cross needed for a foreign native amount.
+  final double usdMxnRate;
   final DateRange selectedRange;
 
   const NetWorthCard({
@@ -25,6 +29,7 @@ class NetWorthCard extends StatefulWidget {
     required this.currencyFormat,
     required this.reportingCurrency,
     required this.sourceBreakdown,
+    required this.usdMxnRate,
     this.selectedRange = DateRange.all,
   });
 
@@ -47,7 +52,29 @@ class _NetWorthCardState extends State<NetWorthCard> {
   NumberFormat get currencyFormat => widget.currencyFormat;
   String get reportingCurrency => widget.reportingCurrency;
   List<dynamic> get sourceBreakdown => widget.sourceBreakdown;
+  double get usdMxnRate => widget.usdMxnRate;
   DateRange get selectedRange => widget.selectedRange;
+
+  /// Native-currency composition, parsed from `sourceBreakdown` and ordered by
+  /// reporting-currency value (dominant currency first) — the order the hero
+  /// chips render in, so the chart card reads identically to the dashboard.
+  List<({String cur, double net})> get _breakdownEntries {
+    final entries = sourceBreakdown
+        .map((item) => (
+              cur: (item['currency'] ?? '').toString().toUpperCase(),
+              net: ((item['net'] ?? 0.0) as num).toDouble(),
+            ))
+        .where((e) => e.cur.isNotEmpty)
+        .toList()
+      ..sort((a, b) {
+        final ca = convertCurrency(a.net,
+            from: a.cur, to: reportingCurrency, usdMxnRate: usdMxnRate);
+        final cb = convertCurrency(b.net,
+            from: b.cur, to: reportingCurrency, usdMxnRate: usdMxnRate);
+        return cb.compareTo(ca);
+      });
+    return entries;
+  }
 
   /// Filter history data based on the selected date range
   List<dynamic> _filterByRange(List<dynamic> data) {
@@ -261,18 +288,20 @@ class _NetWorthCardState extends State<NetWorthCard> {
             child: Wrap(spacing: 8, runSpacing: 6, children: chips),
           );
         }),
-        if (sourceBreakdown.isNotEmpty) ...[
+        if (_breakdownEntries.length >= 2) ...[
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 6,
-            children: sourceBreakdown.map((item) {
-              final currency = (item['currency'] ?? '').toString().toUpperCase();
-              final net = ((item['net'] ?? 0.0) as num).toDouble();
-              // One chip per currency: the ISO code (USD / MXN) + the net held
-              // natively in that currency. The code label makes the split
-              // explicit — how much of the total is genuinely USD vs MXN —
-              // rather than leaning on the "$" / "MX$" glyph alone.
+            children: _breakdownEntries.map((e) {
+              // One self-labelling chip per currency, matching the dashboard
+              // hero and the accounts list: the native amount always carries
+              // its ISO code ("USD 9,591.00"), and a foreign currency also
+              // shows its reporting-currency worth ("MXN 56,344.00 ≈ $3,238"),
+              // so the chips visibly add up to the hero number above.
+              final isTarget = e.cur == reportingCurrency.toUpperCase();
+              final converted = convertCurrency(e.net,
+                  from: e.cur, to: reportingCurrency, usdMxnRate: usdMxnRate);
               return Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -281,13 +310,29 @@ class _NetWorthCardState extends State<NetWorthCard> {
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: context.hairline),
                 ),
-                child: Text(
-                  formatCurrencyAmount(net, currency),
-                  style: TextStyle(
-                    color: context.textSubtle,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: formatCurrencyWithCode(e.net, e.cur),
+                        style: TextStyle(
+                          color: context.textSubtle,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (!isTarget)
+                        TextSpan(
+                          text: '  ≈ ${currencyFormat.format(converted)}',
+                          style: TextStyle(
+                            color: context.textFaint,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                    ],
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
