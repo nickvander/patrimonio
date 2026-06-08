@@ -20,6 +20,9 @@ const List<String> kSupportedMxBanks = [
   'Banorte',
   'Scotiabank',
   'Cetesdirecto',
+  // US: HealthEquity HSA — validated against six real monthly statements
+  // (cash ledger + invested fund value → total account worth).
+  'HealthEquity',
 ];
 
 /// An Oxford-style human list of the supported institutions for body copy.

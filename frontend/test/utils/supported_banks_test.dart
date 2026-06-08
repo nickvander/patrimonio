@@ -13,6 +13,7 @@ void main() {
         'Banorte',
         'Scotiabank',
         'Cetesdirecto',
+        'HealthEquity',
       ]);
     });
 
@@ -35,7 +36,7 @@ void main() {
       // exact string, so asserting it here guards both call sites at once.
       expect(
         supportedMxBanksSentence(),
-        'Nu México, Banamex, Banorte, Scotiabank, or Cetesdirecto',
+        'Nu México, Banamex, Banorte, Scotiabank, Cetesdirecto, or HealthEquity',
       );
     });
 

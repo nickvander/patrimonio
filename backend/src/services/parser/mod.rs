@@ -1,3 +1,4 @@
+pub mod healthequity;
 pub mod nu_mexico;
 pub mod nu_mexico_pdf;
 pub mod banamex;
@@ -529,6 +530,15 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
             }};
         }
 
+        // HealthEquity HSA (US) — unique English markers, no overlap with the
+        // Mexican-bank checks below, so it's safe to try first.
+        if healthequity::looks_like(&sample_text) {
+            try_rows!(
+                healthequity::parse_text(&best).unwrap_or_default(),
+                "healthequity-layout"
+            );
+        }
+
         // Nu México — checked FIRST, by issuer-specific markers. Nu's debit
         // statements routinely mention other banks (BANAMEX, BBVA…) inside
         // SPEI transfer descriptions, which would otherwise trip the broad
@@ -682,7 +692,7 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
         return Err(anyhow!(
             "Couldn't find any transactions in '{}'. If this is a real statement, its layout \
              isn't supported yet — share a sample and we can add it. (Built-in support: Nu, \
-             Banamex, BBVA, Santander, CetesDirecto, plus CSV exports.)",
+             Banamex, BBVA, Santander, CetesDirecto, HealthEquity, plus CSV exports.)",
             file_name
         ));
     }
@@ -752,6 +762,9 @@ pub fn parse_account_info(
     }
     let upper = text.to_uppercase();
 
+    if healthequity::looks_like(&upper) {
+        return Some(healthequity_account_info(&text));
+    }
     if upper.contains("NU MÉXICO FINANCIERA")
         || upper.contains("CUENTA NU")
         || upper.contains("DETALLE DE MOVIMIENTOS EN TU CUENTA")
@@ -831,6 +844,39 @@ fn nu_period_end(text: &str) -> Option<String> {
     };
     let year: i32 = c[3].parse().ok()?;
     Some(format!("{year:04}-{month:02}-{day:02}"))
+}
+
+fn healthequity_account_info(text: &str) -> AccountInfo {
+    // The account's worth is cash + invested value, not the idle cash balance.
+    let bal = healthequity::parse_total_account_value(text)
+        .and_then(|d| d.to_string().parse::<f64>().ok());
+    // Holder sits to the LEFT of "Account Number:" on the same layout row.
+    let holder = re_cap(r"(?im)^\s*([A-Za-z][^\n]*?\S)\s{2,}Account Number:\s*\d", text);
+    let acct = re_cap(r"(?i)Account Number:\s*(\d+)", text);
+    let masked = acct
+        .as_deref()
+        .filter(|a| a.len() >= 4)
+        .map(|a| format!("HealthEquity HSA \u{2022}\u{2022}{}", &a[a.len() - 4..]))
+        .unwrap_or_else(|| "HealthEquity HSA".to_string());
+    AccountInfo {
+        institution: Some("HealthEquity".into()),
+        holder_name: holder,
+        clabe: None,
+        rfc: None,
+        suggested_name: Some(masked),
+        suggested_balance: bal,
+        currency: Some("USD".into()),
+        // An HSA is a tax-advantaged investment account (categorised as
+        // investment); see account_category.dart.
+        account_type: Some("HSA".into()),
+        // "Period: 01/01/26 through 06/30/26" → 2026-06-30.
+        period_end: regex::Regex::new(
+            r"(?i)Period:\s*\d{2}/\d{2}/\d{2}\s+through\s+(\d{2})/(\d{2})/(\d{2})",
+        )
+        .ok()
+        .and_then(|re| re.captures(text))
+        .map(|c| format!("20{}-{}-{}", &c[3], &c[1], &c[2])),
+    }
 }
 
 fn cetes_account_info(text: &str) -> AccountInfo {
