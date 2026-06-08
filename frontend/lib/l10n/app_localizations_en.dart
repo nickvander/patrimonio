@@ -2853,6 +2853,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pfVaults => 'Vaults';
 
   @override
+  String get pfBase => 'base';
+
+  @override
   String get pfAccountsDescriptor => 'Accounts';
 
   @override

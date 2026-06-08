@@ -896,6 +896,7 @@
     }
   },
   "pfVaults": "Vaults",
+  "pfBase": "base",
   "pfAccountsDescriptor": "Accounts",
   "pfInstDescriptor": "{inst} · {descriptor}",
   "pfVault": "Vault",

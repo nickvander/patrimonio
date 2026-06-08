@@ -2881,6 +2881,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get pfVaults => 'Apartados';
 
   @override
+  String get pfBase => 'base';
+
+  @override
   String get pfAccountsDescriptor => 'Cuentas';
 
   @override

@@ -4766,6 +4766,12 @@ abstract class AppLocalizations {
   /// **'Vaults'**
   String get pfVaults;
 
+  /// No description provided for @pfBase.
+  ///
+  /// In en, this message translates to:
+  /// **'base'**
+  String get pfBase;
+
   /// No description provided for @pfAccountsDescriptor.
   ///
   /// In en, this message translates to:

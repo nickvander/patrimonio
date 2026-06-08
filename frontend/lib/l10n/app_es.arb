@@ -777,6 +777,7 @@
   "pfGroupOther": "Otros",
   "pfUnknownSubtypes": "{count, plural, =1{Subtipo desconocido: {list}} other{Subtipos desconocidos: {list}}}",
   "pfVaults": "Apartados",
+  "pfBase": "base",
   "pfAccountsDescriptor": "Cuentas",
   "pfInstDescriptor": "{inst} · {descriptor}",
   "pfVault": "Apartado",

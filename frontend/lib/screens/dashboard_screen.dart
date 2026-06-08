@@ -656,6 +656,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   /// Five-tile compact stat strip pinned to the top of the Overview tab.
   /// All values are derived from the already-loaded /dashboard/overview
+  /// Native-currency split of net worth ("USD $X · MXN MX$Y"), shown right
+  /// under the (converted) total so it's clear how much is genuinely held in
+  /// each currency. Hidden when everything is one currency.
+  Widget _buildCurrencyBreakdown() {
+    final breakdown = (_overview?['currency_breakdown'] as List?) ?? const [];
+    if (breakdown.length < 2) return const SizedBox.shrink();
+    final es = Localizations.localeOf(context).languageCode == 'es';
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(
+            es ? 'En moneda nativa:' : 'Held natively:',
+            style: TextStyle(
+                fontSize: 12,
+                color: context.textSubtle,
+                fontWeight: FontWeight.w600),
+          ),
+          ...breakdown.map((item) {
+            final cur = (item['currency'] ?? '').toString().toUpperCase();
+            final net = ((item['net'] ?? 0.0) as num).toDouble();
+            return Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: context.tileSurface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: context.hairline),
+              ),
+              child: Text(
+                '$cur  ${formatCurrencyAmount(net, cur)}',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: context.textPrimary,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   /// payload so no extra API call is needed.
   Widget _buildStatStrip({
     required NumberFormat currencyFormat,
@@ -2462,6 +2510,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               if (_sinceLastLogin != null) const SizedBox(height: 12),
               stats,
+              _buildCurrencyBreakdown(),
               const SizedBox(height: 24),
               // Net-worth-focused widgets stay on Overview. Cash-flow
               // widgets (monthly card, trends, budgets) moved to the

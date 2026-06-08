@@ -467,13 +467,36 @@ class AccountsListWidget extends StatelessWidget {
       final savingsIdx = products.indexWhere((a) =>
           (a['account_type'] ?? '').toString().toLowerCase().contains('savings'));
       final attachIdx = savingsIdx >= 0 ? savingsIdx : products.length - 1;
+      // Vault total folded into the attach product's NATIVE currency, so its
+      // headline reads as savings + vaults combined.
+      final attachAcc = products[attachIdx];
+      final attachCur = (attachAcc['currency'] ?? targetCurrency).toString();
+      final vaultExtra = vaults.fold<double>(
+        0.0,
+        (s, v) =>
+            s +
+            convertCurrency(
+              ((v['current_balance'] ?? 0.0) as num).toDouble().abs(),
+              from: (v['currency'] ?? targetCurrency).toString(),
+              to: attachCur,
+              usdMxnRate: usdMxnRate,
+            ),
+      );
       for (var i = 0; i < products.length; i++) {
-        widgets.add(_buildAccountRow(context, products[i]));
-        if (i == attachIdx && vaults.isNotEmpty) {
+        final isAttach = i == attachIdx && vaults.isNotEmpty;
+        widgets.add(_buildAccountRow(
+          context,
+          products[i],
+          vaultExtraNative: isAttach ? vaultExtra : null,
+          vaultCount: isAttach ? vaults.length : null,
+        ));
+        if (isAttach) {
+          // Combined total already shows on the row above; the collapsible is
+          // just the expand affordance + the individual vaults (no redundant
+          // total in its header).
           widgets.add(_CollapsibleVaults(
             label: l.pfVaults,
             count: vaults.length,
-            totalLabel: currencyFormat.format(vaultTotal(vaults)),
             rows: vaults.map((v) => _buildVaultRow(context, v)).toList(),
           ));
         }
@@ -600,10 +623,19 @@ class AccountsListWidget extends StatelessWidget {
   /// available width so the balance never overflows on narrow screens:
   ///   wide  : name+inst — — — — — — balance + companion + menu
   ///   narrow: name+inst stacked, balance below on its own line
-  Widget _buildAccountRow(BuildContext context, dynamic acc) {
+  /// [vaultExtraNative] (in the account's native currency) and [vaultCount],
+  /// when set, fold a parent account's nested vaults INTO its displayed total —
+  /// so "SoFi Savings" reads as the combined savings + vaults figure, with the
+  /// base balance shown on the sub-line.
+  Widget _buildAccountRow(
+    BuildContext context,
+    dynamic acc, {
+    double? vaultExtraNative,
+    int? vaultCount,
+  }) {
     final l = AppLocalizations.of(context);
-    final balance =
-        ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
+    final base = ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
+    final balance = base + (vaultExtraNative ?? 0.0);
     final sourceCurrency = (acc['currency'] ?? targetCurrency).toString();
     // Prefer the user's nickname over the bank-supplied name so a Plaid
     // default like "PLAID CHECKING 0001" can read as "Joint checking".
@@ -674,7 +706,21 @@ class AccountsListWidget extends StatelessWidget {
     );
 
     Widget? subBalance;
-    if (hasCrypto) {
+    if (vaultExtraNative != null && vaultExtraNative > 0) {
+      // "$50.16 base + 6 vaults" — makes clear the headline figure is the
+      // savings base enhanced by the vaults, with the base called out.
+      subBalance = Text(
+        '${formatCurrencyAmount(base, sourceCurrency)} ${l.pfBase} '
+        '+ ${vaultCount ?? 0} ${l.pfVaults.toLowerCase()}',
+        style: TextStyle(
+          fontSize: 11,
+          color: context.textFaint,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+    } else if (hasCrypto) {
       subBalance = Text(
         '${acc['crypto_amount']} ${acc['ticker_symbol']}',
         style: TextStyle(
@@ -1029,13 +1075,13 @@ class AccountsListWidget extends StatelessWidget {
 class _CollapsibleVaults extends StatefulWidget {
   final String label;
   final int count;
-  final String totalLabel;
+  final String? totalLabel;
   final List<Widget> rows;
 
   const _CollapsibleVaults({
     required this.label,
     required this.count,
-    required this.totalLabel,
+    this.totalLabel,
     required this.rows,
   });
 
@@ -1071,14 +1117,15 @@ class _CollapsibleVaultsState extends State<_CollapsibleVaults> {
                         color: context.textSubtle),
                   ),
                   const Spacer(),
-                  Text(
-                    widget.totalLabel,
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        color: context.textSubtle,
-                        fontFeatures: const [FontFeature.tabularFigures()]),
-                  ),
+                  if (widget.totalLabel != null)
+                    Text(
+                      widget.totalLabel!,
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: context.textSubtle,
+                          fontFeatures: const [FontFeature.tabularFigures()]),
+                    ),
                 ],
               ),
             ),
