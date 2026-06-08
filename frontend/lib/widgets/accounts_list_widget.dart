@@ -324,22 +324,72 @@ class AccountsListWidget extends StatelessWidget {
                 textAlign: TextAlign.right,
               );
 
-              // Only worth showing when the group spans >1 currency.
+              // Only worth showing when the group spans >1 currency. Each
+              // currency reads as its own self-labelled pill ("USD 9,591.00")
+              // — never a bare "$" that's ambiguous in a mixed list — and a
+              // foreign currency also shows what it's worth in the reporting
+              // currency ("≈ $3,238") so the pills visibly add up to the
+              // converted headline above them.
+              final targetUpper = targetCurrency.toUpperCase();
+              final currencyEntries = byCurrency.entries.toList()
+                ..sort((a, b) {
+                  double conv(MapEntry<String, double> e) => convertCurrency(
+                        e.value,
+                        from: e.key,
+                        to: targetCurrency,
+                        usdMxnRate: usdMxnRate,
+                      );
+                  return conv(b).compareTo(conv(a));
+                });
               final currencyLine = byCurrency.length < 2
                   ? null
                   : Padding(
-                      padding: const EdgeInsets.only(top: 6, left: 38),
+                      padding: const EdgeInsets.only(top: 8, left: 38),
                       child: Wrap(
                         spacing: 8,
-                        runSpacing: 4,
-                        children: byCurrency.entries.map((e) {
-                          return Text(
-                            formatCurrencyAmount(e.value, e.key),
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: context.textSubtle,
-                              fontFeatures: const [FontFeature.tabularFigures()],
+                        runSpacing: 6,
+                        children: currencyEntries.map((e) {
+                          final isTarget = e.key == targetUpper;
+                          final converted = convertCurrency(
+                            e.value,
+                            from: e.key,
+                            to: targetCurrency,
+                            usdMxnRate: usdMxnRate,
+                          );
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: context.tileSurface,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: context.hairline),
+                            ),
+                            child: Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text:
+                                        formatCurrencyWithCode(e.value, e.key),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: context.textSubtle,
+                                    ),
+                                  ),
+                                  if (!isTarget)
+                                    TextSpan(
+                                      text:
+                                          '  ≈ ${currencyFormat.format(converted)}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w400,
+                                        color: context.textFaint,
+                                      ),
+                                    ),
+                                ],
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontFeatures: [FontFeature.tabularFigures()],
+                                ),
+                              ),
                             ),
                           );
                         }).toList(),

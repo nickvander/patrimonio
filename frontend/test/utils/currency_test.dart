@@ -33,4 +33,23 @@ void main() {
       expect(formatCurrencyAmount(12345678.9, 'MXN'), 'MXN 12,345,678.90');
     });
   });
+
+  group('formatCurrencyWithCode — self-labelling for mixed lists', () {
+    test('USD gets an explicit code, not a bare \$', () {
+      // In a per-currency breakdown "$9,591" is ambiguous; "USD 9,591.00" isn't.
+      expect(formatCurrencyWithCode(9591.0, 'USD'), 'USD 9,591.00');
+    });
+
+    test('MXN keeps its code prefix', () {
+      expect(formatCurrencyWithCode(56344.0, 'MXN'), 'MXN 56,344.00');
+    });
+
+    test('lower-case code is normalised', () {
+      expect(formatCurrencyWithCode(10.0, 'usd'), 'USD 10.00');
+    });
+
+    test('negative amounts keep the sign', () {
+      expect(formatCurrencyWithCode(-1234.56, 'USD'), '-USD 1,234.56');
+    });
+  });
 }

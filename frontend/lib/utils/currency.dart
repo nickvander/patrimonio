@@ -49,3 +49,12 @@ NumberFormat moneyFormat(String currency) {
 String formatCurrencyAmount(double amount, String currency) {
   return moneyFormat(currency).format(amount);
 }
+
+/// Code-prefixed amount ("USD 9,591.00", "MXN 56,344.00") for places that list
+/// several currencies side by side — a per-currency breakdown — where a bare
+/// "$" is ambiguous about which dollar it is. Always the ISO code, never the
+/// idiomatic glyph, so each batch is self-labelling.
+String formatCurrencyWithCode(double amount, String currency) {
+  final code = currency.toUpperCase();
+  return NumberFormat.currency(name: code, symbol: '$code ').format(amount);
+}
