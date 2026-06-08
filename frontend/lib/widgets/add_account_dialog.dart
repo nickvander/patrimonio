@@ -112,7 +112,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
   static const _typeGroups = <(String, List<String>)>[
     ('cashBanking', ['Checking', 'Savings', 'CD']),
     ('investments',
-        ['Brokerage', 'Stock plan', 'Investment', 'Bonds', 'IRA', '401k']),
+        ['Brokerage', 'Stock plan', 'Investment', 'Bonds', 'IRA', '401k', 'HSA']),
     ('crypto', ['Crypto']),
     ('realAssets', [
       'Real Estate',
