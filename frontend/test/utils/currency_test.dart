@@ -8,8 +8,8 @@ void main() {
       expect(formatCurrencyAmount(1234.0, 'USD'), '\$1,234.00');
     });
 
-    test('MXN uses a leading MX\$', () {
-      expect(formatCurrencyAmount(47651.01, 'MXN'), 'MX\$47,651.01');
+    test('MXN uses a leading MXN code', () {
+      expect(formatCurrencyAmount(47651.01, 'MXN'), 'MXN 47,651.01');
     });
 
     test('lower-case code is normalised', () {
@@ -30,7 +30,7 @@ void main() {
     });
 
     test('large MXN values group correctly', () {
-      expect(formatCurrencyAmount(12345678.9, 'MXN'), 'MX\$12,345,678.90');
+      expect(formatCurrencyAmount(12345678.9, 'MXN'), 'MXN 12,345,678.90');
     });
   });
 }

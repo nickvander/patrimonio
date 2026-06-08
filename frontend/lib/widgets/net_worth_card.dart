@@ -282,7 +282,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                   border: Border.all(color: context.hairline),
                 ),
                 child: Text(
-                  '$currency  ${formatCurrencyAmount(net, currency)}',
+                  formatCurrencyAmount(net, currency),
                   style: TextStyle(
                     color: context.textSubtle,
                     fontSize: 11,
@@ -839,11 +839,12 @@ _NetWorthDelta? _computeDelta(List<dynamic> history) {
     final ref = pick(days, 5);
     if (ref != null && ref.value != 0) {
       final amount = latest.value - ref.value;
-      return _NetWorthDelta(
-        amount: amount,
-        percentage: _plausiblePct(amount, ref.value, latest.value),
-        windowLabel: label,
-      );
+      final pct = _plausiblePct(amount, ref.value, latest.value);
+      // Implausible baseline (onboarding — net worth >3x'd as accounts were
+      // added): hide the whole chip, not just the %. A "+$1.5M MoM" is as
+      // misleading as "+3905%". Try the next (shorter) window instead.
+      if (pct == null) continue;
+      return _NetWorthDelta(amount: amount, percentage: pct, windowLabel: label);
     }
   }
   return null;
@@ -884,11 +885,10 @@ _NetWorthDelta? _computeDelta(List<dynamic> history) {
     }
     if (best == null || best.value == 0) return null;
     final amount = latest.value - best.value;
-    return _NetWorthDelta(
-      amount: amount,
-      percentage: _plausiblePct(amount, best.value, latest.value),
-      windowLabel: label,
-    );
+    final pct = _plausiblePct(amount, best.value, latest.value);
+    // Onboarding-inflated baseline → hide the chip entirely (no "+$1.5M MoM").
+    if (pct == null) return null;
+    return _NetWorthDelta(amount: amount, percentage: pct, windowLabel: label);
   }
 
   final d = latest.date;

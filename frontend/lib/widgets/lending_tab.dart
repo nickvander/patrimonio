@@ -2565,7 +2565,7 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: InputDecoration(
             labelText: 'Amount received',
-            prefixText: widget.currency == 'MXN' ? r'MX$ ' : r'$ ',
+            prefixText: widget.currency == 'MXN' ? 'MXN ' : r'$ ',
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
           ),
         ),

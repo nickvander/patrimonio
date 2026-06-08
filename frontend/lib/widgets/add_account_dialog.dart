@@ -277,7 +277,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
                   labelText: l.dlgAccountInitialBalance,
                   // Currency-aware prefix: don't hardcode `$` regardless of
                   // the selected currency.
-                  prefixText: _currency == 'MXN' ? r'MX$ ' : r'$ ',
+                  prefixText: _currency == 'MXN' ? 'MXN ' : r'$ ',
                   suffixText: _currency,
                   helperText: l.dlgAccountBalanceHelper,
                   helperMaxLines: 2,

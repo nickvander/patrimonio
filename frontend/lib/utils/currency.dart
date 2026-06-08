@@ -22,7 +22,10 @@ double convertCurrency(
 /// without an entry fall back to the ISO code so nothing renders blank.
 const Map<String, String> _currencySymbols = {
   'USD': '\$',
-  'MXN': 'MX\$',
+  // Peso amounts read as "MXN 47,651.01". The "MX$" glyph was being misread as
+  // "MX" (a country code) and looked awkward next to "$" USD amounts; the ISO
+  // code is unambiguous and matches what the user expects ("MXN").
+  'MXN': 'MXN ',
 };
 
 /// The display glyph for a currency code: `$` / `MX$`, or "CODE " (ISO

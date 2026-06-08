@@ -112,7 +112,7 @@ class CrossCurrencyTransfersCard extends StatelessWidget {
     final srcDate = (t['source_date'] ?? '').toString();
 
     final money = (double amount, String cur) =>
-        NumberFormat.currency(symbol: cur == 'MXN' ? r'MX$' : r'$').format(amount);
+        NumberFormat.currency(symbol: cur == 'MXN' ? 'MXN ' : r'$').format(amount);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),

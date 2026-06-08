@@ -334,7 +334,7 @@ class AccountsListWidget extends StatelessWidget {
                         runSpacing: 4,
                         children: byCurrency.entries.map((e) {
                           return Text(
-                            '${e.key} ${formatCurrencyAmount(e.value, e.key)}',
+                            formatCurrencyAmount(e.value, e.key),
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,

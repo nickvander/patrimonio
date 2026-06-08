@@ -64,7 +64,7 @@ List<AppNotification> deriveNotifications({
   //    The server sends exactly one of days_overdue / days_until > 0
   //    per row, so each installment yields at most one notification.
   String money(num v, String cur) => NumberFormat.currency(
-        symbol: cur == 'MXN' ? r'MX$' : r'$',
+        symbol: cur == 'MXN' ? 'MXN ' : r'$',
         decimalDigits: 2,
       ).format(v);
   for (final raw in loanReminders) {

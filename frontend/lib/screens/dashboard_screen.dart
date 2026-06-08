@@ -689,7 +689,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 border: Border.all(color: context.hairline),
               ),
               child: Text(
-                '$cur  ${formatCurrencyAmount(net, cur)}',
+                formatCurrencyAmount(net, cur),
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w700,

@@ -564,9 +564,11 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
+          // Native balance as the hero, with the converted estimate stacked
+          // cleanly beneath it (was crammed onto the same baseline, which read
+          // awkwardly with a long MXN figure).
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 formatCurrencyAmount(balance, sourceCurrency),
@@ -576,19 +578,21 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                   color: context.textPrimary,
                   fontFeatures: [const FontFeature.tabularFigures()],
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              if (needsConversion) ...[
-                const SizedBox(width: 8),
-                Text(
-                  '≈ ${widget.currencyFormat.format(convertedBalance)}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: context.textFaint,
-                    fontStyle: FontStyle.italic,
-                    fontFeatures: [const FontFeature.tabularFigures()],
+              if (needsConversion)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    '≈ ${widget.currencyFormat.format(convertedBalance)}',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: context.textSubtle,
+                      fontFeatures: [const FontFeature.tabularFigures()],
+                    ),
                   ),
                 ),
-              ],
             ],
           ),
           _buildBalanceSparkline(),
