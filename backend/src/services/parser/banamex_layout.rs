@@ -107,32 +107,51 @@ fn is_skippable(upper: &str) -> bool {
 /// may straddle a year boundary (… del 25 de diciembre del 2025 al 24 de
 /// enero del 2026). Returns a closure month → year.
 fn year_resolver(upper: &str) -> Box<dyn Fn(u32) -> i32> {
-    let re = Regex::new(
+    // MOST RELIABLE: the cut date "FECHA DE CORTE 23 DE MAYO DE 2026". The
+    // statement covers ~one month ending here, so every row is in `corte_year`
+    // for months up to `corte_month`, and `corte_year - 1` for any later month
+    // (the Dec→Jan straddle). This avoids the old failure where a stray "20xx"
+    // in a reference/account number (e.g. "2074") was taken as the year and
+    // dated a whole statement to the future.
+    if let Some(c) =
+        Regex::new(r"FECHA DE CORTE\s+\d{1,2}\s+DE\s+(\w+)\s+DE\s+(20\d{2})")
+            .unwrap()
+            .captures(upper)
+    {
+        if let (Some(cm), Ok(cy)) = (month_full(&c[1]), c[2].parse::<i32>()) {
+            return Box::new(move |m: u32| if m > cm { cy - 1 } else { cy });
+        }
+    }
+
+    // Next: an explicit two-year período ("… del 2025 al … del 2026").
+    if let Some(c) = Regex::new(
         r"PER[IÍ]ODO DEL \d{1,2} DE (\w+) DEL (20\d{2}) AL \d{1,2} DE (\w+) DEL (20\d{2})",
     )
-    .unwrap();
+    .unwrap()
+    .captures(upper)
+    {
+        let sm = month_full(&c[1]).unwrap_or(1);
+        let sy: i32 = c[2].parse().unwrap_or(2025);
+        let ey: i32 = c[4].parse().unwrap_or(sy);
+        return Box::new(move |m: u32| if sy == ey { sy } else if m >= sm { sy } else { ey });
+    }
+
+    // Single-year período ("… al 24 de mayo del 2026").
+    if let Some(y) = Regex::new(r"PER[IÍ]ODO DEL .* DEL (20\d{2})")
+        .unwrap()
+        .captures(upper)
+        .and_then(|c| c[1].parse::<i32>().ok())
+    {
+        return Box::new(move |_m: u32| y);
+    }
+
+    // Last resort: the first 20xx in the header.
     let fallback = Regex::new(r"(20\d{2})")
         .unwrap()
         .find(&upper[..upper.len().min(3000)])
         .and_then(|m| m.as_str().parse::<i32>().ok())
         .unwrap_or(2025);
-
-    if let Some(c) = re.captures(upper) {
-        let sm = month_full(&c[1]).unwrap_or(1);
-        let sy: i32 = c[2].parse().unwrap_or(fallback);
-        let ey: i32 = c[4].parse().unwrap_or(sy);
-        Box::new(move |m: u32| {
-            if sy == ey {
-                sy
-            } else if m >= sm {
-                sy
-            } else {
-                ey
-            }
-        })
-    } else {
-        Box::new(move |_m: u32| fallback)
-    }
+    Box::new(move |_m: u32| fallback)
 }
 
 /// Parse the `pdftotext -layout` text of a Banamex statement.
