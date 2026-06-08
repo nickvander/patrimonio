@@ -839,10 +839,9 @@ _NetWorthDelta? _computeDelta(List<dynamic> history) {
     final ref = pick(days, 5);
     if (ref != null && ref.value != 0) {
       final amount = latest.value - ref.value;
-      final pct = (amount / ref.value) * 100;
       return _NetWorthDelta(
         amount: amount,
-        percentage: pct,
+        percentage: _plausiblePct(amount, ref.value, latest.value),
         windowLabel: label,
       );
     }
@@ -887,7 +886,7 @@ _NetWorthDelta? _computeDelta(List<dynamic> history) {
     final amount = latest.value - best.value;
     return _NetWorthDelta(
       amount: amount,
-      percentage: (amount / best.value) * 100,
+      percentage: _plausiblePct(amount, best.value, latest.value),
       windowLabel: label,
     );
   }
@@ -907,7 +906,11 @@ class _DeltaPoint {
 
 class _NetWorthDelta {
   final double amount;
-  final double percentage;
+  /// Null when the baseline is unreliable (onboarding inflation — net worth
+  /// more than ~tripled over the window because accounts were still being
+  /// added). The dollar amount is still shown; the percentage is suppressed
+  /// rather than reporting a meaningless "+3905%".
+  final double? percentage;
   final String windowLabel;
   _NetWorthDelta({
     required this.amount,
@@ -916,9 +919,18 @@ class _NetWorthDelta {
   });
 }
 
+/// Percentage from a baseline → latest, or null when the baseline is so small
+/// relative to the latest that the change is onboarding/data noise, not a real
+/// market move (net worth doesn't 3x in a month from returns).
+double? _plausiblePct(double amount, double baseline, double latest) {
+  if (baseline <= 0) return null;
+  if (latest / baseline > 3.0) return null;
+  return (amount / baseline) * 100;
+}
+
 class _DeltaChip extends StatelessWidget {
   final double amount;
-  final double percentage;
+  final double? percentage;
   final String label;
   final NumberFormat currencyFormat;
 
@@ -967,12 +979,20 @@ class _DeltaChip extends StatelessWidget {
           const SizedBox(width: 4),
           Flexible(
             child: Text(
-              periodTag != null
-                  ? '${isUp ? '+' : '−'}${currencyFormat.format(amount.abs())} '
-                      '(${isUp ? '+' : ''}${percentage.toStringAsFixed(1)}%)'
-                  : '${isUp ? '+' : '−'}${currencyFormat.format(amount.abs())} '
-                      '(${isUp ? '+' : ''}${percentage.toStringAsFixed(2)}%) '
-                      '${AppLocalizations.of(context).pfDeltaVsAgo(label)}',
+              () {
+                final pct = percentage;
+                // Suppress the "(+X%)" when the baseline is onboarding noise;
+                // the dollar amount alone is the honest read.
+                final pctStr = pct == null
+                    ? ''
+                    : ' (${isUp ? '+' : ''}'
+                        '${pct.toStringAsFixed(periodTag != null ? 1 : 2)}%)';
+                final amt =
+                    '${isUp ? '+' : '−'}${currencyFormat.format(amount.abs())}';
+                return periodTag != null
+                    ? '$amt$pctStr'
+                    : '$amt$pctStr ${AppLocalizations.of(context).pfDeltaVsAgo(label)}';
+              }(),
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,

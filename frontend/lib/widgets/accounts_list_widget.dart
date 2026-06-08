@@ -270,6 +270,15 @@ class AccountsListWidget extends StatelessWidget {
           );
     });
 
+    // Native split of this group's total by currency — so e.g. Cash shows how
+    // much is genuinely USD vs MXN, not just the converted headline.
+    final byCurrency = <String, double>{};
+    for (final acc in groupAccounts) {
+      final cur = (acc['currency'] ?? targetCurrency).toString().toUpperCase();
+      byCurrency[cur] = (byCurrency[cur] ?? 0) +
+          ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 24.0),
       decoration: BoxDecoration(
@@ -315,6 +324,28 @@ class AccountsListWidget extends StatelessWidget {
                 textAlign: TextAlign.right,
               );
 
+              // Only worth showing when the group spans >1 currency.
+              final currencyLine = byCurrency.length < 2
+                  ? null
+                  : Padding(
+                      padding: const EdgeInsets.only(top: 6, left: 38),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: byCurrency.entries.map((e) {
+                          return Text(
+                            '${e.key} ${formatCurrencyAmount(e.value, e.key)}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: context.textSubtle,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    );
+
               final subtitleText = subtitle == null
                   ? null
                   : Padding(
@@ -347,6 +378,7 @@ class AccountsListWidget extends StatelessWidget {
                         ],
                       ),
                       ?subtitleText,
+                      ?currencyLine,
                       const SizedBox(height: 6),
                       Align(
                         alignment: Alignment.centerRight,
@@ -372,6 +404,7 @@ class AccountsListWidget extends StatelessWidget {
                       ],
                     ),
                     ?subtitleText,
+                    ?currencyLine,
                   ],
                 ),
               );
