@@ -101,11 +101,28 @@ async fn main() -> Result<()> {
                 // Cron runs without a session — pull user_id straight
                 // from the source account so each snapshot inherits its
                 // owner without any per-user iteration.
+                // balance_usd MUST be FX-converted, not a copy of the native
+                // balance — otherwise an MXN account (e.g. a ~$890k MXN cetes
+                // portfolio) lands in net worth as ~$890k USD, a ~17x
+                // overstatement. Mirror the create-account path: divide a MXN
+                // balance by the latest USD→MXN rate; pass USD through; default
+                // other currencies 1:1 (no rates yet).
                 let _ = sqlx::query(
                     r#"
                     INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd, user_id)
-                    SELECT id, current_balance, $1, currency, current_balance, user_id
-                    FROM accounts
+                    SELECT a.id, a.current_balance, $1, a.currency,
+                           CASE
+                             WHEN a.currency = 'MXN' AND r.rate IS NOT NULL AND r.rate <> 0
+                                  THEN ROUND(a.current_balance / r.rate, 2)
+                             ELSE a.current_balance
+                           END,
+                           a.user_id
+                    FROM accounts a
+                    LEFT JOIN LATERAL (
+                        SELECT rate FROM exchange_rates
+                        WHERE base_currency = 'USD' AND target_currency = 'MXN'
+                        ORDER BY recorded_at DESC LIMIT 1
+                    ) r ON TRUE
                     ON CONFLICT (account_id, as_of_date) DO NOTHING
                     "#
                 )

@@ -628,7 +628,10 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     final sourceCurrency =
         (widget.account['currency'] ?? widget.targetCurrency).toString();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      // Left inset matches the header's 24px so the CLABE card + transaction
+      // list line up with the account name/balance above (was 16 → an 8px
+      // step-in that read as misaligned).
+      padding: const EdgeInsets.fromLTRB(24, 8, 16, 16),
       child: Column(
         children: [
           if ((widget.account['clabe'] ?? '').toString().isNotEmpty) ...[
