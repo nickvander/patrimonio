@@ -889,7 +889,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.receipt_long, size: 64, color: Colors.grey[800]),
+            Icon(Icons.receipt_long, size: 64, color: context.textFaint),
             const SizedBox(height: 16),
             Text(
               l.acctxNoTransactionsTitle,
@@ -898,7 +898,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             const SizedBox(height: 8),
             Text(
               l.acctxNoTransactionsBody,
-              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+              style: TextStyle(color: context.textFaint, fontSize: 12),
               textAlign: TextAlign.center,
             ),
           ],
@@ -1003,13 +1003,19 @@ Future<void> showAccountTransactionsPanel(
             width: isNarrow ? size.width : 560,
             height: isNarrow ? size.height * 0.92 : size.height,
             decoration: BoxDecoration(
-              color: const Color(0xFF15151E),
+              // Theme-aware surface (white in light, charcoal in dark) so the
+              // onSurface-derived text tokens keep their contrast. Was a
+              // hardcoded dark (#15151E) — dark-on-dark in light mode.
+              color: Theme.of(ctx).colorScheme.surface,
               borderRadius: isNarrow
                   ? const BorderRadius.vertical(top: Radius.circular(20))
                   : const BorderRadius.horizontal(left: Radius.circular(20)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.4),
+                  color: Colors.black.withValues(
+                      alpha: Theme.of(ctx).brightness == Brightness.dark
+                          ? 0.4
+                          : 0.18),
                   blurRadius: 24,
                   offset: const Offset(-4, 0),
                 ),
