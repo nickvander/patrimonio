@@ -59,6 +59,8 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   // Equity holdings (Plaid-synced or manually added by ticker + quantity).
   List<dynamic> _holdings = const [];
   bool _refreshingHoldings = false;
+  // Dividend info keyed by symbol (annual rate, yield, est next ex-date, income).
+  Map<String, dynamic> _dividends = const {};
   // Low-balance alert thresholds (account id -> native-currency amount).
   Map<String, double> _accountAlerts = const {};
 
@@ -90,6 +92,18 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     try {
       final h = await _apiService.getAccountHoldings(_accountId);
       if (mounted) setState(() => _holdings = h);
+      if (h.isNotEmpty) _fetchDividends();
+    } catch (_) {/* best-effort */}
+  }
+
+  Future<void> _fetchDividends() async {
+    try {
+      final divs = await _apiService.getHoldingsDividends(_accountId);
+      if (!mounted) return;
+      setState(() => _dividends = {
+            for (final d in divs)
+              if (d is Map && d['symbol'] != null) d['symbol'].toString(): d,
+          });
     } catch (_) {/* best-effort */}
   }
 
@@ -111,6 +125,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     try {
       final h = await _apiService.refreshHoldings(_accountId);
       if (mounted) setState(() => _holdings = h);
+      _fetchDividends();
       _fetchBalanceHistory();
     } catch (_) {
     } finally {
@@ -698,10 +713,63 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                             fontFeatures: const [FontFeature.tabularFigures()])),
                   ],
                 ),
+                if (_totalDividendIncome() > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                            es
+                                ? 'Ingreso anual estimado (dividendos)'
+                                : 'Est. annual income (dividends)',
+                            style: TextStyle(
+                                fontSize: 11.5, color: context.tealAccent)),
+                        Text(fmt.format(_totalDividendIncome()),
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: context.tealAccent,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures()
+                                ])),
+                      ],
+                    ),
+                  ),
               ]),
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  double _totalDividendIncome() {
+    double t = 0;
+    for (final d in _dividends.values) {
+      t += (d is Map ? (d['annual_income'] as num?)?.toDouble() : null) ?? 0;
+    }
+    return t;
+  }
+
+  Widget _dividendLine(String symbol, NumberFormat fmt, bool es) {
+    final d = _dividends[symbol];
+    final income =
+        d == null ? 0.0 : ((d['annual_income'] as num?)?.toDouble() ?? 0.0);
+    if (d == null || income <= 0) return const SizedBox.shrink();
+    final yieldPct = (d['yield_pct'] as num?)?.toDouble();
+    final next = d['est_next_ex_date']?.toString();
+    return Padding(
+      padding: const EdgeInsets.only(top: 1),
+      child: Text(
+        [
+          'Div: ${fmt.format(income)}${es ? '/año' : '/yr'}',
+          if (yieldPct != null) '${yieldPct.toStringAsFixed(2)}%',
+          if (next != null && next.isNotEmpty) '${es ? 'próx.' : 'next'} ~$next',
+        ].join('  ·  '),
+        style: TextStyle(
+            fontSize: 11,
+            color: context.tealAccent,
+            fontFeatures: const [FontFeature.tabularFigures()]),
       ),
     );
   }
@@ -738,6 +806,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                       color: context.textSubtle,
                       fontFeatures: const [FontFeature.tabularFigures()]),
                 ),
+                _dividendLine(symbol, fmt, es),
               ],
             ),
           ),

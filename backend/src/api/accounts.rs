@@ -25,6 +25,7 @@ pub fn router() -> Router<AppState> {
         // Plaid): add shares by ticker, priced live from the Yahoo quote cache.
         .route("/{id}/holdings", get(list_holdings).post(create_holding))
         .route("/{id}/holdings/refresh", post(refresh_holdings))
+        .route("/{id}/holdings/dividends", get(holdings_dividends))
         .route("/{id}/holdings/{hid}", delete(delete_holding))
         .route("/{id}/transactions", get(get_account_transactions))
         // Static segment must precede the dynamic `/{tx_id}` route so
@@ -1551,4 +1552,65 @@ async fn refresh_holdings(
     list_holdings(State(state), Extension(ctx), Path(account_id))
         .await
         .into_response()
+}
+
+/// Per-holding dividend info (trailing annual rate, yield, estimated next
+/// ex-date) + the projected annual income for the held quantity. Sourced from
+/// the same free Yahoo feed as prices.
+async fn holdings_dividends(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path(account_id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    if !account_owned(&state.db, account_id, ctx.user_id).await {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let rows = sqlx::query(
+        "SELECT symbol, quantity, price FROM holdings WHERE account_id = $1 AND user_id = $2",
+    )
+    .bind(account_id)
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let mut out = Vec::new();
+    for row in rows {
+        let symbol: String = row.get("symbol");
+        let qty: Option<rust_decimal::Decimal> = row.get("quantity");
+        let price: Option<rust_decimal::Decimal> = row.get("price");
+        let qf = qty
+            .map(|q| q.to_string().parse::<f64>().unwrap_or(0.0))
+            .unwrap_or(0.0);
+        let pf = price.and_then(|p| p.to_string().parse::<f64>().ok());
+
+        let info = benchmark_dividends(&symbol).await;
+        let annual_rate = info.as_ref().map(|i| i.0).unwrap_or(0.0);
+        let annual_income = ((annual_rate * qf) * 100.0).round() / 100.0;
+        let yield_pct = pf
+            .filter(|p| *p > 0.0)
+            .map(|p| ((annual_rate / p * 100.0) * 100.0).round() / 100.0);
+        out.push(serde_json::json!({
+            "symbol": symbol,
+            "quantity": qf,
+            "annual_rate": annual_rate,
+            "annual_income": annual_income,
+            "yield_pct": yield_pct,
+            "last_ex_date": info.as_ref().and_then(|i| i.1.clone()),
+            "est_next_ex_date": info.as_ref().and_then(|i| i.2.clone()),
+            "per_year": info.as_ref().map(|i| i.3).unwrap_or(0),
+        }));
+    }
+    Json(out).into_response()
+}
+
+/// (annual_rate, last_ex_date, est_next_ex_date, per_year) for a symbol, or
+/// None on a fetch error. Non-payers come back as a zero-rate Some.
+async fn benchmark_dividends(
+    symbol: &str,
+) -> Option<(f64, Option<String>, Option<String>, i32)> {
+    match crate::services::dividends::fetch_dividends(symbol).await {
+        Ok(i) => Some((i.annual_rate, i.last_ex_date, i.est_next_ex_date, i.per_year)),
+        Err(_) => None,
+    }
 }

@@ -1857,6 +1857,16 @@ class ApiService {
     return body is List ? body : const [];
   }
 
+  /// Per-holding dividend info (annual rate, yield, est. next ex-date,
+  /// projected annual income). Best-effort — empty on failure.
+  Future<List<dynamic>> getHoldingsDividends(String accountId) async {
+    final res =
+        await _get(Uri.parse('$_baseUrl/accounts/$accountId/holdings/dividends'));
+    if (res.statusCode != 200) return const [];
+    final body = json.decode(res.body);
+    return body is List ? body : const [];
+  }
+
   Future<Map<String, dynamic>> getWealthProjection({
     required double startBalance,
     required double monthlyContribution,

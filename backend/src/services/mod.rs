@@ -4,6 +4,7 @@
 pub mod encryption;
 pub mod exchange_rate;
 pub mod benchmark;
+pub mod dividends;
 pub mod twr;
 pub mod sync;
 pub mod parser;
