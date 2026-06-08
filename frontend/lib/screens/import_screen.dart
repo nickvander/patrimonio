@@ -1283,7 +1283,6 @@ class _ImportScreenState extends State<ImportScreen> {
   /// the import being complete.
   Future<void> _showContinuityWarnings(
       List<Map<String, dynamic>> warnings) async {
-    final l = AppLocalizations.of(context);
     final es = Localizations.localeOf(context).languageCode == 'es';
     // Statements are MXN bank PDFs; format the raw decimal strings as MX$.
     String money(Object? raw) {
@@ -1291,15 +1290,8 @@ class _ImportScreenState extends State<ImportScreen> {
       return v == null ? (raw ?? '').toString() : formatCurrencyAmount(v, 'MXN');
     }
 
-    String line(Map<String, dynamic> w) => l.impContinuityGap(
-          (w['from_file'] ?? '').toString(),
-          money(w['from_balance']),
-          (w['from_date'] ?? '').toString(),
-          (w['to_file'] ?? '').toString(),
-          money(w['to_balance']),
-          (w['to_date'] ?? '').toString(),
-          money(w['diff']),
-        );
+    String shortFile(Object? raw) =>
+        (raw ?? '').toString().replaceAll(RegExp(r'\.pdf$', caseSensitive: false), '');
 
     await showDialog<void>(
       context: context,
@@ -1309,22 +1301,89 @@ class _ImportScreenState extends State<ImportScreen> {
             Icon(Icons.warning_amber_rounded, color: context.warning),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(es
-                  ? 'Posibles estados de cuenta faltantes'
-                  : 'Possible missing statements'),
+              child: Text(
+                es
+                    ? '${warnings.length} posible(s) hueco(s)'
+                    : '${warnings.length} possible gap(s)',
+                style: const TextStyle(fontSize: 17),
+              ),
             ),
           ],
         ),
-        content: SingleChildScrollView(
+        // Bounded height so a long list scrolls inside the dialog instead of
+        // overflowing the screen (the old unbounded column couldn't scroll).
+        content: SizedBox(
+          width: double.maxFinite,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (final w in warnings) ...[
-                Text('• ${line(w)}',
-                    style: const TextStyle(fontSize: 13, height: 1.35)),
-                const SizedBox(height: 10),
-              ],
+              Text(
+                es
+                    ? 'Entre estos estados de cuenta el saldo no conecta — puede faltar uno.'
+                    : "Between these statements the balance doesn't connect — one may be missing.",
+                style: TextStyle(fontSize: 12.5, color: context.textSubtle),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(ctx).size.height * 0.45,
+                  ),
+                  child: Scrollbar(
+                    thumbVisibility: true,
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: warnings.length,
+                      separatorBuilder: (_, _) =>
+                          Divider(height: 14, color: context.hairline),
+                      itemBuilder: (_, i) {
+                        final w = warnings[i];
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${shortFile(w['from_file'])} → ${shortFile(w['to_file'])}',
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: context.textPrimary),
+                                  ),
+                                  Text(
+                                    '${es ? 'cierra' : 'closes'} ${money(w['from_balance'])} · '
+                                    '${es ? 'abre' : 'opens'} ${money(w['to_balance'])}',
+                                    style: TextStyle(
+                                        fontSize: 11.5,
+                                        color: context.textSubtle,
+                                        fontFeatures: const [
+                                          FontFeature.tabularFigures()
+                                        ]),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${es ? 'Δ' : 'Δ'} ${money(w['diff'])}',
+                              style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: context.warning,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures()
+                                  ]),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
