@@ -406,8 +406,21 @@ class AccountsListWidget extends StatelessWidget {
       }).add(acc);
     }
 
+    final l = AppLocalizations.of(context);
     double bal(dynamic a) =>
         ((a['current_balance'] ?? 0.0) as num).toDouble().abs();
+    // Converted-to-target total of a vault list, for the collapsed summary.
+    double vaultTotal(List<dynamic> vs) => vs.fold<double>(
+          0.0,
+          (s, v) =>
+              s +
+              convertCurrency(
+                ((v['current_balance'] ?? 0.0) as num).toDouble(),
+                from: (v['currency'] ?? targetCurrency).toString(),
+                to: targetCurrency,
+                usdMxnRate: usdMxnRate,
+              ),
+        );
 
     final widgets = <Widget>[];
     for (final inst in order) {
@@ -435,36 +448,38 @@ class AccountsListWidget extends StatelessWidget {
         ..sort((a, b) => bal(b).compareTo(bal(a)));
 
       if (products.isEmpty) {
-        // All siblings (e.g. several identically-named sub-accounts) — render
-        // an institution-scoped "Vaults" header + every one beneath it.
+        // All siblings (no real product) — institution-scoped header + the
+        // vaults collapsed beneath it (tap to expand).
         widgets.add(_buildVaultClusterHeader(context, cluster));
-        widgets.add(_buildVaultColumn(context, cluster));
+        widgets.add(_CollapsibleVaults(
+          label: l.pfVaults,
+          count: cluster.length,
+          totalLabel: currencyFormat.format(vaultTotal(cluster)),
+          rows: cluster.map((v) => _buildVaultRow(context, v)).toList(),
+        ));
         continue;
       }
 
       // Nest the vaults under the SAVINGS product if there is one (vaults are
-      // savings buckets); otherwise under the last/smallest product.
+      // savings buckets); otherwise under the last/smallest product. Collapsed
+      // by default — one "Vaults · N · $total" line that expands on tap —
+      // so a bank with six buckets doesn't eat six rows.
       final savingsIdx = products.indexWhere((a) =>
           (a['account_type'] ?? '').toString().toLowerCase().contains('savings'));
       final attachIdx = savingsIdx >= 0 ? savingsIdx : products.length - 1;
       for (var i = 0; i < products.length; i++) {
         widgets.add(_buildAccountRow(context, products[i]));
         if (i == attachIdx && vaults.isNotEmpty) {
-          widgets.add(_buildVaultColumn(context, vaults));
+          widgets.add(_CollapsibleVaults(
+            label: l.pfVaults,
+            count: vaults.length,
+            totalLabel: currencyFormat.format(vaultTotal(vaults)),
+            rows: vaults.map((v) => _buildVaultRow(context, v)).toList(),
+          ));
         }
       }
     }
     return widgets;
-  }
-
-  /// Indented column of vault sub-rows shared by both grouping paths.
-  Widget _buildVaultColumn(BuildContext context, List<dynamic> vaults) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(40, 0, 12, 8),
-      child: Column(
-        children: vaults.map((v) => _buildVaultRow(context, v)).toList(),
-      ),
-    );
   }
 
   /// Header for a cluster of sibling vaults that has no real parent account.
@@ -619,7 +634,7 @@ class AccountsListWidget extends StatelessWidget {
       child: Text(
         name,
         style: TextStyle(
-          fontSize: 15,
+          fontSize: 14,
           fontWeight: FontWeight.w600,
           color: context.textPrimary,
         ),
@@ -649,7 +664,7 @@ class AccountsListWidget extends StatelessWidget {
     Widget balanceText = Text(
       nativeText,
       style: TextStyle(
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: FontWeight.w700,
         color: context.textPrimary,
         fontFeatures: [const FontFeature.tabularFigures()],
@@ -798,7 +813,7 @@ class AccountsListWidget extends StatelessWidget {
           final isNarrow = constraints.maxWidth < 420;
           if (isNarrow) {
             return Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+              padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -824,7 +839,7 @@ class AccountsListWidget extends StatelessWidget {
           }
 
           return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+            padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -1001,6 +1016,83 @@ class AccountsListWidget extends StatelessWidget {
               );
             },
             child: Text(l.actionSave),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Collapsible group of "vault" sub-accounts (SoFi buckets, Nu cajitas). Shows
+/// one summary line — "Vaults · N · $total" — that expands to the individual
+/// rows on tap, so a bank with several buckets doesn't consume several rows.
+class _CollapsibleVaults extends StatefulWidget {
+  final String label;
+  final int count;
+  final String totalLabel;
+  final List<Widget> rows;
+
+  const _CollapsibleVaults({
+    required this.label,
+    required this.count,
+    required this.totalLabel,
+    required this.rows,
+  });
+
+  @override
+  State<_CollapsibleVaults> createState() => _CollapsibleVaultsState();
+}
+
+class _CollapsibleVaultsState extends State<_CollapsibleVaults> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 40, right: 12, bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _open = !_open),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  Icon(_open ? Icons.expand_more : Icons.chevron_right,
+                      size: 18, color: context.textSubtle),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${widget.label} · ${widget.count}',
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: context.textSubtle),
+                  ),
+                  const Spacer(),
+                  Text(
+                    widget.totalLabel,
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: context.textSubtle,
+                        fontFeatures: const [FontFeature.tabularFigures()]),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 160),
+            sizeCurve: Curves.easeOut,
+            crossFadeState:
+                _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            firstChild: const SizedBox(width: double.infinity),
+            secondChild: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: widget.rows,
+            ),
           ),
         ],
       ),

@@ -267,21 +267,31 @@ class _NetWorthCardState extends State<NetWorthCard> {
             spacing: 8,
             runSpacing: 6,
             children: sourceBreakdown.map((item) {
-              final currency = (item['currency'] ?? '').toString();
+              final currency = (item['currency'] ?? '').toString().toUpperCase();
               final net = ((item['net'] ?? 0.0) as num).toDouble();
-              // Each chip is one currency's net held in native units (e.g.
-              // "$12,400.00" of USD-denominated holdings, "MX$80,000.00"
-              // of MXN). The symbol already names the currency, so no
-              // trailing label is needed.
-              return Text(
-                formatCurrencyAmount(net, currency),
-                style: TextStyle(
-                  color: context.textSubtle,
-                  fontSize: 11,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+              // One chip per currency: the ISO code (USD / MXN) + the net held
+              // natively in that currency. The code label makes the split
+              // explicit — how much of the total is genuinely USD vs MXN —
+              // rather than leaning on the "$" / "MX$" glyph alone.
+              return Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: context.tint(0.05),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: context.hairline),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                child: Text(
+                  '$currency  ${formatCurrencyAmount(net, currency)}',
+                  style: TextStyle(
+                    color: context.textSubtle,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               );
             }).toList(),
           ),
