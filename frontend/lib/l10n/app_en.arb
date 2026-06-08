@@ -1033,6 +1033,18 @@
   "@impSummaryFiles": {
     "placeholders": { "count": { "type": "int" } }
   },
+  "impContinuityGap": "Possible missing statement: ‘{fromFile}’ ends at {fromBalance} ({fromDate}), but ‘{toFile}’ opens at {toBalance} ({toDate}) — an unexplained difference of {diff}. A statement covering the period between them may be missing.",
+  "@impContinuityGap": {
+    "placeholders": {
+      "fromFile": { "type": "Object" },
+      "fromBalance": { "type": "Object" },
+      "fromDate": { "type": "Object" },
+      "toFile": { "type": "Object" },
+      "toBalance": { "type": "Object" },
+      "toDate": { "type": "Object" },
+      "diff": { "type": "Object" }
+    }
+  },
   "dlgAccountCurrency": "Currency",
   "dlgAccountInitialBalance": "Initial balance",
   "dlgAccountBalanceHelper": "For credit cards / loans, enter the amount owed as a positive number.",

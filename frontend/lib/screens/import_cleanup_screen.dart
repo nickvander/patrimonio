@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../utils/theme_colors.dart';
+import '../utils/currency.dart';
 import '../l10n/app_localizations.dart';
 
 /// Manage / undo imports. Two paths:
@@ -190,7 +191,7 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
                           : 'Flags likely-missing statements — a balance jump between sequential months.',
                       style: TextStyle(fontSize: 12, color: context.textSubtle)),
                   const SizedBox(height: 12),
-                  ..._continuity.map((c) => _coverageCard(c as Map, es)),
+                  ..._continuity.map((c) => _coverageCard(c as Map, es, l)),
                 ],
                 const SizedBox(height: 32),
                 Text(l.impBulkDelete,
@@ -206,13 +207,34 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
     );
   }
 
-  Widget _coverageCard(Map c, bool es) {
+  Widget _coverageCard(Map c, bool es, AppLocalizations l) {
     final name = (c['account_name'] ?? '').toString();
     final inst = c['institution_name']?.toString();
     final title = (inst != null && inst.isNotEmpty) ? '$inst · $name' : name;
     final count = (c['statement_count'] as num?)?.toInt() ?? 0;
-    final warnings =
-        (c['warnings'] as List?)?.map((e) => e.toString()).toList() ?? const [];
+    String money(Object? raw) {
+      final v = double.tryParse((raw ?? '').toString());
+      return v == null
+          ? (raw ?? '').toString()
+          : formatCurrencyAmount(v, 'MXN');
+    }
+
+    // Structured continuity gaps, localized client-side (the backend has no
+    // locale). Tolerate any legacy string entries by passing them through.
+    final warnings = (c['warnings'] as List?)
+            ?.map((e) => e is Map
+                ? l.impContinuityGap(
+                    (e['from_file'] ?? '').toString(),
+                    money(e['from_balance']),
+                    (e['from_date'] ?? '').toString(),
+                    (e['to_file'] ?? '').toString(),
+                    money(e['to_balance']),
+                    (e['to_date'] ?? '').toString(),
+                    money(e['diff']),
+                  )
+                : e.toString())
+            .toList() ??
+        const [];
     final ok = warnings.isEmpty;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),

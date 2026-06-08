@@ -744,10 +744,16 @@ class _ImportScreenState extends State<ImportScreen> {
     }
     if (inst.isNotEmpty) {
       final key = inst.split(RegExp(r'[ —-]')).first; // "nu" / "cetesdirecto"
+      // Match the bank key as a WHOLE WORD, not a bare substring — otherwise
+      // "nu" matches the generic "Manual" institution ("ma-NU-al") and a Nu
+      // import wrongly auto-selects, say, a Banamex account filed under Manual.
+      final keyRe = key.length >= 2
+          ? RegExp('\\b${RegExp.escape(key)}\\b', caseSensitive: false)
+          : null;
       for (final a in accounts) {
         final hay =
             '${a['institution_name'] ?? ''} ${a['name'] ?? ''}'.toLowerCase();
-        if (key.length >= 2 && hay.contains(key)) {
+        if (keyRe != null && keyRe.hasMatch(hay)) {
           _selectedAccountId = a['id']?.toString();
           _accountCue = _AccountCue.matched;
           return;
@@ -1221,7 +1227,9 @@ class _ImportScreenState extends State<ImportScreen> {
 
     try {
       final messages = <String>[];
-      final warnings = <String>[];
+      // Continuity gaps arrive as structured maps (from_file, balances, dates,
+      // diff) so they can be localized client-side — the backend has no locale.
+      final warnings = <Map<String, dynamic>>[];
       // One confirm call per destination account.
       for (final entry in byAccount.entries) {
         final response =
@@ -1230,7 +1238,9 @@ class _ImportScreenState extends State<ImportScreen> {
           messages.add(response['message'].toString());
         }
         final w = response['warnings'];
-        if (w is List) warnings.addAll(w.map((e) => e.toString()));
+        if (w is List) {
+          warnings.addAll(w.whereType<Map>().map((e) => e.cast<String, dynamic>()));
+        }
       }
 
       if (!mounted) return;
@@ -1267,8 +1277,26 @@ class _ImportScreenState extends State<ImportScreen> {
   /// Show the backend's statement-continuity warnings (likely missing
   /// months) in a dialog so the user can go fetch the gap before relying on
   /// the import being complete.
-  Future<void> _showContinuityWarnings(List<String> warnings) async {
+  Future<void> _showContinuityWarnings(
+      List<Map<String, dynamic>> warnings) async {
+    final l = AppLocalizations.of(context);
     final es = Localizations.localeOf(context).languageCode == 'es';
+    // Statements are MXN bank PDFs; format the raw decimal strings as MX$.
+    String money(Object? raw) {
+      final v = double.tryParse((raw ?? '').toString());
+      return v == null ? (raw ?? '').toString() : formatCurrencyAmount(v, 'MXN');
+    }
+
+    String line(Map<String, dynamic> w) => l.impContinuityGap(
+          (w['from_file'] ?? '').toString(),
+          money(w['from_balance']),
+          (w['from_date'] ?? '').toString(),
+          (w['to_file'] ?? '').toString(),
+          money(w['to_balance']),
+          (w['to_date'] ?? '').toString(),
+          money(w['diff']),
+        );
+
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1289,7 +1317,8 @@ class _ImportScreenState extends State<ImportScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               for (final w in warnings) ...[
-                Text('• $w', style: const TextStyle(fontSize: 13, height: 1.35)),
+                Text('• ${line(w)}',
+                    style: const TextStyle(fontSize: 13, height: 1.35)),
                 const SizedBox(height: 10),
               ],
             ],

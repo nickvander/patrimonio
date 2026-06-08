@@ -3207,6 +3207,19 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String impContinuityGap(
+    Object fromFile,
+    Object fromBalance,
+    Object fromDate,
+    Object toFile,
+    Object toBalance,
+    Object toDate,
+    Object diff,
+  ) {
+    return 'Possible missing statement: ‘$fromFile’ ends at $fromBalance ($fromDate), but ‘$toFile’ opens at $toBalance ($toDate) — an unexplained difference of $diff. A statement covering the period between them may be missing.';
+  }
+
+  @override
   String get dlgAccountCurrency => 'Currency';
 
   @override

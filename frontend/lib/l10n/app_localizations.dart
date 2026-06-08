@@ -5342,6 +5342,20 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{1 file} other{{count} files}}'**
   String impSummaryFiles(int count);
 
+  /// No description provided for @impContinuityGap.
+  ///
+  /// In en, this message translates to:
+  /// **'Possible missing statement: ‘{fromFile}’ ends at {fromBalance} ({fromDate}), but ‘{toFile}’ opens at {toBalance} ({toDate}) — an unexplained difference of {diff}. A statement covering the period between them may be missing.'**
+  String impContinuityGap(
+    Object fromFile,
+    Object fromBalance,
+    Object fromDate,
+    Object toFile,
+    Object toBalance,
+    Object toDate,
+    Object diff,
+  );
+
   /// No description provided for @dlgAccountCurrency.
   ///
   /// In en, this message translates to:

@@ -74,10 +74,28 @@ fn summaries(rows: &[Row]) -> Vec<Summary> {
     out
 }
 
+/// A detected balance discontinuity between two sequential statements. The
+/// fields are structured (not a pre-formatted sentence) so the UI can render
+/// the message in the user's language — the backend has no locale.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ContinuityGap {
+    pub from_file: String,
+    pub to_file: String,
+    /// Closing balance of `from_file` and opening balance of `to_file`, as
+    /// plain decimal strings (e.g. "97665.80"); the UI formats them.
+    pub from_balance: String,
+    pub to_balance: String,
+    /// Period boundary dates (ISO `YYYY-MM-DD`).
+    pub from_date: String,
+    pub to_date: String,
+    /// Unexplained difference (to_balance - from_balance).
+    pub diff: String,
+}
+
 /// Detect balance discontinuities between sequential statements. Returns one
-/// human-readable warning per gap; empty when the statements chain cleanly
-/// (or there's only one).
-pub fn continuity_warnings(rows: &[Row]) -> Vec<String> {
+/// gap per discontinuity; empty when the statements chain cleanly (or there's
+/// only one).
+pub fn continuity_warnings(rows: &[Row]) -> Vec<ContinuityGap> {
     let mut summaries = summaries(rows);
     // Order statements by their period so we compare month N against N+1
     // regardless of upload order.
@@ -95,12 +113,15 @@ pub fn continuity_warnings(rows: &[Row]) -> Vec<String> {
         }
         let diff = next.opening - cur.closing;
         if diff.abs() > tol {
-            warnings.push(format!(
-                "Possible missing statement: '{}' ends at a balance of {} (on {}), \
-                 but '{}' opens at {} (on {}) — an unexplained difference of {}. \
-                 A statement covering the period between them may be missing.",
-                cur.file, cur.closing, cur.end, next.file, next.opening, next.start, diff
-            ));
+            warnings.push(ContinuityGap {
+                from_file: cur.file.clone(),
+                to_file: next.file.clone(),
+                from_balance: cur.closing.round_dp(2).to_string(),
+                to_balance: next.opening.round_dp(2).to_string(),
+                from_date: cur.end.to_string(),
+                to_date: next.start.to_string(),
+                diff: diff.round_dp(2).to_string(),
+            });
         }
     }
     warnings
@@ -138,8 +159,9 @@ mod tests {
         ];
         let w = continuity_warnings(&rows);
         assert_eq!(w.len(), 1, "got {:#?}", w);
-        assert!(w[0].contains("feb.pdf") && w[0].contains("apr.pdf"));
-        assert!(w[0].contains("300"), "reports the gap size");
+        assert_eq!(w[0].from_file, "feb.pdf");
+        assert_eq!(w[0].to_file, "apr.pdf");
+        assert!(w[0].diff.contains("300"), "reports the gap size");
     }
 
     #[test]

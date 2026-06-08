@@ -3237,6 +3237,19 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String impContinuityGap(
+    Object fromFile,
+    Object fromBalance,
+    Object fromDate,
+    Object toFile,
+    Object toBalance,
+    Object toDate,
+    Object diff,
+  ) {
+    return 'Posible estado de cuenta faltante: ‘$fromFile’ cierra en $fromBalance ($fromDate), pero ‘$toFile’ abre en $toBalance ($toDate) — una diferencia sin explicar de $diff. Puede faltar un estado de cuenta que cubra el periodo entre ellos.';
+  }
+
+  @override
   String get dlgAccountCurrency => 'Moneda';
 
   @override

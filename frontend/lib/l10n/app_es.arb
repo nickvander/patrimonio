@@ -882,6 +882,18 @@
   "@impSummaryFiles": {
     "placeholders": { "count": { "type": "int" } }
   },
+  "impContinuityGap": "Posible estado de cuenta faltante: ‘{fromFile}’ cierra en {fromBalance} ({fromDate}), pero ‘{toFile}’ abre en {toBalance} ({toDate}) — una diferencia sin explicar de {diff}. Puede faltar un estado de cuenta que cubra el periodo entre ellos.",
+  "@impContinuityGap": {
+    "placeholders": {
+      "fromFile": { "type": "Object" },
+      "fromBalance": { "type": "Object" },
+      "fromDate": { "type": "Object" },
+      "toFile": { "type": "Object" },
+      "toBalance": { "type": "Object" },
+      "toDate": { "type": "Object" },
+      "diff": { "type": "Object" }
+    }
+  },
   "dlgAccountCurrency": "Moneda",
   "dlgAccountInitialBalance": "Saldo inicial",
   "dlgAccountBalanceHelper": "Para tarjetas de crédito o préstamos, ingresa el monto adeudado como número positivo.",
