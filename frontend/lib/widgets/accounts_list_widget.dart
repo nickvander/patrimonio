@@ -392,68 +392,66 @@ class AccountsListWidget extends StatelessWidget {
   /// under SoFi Savings without losing them.
   List<Widget> _renderAccountsWithVaults(
       BuildContext context, List<dynamic> groupAccounts) {
+    // Cluster by INSTITUTION (within the already type-filtered category) so all
+    // of a bank's accounts stay together — e.g. SoFi Checking + Savings + its
+    // vaults cluster as one "SoFi" block rather than scattering by balance and
+    // leaving the vaults stranded next to an unrelated bank (Nu).
     final clusters = <String, List<dynamic>>{};
     final order = <String>[];
     for (final acc in groupAccounts) {
       final inst = (acc['institution_name'] ?? '').toString();
-      final type = (acc['account_type'] ?? '').toString().toLowerCase();
-      final key = '$inst|$type';
-      clusters.putIfAbsent(key, () {
-        order.add(key);
+      clusters.putIfAbsent(inst, () {
+        order.add(inst);
         return <dynamic>[];
       }).add(acc);
     }
 
+    double bal(dynamic a) =>
+        ((a['current_balance'] ?? 0.0) as num).toDouble().abs();
+
     final widgets = <Widget>[];
-    for (final key in order) {
-      final cluster = clusters[key]!;
+    for (final inst in order) {
+      final cluster = clusters[inst]!;
       if (cluster.length == 1) {
         widgets.add(_buildAccountRow(context, cluster.first));
         continue;
       }
-      // Decide whether this cluster has a genuine "parent" account or is
-      // just a set of sibling sub-accounts. A real parent is named after the
-      // bank product — its name contains the account_type token (e.g.
-      // "Savings" in "SoFi Savings") or the institution name. The vaults
-      // (SoFi "Emergency", "Car", "Rent", "Cards", …) are user nicknames that
-      // match neither.
-      final typeToken =
-          (cluster.first['account_type'] ?? '').toString().toLowerCase();
-      final instToken =
-          (cluster.first['institution_name'] ?? '').toString().toLowerCase();
-      int rank(dynamic acc) {
+      final instToken = inst.toLowerCase();
+      // A "vault" is a user-nicknamed sub-account (SoFi "Car", "Rent", …) whose
+      // name matches neither its account-type token nor the bank name. A real
+      // product (Checking, Savings, a 401k) does.
+      bool isVault(dynamic acc) {
         final name = (acc['name'] ?? '').toString().toLowerCase();
-        if (typeToken.isNotEmpty && name.contains(typeToken)) return 0;
-        if (instToken.isNotEmpty && name.contains(instToken)) return 1;
-        return 2;
+        final typeTok =
+            (acc['account_type'] ?? '').toString().toLowerCase().split(' ').first;
+        if (typeTok.isNotEmpty && name.contains(typeTok)) return false;
+        if (instToken.isNotEmpty && name.contains(instToken)) return false;
+        return true;
       }
 
-      final hasRealParent = cluster.any((a) => rank(a) < 2);
+      final products = cluster.where((a) => !isVault(a)).toList()
+        ..sort((a, b) => bal(b).compareTo(bal(a)));
+      final vaults = cluster.where(isVault).toList()
+        ..sort((a, b) => bal(b).compareTo(bal(a)));
 
-      if (hasRealParent) {
-        // Parent + nested vaults (e.g. "SoFi Savings" with Car/Rent/… under).
-        cluster.sort((a, b) {
-          final ra = rank(a);
-          final rb = rank(b);
-          if (ra != rb) return ra.compareTo(rb);
-          final ba = ((a['current_balance'] ?? 0.0) as num).toDouble().abs();
-          final bb = ((b['current_balance'] ?? 0.0) as num).toDouble().abs();
-          return bb.compareTo(ba);
-        });
-        widgets.add(_buildAccountRow(context, cluster.first));
-        widgets.add(_buildVaultColumn(context, cluster.skip(1).toList()));
-      } else {
-        // No real parent — these are all sibling vaults (e.g. SoFi's six
-        // "cash management" vaults). Don't promote the biggest-balance one to
-        // a parent (that's what mislabeled the whole group "Cards"). Render an
-        // institution-scoped header + every vault beneath it.
-        cluster.sort((a, b) {
-          final ba = ((a['current_balance'] ?? 0.0) as num).toDouble().abs();
-          final bb = ((b['current_balance'] ?? 0.0) as num).toDouble().abs();
-          return bb.compareTo(ba);
-        });
+      if (products.isEmpty) {
+        // All siblings (e.g. several identically-named sub-accounts) — render
+        // an institution-scoped "Vaults" header + every one beneath it.
         widgets.add(_buildVaultClusterHeader(context, cluster));
         widgets.add(_buildVaultColumn(context, cluster));
+        continue;
+      }
+
+      // Nest the vaults under the SAVINGS product if there is one (vaults are
+      // savings buckets); otherwise under the last/smallest product.
+      final savingsIdx = products.indexWhere((a) =>
+          (a['account_type'] ?? '').toString().toLowerCase().contains('savings'));
+      final attachIdx = savingsIdx >= 0 ? savingsIdx : products.length - 1;
+      for (var i = 0; i < products.length; i++) {
+        widgets.add(_buildAccountRow(context, products[i]));
+        if (i == attachIdx && vaults.isNotEmpty) {
+          widgets.add(_buildVaultColumn(context, vaults));
+        }
       }
     }
     return widgets;
