@@ -148,9 +148,61 @@ pub async fn sync_institutions(
 
                 if let Some(accounts) = res["accounts"].as_array() {
                     for acc in accounts {
-                        let name = acc["name"].as_str().unwrap_or("Unknown");
                         let external_id = acc["account_id"].as_str().unwrap_or("");
                         let subtype = acc["subtype"].as_str().unwrap_or("checking");
+                        let mask = acc["mask"].as_str().unwrap_or("");
+                        // Friendly display name. Prefer Plaid's official name;
+                        // otherwise rewrite a generic "<broad type> Account
+                        // <mask>" (some banks — e.g. Capital One — return
+                        // "depository Account 0916" from the broad `type`, not
+                        // the subtype) or an empty/"Unknown" name into
+                        // "<Subtype> ••<mask>" ("Checking ••0916").
+                        let pretty_subtype = subtype
+                            .split(' ')
+                            .map(|w| {
+                                let mut ch = w.chars();
+                                match ch.next() {
+                                    Some(f) => {
+                                        f.to_uppercase().collect::<String>() + ch.as_str()
+                                    }
+                                    None => String::new(),
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        let official = acc["official_name"]
+                            .as_str()
+                            .map(str::trim)
+                            .filter(|s| !s.is_empty());
+                        let plaid_name = acc["name"]
+                            .as_str()
+                            .map(str::trim)
+                            .filter(|s| !s.is_empty());
+                        let is_generic = plaid_name.is_none_or(|n| {
+                            let l = n.to_lowercase();
+                            l == "unknown"
+                                || [
+                                    "depository",
+                                    "credit",
+                                    "investment",
+                                    "loan",
+                                    "brokerage",
+                                    "other",
+                                ]
+                                .iter()
+                                .any(|b| l.starts_with(&format!("{b} account")))
+                        });
+                        let name: String = if let Some(o) = official {
+                            o.to_string()
+                        } else if is_generic {
+                            if mask.is_empty() {
+                                format!("{pretty_subtype} account")
+                            } else {
+                                format!("{pretty_subtype} \u{2022}\u{2022}{mask}")
+                            }
+                        } else {
+                            plaid_name.unwrap().to_string()
+                        };
                         let current_bal = acc["balances"]["current"].as_f64();
                         let available_bal = acc["balances"]["available"].as_f64();
 
@@ -178,7 +230,7 @@ pub async fn sync_institutions(
                                 VALUES ($1, $2, $3, $4, 'USD', $5, $6, $7)
                                 "#
                             )
-                            .bind(inst_id).bind(external_id).bind(name).bind(subtype).bind(current_bal).bind(available_bal).bind(inst_user_id)
+                            .bind(inst_id).bind(external_id).bind(&name).bind(subtype).bind(current_bal).bind(available_bal).bind(inst_user_id)
                             .execute(db).await?;
                         }
 
