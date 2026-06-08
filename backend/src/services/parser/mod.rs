@@ -775,9 +775,17 @@ pub fn parse_account_info(
 
 fn nu_account_info(text: &str) -> AccountInfo {
     let summary = nu_mexico_pdf::parse_account_summary(text);
+    // The Nu account balance is the TOTAL the statement reports ("Saldo al
+    // generar este estado de cuenta" = available + cajitas), NOT just the
+    // available "En su Cuenta" — which is often $0 because the money lives in
+    // cajitas (Ahorro). Preferring available made a real ~$50k account show 0.
+    // Fall back to available + cajitas, then available alone.
     let bal = summary
-        .en_su_cuenta
-        .or(summary.saldo_total)
+        .saldo_total
+        .or_else(|| match (summary.en_su_cuenta, summary.total_cajitas) {
+            (Some(c), Some(j)) => Some(c + j),
+            (other, _) => other,
+        })
         .and_then(|d| d.to_string().parse::<f64>().ok());
     // Holder is the line just above "Cuenta Nu:".
     let holder = {
