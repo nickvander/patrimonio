@@ -149,6 +149,22 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
         });
     }
 
+    // Stamp the statement's portfolio "Total final" onto the latest-dated
+    // transaction's balance_after. That's the account's real value at the
+    // period end — the snapshot back-fill (import confirm) turns it into a
+    // dated net-worth point, and `closing` sets the current balance. Only one
+    // row per statement carries it, so the continuity check (which needs >=2
+    // balance rows) skips these — no false "missing statement" warnings.
+    if let Some(total) = parse_portfolio_total(text) {
+        if let Some((idx, _)) = txs
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| a.date.cmp(&b.date))
+        {
+            txs[idx].balance_after = Some(total);
+        }
+    }
+
     info!("cetesdirecto parser extracted {} transactions", txs.len());
     Ok(txs)
 }

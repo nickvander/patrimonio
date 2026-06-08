@@ -286,6 +286,30 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
         }
     }
 
+    // Stamp the statement's headline total ("Saldo al generar este estado de
+    // cuenta" = available + cajitas, else available + cajitas) onto the latest
+    // MAIN-account (non-cajita) transaction's balance_after. The import's
+    // snapshot back-fill turns it into a dated net-worth point and `closing`
+    // sets the current balance. Only one row carries it, so the continuity
+    // check (needs >=2 balance rows) skips it.
+    let summary = parse_account_summary(text);
+    let total = summary.saldo_total.or_else(|| {
+        match (summary.en_su_cuenta, summary.total_cajitas) {
+            (Some(c), Some(j)) => Some(c + j),
+            (other, _) => other,
+        }
+    });
+    if let Some(total) = total {
+        if let Some((idx, _)) = txs
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.account_label.is_none())
+            .max_by(|(_, a), (_, b)| a.date.cmp(&b.date))
+        {
+            txs[idx].balance_after = Some(total);
+        }
+    }
+
     info!("Nu México PDF parser extracted {} transactions", txs.len());
     Ok(txs)
 }

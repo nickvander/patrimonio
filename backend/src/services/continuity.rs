@@ -57,6 +57,15 @@ fn summaries(rows: &[Row]) -> Vec<Summary> {
         if with_bal.is_empty() {
             continue;
         }
+        // A lone balance row among many is a period-total MARKER (cetes "Total
+        // final", Nu "Saldo al generar") stamped for the snapshot back-fill,
+        // not a running ledger — chaining those across statements would flag a
+        // portfolio's normal growth as a "missing statement". Skip those, but
+        // keep genuine sparse statements (a real month with 1 transaction has
+        // balance == row count).
+        if with_bal.len() < 2 && with_bal.len() < group.len() {
+            continue;
+        }
         let first = with_bal.first().unwrap();
         let last = with_bal.last().unwrap();
         let opening = first.balance_after.unwrap() - first.amount;
