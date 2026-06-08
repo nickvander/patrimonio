@@ -654,51 +654,143 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Preferences.setCurrency(currency);
   }
 
-  /// Five-tile compact stat strip pinned to the top of the Overview tab.
-  /// All values are derived from the already-loaded /dashboard/overview
-  /// Native-currency split of net worth ("USD $X · MXN MX$Y"), shown right
-  /// under the (converted) total so it's clear how much is genuinely held in
-  /// each currency. Hidden when everything is one currency.
-  Widget _buildCurrencyBreakdown() {
-    final breakdown = (_overview?['currency_breakdown'] as List?) ?? const [];
-    if (breakdown.length < 2) return const SizedBox.shrink();
+  /// The Overview hero: the net-worth total in the reporting currency with
+  /// its native-currency composition bound directly beneath it.
+  ///
+  /// Previously the total lived as the first tile in the stat row (competing
+  /// with Assets/Liabilities/…) and the native split was an orphan strip
+  /// floating below all five tiles — so the relationship "this $X is made of
+  /// these native pieces" was easy to miss. Pulling the total into its own
+  /// hero block and pinning the breakdown under it makes that explicit. The
+  /// pills are self-labelling ("USD 9,591.00") and a foreign currency also
+  /// shows its reporting-currency worth ("≈ $3,238"), so the pieces visibly
+  /// add up to the headline.
+  Widget _buildNetWorthHero({
+    required NumberFormat currencyFormat,
+    required double conversionFactor,
+    required double usdMxnRate,
+  }) {
+    final l = AppLocalizations.of(context);
     final es = Localizations.localeOf(context).languageCode == 'es';
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
+    final accent = context.positive;
+    final netWorth =
+        ((_overview?['net_worth'] as num?)?.toDouble() ?? 0.0) *
+            conversionFactor;
+    final targetUpper = _targetCurrency.toUpperCase();
+
+    // Native composition, ordered by converted value (dominant currency
+    // first). Each foreign currency carries its reporting-currency worth.
+    final entries = ((_overview?['currency_breakdown'] as List?) ?? const [])
+        .map((item) => (
+              cur: (item['currency'] ?? '').toString().toUpperCase(),
+              net: ((item['net'] ?? 0.0) as num).toDouble(),
+            ))
+        .where((e) => e.cur.isNotEmpty)
+        .toList()
+      ..sort((a, b) {
+        final ca = convertCurrency(a.net,
+            from: a.cur, to: _targetCurrency, usdMxnRate: usdMxnRate);
+        final cb = convertCurrency(b.net,
+            from: b.cur, to: _targetCurrency, usdMxnRate: usdMxnRate);
+        return cb.compareTo(ca);
+      });
+
+    Widget? composition;
+    if (entries.length >= 2) {
+      composition = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 14),
+          Text(
+            (es ? 'En moneda nativa' : 'Held natively').toUpperCase(),
+            style: TextStyle(
+              fontSize: 9,
+              letterSpacing: 0.8,
+              fontWeight: FontWeight.w700,
+              color: context.textFaint,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: entries.map((e) {
+              final isTarget = e.cur == targetUpper;
+              final converted = convertCurrency(e.net,
+                  from: e.cur, to: _targetCurrency, usdMxnRate: usdMxnRate);
+              return Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: context.tileSurface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: context.hairline),
+                ),
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text: formatCurrencyWithCode(e.net, e.cur),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: context.textPrimary,
+                        ),
+                      ),
+                      if (!isTarget)
+                        TextSpan(
+                          text: '  ≈ ${currencyFormat.format(converted)}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w400,
+                            color: context.textFaint,
+                          ),
+                        ),
+                    ],
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accent.withValues(alpha: 0.32), width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            es ? 'En moneda nativa:' : 'Held natively:',
+            l.statNetWorth.toUpperCase(),
             style: TextStyle(
-                fontSize: 12,
-                color: context.textSubtle,
-                fontWeight: FontWeight.w600),
+              fontSize: 10,
+              letterSpacing: 1.2,
+              fontWeight: FontWeight.w700,
+              color: accent,
+            ),
           ),
-          ...breakdown.map((item) {
-            final cur = (item['currency'] ?? '').toString().toUpperCase();
-            final net = ((item['net'] ?? 0.0) as num).toDouble();
-            return Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: context.tileSurface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: context.hairline),
-              ),
-              child: Text(
-                formatCurrencyAmount(net, cur),
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: context.textPrimary,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            );
-          }),
+          const SizedBox(height: 6),
+          Text(
+            currencyFormat.format(netWorth),
+            style: TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.w800,
+              color: context.textPrimary,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          ?composition,
         ],
       ),
     );
@@ -773,20 +865,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final assets = netWorth + liabilities;
 
+    // Net worth is no longer a tile here — it's the dedicated hero block
+    // (_buildNetWorthHero) directly above this row, with the native-currency
+    // composition bound to it. These tiles are the secondary stats that
+    // decompose that total.
     final tiles = <_StatTile>[
-      _StatTile(
-        label: l.statNetWorth,
-        value: currencyFormat.format(netWorth),
-        accent: context.positive,
-        emphasized: true,
-      ),
       _StatTile(
         label: l.statAssets,
         value: currencyFormat.format(assets),
-        // Neutral grey — sits between the green hero (Net worth) and
-        // the colour-coded secondary stats so the row reads as a
-        // coherent set with a meaningful category cue rather than
-        // five competing colours.
+        // Neutral grey — a calm lead-in to the colour-coded secondary
+        // stats so the row reads as a coherent set with a meaningful
+        // category cue rather than competing colours.
         accent: context.neutralAccent,
       ),
       _StatTile(
@@ -2509,8 +2598,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onJumpToManagement: () => _goToNav(NavId.settings),
               ),
               if (_sinceLastLogin != null) const SizedBox(height: 12),
+              _buildNetWorthHero(
+                currencyFormat: currencyFormat,
+                conversionFactor: conversionFactor,
+                usdMxnRate: fxRate,
+              ),
+              const SizedBox(height: 12),
               stats,
-              _buildCurrencyBreakdown(),
               const SizedBox(height: 24),
               // Net-worth-focused widgets stay on Overview. Cash-flow
               // widgets (monthly card, trends, budgets) moved to the
