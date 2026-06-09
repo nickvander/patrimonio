@@ -42,17 +42,18 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
       );
     }
 
-    final totalBalance = creditData.fold<double>(
-      0.0,
-      (sum, item) => sum + ((item['balance'] ?? 0.0) as num).toDouble(),
-    );
-    final totalLimit = creditData.fold<double>(
-      0.0,
-      (sum, item) => sum + ((item['credit_limit'] ?? 0.0) as num).toDouble(),
-    );
-    final totalUtilization = totalLimit > 0
-        ? (totalBalance / totalLimit) * 100
-        : 0.0;
+    double limitOf(dynamic i) => ((i['credit_limit'] ?? 0.0) as num).toDouble();
+    double balanceOf(dynamic i) => ((i['balance'] ?? 0.0) as num).toDouble();
+    // Utilization is only meaningful for cards whose issuer reports a limit
+    // (Plaid's balances.limit is null for some). Aggregate over those only, so
+    // a limitless card doesn't drag the headline % to a misleading value.
+    final withLimit = creditData.where((i) => limitOf(i) > 0).toList();
+    final totalBalance =
+        withLimit.fold<double>(0.0, (sum, i) => sum + balanceOf(i));
+    final totalLimit = withLimit.fold<double>(0.0, (sum, i) => sum + limitOf(i));
+    final hasLimits = totalLimit > 0;
+    final totalUtilization =
+        hasLimits ? (totalBalance / totalLimit) * 100 : 0.0;
 
     return Card(
       elevation: 4,
@@ -75,30 +76,37 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
                   ),
                 ),
                 Text(
-                  '${totalUtilization.toStringAsFixed(1)}%',
+                  hasLimits ? '${totalUtilization.toStringAsFixed(1)}%' : '—',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: totalUtilization > 30
-                        ? context.warning
-                        : context.positive,
+                    color: !hasLimits
+                        ? context.textSubtle
+                        : totalUtilization > 30
+                            ? context.warning
+                            : context.positive,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: LinearProgressIndicator(
-                value: (totalUtilization / 100).clamp(0.0, 1.0),
-                backgroundColor: context.hairline,
-                color: totalUtilization > 30
-                    ? context.warning
-                    : context.positive,
-                minHeight: 8,
+            // The overall bar only makes sense when at least one card reports a
+            // limit; otherwise it'd be a permanently-empty 0% bar.
+            if (hasLimits) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: LinearProgressIndicator(
+                  value: (totalUtilization / 100).clamp(0.0, 1.0),
+                  backgroundColor: context.hairline,
+                  color: totalUtilization > 30
+                      ? context.warning
+                      : context.positive,
+                  minHeight: 8,
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
+            ] else
+              const SizedBox(height: 16),
             ..._buildCreditRows(),
           ],
         ),
@@ -132,7 +140,9 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
     for (final item in visible) {
       final balance = ((item['balance'] ?? 0.0) as num).toDouble();
       final limit = ((item['credit_limit'] ?? 0.0) as num).toDouble();
-      final util = limit > 0 ? (balance / limit) * 100 : 0.0;
+      final hasLimit = limit > 0;
+      final util = hasLimit ? (balance / limit) * 100 : 0.0;
+      final es = Localizations.localeOf(context).languageCode == 'es';
       rows.add(Padding(
         padding: const EdgeInsets.only(bottom: 16.0),
         child: Column(
@@ -163,28 +173,49 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                Text(
-                  '${currencyFormat.format(balance * conversionFactor)} / ${currencyFormat.format(limit * conversionFactor)}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
+                // With a known limit: "balance / limit". Without: just the
+                // balance owed + a muted "no limit" note, instead of a
+                // misleading "/ $0.00".
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      hasLimit
+                          ? '${currencyFormat.format(balance * conversionFactor)} / ${currencyFormat.format(limit * conversionFactor)}'
+                          : currencyFormat.format(balance * conversionFactor),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    if (!hasLimit)
+                      Text(
+                        es ? 'límite no disponible' : 'limit unavailable',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: context.textFaint,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                  ],
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: (util / 100).clamp(0.0, 1.0),
-                backgroundColor: context.hairline,
-                color: util > 30
-                    ? context.warning.withValues(alpha: 0.7)
-                    : context.positive.withValues(alpha: 0.7),
-                minHeight: 4,
+            if (hasLimit) ...[
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: (util / 100).clamp(0.0, 1.0),
+                  backgroundColor: context.hairline,
+                  color: util > 30
+                      ? context.warning.withValues(alpha: 0.7)
+                      : context.positive.withValues(alpha: 0.7),
+                  minHeight: 4,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ));
