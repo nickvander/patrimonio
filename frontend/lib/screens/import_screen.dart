@@ -747,6 +747,19 @@ class _ImportScreenState extends State<ImportScreen> {
       }
     }
     if (inst.isNotEmpty) {
+      // Prefer a FULL institution-name match first, so a multi-word institution
+      // ("Fidelity NetBenefits") isn't collapsed to its first word ("Fidelity")
+      // and grabbed by a different account that merely shares that word (e.g. a
+      // Plaid "Fidelity" brokerage). Exact institution_name beats the key below.
+      for (final a in accounts) {
+        final ainst =
+            (a['institution_name'] ?? '').toString().toLowerCase().trim();
+        if (ainst.isNotEmpty && ainst == inst) {
+          _selectedAccountId = a['id']?.toString();
+          _accountCue = _AccountCue.matched;
+          return;
+        }
+      }
       final key = inst.split(RegExp(r'[ —-]')).first; // "nu" / "cetesdirecto"
       // Match the bank key as a WHOLE WORD, not a bare substring — otherwise
       // "nu" matches the generic "Manual" institution ("ma-NU-al") and a Nu
