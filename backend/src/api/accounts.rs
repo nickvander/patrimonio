@@ -1478,22 +1478,29 @@ async fn import_holdings(
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| symbol.clone());
         let stmt_value = h.value.and_then(rust_decimal::Decimal::from_f64_retain);
-        let (price, value, htype) = if h.cash {
-            // Cash sleeve: $1.00 NAV, value = the cash amount; never Yahoo-priced.
-            (
-                Some(rust_decimal::Decimal::ONE),
-                stmt_value.or(Some(qty)),
-                "cash",
-            )
-        } else {
-            // Equity/fund: live price from the Yahoo quote cache; fall back to
-            // the statement's reported value if the symbol can't be priced.
-            let p = latest_price(&state.db, &symbol).await;
-            let v = p
-                .map(|p| (p * qty).round_dp(2))
-                .or(stmt_value);
-            (p, v, "equity")
-        };
+        let (price, value, htype): (Option<rust_decimal::Decimal>, Option<rust_decimal::Decimal>, String) =
+            if h.cash {
+                // Cash sleeve: $1.00 NAV, value = the cash amount; never Yahoo-priced.
+                (
+                    Some(rust_decimal::Decimal::ONE),
+                    stmt_value.or(Some(qty)),
+                    "cash".to_string(),
+                )
+            } else {
+                // Equity/fund: live price from the Yahoo quote cache; fall back to
+                // the statement's reported value if the symbol can't be priced.
+                let p = latest_price(&state.db, &symbol).await;
+                let v = p.map(|p| (p * qty).round_dp(2)).or(stmt_value);
+                // Allocation bucket — defaults to "equity"; a fund import
+                // (e.g. HSA target-date) sets "mutual fund".
+                let kind = h
+                    .holding_type
+                    .as_ref()
+                    .map(|s| s.trim().to_lowercase())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| "equity".to_string());
+                (p, v, kind)
+            };
 
         let _ = sqlx::query(
             r#"

@@ -723,6 +723,11 @@ pub struct ImportHolding {
     /// A cash position: priced at 1.00 and never sent to Yahoo.
     #[serde(default)]
     pub cash: bool,
+    /// Allocation bucket (`INITCAP`-ed for the Portfolio view), e.g. "mutual
+    /// fund" so an HSA's target-date fund groups with the other funds rather
+    /// than under Equity. None → "equity" for a non-cash holding.
+    #[serde(default)]
+    pub holding_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -890,6 +895,9 @@ fn healthequity_account_info(text: &str) -> AccountInfo {
             quantity: shares.to_string().parse().unwrap_or(0.0),
             value: value.to_string().parse().ok(),
             cash: false,
+            // HealthEquity's investment menu is mutual funds (target-date /
+            // index), so group it with the other funds, not under Equity.
+            holding_type: Some("mutual fund".into()),
         });
     }
     if let Some(cash) = healthequity::parse_cash_ending_balance(text) {
@@ -901,6 +909,7 @@ fn healthequity_account_info(text: &str) -> AccountInfo {
                 quantity: c,
                 value: Some(c),
                 cash: true,
+                holding_type: None,
             });
         }
     }
