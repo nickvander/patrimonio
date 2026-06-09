@@ -205,6 +205,11 @@ pub async fn sync_institutions(
                         };
                         let current_bal = acc["balances"]["current"].as_f64();
                         let available_bal = acc["balances"]["available"].as_f64();
+                        // Plaid returns the credit line in balances.limit for
+                        // credit cards (null for most depository accounts and
+                        // for issuers that don't expose it). Drives the credit-
+                        // utilization card.
+                        let credit_limit = acc["balances"]["limit"].as_f64();
 
                         // Look up account scoped to this institution +
                         // owner. external_id is Plaid-issued and shouldn't
@@ -218,19 +223,22 @@ pub async fn sync_institutions(
                             .fetch_optional(db).await?;
 
                         if existing.is_some() {
+                            // COALESCE keeps a previously-fetched limit when a
+                            // later sync returns null (Plaid is sometimes
+                            // inconsistent about populating it).
                             sqlx::query(
-                                "UPDATE accounts SET current_balance = $1, available_balance = $2, updated_at = NOW() WHERE external_id = $3 AND user_id = $4"
+                                "UPDATE accounts SET current_balance = $1, available_balance = $2, credit_limit = COALESCE($3, credit_limit), updated_at = NOW() WHERE external_id = $4 AND user_id = $5"
                             )
-                                .bind(current_bal).bind(available_bal).bind(external_id).bind(inst_user_id)
+                                .bind(current_bal).bind(available_bal).bind(credit_limit).bind(external_id).bind(inst_user_id)
                                 .execute(db).await?;
                         } else {
                             sqlx::query(
                                 r#"
-                                INSERT INTO accounts (institution_id, external_id, name, account_type, currency, current_balance, available_balance, user_id)
-                                VALUES ($1, $2, $3, $4, 'USD', $5, $6, $7)
+                                INSERT INTO accounts (institution_id, external_id, name, account_type, currency, current_balance, available_balance, credit_limit, user_id)
+                                VALUES ($1, $2, $3, $4, 'USD', $5, $6, $7, $8)
                                 "#
                             )
-                            .bind(inst_id).bind(external_id).bind(&name).bind(subtype).bind(current_bal).bind(available_bal).bind(inst_user_id)
+                            .bind(inst_id).bind(external_id).bind(&name).bind(subtype).bind(current_bal).bind(available_bal).bind(credit_limit).bind(inst_user_id)
                             .execute(db).await?;
                         }
 
