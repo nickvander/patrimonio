@@ -28,6 +28,10 @@ pub fn router() -> Router<AppState> {
         // Manual holdings (e.g. a Fidelity NetBenefits ESPP position not on
         // Plaid): add shares by ticker, priced live from the Yahoo quote cache.
         .route("/{id}/holdings", get(list_holdings).post(create_holding))
+        // Bulk attach statement-derived holdings (HSA fund + cash sleeve),
+        // replacing any prior manual rows for the same symbol so a re-import
+        // reflects the latest statement.
+        .route("/{id}/holdings/import", post(import_holdings))
         .route("/{id}/holdings/refresh", post(refresh_holdings))
         .route("/{id}/holdings/dividends", get(holdings_dividends))
         .route("/{id}/holdings/{hid}", delete(delete_holding))
@@ -1500,6 +1504,95 @@ async fn create_holding(
     }
 }
 
+#[derive(serde::Deserialize)]
+struct ImportHoldingsRequest {
+    holdings: Vec<crate::services::parser::ImportHolding>,
+}
+
+/// Attach a batch of statement-derived holdings to a manual account — an HSA's
+/// invested fund (live-priced from Yahoo) plus its cash sleeve (fixed at 1.00).
+/// Each symbol REPLACES any prior manually-imported row for the same symbol, so
+/// re-importing newer statements just updates the quantities. The account's
+/// balance is then recomputed as the sum of its holdings.
+async fn import_holdings(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path(account_id): Path<uuid::Uuid>,
+    Json(payload): Json<ImportHoldingsRequest>,
+) -> impl IntoResponse {
+    if !account_is_manual(&state.db, account_id, ctx.user_id).await {
+        return (
+            StatusCode::FORBIDDEN,
+            "holdings can only be added to a manual account",
+        )
+            .into_response();
+    }
+    for h in &payload.holdings {
+        let symbol = h.symbol.trim().to_uppercase();
+        if symbol.is_empty() {
+            continue;
+        }
+        let Some(qty) = rust_decimal::Decimal::from_f64_retain(h.quantity) else {
+            continue;
+        };
+        // Replace any prior manual row for this (account, symbol) so a re-import
+        // is idempotent. Plaid-sourced rows (external_id set) are left alone.
+        let _ = sqlx::query(
+            "DELETE FROM holdings WHERE account_id = $1 AND user_id = $2 AND symbol = $3 AND external_id IS NULL",
+        )
+        .bind(account_id)
+        .bind(ctx.user_id)
+        .bind(&symbol)
+        .execute(&state.db)
+        .await;
+
+        let name = h
+            .name
+            .as_ref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| symbol.clone());
+        let stmt_value = h.value.and_then(rust_decimal::Decimal::from_f64_retain);
+        let (price, value, htype) = if h.cash {
+            // Cash sleeve: $1.00 NAV, value = the cash amount; never Yahoo-priced.
+            (
+                Some(rust_decimal::Decimal::ONE),
+                stmt_value.or(Some(qty)),
+                "cash",
+            )
+        } else {
+            // Equity/fund: live price from the Yahoo quote cache; fall back to
+            // the statement's reported value if the symbol can't be priced.
+            let p = latest_price(&state.db, &symbol).await;
+            let v = p
+                .map(|p| (p * qty).round_dp(2))
+                .or(stmt_value);
+            (p, v, "equity")
+        };
+
+        let _ = sqlx::query(
+            r#"
+            INSERT INTO holdings (id, account_id, user_id, symbol, name, quantity, price, value, currency, holding_type, updated_at)
+            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, 'USD', $8, NOW())
+            "#,
+        )
+        .bind(account_id)
+        .bind(ctx.user_id)
+        .bind(&symbol)
+        .bind(&name)
+        .bind(qty)
+        .bind(price)
+        .bind(value)
+        .bind(htype)
+        .execute(&state.db)
+        .await;
+    }
+    if let Err(e) = recompute_holding_balance(&state.db, account_id, ctx.user_id).await {
+        error!("Failed to recompute balance after holdings import: {}", e);
+    }
+    StatusCode::OK.into_response()
+}
+
 async fn list_holdings(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
@@ -1659,7 +1752,9 @@ async fn refresh_all_holdings(
     let mut symbols_priced = 0;
     for account_id in &accounts {
         let symbols: Vec<String> = sqlx::query_scalar(
-            "SELECT DISTINCT symbol FROM holdings WHERE account_id = $1 AND user_id = $2",
+            // Skip cash-sleeve positions — they're fixed at 1.00 and have no
+            // Yahoo quote, so a lookup would only waste a request + log a miss.
+            "SELECT DISTINCT symbol FROM holdings WHERE account_id = $1 AND user_id = $2 AND COALESCE(holding_type, '') <> 'cash'",
         )
         .bind(account_id)
         .bind(ctx.user_id)

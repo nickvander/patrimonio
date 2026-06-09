@@ -708,6 +708,23 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
 /// portfolio "Total final" (not its ~0 cash), or Nu's "En su Cuenta". For
 /// Banamex it's left None — those statements carry a per-row running balance,
 /// so the import already sets the account balance from the closing row.
+/// A security the statement reports the account holding — e.g. an HSA's
+/// invested fund, plus a cash sleeve. The import can turn these into
+/// live-priced holdings so the account's value tracks the market between
+/// statements (an HSA is mostly fund, not the ~$500 idle cash).
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct ImportHolding {
+    pub symbol: String,
+    pub name: Option<String>,
+    pub quantity: f64,
+    /// Statement-reported value — used to value a cash sleeve and as a fallback
+    /// when no live price is available for an equity.
+    pub value: Option<f64>,
+    /// A cash position: priced at 1.00 and never sent to Yahoo.
+    #[serde(default)]
+    pub cash: bool,
+}
+
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct AccountInfo {
     pub institution: Option<String>,
@@ -724,6 +741,10 @@ pub struct AccountInfo {
     pub account_type: Option<String>,
     /// ISO `YYYY-MM-DD` period end, used to pick the newest statement's info.
     pub period_end: Option<String>,
+    /// Securities the import should attach as live-priced holdings (currently
+    /// only HealthEquity HSAs: the invested fund + a cash sleeve).
+    #[serde(default)]
+    pub holdings: Vec<ImportHolding>,
 }
 
 fn re_cap(pattern: &str, text: &str) -> Option<String> {
@@ -828,6 +849,7 @@ fn nu_account_info(text: &str) -> AccountInfo {
         currency: Some("MXN".into()),
         account_type: Some("Checking".into()),
         period_end: nu_period_end(text),
+        holdings: Vec::new(),
     }
 }
 
@@ -858,6 +880,30 @@ fn healthequity_account_info(text: &str) -> AccountInfo {
         .filter(|a| a.len() >= 4)
         .map(|a| format!("HealthEquity HSA \u{2022}\u{2022}{}", &a[a.len() - 4..]))
         .unwrap_or_else(|| "HealthEquity HSA".to_string());
+    // The invested fund (live-priced) + a cash sleeve, so the account's worth
+    // tracks the market while staying exact on the cash side.
+    let mut holdings: Vec<ImportHolding> = Vec::new();
+    if let Some((sym, shares, value)) = healthequity::parse_investment_holding(text) {
+        holdings.push(ImportHolding {
+            symbol: sym,
+            name: Some("Invested funds".into()),
+            quantity: shares.to_string().parse().unwrap_or(0.0),
+            value: value.to_string().parse().ok(),
+            cash: false,
+        });
+    }
+    if let Some(cash) = healthequity::parse_cash_ending_balance(text) {
+        let c: f64 = cash.to_string().parse().unwrap_or(0.0);
+        if c > 0.0 {
+            holdings.push(ImportHolding {
+                symbol: "CASH".into(),
+                name: Some("HSA cash".into()),
+                quantity: c,
+                value: Some(c),
+                cash: true,
+            });
+        }
+    }
     AccountInfo {
         institution: Some("HealthEquity".into()),
         holder_name: holder,
@@ -876,6 +922,7 @@ fn healthequity_account_info(text: &str) -> AccountInfo {
         .ok()
         .and_then(|re| re.captures(text))
         .map(|c| format!("20{}-{}-{}", &c[3], &c[1], &c[2])),
+        holdings,
     }
 }
 
@@ -898,6 +945,7 @@ fn cetes_account_info(text: &str) -> AccountInfo {
             .ok()
             .and_then(|re| re.captures(text))
             .map(|c| format!("{}-{}-{}", &c[3], &c[2], &c[1])),
+        holdings: Vec::new(),
     }
 }
 
@@ -913,5 +961,6 @@ fn banamex_account_info(text: &str) -> AccountInfo {
         currency: Some("MXN".into()),
         account_type: Some("Checking".into()),
         period_end: None,
+        holdings: Vec::new(),
     }
 }

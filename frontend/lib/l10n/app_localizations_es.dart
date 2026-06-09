@@ -2035,7 +2035,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'Aún no se configuran las credenciales de Plaid: por ahora usa CSV o manual.';
 
   @override
-  String get dashImportMxCsvPdf => 'Importar CSV o PDF de México';
+  String get dashImportMxCsvPdf => 'Importar un estado de cuenta (CSV o PDF)';
 
   @override
   String dashImportMxCsvPdfSubtitle(Object banks) {
@@ -2270,7 +2270,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get dashLinkPlaidUsBanks => 'Vincular Plaid (bancos de EE. UU.)';
 
   @override
-  String get dashImportMxShort => 'Importar México (CSV/PDF)';
+  String get dashImportMxShort => 'Importar estado de cuenta';
 
   @override
   String get dashAddManualAccountShort => 'Agregar cuenta manual';

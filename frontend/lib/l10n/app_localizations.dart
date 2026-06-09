@@ -3383,7 +3383,7 @@ abstract class AppLocalizations {
   /// No description provided for @dashImportMxCsvPdf.
   ///
   /// In en, this message translates to:
-  /// **'Import Mexico CSV or PDF'**
+  /// **'Import a statement (CSV or PDF)'**
   String get dashImportMxCsvPdf;
 
   /// No description provided for @dashImportMxCsvPdfSubtitle.
@@ -3743,7 +3743,7 @@ abstract class AppLocalizations {
   /// No description provided for @dashImportMxShort.
   ///
   /// In en, this message translates to:
-  /// **'Import Mexico (CSV/PDF)'**
+  /// **'Import statement'**
   String get dashImportMxShort;
 
   /// No description provided for @dashAddManualAccountShort.

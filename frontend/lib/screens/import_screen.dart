@@ -1247,6 +1247,23 @@ class _ImportScreenState extends State<ImportScreen> {
         }
       }
 
+      // Statement-derived holdings (HSA invested fund + cash sleeve) attach to
+      // the PRIMARY destination account, so its value tracks the market between
+      // statements. Best-effort: a non-manual target just no-ops (403).
+      final holdings = _accountInfo?['holdings'];
+      final primaryId = _selectedAccountId;
+      if (holdings is List &&
+          holdings.isNotEmpty &&
+          primaryId != null &&
+          primaryId.isNotEmpty) {
+        try {
+          await _apiService.importHoldings(primaryId, holdings);
+        } catch (_) {
+          // Don't fail the whole import if holdings couldn't be attached —
+          // the transactions + balance already landed.
+        }
+      }
+
       if (!mounted) return;
 
       // Surface likely-missing-statement warnings before leaving the screen.

@@ -1465,6 +1465,23 @@ class ApiService {
     }
   }
 
+  /// Attach statement-derived holdings (e.g. an HSA's invested fund + cash
+  /// sleeve) to a manual account. Each [holdings] entry is a map
+  /// {symbol, name?, quantity, value?, cash?}; same-symbol rows are replaced,
+  /// then the account balance is recomputed from its holdings. Best-effort —
+  /// a non-manual target returns 403, which the caller can ignore.
+  Future<void> importHoldings(String accountId, List<dynamic> holdings) async {
+    final response = await _post(
+      Uri.parse('$_baseUrl/accounts/$accountId/holdings/import'),
+      headers: _withCsrf({'Content-Type': 'application/json'}),
+      body: json.encode({'holdings': holdings}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(_t('Holdings import failed: ${response.body}',
+          'La importación de posiciones falló: ${response.body}'));
+    }
+  }
+
   /// Recent import batches (newest first): each is
   /// {batch_id, account_id, account_name, txn_count, from_date, to_date,
   /// imported_at, files[]}.
