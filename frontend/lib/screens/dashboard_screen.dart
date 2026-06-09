@@ -800,6 +800,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildStatStrip({
     required NumberFormat currencyFormat,
     required double conversionFactor,
+    required double usdMxnRate,
   }) {
     final l = AppLocalizations.of(context);
     final overview = _overview ?? const <String, dynamic>{};
@@ -819,8 +820,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     double realAssets = 0;
     for (final raw in accounts) {
       final acc = raw as Map<String, dynamic>;
-      final usdBal = ((acc['current_balance'] as num?)?.toDouble() ?? 0.0);
-      final reported = usdBal.abs() * conversionFactor;
+      // current_balance is in the account's NATIVE currency — convert it to the
+      // reporting currency (don't just × conversionFactor, which assumes USD and
+      // left MXN balances at face value, inflating the cash/investment tiles to
+      // more than net worth).
+      final cur = (acc['currency'] ?? _targetCurrency).toString();
+      final native = ((acc['current_balance'] as num?)?.toDouble() ?? 0.0).abs();
+      final reported = convertCurrency(
+        native,
+        from: cur,
+        to: _targetCurrency,
+        usdMxnRate: usdMxnRate,
+      );
       switch (categorizeAccount(acc['account_type']?.toString())) {
         case AccountCategory.credit:
         case AccountCategory.loan:
@@ -2553,6 +2564,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final stats = _buildStatStrip(
             currencyFormat: currencyFormat,
             conversionFactor: conversionFactor,
+            usdMxnRate: fxRate,
           );
 
           final body = isNarrow
