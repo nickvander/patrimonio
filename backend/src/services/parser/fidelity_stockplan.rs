@@ -46,6 +46,23 @@ fn dec(s: &str) -> Option<Decimal> {
     Decimal::from_str(&s.replace([',', '$', ' '], "")).ok()
 }
 
+/// Format a USD amount with a `$` and thousands separators for a human-facing
+/// description, e.g. 85348.32 → "$85,348.32".
+fn money(d: Decimal) -> String {
+    let neg = d.is_sign_negative();
+    let s = format!("{:.2}", d.abs());
+    let (int_part, frac) = s.split_once('.').unwrap_or((s.as_str(), "00"));
+    let n = int_part.len();
+    let mut grouped = String::new();
+    for (i, ch) in int_part.chars().enumerate() {
+        if i > 0 && (n - i) % 3 == 0 {
+            grouped.push(',');
+        }
+        grouped.push(ch);
+    }
+    format!("{}${grouped}.{frac}", if neg { "-" } else { "" })
+}
+
 fn month_num(name: &str) -> Option<u32> {
     Some(match name.to_lowercase().chars().take(3).collect::<String>().as_str() {
         "jan" => 1, "feb" => 2, "mar" => 3, "apr" => 4, "may" => 5, "jun" => 6,
@@ -114,9 +131,13 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
     // A single period-end value marker. Amount 0 keeps it out of cash-flow
     // analytics; `balance_after` seeds the dated net-worth snapshot. The live
     // value comes from the attached holding.
+    // Show the value IN the description: the amount stays 0 (an unrealized
+    // holding gain isn't a cash flow, and a negative amount would count as
+    // spending), so a bare row would read as an empty "$0.00". The value lives
+    // in `balance_after` (→ net-worth snapshot) and here for human eyes.
     let tx = ParsedTransaction {
         date: end,
-        description: "Stock plan statement value".to_string(),
+        description: format!("Stock plan value {} ({})", money(value), end.format("%b %Y")),
         amount: Decimal::ZERO,
         currency: "USD".to_string(),
         category: None,
@@ -174,6 +195,13 @@ www.netbenefits.com
     }
 
     #[test]
+    fn money_formats_with_commas() {
+        assert_eq!(money(Decimal::from_str("85348.32").unwrap()), "$85,348.32");
+        assert_eq!(money(Decimal::from_str("0.07").unwrap()), "$0.07");
+        assert_eq!(money(Decimal::from_str("1234567.80").unwrap()), "$1,234,567.80");
+    }
+
+    #[test]
     fn monthly_value_marker() {
         let txs = parse_text(MONTHLY).unwrap();
         assert_eq!(txs.len(), 1);
@@ -182,6 +210,12 @@ www.netbenefits.com
         assert_eq!(
             txs[0].balance_after,
             Some(Decimal::from_str("85348.32").unwrap())
+        );
+        // The value is in the description so the row isn't a bare "$0.00".
+        assert!(
+            txs[0].description.contains("$85,348.32"),
+            "desc: {}",
+            txs[0].description
         );
     }
 
