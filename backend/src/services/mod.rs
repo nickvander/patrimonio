@@ -24,3 +24,4 @@ pub mod common_passwords;
 pub mod realtime;
 pub mod loan_match;
 pub mod loan_schedule;
+pub mod holdings;

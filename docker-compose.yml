@@ -35,6 +35,9 @@ services:
       # text here (inside the container) so a new bank layout can be added by
       # inspecting what the parser sees. Empty/unset = off (production default).
       IMPORT_DEBUG_DUMP_DIR: ${IMPORT_DEBUG_DUMP_DIR:-}
+      # Nightly holdings price-refresh schedule (6-field cron, UTC). Unset/empty
+      # = default 23:00 UTC; set to "off" to disable.
+      HOLDINGS_REFRESH_CRON: ${HOLDINGS_REFRESH_CRON:-}
       REDIS_URL: redis://:${REDIS_PASSWORD:-patrimonio}@redis:6379
       PLAID_CLIENT_ID: ${PLAID_CLIENT_ID:-}
       PLAID_SECRET: ${PLAID_SECRET:-}

@@ -11,7 +11,6 @@ use tracing::{error, info};
 
 use crate::api::session::AuthContext;
 use crate::models::holding::Holding;
-use crate::services::benchmark;
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -1319,87 +1318,13 @@ pub struct CreateHoldingRequest {
     pub cost_basis: Option<rust_decimal::Decimal>,
 }
 
-/// Latest cached close for a symbol (after a best-effort Yahoo refresh).
-async fn latest_price(
-    db: &sqlx::PgPool,
-    symbol: &str,
-) -> Option<rust_decimal::Decimal> {
-    // ensure_symbol_fresh refreshes from Yahoo when stale and tolerates a
-    // network failure as long as some cached data already exists.
-    let _ = benchmark::ensure_symbol_fresh(db, symbol, symbol).await;
-    sqlx::query_scalar::<_, rust_decimal::Decimal>(
-        "SELECT close FROM benchmark_prices WHERE symbol = $1 ORDER BY price_date DESC LIMIT 1",
-    )
-    .bind(symbol)
-    .fetch_optional(db)
-    .await
-    .ok()
-    .flatten()
-}
+// latest_price + recompute_holding_balance moved to services::holdings so the
+// nightly refresh cron can share them without an HTTP/auth context.
+use crate::services::holdings::{latest_price, recompute_holding_balance};
 
 /// Recompute a holdings-backed account's balance as the sum of its holdings'
 /// values, and snapshot it (FX-aware) so it flows into net worth — the same
 /// way a Plaid investment account's balance is the sum of its holdings.
-async fn recompute_holding_balance(
-    db: &sqlx::PgPool,
-    account_id: uuid::Uuid,
-    user_id: uuid::Uuid,
-) -> Result<(), sqlx::Error> {
-    let total: Option<rust_decimal::Decimal> = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(value), 0) FROM holdings WHERE account_id = $1 AND user_id = $2",
-    )
-    .bind(account_id)
-    .bind(user_id)
-    .fetch_one(db)
-    .await?;
-    let total = total.unwrap_or_default();
-
-    sqlx::query(
-        "UPDATE accounts SET current_balance = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3",
-    )
-    .bind(total)
-    .bind(account_id)
-    .bind(user_id)
-    .execute(db)
-    .await?;
-
-    let currency: String =
-        sqlx::query_scalar("SELECT currency FROM accounts WHERE id = $1")
-            .bind(account_id)
-            .fetch_one(db)
-            .await?;
-    let balance_usd = if currency == "MXN" {
-        let rate: Option<rust_decimal::Decimal> = sqlx::query_scalar(
-            "SELECT rate FROM exchange_rates WHERE base_currency='USD' AND target_currency='MXN' ORDER BY recorded_at DESC LIMIT 1",
-        )
-        .fetch_optional(db)
-        .await?;
-        match rate {
-            Some(r) if !r.is_zero() => (total / r).round_dp(2),
-            _ => total,
-        }
-    } else {
-        total
-    };
-
-    sqlx::query(
-        r#"
-        INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd, user_id)
-        VALUES ($1, $2, CURRENT_DATE, $3, $4, $5)
-        ON CONFLICT (account_id, as_of_date)
-        DO UPDATE SET balance = EXCLUDED.balance, balance_usd = EXCLUDED.balance_usd, created_at = NOW()
-        "#,
-    )
-    .bind(account_id)
-    .bind(total)
-    .bind(&currency)
-    .bind(balance_usd)
-    .bind(user_id)
-    .execute(db)
-    .await?;
-    Ok(())
-}
-
 async fn account_owned(
     db: &sqlx::PgPool,
     account_id: uuid::Uuid,

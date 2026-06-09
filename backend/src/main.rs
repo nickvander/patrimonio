@@ -132,6 +132,43 @@ async fn main() -> Result<()> {
         }).expect("Failed to add cron job")
     ).await.expect("Failed to register job");
 
+    // Nightly holdings price refresh — re-price every manual account's holdings
+    // from Yahoo and recompute balances, so a live-priced position (e.g. an HSA
+    // fund) tracks the market without waiting for a dashboard load. Runs at
+    // 23:00 UTC, AFTER US market close (~21:00 UTC) and BEFORE the midnight
+    // snapshot above, so that snapshot captures the day's closing values.
+    // Schedule is overridable via HOLDINGS_REFRESH_CRON; set it to "off" to
+    // disable (e.g. to spare Yahoo on a machine with no holdings).
+    // Unset OR empty (e.g. a blank compose passthrough) falls back to the
+    // default schedule — never an empty string, which is an invalid cron.
+    let holdings_cron = std::env::var("HOLDINGS_REFRESH_CRON")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "0 0 23 * * *".to_string());
+    if holdings_cron.trim().eq_ignore_ascii_case("off") {
+        tracing::info!("Nightly holdings refresh disabled (HOLDINGS_REFRESH_CRON=off)");
+    } else {
+        let refresh_db = db.clone();
+        sched
+            .add(
+                Job::new_async(holdings_cron.as_str(), move |_uuid, mut _l| {
+                    let db = refresh_db.clone();
+                    Box::pin(async move {
+                        tracing::info!("Running nightly holdings price refresh...");
+                        let s = patrimonio::services::holdings::refresh_all_prices(&db).await;
+                        tracing::info!(
+                            "Nightly holdings refresh complete: {} symbols priced across {} accounts",
+                            s.symbols_priced, s.accounts
+                        );
+                    })
+                })
+                .expect("Failed to add holdings-refresh cron job"),
+            )
+            .await
+            .expect("Failed to register holdings-refresh job");
+    }
+
     sched.start().await.expect("Failed to start scheduler");
 
     // ---- routing ----
