@@ -46,3 +46,7 @@ redisdata/
 /work/healthequity/*.PDF
 /work/healthequity/*.csv
 /work/healthequity/*.txt
+
+# Local-only Fidelity NetBenefits samples (PII) — never commit
+/work/netbenefits/*.txt
+/work/netbenefits/*.pdf

@@ -23,6 +23,9 @@ const List<String> kSupportedMxBanks = [
   // US: HealthEquity HSA — validated against six real monthly statements
   // (cash ledger + invested fund value → total account worth).
   'HealthEquity',
+  // US: Fidelity Stock Plan Services ("NetBenefits") — equity-comp reports
+  // (monthly + year-end), validated against five real statements.
+  'Fidelity NetBenefits',
 ];
 
 /// An Oxford-style human list of the supported institutions for body copy.

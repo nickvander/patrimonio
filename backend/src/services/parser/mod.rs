@@ -1,4 +1,5 @@
 pub mod healthequity;
+pub mod fidelity_stockplan;
 pub mod nu_mexico;
 pub mod nu_mexico_pdf;
 pub mod banamex;
@@ -539,6 +540,14 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
             );
         }
 
+        // Fidelity Stock Plan Services ("NetBenefits") — US equity-comp report.
+        if fidelity_stockplan::looks_like(&sample_text) {
+            try_rows!(
+                fidelity_stockplan::parse_text(&best).unwrap_or_default(),
+                "fidelity-stockplan-layout"
+            );
+        }
+
         // Nu México — checked FIRST, by issuer-specific markers. Nu's debit
         // statements routinely mention other banks (BANAMEX, BBVA…) inside
         // SPEI transfer descriptions, which would otherwise trip the broad
@@ -692,7 +701,8 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
         return Err(anyhow!(
             "Couldn't find any transactions in '{}'. If this is a real statement, its layout \
              isn't supported yet — share a sample and we can add it. (Built-in support: Nu, \
-             Banamex, BBVA, Santander, CetesDirecto, HealthEquity, plus CSV exports.)",
+             Banamex, BBVA, Santander, CetesDirecto, HealthEquity, Fidelity Stock Plan, plus \
+             CSV exports.)",
             file_name
         ));
     }
@@ -790,6 +800,9 @@ pub fn parse_account_info(
 
     if healthequity::looks_like(&upper) {
         return Some(healthequity_account_info(&text));
+    }
+    if fidelity_stockplan::looks_like(&upper) {
+        return Some(fidelity_stockplan_account_info(&text));
     }
     if upper.contains("NU MÉXICO FINANCIERA")
         || upper.contains("CUENTA NU")
@@ -932,6 +945,31 @@ fn healthequity_account_info(text: &str) -> AccountInfo {
         .and_then(|re| re.captures(text))
         .map(|c| format!("20{}-{}-{}", &c[3], &c[1], &c[2])),
         holdings,
+    }
+}
+
+fn fidelity_stockplan_account_info(text: &str) -> AccountInfo {
+    let bal = fidelity_stockplan::parse_account_value(text)
+        .and_then(|d| d.to_string().parse::<f64>().ok());
+    // Holder appears as "NAME - STOCK PLAN ACCOUNT" on the per-account pages.
+    let holder = re_cap(r"(?im)^\s*([A-Z][A-Z .'-]{3,}?)\s+-\s+STOCK PLAN ACCOUNT", text);
+    let participant = re_cap(r"(?i)Participant Number:\s*([A-Z0-9]+)", text);
+    let masked = participant
+        .as_deref()
+        .filter(|p| p.len() >= 4)
+        .map(|p| format!("Fidelity Stock Plan \u{2022}\u{2022}{}", &p[p.len() - 4..]))
+        .unwrap_or_else(|| "Fidelity Stock Plan".to_string());
+    AccountInfo {
+        institution: Some("Fidelity NetBenefits".into()),
+        holder_name: holder,
+        clabe: None,
+        rfc: None,
+        suggested_name: Some(masked),
+        suggested_balance: bal,
+        currency: Some("USD".into()),
+        account_type: Some("Stock plan".into()),
+        period_end: fidelity_stockplan::parse_period_end(text).map(|d| d.to_string()),
+        holdings: fidelity_stockplan::parse_holdings(text),
     }
 }
 
