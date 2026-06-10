@@ -2556,6 +2556,19 @@ class AppLocalizationsEs extends AppLocalizations {
   String get projFireFocusTitle => '¿A qué tipo de FIRE apuntas?';
 
   @override
+  String get projFirePlanTitle => 'Tu plan FIRE';
+
+  @override
+  String get projGoalLabel => 'Meta';
+
+  @override
+  String get projTermLifestyle => 'Austero / Estándar / Holgado';
+
+  @override
+  String get projGlossaryLifestyleDef =>
+      'Niveles de estilo de vida — Austero es frugal, Holgado es generoso, Estándar ≈ tu gasto registrado. Definen tus gastos anuales, que a su vez definen cada objetivo.';
+
+  @override
   String get projFocusFull => 'FIRE completo';
 
   @override

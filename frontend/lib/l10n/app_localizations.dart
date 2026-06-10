@@ -4250,6 +4250,30 @@ abstract class AppLocalizations {
   /// **'Which FIRE are you aiming for?'**
   String get projFireFocusTitle;
 
+  /// No description provided for @projFirePlanTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your FIRE plan'**
+  String get projFirePlanTitle;
+
+  /// No description provided for @projGoalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Goal'**
+  String get projGoalLabel;
+
+  /// No description provided for @projTermLifestyle.
+  ///
+  /// In en, this message translates to:
+  /// **'Lean / Standard / Fat'**
+  String get projTermLifestyle;
+
+  /// No description provided for @projGlossaryLifestyleDef.
+  ///
+  /// In en, this message translates to:
+  /// **'Lifestyle levels — Lean is frugal, Fat is generous, Standard ≈ your tracked spending. They set your annual expenses, which sets every target.'**
+  String get projGlossaryLifestyleDef;
+
   /// No description provided for @projFocusFull.
   ///
   /// In en, this message translates to:

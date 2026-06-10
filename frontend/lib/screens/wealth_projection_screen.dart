@@ -71,14 +71,21 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   // explore, answering "why Coast?" by making it one option among peers.
   _FireFocus _fireFocus = _FireFocus.full;
 
-  // Lean / Standard / Fat lifestyle presets are just annual-expense levels
-  // (USD, real) — Lean = frugal, Fat = generous. Tapping one sets the
-  // expenses slider; dragging the slider clears the active preset.
-  static const Map<String, double> _spendingPresets = {
-    'lean': 30000,
-    'standard': 55000,
-    'fat': 110000,
+  // Lean / Standard / Fat are lifestyle *levels* relative to the user's own
+  // baseline spending (Standard = their tracked/real expenses), so the
+  // presets always make sense instead of snapping to arbitrary dollar
+  // amounts. Captured once (default first, overridden by tracked data).
+  double? _baselineExpenses;
+  static const Map<String, double> _lifestyleMultipliers = {
+    'lean': 0.7,
+    'standard': 1.0,
+    'fat': 1.6,
   };
+
+  // Annual-expense value for a lifestyle preset, rounded to a clean $1k and
+  // clamped to the slider's range.
+  double _presetExpense(String key, double base) =>
+      ((base * _lifestyleMultipliers[key]!) / 1000).round() * 1000.0;
 
   @override
   void initState() {
@@ -128,6 +135,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               _monthlyContribution = contrib.clamp(0, 10000);
             }
             _annualExpenses = expenses.clamp(10000, 200000);
+            // Anchor the Lean/Standard/Fat presets to the user's real spend.
+            _baselineExpenses = _annualExpenses;
             _prefilledFromData = true;
           });
         }
@@ -334,6 +343,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Divider(color: context.hairline, height: 1),
+                  row(l.projTermLifestyle, l.projGlossaryLifestyleDef),
                   row(l.projFiNumber, l.projGlossaryFiNumberDef),
                   row(l.projTermCoast, l.projGlossaryCoastDef),
                   row(l.projTermBarista, l.projGlossaryBaristaDef),
@@ -409,7 +419,6 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           onChanged: (val) => setState(() => _annualExpenses = val),
           onChangeEnd: (_) => _fetchProjection(),
         ),
-        _buildSpendingPresets(l),
         Divider(height: 32, color: context.hairline),
         _buildSliderControl(
           label: l.projSafeWithdrawalRate,
@@ -576,49 +585,6 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           onChangeEnd: onChangeEnd,
         ),
       ],
-    );
-  }
-
-  // Lean / Standard / Fat lifestyle presets — they're just annual-expense
-  // levels, so tapping one moves the expenses slider (and re-runs the model).
-  // The "flavor" of FIRE on the spending axis, made tangible.
-  Widget _buildSpendingPresets(AppLocalizations l) {
-    Widget chip(String key, String label) {
-      final value = _spendingPresets[key]!;
-      final active = (_annualExpenses - value).abs() < 1.0;
-      return ChoiceChip(
-        label: Text(label),
-        selected: active,
-        visualDensity: VisualDensity.compact,
-        onSelected: (_) {
-          setState(() => _annualExpenses = value);
-          _fetchProjection();
-        },
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Row(
-        children: [
-          Text(
-            l.projSpendingLevel,
-            style: TextStyle(color: context.textFaint, fontSize: 11),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                chip('lean', l.projPresetLean),
-                chip('standard', l.projPresetStandard),
-                chip('fat', l.projPresetFat),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1119,6 +1085,42 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           onSelected: (_) => setState(() => _fireFocus = f),
         );
 
+    // Lifestyle presets are relative to the user's baseline spend, so
+    // "Standard" matches their real expenses and Lean/Fat step around it.
+    final base = (_baselineExpenses ??= _annualExpenses);
+    Widget lifeChip(String key, String label) {
+      final double value =
+          _presetExpense(key, base).clamp(10000.0, 200000.0).toDouble();
+      final active = (_annualExpenses - value).abs() < 500;
+      return ChoiceChip(
+        label: Text(label),
+        selected: active,
+        visualDensity: VisualDensity.compact,
+        onSelected: (_) {
+          setState(() => _annualExpenses = value);
+          _fetchProjection();
+        },
+      );
+    }
+
+    // A labelled axis row: fixed-width caption + its chips, so the Lifestyle
+    // and Goal rows line up.
+    Widget axis(String label, List<Widget> chips) => Row(
+          children: [
+            SizedBox(
+              width: 64,
+              child: Text(
+                label,
+                style: TextStyle(color: context.textFaint, fontSize: 11),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Wrap(spacing: 8, runSpacing: 8, children: chips),
+            ),
+          ],
+        );
+
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
@@ -1127,22 +1129,26 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              l.projFireFocusTitle,
+              l.projFirePlanTitle,
               style: TextStyle(
-                  color: context.textMuted,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600),
+                  color: context.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700),
             ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                chip(_FireFocus.full, l.projFocusFull),
-                chip(_FireFocus.coast, l.projTermCoast),
-                chip(_FireFocus.barista, l.projTermBarista),
-              ],
-            ),
+            const SizedBox(height: 12),
+            axis(l.projSpendingLevel, [
+              lifeChip('lean', l.projPresetLean),
+              lifeChip('standard', l.projPresetStandard),
+              lifeChip('fat', l.projPresetFat),
+            ]),
+            const SizedBox(height: 10),
+            axis(l.projGoalLabel, [
+              chip(_FireFocus.full, l.projFocusFull),
+              chip(_FireFocus.coast, l.projTermCoast),
+              chip(_FireFocus.barista, l.projTermBarista),
+            ]),
+            const SizedBox(height: 12),
+            Divider(color: context.hairline, height: 1),
             const SizedBox(height: 12),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,

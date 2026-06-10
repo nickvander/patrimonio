@@ -2532,6 +2532,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get projFireFocusTitle => 'Which FIRE are you aiming for?';
 
   @override
+  String get projFirePlanTitle => 'Your FIRE plan';
+
+  @override
+  String get projGoalLabel => 'Goal';
+
+  @override
+  String get projTermLifestyle => 'Lean / Standard / Fat';
+
+  @override
+  String get projGlossaryLifestyleDef =>
+      'Lifestyle levels — Lean is frugal, Fat is generous, Standard ≈ your tracked spending. They set your annual expenses, which sets every target.';
+
+  @override
   String get projFocusFull => 'Full FIRE';
 
   @override
