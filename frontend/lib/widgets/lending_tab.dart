@@ -561,6 +561,10 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
         .toList();
     final media = MediaQuery.of(context);
     final narrow = media.size.width < 380;
+    // Cap content at 460 but never exceed the viewport minus the AlertDialog's
+    // 16px-per-side inset, or the dialog overflows off-screen on narrow windows.
+    final dialogWidth =
+        media.size.width - 32 < 460 ? media.size.width - 32 : 460.0;
     // Height the scrollable content may take. AlertDialog stacks the
     // title (~88) + actions (~64) + inset padding (48) on top of the
     // content, plus any keyboard inset — leave room for all of it so the
@@ -605,11 +609,11 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
       ),
       content: ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: 460,
+          maxWidth: dialogWidth,
           maxHeight: contentMaxHeight,
         ),
         child: SizedBox(
-          width: 460,
+          width: dialogWidth,
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1334,6 +1338,8 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
     final contentMaxHeight =
         (media.size.height - media.viewInsets.bottom - 220)
             .clamp(220.0, 620.0);
+    final dialogWidth =
+        media.size.width - 32 < 460 ? media.size.width - 32 : 460.0;
     final readOnlyTerms = _termsSummary();
 
     return AlertDialog(
@@ -1371,11 +1377,11 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
       ),
       content: ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: 460,
+          maxWidth: dialogWidth,
           maxHeight: contentMaxHeight,
         ),
         child: SizedBox(
-          width: 460,
+          width: dialogWidth,
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
