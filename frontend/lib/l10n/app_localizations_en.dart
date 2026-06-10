@@ -2529,6 +2529,46 @@ class AppLocalizationsEn extends AppLocalizations {
       'Every figure is in today\'s dollars, so a future amount already accounts for inflation.';
 
   @override
+  String get projFireFocusTitle => 'Which FIRE are you aiming for?';
+
+  @override
+  String get projFocusFull => 'Full FIRE';
+
+  @override
+  String get projFullReached =>
+      'You\'ve reached your FI number — full FIRE is covered.';
+
+  @override
+  String projFullYearsAway(Object years) {
+    return 'About $years years away at your current pace.';
+  }
+
+  @override
+  String get projFullUnreachable =>
+      'Not reachable in this horizon — raise savings or returns.';
+
+  @override
+  String projCoastTake(Object amount) {
+    return 'You have $amount today — reach the figure above and growth alone finishes the job.';
+  }
+
+  @override
+  String get projBaristaPrompt =>
+      'Set \'Barista / pension income\' above to see this lower target.';
+
+  @override
+  String get projSpendingLevel => 'Lifestyle';
+
+  @override
+  String get projPresetLean => 'Lean';
+
+  @override
+  String get projPresetStandard => 'Standard';
+
+  @override
+  String get projPresetFat => 'Fat';
+
+  @override
   String get projTaxDrag => 'Tax drag';
 
   @override

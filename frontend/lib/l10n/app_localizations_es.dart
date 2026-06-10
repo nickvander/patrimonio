@@ -2553,6 +2553,46 @@ class AppLocalizationsEs extends AppLocalizations {
       'Cada cifra está en dólares de hoy, así que un monto futuro ya considera la inflación.';
 
   @override
+  String get projFireFocusTitle => '¿A qué tipo de FIRE apuntas?';
+
+  @override
+  String get projFocusFull => 'FIRE completo';
+
+  @override
+  String get projFullReached =>
+      'Alcanzaste tu número FI — el FIRE completo está cubierto.';
+
+  @override
+  String projFullYearsAway(Object years) {
+    return 'A unos $years años a tu ritmo actual.';
+  }
+
+  @override
+  String get projFullUnreachable =>
+      'No alcanzable en este horizonte — sube el ahorro o el rendimiento.';
+
+  @override
+  String projCoastTake(Object amount) {
+    return 'Hoy tienes $amount — llega a la cifra de arriba y el crecimiento hace el resto.';
+  }
+
+  @override
+  String get projBaristaPrompt =>
+      'Ajusta \'Ingreso Barista / pensión\' arriba para ver este objetivo menor.';
+
+  @override
+  String get projSpendingLevel => 'Estilo de vida';
+
+  @override
+  String get projPresetLean => 'Austero';
+
+  @override
+  String get projPresetStandard => 'Estándar';
+
+  @override
+  String get projPresetFat => 'Holgado';
+
+  @override
   String get projTaxDrag => 'Carga fiscal';
 
   @override

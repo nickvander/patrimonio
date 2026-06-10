@@ -4244,6 +4244,72 @@ abstract class AppLocalizations {
   /// **'Every figure is in today\'s dollars, so a future amount already accounts for inflation.'**
   String get projGlossaryRealDef;
 
+  /// No description provided for @projFireFocusTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Which FIRE are you aiming for?'**
+  String get projFireFocusTitle;
+
+  /// No description provided for @projFocusFull.
+  ///
+  /// In en, this message translates to:
+  /// **'Full FIRE'**
+  String get projFocusFull;
+
+  /// No description provided for @projFullReached.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve reached your FI number — full FIRE is covered.'**
+  String get projFullReached;
+
+  /// No description provided for @projFullYearsAway.
+  ///
+  /// In en, this message translates to:
+  /// **'About {years} years away at your current pace.'**
+  String projFullYearsAway(Object years);
+
+  /// No description provided for @projFullUnreachable.
+  ///
+  /// In en, this message translates to:
+  /// **'Not reachable in this horizon — raise savings or returns.'**
+  String get projFullUnreachable;
+
+  /// No description provided for @projCoastTake.
+  ///
+  /// In en, this message translates to:
+  /// **'You have {amount} today — reach the figure above and growth alone finishes the job.'**
+  String projCoastTake(Object amount);
+
+  /// No description provided for @projBaristaPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Set \'Barista / pension income\' above to see this lower target.'**
+  String get projBaristaPrompt;
+
+  /// No description provided for @projSpendingLevel.
+  ///
+  /// In en, this message translates to:
+  /// **'Lifestyle'**
+  String get projSpendingLevel;
+
+  /// No description provided for @projPresetLean.
+  ///
+  /// In en, this message translates to:
+  /// **'Lean'**
+  String get projPresetLean;
+
+  /// No description provided for @projPresetStandard.
+  ///
+  /// In en, this message translates to:
+  /// **'Standard'**
+  String get projPresetStandard;
+
+  /// No description provided for @projPresetFat.
+  ///
+  /// In en, this message translates to:
+  /// **'Fat'**
+  String get projPresetFat;
+
   /// No description provided for @projTaxDrag.
   ///
   /// In en, this message translates to:

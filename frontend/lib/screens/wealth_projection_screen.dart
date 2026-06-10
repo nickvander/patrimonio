@@ -6,6 +6,11 @@ import '../services/api_service.dart';
 import '../services/preferences.dart';
 import '../l10n/app_localizations.dart';
 
+/// Which FIRE "flavor" the user is focusing on. Purely a view choice — it
+/// switches which target the headline + chart line emphasize; the underlying
+/// projection math is identical for all three.
+enum _FireFocus { full, coast, barista }
+
 class WealthProjectionScreen extends StatefulWidget {
   final double currentNetWorth;
   final double conversionFactor;
@@ -60,6 +65,20 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   // jargon (Coast FIRE, Barista FI, withdrawal rate…) isn't obvious, so we
   // explain it on demand without permanently cluttering the screen.
   bool _showGlossary = false;
+
+  // Which FIRE flavor the headline + chart target line emphasize. Defaults to
+  // Full FIRE (the canonical "your number"); Coast / Barista are there to
+  // explore, answering "why Coast?" by making it one option among peers.
+  _FireFocus _fireFocus = _FireFocus.full;
+
+  // Lean / Standard / Fat lifestyle presets are just annual-expense levels
+  // (USD, real) — Lean = frugal, Fat = generous. Tapping one sets the
+  // expenses slider; dragging the slider clears the active preset.
+  static const Map<String, double> _spendingPresets = {
+    'lean': 30000,
+    'standard': 55000,
+    'fat': 110000,
+  };
 
   @override
   void initState() {
@@ -390,6 +409,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           onChanged: (val) => setState(() => _annualExpenses = val),
           onChangeEnd: (_) => _fetchProjection(),
         ),
+        _buildSpendingPresets(l),
         Divider(height: 32, color: context.hairline),
         _buildSliderControl(
           label: l.projSafeWithdrawalRate,
@@ -556,6 +576,49 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           onChangeEnd: onChangeEnd,
         ),
       ],
+    );
+  }
+
+  // Lean / Standard / Fat lifestyle presets — they're just annual-expense
+  // levels, so tapping one moves the expenses slider (and re-runs the model).
+  // The "flavor" of FIRE on the spending axis, made tangible.
+  Widget _buildSpendingPresets(AppLocalizations l) {
+    Widget chip(String key, String label) {
+      final value = _spendingPresets[key]!;
+      final active = (_annualExpenses - value).abs() < 1.0;
+      return ChoiceChip(
+        label: Text(label),
+        selected: active,
+        visualDensity: VisualDensity.compact,
+        onSelected: (_) {
+          setState(() => _annualExpenses = value);
+          _fetchProjection();
+        },
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          Text(
+            l.projSpendingLevel,
+            style: TextStyle(color: context.textFaint, fontSize: 11),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                chip('lean', l.projPresetLean),
+                chip('standard', l.projPresetStandard),
+                chip('fat', l.projPresetFat),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -790,8 +853,20 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     if (_projectionData == null) return Container();
 
     final points = _projectionData!['points'] as List<dynamic>;
-    final fiNumber =
-        (_projectionData!['fire_metrics']['fi_number'] as num).toDouble();
+    final fm = _projectionData!['fire_metrics'] as Map<String, dynamic>;
+    final fiNumber = (fm['fi_number'] as num?)?.toDouble() ?? 0.0;
+    final coastNumber = (fm['coast_fi_number'] as num?)?.toDouble() ?? 0.0;
+    final baristaNumber = (fm['barista_fi_number'] as num?)?.toDouble() ?? 0.0;
+    // The dashed target line + its colour track the focused FIRE flavor, so
+    // switching the focus chips visibly moves the goalpost on the chart.
+    final (double targetValue, Color targetColor) = switch (_fireFocus) {
+      _FireFocus.full => (fiNumber, context.warning),
+      _FireFocus.coast => (coastNumber > 0 ? coastNumber : fiNumber, context.info),
+      _FireFocus.barista => (
+          baristaNumber > 0 ? baristaNumber : fiNumber,
+          context.purpleAccent
+        ),
+    };
 
     // Expected (deterministic, real-return) path — the bold headline line.
     final spots = points.map((p) {
@@ -906,15 +981,15 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               ),
             ),
           ),
-          // FI target line
+          // Focused FIRE target line (Full / Coast / Barista)
           LineChartBarData(
             spots: [
-              FlSpot(0, fiNumber * widget.conversionFactor),
+              FlSpot(0, targetValue * widget.conversionFactor),
               FlSpot(_projectionYears.toDouble(),
-                  fiNumber * widget.conversionFactor),
+                  targetValue * widget.conversionFactor),
             ],
             isCurved: false,
-            color: context.warning.withValues(alpha: 0.6),
+            color: targetColor.withValues(alpha: 0.7),
             barWidth: 2,
             dashArray: [5, 5],
             dotData: const FlDotData(show: false),
@@ -982,98 +1057,142 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     );
   }
 
-  // Coast / Barista FIRE status strip — near-free given we know current
-  // balance: tells the user today whether they can stop contributing.
+  // FIRE focus card: pick a flavor (Full / Coast / Barista) and the headline
+  // — plus the chart's dashed target line — follow it. Replaces the old
+  // passive strip; answers "why Coast?" by making it one option among peers.
   Widget _buildFireStatusStrip() {
     final l = AppLocalizations.of(context);
     if (_projectionData == null) return const SizedBox.shrink();
     final m = _projectionData!['fire_metrics'] as Map<String, dynamic>;
+    final fiNumber = (m['fi_number'] as num?)?.toDouble() ?? 0.0;
     final coastAchieved = m['coast_fi_achieved'] == true;
-    final coastNumber =
-        (m['coast_fi_number'] as num?)?.toDouble() ?? 0.0;
-    final baristaNumber =
-        (m['barista_fi_number'] as num?)?.toDouble() ?? 0.0;
+    final coastNumber = (m['coast_fi_number'] as num?)?.toDouble() ?? 0.0;
+    final baristaNumber = (m['barista_fi_number'] as num?)?.toDouble() ?? 0.0;
+    final yearsToFi = (m['estimated_years_to_fi'] as num?)?.toDouble();
 
-    final coastColor = coastAchieved ? context.positive : context.info;
+    String money(double usd) =>
+        widget.currencyFormat.format(usd * widget.conversionFactor);
+
+    // Per-focus headline content.
+    final IconData icon;
+    final Color color;
+    final String title;
+    final String number;
+    final String def;
+    final String take;
+    switch (_fireFocus) {
+      case _FireFocus.full:
+        icon = Icons.flag_rounded;
+        color = context.warning;
+        title = l.projFocusFull;
+        number = money(fiNumber);
+        def = l.projGlossaryFiNumberDef;
+        take = yearsToFi == null
+            ? l.projFullUnreachable
+            : (yearsToFi <= 0
+                ? l.projFullReached
+                : l.projFullYearsAway(yearsToFi.toStringAsFixed(1)));
+      case _FireFocus.coast:
+        icon = coastAchieved
+            ? Icons.check_circle_rounded
+            : Icons.trending_up_rounded;
+        color = coastAchieved ? context.positive : context.info;
+        title = l.projTermCoast;
+        number = money(coastNumber);
+        def = l.projGlossaryCoastDef;
+        take = coastAchieved
+            ? l.projCoastReachedSub
+            : l.projCoastTake(money(widget.currentNetWorth));
+      case _FireFocus.barista:
+        icon = Icons.local_cafe_rounded;
+        color = context.purpleAccent;
+        title = l.projTermBarista;
+        number = baristaNumber > 0 ? money(baristaNumber) : '—';
+        def = l.projGlossaryBaristaDef;
+        take = baristaNumber > 0 ? l.projBaristaFiSub : l.projBaristaPrompt;
+    }
+
+    Widget chip(_FireFocus f, String label) => ChoiceChip(
+          label: Text(label),
+          selected: _fireFocus == f,
+          visualDensity: VisualDensity.compact,
+          onSelected: (_) => setState(() => _fireFocus = f),
+        );
+
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        child: Wrap(
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 16,
-          runSpacing: 8,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
+            Text(
+              l.projFireFocusTitle,
+              style: TextStyle(
+                  color: context.textMuted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                Icon(
-                  coastAchieved
-                      ? Icons.check_circle_rounded
-                      : Icons.trending_up_rounded,
-                  color: coastColor,
-                  size: 22,
-                ),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      coastAchieved
-                          ? l.projCoastReached
-                          : l.projCoastNeed(widget.currencyFormat
-                              .format(coastNumber * widget.conversionFactor)),
-                      style: TextStyle(
-                        color: context.textPrimary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                      ),
-                    ),
-                    Text(
-                      coastAchieved
-                          ? l.projCoastReachedSub
-                          : l.projCoastNeedSub,
-                      style:
-                          TextStyle(color: context.textFaint, fontSize: 11),
-                    ),
-                  ],
-                ),
+                chip(_FireFocus.full, l.projFocusFull),
+                chip(_FireFocus.coast, l.projTermCoast),
+                chip(_FireFocus.barista, l.projTermBarista),
               ],
             ),
-            if (baristaNumber > 0)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.local_cafe_rounded,
-                      color: context.purpleAccent, size: 20),
-                  const SizedBox(width: 8),
-                  Column(
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, color: color, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        l.projBaristaFi,
-                        style: TextStyle(
-                            color: context.textMuted, fontSize: 11),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            title,
+                            style: TextStyle(
+                                color: context.textPrimary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            number,
+                            style: TextStyle(
+                                color: color,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15),
+                          ),
+                        ],
                       ),
+                      const SizedBox(height: 2),
                       Text(
-                        widget.currencyFormat.format(
-                            baristaNumber * widget.conversionFactor),
+                        def,
                         style: TextStyle(
-                            color: context.textPrimary,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13),
+                            color: context.textMuted,
+                            fontSize: 12,
+                            height: 1.3),
                       ),
+                      const SizedBox(height: 4),
                       Text(
-                        l.projBaristaFiSub,
+                        take,
                         style:
-                            TextStyle(color: context.textFaint, fontSize: 11),
+                            TextStyle(color: context.textFaint, fontSize: 12),
                       ),
                     ],
                   ),
-                ],
-              ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
