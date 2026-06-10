@@ -4235,7 +4235,7 @@ abstract class AppLocalizations {
   /// No description provided for @projGlossaryCoastDef.
   ///
   /// In en, this message translates to:
-  /// **'You\'ve already saved enough that growth alone reaches your FI number by retirement — you can stop adding money and just coast.'**
+  /// **'The amount that, invested today, would grow to your FI number by retirement with no more saving — reach it and you can stop contributing.'**
   String get projGlossaryCoastDef;
 
   /// No description provided for @projGlossaryBaristaDef.
@@ -4319,7 +4319,7 @@ abstract class AppLocalizations {
   /// No description provided for @projCoastTake.
   ///
   /// In en, this message translates to:
-  /// **'You have {amount} today — reach the figure above and growth alone finishes the job.'**
+  /// **'You\'re at {amount} today — close the gap and growth alone finishes the job.'**
   String projCoastTake(Object amount);
 
   /// No description provided for @projBaristaPrompt.

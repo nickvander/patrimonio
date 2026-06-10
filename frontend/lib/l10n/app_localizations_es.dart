@@ -2545,7 +2545,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get projGlossaryCoastDef =>
-      'Ya ahorraste lo suficiente para que el crecimiento por sí solo alcance tu número FI al llegar al retiro — puedes dejar de aportar y solo dejar correr.';
+      'La cantidad que, invertida hoy, crecería hasta tu número FI al llegar al retiro sin ahorrar más — alcánzala y puedes dejar de aportar.';
 
   @override
   String get projGlossaryBaristaDef =>
@@ -2597,7 +2597,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String projCoastTake(Object amount) {
-    return 'Hoy tienes $amount — llega a la cifra de arriba y el crecimiento hace el resto.';
+    return 'Vas en $amount hoy — cierra la brecha y el crecimiento hace el resto.';
   }
 
   @override
