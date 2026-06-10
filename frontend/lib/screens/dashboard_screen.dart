@@ -119,6 +119,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // spinner on the Settings sync button (instead of a blocking SnackBar).
   bool _isSyncing = false;
   Map<String, dynamic>? _setupStatus;
+  // When every required check passes, the Launch-setup card collapses to a
+  // single "Ready" summary row; this tracks whether the user has expanded it
+  // to see the full diagnostic list. When a required check is missing the
+  // card is force-expanded regardless (warnings must stay visible).
+  bool _setupExpanded = false;
   Map<String, dynamic>? _fxRate;
   List<dynamic>? _transactions;
   List<AllocationData>? _allocationData;
@@ -1042,11 +1047,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         side: BorderSide(color: context.hairline),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         child: Column(
           children: [
             SwitchListTile(
@@ -2335,6 +2340,69 @@ class _DashboardScreenState extends State<DashboardScreen> {
       await _refreshData();
     }
 
+    // Compact "last synced · Sync now" bar for the Overview, so refreshing
+    // isn't buried in Settings. Reuses runSync + the inline _isSyncing state.
+    Widget buildSyncBar() {
+      DateTime? latest;
+      for (final inst in (_syncData ?? const [])) {
+        if (inst is Map && inst['last_synced_at'] != null) {
+          final dt =
+              DateTime.tryParse(inst['last_synced_at'].toString())?.toLocal();
+          if (dt != null && (latest == null || dt.isAfter(latest))) {
+            latest = dt;
+          }
+        }
+      }
+      final whenText = latest == null
+          ? l.lwSyncNever
+          : DateFormat('MMM d, h:mm a').format(latest);
+      return Row(
+        children: [
+          Icon(Icons.sync, size: 14, color: context.textFaint),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              l.dashSyncedAt(whenText),
+              style: TextStyle(fontSize: 12, color: context.textSubtle),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (_isSyncing)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(context.textMuted),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  l.dashSyncingAll,
+                  style: TextStyle(fontSize: 12, color: context.textMuted),
+                ),
+              ],
+            )
+          else
+            TextButton.icon(
+              onPressed: runSync,
+              icon: const Icon(Icons.refresh, size: 16),
+              label: Text(l.dashSyncNow),
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                foregroundColor: context.info,
+              ),
+            ),
+        ],
+      );
+    }
+
     Future<void> handleReconnect(String institutionId) async {
       setState(() => _isLoading = true);
       try {
@@ -2400,38 +2468,88 @@ class _DashboardScreenState extends State<DashboardScreen> {
           )
           .length;
 
+      // Optional-but-unconfigured checks (FX without an API key, Coinbase
+      // without OAuth creds) are non-events — hide them so they never read
+      // as a warning. Optional checks still appear once configured, as a
+      // green confirmation.
+      final visibleChecks = checks.where((raw) {
+        if (raw is! Map) return false;
+        return raw['configured'] == true || raw['severity'] != 'optional';
+      }).toList();
+
+      // When nothing required is missing the card collapses to a single
+      // "Ready" row; the full diagnostic list is one tap away. A missing
+      // required check force-expands it so the warning can't be hidden.
+      final ready = blocking.isEmpty;
+      final showDetails = !ready || _setupExpanded;
+
       return Card(
         elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
                   Icon(
-                    blocking.isEmpty
+                    ready
                         ? Icons.verified_user_outlined
                         : Icons.warning_amber_rounded,
-                    color: blocking.isEmpty ? context.positive : context.warning,
+                    color: ready ? context.positive : context.warning,
+                    size: 20,
                   ),
-                  const SizedBox(width: 10),
-                  Text(
-                    l.dashLaunchSetup,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      l.dashLaunchSetup,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
                   ),
+                  if (ready) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: context.positive.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        l.dashSetupReadyPill,
+                        style: TextStyle(
+                          color: context.positive,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () =>
+                          setState(() => _setupExpanded = !_setupExpanded),
+                      icon: Icon(_setupExpanded
+                          ? Icons.expand_less
+                          : Icons.expand_more),
+                      tooltip: _setupExpanded
+                          ? l.dashSetupHideDetails
+                          : l.dashSetupShowDetails,
+                      visualDensity: VisualDensity.compact,
+                      color: context.textMuted,
+                    ),
+                  ],
                 ],
               ),
-              const SizedBox(height: 12),
-              Text(
-                blocking.isEmpty
-                    ? l.dashLaunchSetupReady
-                    : l.dashLaunchSetupBlocked,
-                style: TextStyle(color: context.textMuted, fontSize: 13),
-              ),
-              const SizedBox(height: 12),
-              ...checks.map((raw) {
+              if (showDetails) ...[
+                const SizedBox(height: 12),
+                Text(
+                  ready
+                      ? l.dashLaunchSetupReady
+                      : l.dashLaunchSetupBlocked,
+                  style: TextStyle(color: context.textMuted, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                ...visibleChecks.map((raw) {
                 final check = raw as Map<String, dynamic>;
                 final configured = check['configured'] == true;
                 final key = check['key']?.toString() ?? '';
@@ -2455,7 +2573,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   );
                 }
                 return Padding(
-                  padding: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.only(top: 12),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -2513,6 +2631,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       .join(', ')),
                   style: TextStyle(color: context.textSubtle, fontSize: 12),
                 ),
+              ],
               ],
             ],
           ),
@@ -2616,6 +2735,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 conversionFactor: conversionFactor,
                 usdMxnRate: fxRate,
               ),
+              const SizedBox(height: 10),
+              buildSyncBar(),
               const SizedBox(height: 12),
               stats,
               const SizedBox(height: 24),
@@ -3030,8 +3151,210 @@ class _DashboardScreenState extends State<DashboardScreen> {
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
-          _buildModulesCard(),
+          // All "get data in" actions live in one card so the tab reads as a
+          // tidy set of sections (matching Overview/Transactions) instead of
+          // bare buttons floating on the background. Banks/manual and crypto
+          // are split into labelled sub-groups.
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.add_link,
+                          size: 18, color: context.tealAccent),
+                      const SizedBox(width: 8),
+                      Text(
+                        l.dashAddAccountsTitle,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  LayoutBuilder(builder: (ctx, c) {
+                    final isNarrow = c.maxWidth < 520;
+                    final tileWidth =
+                        isNarrow ? c.maxWidth : (c.maxWidth - 16) / 2;
+                    Widget tile(IconData icon, String label,
+                        {required Color bg,
+                        Color? fg,
+                        Color? iconColor,
+                        VoidCallback? onPressed}) {
+                      final foreground = fg ?? context.textPrimary;
+                      return SizedBox(
+                        width: tileWidth,
+                        child: ElevatedButton.icon(
+                          icon: Icon(icon, color: iconColor ?? foreground),
+                          label: Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 20),
+                            backgroundColor: bg,
+                            // Pin foreground so the label stays legible on
+                            // every tinted tile (ElevatedButton's default
+                            // light-mode tonal grey fades into the tint).
+                            foregroundColor: foreground,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          onPressed: onPressed,
+                        ),
+                      );
+                    }
+
+                    Widget subLabel(String text) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            text.toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: context.textSubtle,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                        );
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        subLabel(l.dashConnectStandardAccounts),
+                        Wrap(
+                          spacing: 16,
+                          runSpacing: 16,
+                          children: [
+                            tile(
+                              Icons.add_link,
+                              l.dashLinkPlaidUsBanks,
+                              bg: context.accentSoft(context.tealAccent),
+                              onPressed: plaidReady()
+                                  ? () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              const ConnectBankScreen(),
+                                        ),
+                                      ).then(
+                                          (_) => _loadAllData(silent: true));
+                                    }
+                                  : null,
+                            ),
+                            tile(
+                              Icons.upload_file,
+                              l.dashImportMxShort,
+                              bg: context.hairline,
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const ImportScreen(),
+                                  ),
+                                ).then((_) => _loadAllData(silent: true));
+                              },
+                            ),
+                            tile(
+                              Icons.add_circle_outline,
+                              l.dashAddManualAccountShort,
+                              bg: context.hairline,
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => AddAccountDialog(
+                                      onAccountCreated: _loadAllData),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        Divider(color: context.hairline, height: 1),
+                        const SizedBox(height: 20),
+                        subLabel(l.dashConnectCryptoExchanges),
+                        Wrap(
+                          spacing: 16,
+                          runSpacing: 16,
+                          children: [
+                            tile(
+                              Icons.login,
+                              l.dashLinkCoinbase,
+                              // Coinbase brand blue (#0052FF) with white
+                              // text/icon so the brand reads correctly in
+                              // light mode too.
+                              bg: const Color(0xFF0052FF),
+                              fg: Colors.white,
+                              onPressed: () {
+                                final baseUrl = _apiService.baseUrl;
+                                web.window.location.href =
+                                    '$baseUrl/auth/coinbase';
+                              },
+                            ),
+                            tile(
+                              Icons.currency_exchange,
+                              l.dashConnectBitso,
+                              bg: context.positive.withValues(alpha: 0.12),
+                              iconColor: context.positive,
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => AddCryptoDialog(
+                                    exchange: 'bitso',
+                                    onLinked: _loadAllData,
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: 24),
+          // "Sync all" acts on already-connected accounts, so it sits with
+          // the sync-status / FX monitoring row rather than the add-account
+          // actions. Inline spinner instead of a blocking SnackBar.
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: _isSyncing
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            context.textPrimary),
+                      ),
+                    )
+                  : const Icon(Icons.sync),
+              label: Text(
+                _isSyncing ? l.dashSyncingAll : l.dashSyncAllAccounts,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                backgroundColor: context.accentSoft(context.info),
+                foregroundColor: context.textPrimary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              onPressed: _isSyncing ? null : runSync,
+            ),
+          ),
+          const SizedBox(height: 16),
           LayoutBuilder(builder: (ctx, c) {
             // Below ~720px the SyncStatusCard + FxWidget pair gets squeezed
             // into unreadability when forced side-by-side. Stack them.
@@ -3135,194 +3458,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             );
           }),
           const SizedBox(height: 24),
-          buildSetupStatusCard(),
+          _buildModulesCard(),
           const SizedBox(height: 24),
-          Text(
-            l.dashConnectStandardAccounts,
-            style: TextStyle(fontSize: 16, color: context.textMuted),
-          ),
-          const SizedBox(height: 12),
-          // Connect-bank buttons. LayoutBuilder + Wrap lets them sit 2-up
-          // when there's room, then reflow to full-width single-column on
-          // phones — without crushing the "Import Mexico (CSV/PDF)" label
-          // into ellipsis territory inside a forced 50% Expanded.
-          LayoutBuilder(builder: (ctx, c) {
-            final isNarrow = c.maxWidth < 560;
-            final tileWidth = isNarrow ? c.maxWidth : (c.maxWidth - 16) / 2;
-            Widget tile(IconData icon, String label,
-                {Color? bg, VoidCallback? onPressed}) {
-              return SizedBox(
-                width: tileWidth,
-                child: ElevatedButton.icon(
-                  icon: Icon(icon),
-                  label: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    backgroundColor: bg ?? context.accentSoft(context.info),
-                    // ElevatedButton's default foreground in light mode is
-                    // a tonal mid-grey that fades into the tinted bg. Pin
-                    // it to textPrimary so the label and icon stay legible
-                    // on every tinted tile.
-                    foregroundColor: context.textPrimary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  onPressed: onPressed,
-                ),
-              );
-            }
-            return Wrap(
-              spacing: 16,
-              runSpacing: 16,
-              children: [
-                // Sync shows its progress inline (spinner + disabled) rather
-                // than a long bottom SnackBar that covered the crypto buttons.
-                SizedBox(
-                  width: tileWidth,
-                  child: ElevatedButton.icon(
-                    icon: _isSyncing
-                        ? SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                  context.textPrimary),
-                            ),
-                          )
-                        : const Icon(Icons.sync),
-                    label: Text(
-                      _isSyncing ? l.dashSyncingAll : l.dashSyncAllAccounts,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 20),
-                      backgroundColor: context.accentSoft(context.info),
-                      foregroundColor: context.textPrimary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    onPressed: _isSyncing ? null : runSync,
-                  ),
-                ),
-                tile(
-                  Icons.add_link,
-                  l.dashLinkPlaidUsBanks,
-                  bg: context.accentSoft(context.tealAccent),
-                  onPressed: plaidReady()
-                      ? () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const ConnectBankScreen(),
-                            ),
-                          ).then((_) => _loadAllData(silent: true));
-                        }
-                      : null,
-                ),
-                tile(Icons.upload_file, l.dashImportMxShort,
-                    bg: context.hairline,
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const ImportScreen(),
-                        ),
-                      ).then((_) => _loadAllData(silent: true));
-                    }),
-                tile(Icons.add_circle_outline, l.dashAddManualAccountShort,
-                    bg: context.hairline,
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) =>
-                            AddAccountDialog(onAccountCreated: _loadAllData),
-                      );
-                    }),
-              ],
-            );
-          }),
-          const SizedBox(height: 32),
-          Text(
-            l.dashConnectCryptoExchanges,
-            style: TextStyle(fontSize: 16, color: context.textMuted),
-          ),
-          const SizedBox(height: 12),
-          LayoutBuilder(builder: (ctx, c) {
-            final isNarrow = c.maxWidth < 560;
-            final tileWidth = isNarrow ? c.maxWidth : (c.maxWidth - 16) / 2;
-            return Wrap(
-              spacing: 16,
-              runSpacing: 16,
-              children: [
-                SizedBox(
-                  width: tileWidth,
-                  child: ElevatedButton.icon(
-                    // Coinbase brand blue (#0052FF) is the official
-                    // background — text/icon must be white regardless of
-                    // the active theme brightness so the brand reads
-                    // correctly in light mode too.
-                    icon: const Icon(Icons.login, color: Colors.white),
-                    label: Text(
-                      l.dashLinkCoinbase,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 20),
-                      backgroundColor: const Color(0xFF0052FF),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    onPressed: () {
-                      final baseUrl = _apiService.baseUrl;
-                      web.window.location.href = '$baseUrl/auth/coinbase';
-                    },
-                  ),
-                ),
-                SizedBox(
-                  width: tileWidth,
-                  child: ElevatedButton.icon(
-                    icon: Icon(
-                      Icons.currency_exchange,
-                      color: context.positive,
-                    ),
-                    label: Text(
-                      l.dashConnectBitso,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 20),
-                      backgroundColor: context.positive.withValues(alpha: 0.12),
-                      foregroundColor: context.textPrimary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => AddCryptoDialog(
-                          exchange: 'bitso',
-                          onLinked: _loadAllData,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            );
-          }),
+          // Deployment diagnostics sit last — they collapse to a single
+          // "Ready" row once required checks pass, so they no longer crowd
+          // the top of the tab.
+          buildSetupStatusCard(),
         ],
       ),
     );

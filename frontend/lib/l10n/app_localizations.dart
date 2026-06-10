@@ -3578,6 +3578,18 @@ abstract class AppLocalizations {
   /// **'Sync failed: {error}'**
   String dashSyncFailed(Object error);
 
+  /// No description provided for @dashSyncedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Synced {when}'**
+  String dashSyncedAt(Object when);
+
+  /// No description provided for @dashSyncNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync now'**
+  String get dashSyncNow;
+
   /// No description provided for @dashLaunchSetup.
   ///
   /// In en, this message translates to:
@@ -3769,6 +3781,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Connect Bitso'**
   String get dashConnectBitso;
+
+  /// No description provided for @dashAddAccountsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add accounts'**
+  String get dashAddAccountsTitle;
+
+  /// No description provided for @dashSetupReadyPill.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get dashSetupReadyPill;
+
+  /// No description provided for @dashSetupShowDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Show details'**
+  String get dashSetupShowDetails;
+
+  /// No description provided for @dashSetupHideDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide details'**
+  String get dashSetupHideDetails;
 
   /// No description provided for @dashHiddenItems.
   ///
@@ -4711,6 +4747,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'ACCOUNTS'**
   String get pfAccountsHeader;
+
+  /// No description provided for @pfSearchAccounts.
+  ///
+  /// In en, this message translates to:
+  /// **'Search accounts'**
+  String get pfSearchAccounts;
+
+  /// No description provided for @pfHideZero.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide \$0'**
+  String get pfHideZero;
+
+  /// No description provided for @pfNoAccountMatches.
+  ///
+  /// In en, this message translates to:
+  /// **'No accounts match'**
+  String get pfNoAccountMatches;
+
+  /// No description provided for @pfClearFilters.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear filters'**
+  String get pfClearFilters;
 
   /// No description provided for @pfGroupCash.
   ///

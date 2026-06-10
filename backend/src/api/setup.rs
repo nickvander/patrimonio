@@ -37,11 +37,16 @@ async fn setup_status(State(state): State<AppState>) -> Json<SetupStatus> {
             key: "fx".to_string(),
             label: "Exchange rates".to_string(),
             configured: config.exchange_rate_api_key.is_some(),
-            severity: "recommended".to_string(),
+            // Optional, not recommended: the live USD/MXN rate the app uses
+            // for multi-currency conversion works fine on cached/fallback
+            // rates, so an unset key is a non-event — keep it out of the
+            // "recommended before production" recap and let the UI hide it
+            // when unconfigured (only confirm it when a key IS present).
+            severity: "optional".to_string(),
             detail: if config.exchange_rate_api_key.is_some() {
                 "Live FX API key configured".to_string()
             } else {
-                "No EXCHANGE_RATE_API_KEY set; app can still use cached/fallback rates".to_string()
+                "Optional — set EXCHANGE_RATE_API_KEY for live rates; cached/fallback rates are used otherwise".to_string()
             },
         },
         SetupCheck {
@@ -63,10 +68,14 @@ async fn setup_status(State(state): State<AppState>) -> Json<SetupStatus> {
             key: "plaid_webhook".to_string(),
             label: "Plaid webhook URL".to_string(),
             configured: config.plaid_webhook_url.is_some(),
-            severity: "recommended".to_string(),
+            // Optional, not recommended: without it Plaid falls back to ~4h
+            // polling, which is fine for a single-owner self-host. Keep it out
+            // of the nag list and hide it when unset (the UI only surfaces
+            // unconfigured `optional` checks once they're actually set).
+            severity: "optional".to_string(),
             detail: match &config.plaid_webhook_url {
                 Some(url) => format!("Configured → {}", url),
-                None => "Set PLAID_WEBHOOK_URL to a public HTTPS endpoint to enable real-time syncs (see docs/deployment.md)".to_string(),
+                None => "Optional — set PLAID_WEBHOOK_URL for real-time syncs; otherwise Plaid polls every ~4h (see docs/deployment.md)".to_string(),
             },
         },
         SetupCheck {

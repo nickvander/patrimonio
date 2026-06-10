@@ -2164,6 +2164,14 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String dashSyncedAt(Object when) {
+    return 'Sincronizado $when';
+  }
+
+  @override
+  String get dashSyncNow => 'Sincronizar';
+
+  @override
   String get dashLaunchSetup => 'Configuración de lanzamiento';
 
   @override
@@ -2283,6 +2291,18 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get dashConnectBitso => 'Conectar Bitso';
+
+  @override
+  String get dashAddAccountsTitle => 'Agregar cuentas';
+
+  @override
+  String get dashSetupReadyPill => 'Listo';
+
+  @override
+  String get dashSetupShowDetails => 'Mostrar detalles';
+
+  @override
+  String get dashSetupHideDetails => 'Ocultar detalles';
 
   @override
   String get dashHiddenItems => 'Elementos ocultos';
@@ -2844,6 +2864,18 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get pfAccountsHeader => 'CUENTAS';
+
+  @override
+  String get pfSearchAccounts => 'Buscar cuentas';
+
+  @override
+  String get pfHideZero => 'Ocultar \$0';
+
+  @override
+  String get pfNoAccountMatches => 'Ninguna cuenta coincide';
+
+  @override
+  String get pfClearFilters => 'Limpiar filtros';
 
   @override
   String get pfGroupCash => 'Efectivo';

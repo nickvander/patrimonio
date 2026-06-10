@@ -6,7 +6,7 @@ import '../utils/account_category.dart';
 import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
-class AccountsListWidget extends StatelessWidget {
+class AccountsListWidget extends StatefulWidget {
   final List<dynamic> accounts;
   final double conversionFactor;
   final NumberFormat currencyFormat;
@@ -42,6 +42,65 @@ class AccountsListWidget extends StatelessWidget {
     this.onAddAccount,
     this.onAlertsChanged,
   });
+
+  @override
+  State<AccountsListWidget> createState() => _AccountsListWidgetState();
+}
+
+class _AccountsListWidgetState extends State<AccountsListWidget> {
+  // Proxy getters: the render helpers below were written against bare field
+  // names while this was a StatelessWidget. Exposing them as getters keeps
+  // those method bodies unchanged after the StatefulWidget split.
+  List<dynamic> get accounts => widget.accounts;
+  double get conversionFactor => widget.conversionFactor;
+  NumberFormat get currencyFormat => widget.currencyFormat;
+  String get targetCurrency => widget.targetCurrency;
+  double get usdMxnRate => widget.usdMxnRate;
+  Function(String, double)? get onBalanceUpdate => widget.onBalanceUpdate;
+  Function(String)? get onDeleteAccount => widget.onDeleteAccount;
+  Function(String, String)? get onRenameAccount => widget.onRenameAccount;
+  Function(String, double, String?)? get onRevalueAccount =>
+      widget.onRevalueAccount;
+  VoidCallback? get onAddAccount => widget.onAddAccount;
+  VoidCallback? get onAlertsChanged => widget.onAlertsChanged;
+
+  // Local UI state (collapse / filter), kept on the State so a silent data
+  // refresh doesn't reset which groups are open or what's typed in search.
+  final Set<String> _collapsed = {};
+  bool _collapseInitialized = false;
+  bool _hideZero = false;
+  final TextEditingController _searchCtl = TextEditingController();
+  String _search = '';
+
+  // Past this many accounts we (a) show the search box and (b) start every
+  // group collapsed, so a long list opens as a scannable set of subtotal
+  // headers instead of a wall of rows.
+  static const int _longListThreshold = 8;
+
+  @override
+  void dispose() {
+    _searchCtl.dispose();
+    super.dispose();
+  }
+
+  bool _matchesSearch(dynamic acc) {
+    final q = _search.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    final hay = [
+      acc['nickname'],
+      acc['name'],
+      acc['official_name'],
+      acc['institution_name'],
+      acc['account_type'],
+    ].where((e) => e != null).map((e) => e.toString().toLowerCase()).join(' ');
+    return hay.contains(q);
+  }
+
+  bool _isZeroBalance(dynamic acc) =>
+      ((acc['current_balance'] ?? 0.0) as num).toDouble().abs() < 0.005;
+
+  bool _passesFilters(dynamic acc) =>
+      _matchesSearch(acc) && (!_hideZero || !_isZeroBalance(acc));
 
   @override
   Widget build(BuildContext context) {
@@ -105,7 +164,11 @@ class AccountsListWidget extends StatelessWidget {
     // and log them to the dev console (we catch them in telemetry).
     final unknownTypes = <String>{};
 
-    for (var acc in accounts) {
+    // Apply search + hide-zero before grouping so headers, subtotals and
+    // counts all reflect exactly what's shown.
+    final visibleAccounts = accounts.where(_passesFilters).toList();
+
+    for (var acc in visibleAccounts) {
       switch (categorizeAccount(acc['account_type']?.toString())) {
         case AccountCategory.cash:
           cashAccounts.add(acc);
@@ -137,6 +200,30 @@ class AccountsListWidget extends StatelessWidget {
       );
     }
 
+    // Titles of the groups that will render, in display order. Seeds the
+    // default-collapsed set; _buildAccountGroup keys its collapse state on
+    // the same title.
+    final groupTitles = <String>[
+      if (cashAccounts.isNotEmpty) l.pfGroupCash,
+      if (investmentAccounts.isNotEmpty) l.pfGroupInvestments,
+      if (cryptoAccounts.isNotEmpty) l.pfGroupCrypto,
+      if (creditAccounts.isNotEmpty) l.pfGroupCreditCards,
+      if (loanAccounts.isNotEmpty) l.pfGroupLoans,
+      if (realAssetAccounts.isNotEmpty) l.pfGroupRealAssets,
+      if (otherAccounts.isNotEmpty) l.pfGroupOther,
+    ];
+    if (!_collapseInitialized) {
+      _collapseInitialized = true;
+      // A long list opens collapsed (headers + subtotals only); a short list
+      // stays fully expanded.
+      if (accounts.length > _longListThreshold) {
+        _collapsed.addAll(groupTitles);
+      }
+    }
+
+    final showControls =
+        accounts.length >= _longListThreshold || _hideZero || _search.isNotEmpty;
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -155,11 +242,18 @@ class AccountsListWidget extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            ListView(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
-                if (cashAccounts.isNotEmpty)
+            if (showControls) ...[
+              _buildFilterControls(context, l),
+              const SizedBox(height: 16),
+            ],
+            if (visibleAccounts.isEmpty)
+              _buildNoMatches(context, l)
+            else
+              ListView(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  if (cashAccounts.isNotEmpty)
                   _buildAccountGroup(
                     context,
                     l.pfGroupCash,
@@ -239,6 +333,81 @@ class AccountsListWidget extends StatelessWidget {
     );
   }
 
+  /// Search box + "hide $0" filter chip. Shown only once the list is long
+  /// enough to be worth filtering (or while a filter is already active).
+  Widget _buildFilterControls(BuildContext context, AppLocalizations l) {
+    return Row(
+      children: [
+        Expanded(
+          child: SizedBox(
+            height: 40,
+            child: TextField(
+              controller: _searchCtl,
+              onChanged: (v) => setState(() => _search = v),
+              textInputAction: TextInputAction.search,
+              style: const TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                isDense: true,
+                prefixIcon: const Icon(Icons.search, size: 18),
+                hintText: l.pfSearchAccounts,
+                suffixIcon: _search.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.close, size: 16),
+                        tooltip: l.pfClearFilters,
+                        onPressed: () => setState(() {
+                          _searchCtl.clear();
+                          _search = '';
+                        }),
+                      ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        FilterChip(
+          label: Text(l.pfHideZero),
+          selected: _hideZero,
+          onSelected: (v) => setState(() => _hideZero = v),
+          visualDensity: VisualDensity.compact,
+        ),
+      ],
+    );
+  }
+
+  /// Shown when search / hide-zero filter out every account.
+  Widget _buildNoMatches(BuildContext context, AppLocalizations l) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 28),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.search_off, size: 36, color: context.textFaint),
+            const SizedBox(height: 8),
+            Text(
+              l.pfNoAccountMatches,
+              style: TextStyle(color: context.textMuted, fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            TextButton(
+              onPressed: () => setState(() {
+                _searchCtl.clear();
+                _search = '';
+                _hideZero = false;
+              }),
+              child: Text(l.pfClearFilters),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildAccountGroup(
     BuildContext context,
     String title,
@@ -279,6 +448,18 @@ class AccountsListWidget extends StatelessWidget {
           ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
     }
 
+    // Long lists default to collapsed; an active search force-expands every
+    // group so matches are visible without hunting through headers.
+    final collapsed =
+        _search.trim().isEmpty ? _collapsed.contains(title) : false;
+    void toggle() => setState(() {
+          if (_collapsed.contains(title)) {
+            _collapsed.remove(title);
+          } else {
+            _collapsed.add(title);
+          }
+        });
+
     return Container(
       margin: const EdgeInsets.only(bottom: 24.0),
       decoration: BoxDecoration(
@@ -289,7 +470,10 @@ class AccountsListWidget extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LayoutBuilder(
+          InkWell(
+            onTap: toggle,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            child: LayoutBuilder(
             builder: (context, constraints) {
               final isNarrow = constraints.maxWidth < 380;
               final headerIcon = Container(
@@ -301,7 +485,7 @@ class AccountsListWidget extends StatelessWidget {
                 child: Icon(icon, color: accentColor, size: 18),
               );
               final titleText = Text(
-                title,
+                '$title · ${groupAccounts.length}',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -310,6 +494,11 @@ class AccountsListWidget extends StatelessWidget {
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+              );
+              final chevron = Icon(
+                collapsed ? Icons.chevron_right : Icons.expand_more,
+                size: 20,
+                color: context.textSubtle,
               );
               final totalText = Text(
                 currencyFormat.format(total),
@@ -422,6 +611,8 @@ class AccountsListWidget extends StatelessWidget {
                     children: [
                       Row(
                         children: [
+                          chevron,
+                          const SizedBox(width: 4),
                           headerIcon,
                           const SizedBox(width: 12),
                           Expanded(child: titleText),
@@ -446,6 +637,8 @@ class AccountsListWidget extends StatelessWidget {
                   children: [
                     Row(
                       children: [
+                        chevron,
+                        const SizedBox(width: 4),
                         headerIcon,
                         const SizedBox(width: 12),
                         Expanded(child: titleText),
@@ -459,9 +652,22 @@ class AccountsListWidget extends StatelessWidget {
                 ),
               );
             },
+            ),
           ),
-          Divider(color: context.hairline, height: 1),
-          ..._renderAccountsWithVaults(context, groupAccounts),
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 160),
+            sizeCurve: Curves.easeOut,
+            crossFadeState:
+                collapsed ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+            firstChild: const SizedBox(width: double.infinity),
+            secondChild: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Divider(color: context.hairline, height: 1),
+                ..._renderAccountsWithVaults(context, groupAccounts),
+              ],
+            ),
+          ),
         ],
       ),
     );
