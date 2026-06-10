@@ -2483,7 +2483,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get projHelpTaxDrag =>
-      'Yearly haircut from taxes and fees on your returns. ~0.5–1% is typical.';
+      'What taxes and fund fees take out of your return each year. ~0.5–1% is typical.';
+
+  @override
+  String get projLegendProjected => 'Projected';
+
+  @override
+  String projLegendTarget(Object flavor) {
+    return '$flavor target';
+  }
+
+  @override
+  String get projLegendGoal => 'Your goal';
 
   @override
   String get projHelpYearsToRetirement =>

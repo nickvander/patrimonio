@@ -4169,8 +4169,26 @@ abstract class AppLocalizations {
   /// No description provided for @projHelpTaxDrag.
   ///
   /// In en, this message translates to:
-  /// **'Yearly haircut from taxes and fees on your returns. ~0.5–1% is typical.'**
+  /// **'What taxes and fund fees take out of your return each year. ~0.5–1% is typical.'**
   String get projHelpTaxDrag;
+
+  /// No description provided for @projLegendProjected.
+  ///
+  /// In en, this message translates to:
+  /// **'Projected'**
+  String get projLegendProjected;
+
+  /// No description provided for @projLegendTarget.
+  ///
+  /// In en, this message translates to:
+  /// **'{flavor} target'**
+  String projLegendTarget(Object flavor);
+
+  /// No description provided for @projLegendGoal.
+  ///
+  /// In en, this message translates to:
+  /// **'Your goal'**
+  String get projLegendGoal;
 
   /// No description provided for @projHelpYearsToRetirement.
   ///

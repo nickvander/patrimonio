@@ -2507,7 +2507,18 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get projHelpTaxDrag =>
-      'Recorte anual por impuestos y comisiones sobre tus rendimientos. ~0.5–1% es lo típico.';
+      'Lo que los impuestos y comisiones de fondos restan a tu rendimiento cada año. ~0.5–1% es lo típico.';
+
+  @override
+  String get projLegendProjected => 'Proyectado';
+
+  @override
+  String projLegendTarget(Object flavor) {
+    return 'Objetivo $flavor';
+  }
+
+  @override
+  String get projLegendGoal => 'Tu meta';
 
   @override
   String get projHelpYearsToRetirement =>

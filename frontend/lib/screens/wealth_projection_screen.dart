@@ -774,32 +774,86 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                       ),
                     ],
                   ),
-                  if (_showBand)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: context.positive.withValues(alpha: 0.18),
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            l.projBandLegend,
-                            style: TextStyle(
-                                color: context.textFaint, fontSize: 11),
-                          ),
-                        ],
-                      ),
-                    ),
+                  _buildChartLegend(l),
                   const SizedBox(height: 18),
                   Expanded(child: _buildChart()),
                 ],
               ),
+      ),
+    );
+  }
+
+  // Names every line on the chart so the dashed lines aren't a mystery: the
+  // solid projected path, the focused FIRE target (colour-matched to the
+  // plan card), the optional user goal, and the uncertainty band.
+  Widget _buildChartLegend(AppLocalizations l) {
+    final (Color targetColor, String flavor) = switch (_fireFocus) {
+      _FireFocus.full => (context.warning, l.projFocusFull),
+      _FireFocus.coast => (context.info, l.projTermCoast),
+      _FireFocus.barista => (context.purpleAccent, l.projTermBarista),
+    };
+    Widget line(Color c, String label, {bool dashed = false}) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 16,
+              height: 3,
+              child: dashed
+                  ? Row(
+                      children: List.generate(
+                        3,
+                        (_) => Container(
+                          width: 4,
+                          height: 3,
+                          margin: const EdgeInsets.only(right: 2),
+                          decoration: BoxDecoration(
+                            color: c,
+                            borderRadius: BorderRadius.circular(1),
+                          ),
+                        ),
+                      ),
+                    )
+                  : Container(
+                      decoration: BoxDecoration(
+                        color: c,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 6),
+            Text(label,
+                style: TextStyle(color: context.textFaint, fontSize: 11)),
+          ],
+        );
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Wrap(
+        spacing: 16,
+        runSpacing: 6,
+        children: [
+          line(context.positive, l.projLegendProjected),
+          line(targetColor, l.projLegendTarget(flavor), dashed: true),
+          if (_goalAmountUsd != null)
+            line(context.yellowAccent, l.projLegendGoal, dashed: true),
+          if (_showBand)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: context.positive.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(l.projBandLegend,
+                    style:
+                        TextStyle(color: context.textFaint, fontSize: 11)),
+              ],
+            ),
+        ],
       ),
     );
   }
