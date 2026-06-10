@@ -150,6 +150,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
   // Local spinner state while widget.onLoadMore is in-flight so the "Load
   // more" button itself shows feedback without a full-page reload.
   bool _loadingMore = false;
+  // True while we're cascade-loading the remaining pages so a client-side
+  // filter can see the user's whole history (see _loadAllForFilter).
+  bool _autoLoading = false;
   // True inline rename: when set, the row with this tx id renders a
   // TextField in place of the label. Double-click on the label or R
   // while hovering opens the editor. Enter saves, Esc cancels (so
@@ -381,7 +384,28 @@ class _TransactionsTabState extends State<TransactionsTab> {
     _filteredCacheIdentity = identity;
     _filteredCacheQuery = q;
     _filteredCacheFilters = _filters;
+    // (cascade-load trigger lives in build(), keyed off the same filter state)
     return result;
+  }
+
+  /// Cascade-load the remaining pages so a client-side filter/search can see
+  /// the user's whole history (bounded by the backend's 500-row cap). Runs at
+  /// most one cascade at a time; stops early if the filter is cleared.
+  Future<void> _loadAllForFilter() async {
+    if (_autoLoading) return;
+    final onLoadMore = widget.onLoadMore;
+    if (onLoadMore == null) return;
+    _autoLoading = true;
+    if (mounted) setState(() {});
+    try {
+      while (mounted &&
+          widget.hasMore &&
+          (_searchQuery.isNotEmpty || _filters.isActive)) {
+        await onLoadMore();
+      }
+    } finally {
+      if (mounted) setState(() => _autoLoading = false);
+    }
   }
 
   /// Lowercased haystack for one tx: the searchable fields joined
@@ -573,6 +597,16 @@ class _TransactionsTabState extends State<TransactionsTab> {
 
     final filtered = _filteredTransactions;
 
+    // Filtering/search is client-side over the loaded pages. If a filter is
+    // active but more pages exist, an account/category whose activity sits
+    // below the loaded window wrongly shows nothing (the "Nu — Cuenta: no
+    // results" bug). Pull in the rest once so the filter sees everything.
+    if (!_autoLoading &&
+        widget.hasMore &&
+        (_searchQuery.isNotEmpty || _filters.isActive)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadAllForFilter());
+    }
+
     return Focus(
       // Tab-level R-key shortcut: opens inline rename on the most-
       // recently hovered row. Skipped automatically when focus is
@@ -614,7 +648,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   child: Center(
-                    child: _loadingMore
+                    child: (_loadingMore || _autoLoading)
                         ? const SizedBox(
                             height: 20,
                             width: 20,
