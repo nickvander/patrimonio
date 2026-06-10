@@ -71,6 +71,9 @@ services:
   # PostgreSQL database
   postgres:
     image: postgres:17-alpine
+    # Without this the DB stays down after a host reboot / `docker stop`,
+    # which takes the api (and your login) down with it. Match frontend/api.
+    restart: unless-stopped
     ports:
       # Bound to loopback by default. The api reaches postgres over the
       # internal compose network (service name `postgres:5432`), so the
@@ -99,6 +102,7 @@ services:
   # Redis cache + session / WebAuthn-ceremony store
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       # Loopback only (same rationale as postgres). The api reaches redis
       # over the internal network (service name `redis:6379`).
