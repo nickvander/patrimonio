@@ -495,6 +495,9 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   String _ratePeriod = 'annual';
   String _paymentFrequency = 'monthly';
   DateTime _originationDate = DateTime.now();
+  // Optional "pay back by" date — works for any loan style, including a
+  // no-interest open-ended loan that just needs a due date + reminder.
+  DateTime? _expectedRepaymentDate;
   bool _submitting = false;
   // When true, the user enters the payment they can make and we solve
   // for the term (instead of entering a term and computing the payment).
@@ -696,6 +699,10 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                   const SizedBox(height: 14),
                   _termOrPaymentControls(narrow),
                   _advancedPanel(narrow),
+                ]),
+                const SizedBox(height: 16),
+                _section('Expected repayment', [
+                  _expectedDateField(),
                 ]),
                 const SizedBox(height: 16),
                 _section('Notes', [
@@ -1190,6 +1197,52 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     if (picked != null) setState(() => _originationDate = picked);
   }
 
+  // Optional, clearable "pay back by" date. A repayment is in the future, so
+  // (unlike "Lent on") the picker allows future dates.
+  Future<void> _pickExpectedDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _expectedRepaymentDate ??
+          _originationDate.add(const Duration(days: 30)),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) setState(() => _expectedRepaymentDate = picked);
+  }
+
+  Widget _expectedDateField() {
+    return Row(
+      children: [
+        Expanded(
+          child: InkWell(
+            onTap: _pickExpectedDate,
+            borderRadius: BorderRadius.circular(10),
+            child: InputDecorator(
+              decoration: _decoration('Pay back by',
+                  icon: Icons.event_available_outlined),
+              child: Text(
+                _expectedRepaymentDate == null
+                    ? 'Optional — when do they pay it back?'
+                    : DateFormat('MMM d, y').format(_expectedRepaymentDate!),
+                style: TextStyle(
+                  color: _expectedRepaymentDate == null
+                      ? context.textFaint
+                      : context.textPrimary,
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (_expectedRepaymentDate != null)
+          IconButton(
+            icon: const Icon(Icons.clear, size: 18),
+            tooltip: 'Clear date',
+            onPressed: () => setState(() => _expectedRepaymentDate = null),
+          ),
+      ],
+    );
+  }
+
   Future<void> _submit() async {
     final borrower = _borrowerText.trim();
     final principal = double.tryParse(_principalCtrl.text.trim());
@@ -1244,6 +1297,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
         // the loan is open-ended (repayments recorded ad hoc).
         paymentFrequency: term != null ? _paymentFrequency : null,
         notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+        expectedRepaymentDate: _expectedRepaymentDate,
       );
       if (!mounted) return;
       Navigator.pop(context, true);
@@ -1289,6 +1343,7 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
   late final TextEditingController _rateCtrl;
   late final TextEditingController _notesCtrl;
   late String _interestType;
+  DateTime? _expectedRepaymentDate;
   bool _submitting = false;
 
   String get _currency =>
@@ -1313,6 +1368,53 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
     _notesCtrl = TextEditingController(
         text: (widget.loan['notes'] ?? '').toString());
     _interestType = (widget.loan['interest_type'] ?? 'none').toString();
+    final erd = widget.loan['expected_repayment_date'];
+    _expectedRepaymentDate =
+        erd == null ? null : DateTime.tryParse(erd.toString());
+  }
+
+  Future<void> _pickExpectedDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate:
+          _expectedRepaymentDate ?? DateTime.now().add(const Duration(days: 30)),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) setState(() => _expectedRepaymentDate = picked);
+  }
+
+  Widget _expectedDateField() {
+    return Row(
+      children: [
+        Expanded(
+          child: InkWell(
+            onTap: _pickExpectedDate,
+            borderRadius: BorderRadius.circular(10),
+            child: InputDecorator(
+              decoration: _decoration('Pay back by',
+                  icon: Icons.event_available_outlined),
+              child: Text(
+                _expectedRepaymentDate == null
+                    ? 'Optional — when do they pay it back?'
+                    : DateFormat('MMM d, y').format(_expectedRepaymentDate!),
+                style: TextStyle(
+                  color: _expectedRepaymentDate == null
+                      ? context.textFaint
+                      : context.textPrimary,
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (_expectedRepaymentDate != null)
+          IconButton(
+            icon: const Icon(Icons.clear, size: 18),
+            tooltip: 'Clear date',
+            onPressed: () => setState(() => _expectedRepaymentDate = null),
+          ),
+      ],
+    );
   }
 
   /// Format a double for an editable field without a trailing ".0".
@@ -1445,6 +1547,10 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
                           TextStyle(fontSize: 11, color: context.textSubtle),
                     ),
                   ],
+                ]),
+                const SizedBox(height: 16),
+                _section('Expected repayment', [
+                  _expectedDateField(),
                 ]),
                 const SizedBox(height: 16),
                 _section('Notes', [
@@ -1591,6 +1697,7 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
         // Empty clears the note (COALESCE keeps the old value only on
         // null; we send an explicit empty string to allow clearing).
         notes: notes,
+        expectedRepaymentDate: _expectedRepaymentDate,
       );
       if (!mounted) return;
       // Hand the edited values back in the loan's display shape so the
@@ -1601,6 +1708,9 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
         'interest_rate': rateFraction,
         'interest_type': _interestType,
         'notes': notes,
+        if (_expectedRepaymentDate != null)
+          'expected_repayment_date':
+              DateFormat('yyyy-MM-dd').format(_expectedRepaymentDate!),
       });
     } on LoanTermsLockedException catch (e) {
       if (!mounted) return;
@@ -2045,7 +2155,45 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
           )
         else
           _buildScheduleTable(scheduled),
+        _buildDueDateRow(),
       ],
+    );
+  }
+
+  // "Pay back by <date> · in N days / overdue" — the schedule-less due date.
+  // Colour-coded: green when comfortably ahead, amber within a week, red when
+  // overdue. Hidden when no expected_repayment_date is set.
+  Widget _buildDueDateRow() {
+    final raw = widget.loan['expected_repayment_date'];
+    if (raw == null) return const SizedBox.shrink();
+    final date = DateTime.tryParse(raw.toString());
+    if (date == null) return const SizedBox.shrink();
+    final now = DateTime.now();
+    final days = DateTime(date.year, date.month, date.day)
+        .difference(DateTime(now.year, now.month, now.day))
+        .inDays;
+    final overdue = days < 0;
+    final color = overdue
+        ? context.negative
+        : (days <= 7 ? context.warning : context.positive);
+    final when = overdue
+        ? 'overdue by ${-days} day${days == -1 ? '' : 's'}'
+        : (days == 0 ? 'due today' : 'in $days day${days == 1 ? '' : 's'}');
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(
+        children: [
+          Icon(Icons.event_available_outlined, size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Pay back by ${DateFormat('MMM d, y').format(date)} · $when',
+              style: TextStyle(
+                  fontSize: 12.5, color: color, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

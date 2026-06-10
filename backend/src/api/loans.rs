@@ -80,6 +80,9 @@ struct LoanView {
     term_months: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     payment_frequency: Option<String>,
+    /// Optional explicit "pay back by" date (YYYY-MM-DD), schedule or not.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expected_repayment_date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     disbursement_tx_id: Option<String>,
     status: String,
@@ -166,6 +169,10 @@ struct CreateLoanRequest {
     payment_frequency: Option<String>,
     #[serde(default)]
     notes: Option<String>,
+    /// Optional explicit "pay back by" date. Independent of term/frequency —
+    /// gives even an open-ended, no-interest loan a due date.
+    #[serde(default)]
+    expected_repayment_date: Option<chrono::NaiveDate>,
 }
 
 fn default_interest_type() -> String {
@@ -194,6 +201,8 @@ struct UpdateLoanRequest {
     status: Option<String>,
     #[serde(default)]
     notes: Option<String>,
+    #[serde(default)]
+    expected_repayment_date: Option<chrono::NaiveDate>,
 }
 
 #[derive(Deserialize)]
@@ -306,12 +315,23 @@ const LOAN_AGGREGATES: &str = r#"
     COALESCE((SELECT SUM(COALESCE(p.principal_portion, p.paid_amount, 0))
               FROM loan_payments p
               WHERE p.loan_id = l.id AND p.paid_amount IS NOT NULL), 0) AS principal_paid,
-    (SELECT MIN(p.due_date) FROM loan_payments p
-     WHERE p.loan_id = l.id
-       AND (p.actual_tx_id IS NULL OR p.paid_amount < p.scheduled_amount)) AS next_due,
-    EXISTS(SELECT 1 FROM loan_payments p
-           WHERE p.loan_id = l.id AND p.due_date < CURRENT_DATE
-             AND (p.actual_tx_id IS NULL OR p.paid_amount < p.scheduled_amount)) AS overdue,
+    -- Earliest unpaid scheduled installment, OR — for a schedule-less but
+    -- still-active loan — its explicit expected_repayment_date.
+    COALESCE(
+      (SELECT MIN(p.due_date) FROM loan_payments p
+       WHERE p.loan_id = l.id
+         AND (p.actual_tx_id IS NULL OR p.paid_amount < p.scheduled_amount)),
+      CASE WHEN l.status = 'active' THEN l.expected_repayment_date END
+    ) AS next_due,
+    (EXISTS(SELECT 1 FROM loan_payments p
+            WHERE p.loan_id = l.id AND p.due_date < CURRENT_DATE
+              AND (p.actual_tx_id IS NULL OR p.paid_amount < p.scheduled_amount))
+     OR (l.status = 'active'
+         AND l.expected_repayment_date IS NOT NULL
+         AND l.expected_repayment_date < CURRENT_DATE
+         AND NOT EXISTS(SELECT 1 FROM loan_payments p
+                        WHERE p.loan_id = l.id AND p.scheduled_principal > 0))
+    ) AS overdue,
     -- Σ scheduled_amount billed on or before today (for paid-ahead).
     COALESCE((SELECT SUM(p.scheduled_amount) FROM loan_payments p
               WHERE p.loan_id = l.id AND p.due_date <= CURRENT_DATE), 0) AS cumulative_due,
@@ -402,6 +422,11 @@ fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
         origination_date: origination.to_string(),
         term_months: r.try_get("term_months").ok().flatten(),
         payment_frequency: r.try_get("payment_frequency").ok().flatten(),
+        expected_repayment_date: r
+            .try_get::<Option<chrono::NaiveDate>, _>("expected_repayment_date")
+            .ok()
+            .flatten()
+            .map(|d| d.to_string()),
         disbursement_tx_id: r
             .try_get::<Option<uuid::Uuid>, _>("disbursement_tx_id")
             .ok()
@@ -501,8 +526,8 @@ async fn create_loan(
         r#"
         INSERT INTO loans (user_id, person_id, borrower_name, principal, currency,
                            interest_rate, interest_type, rate_period, origination_date,
-                           term_months, payment_frequency, notes)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                           term_months, payment_frequency, notes, expected_repayment_date)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING id
         "#,
     )
@@ -518,6 +543,7 @@ async fn create_loan(
     .bind(payload.term_months)
     .bind(&payload.payment_frequency)
     .bind(&payload.notes)
+    .bind(payload.expected_repayment_date)
     .fetch_one(&state.db)
     .await;
 
@@ -645,8 +671,9 @@ async fn update_loan(
             interest_type = COALESCE($4, interest_type),
             status = COALESCE($5, status),
             notes = COALESCE($6, notes),
+            expected_repayment_date = COALESCE($7, expected_repayment_date),
             updated_at = NOW()
-        WHERE id = $7 AND user_id = $8
+        WHERE id = $8 AND user_id = $9
         "#,
     )
     .bind(payload.borrower_name)
@@ -655,6 +682,7 @@ async fn update_loan(
     .bind(payload.interest_type)
     .bind(payload.status)
     .bind(payload.notes)
+    .bind(payload.expected_repayment_date)
     .bind(id)
     .bind(ctx.user_id)
     .execute(&state.db)
@@ -1794,7 +1822,26 @@ async fn list_reminders(
           AND p.due_date IS NOT NULL
           AND l.status = 'active'
           AND p.due_date <= CURRENT_DATE + ($2)::int
-        ORDER BY p.due_date ASC
+        UNION ALL
+        -- Schedule-less loans that carry only an expected_repayment_date get
+        -- one synthetic reminder for the whole outstanding balance. payment_id
+        -- reuses the loan id (there's no installment row to reference).
+        SELECT l.id AS payment_id, l.id AS loan_id, l.borrower_name, l.currency,
+               l.expected_repayment_date AS due_date, 0 AS installment_number,
+               GREATEST(l.principal - COALESCE((
+                   SELECT SUM(COALESCE(p.principal_portion, p.paid_amount, 0))
+                   FROM loan_payments p
+                   WHERE p.loan_id = l.id AND p.paid_amount IS NOT NULL), 0), 0) AS amount,
+               GREATEST((l.expected_repayment_date - CURRENT_DATE), 0) AS days_until,
+               GREATEST((CURRENT_DATE - l.expected_repayment_date), 0) AS days_overdue
+        FROM loans l
+        WHERE l.user_id = $1
+          AND l.status = 'active'
+          AND l.expected_repayment_date IS NOT NULL
+          AND l.expected_repayment_date <= CURRENT_DATE + ($2)::int
+          AND NOT EXISTS(SELECT 1 FROM loan_payments p
+                         WHERE p.loan_id = l.id AND p.scheduled_principal > 0)
+        ORDER BY due_date ASC
         "#,
     )
     .bind(ctx.user_id)

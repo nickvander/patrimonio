@@ -2129,6 +2129,7 @@ class ApiService {
     String? paymentFrequency,
     String? notes,
     String? personId,
+    DateTime? expectedRepaymentDate,
   }) async {
     final body = <String, dynamic>{
       'borrower_name': borrowerName,
@@ -2142,6 +2143,8 @@ class ApiService {
       if (paymentFrequency != null) 'payment_frequency': paymentFrequency,
       if (notes != null && notes.isNotEmpty) 'notes': notes,
       if (personId != null) 'person_id': personId,
+      if (expectedRepaymentDate != null)
+        'expected_repayment_date': _isoDate(expectedRepaymentDate),
     };
     final response = await _post(
       // No trailing slash — see getLoans (axum nest routing).
@@ -2176,6 +2179,7 @@ class ApiService {
     double? interestRate,
     String? interestType,
     String? notes,
+    DateTime? expectedRepaymentDate,
   }) async {
     final body = <String, dynamic>{
       ...changes,
@@ -2184,6 +2188,8 @@ class ApiService {
       if (interestRate != null) 'interest_rate': interestRate,
       if (interestType != null) 'interest_type': interestType,
       if (notes != null) 'notes': notes,
+      if (expectedRepaymentDate != null)
+        'expected_repayment_date': _isoDate(expectedRepaymentDate),
     };
     final response = await _patch(
       Uri.parse('$_baseUrl/loans/$id'),
