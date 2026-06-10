@@ -82,10 +82,19 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     'fat': 1.6,
   };
 
-  // Annual-expense value for a lifestyle preset, rounded to a clean $1k and
-  // clamped to the slider's range.
+  // Annual-expense value for a lifestyle preset, rounded to a clean $1k.
   double _presetExpense(String key, double base) =>
       ((base * _lifestyleMultipliers[key]!) / 1000).round() * 1000.0;
+
+  // Upper bound of the annual-expense slider. Normally $200k, but it grows
+  // with the baseline so a high earner's "Fat" preset (1.6×) doesn't clamp
+  // and collapse into "Standard". Rounded up to a clean $50k tick.
+  double get _expensesMax {
+    final base = _baselineExpenses ?? _annualExpenses;
+    final needed = base * 1.8;
+    if (needed <= 200000) return 200000;
+    return (needed / 50000).ceil() * 50000.0;
+  }
 
   @override
   void initState() {
@@ -412,7 +421,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           label: l.projAnnualExpenses,
           value: _annualExpenses,
           min: 10000,
-          max: 200000,
+          max: _expensesMax,
           isCurrency: true,
           help: l.projHelpAnnualExpenses,
           hint: _prefilledFromData ? l.projFromYourData : null,
@@ -1144,7 +1153,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     final base = (_baselineExpenses ??= _annualExpenses);
     Widget lifeChip(String key, String label) {
       final double value =
-          _presetExpense(key, base).clamp(10000.0, 200000.0).toDouble();
+          _presetExpense(key, base).clamp(10000.0, _expensesMax).toDouble();
       final active = (_annualExpenses - value).abs() < 500;
       return ChoiceChip(
         label: Text(label),

@@ -150,10 +150,12 @@ pub fn calculate_projection(req: &ProjectionRequest) -> ProjectionResponse {
     let retire_month = req.retire_year() * 12;
     // Guaranteed retirement income (Social Security / pension / part-time)
     // offsets spending during decumulation, so the portfolio only has to fund
-    // the shortfall. Net can go negative (surplus reinvested) when income
-    // exceeds expenses.
+    // the shortfall. Floored at 0: when income covers expenses you simply stop
+    // drawing down — you don't pump the surplus back into the portfolio (that
+    // overstates growth, and it would disagree with barista_fi_number, which
+    // already floors the shortfall at 0).
     let other_monthly_income = req.barista_monthly_income.unwrap_or(0.0);
-    let monthly_withdrawal = req.annual_expenses / 12.0 - other_monthly_income;
+    let monthly_withdrawal = (req.annual_expenses / 12.0 - other_monthly_income).max(0.0);
 
     let mut points = Vec::new();
     let mut balance = req.start_balance;
@@ -316,8 +318,10 @@ fn run_monte_carlo(req: &ProjectionRequest, real: f64) -> MonteCarloResult {
     let retire_year = req.retire_year();
     let sigma = req.volatility();
     let annual_contribution = req.monthly_contribution * 12.0;
-    // Net of guaranteed retirement income (see deterministic path above).
-    let annual_spend = req.annual_expenses - req.barista_monthly_income.unwrap_or(0.0) * 12.0;
+    // Net of guaranteed retirement income, floored at 0 (see deterministic
+    // path above — surplus income is not reinvested into the portfolio).
+    let annual_spend =
+        (req.annual_expenses - req.barista_monthly_income.unwrap_or(0.0) * 12.0).max(0.0);
     let drift = (1.0 + real).ln() - 0.5 * sigma * sigma;
     // Guardrails only make sense when the portfolio is actually being drawn
     // down (net positive spend).
