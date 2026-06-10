@@ -56,6 +56,11 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   // fan) around the expected line.
   bool _showBand = true;
 
+  // Collapsible plain-language glossary at the top of the tab — the FIRE
+  // jargon (Coast FIRE, Barista FI, withdrawal rate…) isn't obvious, so we
+  // explain it on demand without permanently cluttering the screen.
+  bool _showGlossary = false;
+
   @override
   void initState() {
     super.initState();
@@ -152,6 +157,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildHeader(),
+              const SizedBox(height: 16),
+              _buildGlossaryCard(),
               const SizedBox(height: 24),
               _buildControls(scrollable: false),
               const SizedBox(height: 24),
@@ -168,6 +175,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(),
+          const SizedBox(height: 16),
+          _buildGlossaryCard(),
           const SizedBox(height: 24),
           Expanded(
             child: Row(
@@ -238,6 +247,89 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     );
   }
 
+  // Collapsible plain-language glossary. Defines the FIRE jargon the rest of
+  // the tab throws around (Coast FIRE, Barista FI, withdrawal rate, the
+  // uncertainty band) so a newcomer isn't staring at unexplained terms.
+  Widget _buildGlossaryCard() {
+    final l = AppLocalizations.of(context);
+    Widget row(String term, String def) => Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                term,
+                style: TextStyle(
+                  color: context.textPrimary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12.5,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                def,
+                style: TextStyle(
+                    color: context.textMuted, fontSize: 12, height: 1.3),
+              ),
+            ],
+          ),
+        );
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () => setState(() => _showGlossary = !_showGlossary),
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              child: Row(
+                children: [
+                  Icon(Icons.school_outlined, size: 18, color: context.info),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      l.projGlossaryTitle,
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  Icon(
+                    _showGlossary ? Icons.expand_less : Icons.expand_more,
+                    color: context.textMuted,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 160),
+            sizeCurve: Curves.easeOut,
+            crossFadeState: _showGlossary
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            firstChild: const SizedBox(width: double.infinity),
+            secondChild: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Divider(color: context.hairline, height: 1),
+                  row(l.projFiNumber, l.projGlossaryFiNumberDef),
+                  row(l.projTermCoast, l.projGlossaryCoastDef),
+                  row(l.projTermBarista, l.projGlossaryBaristaDef),
+                  row(l.projSafeWithdrawalRate, l.projGlossarySwrDef),
+                  row(l.projTermRange, l.projGlossaryRangeDef),
+                  row(l.projTermRealDollars, l.projGlossaryRealDef),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildControls({bool scrollable = true}) {
     final l = AppLocalizations.of(context);
     final body = Column(
@@ -260,6 +352,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           min: 0,
           max: 0.15,
           isPercent: true,
+          help: l.projHelpExpectedReturn,
           onChanged: (val) => setState(() => _annualReturnRate = val),
           onChangeEnd: (_) => _fetchProjection(),
         ),
@@ -270,6 +363,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           min: 0,
           max: 0.06,
           isPercent: true,
+          help: l.projHelpInflation,
           onChanged: (val) => setState(() => _annualInflation = val),
           onChangeEnd: (_) => _fetchProjection(),
         ),
@@ -280,6 +374,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           min: 0,
           max: 0.25,
           isPercent: true,
+          help: l.projHelpVolatility,
           onChanged: (val) => setState(() => _returnVolatility = val),
           onChangeEnd: (_) => _fetchProjection(),
         ),
@@ -290,6 +385,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           min: 10000,
           max: 200000,
           isCurrency: true,
+          help: l.projHelpAnnualExpenses,
           hint: _prefilledFromData ? l.projFromYourData : null,
           onChanged: (val) => setState(() => _annualExpenses = val),
           onChangeEnd: (_) => _fetchProjection(),
@@ -301,6 +397,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           min: 0.02,
           max: 0.06,
           isPercent: true,
+          help: l.projHelpSwr,
           onChanged: (val) => setState(() => _withdrawalRate = val),
           onChangeEnd: (_) => _fetchProjection(),
         ),
@@ -311,6 +408,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           min: 0,
           max: 10000,
           isCurrency: true,
+          help: l.projHelpBaristaIncome,
           onChanged: (val) => setState(() => _baristaMonthlyIncome = val),
           onChangeEnd: (_) => _fetchProjection(),
         ),
@@ -321,6 +419,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           min: 0,
           max: 0.03,
           isPercent: true,
+          help: l.projHelpTaxDrag,
           onChanged: (val) => setState(() => _annualTaxDrag = val),
           onChangeEnd: (_) => _fetchProjection(),
         ),
@@ -336,6 +435,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           min: 0,
           max: _projectionYears.toDouble(),
           divisions: _projectionYears,
+          help: l.projHelpYearsToRetirement,
           onChanged: (val) => setState(() => _yearsToRetirement = val.toInt()),
           onChangeEnd: (_) => _fetchProjection(),
         ),
@@ -376,6 +476,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     bool isPercent = false,
     int? divisions,
     String? hint,
+    String? help,
     required ValueChanged<double> onChanged,
     required ValueChanged<double> onChangeEnd,
   }) {
@@ -403,6 +504,17 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                     label,
                     style: TextStyle(color: context.textMuted, fontSize: 14),
                   ),
+                  if (help != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2, right: 8),
+                      child: Text(
+                        help,
+                        style: TextStyle(
+                            color: context.textFaint,
+                            fontSize: 11,
+                            height: 1.25),
+                      ),
+                    ),
                   if (hint != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
@@ -952,6 +1064,11 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                             color: context.textPrimary,
                             fontWeight: FontWeight.w700,
                             fontSize: 13),
+                      ),
+                      Text(
+                        l.projBaristaFiSub,
+                        style:
+                            TextStyle(color: context.textFaint, fontSize: 11),
                       ),
                     ],
                   ),

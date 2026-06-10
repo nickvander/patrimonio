@@ -2469,13 +2469,88 @@ class AppLocalizationsEs extends AppLocalizations {
   String get projBaristaFi => 'Número FI Barista';
 
   @override
-  String get projBaristaIncome => 'Ingreso en retiro (SS/pensión)';
+  String get projBaristaFiSub =>
+      'Capital necesario cuando un ingreso de medio tiempo ayuda a cubrir gastos';
+
+  @override
+  String get projBaristaIncome => 'Ingreso Barista / pensión';
 
   @override
   String get projFromYourData => 'De tus gastos registrados';
 
   @override
   String get projBandLegend => 'Rango percentil 10–90';
+
+  @override
+  String get projHelpExpectedReturn =>
+      'Rendimiento anual bruto antes de inflación. ~7% ≈ el promedio histórico de la bolsa.';
+
+  @override
+  String get projHelpInflation =>
+      'Reduce el dinero futuro a su valor de hoy. ~3% es el promedio de largo plazo.';
+
+  @override
+  String get projHelpVolatility =>
+      'Qué tan variables son los rendimientos — amplía el rango sombreado de resultados. ~13% ≈ una cartera con mucha renta variable.';
+
+  @override
+  String get projHelpAnnualExpenses =>
+      'Tu gasto anual objetivo en el retiro, en dólares de hoy.';
+
+  @override
+  String get projHelpSwr =>
+      'Cuánto retiras de la cartera cada año en el retiro. La clásica \'regla del 4%\' implica un capital de 25×.';
+
+  @override
+  String get projHelpBaristaIncome =>
+      'Trabajo de medio tiempo, una pensión o seguro social en el retiro. Reduce el capital que necesitas — esto define el número FI Barista.';
+
+  @override
+  String get projHelpTaxDrag =>
+      'Recorte anual por impuestos y comisiones sobre tus rendimientos. ~0.5–1% es lo típico.';
+
+  @override
+  String get projHelpYearsToRetirement =>
+      'Cuándo dejas de aportar y empiezas a retirar — también define el objetivo de Coast FIRE.';
+
+  @override
+  String get projGlossaryTitle => '¿Qué significan estos términos?';
+
+  @override
+  String get projTermCoast => 'Coast FIRE';
+
+  @override
+  String get projTermBarista => 'Barista FI';
+
+  @override
+  String get projTermRange => 'El rango sombreado';
+
+  @override
+  String get projTermRealDollars => 'Dólares de hoy';
+
+  @override
+  String get projGlossaryFiNumberDef =>
+      'El capital que te permite vivir de los retiros indefinidamente — aproximadamente tu gasto anual × 25 con una tasa de retiro del 4%.';
+
+  @override
+  String get projGlossaryCoastDef =>
+      'Ya ahorraste lo suficiente para que el crecimiento por sí solo alcance tu número FI al llegar al retiro — puedes dejar de aportar y solo dejar correr.';
+
+  @override
+  String get projGlossaryBaristaDef =>
+      'Un objetivo menor: el trabajo de medio tiempo o una pensión cubre parte del gasto, así que tu cartera solo financia el resto.';
+
+  @override
+  String get projGlossarySwrDef =>
+      'La parte de tu cartera que retiras cada año en el retiro. La conocida \'regla del 4%\' es el valor por defecto aquí.';
+
+  @override
+  String get projGlossaryRangeDef =>
+      'La banda es una simulación de mercado de 1,000 corridas — el rango de buena y mala suerte. La \'tasa de éxito\' es con qué frecuencia el dinero dura todo el horizonte.';
+
+  @override
+  String get projGlossaryRealDef =>
+      'Cada cifra está en dólares de hoy, así que un monto futuro ya considera la inflación.';
 
   @override
   String get projTaxDrag => 'Carga fiscal';

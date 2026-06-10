@@ -4106,10 +4106,16 @@ abstract class AppLocalizations {
   /// **'Barista FI number'**
   String get projBaristaFi;
 
+  /// No description provided for @projBaristaFiSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Nest egg needed once part-time income helps cover spending'**
+  String get projBaristaFiSub;
+
   /// No description provided for @projBaristaIncome.
   ///
   /// In en, this message translates to:
-  /// **'Retirement income (SS/pension)'**
+  /// **'Barista / pension income'**
   String get projBaristaIncome;
 
   /// No description provided for @projFromYourData.
@@ -4123,6 +4129,120 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'10th–90th percentile range'**
   String get projBandLegend;
+
+  /// No description provided for @projHelpExpectedReturn.
+  ///
+  /// In en, this message translates to:
+  /// **'Gross annual return before inflation. ~7% ≈ the long-run stock-market average.'**
+  String get projHelpExpectedReturn;
+
+  /// No description provided for @projHelpInflation.
+  ///
+  /// In en, this message translates to:
+  /// **'Shrinks future money to today\'s value. ~3% is the long-run average.'**
+  String get projHelpInflation;
+
+  /// No description provided for @projHelpVolatility.
+  ///
+  /// In en, this message translates to:
+  /// **'How bumpy returns are — widens the shaded range of outcomes. ~13% ≈ a stock-heavy mix.'**
+  String get projHelpVolatility;
+
+  /// No description provided for @projHelpAnnualExpenses.
+  ///
+  /// In en, this message translates to:
+  /// **'Your target yearly spending in retirement, in today\'s dollars.'**
+  String get projHelpAnnualExpenses;
+
+  /// No description provided for @projHelpSwr.
+  ///
+  /// In en, this message translates to:
+  /// **'How much you withdraw from the portfolio each year in retirement. The classic \'4% rule\' implies a 25× nest egg.'**
+  String get projHelpSwr;
+
+  /// No description provided for @projHelpBaristaIncome.
+  ///
+  /// In en, this message translates to:
+  /// **'Part-time work, a pension, or Social Security in retirement. Lowers the nest egg you need — this drives the Barista FI number.'**
+  String get projHelpBaristaIncome;
+
+  /// No description provided for @projHelpTaxDrag.
+  ///
+  /// In en, this message translates to:
+  /// **'Yearly haircut from taxes and fees on your returns. ~0.5–1% is typical.'**
+  String get projHelpTaxDrag;
+
+  /// No description provided for @projHelpYearsToRetirement.
+  ///
+  /// In en, this message translates to:
+  /// **'When you stop contributing and start withdrawing — also sets the Coast FIRE target.'**
+  String get projHelpYearsToRetirement;
+
+  /// No description provided for @projGlossaryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What do these terms mean?'**
+  String get projGlossaryTitle;
+
+  /// No description provided for @projTermCoast.
+  ///
+  /// In en, this message translates to:
+  /// **'Coast FIRE'**
+  String get projTermCoast;
+
+  /// No description provided for @projTermBarista.
+  ///
+  /// In en, this message translates to:
+  /// **'Barista FI'**
+  String get projTermBarista;
+
+  /// No description provided for @projTermRange.
+  ///
+  /// In en, this message translates to:
+  /// **'The shaded range'**
+  String get projTermRange;
+
+  /// No description provided for @projTermRealDollars.
+  ///
+  /// In en, this message translates to:
+  /// **'Today\'s dollars'**
+  String get projTermRealDollars;
+
+  /// No description provided for @projGlossaryFiNumberDef.
+  ///
+  /// In en, this message translates to:
+  /// **'The nest egg that lets you live on withdrawals indefinitely — roughly your yearly spending × 25 at a 4% withdrawal rate.'**
+  String get projGlossaryFiNumberDef;
+
+  /// No description provided for @projGlossaryCoastDef.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve already saved enough that growth alone reaches your FI number by retirement — you can stop adding money and just coast.'**
+  String get projGlossaryCoastDef;
+
+  /// No description provided for @projGlossaryBaristaDef.
+  ///
+  /// In en, this message translates to:
+  /// **'A smaller target: part-time work or a pension covers some of your spending, so your portfolio only has to fund the rest.'**
+  String get projGlossaryBaristaDef;
+
+  /// No description provided for @projGlossarySwrDef.
+  ///
+  /// In en, this message translates to:
+  /// **'The share of your portfolio you withdraw each year in retirement. The well-known \'4% rule\' is the default here.'**
+  String get projGlossarySwrDef;
+
+  /// No description provided for @projGlossaryRangeDef.
+  ///
+  /// In en, this message translates to:
+  /// **'The band is a 1,000-run market simulation — the spread of good and bad luck. \'Success rate\' is how often the money lasts the whole horizon.'**
+  String get projGlossaryRangeDef;
+
+  /// No description provided for @projGlossaryRealDef.
+  ///
+  /// In en, this message translates to:
+  /// **'Every figure is in today\'s dollars, so a future amount already accounts for inflation.'**
+  String get projGlossaryRealDef;
 
   /// No description provided for @projTaxDrag.
   ///

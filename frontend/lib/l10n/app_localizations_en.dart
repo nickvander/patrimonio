@@ -2445,13 +2445,88 @@ class AppLocalizationsEn extends AppLocalizations {
   String get projBaristaFi => 'Barista FI number';
 
   @override
-  String get projBaristaIncome => 'Retirement income (SS/pension)';
+  String get projBaristaFiSub =>
+      'Nest egg needed once part-time income helps cover spending';
+
+  @override
+  String get projBaristaIncome => 'Barista / pension income';
 
   @override
   String get projFromYourData => 'From your tracked spending';
 
   @override
   String get projBandLegend => '10th–90th percentile range';
+
+  @override
+  String get projHelpExpectedReturn =>
+      'Gross annual return before inflation. ~7% ≈ the long-run stock-market average.';
+
+  @override
+  String get projHelpInflation =>
+      'Shrinks future money to today\'s value. ~3% is the long-run average.';
+
+  @override
+  String get projHelpVolatility =>
+      'How bumpy returns are — widens the shaded range of outcomes. ~13% ≈ a stock-heavy mix.';
+
+  @override
+  String get projHelpAnnualExpenses =>
+      'Your target yearly spending in retirement, in today\'s dollars.';
+
+  @override
+  String get projHelpSwr =>
+      'How much you withdraw from the portfolio each year in retirement. The classic \'4% rule\' implies a 25× nest egg.';
+
+  @override
+  String get projHelpBaristaIncome =>
+      'Part-time work, a pension, or Social Security in retirement. Lowers the nest egg you need — this drives the Barista FI number.';
+
+  @override
+  String get projHelpTaxDrag =>
+      'Yearly haircut from taxes and fees on your returns. ~0.5–1% is typical.';
+
+  @override
+  String get projHelpYearsToRetirement =>
+      'When you stop contributing and start withdrawing — also sets the Coast FIRE target.';
+
+  @override
+  String get projGlossaryTitle => 'What do these terms mean?';
+
+  @override
+  String get projTermCoast => 'Coast FIRE';
+
+  @override
+  String get projTermBarista => 'Barista FI';
+
+  @override
+  String get projTermRange => 'The shaded range';
+
+  @override
+  String get projTermRealDollars => 'Today\'s dollars';
+
+  @override
+  String get projGlossaryFiNumberDef =>
+      'The nest egg that lets you live on withdrawals indefinitely — roughly your yearly spending × 25 at a 4% withdrawal rate.';
+
+  @override
+  String get projGlossaryCoastDef =>
+      'You\'ve already saved enough that growth alone reaches your FI number by retirement — you can stop adding money and just coast.';
+
+  @override
+  String get projGlossaryBaristaDef =>
+      'A smaller target: part-time work or a pension covers some of your spending, so your portfolio only has to fund the rest.';
+
+  @override
+  String get projGlossarySwrDef =>
+      'The share of your portfolio you withdraw each year in retirement. The well-known \'4% rule\' is the default here.';
+
+  @override
+  String get projGlossaryRangeDef =>
+      'The band is a 1,000-run market simulation — the spread of good and bad luck. \'Success rate\' is how often the money lasts the whole horizon.';
+
+  @override
+  String get projGlossaryRealDef =>
+      'Every figure is in today\'s dollars, so a future amount already accounts for inflation.';
 
   @override
   String get projTaxDrag => 'Tax drag';
