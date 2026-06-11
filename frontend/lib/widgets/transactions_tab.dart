@@ -3,15 +3,35 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
-import 'package:web/web.dart' as web;
 import '../services/api_service.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/category.dart';
 import '../utils/currency.dart';
 import '../utils/transaction_display.dart';
+import '../utils/url_opener.dart';
 import 'add_transaction_dialog.dart';
 import 'split_transaction_dialog.dart';
 import 'transaction_filters.dart';
+
+/// Detail-panel Save diffing: returns the trimmed edited text when it
+/// genuinely differs from the prefilled [initial] value, or null when
+/// the field is unchanged so the caller omits it from the PATCH
+/// entirely (null = "leave this column alone" in
+/// `ApiService.updateTransaction`).
+///
+/// The comparison is against the exact prefill — for the category field
+/// that's the PRETTIFIED label the editor was seeded with, so opening a
+/// transaction and pressing Save without edits never converts the
+/// auto-category into a user override of the raw Plaid enum string.
+/// Clearing a prefilled field IS a change and returns '' (the backend
+/// treats an empty string as "clear the override").
+///
+/// Top-level (not a method) so the no-op-Save behavior is unit-testable
+/// without pumping the detail panel.
+String? diffEditedField(String edited, String initial) {
+  final next = edited.trim();
+  return next == initial.trim() ? null : next;
+}
 
 class TransactionsTab extends StatefulWidget {
   final List<dynamic> transactions;
@@ -621,6 +641,16 @@ class _TransactionsTabState extends State<TransactionsTab> {
         padding: const EdgeInsets.all(24.0),
         child: LayoutBuilder(builder: (context, constraints) {
           final isNarrow = constraints.maxWidth < 560;
+          // Bounded-host mode: when the parent hands us a finite height
+          // (e.g. the account panel's Expanded slot, side panel or
+          // bottom sheet), the rows region must fill the remaining
+          // space and scroll internally — an eager Column would
+          // overflow the slot and clip rows below the fold, and the
+          // window-height SizedBox would ignore the panel's actual
+          // size. The dashboard hosts us inside a page-level
+          // SingleChildScrollView (unbounded height), which keeps the
+          // existing page-scroll behavior there.
+          final boundedHost = constraints.maxHeight.isFinite;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -643,7 +673,15 @@ class _TransactionsTabState extends State<TransactionsTab> {
               // of the page — but it's the only way Flutter avoids
               // building every row up front. Short lists keep the
               // page-scroll feel.
-              _buildRowsRegion(filtered, isNarrow, constraints),
+              //
+              // In a bounded host the list instead takes whatever
+              // height remains in the slot (Expanded) and always
+              // virtualises, so every row — even on a ≤50-row account
+              // — is reachable by scrolling inside the panel.
+              if (boundedHost)
+                Expanded(child: _buildVirtualisedList(filtered, isNarrow))
+              else
+                _buildRowsRegion(filtered, isNarrow, constraints),
               if (widget.onLoadMore != null && widget.hasMore)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1475,7 +1513,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
     if (widget.apiService == null) return;
     // Hand off to the browser — the backend responds with
     // Content-Disposition: attachment so the browser downloads directly.
-    web.window.open(widget.apiService!.exportTransactionsCsvUrl(), '_self');
+    // Routed through the url_opener seam (no-op on the test VM) so this
+    // file stays free of a direct package:web import.
+    openUrlSameTab(widget.apiService!.exportTransactionsCsvUrl());
   }
 
   Widget _searchField() {
@@ -1524,6 +1564,11 @@ class _TransactionsTabState extends State<TransactionsTab> {
   /// page-scroll UX is friendlier; above that, the build cost of
   /// every row dominates and inner-list scrolling is the lesser
   /// evil.
+  ///
+  /// Unbounded-host path only (dashboard page scroll). Bounded hosts
+  /// (the account side panel / bottom sheet) bypass this entirely and
+  /// put [_buildVirtualisedList] in an Expanded, sized by the host's
+  /// own constraints rather than the window height.
   Widget _buildRowsRegion(
     List<dynamic> txs,
     bool isNarrow,
@@ -1536,39 +1581,53 @@ class _TransactionsTabState extends State<TransactionsTab> {
         children: _buildGroupedRows(txs, isNarrow),
       );
     }
-    final items = _ensureItemPlan(txs, isNarrow);
     // Viewport-relative height so the inner list always shows a
-    // few screenfuls without dominating the page. The minimum
-    // floor prevents a degenerate tiny window on short viewports.
+    // few screenfuls without dominating the page. The 400px floor
+    // prevents a degenerate tiny window — but only when the viewport
+    // can actually fit it: on short windows (h * 0.78 < 400) the
+    // floor drops to the ceiling so clamp's bounds stay ordered.
+    // (lo > hi throws ArgumentError, which used to paint the whole
+    // tab as the red error widget on any window under ~513px.)
     final h = MediaQuery.sizeOf(context).height;
-    final listHeight = (h - 280).clamp(400.0, h * 0.78);
+    final hi = h * 0.78;
+    final lo = hi < 400.0 ? hi : 400.0;
+    final listHeight = (h - 280).clamp(lo, hi);
     return SizedBox(
       height: listHeight,
-      child: Scrollbar(
-        thumbVisibility: true,
-        child: ListView.builder(
-          // No itemExtent — rows can be one or two lines depending
-          // on the override / notes presence. Flutter still
-          // virtualises by viewport visibility; we just lose the
-          // O(1) scroll-to-index optimisation, which we don't need.
-          itemCount: items.length,
-          itemBuilder: (context, i) {
-            final item = items[i];
-            switch (item.kind) {
-              case 0:
-                return _dateGroupHeader(item.date!, isFirst: item.isFirst);
-              case 2:
-                return Divider(
-                  height: 1,
-                  thickness: 1,
-                  color: context.hairline,
-                  indent: 44,
-                );
-              default:
-                return _buildTransactionRow(item.tx, isNarrow);
-            }
-          },
-        ),
+      child: _buildVirtualisedList(txs, isNarrow),
+    );
+  }
+
+  /// The virtualised inner list: scrollbar + `ListView.builder` over
+  /// the precomputed item plan. The caller decides the height — a
+  /// window-derived SizedBox on the (unbounded) dashboard, or an
+  /// Expanded slot in a bounded host.
+  Widget _buildVirtualisedList(List<dynamic> txs, bool isNarrow) {
+    final items = _ensureItemPlan(txs, isNarrow);
+    return Scrollbar(
+      thumbVisibility: true,
+      child: ListView.builder(
+        // No itemExtent — rows can be one or two lines depending
+        // on the override / notes presence. Flutter still
+        // virtualises by viewport visibility; we just lose the
+        // O(1) scroll-to-index optimisation, which we don't need.
+        itemCount: items.length,
+        itemBuilder: (context, i) {
+          final item = items[i];
+          switch (item.kind) {
+            case 0:
+              return _dateGroupHeader(item.date!, isFirst: item.isFirst);
+            case 2:
+              return Divider(
+                height: 1,
+                thickness: 1,
+                color: context.hairline,
+                indent: 44,
+              );
+            default:
+              return _buildTransactionRow(item.tx, isNarrow);
+          }
+        },
       ),
     );
   }
@@ -2027,12 +2086,31 @@ class _TransactionsTabState extends State<TransactionsTab> {
   /// - Save / Close footer
   void _showTransactionDetails(dynamic tx) {
     final l = AppLocalizations.of(context);
-    final catController = TextEditingController(
-      text: (tx['user_category'] ?? tx['category'] ?? '').toString(),
-    );
-    final notesController = TextEditingController(
-      text: (tx['user_notes'] ?? '').toString(),
-    );
+    // Prefill the category editor with the PRETTIFIED label — the same
+    // string the list row shows — never the raw Plaid enum
+    // ("FOOD_AND_DRINK"). The Save handler diffs the field against this
+    // exact prefill (see [diffEditedField]), so open-then-Save with no
+    // edits sends nothing instead of silently converting the
+    // auto-category into a user override of the raw enum string.
+    final hasAnyCategory =
+        (tx['user_category'] ?? '').toString().trim().isNotEmpty ||
+            (tx['category'] ?? '').toString().trim().isNotEmpty ||
+            (tx['category_detailed'] ?? '').toString().trim().isNotEmpty;
+    final initialCategoryLabel = hasAnyCategory
+        ? prettyCategory(
+            userCategory: tx['user_category']?.toString(),
+            detailed: tx['category_detailed']?.toString(),
+            primary: tx['category']?.toString(),
+          )
+        : '';
+    final initialNotes = (tx['user_notes'] ?? '').toString();
+    final catController = TextEditingController(text: initialCategoryLabel);
+    final catFocusNode = FocusNode();
+    final notesController = TextEditingController(text: initialNotes);
+    // Shared suggestion source — the same list the bulk-categorize and
+    // add-transaction dialogs feed from, so the type-ahead can't drift
+    // into a second divergent taxonomy.
+    final categorySuggestions = _distinctCategories();
 
     final date = DateTime.parse(tx['date'] as String);
     final sourceAmount = ((tx['amount'] as num?)?.toDouble() ?? 0.0);
@@ -2361,16 +2439,63 @@ class _TransactionsTabState extends State<TransactionsTab> {
                   const SizedBox(height: 18),
                   _sectionLabel(l.txCategoryAndNotes),
                   const SizedBox(height: 8),
-                  TextField(
-                    controller: catController,
-                    decoration: InputDecoration(
-                      labelText: l.txCategory,
-                      hintText: originalCategory.isNotEmpty
-                          ? l.txCategoryExample(originalCategory)
-                          : null,
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                    ),
+                  // Category type-ahead. RawAutocomplete (same pattern
+                  // as AddTransactionDialog's category field) so the
+                  // save path keeps reading [catController] directly.
+                  // Suggestions are hints only — a free-typed value not
+                  // in the list is still accepted.
+                  RawAutocomplete<String>(
+                    textEditingController: catController,
+                    focusNode: catFocusNode,
+                    optionsBuilder: (TextEditingValue value) {
+                      final q = value.text.trim().toLowerCase();
+                      if (q.isEmpty) return categorySuggestions;
+                      return categorySuggestions
+                          .where((s) => s.toLowerCase().contains(q));
+                    },
+                    fieldViewBuilder:
+                        (ctx, controller, focusNode, onFieldSubmitted) {
+                      return TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        decoration: InputDecoration(
+                          labelText: l.txCategory,
+                          hintText: l.txCategoryHint,
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onSubmitted: (_) => onFieldSubmitted(),
+                      );
+                    },
+                    optionsViewBuilder: (ctx, onSelected, options) {
+                      final opts = options.toList();
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 4,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                                maxHeight: 200, maxWidth: 420),
+                            child: ListView.builder(
+                              padding: EdgeInsets.zero,
+                              shrinkWrap: true,
+                              itemCount: opts.length,
+                              itemBuilder: (ctx, index) {
+                                final option = opts[index];
+                                return InkWell(
+                                  onTap: () => onSelected(option),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12),
+                                    child: Text(option),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -2545,11 +2670,24 @@ class _TransactionsTabState extends State<TransactionsTab> {
                       const SizedBox(width: 8),
                       ElevatedButton(
                         onPressed: () {
+                          // Diff each field against its prefill: only
+                          // what the user actually edited is sent
+                          // (null = "leave alone" in the PATCH). A
+                          // no-edit Save must NOT turn the
+                          // auto-category into a user override of the
+                          // raw enum string.
+                          final newCategory = diffEditedField(
+                              catController.text, initialCategoryLabel);
+                          final newNotes = diffEditedField(
+                              notesController.text, initialNotes);
                           Navigator.pop(context);
+                          if (newCategory == null && newNotes == null) {
+                            return;
+                          }
                           widget.onUpdate?.call(
                             tx['id'],
-                            userCategory: catController.text.trim(),
-                            userNotes: notesController.text.trim(),
+                            userCategory: newCategory,
+                            userNotes: newNotes,
                           );
                         },
                         child: Text(l.actionSave),
