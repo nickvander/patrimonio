@@ -5,7 +5,9 @@ import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../l10n/app_localizations.dart';
+import '../theme/typography.dart';
 import '../utils/category.dart';
+import '../utils/category_style.dart';
 import '../utils/currency.dart';
 import '../utils/transaction_display.dart';
 import '../utils/url_opener.dart';
@@ -31,6 +33,53 @@ import 'transaction_filters.dart';
 String? diffEditedField(String edited, String initial) {
   final next = edited.trim();
   return next == initial.trim() ? null : next;
+}
+
+/// Trailing ".00" / "0" trimmer for the haystack's plain amount form.
+/// Hoisted so [searchHaystackFor] doesn't rebuild the RegExp per row.
+final RegExp _trailingZeros = RegExp(r'\.?0+$');
+
+/// Lowercased search haystack for one transaction: every text field a
+/// user can see on the row or in its detail panel — including
+/// `user_notes`, which is rendered right in the row's meta line — plus
+/// the amount in plain numeric forms. The amount is the absolute value
+/// as both "450.00" and "450" (trailing zeros trimmed), so searching
+/// "450" or "450.00" finds a 450.00 transaction regardless of the
+/// Plaid sign convention or how the row formats the currency.
+///
+/// Top-level (not a method) so the field list is unit-testable without
+/// pumping the tab; [_TransactionsTabState._haystackFor] wraps it with
+/// the per-list-identity memoization.
+String searchHaystackFor(Map<String, dynamic> tx) {
+  final label = displayLabel(tx).toLowerCase();
+  final parts = <String>[
+    label,
+    (tx['description'] ?? '').toString().toLowerCase(),
+    (tx['original_description'] ?? '').toString().toLowerCase(),
+    (tx['merchant_name'] ?? '').toString().toLowerCase(),
+    (tx['counterparty_name'] ?? '').toString().toLowerCase(),
+    (tx['payment_payee'] ?? '').toString().toLowerCase(),
+    (tx['payment_payer'] ?? '').toString().toLowerCase(),
+    (tx['account_name'] ?? '').toString().toLowerCase(),
+    (tx['category'] ?? '').toString().toLowerCase(),
+    (tx['user_notes'] ?? '').toString().toLowerCase(),
+  ];
+  final amount = (tx['amount'] as num?)?.toDouble();
+  if (amount != null) {
+    final fixed = amount.abs().toStringAsFixed(2); // "450.00"
+    parts.add(fixed);
+    // "450" for 450.00, "450.5" for 450.50 — contains() already lets
+    // a "450" query hit "450.00", but the trimmed form also lets a
+    // "450 " style exact token read naturally in the haystack.
+    final plain = fixed.replaceFirst(_trailingZeros, '');
+    if (plain.isNotEmpty && plain != fixed) parts.add(plain);
+  }
+  // Single concatenated string — one .contains() call covers
+  // every field. Separator is a 4-char printable sequence that
+  // users virtually never type into a search field, so cross-
+  // field false positives are negligible while git keeps treating
+  // the file as plain text.
+  return parts.join(' || ');
 }
 
 class TransactionsTab extends StatefulWidget {
@@ -429,9 +478,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
   }
 
   /// Lowercased haystack for one tx: the searchable fields joined
-  /// with a separator + memoized. We previously re-lowercased 9
-  /// fields per row on every keystroke; now each row is lowercased
-  /// at most once per list-identity.
+  /// with a separator (see [searchHaystackFor]) + memoized. We
+  /// previously re-lowercased every field per row on every keystroke;
+  /// now each row is lowercased at most once per list-identity.
   String _haystackFor(dynamic tx) {
     if (tx is! Map) return '';
     final id = tx['id']?.toString();
@@ -439,25 +488,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
       final cached = _haystackCache[id];
       if (cached != null) return cached;
     }
-    final label = displayLabel(Map<String, dynamic>.from(tx))
-        .toLowerCase();
-    final parts = <String>[
-      label,
-      (tx['description'] ?? '').toString().toLowerCase(),
-      (tx['original_description'] ?? '').toString().toLowerCase(),
-      (tx['merchant_name'] ?? '').toString().toLowerCase(),
-      (tx['counterparty_name'] ?? '').toString().toLowerCase(),
-      (tx['payment_payee'] ?? '').toString().toLowerCase(),
-      (tx['payment_payer'] ?? '').toString().toLowerCase(),
-      (tx['account_name'] ?? '').toString().toLowerCase(),
-      (tx['category'] ?? '').toString().toLowerCase(),
-    ];
-    // Single concatenated string — one .contains() call covers
-    // every field. Separator is a 4-char printable sequence that
-    // users virtually never type into a search field, so cross-
-    // field false positives are negligible while git keeps treating
-    // the file as plain text.
-    final hay = parts.join(' || ');
+    final hay = searchHaystackFor(Map<String, dynamic>.from(tx));
     if (id != null) _haystackCache[id] = hay;
     return hay;
   }
@@ -541,6 +572,25 @@ class _TransactionsTabState extends State<TransactionsTab> {
             )),
       ));
     }
+    if (_filters.minAmount != null || _filters.maxAmount != null) {
+      // "450–1,000"-style window, "≥ 450" / "≤ 450" when one end is
+      // open. Numbers + comparison glyphs read the same in en/es, so
+      // no extra l10n template is needed for the chip itself.
+      final lo = _filters.minAmount;
+      final hi = _filters.maxAmount;
+      final String label;
+      if (lo != null && hi != null) {
+        label = '${formatFilterAmount(lo)}–${formatFilterAmount(hi)}';
+      } else if (lo != null) {
+        label = '≥ ${formatFilterAmount(lo)}';
+      } else {
+        label = '≤ ${formatFilterAmount(hi!)}';
+      }
+      chips.add(_filterChip(
+        label,
+        () => setState(() => _filters = _filters.copyWith(clearAmounts: true)),
+      ));
+    }
     chips.add(TextButton(
       onPressed: () => setState(() => _filters = TxFilters.empty),
       style: TextButton.styleFrom(
@@ -575,6 +625,59 @@ class _TransactionsTabState extends State<TransactionsTab> {
     );
   }
 
+  /// One-stroke escape hatch from a zero-match dead end: drops the
+  /// search text (flushing any pending debounce so a stale keystroke
+  /// can't resurrect it) and every filter, amount range included.
+  void _clearFiltersAndSearch() {
+    _searchDebounce?.cancel();
+    setState(() {
+      _searchQuery = '';
+      _searchController.clear();
+      _searchOpenOnNarrow = false;
+      _filters = TxFilters.empty;
+    });
+  }
+
+  /// Centered state for "filters/search matched nothing" — styled like
+  /// the no-transactions-at-all empty state (icon, title, body, one
+  /// action) but the action clears filters + search instead of adding
+  /// an account. Only reachable when the source list is non-empty.
+  Widget _noMatchesState() {
+    final l = AppLocalizations.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.search_off, size: 64, color: context.textFaint),
+            const SizedBox(height: 16),
+            Text(
+              l.txNoMatchesTitle,
+              style: TextStyle(
+                color: context.textMuted,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              l.txNoMatchesBody,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: context.textMuted),
+            ),
+            const SizedBox(height: 20),
+            OutlinedButton.icon(
+              onPressed: _clearFiltersAndSearch,
+              icon: const Icon(Icons.filter_alt_off_outlined, size: 18),
+              label: Text(l.txClearFiltersSearch),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -583,8 +686,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.receipt_long_outlined,
-                size: 64, color: Colors.grey),
+            Icon(Icons.receipt_long_outlined,
+                size: 64, color: context.textFaint),
             const SizedBox(height: 16),
             Text(
               l.txEmptyTitle,
@@ -598,7 +701,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
             Text(
               l.txEmptyBody,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.grey),
+              style: TextStyle(color: context.textMuted),
             ),
             const SizedBox(height: 20),
             FilledButton.icon(
@@ -659,7 +762,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               const SizedBox(height: 8),
               Text(
                 l.txShowingCount(filtered.length, widget.transactions.length),
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
+                style: TextStyle(color: context.textSubtle, fontSize: 12),
               ),
               const SizedBox(height: 8),
               if (_selectionMode) _buildBulkActionBar(filtered),
@@ -678,7 +781,19 @@ class _TransactionsTabState extends State<TransactionsTab> {
               // height remains in the slot (Expanded) and always
               // virtualises, so every row — even on a ≤50-row account
               // — is reachable by scrolling inside the panel.
-              if (boundedHost)
+              //
+              // Zero matches with a non-empty source list can only mean
+              // the active search/filters excluded everything (the
+              // unfiltered getter returns the source list as-is), so
+              // instead of dead space + "Showing 0 of N" we render a
+              // centered no-match state with a one-tap way out. Both
+              // hosts get it: the bounded path centers it in the
+              // Expanded slot, the eager/virtualised path inline.
+              if (filtered.isEmpty)
+                boundedHost
+                    ? Expanded(child: _noMatchesState())
+                    : _noMatchesState()
+              else if (boundedHost)
                 Expanded(child: _buildVirtualisedList(filtered, isNarrow))
               else
                 _buildRowsRegion(filtered, isNarrow, constraints),
@@ -1203,6 +1318,37 @@ class _TransactionsTabState extends State<TransactionsTab> {
     return next;
   }
 
+  // O(1) "is this row one leg of an FX-transfer link?" lookup for the
+  // list rows. Keyed on transaction id; the value is true when at least
+  // one of the row's links is user-confirmed (so a tx that appears in a
+  // confirmed AND an auto-detected link reads as confirmed). Identity-
+  // keyed on widget.fxTransfers — same memoization pattern as
+  // _ensureDescIndex — so rebuilding rows never re-walks the links list
+  // unless the dashboard handed us a new one.
+  Map<String, bool>? _fxLinkIndex;
+  int _fxLinkIndexIdentity = 0;
+
+  Map<String, bool> _ensureFxLinkIndex() {
+    final links = widget.fxTransfers;
+    final identity = identityHashCode(links);
+    if (_fxLinkIndex != null && identity == _fxLinkIndexIdentity) {
+      return _fxLinkIndex!;
+    }
+    final next = <String, bool>{};
+    for (final raw in links) {
+      if (raw is! Map) continue;
+      final confirmed = raw['user_confirmed'] == true;
+      for (final key in const ['source_tx_id', 'dest_tx_id']) {
+        final id = raw[key]?.toString();
+        if (id == null || id.isEmpty) continue;
+        next[id] = (next[id] ?? false) || confirmed;
+      }
+    }
+    _fxLinkIndex = next;
+    _fxLinkIndexIdentity = identity;
+    return next;
+  }
+
   Future<void> _renameTransaction(
     dynamic tx, {
     List<String> similarIds = const [],
@@ -1472,7 +1618,13 @@ class _TransactionsTabState extends State<TransactionsTab> {
               IconButton(
                 onPressed: () => _downloadCsv(),
                 icon: const Icon(Icons.file_download_outlined, size: 22),
-                tooltip: l.txExportCsv,
+                // The backend export has no filter parameters, so when a
+                // filter/search is active the affordance says up front
+                // that the CSV covers everything (and _downloadCsv asks
+                // for confirmation too).
+                tooltip: (_searchQuery.isNotEmpty || _filters.isActive)
+                    ? l.txExportCsvAllNote
+                    : l.txExportCsv,
               ),
             ],
             if (widget.onDetectFxTransfers != null)
@@ -1509,8 +1661,32 @@ class _TransactionsTabState extends State<TransactionsTab> {
     );
   }
 
-  void _downloadCsv() {
+  Future<void> _downloadCsv() async {
     if (widget.apiService == null) return;
+    // Export honesty: the backend endpoint exports EVERYTHING — it has
+    // no filter/search parameters. When the user is looking at a
+    // filtered list, confirm that's understood before handing off.
+    if (_searchQuery.isNotEmpty || _filters.isActive) {
+      final l = AppLocalizations.of(context);
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogCtx) => AlertDialog(
+          title: Text(l.txExportAllTitle),
+          content: Text(l.txExportAllBody),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx, false),
+              child: Text(l.actionCancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogCtx, true),
+              child: Text(l.txExportAllConfirm),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
     // Hand off to the browser — the backend responds with
     // Content-Disposition: attachment so the browser downloads directly.
     // Routed through the url_opener seam (no-op on the test VM) so this
@@ -1612,56 +1788,47 @@ class _TransactionsTabState extends State<TransactionsTab> {
         // virtualises by viewport visibility; we just lose the
         // O(1) scroll-to-index optimisation, which we don't need.
         itemCount: items.length,
-        itemBuilder: (context, i) {
-          final item = items[i];
-          switch (item.kind) {
-            case 0:
-              return _dateGroupHeader(item.date!, isFirst: item.isFirst);
-            case 2:
-              return Divider(
-                height: 1,
-                thickness: 1,
-                color: context.hairline,
-                indent: 44,
-              );
-            default:
-              return _buildTransactionRow(item.tx, isNarrow);
-          }
-        },
+        itemBuilder: (context, i) => _planItemWidget(items[i], isNarrow, txs),
       ),
     );
   }
 
+  /// Eager (≤50 rows) path: same item plan as the virtualised list,
+  /// materialised into a plain Column. One grouping algorithm, two hosts —
+  /// month landmarks and day headers can never drift between them.
   List<Widget> _buildGroupedRows(List<dynamic> txs, bool isNarrow) {
-    final out = <Widget>[];
-    String? lastGroup;
-    for (var i = 0; i < txs.length; i++) {
-      final tx = txs[i];
-      final dateStr = tx['date'] as String?;
-      if (dateStr == null) continue;
-      final date = DateTime.parse(dateStr);
-      final key = _dateGroupKey(date);
-      if (key != lastGroup) {
-        out.add(_dateGroupHeader(date, isFirst: lastGroup == null));
-        lastGroup = key;
-      } else {
-        out.add(Divider(
+    return [
+      for (final item in _ensureItemPlan(txs, isNarrow))
+        _planItemWidget(item, isNarrow, txs),
+    ];
+  }
+
+  /// One plan item → one widget. Shared by the virtualised builder and
+  /// the eager Column so both render the exact same grouping.
+  Widget _planItemWidget(_TxListItem item, bool isNarrow, List<dynamic> txs) {
+    switch (item.kind) {
+      case 0:
+        return _dateGroupHeader(item.date!, isFirst: item.isFirst);
+      case 2:
+        return Divider(
           height: 1,
           thickness: 1,
           color: context.hairline,
           indent: 44, // align with the description column, past the icon
-        ));
-      }
-      out.add(_buildTransactionRow(tx, isNarrow));
+        );
+      case 3:
+        return _monthGroupHeader(item.date!, txs, isFirst: item.isFirst);
+      default:
+        return _buildTransactionRow(item.tx, isNarrow);
     }
-    return out;
   }
 
-  /// Flat index→item plan for the virtualised ListView.builder.
-  /// Each item is one of:
-  ///   • `_HeaderItem(date)` — a date-group heading ("Today", etc.)
-  ///   • `_RowItem(tx)`      — one transaction
-  ///   • `_DividerItem()`    — separator between rows in the same group
+  /// Flat index→item plan shared by both list paths (virtualised
+  /// ListView.builder and the eager Column). Each item is one of:
+  ///   • month header — calendar-month landmark ("June 2026" + net)
+  ///   • day header   — a date-group heading ("Today", etc.)
+  ///   • row          — one transaction
+  ///   • divider      — separator between rows in the same group
   ///
   /// Precomputed once per (filtered list identity, isNarrow) so the
   /// builder can return one widget per index in O(1) without re-
@@ -1679,6 +1846,11 @@ class _TransactionsTabState extends State<TransactionsTab> {
     }
     final out = <_TxListItem>[];
     String? lastGroup;
+    // Calendar month of the last emitted month landmark. Stays null
+    // through the Today/Yesterday band so the list never opens with a
+    // redundant "June 2026" banner above "Today" — the first landmark
+    // appears at the first day group outside that band.
+    String? lastMonthKey;
     for (var i = 0; i < txs.length; i++) {
       final tx = txs[i];
       final dateStr = tx['date'] as String?;
@@ -1686,7 +1858,19 @@ class _TransactionsTabState extends State<TransactionsTab> {
       final date = DateTime.parse(dateStr);
       final key = _dateGroupKey(date);
       if (key != lastGroup) {
-        out.add(_TxListItem.header(date: date, isFirst: lastGroup == null));
+        var afterMonth = false;
+        if (key != 'today' && key != 'yesterday') {
+          final monthKey = _monthKey(date);
+          if (monthKey != lastMonthKey) {
+            out.add(_TxListItem.monthHeader(date: date, isFirst: out.isEmpty));
+            lastMonthKey = monthKey;
+            afterMonth = true;
+          }
+        }
+        // A day header straight under its month landmark hugs it
+        // (isFirst spacing) instead of opening a second air gap.
+        out.add(
+            _TxListItem.header(date: date, isFirst: out.isEmpty || afterMonth));
         lastGroup = key;
       } else {
         out.add(const _TxListItem.divider());
@@ -1697,6 +1881,65 @@ class _TransactionsTabState extends State<TransactionsTab> {
     _itemPlanCacheFilteredId = identity;
     _itemPlanCacheNarrow = isNarrow;
     return out;
+  }
+
+  /// Stable per-calendar-month grouping key ("2026-6").
+  String _monthKey(DateTime date) => '${date.year}-${date.month}';
+
+  // Month → net flow (income positive, in the reporting currency) over
+  // the rows currently in the list — i.e. loaded AND matching any active
+  // filter, exactly what the user sees under the landmark. FX-transfer
+  // legs are skipped: money moving between the user's own pockets is
+  // neither income nor spending (same rule as the rows' neutral ⇄
+  // treatment). Memoized on (list identity, fx identity, usdMxnRate),
+  // mirroring _ensureDescIndex / _ensureFxLinkIndex.
+  Map<String, double>? _monthNets;
+  int _monthNetsTxIdentity = 0;
+  int _monthNetsFxIdentity = 0;
+  double _monthNetsRate = -1;
+  // Oldest (last) loaded calendar month — when the parent says more
+  // pages exist, that month's subtotal is honestly flagged "(partial)".
+  String? _monthNetsOldestKey;
+
+  Map<String, double> _ensureMonthNets(List<dynamic> txs) {
+    final identity = identityHashCode(txs);
+    final fxIdentity = identityHashCode(widget.fxTransfers);
+    if (_monthNets != null &&
+        _monthNetsTxIdentity == identity &&
+        _monthNetsFxIdentity == fxIdentity &&
+        _monthNetsRate == widget.usdMxnRate) {
+      return _monthNets!;
+    }
+    final fxIndex = _ensureFxLinkIndex();
+    final next = <String, double>{};
+    String? oldest;
+    for (final tx in txs) {
+      final dateStr = tx['date'] as String?;
+      if (dateStr == null) continue;
+      final key = _monthKey(DateTime.parse(dateStr));
+      // Every loaded month gets an entry (a transfers-only month nets
+      // to 0.00 rather than missing); rows are newest-first, so the
+      // last write is the oldest loaded month.
+      next.putIfAbsent(key, () => 0.0);
+      oldest = key;
+      final id = tx['id']?.toString();
+      if (id != null && fxIndex.containsKey(id)) continue; // transfer leg
+      final amount = (tx['amount'] as num?)?.toDouble() ?? 0.0;
+      final converted = convertCurrency(
+        amount,
+        from: (tx['currency'] ?? widget.targetCurrency).toString(),
+        to: widget.targetCurrency,
+        usdMxnRate: widget.usdMxnRate,
+      );
+      // Plaid sign convention: positive = outflow. Net is income-positive.
+      next[key] = next[key]! - converted;
+    }
+    _monthNets = next;
+    _monthNetsTxIdentity = identity;
+    _monthNetsFxIdentity = fxIdentity;
+    _monthNetsRate = widget.usdMxnRate;
+    _monthNetsOldestKey = oldest;
+    return next;
   }
 
   /// Stable key for grouping. "today" / "yesterday" / yyyy-mm-dd otherwise.
@@ -1711,8 +1954,11 @@ class _TransactionsTabState extends State<TransactionsTab> {
   }
 
   /// Section heading shown above each date group. Reads "Today" /
-  /// "Yesterday" / weekday for the past week, then "Month d" / "Month d,
-  /// yyyy" for older dates.
+  /// "Yesterday", then weekday + date for the past week ("Monday, Jun 8"
+  /// — a bare "Monday" never says WHICH Monday), then a short date for
+  /// older groups. The locale-skeleton constructors (MMMd/yMMMd) follow
+  /// the active locale's day/month order ("Jun 8" vs "8 jun"), which
+  /// works now that Intl.defaultLocale is initialised at startup.
   Widget _dateGroupHeader(DateTime date, {required bool isFirst}) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -1725,11 +1971,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
     } else if (diff == 1) {
       label = l.txDateYesterday;
     } else if (diff > 1 && diff < 7) {
-      label = DateFormat('EEEE').format(date);
+      label =
+          '${DateFormat('EEEE').format(date)}, ${DateFormat.MMMd().format(date)}';
     } else if (date.year == now.year) {
-      label = DateFormat('MMM d').format(date);
+      label = DateFormat.MMMd().format(date);
     } else {
-      label = DateFormat('MMM d, y').format(date);
+      label = DateFormat.yMMMd().format(date);
     }
     return Padding(
       padding: EdgeInsets.only(
@@ -1750,6 +1997,78 @@ class _TransactionsTabState extends State<TransactionsTab> {
     );
   }
 
+  /// Calendar-month landmark inserted where the list crosses into a new
+  /// month: "June 2026" on the left, the month's net flow over the rows
+  /// shown below it on the right ("−\$1,234.56 net"). One tier above the
+  /// day headers (larger, textMuted vs textSubtle, hairline underline)
+  /// so hundreds of "Jun 3"-style micro-sections finally get structure —
+  /// and the list can answer "what did June cost me?" at a glance.
+  Widget _monthGroupHeader(
+    DateTime date,
+    List<dynamic> txs, {
+    required bool isFirst,
+  }) {
+    final l = AppLocalizations.of(context);
+    final key = _monthKey(date);
+    final net = _ensureMonthNets(txs)[key] ?? 0.0;
+    // The oldest loaded month may be cut off by pagination; when the
+    // parent says more pages exist its subtotal is flagged "(partial)".
+    final isPartial = widget.hasMore && key == _monthNetsOldestKey;
+    // yMMMM follows the locale ("June 2026" / "junio de 2026"); Spanish
+    // month names are lowercase, so sentence-case the heading.
+    var label = DateFormat.yMMMM().format(date);
+    if (label.isNotEmpty) {
+      label = label[0].toUpperCase() + label.substring(1);
+    }
+    final signedNet =
+        '${net < 0 ? '−' : '+'}${widget.currencyFormat.format(net.abs())}';
+    final netLabel =
+        isPartial ? l.txMonthNetPartial(signedNet) : l.txMonthNet(signedNet);
+    return Padding(
+      padding: EdgeInsets.only(
+        top: isFirst ? 4 : 28,
+        left: 4,
+        right: 4,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: context.textMuted,
+                    letterSpacing: 0.4,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                netLabel,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: context.textSubtle,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Divider(height: 1, thickness: 1, color: context.hairline),
+        ],
+      ),
+    );
+  }
+
   /// One row in the transactions list. Modern dense layout — 32px icon,
   /// single-line description + meta, right-aligned native-currency amount.
   /// Total row height is ~56px (was 92), so a wall of transactions
@@ -1766,15 +2085,34 @@ class _TransactionsTabState extends State<TransactionsTab> {
       usdMxnRate: widget.usdMxnRate,
     );
     final isExpense = sourceAmount > 0;
-    final category = tx['user_category'] ?? tx['category'];
     final notes = (tx['user_notes'] ?? '').toString();
-    final color = _getCategoryColor(category, tx['description']);
+    // Same prettified label the row's meta line shows — the registry is
+    // keyed on it, so a Spanish import category ("Supermercado") and the
+    // Plaid enum ("FOOD_AND_DRINK") both land on a real style instead of
+    // the old grey-receipt fallback.
+    final catStyle = context.categoryStyle(prettyCategory(
+      userCategory: tx['user_category']?.toString(),
+      detailed: tx['category_detailed']?.toString(),
+      primary: tx['category']?.toString(),
+    ));
+    final color = catStyle.color;
 
     final needsConversion =
         widget.usdMxnRate > 0 && sourceCurrency != widget.targetCurrency;
 
     final id = tx['id']?.toString();
     final isSelected = id != null && _selectedIds.contains(id);
+
+    // FX-transfer leg? null = not linked; true/false = linked and
+    // (any-)confirmed / auto-detected only. Drives the TRANSFER pill and
+    // the neutral amount treatment — money moving between the user's own
+    // pockets must not read as income (+green) or spending.
+    final fxConfirmed = id == null ? null : _ensureFxLinkIndex()[id];
+    final isFxTransfer = fxConfirmed != null;
+    // Pill accent mirrors the detail block's semantics: teal = user-
+    // confirmed link, amber = auto-detected (pending confirmation).
+    final fxAccent =
+        (fxConfirmed ?? false) ? context.tealAccent : context.warning;
 
     return MouseRegion(
       // Tracks the currently-hovered row id so the R keyboard
@@ -1874,7 +2212,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(
-                _getCategoryIcon(category, tx['description']),
+                catStyle.icon,
                 color: color,
                 size: 16,
               ),
@@ -1975,6 +2313,30 @@ class _TransactionsTabState extends State<TransactionsTab> {
                           ),
                         ),
                       ],
+                      // "Transfer" pill on rows that are one leg of a
+                      // detected FX-transfer pair — the linkage was only
+                      // visible inside the detail panel, so the receiving
+                      // leg read as income in the list.
+                      if (isFxTransfer) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: context.accentSoft(fxAccent),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            l.txTransferPill,
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: fxAccent,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 2),
@@ -2001,13 +2363,21 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Transfer legs swap the +/− sign for ⇄ and render in
+                  // neutral textPrimary: the money moved between the
+                  // user's own accounts, so neither the green income
+                  // treatment nor the expense one applies.
                   Text(
-                    '${isExpense ? '−' : '+'}${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}',
+                    isFxTransfer
+                        ? '⇄ ${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}'
+                        : '${isExpense ? '−' : '+'}${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}',
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
                       fontFeatures: const [FontFeature.tabularFigures()],
-                      color: isExpense ? context.textPrimary : context.positive,
+                      color: (isFxTransfer || isExpense)
+                          ? context.textPrimary
+                          : context.positive,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -2125,6 +2495,14 @@ class _TransactionsTabState extends State<TransactionsTab> {
     final needsConversion =
         widget.usdMxnRate > 0 && sourceCurrency != widget.targetCurrency;
     final isExpense = sourceAmount > 0;
+    // ONE accent pair for the binary in/out concept, applied to the hero
+    // border, caption and amount alike: inflow = jade positive, outflow =
+    // neutral text. The red `negative` token stays reserved for
+    // destructive/error affordances and teal for transfer/linked
+    // semantics — previously this block mixed four accents (red border +
+    // pink caption + neutral amount for an expense; teal border + teal
+    // caption + green amount for income).
+    final flowAccent = isExpense ? context.textPrimary : context.positive;
     final source = (tx['source'] ?? 'plaid').toString();
     final originalCategory = (tx['category'] ?? '').toString();
     final merchant = (tx['merchant_name'] ?? '').toString();
@@ -2132,10 +2510,15 @@ class _TransactionsTabState extends State<TransactionsTab> {
     final rawDescription = (tx['description'] ?? '').toString();
     final titleDescription = displayLabel(tx);
     final logoUrl = counterpartyLogo(tx);
-    final color = _getCategoryColor(
-      tx['user_category'] ?? tx['category'],
-      rawDescription,
-    );
+    // Hero icon style — same registry the list rows use, keyed on the
+    // prettified label (always non-empty: prettyCategory falls back to
+    // "Uncategorized"/"Sin categoría", which has its own neutral style).
+    final catStyle = context.categoryStyle(prettyCategory(
+      userCategory: tx['user_category']?.toString(),
+      detailed: tx['category_detailed']?.toString(),
+      primary: tx['category']?.toString(),
+    ));
+    final color = catStyle.color;
 
     // All transactions sharing this exact description (excluding the
     // current one). We use the full set to compute lifetime spend at
@@ -2240,19 +2623,13 @@ class _TransactionsTabState extends State<TransactionsTab> {
                                 logoUrl,
                                 fit: BoxFit.cover,
                                 errorBuilder: (_, __, ___) => Icon(
-                                  _getCategoryIcon(
-                                    tx['user_category'] ?? tx['category'],
-                                    rawDescription,
-                                  ),
+                                  catStyle.icon,
                                   color: color,
                                   size: 28,
                                 ),
                               )
                             : Icon(
-                                _getCategoryIcon(
-                                  tx['user_category'] ?? tx['category'],
-                                  rawDescription,
-                                ),
+                                catStyle.icon,
                                 color: color,
                                 size: 28,
                               ),
@@ -2323,8 +2700,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                       color: context.tint(0.04),
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: (isExpense ? context.negative : context.tealAccent)
-                            .withValues(alpha: 0.3),
+                        color: flowAccent.withValues(alpha: 0.3),
                       ),
                     ),
                     child: Column(
@@ -2335,23 +2711,23 @@ class _TransactionsTabState extends State<TransactionsTab> {
                           style: TextStyle(
                             fontSize: 10,
                             letterSpacing: 1.2,
-                            color: isExpense
-                                ? context.pinkAccent
-                                : context.tealAccent,
+                            color: flowAccent,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         const SizedBox(height: 6),
                         // Hero amount in the transaction's NATIVE currency
                         // (this is the real, bank-reported value).
+                        // brandDisplayStyle = the bundled JetBrains Mono
+                        // display treatment (caps at a real w700 — the
+                        // old w900 request synthesised a faux bold Inter
+                        // ships no file for) with tabular/lining figures
+                        // like every other hero money figure.
                         Text(
                           '${isExpense ? '−' : '+'}${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}',
-                          style: TextStyle(
+                          style: brandDisplayStyle(
                             fontSize: 32,
-                            fontWeight: FontWeight.w900,
-                            color: isExpense
-                                ? context.textPrimary
-                                : context.positive,
+                            color: flowAccent,
                           ),
                         ),
                         if (needsConversion) ...[
@@ -2420,7 +2796,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                             (tx['merchant_name'] ?? '').toString()),
                       if (pending)
                         _metaChip(Icons.hourglass_empty, l.txStatusPending,
-                            accent: Colors.orange),
+                            accent: context.warning),
                     ],
                   ),
                   if (rawDescription != titleDescription) ...[
@@ -2637,7 +3013,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                                     onPressed: () =>
                                         Navigator.pop(ctx, true),
                                     style: TextButton.styleFrom(
-                                        foregroundColor: Colors.redAccent),
+                                        foregroundColor: ctx.negative),
                                     child: Text(l.actionDelete),
                                   ),
                                 ],
@@ -2657,10 +3033,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
                               );
                             }
                           },
-                          icon: const Icon(Icons.delete_outline,
-                              size: 16, color: Colors.redAccent),
+                          icon: Icon(Icons.delete_outline,
+                              size: 16, color: context.negative),
                           label: Text(l.actionDelete,
-                              style: const TextStyle(color: Colors.redAccent)),
+                              style: TextStyle(color: context.negative)),
                         ),
                       const Spacer(),
                       TextButton(
@@ -2958,106 +3334,6 @@ class _TransactionsTabState extends State<TransactionsTab> {
   }
 
   NumberFormat get currencyFormat => widget.currencyFormat;
-
-  IconData _getCategoryIcon(String? category, String? description) {
-    final cat = (category ?? '').toLowerCase();
-    final desc = (description ?? '').toLowerCase();
-    // Plaid-style categories
-    if (cat.contains('food') ||
-        cat.contains('dining') ||
-        desc.contains('starbucks') ||
-        desc.contains('mcdonald')) {
-      return Icons.restaurant;
-    }
-    if (cat.contains('travel') ||
-        desc.contains('airline') ||
-        desc.contains('united')) {
-      return Icons.flight;
-    }
-    if (cat.contains('shopping') || desc.contains('amazon')) {
-      return Icons.shopping_bag;
-    }
-    if (cat.contains('transfer') ||
-        desc.contains('ach') ||
-        desc.contains('wire')) {
-      return Icons.sync_alt;
-    }
-    if (cat.contains('payment') ||
-        desc.contains('payment') ||
-        desc.contains('credit card')) {
-      return Icons.payment;
-    }
-    if (cat.contains('entertainment') ||
-        desc.contains('netflix') ||
-        desc.contains('spotify')) {
-      return Icons.movie;
-    }
-    if (cat.contains('recreation') ||
-        desc.contains('climbing') ||
-        desc.contains('gym')) {
-      return Icons.fitness_center;
-    }
-    if (cat.contains('deposit') || desc.contains('deposit')) {
-      return Icons.account_balance;
-    }
-    if (cat.contains('uber') ||
-        desc.contains('uber') ||
-        desc.contains('lyft')) {
-      return Icons.directions_car;
-    }
-    if (cat.contains('personal') || cat.contains('service')) {
-      return Icons.person;
-    }
-    return Icons.receipt;
-  }
-
-  Color _getCategoryColor(String? category, String? description) {
-    final cat = (category ?? '').toLowerCase();
-    final desc = (description ?? '').toLowerCase();
-    if (cat.contains('food') ||
-        cat.contains('dining') ||
-        desc.contains('starbucks') ||
-        desc.contains('mcdonald')) {
-      return Colors.orange;
-    }
-    if (cat.contains('travel') ||
-        desc.contains('airline') ||
-        desc.contains('united')) {
-      return Colors.blue;
-    }
-    if (cat.contains('shopping') || desc.contains('amazon')) {
-      return Colors.purple;
-    }
-    if (cat.contains('transfer') ||
-        desc.contains('ach') ||
-        desc.contains('wire')) {
-      return Colors.teal;
-    }
-    if (cat.contains('payment') ||
-        desc.contains('payment') ||
-        desc.contains('credit card')) {
-      return Colors.green;
-    }
-    if (cat.contains('entertainment') ||
-        desc.contains('netflix') ||
-        desc.contains('spotify')) {
-      return Colors.pink;
-    }
-    if (cat.contains('recreation') ||
-        desc.contains('climbing') ||
-        desc.contains('gym')) {
-      return Colors.teal;
-    }
-    if (cat.contains('deposit') || desc.contains('deposit')) {
-      return Colors.blueAccent;
-    }
-    if (cat.contains('uber') ||
-        desc.contains('uber') ||
-        desc.contains('lyft')) {
-      return Colors.indigo;
-    }
-    return Colors.grey;
-  }
 }
 
 /// Sealed-style discriminated union for the flat virtualised list.
@@ -3065,7 +3341,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
 /// are null. Plain class instead of a Dart 3 sealed/sum because
 /// we want it to compile against older analyzer pin-pointing.
 class _TxListItem {
-  /// 0 = header, 1 = row, 2 = divider. Indexed for cheap == checks.
+  /// 0 = day header, 1 = row, 2 = divider, 3 = month landmark header.
+  /// Indexed for cheap == checks.
   final int kind;
   final DateTime? date;
   final bool isFirst;
@@ -3075,6 +3352,8 @@ class _TxListItem {
       : this._(0, date: date, isFirst: isFirst);
   const _TxListItem.row({required dynamic tx}) : this._(1, tx: tx);
   const _TxListItem.divider() : this._(2);
+  const _TxListItem.monthHeader({required DateTime date, required bool isFirst})
+      : this._(3, date: date, isFirst: isFirst);
 }
 
 /// Small inline picker: shows a dropdown of accounts and reassigns the

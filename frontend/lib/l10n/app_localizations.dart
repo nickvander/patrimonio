@@ -482,6 +482,30 @@ abstract class AppLocalizations {
   /// **'Status'**
   String get txStatus;
 
+  /// No description provided for @txAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount'**
+  String get txAmount;
+
+  /// No description provided for @txAmountMin.
+  ///
+  /// In en, this message translates to:
+  /// **'Min'**
+  String get txAmountMin;
+
+  /// No description provided for @txAmountMax.
+  ///
+  /// In en, this message translates to:
+  /// **'Max'**
+  String get txAmountMax;
+
+  /// No description provided for @txAmountFilterHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Matches the amount regardless of sign or currency.'**
+  String get txAmountFilterHelp;
+
   /// No description provided for @txClearAll.
   ///
   /// In en, this message translates to:
@@ -505,6 +529,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add an account'**
   String get txAddAccount;
+
+  /// No description provided for @txNoMatchesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No transactions match'**
+  String get txNoMatchesTitle;
+
+  /// No description provided for @txNoMatchesBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Try adjusting your search or filters.'**
+  String get txNoMatchesBody;
+
+  /// No description provided for @txClearFiltersSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear filters & search'**
+  String get txClearFiltersSearch;
 
   /// No description provided for @txShowingCount.
   ///
@@ -764,6 +806,30 @@ abstract class AppLocalizations {
   /// **'Export CSV'**
   String get txExportCsv;
 
+  /// No description provided for @txExportCsvAllNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Export CSV — exports all transactions (filters and search don\'t apply)'**
+  String get txExportCsvAllNote;
+
+  /// No description provided for @txExportAllTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Export all transactions?'**
+  String get txExportAllTitle;
+
+  /// No description provided for @txExportAllBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Filters and search don\'t apply to the CSV export — it will include your entire transaction history.'**
+  String get txExportAllBody;
+
+  /// No description provided for @txExportAllConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Export all'**
+  String get txExportAllConfirm;
+
   /// No description provided for @txScanTransfers.
   ///
   /// In en, this message translates to:
@@ -788,6 +854,18 @@ abstract class AppLocalizations {
   /// **'Yesterday'**
   String get txDateYesterday;
 
+  /// No description provided for @txMonthNet.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} net'**
+  String txMonthNet(Object amount);
+
+  /// No description provided for @txMonthNetPartial.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} net (partial)'**
+  String txMonthNetPartial(Object amount);
+
   /// No description provided for @txInlineEditHint.
   ///
   /// In en, this message translates to:
@@ -799,6 +877,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Split'**
   String get txSplitPill;
+
+  /// No description provided for @txTransferPill.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer'**
+  String get txTransferPill;
 
   /// No description provided for @txDismiss.
   ///

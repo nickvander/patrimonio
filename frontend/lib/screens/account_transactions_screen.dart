@@ -10,6 +10,7 @@ import '../widgets/clabe_info.dart';
 import '../widgets/add_holding_dialog.dart';
 import '../services/preferences.dart';
 import '../utils/account_category.dart';
+import '../theme/typography.dart';
 import '../l10n/app_localizations.dart';
 
 /// Per-account transaction history. Rendered as the body of a slide-from-
@@ -570,13 +571,14 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // brandDisplayStyle: the shared big-figure treatment
+              // (bundled mono, caps at a real w700 instead of the old
+              // w900 faux-bold, tabular/lining figures built in).
               Text(
                 formatCurrencyAmount(balance, sourceCurrency),
-                style: TextStyle(
+                style: brandDisplayStyle(
                   fontSize: 28,
-                  fontWeight: FontWeight.w900,
                   color: context.textPrimary,
-                  fontFeatures: [const FontFeature.tabularFigures()],
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -860,7 +862,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            Icon(Icons.error_outline, size: 64, color: context.negative),
             const SizedBox(height: 16),
             Text(
               l.acctxLoadError(_error!),

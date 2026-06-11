@@ -206,6 +206,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get txStatus => 'Status';
 
   @override
+  String get txAmount => 'Amount';
+
+  @override
+  String get txAmountMin => 'Min';
+
+  @override
+  String get txAmountMax => 'Max';
+
+  @override
+  String get txAmountFilterHelp =>
+      'Matches the amount regardless of sign or currency.';
+
+  @override
   String get txClearAll => 'Clear all';
 
   @override
@@ -217,6 +230,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get txAddAccount => 'Add an account';
+
+  @override
+  String get txNoMatchesTitle => 'No transactions match';
+
+  @override
+  String get txNoMatchesBody => 'Try adjusting your search or filters.';
+
+  @override
+  String get txClearFiltersSearch => 'Clear filters & search';
 
   @override
   String txShowingCount(Object shown, Object total) {
@@ -384,6 +406,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get txExportCsv => 'Export CSV';
 
   @override
+  String get txExportCsvAllNote =>
+      'Export CSV — exports all transactions (filters and search don\'t apply)';
+
+  @override
+  String get txExportAllTitle => 'Export all transactions?';
+
+  @override
+  String get txExportAllBody =>
+      'Filters and search don\'t apply to the CSV export — it will include your entire transaction history.';
+
+  @override
+  String get txExportAllConfirm => 'Export all';
+
+  @override
   String get txScanTransfers =>
       'Scan for cross-currency transfers (Wise / Remitly / etc.)';
 
@@ -397,10 +433,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get txDateYesterday => 'Yesterday';
 
   @override
+  String txMonthNet(Object amount) {
+    return '$amount net';
+  }
+
+  @override
+  String txMonthNetPartial(Object amount) {
+    return '$amount net (partial)';
+  }
+
+  @override
   String get txInlineEditHint => 'New label · Enter to save';
 
   @override
   String get txSplitPill => 'Split';
+
+  @override
+  String get txTransferPill => 'Transfer';
 
   @override
   String get txDismiss => 'Dismiss';

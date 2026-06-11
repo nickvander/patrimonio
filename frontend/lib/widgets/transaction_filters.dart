@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
@@ -46,6 +47,12 @@ class TxFilters {
   final TxDateRange dateRange;
   final DateTime? customStart;
   final DateTime? customEnd;
+  // Inclusive amount window applied to the ABSOLUTE amount in the
+  // transaction's own currency — "that ~$450 charge" matches whether
+  // it was an inflow or an outflow. Either bound may be null (open
+  // end). The dialog guarantees min <= max by swapping on Apply.
+  final double? minAmount;
+  final double? maxAmount;
 
   const TxFilters({
     this.accountIds = const {},
@@ -55,6 +62,8 @@ class TxFilters {
     this.dateRange = TxDateRange.all,
     this.customStart,
     this.customEnd,
+    this.minAmount,
+    this.maxAmount,
   });
 
   static const empty = TxFilters();
@@ -64,7 +73,9 @@ class TxFilters {
       categories.isNotEmpty ||
       flow != TxFlow.all ||
       status != TxStatus.all ||
-      dateRange != TxDateRange.all;
+      dateRange != TxDateRange.all ||
+      minAmount != null ||
+      maxAmount != null;
 
   /// Count of active filters — drives the badge on the filter button.
   /// Treats account/category sets as a single bucket each (any value vs.
@@ -76,6 +87,8 @@ class TxFilters {
     if (flow != TxFlow.all) n++;
     if (status != TxStatus.all) n++;
     if (dateRange != TxDateRange.all) n++;
+    // Min/max are one conceptual "amount" filter, like the sets above.
+    if (minAmount != null || maxAmount != null) n++;
     return n;
   }
 
@@ -113,6 +126,9 @@ class TxFilters {
     DateTime? customStart,
     DateTime? customEnd,
     bool clearCustomDates = false,
+    double? minAmount,
+    double? maxAmount,
+    bool clearAmounts = false,
   }) {
     return TxFilters(
       accountIds: accountIds ?? this.accountIds,
@@ -123,6 +139,8 @@ class TxFilters {
       customStart:
           clearCustomDates ? null : (customStart ?? this.customStart),
       customEnd: clearCustomDates ? null : (customEnd ?? this.customEnd),
+      minAmount: clearAmounts ? null : (minAmount ?? this.minAmount),
+      maxAmount: clearAmounts ? null : (maxAmount ?? this.maxAmount),
     );
   }
 
@@ -143,6 +161,12 @@ class TxFilters {
     final amount = (tx['amount'] as num?)?.toDouble() ?? 0.0;
     if (flow == TxFlow.expense && amount <= 0) return false;
     if (flow == TxFlow.income && amount >= 0) return false;
+    // Amount window on the absolute value: the Plaid sign convention
+    // (positive = outflow) is an implementation detail users searching
+    // for "the ~$450 one" shouldn't have to know about.
+    final absAmount = amount.abs();
+    if (minAmount != null && absAmount < minAmount!) return false;
+    if (maxAmount != null && absAmount > maxAmount!) return false;
     final pending = tx['pending'] == true;
     if (status == TxStatus.pending && !pending) return false;
     if (status == TxStatus.settled && pending) return false;
@@ -161,6 +185,22 @@ class TxFilters {
 }
 
 DateTime _stripTime(DateTime d) => DateTime(d.year, d.month, d.day);
+
+/// Compact display form for an amount bound: whole numbers drop the
+/// decimals ("450"), anything else keeps cents ("450.50"). Shared by
+/// the dialog's prefill and the active-filter chip label.
+String formatFilterAmount(double v) =>
+    v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+
+/// Lenient numeric parse for the amount fields: trims, drops thousands
+/// separators and a stray currency sign, and treats anything
+/// unparseable (or empty) as "no bound". Sign is discarded — the
+/// filter is on the absolute amount.
+double? parseFilterAmount(String raw) {
+  final t = raw.trim().replaceAll(',', '').replaceAll(r'$', '');
+  if (t.isEmpty) return null;
+  return double.tryParse(t)?.abs();
+}
 
 /// Filter editor — shown as a dialog on wide screens, bottom sheet on
 /// narrow. Lets the user multi-select accounts and categories and pick
@@ -187,11 +227,56 @@ class TxFiltersDialog extends StatefulWidget {
 
 class _TxFiltersDialogState extends State<TxFiltersDialog> {
   late TxFilters _draft;
+  // Free-typed min/max amount bounds. Parsed only on Apply (and
+  // swapped if the user typed them backwards) so half-typed numbers
+  // never fight the draft state while editing.
+  final TextEditingController _minAmountCtrl = TextEditingController();
+  final TextEditingController _maxAmountCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _draft = widget.initial;
+    if (widget.initial.minAmount != null) {
+      _minAmountCtrl.text = formatFilterAmount(widget.initial.minAmount!);
+    }
+    if (widget.initial.maxAmount != null) {
+      _maxAmountCtrl.text = formatFilterAmount(widget.initial.maxAmount!);
+    }
+  }
+
+  @override
+  void dispose() {
+    _minAmountCtrl.dispose();
+    _maxAmountCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Fold the amount fields into the draft and close. min > max is
+  /// silently swapped — the user's intent ("between these two
+  /// numbers") is unambiguous, so a graceful fix beats an error.
+  void _apply() {
+    var lo = parseFilterAmount(_minAmountCtrl.text);
+    var hi = parseFilterAmount(_maxAmountCtrl.text);
+    if (lo != null && hi != null && lo > hi) {
+      final tmp = lo;
+      lo = hi;
+      hi = tmp;
+    }
+    Navigator.pop<TxFilters>(
+      context,
+      TxFilters(
+        accountIds: _draft.accountIds,
+        categories: _draft.categories,
+        flow: _draft.flow,
+        status: _draft.status,
+        dateRange: _draft.dateRange,
+        customStart: _draft.customStart,
+        customEnd: _draft.customEnd,
+        minAmount: lo,
+        maxAmount: hi,
+      ),
+    );
   }
 
   // Distinct account (id → label) entries from the dashboard accounts
@@ -246,9 +331,15 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
       title: Row(
         children: [
           Expanded(child: Text(l.txFilterTransactions)),
-          if (_draft.isActive)
+          if (_draft.isActive ||
+              _minAmountCtrl.text.isNotEmpty ||
+              _maxAmountCtrl.text.isNotEmpty)
             TextButton(
-              onPressed: () => setState(() => _draft = TxFilters.empty),
+              onPressed: () => setState(() {
+                _draft = TxFilters.empty;
+                _minAmountCtrl.clear();
+                _maxAmountCtrl.clear();
+              }),
               child: Text(l.txReset),
             ),
         ],
@@ -341,6 +432,58 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
                 onSelectionChanged: (s) =>
                     setState(() => _draft = _draft.copyWith(status: s.first)),
               ),
+              const SizedBox(height: 18),
+              _sectionLabel(l.txAmount),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _minAmountCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                            RegExp(r'[\d.,$]')),
+                      ],
+                      decoration: InputDecoration(
+                        labelText: l.txAmountMin,
+                        isDense: true,
+                        border: const OutlineInputBorder(),
+                      ),
+                      // setState so the Reset button's visibility tracks
+                      // the amount fields, not just the chip draft.
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 10),
+                    child: Text('–'),
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _maxAmountCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                            RegExp(r'[\d.,$]')),
+                      ],
+                      decoration: InputDecoration(
+                        labelText: l.txAmountMax,
+                        isDense: true,
+                        border: const OutlineInputBorder(),
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                l.txAmountFilterHelp,
+                style: TextStyle(color: context.textSubtle, fontSize: 11),
+              ),
               if (accountOptions.isNotEmpty) ...[
                 const SizedBox(height: 18),
                 _sectionLabel(l.txAccounts),
@@ -403,7 +546,7 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
           child: Text(l.actionCancel),
         ),
         FilledButton(
-          onPressed: () => Navigator.pop<TxFilters>(context, _draft),
+          onPressed: _apply,
           child: Text(l.actionApply),
         ),
       ],

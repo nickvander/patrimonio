@@ -206,6 +206,19 @@ class AppLocalizationsEs extends AppLocalizations {
   String get txStatus => 'Estado';
 
   @override
+  String get txAmount => 'Monto';
+
+  @override
+  String get txAmountMin => 'Mín.';
+
+  @override
+  String get txAmountMax => 'Máx.';
+
+  @override
+  String get txAmountFilterHelp =>
+      'Coincide con el monto sin importar el signo o la divisa.';
+
+  @override
   String get txClearAll => 'Limpiar todo';
 
   @override
@@ -217,6 +230,15 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get txAddAccount => 'Agregar una cuenta';
+
+  @override
+  String get txNoMatchesTitle => 'Ningún movimiento coincide';
+
+  @override
+  String get txNoMatchesBody => 'Prueba ajustar tu búsqueda o los filtros.';
+
+  @override
+  String get txClearFiltersSearch => 'Limpiar filtros y búsqueda';
 
   @override
   String txShowingCount(Object shown, Object total) {
@@ -385,6 +407,20 @@ class AppLocalizationsEs extends AppLocalizations {
   String get txExportCsv => 'Exportar CSV';
 
   @override
+  String get txExportCsvAllNote =>
+      'Exportar CSV: exporta todos los movimientos (los filtros y la búsqueda no se aplican)';
+
+  @override
+  String get txExportAllTitle => '¿Exportar todos los movimientos?';
+
+  @override
+  String get txExportAllBody =>
+      'Los filtros y la búsqueda no se aplican a la exportación CSV: incluirá todo tu historial de movimientos.';
+
+  @override
+  String get txExportAllConfirm => 'Exportar todo';
+
+  @override
   String get txScanTransfers =>
       'Buscar transferencias entre divisas (Wise / Remitly / etc.)';
 
@@ -398,10 +434,23 @@ class AppLocalizationsEs extends AppLocalizations {
   String get txDateYesterday => 'Ayer';
 
   @override
+  String txMonthNet(Object amount) {
+    return '$amount neto';
+  }
+
+  @override
+  String txMonthNetPartial(Object amount) {
+    return '$amount neto (parcial)';
+  }
+
+  @override
   String get txInlineEditHint => 'Nueva etiqueta · Enter para guardar';
 
   @override
   String get txSplitPill => 'División';
+
+  @override
+  String get txTransferPill => 'Transferencia';
 
   @override
   String get txDismiss => 'Cerrar';
