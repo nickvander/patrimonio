@@ -96,11 +96,11 @@ class ApiService {
   /// rest. See `response_cache.dart` for the correctness model.
   ///
   /// WHY a cache: `dashboard_screen._loadAllData()` fires a ~15-endpoint
-  /// `Future.wait` on EVERY reload (sub-screen return, realtime event,
-  /// post-mutation refresh). Without caching, a single transaction rename
-  /// re-pulled holdings, net-worth history, allocation, trends, etc. The
-  /// cache collapses redundant reads inside the TTL window and de-dupes
-  /// concurrent identical GETs into one network call.
+  /// `Future.wait` on EVERY reload (sub-screen return, realtime event).
+  /// Transaction mutations now use the targeted
+  /// `_refreshAfterTransactionMutation()` instead of a full reload, but
+  /// the cache still collapses redundant reads inside the TTL window and
+  /// de-dupes concurrent identical GETs into one network call.
   static final ResponseCache _cache = ResponseCache();
 
   /// Cache-key namespace prefix. `clearDashboardCache` / mutation

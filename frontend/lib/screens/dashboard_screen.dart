@@ -11,6 +11,7 @@ import '../l10n/app_localizations.dart';
 import '../services/preferences.dart';
 import '../services/plaid_oauth.dart';
 import '../services/realtime_service.dart';
+import '../services/transaction_mutation_refresh.dart';
 import '../widgets/net_worth_card.dart';
 import '../widgets/assets_liabilities_bar.dart';
 import '../widgets/monthly_cash_flow_card.dart';
@@ -1018,7 +1019,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: () async {
               try {
                 await _apiService.unignoreSubscription(key);
-                await _refreshData();
+                await _refreshSubscriptionLists();
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text(l.dashSubscriptionRestored(key))),
@@ -1537,15 +1538,79 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
-  /// Explicit user-initiated refresh (pull-to-refresh, "sync everything",
-  /// post-mutation reloads). Bypasses the response cache so the user who
-  /// just asked for fresh data gets exactly that. Re-prices manual stock
-  /// holdings (Oracle etc.) live too — the stock analog of the FX refresh.
+  /// Explicit user-initiated refresh ("sync everything" / per-institution
+  /// retry). Bypasses the response cache so the user who just asked for
+  /// fresh data gets exactly that. Re-prices manual stock holdings
+  /// (Oracle etc.) live too — the stock analog of the FX refresh. This is
+  /// the ONLY path allowed to hit the external quote API; transaction
+  /// mutations go through [_refreshAfterTransactionMutation] instead.
   Future<void> _refreshData() async {
     try {
       await _apiService.refreshAllStockPrices();
     } catch (_) {/* best-effort; data reload still proceeds */}
     await _loadAllData(silent: true, forceRefresh: true);
+  }
+
+  /// Targeted refresh after a transaction mutation (categorize / rename /
+  /// delete / split / manual add / FX-transfer link). Refetches ONLY the
+  /// reads a transaction change can affect — the transaction list (which
+  /// also feeds BudgetsCard), the overview (account balances / net worth)
+  /// and the monthly trends behind the cash-flow cards. Deliberately NOT
+  /// [_refreshData]: that path re-prices every manual stock holding via
+  /// the external quote API and re-pulls all ~18 dashboard endpoints,
+  /// which made renaming one transaction cost seconds of network.
+  /// Investments / holdings / crypto / FX-rate reads never refetch here.
+  ///
+  /// No forceRefresh needed: the mutation that just ran already cleared
+  /// the response cache in ApiService, so these reads are fresh by
+  /// construction (see `_invalidateAfterMutation`).
+  ///
+  /// [includeFxTransfers] adds the FX-transfer pair list for the mutations
+  /// that can change it (confirm / unlink / detect).
+  Future<void> _refreshAfterTransactionMutation(
+      {bool includeFxTransfers = false}) async {
+    try {
+      final data = await fetchAfterTransactionMutation(
+        getTransactions: () =>
+            _apiService.getTransactions(limit: _txPageSize),
+        getOverview: _apiService.getDashboardOverview,
+        getTrends: _apiService.getTrendData,
+        getFxTransfers:
+            includeFxTransfers ? _apiService.getFxTransfers : null,
+      );
+      if (!mounted) return;
+      setState(() {
+        _transactions = data.transactions;
+        // Same first-page semantics as _loadAllData: fewer rows than the
+        // page size means we already hold the tail of the table.
+        _transactionsHasMore = data.transactions.length >= _txPageSize;
+        _overview = data.overview;
+        _trendData = data.trends;
+        if (data.fxTransfers != null) _fxTransfers = data.fxTransfers;
+      });
+    } catch (e) {
+      // Same policy as a silent _loadAllData: a transient hiccup right
+      // after a mutation must not blank the dashboard — keep the current
+      // data on screen and let the next refresh reconcile.
+      debugPrint('Post-mutation refresh error: $e');
+    }
+  }
+
+  /// Targeted refresh after hiding/unhiding a subscription merchant. Only
+  /// the two subscription lists can change — re-pricing stocks and
+  /// re-pulling the whole dashboard for that was pure waste.
+  Future<void> _refreshSubscriptionLists() async {
+    final results = await Future.wait([
+      _apiService.getSubscriptions().catchError((_) => <dynamic>[]),
+      _apiService
+          .getIgnoredSubscriptions()
+          .catchError((_) => <dynamic>[]),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _subscriptions = results[0];
+      _ignoredSubscriptions = results[1];
+    });
   }
 
   Future<void> _loadMoreTransactions() async {
@@ -2861,7 +2926,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         usdMxnRate: fxRate,
         onAddAccount: _openAddAccount,
         apiService: _apiService,
-        onTransactionAdded: () => _refreshData(),
+        onTransactionAdded: () => _refreshAfterTransactionMutation(),
         onLoadMore: _loadMoreTransactions,
         hasMore: _transactionsHasMore,
         searchOverride: _transactionsSearchOverride,
@@ -2872,7 +2937,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onConfirmFxTransfer: (id) async {
           try {
             await _apiService.confirmFxTransfer(id);
-            await _refreshData();
+            await _refreshAfterTransactionMutation(includeFxTransfers: true);
           } catch (e) {
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
@@ -2883,7 +2948,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onUnlinkFxTransfer: (id) async {
           try {
             await _apiService.unlinkFxTransfer(id);
-            await _refreshData();
+            await _refreshAfterTransactionMutation(includeFxTransfers: true);
           } catch (e) {
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
@@ -2893,15 +2958,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         },
         onSplitTransaction: (parentId, splits) async {
           await _apiService.splitTransaction(parentId, splits);
-          await _refreshData();
+          await _refreshAfterTransactionMutation();
         },
         onUnsplitTransaction: (parentId) async {
           await _apiService.unsplitTransaction(parentId);
-          await _refreshData();
+          await _refreshAfterTransactionMutation();
         },
         onReplaceSplits: (parentId, splits) async {
           await _apiService.replaceSplits(parentId, splits);
-          await _refreshData();
+          await _refreshAfterTransactionMutation();
         },
         onDetectFxTransfers: () async {
           final messenger = ScaffoldMessenger.of(context);
@@ -2910,7 +2975,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           );
           try {
             final r = await _apiService.detectFxTransfers();
-            await _refreshData();
+            await _refreshAfterTransactionMutation(includeFxTransfers: true);
             if (!mounted) return;
             messenger.hideCurrentSnackBar();
             messenger.showSnackBar(
@@ -2941,7 +3006,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               userDescription: userDescription,
               accountId: accountId,
             );
-            await _refreshData();
+            await _refreshAfterTransactionMutation();
           } catch (e) {
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
@@ -2958,7 +3023,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             accountId: accountId,
             description: userDescription,
           );
-          await _refreshData();
+          await _refreshAfterTransactionMutation();
           return n;
         },
         // Bulk delete: N deletes then ONE refresh (no per-row reload).
@@ -2966,11 +3031,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           for (final id in ids) {
             await _apiService.deleteTransaction(id);
           }
-          await _refreshData();
+          await _refreshAfterTransactionMutation();
         },
         onDelete: (id) async {
           await _apiService.deleteTransaction(id);
-          await _refreshData();
+          await _refreshAfterTransactionMutation();
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(l.dashTransactionDeleted)),
@@ -3024,7 +3089,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onConfirm: (id) async {
                 try {
                   await _apiService.confirmFxTransfer(id);
-                  await _refreshData();
+                  await _refreshAfterTransactionMutation(
+                      includeFxTransfers: true);
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(l.dashLinkConfirmed)),
@@ -3039,7 +3105,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onUnlink: (id) async {
                 try {
                   await _apiService.unlinkFxTransfer(id);
-                  await _refreshData();
+                  await _refreshAfterTransactionMutation(
+                      includeFxTransfers: true);
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(l.dashPairUnlinked)),
@@ -3078,7 +3145,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onIgnoreMerchant: (m) async {
                 try {
                   await _apiService.ignoreSubscription(m);
-                  await _refreshData();
+                  await _refreshSubscriptionLists();
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(l.dashMerchantHidden(m))),
