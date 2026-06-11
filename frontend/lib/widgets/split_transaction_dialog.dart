@@ -6,11 +6,33 @@ import '../utils/theme_colors.dart';
 
 /// One row in the split editor. Mutable so the parent dialog can
 /// track form state across rebuilds.
+///
+/// Each draft owns its text controllers and a stable [id] (used as the
+/// row's ValueKey) so that editing an amount never recreates the row's
+/// widget subtree — recreating it would drop focus on every keystroke.
 class _SplitDraft {
-  String description;
-  String amountText;
+  static int _nextId = 0;
+
+  /// Stable identity for the row's ValueKey. Never reused within a
+  /// dialog session, so rows keep their element (and focus) across
+  /// inserts/removals/presets.
+  final int id;
+  final TextEditingController descriptionController;
+  final TextEditingController amountController;
   String category;
-  _SplitDraft({this.description = '', this.amountText = '', this.category = ''});
+
+  _SplitDraft({String description = '', String amountText = '', this.category = ''})
+      : id = _nextId++,
+        descriptionController = TextEditingController(text: description),
+        amountController = TextEditingController(text: amountText);
+
+  String get description => descriptionController.text;
+  String get amountText => amountController.text;
+
+  void dispose() {
+    descriptionController.dispose();
+    amountController.dispose();
+  }
 }
 
 /// Editor for splitting a parent transaction into N children. Validates
@@ -73,7 +95,7 @@ class SplitTransactionDialog extends StatefulWidget {
 }
 
 class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
-  late List<_SplitDraft> _drafts;
+  final List<_SplitDraft> _drafts = [];
 
   bool get _isEditing =>
       widget.initialDrafts != null && widget.initialDrafts!.isNotEmpty;
@@ -82,14 +104,14 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
   void initState() {
     super.initState();
     if (_isEditing) {
-      _drafts = widget.initialDrafts!.map((raw) {
+      _drafts.addAll(widget.initialDrafts!.map((raw) {
         final amt = (raw['amount'] as num?)?.toDouble() ?? 0.0;
         return _SplitDraft(
           description: (raw['description'] ?? '').toString(),
           amountText: amt.toStringAsFixed(2),
           category: (raw['category'] ?? widget.parentCategory).toString(),
         );
-      }).toList();
+      }));
       // Defensive: a corrupt initialDrafts shouldn't leave us with
       // <2 rows (would block save forever).
       while (_drafts.length < 2) {
@@ -98,6 +120,21 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
     } else {
       _applyRatio([0.5, 0.5]);
     }
+  }
+
+  @override
+  void dispose() {
+    for (final d in _drafts) {
+      d.dispose();
+    }
+    super.dispose();
+  }
+
+  /// A draft's controllers can't be disposed while its row is still
+  /// mounted (the TextFormField detaches its listeners on unmount), so
+  /// defer disposal to after the rebuild that removes the row.
+  void _disposeAfterFrame(_SplitDraft draft) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => draft.dispose());
   }
 
   double _sum() {
@@ -124,11 +161,12 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
     return _sumMatches;
   }
 
-  /// Replace `_drafts` with N rows whose amounts follow [ratios].
+  /// Resize `_drafts` to N rows whose amounts follow [ratios].
   /// Trailing row absorbs any cents-of-rounding remainder so the sum
-  /// always equals the parent exactly. Description + category are
-  /// carried over from existing rows where possible, otherwise blank
-  /// / parent-category.
+  /// always equals the parent exactly. Existing rows (and therefore
+  /// their descriptions, categories and focus) are kept in place —
+  /// only the amount text is rewritten, via the row's controller, so
+  /// no widgets are recreated.
   void _applyRatio(List<double> ratios) {
     final n = ratios.length;
     final allocated = <double>[];
@@ -141,18 +179,20 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
         allocated.fold<double>(0.0, (a, b) => a + b);
     allocated.add(double.parse(remainder.toStringAsFixed(2)));
 
-    final next = <_SplitDraft>[];
-    for (var i = 0; i < n; i++) {
-      final existing = i < _drafts.length ? _drafts[i] : null;
-      next.add(_SplitDraft(
-        description: existing?.description ?? '',
-        amountText: allocated[i].toStringAsFixed(2),
-        category: existing?.category.isNotEmpty == true
-            ? existing!.category
-            : widget.parentCategory,
-      ));
-    }
-    setState(() => _drafts = next);
+    setState(() {
+      while (_drafts.length > n) {
+        _disposeAfterFrame(_drafts.removeLast());
+      }
+      while (_drafts.length < n) {
+        _drafts.add(_SplitDraft(category: widget.parentCategory));
+      }
+      for (var i = 0; i < n; i++) {
+        if (_drafts[i].category.trim().isEmpty) {
+          _drafts[i].category = widget.parentCategory;
+        }
+        _drafts[i].amountController.text = allocated[i].toStringAsFixed(2);
+      }
+    });
   }
 
   /// Distribute the parent's amount evenly across [n] rows. Carries
@@ -178,7 +218,7 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
 
   void _removeRow(int idx) {
     if (_drafts.length <= 2) return;
-    setState(() => _drafts.removeAt(idx));
+    setState(() => _disposeAfterFrame(_drafts.removeAt(idx)));
   }
 
   /// Build a small dropdown of the categories the user already has
@@ -323,12 +363,13 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
                   children: [
                     for (var i = 0; i < _drafts.length; i++)
                       Padding(
-                        // The Key ties each row to its draft index so the
-                        // TextFormField's internal state survives ratio
-                        // presets — without it, "60/40" would re-create
-                        // each row and clear the description fields.
-                        key: ValueKey('split-row-${_drafts.length}-$i-'
-                            '${_drafts[i].amountText}'),
+                        // The Key ties each row to its draft's stable id
+                        // so the row's element (and focus) survives
+                        // rebuilds, ratio presets and row removal. It
+                        // must NOT depend on the live text — that would
+                        // recreate the subtree on every keystroke and
+                        // drop focus.
+                        key: ValueKey('split-row-${_drafts[i].id}'),
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -338,21 +379,22 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
                                 Expanded(
                                   flex: 3,
                                   child: TextFormField(
-                                    initialValue: _drafts[i].description,
+                                    controller: _drafts[i].descriptionController,
                                     decoration: InputDecoration(
                                       isDense: true,
                                       labelText: l.txSplitDescription,
                                       border: const OutlineInputBorder(),
                                     ),
-                                    onChanged: (v) =>
-                                        setState(() => _drafts[i].description = v),
+                                    // Text lives in the controller; the
+                                    // setState only refreshes _canSave.
+                                    onChanged: (_) => setState(() {}),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   flex: 2,
                                   child: TextFormField(
-                                    initialValue: _drafts[i].amountText,
+                                    controller: _drafts[i].amountController,
                                     decoration: InputDecoration(
                                       isDense: true,
                                       labelText: l.txSplitAmount,
@@ -361,8 +403,10 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
                                     ),
                                     keyboardType: const TextInputType.numberWithOptions(
                                         decimal: true, signed: true),
-                                    onChanged: (v) =>
-                                        setState(() => _drafts[i].amountText = v),
+                                    // Text lives in the controller; the
+                                    // setState refreshes the sum banner
+                                    // and _canSave.
+                                    onChanged: (_) => setState(() {}),
                                   ),
                                 ),
                                 IconButton(
