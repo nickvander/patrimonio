@@ -171,6 +171,14 @@ class _PortfolioCardState extends State<PortfolioCard> {
       _sortColumnIndex = columnIndex;
       _isAscending = ascending;
 
+      // Cost basis / gain / return can be null when the institution
+      // doesn't report a basis. Unknown sorts LAST regardless of
+      // direction: the comparator below compares ascending on
+      // (possibly swapped) values, so mapping null to +inf when
+      // ascending and -inf when descending pins it to the bottom.
+      double unknownLast(num? v) => v?.toDouble() ??
+          (ascending ? double.infinity : double.negativeInfinity);
+
       _holdings.sort((a, b) {
         dynamic valA;
         dynamic valB;
@@ -193,16 +201,16 @@ class _PortfolioCardState extends State<PortfolioCard> {
             valB = (b['value'] as num?)?.toDouble() ?? 0.0;
             break;
           case 4:
-            valA = (a['cost_basis'] as num?)?.toDouble() ?? 0.0;
-            valB = (b['cost_basis'] as num?)?.toDouble() ?? 0.0;
+            valA = unknownLast(a['cost_basis'] as num?);
+            valB = unknownLast(b['cost_basis'] as num?);
             break;
           case 5:
-            valA = (a['gain_loss'] as num?)?.toDouble() ?? 0.0;
-            valB = (b['gain_loss'] as num?)?.toDouble() ?? 0.0;
+            valA = unknownLast(a['gain_loss'] as num?);
+            valB = unknownLast(b['gain_loss'] as num?);
             break;
           case 6:
-            valA = (a['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
-            valB = (b['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
+            valA = unknownLast(a['gain_loss_pct'] as num?);
+            valB = unknownLast(b['gain_loss_pct'] as num?);
             break;
           default:
             valA = 0;
@@ -420,11 +428,16 @@ class _PortfolioCardState extends State<PortfolioCard> {
     if (valUsd == null || valMxn == null) {
       return const SizedBox.shrink();
     }
-    final glPctUsd = (costUsd != null && costUsd > 0)
-        ? ((valUsd - costUsd) / costUsd) * 100.0
+    // P/L % from the backend's gain/cost pair: both already exclude
+    // holdings with an unknown cost basis, so dividing them keeps the
+    // numerator and denominator consistent. (valUsd - costUsd would
+    // mix the FULL portfolio value with a partial cost and inflate
+    // the percentage.)
+    final glPctUsd = (glUsd != null && costUsd != null && costUsd > 0)
+        ? (glUsd / costUsd) * 100.0
         : 0.0;
-    final glPctMxn = (costMxn != null && costMxn > 0)
-        ? ((valMxn - costMxn) / costMxn) * 100.0
+    final glPctMxn = (glMxn != null && costMxn != null && costMxn > 0)
+        ? (glMxn / costMxn) * 100.0
         : 0.0;
 
     final usdFmt = NumberFormat.currency(locale: 'en_US', symbol: '\$');
@@ -605,7 +618,11 @@ class _PortfolioCardState extends State<PortfolioCard> {
       if (top == null || v > ((top['value'] as num?)?.toDouble() ?? 0)) {
         top = h;
       }
-      final pct = (h['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
+      // Null return % means the institution didn't report a cost
+      // basis — exclude those from the gainer/loser race instead of
+      // letting an unknown masquerade as a 0% performer.
+      final pct = (h['gain_loss_pct'] as num?)?.toDouble();
+      if (pct == null) continue;
       if (gainer == null ||
           pct > ((gainer['gain_loss_pct'] as num?)?.toDouble() ?? 0)) {
         gainer = h;
@@ -944,8 +961,10 @@ class _PortfolioCardState extends State<PortfolioCard> {
     final cf = widget.conversionFactor;
     final qty = (h['quantity'] as num?)?.toDouble() ?? 0.0;
     final value = ((h['value'] as num?)?.toDouble() ?? 0.0) * cf;
-    final pct = (h['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
-    final isGain = pct >= 0;
+    // Null when the institution doesn't report a cost basis — render
+    // a muted em dash, never a fake green "+0.00%".
+    final pct = (h['gain_loss_pct'] as num?)?.toDouble();
+    final isGain = (pct ?? 0) >= 0;
     final rawSym = (h['symbol'] ?? '').toString();
     final rawName = (h['name'] ?? '').toString();
     final opaque = rawSym.length > 8 ||
@@ -1003,16 +1022,30 @@ class _PortfolioCardState extends State<PortfolioCard> {
           const SizedBox(width: 12),
           SizedBox(
             width: 64,
-            child: Text(
-              '${isGain ? '+' : ''}${pct.toStringAsFixed(2)}%',
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: isGain ? context.positive : context.negative,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
+            child: pct == null
+                ? Tooltip(
+                    message: l.pfCostBasisUnavailable,
+                    waitDuration: const Duration(milliseconds: 600),
+                    child: Text(
+                      '—',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: context.textMuted,
+                      ),
+                    ),
+                  )
+                : Text(
+                    '${isGain ? '+' : ''}${pct.toStringAsFixed(2)}%',
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: isGain ? context.positive : context.negative,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
           ),
         ],
       ),
@@ -1409,13 +1442,17 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
   @override
   Widget build(BuildContext context) {
     final h = widget.holding;
-    final gain = (h['gain_loss'] as num?)?.toDouble() ?? 0.0;
-    final gainPct = (h['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
+    // Null cost_basis / gain_loss / gain_loss_pct means the
+    // institution doesn't report a basis (Plaid employer plans,
+    // statement imports). Those render a muted em dash with an
+    // explanatory tooltip — never a fake "+0.00%" in gain-green.
+    final gain = (h['gain_loss'] as num?)?.toDouble();
+    final gainPct = (h['gain_loss_pct'] as num?)?.toDouble();
     final quantity = (h['quantity'] as num?)?.toDouble() ?? 0.0;
     final sourceCurrency = (h['currency'] ?? widget.targetCurrency).toString();
     final sourcePrice = (h['price'] as num?)?.toDouble() ?? 0.0;
     final sourceValue = (h['value'] as num?)?.toDouble() ?? 0.0;
-    final costBasisSource = (h['cost_basis'] as num?)?.toDouble() ?? 0.0;
+    final costBasisSource = (h['cost_basis'] as num?)?.toDouble();
     final price = convertCurrency(
       sourcePrice,
       from: sourceCurrency,
@@ -1428,19 +1465,25 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
       to: widget.targetCurrency,
       usdMxnRate: widget.usdMxnRate,
     );
-    final costBasis = convertCurrency(
-      costBasisSource,
-      from: sourceCurrency,
-      to: widget.targetCurrency,
-      usdMxnRate: widget.usdMxnRate,
-    );
-    final gainConverted = convertCurrency(
-      gain,
-      from: sourceCurrency,
-      to: widget.targetCurrency,
-      usdMxnRate: widget.usdMxnRate,
-    );
-    final isGain = gain >= 0;
+    final costBasis = costBasisSource == null
+        ? null
+        : convertCurrency(
+            costBasisSource,
+            from: sourceCurrency,
+            to: widget.targetCurrency,
+            usdMxnRate: widget.usdMxnRate,
+          );
+    final gainConverted = gain == null
+        ? null
+        : convertCurrency(
+            gain,
+            from: sourceCurrency,
+            to: widget.targetCurrency,
+            usdMxnRate: widget.usdMxnRate,
+          );
+    final isGain = (gain ?? 0) >= 0;
+    final basisUnavailableMsg =
+        AppLocalizations.of(context).pfCostBasisUnavailable;
 
     final rawSymbol = (h['symbol'] ?? '').toString();
     final rawName = (h['name'] ?? '').toString();
@@ -1584,22 +1627,35 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
 
     final costBasisCell = Align(
       alignment: Alignment.centerRight,
-      child: Text(
-        costBasisSource == 0 ? '—' : widget.format.format(costBasis),
-        style: TextStyle(
-          fontSize: 14,
-          color: costBasisSource == 0 ? context.textFaint : context.textMuted,
-          fontFeatures: const [FontFeature.tabularFigures()],
-        ),
-      ),
+      child: costBasis == null
+          ? Tooltip(
+              message: basisUnavailableMsg,
+              waitDuration: const Duration(milliseconds: 600),
+              child: Text(
+                '—',
+                style: TextStyle(fontSize: 14, color: context.textMuted),
+              ),
+            )
+          : Text(
+              widget.format.format(costBasis),
+              style: TextStyle(
+                fontSize: 14,
+                color: context.textMuted,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
     );
 
     final gainCell = Align(
       alignment: Alignment.centerRight,
-      child: gain == 0
-          ? Text(
-              '—',
-              style: TextStyle(fontSize: 14, color: context.textFaint),
+      child: gainConverted == null
+          ? Tooltip(
+              message: basisUnavailableMsg,
+              waitDuration: const Duration(milliseconds: 600),
+              child: Text(
+                '—',
+                style: TextStyle(fontSize: 14, color: context.textMuted),
+              ),
             )
           : Text(
               '${isGain ? '+' : ''}${widget.format.format(gainConverted)}',
@@ -1612,24 +1668,38 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
             ),
     );
 
+    // pct can be null for a KNOWN zero-cost basis too (return % is
+    // undefined); only claim "unavailable" when the basis really is.
+    final returnDash = Text(
+      '—',
+      style: TextStyle(fontSize: 13, color: context.textMuted),
+    );
     final returnCell = Align(
       alignment: Alignment.centerRight,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: (isGain ? context.positive : context.negative)
-              .withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Text(
-          '${isGain ? '+' : ''}${gainPct.toStringAsFixed(2)}%',
-          style: TextStyle(
-            color: isGain ? context.positive : context.negative,
-            fontWeight: FontWeight.bold,
-            fontSize: 13,
-          ),
-        ),
-      ),
+      child: gainPct == null
+          ? (gain == null
+              ? Tooltip(
+                  message: basisUnavailableMsg,
+                  waitDuration: const Duration(milliseconds: 600),
+                  child: returnDash,
+                )
+              : returnDash)
+          : Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: (isGain ? context.positive : context.negative)
+                    .withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                '${isGain ? '+' : ''}${gainPct.toStringAsFixed(2)}%',
+                style: TextStyle(
+                  color: isGain ? context.positive : context.negative,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+            ),
     );
 
     final lots = (h['lots'] as List?) ?? const [];
@@ -1896,12 +1966,16 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
     final quantity = (h['quantity'] as num?)?.toDouble() ?? 0.0;
     final value = _conv((h['value'] as num?)?.toDouble() ?? 0.0, sourceCurrency);
     final price = _conv((h['price'] as num?)?.toDouble() ?? 0.0, sourceCurrency);
-    final costBasisSource = (h['cost_basis'] as num?)?.toDouble() ?? 0.0;
-    final costBasis = _conv(costBasisSource, sourceCurrency);
-    final gain = (h['gain_loss'] as num?)?.toDouble() ?? 0.0;
-    final gainConverted = _conv(gain, sourceCurrency);
-    final gainPct = (h['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
-    final isGain = gain >= 0;
+    // Null = the institution didn't report a cost basis. Render a
+    // muted em dash with a tooltip, never a fake green "+0.00%".
+    final costBasisSource = (h['cost_basis'] as num?)?.toDouble();
+    final costBasis = costBasisSource == null
+        ? null
+        : _conv(costBasisSource, sourceCurrency);
+    final gain = (h['gain_loss'] as num?)?.toDouble();
+    final gainConverted = gain == null ? null : _conv(gain, sourceCurrency);
+    final gainPct = (h['gain_loss_pct'] as num?)?.toDouble();
+    final isGain = (gain ?? 0) >= 0;
 
     final rawSymbol = (h['symbol'] ?? '').toString();
     final rawName = (h['name'] ?? '').toString();
@@ -1987,15 +2061,29 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      '${isGain ? '+' : ''}${gainPct.toStringAsFixed(2)}%',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: isGain ? context.positive : context.negative,
-                        fontFeatures: const [FontFeature.tabularFigures()],
+                    if (gainPct == null)
+                      Tooltip(
+                        message: l.pfCostBasisUnavailable,
+                        waitDuration: const Duration(milliseconds: 600),
+                        child: Text(
+                          '—',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: context.textMuted,
+                          ),
+                        ),
+                      )
+                    else
+                      Text(
+                        '${isGain ? '+' : ''}${gainPct.toStringAsFixed(2)}%',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: isGain ? context.positive : context.negative,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
                       ),
-                    ),
                   ],
                 ),
                 Icon(
@@ -2017,16 +2105,20 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
                 _detailRow(l.pfColPrice, widget.format.format(price)),
                 _detailRow(
                   l.pfColCostBasis,
-                  costBasisSource == 0 ? '—' : widget.format.format(costBasis),
+                  costBasis == null ? '—' : widget.format.format(costBasis),
+                  color: costBasis == null ? context.textMuted : null,
+                  tooltip: costBasis == null ? l.pfCostBasisUnavailable : null,
                 ),
                 _detailRow(
                   l.pfColGain,
-                  gain == 0
+                  gainConverted == null
                       ? '—'
                       : '${isGain ? '+' : ''}${widget.format.format(gainConverted)}',
-                  color: gain == 0
-                      ? null
+                  color: gainConverted == null
+                      ? context.textMuted
                       : (isGain ? context.positive : context.negative),
+                  tooltip:
+                      gainConverted == null ? l.pfCostBasisUnavailable : null,
                 ),
                 if (hasLots)
                   Align(
@@ -2049,7 +2141,24 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
     );
   }
 
-  Widget _detailRow(String label, String value, {Color? color}) {
+  Widget _detailRow(String label, String value,
+      {Color? color, String? tooltip}) {
+    Widget valueText = Text(
+      value,
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: color ?? context.textPrimary,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+    );
+    if (tooltip != null) {
+      valueText = Tooltip(
+        message: tooltip,
+        waitDuration: const Duration(milliseconds: 600),
+        child: valueText,
+      );
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -2059,15 +2168,7 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
             label,
             style: TextStyle(fontSize: 12, color: context.textSubtle),
           ),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: color ?? context.textPrimary,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
+          valueText,
         ],
       ),
     );

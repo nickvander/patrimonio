@@ -3269,6 +3269,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get pfColCostBasis => 'Costo base';
 
   @override
+  String get pfCostBasisUnavailable =>
+      'Costo base no disponible de esta institución';
+
+  @override
   String get pfColGain => 'Ganancia';
 
   @override

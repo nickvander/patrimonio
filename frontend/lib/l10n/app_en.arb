@@ -1031,6 +1031,7 @@
   "pfColPrice": "Price",
   "pfColValue": "Value",
   "pfColCostBasis": "Cost basis",
+  "pfCostBasisUnavailable": "Cost basis unavailable from this institution",
   "pfColGain": "Gain",
   "pfColReturn": "Return",
   "pfShares": "sh",

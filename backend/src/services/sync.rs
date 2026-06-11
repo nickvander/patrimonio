@@ -389,7 +389,14 @@ pub async fn sync_institutions(
                                 let qty = h["quantity"].as_f64().unwrap_or(0.0);
                                 let price = h["institution_price"].as_f64().unwrap_or(0.0);
                                 let val = h["institution_value"].as_f64().unwrap_or(0.0);
-                                let cost_basis = h["cost_basis"].as_f64().unwrap_or(val);
+                                // Plaid omits cost_basis for many employer plans
+                                // (e.g. 401k). Store SQL NULL — NOT the current
+                                // value — so the API can distinguish "unknown
+                                // basis" from a real zero-gain position. The
+                                // upsert below overwrites with EXCLUDED.cost_basis,
+                                // so previously-poisoned rows (basis == value)
+                                // self-heal to NULL on the next sync.
+                                let cost_basis: Option<f64> = h["cost_basis"].as_f64();
 
                                 let internal_acc = sqlx::query(
                                     "SELECT id FROM accounts WHERE external_id = $1 AND user_id = $2"

@@ -880,6 +880,7 @@
   "pfColPrice": "Precio",
   "pfColValue": "Valor",
   "pfColCostBasis": "Costo base",
+  "pfCostBasisUnavailable": "Costo base no disponible de esta institución",
   "pfColGain": "Ganancia",
   "pfColReturn": "Rendimiento",
   "pfShares": "acc.",

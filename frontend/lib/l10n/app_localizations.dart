@@ -5384,6 +5384,12 @@ abstract class AppLocalizations {
   /// **'Cost basis'**
   String get pfColCostBasis;
 
+  /// No description provided for @pfCostBasisUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Cost basis unavailable from this institution'**
+  String get pfCostBasisUnavailable;
+
   /// No description provided for @pfColGain.
   ///
   /// In en, this message translates to:

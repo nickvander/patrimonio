@@ -494,14 +494,23 @@ async fn holdings(
             let id: uuid::Uuid = r.try_get("id").unwrap_or_else(|_| uuid::Uuid::nil());
             let value: f64 = r.try_get::<rust_decimal::Decimal, _>("value")
                 .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
-            let cost_basis_native: f64 = r.try_get::<rust_decimal::Decimal, _>("cost_basis")
-                .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+            // NULL cost_basis means the institution didn't report a
+            // basis (Plaid omits it for many employer plans, statement
+            // imports never have one). That is "unknown", which is NOT
+            // the same as a true zero-cost position — so it stays
+            // Option<f64> all the way to the JSON (null), never 0.0.
+            let cost_basis_native: Option<f64> = r
+                .try_get::<Option<rust_decimal::Decimal>, _>("cost_basis")
+                .ok()
+                .flatten()
+                .map(|d| d.to_string().parse().unwrap_or(0.0));
             let currency: String = r.get("currency");
 
             // Cost basis in USD: prefer lots (FX-aware) when present;
             // fall back to current-FX conversion of the flat basis.
-            let cost_basis_usd = if let Some(lots) = lots_by_holding.get(&id) {
-                lots.iter()
+            // None when neither lots nor a flat basis exist.
+            let cost_basis_usd: Option<f64> = if let Some(lots) = lots_by_holding.get(&id) {
+                Some(lots.iter()
                     .map(|(qty, cpu, ccy, fx)| {
                         let native = qty * cpu;
                         // Lot's currency may differ from holding's
@@ -514,13 +523,13 @@ async fn holdings(
                             _ => native,
                         }
                     })
-                    .sum::<f64>()
+                    .sum::<f64>())
             } else {
-                to_usd(cost_basis_native, &currency)
+                cost_basis_native.map(|cb| to_usd(cb, &currency))
             };
 
             let value_usd = to_usd(value, &currency);
-            let cost_basis_mxn = cost_basis_usd * fx_usd_to_mxn;
+            let cost_basis_mxn = cost_basis_usd.map(|cb| cb * fx_usd_to_mxn);
             let value_mxn = value_usd * fx_usd_to_mxn;
 
             HoldingDetail {
@@ -532,16 +541,19 @@ async fn holdings(
                     .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
                 value,
                 cost_basis: cost_basis_native,
-                gain_loss: value - cost_basis_native,
-                gain_loss_pct: if cost_basis_native > 0.0 {
-                    ((value - cost_basis_native) / cost_basis_native) * 100.0
-                } else { 0.0 },
+                gain_loss: cost_basis_native.map(|cb| value - cb),
+                // Percent return is undefined both when the basis is
+                // unknown and when it's a true zero-cost position
+                // (division by zero) — null in either case.
+                gain_loss_pct: cost_basis_native.and_then(|cb| {
+                    if cb > 0.0 { Some(((value - cb) / cb) * 100.0) } else { None }
+                }),
                 value_usd,
                 value_mxn,
                 cost_basis_usd,
                 cost_basis_mxn,
-                gain_loss_usd: value_usd - cost_basis_usd,
-                gain_loss_mxn: value_mxn - cost_basis_mxn,
+                gain_loss_usd: cost_basis_usd.map(|cb| value_usd - cb),
+                gain_loss_mxn: cost_basis_mxn.map(|cb| value_mxn - cb),
                 currency,
                 holding_type: r.try_get::<String, _>("holding_type").unwrap_or_default(),
                 account_type: r.try_get::<String, _>("account_type").unwrap_or_default(),
@@ -552,24 +564,39 @@ async fn holdings(
         })
         .collect();
 
+    // Total value covers EVERY holding; the gain/loss totals only
+    // cover holdings with a KNOWN basis (numerator and denominator
+    // alike), so one 401k with an unreported basis doesn't silently
+    // drag the portfolio return toward zero.
     let total_value: f64 = holdings_list.iter().map(|h| h.value).sum();
-    let total_cost: f64 = holdings_list.iter().map(|h| h.cost_basis).sum();
     let total_value_usd: f64 = holdings_list.iter().map(|h| h.value_usd).sum();
     let total_value_mxn: f64 = holdings_list.iter().map(|h| h.value_mxn).sum();
-    let total_cost_usd: f64 = holdings_list.iter().map(|h| h.cost_basis_usd).sum();
-    let total_cost_mxn: f64 = holdings_list.iter().map(|h| h.cost_basis_mxn).sum();
+
+    let total_cost: f64 = holdings_list.iter().filter_map(|h| h.cost_basis).sum();
+    let known_value: f64 = holdings_list.iter()
+        .filter(|h| h.cost_basis.is_some()).map(|h| h.value).sum();
+    let total_cost_usd: f64 = holdings_list.iter().filter_map(|h| h.cost_basis_usd).sum();
+    let known_value_usd: f64 = holdings_list.iter()
+        .filter(|h| h.cost_basis_usd.is_some()).map(|h| h.value_usd).sum();
+    let total_cost_mxn: f64 = holdings_list.iter().filter_map(|h| h.cost_basis_mxn).sum();
+    let known_value_mxn: f64 = holdings_list.iter()
+        .filter(|h| h.cost_basis_mxn.is_some()).map(|h| h.value_mxn).sum();
+    let holdings_without_basis = holdings_list.iter()
+        .filter(|h| h.cost_basis.is_none() && h.cost_basis_usd.is_none())
+        .count();
 
     Json(HoldingsResponse {
         total_value,
         total_cost_basis: total_cost,
-        total_gain_loss: total_value - total_cost,
-        total_gain_loss_pct: if total_cost > 0.0 { ((total_value - total_cost) / total_cost) * 100.0 } else { 0.0 },
+        total_gain_loss: known_value - total_cost,
+        total_gain_loss_pct: if total_cost > 0.0 { ((known_value - total_cost) / total_cost) * 100.0 } else { 0.0 },
         total_value_usd,
         total_value_mxn,
         total_cost_basis_usd: total_cost_usd,
         total_cost_basis_mxn: total_cost_mxn,
-        total_gain_loss_usd: total_value_usd - total_cost_usd,
-        total_gain_loss_mxn: total_value_mxn - total_cost_mxn,
+        total_gain_loss_usd: known_value_usd - total_cost_usd,
+        total_gain_loss_mxn: known_value_mxn - total_cost_mxn,
+        holdings_without_basis,
         holdings: holdings_list,
     })
 }
@@ -2029,6 +2056,12 @@ struct HoldingsResponse {
     /// when mixing USD + MXN positions, in which case the consumer
     /// should read `total_value_usd` / `total_value_mxn`.
     total_value: f64,
+    /// Sum of cost bases over holdings whose basis is KNOWN. Holdings
+    /// with an unknown basis (institution didn't report one — NULL in
+    /// the DB, no lots) are excluded from `total_cost_basis` and from
+    /// both sides of `total_gain_loss` / `total_gain_loss_pct`, while
+    /// `total_value` still covers everything. See
+    /// `holdings_without_basis` for how many were excluded.
     total_cost_basis: f64,
     total_gain_loss: f64,
     total_gain_loss_pct: f64,
@@ -2042,6 +2075,9 @@ struct HoldingsResponse {
     total_cost_basis_mxn: f64,
     total_gain_loss_usd: f64,
     total_gain_loss_mxn: f64,
+    /// Number of holdings excluded from the gain/loss totals because
+    /// no cost basis is available (lets the UI caveat the totals).
+    holdings_without_basis: usize,
     holdings: Vec<HoldingDetail>,
 }
 
@@ -2052,9 +2088,15 @@ struct HoldingDetail {
     quantity: f64,
     price: f64,
     value: f64,
-    cost_basis: f64,
-    gain_loss: f64,
-    gain_loss_pct: f64,
+    /// None (JSON null) when the institution doesn't report a basis —
+    /// e.g. Plaid employer plans, statement-imported holdings. Unknown
+    /// is deliberately distinct from a true zero-cost position, which
+    /// serialises as a real 0.0.
+    cost_basis: Option<f64>,
+    gain_loss: Option<f64>,
+    /// None when the basis is unknown OR the position is zero-cost
+    /// (percent return undefined).
+    gain_loss_pct: Option<f64>,
     /// Per-holding dual-currency conversions. `value_usd` and
     /// `cost_basis_usd` always agree with the holding's native
     /// number when the security is USD-denominated; for MXN
@@ -2064,10 +2106,10 @@ struct HoldingDetail {
     /// render the row.
     value_usd: f64,
     value_mxn: f64,
-    cost_basis_usd: f64,
-    cost_basis_mxn: f64,
-    gain_loss_usd: f64,
-    gain_loss_mxn: f64,
+    cost_basis_usd: Option<f64>,
+    cost_basis_mxn: Option<f64>,
+    gain_loss_usd: Option<f64>,
+    gain_loss_mxn: Option<f64>,
     currency: String,
     holding_type: String,
     /// Owning account's type (e.g. "401k", "brokerage") — lets the frontend
