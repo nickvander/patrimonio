@@ -60,6 +60,10 @@ void main() {
   _updateSplash(60, 'Starting app…');
   // Seed the active locale (web-free notifier) from the saved preference.
   localeNotifier.value = _loadInitialLocale();
+  // The notifier's listener only fires on *change*; with no saved language
+  // the value stays null and Intl would never be initialized, so sync the
+  // startup path explicitly (idempotent when the listener already ran).
+  syncIntlLocale(localeNotifier.value);
   runApp(const PatrimonioApp());
 }
 

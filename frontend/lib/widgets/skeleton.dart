@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../utils/theme_colors.dart';
+
 /// Animated grey block used as a placeholder while real data loads. The
 /// pulse is a low-amplitude opacity animation rather than the classic
 /// shimmer because shimmer can look jittery on slow connections and the
@@ -59,7 +61,11 @@ class _SkeletonBoxState extends State<SkeletonBox>
           width: widget.width,
           height: widget.height,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: t),
+            // onSurface-derived tint (theme_colors.dart) instead of the old
+            // `Colors.white`, which was invisible on the light parchment
+            // theme. `tint` also scales the alpha up in light mode so the
+            // pulse carries comparable visual weight in both brightnesses.
+            color: ctx.tint(t),
             borderRadius: widget.borderRadius,
           ),
         );
