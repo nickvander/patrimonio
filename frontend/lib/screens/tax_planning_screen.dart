@@ -132,9 +132,16 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       to: widget.targetCurrency,
       usdMxnRate: widget.usdMxnRate,
     );
-    final isCapGains = tx['category'] == 'Investment Sale';
+    // /tax/transactions now returns income events only (capital gains come
+    // from lot disposals, not transaction categories). Rows match the stored
+    // taxonomy — 'INCOME' / user_category override — so anything else is a
+    // defensive fallback that keeps the old chart icon.
+    final effectiveCategory =
+        ((tx['user_category'] ?? tx['category']) ?? '').toString().toUpperCase();
+    final isIncome =
+        effectiveCategory == 'INCOME' || effectiveCategory.startsWith('INCOME_');
     final iconColor =
-        isCapGains ? context.purpleAccent : context.tealAccent;
+        isIncome ? context.tealAccent : context.purpleAccent;
     final needsConversion = sourceCurrency != widget.targetCurrency;
 
     return InkWell(
@@ -153,7 +160,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(
-                isCapGains ? Icons.show_chart : Icons.work_outline,
+                isIncome ? Icons.work_outline : Icons.show_chart,
                 color: iconColor,
                 size: 16,
               ),

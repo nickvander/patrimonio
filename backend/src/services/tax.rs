@@ -26,6 +26,11 @@ pub struct TaxEstimation {
     /// Long-term realized gains (held > 1 year) — preferential LTCG rates.
     #[serde(with = "rust_decimal::serde::float")]
     pub long_term_gains: Decimal,
+    /// Realized gains inside tax-advantaged wrappers (401k/IRA/HSA/...). NOT
+    /// part of `capital_gains` or any liability figure — surfaced separately
+    /// so excluded activity is visible rather than silently dropped.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub tax_advantaged_gains: Decimal,
     /// True when the gains came from precise lot-disposal records rather than
     /// the blended cost-basis fallback.
     pub gains_from_lots: bool,
@@ -40,6 +45,67 @@ pub struct TaxEstimation {
     #[serde(with = "rust_decimal::serde::float")]
     pub effective_rate_mx: Decimal,
 }
+
+/// Account subtypes whose internal trades are not taxable events — the
+/// 401k/IRA/HSA-style wrappers. Values are matched case-insensitively against
+/// `accounts.account_type`, which migration `2026060801_normalize_account_type`
+/// (and the create-account handler since then) keeps lowercase; the Plaid
+/// subtype vocabulary is the source of these spellings ("roth" = Roth IRA,
+/// "roth 401k" = designated Roth).
+///
+/// Disposals in these accounts are excluded from taxable short/long-term gains
+/// and reported separately (`TaxEstimation::tax_advantaged_gains`, plus their
+/// own labeled CSV section).
+pub const TAX_ADVANTAGED_ACCOUNT_TYPES: &[&str] = &[
+    "401k",
+    "403b",
+    "457b",
+    "ira",
+    "roth",
+    "roth 401k",
+    "hsa",
+    "529",
+    "pension",
+];
+
+/// True when an `accounts.account_type` value is a tax-advantaged wrapper.
+/// Case-insensitive; `None`/unknown types count as taxable (conservative:
+/// gains stay in the estimate rather than vanishing from it).
+pub fn is_tax_advantaged_account_type(account_type: Option<&str>) -> bool {
+    account_type
+        .map(|t| {
+            let t = t.trim().to_lowercase();
+            TAX_ADVANTAGED_ACCOUNT_TYPES.contains(&t.as_str())
+        })
+        .unwrap_or(false)
+}
+
+/// The advantaged-subtype list as a bindable `text[]` parameter for
+/// `LOWER(account_type) = ANY($n)` predicates.
+fn tax_advantaged_types_param() -> Vec<String> {
+    TAX_ADVANTAGED_ACCOUNT_TYPES
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+}
+
+/// SQL predicate for "this transaction is income", matching the taxonomy the
+/// writers actually store: Plaid sync persists the PFC primary `'INCOME'` with
+/// `category_detailed` like `'INCOME_WAGES'` (sync.rs), and the statement
+/// categorizer emits `'INCOME'` (categorize.rs). Matching is case-insensitive.
+///
+/// A non-empty `user_category` override wins in BOTH directions: overriding to
+/// 'INCOME'/'Income' opts a row in, overriding to anything else opts an
+/// auto-categorized income row out. (`\_` keeps the underscore literal in
+/// LIKE so e.g. 'INCOMES…' can't sneak in.)
+const INCOME_PREDICATE_SQL: &str = r#"(
+    CASE
+        WHEN NULLIF(user_category, '') IS NOT NULL
+            THEN UPPER(user_category) = 'INCOME'
+        ELSE UPPER(category) = 'INCOME'
+             OR UPPER(category_detailed) LIKE 'INCOME\_%'
+    END
+)"#;
 
 pub struct TaxService;
 
@@ -172,17 +238,19 @@ impl TaxService {
         let start_date = chrono::NaiveDate::from_ymd_opt(year, 1, 1).unwrap();
         let end_date = chrono::NaiveDate::from_ymd_opt(year, 12, 31).unwrap();
 
-        // 1. Calculate Ordinary Income (Sum of Salary/Income transactions) — scoped to user.
-        let income_row = sqlx::query(
+        // 1. Ordinary income: sum of income-categorized inflows — scoped to
+        //    user, matching the stored taxonomy (see INCOME_PREDICATE_SQL).
+        let income_sql = format!(
             r#"
             SELECT COALESCE(SUM(amount), 0) as total_income
             FROM transactions
             WHERE date >= $1 AND date <= $2
             AND amount > 0
-            AND (category = 'Income' OR category = 'Salary' OR category = 'Interest')
+            AND {INCOME_PREDICATE_SQL}
             AND user_id = $3
             "#
-        )
+        );
+        let income_row = sqlx::query(&income_sql)
         .bind(start_date)
         .bind(end_date)
         .bind(user_id)
@@ -191,81 +259,52 @@ impl TaxService {
 
         let ordinary_income: Decimal = income_row.try_get("total_income").unwrap_or_default();
 
-        // 2. Realized capital gains. Prefer PRECISE lot disposals (actual P&L
-        //    with holding periods) and split short- vs long-term; fall back to
-        //    the blended cost-basis estimate when no lot data exists.
+        // 2. Realized capital gains from PRECISE lot disposals (actual P&L
+        //    with holding periods), split short- vs long-term. Disposals
+        //    inside tax-advantaged wrappers (401k/IRA/HSA/... — see
+        //    TAX_ADVANTAGED_ACCOUNT_TYPES) are NOT taxable events: they're
+        //    kept out of both buckets and reported separately. No disposals
+        //    means no realized gains — the old "Investment Sale" blended
+        //    fallback matched a category no writer ever produced and is gone.
         let disp = sqlx::query(
             r#"
             SELECT
-                COALESCE(SUM(CASE WHEN l.acquired_at IS NOT NULL
+                COALESCE(SUM(CASE WHEN NOT adv.is_adv
+                                   AND l.acquired_at IS NOT NULL
                                    AND (d.sell_date - l.acquired_at) <= 365
                               THEN d.realized_pnl_usd ELSE 0 END), 0) AS short_term,
                 -- Long-term: held > 1 year, OR holding period unknown (the
                 -- source lot was deleted) — most brokerage lots are long-term,
                 -- so this is the conservative default.
-                COALESCE(SUM(CASE WHEN l.acquired_at IS NULL
-                                   OR (d.sell_date - l.acquired_at) > 365
+                COALESCE(SUM(CASE WHEN NOT adv.is_adv
+                                   AND (l.acquired_at IS NULL
+                                        OR (d.sell_date - l.acquired_at) > 365)
                               THEN d.realized_pnl_usd ELSE 0 END), 0) AS long_term,
+                COALESCE(SUM(CASE WHEN adv.is_adv
+                              THEN d.realized_pnl_usd ELSE 0 END), 0) AS tax_advantaged,
                 COUNT(*) AS n
             FROM lot_disposals d
             LEFT JOIN holding_lots l ON l.id = d.lot_id
+            JOIN accounts a ON a.id = d.account_id
+            CROSS JOIN LATERAL (
+                SELECT LOWER(COALESCE(a.account_type, '')) = ANY($3) AS is_adv
+            ) adv
             WHERE d.user_id = $1
               AND EXTRACT(YEAR FROM d.sell_date)::int = $2
             "#,
         )
         .bind(user_id)
         .bind(year)
+        .bind(tax_advantaged_types_param())
         .fetch_one(db)
         .await?;
 
         let disposal_count: i64 = disp.try_get("n").unwrap_or(0);
         let gains_from_lots = disposal_count > 0;
 
-        let (short_term_gains, long_term_gains) = if gains_from_lots {
-            (
-                disp.try_get::<Decimal, _>("short_term").unwrap_or_default(),
-                disp.try_get::<Decimal, _>("long_term").unwrap_or_default(),
-            )
-        } else {
-            // Fallback: blended cost-basis estimate from "Investment Sale" rows,
-            // treated as long-term (the prior behaviour).
-            let basis_row = sqlx::query(
-                r#"
-                SELECT COALESCE(SUM(cost_basis), 0) as total_basis, COALESCE(SUM(value), 0) as total_value
-                FROM holdings
-                WHERE value > 0 AND cost_basis IS NOT NULL AND user_id = $1
-                "#,
-            )
-            .bind(user_id)
-            .fetch_one(db)
-            .await?;
-            let total_basis: Decimal = basis_row.try_get("total_basis").unwrap_or_default();
-            let total_value: Decimal = basis_row.try_get("total_value").unwrap_or_default();
-            let mut cost_basis_ratio = dec!(0.8);
-            if total_value > dec!(0) {
-                let actual_ratio = total_basis / total_value;
-                if actual_ratio > dec!(0) && actual_ratio <= dec!(1) {
-                    cost_basis_ratio = actual_ratio;
-                }
-            }
-            let gains_row = sqlx::query(
-                r#"
-                SELECT COALESCE(SUM(amount), 0) as total_gains
-                FROM transactions
-                WHERE date >= $1 AND date <= $2
-                AND amount > 0
-                AND category = 'Investment Sale'
-                AND user_id = $3
-                "#,
-            )
-            .bind(start_date)
-            .bind(end_date)
-            .bind(user_id)
-            .fetch_one(db)
-            .await?;
-            let sale_proceeds: Decimal = gains_row.try_get("total_gains").unwrap_or_default();
-            (dec!(0), sale_proceeds * (dec!(1) - cost_basis_ratio))
-        };
+        let short_term_gains: Decimal = disp.try_get("short_term").unwrap_or_default();
+        let long_term_gains: Decimal = disp.try_get("long_term").unwrap_or_default();
+        let tax_advantaged_gains: Decimal = disp.try_get("tax_advantaged").unwrap_or_default();
 
         let capital_gains = short_term_gains + long_term_gains;
 
@@ -288,6 +327,7 @@ impl TaxService {
             capital_gains,
             short_term_gains,
             long_term_gains,
+            tax_advantaged_gains,
             gains_from_lots,
             total_taxable,
             estimated_liability_us,
@@ -305,17 +345,20 @@ impl TaxService {
         let start_date = chrono::NaiveDate::from_ymd_opt(year, 1, 1).unwrap();
         let end_date = chrono::NaiveDate::from_ymd_opt(year, 12, 31).unwrap();
 
-        let rows = sqlx::query_as::<_, crate::models::transaction::Transaction>(
+        // Income events only — realized capital gains live in lot_disposals
+        // (see get_lot_disposals), not in a transaction category.
+        let tx_sql = format!(
             r#"
             SELECT *
             FROM transactions
             WHERE date >= $1 AND date <= $2
             AND amount > 0
-            AND (category = 'Income' OR category = 'Salary' OR category = 'Interest' OR category = 'Investment Sale')
+            AND {INCOME_PREDICATE_SQL}
             AND user_id = $3
             ORDER BY date DESC
             "#
-        )
+        );
+        let rows = sqlx::query_as::<_, crate::models::transaction::Transaction>(&tx_sql)
         .bind(start_date)
         .bind(end_date)
         .bind(user_id)
@@ -343,9 +386,11 @@ impl TaxService {
                    TO_CHAR(d.sell_date, 'YYYY-MM-DD') AS sell_date,
                    d.qty_sold, d.sell_price_per_unit, d.sell_fx_rate,
                    d.cost_per_unit, d.cost_fx_rate, d.realized_pnl_usd,
-                   (d.sell_date - l.acquired_at) AS holding_days
+                   (d.sell_date - l.acquired_at) AS holding_days,
+                   a.account_type
             FROM lot_disposals d
             JOIN holdings h ON h.id = d.holding_id
+            JOIN accounts a ON a.id = d.account_id
             LEFT JOIN holding_lots l ON l.id = d.lot_id
             WHERE d.user_id = $1
               AND EXTRACT(YEAR FROM d.sell_date)::int = $2
@@ -380,6 +425,9 @@ impl TaxService {
                     qty * cost_px
                 };
                 let holding_days: Option<i32> = r.try_get("holding_days").ok();
+                let account_type: Option<String> =
+                    r.try_get::<Option<String>, _>("account_type").unwrap_or(None);
+                let tax_advantaged = is_tax_advantaged_account_type(account_type.as_deref());
                 TaxDisposal {
                     symbol: r.try_get("symbol").unwrap_or_default(),
                     name: r.try_get("name").unwrap_or_default(),
@@ -390,6 +438,8 @@ impl TaxService {
                     cost_usd,
                     gain_usd: dec(r, "realized_pnl_usd"),
                     long_term: holding_days.map(|d| d > 365),
+                    account_type,
+                    tax_advantaged,
                 }
             })
             .collect())
@@ -410,6 +460,13 @@ pub struct TaxDisposal {
     pub gain_usd: Decimal,
     /// True = long-term (held > 365d), false = short-term, None = unknown term.
     pub long_term: Option<bool>,
+    /// `accounts.account_type` of the account the disposal happened in
+    /// (lowercase per migration 2026060801).
+    pub account_type: Option<String>,
+    /// True when the disposal happened inside a tax-advantaged wrapper
+    /// (TAX_ADVANTAGED_ACCOUNT_TYPES) — excluded from taxable gains and from
+    /// the 8949 CSV section, reported in its own section instead.
+    pub tax_advantaged: bool,
 }
 
 #[cfg(test)]
@@ -438,6 +495,17 @@ mod tests {
         // High earner: a $10k gain entirely above the 15% ceiling → 20%.
         let tax = TaxService::calculate_us_ltcg(dec!(10000), dec!(600000), "Single");
         assert_eq!(tax, dec!(2000));
+    }
+
+    #[test]
+    fn tax_advantaged_type_matching_is_case_insensitive_and_none_safe() {
+        assert!(is_tax_advantaged_account_type(Some("401k")));
+        assert!(is_tax_advantaged_account_type(Some("HSA")));
+        assert!(is_tax_advantaged_account_type(Some("Roth 401k")));
+        assert!(is_tax_advantaged_account_type(Some(" ira ")));
+        assert!(!is_tax_advantaged_account_type(Some("brokerage")));
+        assert!(!is_tax_advantaged_account_type(Some("depository")));
+        assert!(!is_tax_advantaged_account_type(None));
     }
 
     #[test]

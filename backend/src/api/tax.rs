@@ -117,7 +117,14 @@ async fn export_tax_csv(
     let _ = wtr.write_record([""; 0]);
 
     // Section 2 — realized capital gains (Form 8949 style), one row per lot
-    // disposal, split short/long-term.
+    // disposal, split short/long-term. Tax-advantaged-account disposals are
+    // NOT taxable events, so they're kept out of the 8949 section and listed
+    // in their own labeled section below instead.
+    let term_label = |lt: Option<bool>| match lt {
+        Some(true) => "Long-term",
+        Some(false) => "Short-term",
+        None => "Unknown",
+    };
     let _ = wtr.write_record(["Realized capital gains (lot disposals)"]);
     let _ = wtr.write_record([
         "Symbol",
@@ -130,18 +137,13 @@ async fn export_tax_csv(
         "Cost basis (USD)",
         "Gain/loss (USD)",
     ]);
-    for d in &disposals {
-        let term = match d.long_term {
-            Some(true) => "Long-term",
-            Some(false) => "Short-term",
-            None => "Unknown",
-        };
+    for d in disposals.iter().filter(|d| !d.tax_advantaged) {
         let _ = wtr.write_record([
             d.symbol.clone(),
             d.name.clone(),
             d.acquired_date.clone().unwrap_or_default(),
             d.sell_date.clone(),
-            term.to_string(),
+            term_label(d.long_term).to_string(),
             d.qty_sold.normalize().to_string(),
             money(d.proceeds_usd),
             money(d.cost_usd),
@@ -150,12 +152,51 @@ async fn export_tax_csv(
     }
     let _ = wtr.write_record([""; 0]);
 
+    // Section 2b — the excluded tax-advantaged activity, visible rather than
+    // silently dropped. Only written when there is any.
+    if disposals.iter().any(|d| d.tax_advantaged) {
+        let _ = wtr.write_record([
+            "Tax-advantaged account disposals (excluded from taxable gains)",
+        ]);
+        let _ = wtr.write_record([
+            "Symbol",
+            "Name",
+            "Account type",
+            "Date acquired",
+            "Date sold",
+            "Term",
+            "Quantity",
+            "Proceeds (USD)",
+            "Cost basis (USD)",
+            "Gain/loss (USD)",
+        ]);
+        for d in disposals.iter().filter(|d| d.tax_advantaged) {
+            let _ = wtr.write_record([
+                d.symbol.clone(),
+                d.name.clone(),
+                d.account_type.clone().unwrap_or_default(),
+                d.acquired_date.clone().unwrap_or_default(),
+                d.sell_date.clone(),
+                term_label(d.long_term).to_string(),
+                d.qty_sold.normalize().to_string(),
+                money(d.proceeds_usd),
+                money(d.cost_usd),
+                money(d.gain_usd),
+            ]);
+        }
+        let _ = wtr.write_record([""; 0]);
+    }
+
     // Section 3 — summary (incl. the ST/LT split that feeds the liability).
     let _ = wtr.write_record(["Summary"]);
     if let Some(est) = &estimation {
         let _ = wtr.write_record(["Short-term gains (USD)", &money(est.short_term_gains)]);
         let _ = wtr.write_record(["Long-term gains (USD)", &money(est.long_term_gains)]);
         let _ = wtr.write_record(["Total capital gains (USD)", &money(est.capital_gains)]);
+        let _ = wtr.write_record([
+            "Tax-advantaged gains, excluded (USD)",
+            &money(est.tax_advantaged_gains),
+        ]);
         let _ = wtr.write_record(["Ordinary income (USD)", &money(est.ordinary_income)]);
         let _ = wtr.write_record(["Total taxable (USD)", &money(est.total_taxable)]);
         let _ = wtr.write_record([
@@ -169,7 +210,7 @@ async fn export_tax_csv(
         let basis = if est.gains_from_lots {
             "Precise lot disposals"
         } else {
-            "Blended cost-basis estimate"
+            "No lot disposals on file"
         };
         let _ = wtr.write_record(["Capital-gains basis", basis]);
     }
@@ -259,7 +300,7 @@ async fn export_tax_pdf(
     let basis_note = if estimation.gains_from_lots {
         "from lot disposals"
     } else {
-        "blended estimate"
+        "no lot disposals on file"
     };
     line(
         &mut ops,
@@ -282,6 +323,20 @@ async fn export_tax_pdf(
             basis_note
         ),
     );
+    // Activity inside 401k/IRA/HSA-style wrappers is excluded from the
+    // taxable figures above — shown so it isn't silently hidden.
+    if estimation.tax_advantaged_gains != rust_decimal::Decimal::ZERO {
+        line(
+            &mut ops,
+            &mut y,
+            11,
+            20,
+            format!(
+                "Tax-advantaged accounts (excluded): ${}",
+                estimation.tax_advantaged_gains.round_dp(2)
+            ),
+        );
+    }
     line(
         &mut ops,
         &mut y,
