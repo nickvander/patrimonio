@@ -1,10 +1,13 @@
-//! HTTP-level integration tests for the tax endpoints (T1/T2/T3 of the tax
+//! HTTP-level integration tests for the tax endpoints (T1–T5 of the tax
 //! backlog): income predicates matching the stored category taxonomy
 //! (sync.rs PFC `'INCOME'`/`'INCOME_*'`, categorize.rs `'INCOME'`,
 //! `user_category` overrides in both directions), exclusion of
-//! tax-advantaged-account disposals from taxable capital gains, and
-//! per-row FX normalization of mixed-currency income into separate USD and
-//! MXN bases before bracket math.
+//! tax-advantaged-account disposals from taxable capital gains, per-row FX
+//! normalization of mixed-currency income into separate USD and MXN bases
+//! before bracket math, year-keyed bracket tables + standard deduction with
+//! the `constants_verified` gate (T4), and ST/LT capital-loss netting with
+//! the capped ordinary offset, carryforward, and unknown-term-as-short-term
+//! classification (T5).
 //!
 //! Like the sibling suites, these need a real Postgres reachable via
 //! `PATRIMONIO_TEST_DATABASE_URL`. When the env var is unset the tests
@@ -302,15 +305,33 @@ async fn seed_usd_mxn_rate(pool: &PgPool, recorded_on: &str, rate: &str) {
     .expect("seed usd/mxn rate");
 }
 
-/// Seed holding + long-term lot + one disposal with the given realized P&L
-/// in the given account. Returns nothing — the summary/CSV assertions read
-/// the aggregates.
+/// Seed holding + lot + one disposal sold on 2026-06-01 with the given
+/// realized P&L in the given account. Returns nothing — the summary/CSV
+/// assertions read the aggregates.
 async fn seed_disposal(
     pool: &PgPool,
     user_id: uuid::Uuid,
     account_id: uuid::Uuid,
     symbol: &str,
     acquired_at: &str,
+    source_tag: &str,
+    pnl: &str,
+) {
+    seed_disposal_dated(
+        pool, user_id, account_id, symbol, acquired_at, "2026-06-01", source_tag, pnl,
+    )
+    .await;
+}
+
+/// [`seed_disposal`] with an explicit sell date (for term-boundary tests).
+#[allow(clippy::too_many_arguments)]
+async fn seed_disposal_dated(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    symbol: &str,
+    acquired_at: &str,
+    sell_date: &str,
     source_tag: &str,
     pnl: &str,
 ) {
@@ -342,13 +363,50 @@ async fn seed_disposal(
         "INSERT INTO lot_disposals \
          (user_id, holding_id, account_id, lot_id, sell_source_id, qty_sold, sell_price_per_unit, \
           sell_currency, sell_fx_rate, sell_date, cost_per_unit, cost_fx_rate, realized_pnl_usd) \
-         VALUES ($1,$2,$3,$4,$5,10,100,'USD',1.0,'2026-06-01',60,1.0,$6)",
+         VALUES ($1,$2,$3,$4,$5,10,100,'USD',1.0,$6::date,60,1.0,$7)",
     )
     .bind(user_id)
     .bind(holding_id)
     .bind(account_id)
     .bind(lot_id)
     .bind(format!("sell-{source_tag}"))
+    .bind(sell_date)
+    .bind(Decimal::from_str(pnl).unwrap())
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+/// Seed a disposal whose source lot is GONE (`lot_id` NULL — the column is
+/// `ON DELETE SET NULL`, so this is what a deleted lot leaves behind): the
+/// acquisition date, and therefore the holding period, is unknown.
+async fn seed_unknown_term_disposal(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    symbol: &str,
+    pnl: &str,
+) {
+    let holding_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO holdings (account_id, symbol, name, currency, user_id) \
+         VALUES ($1, $2, 'Fund', 'USD', $3) RETURNING id",
+    )
+    .bind(account_id)
+    .bind(symbol)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO lot_disposals \
+         (user_id, holding_id, account_id, lot_id, sell_source_id, qty_sold, sell_price_per_unit, \
+          sell_currency, sell_fx_rate, sell_date, cost_per_unit, cost_fx_rate, realized_pnl_usd) \
+         VALUES ($1,$2,$3,NULL,$4,10,100,'USD',1.0,'2026-06-01',60,1.0,$5)",
+    )
+    .bind(user_id)
+    .bind(holding_id)
+    .bind(account_id)
+    .bind(format!("sell-{symbol}"))
     .bind(Decimal::from_str(pnl).unwrap())
     .execute(pool)
     .await
@@ -423,7 +481,16 @@ async fn tax_summary_and_transactions_match_stored_income_taxonomy() {
     assert_eq!(body["gains_from_lots"], serde_json::json!(false));
     assert!((body["capital_gains"].as_f64().unwrap()).abs() < 0.01);
     assert!((body["tax_advantaged_gains"].as_f64().unwrap()).abs() < 0.01);
-    assert!(body["estimated_liability_us"].as_f64().unwrap() > 0.0);
+    // T4 expectation update: this used to assert a positive liability because
+    // the pre-T4 math taxed from dollar zero. $6,250 of income sits entirely
+    // under the (unverified) 2026 single standard deduction → $0.
+    assert!(
+        (body["estimated_liability_us"].as_f64().unwrap()).abs() < 0.01,
+        "income below the standard deduction should owe $0, got {}",
+        body["estimated_liability_us"]
+    );
+    assert_eq!(body["bracket_year_used"], serde_json::json!(2026));
+    assert_eq!(body["constants_verified"], serde_json::json!(false));
 
     // The taxable-transactions list returns exactly the three income rows.
     let res = app
@@ -506,11 +573,14 @@ async fn tax_summary_excludes_tax_advantaged_disposals() {
         "tax_advantaged_gains: {}",
         body["tax_advantaged_gains"]
     );
-    // Liability is computed off the taxable 3,500 only: ST $500 at the 10%
-    // bracket = $50, the $3,000 LT gain sits in the 0% LTCG band.
+    // Liability is computed off the taxable 3,500 only — and T4's standard
+    // deduction now absorbs the $500 ST gain entirely (pre-T4 this was ~$50
+    // because brackets applied from dollar zero); the $3,000 LT gain sits in
+    // the 0% LTCG band. The point of this test is unchanged: the 7,777 of
+    // wrapper gains must not leak into the liability.
     assert!(
-        (body["estimated_liability_us"].as_f64().unwrap() - 50.0).abs() < 0.5,
-        "expected ~$50 US liability, got {}",
+        (body["estimated_liability_us"].as_f64().unwrap()).abs() < 0.01,
+        "expected $0 US liability, got {}",
         body["estimated_liability_us"]
     );
 }
@@ -665,10 +735,11 @@ async fn tax_summary_normalizes_mixed_currency_income_per_row() {
     // Year-level rate = the only stored rate.
     assert!((body["usd_mxn_rate_used"].as_f64().unwrap() - 17.5).abs() < 1e-6);
 
-    // MX liability: tarifa over the MXN base (137,500 lands in the 10.88%
-    // bracket: 5,540.88 + (137,500 − 94,354.08) × 0.1088), then ÷ 17.5 for
-    // the USD mirror field.
-    let mx_mxn = 5540.88 + (mxn_base - 94354.08) * 0.1088;
+    // MX liability: tarifa over the MXN base. T4 replaced the unmatched
+    // in-file tarifa with the (still UNVERIFIED) annual tarifa believed in
+    // force since 2023: 137,500 lands in the 16% row (133,536.08–155,229.80,
+    // cuota fija 10,723.55), then ÷ 17.5 for the USD mirror field.
+    let mx_mxn = 10723.55 + (mxn_base - 133536.07) * 0.16;
     assert!(
         (body["estimated_liability_mx_mxn"].as_f64().unwrap() - mx_mxn).abs() < 0.5,
         "estimated_liability_mx_mxn: {} (want {mx_mxn})",
@@ -838,4 +909,235 @@ async fn tax_income_with_no_stored_rates_uses_ballpark_never_raw_sum() {
     assert!((body["ordinary_income_mxn"].as_f64().unwrap() - 150000.0).abs() < 0.01);
     assert!((body["usd_mxn_rate_used"].as_f64().unwrap() - 20.0).abs() < 1e-6);
     assert_no_raw_blend(&body, 55000.0);
+}
+
+// =====================================================================
+// T4 — standard deduction through the endpoint + verification gate
+// =====================================================================
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_summary_subtracts_standard_deduction_before_brackets() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let acct = seed_typed_account(&pool, user_id, "depository").await;
+
+    seed_categorized_tx(
+        &pool, user_id, acct, "2026-02-13", "ACME CORP PAYROLL", "50000.00",
+        Some("INCOME"), Some("INCOME_WAGES"), None,
+    )
+    .await;
+
+    let body = fetch_summary(&app, &token).await;
+    // 2026 Single (UNVERIFIED tables): 50,000 − 16,100 deduction = 33,900
+    // taxable → 12,400×10% + 21,500×12% = 1,240 + 2,580 = 3,820. The pre-T4
+    // math taxed the full 50,000 from dollar zero.
+    assert!(
+        (body["estimated_liability_us"].as_f64().unwrap() - 3820.0).abs() < 0.01,
+        "estimated_liability_us: {}",
+        body["estimated_liability_us"]
+    );
+    assert!(
+        (body["standard_deduction_used"].as_f64().unwrap() - 16100.0).abs() < 0.01,
+        "standard_deduction_used: {}",
+        body["standard_deduction_used"]
+    );
+    assert_eq!(body["bracket_year_used"], serde_json::json!(2026));
+    assert_eq!(body["constants_verified"], serde_json::json!(false));
+    assert!((body["capital_loss_carryforward"].as_f64().unwrap()).abs() < 0.01);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_summary_unknown_year_reports_nearest_bracket_year() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, _user_id) = bootstrap(&app, &pool).await;
+
+    // 2023 has no table: the response must say which year's tables were used
+    // (nearest = 2025) instead of silently pretending 2023 constants exist.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/summary?year=2023&status=Single",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let status = res.status();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(status, StatusCode::OK, "tax summary body: {body}");
+    assert_eq!(body["bracket_year_used"], serde_json::json!(2025));
+    assert_eq!(body["constants_verified"], serde_json::json!(false));
+}
+
+// =====================================================================
+// T5 — netting, capped offset + carryforward, unknown-term-as-short
+// =====================================================================
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_summary_nets_losses_caps_ordinary_offset_and_reports_carryforward() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let depo = seed_typed_account(&pool, user_id, "depository").await;
+    let brokerage = seed_typed_account(&pool, user_id, "brokerage").await;
+
+    seed_categorized_tx(
+        &pool, user_id, depo, "2026-02-13", "ACME CORP PAYROLL", "50000.00",
+        Some("INCOME"), Some("INCOME_WAGES"), None,
+    )
+    .await;
+    // ST loss −5,000 (acquired Jan 2026, sold Jun 2026) + LT loss −2,000.
+    seed_disposal(&pool, user_id, brokerage, "STL", "2026-01-02", "stl", "-5000").await;
+    seed_disposal(&pool, user_id, brokerage, "LTL", "2022-01-01", "ltl", "-2000").await;
+
+    let body = fetch_summary(&app, &token).await;
+    // Raw buckets are reported un-netted.
+    assert!((body["short_term_gains"].as_f64().unwrap() + 5000.0).abs() < 0.01);
+    assert!((body["long_term_gains"].as_f64().unwrap() + 2000.0).abs() < 0.01);
+    // Net capital loss 7,000 → 3,000 (capped) offsets ordinary income, the
+    // pre-T5 code would have subtracted the whole 5,000 ST loss uncapped AND
+    // dropped the LT loss. Liability: 50,000 − 3,000 − 16,100 = 30,900 →
+    // 12,400×10% + 18,500×12% = 3,460 on the unverified 2026 tables.
+    assert!(
+        (body["estimated_liability_us"].as_f64().unwrap() - 3460.0).abs() < 0.01,
+        "estimated_liability_us: {}",
+        body["estimated_liability_us"]
+    );
+    // The other 4,000 of loss is the carryforward, not silently gone.
+    assert!(
+        (body["capital_loss_carryforward"].as_f64().unwrap() - 4000.0).abs() < 0.01,
+        "capital_loss_carryforward: {}",
+        body["capital_loss_carryforward"]
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_summary_st_loss_offsets_lt_gain_through_endpoint() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let brokerage = seed_typed_account(&pool, user_id, "brokerage").await;
+
+    seed_disposal(&pool, user_id, brokerage, "STL", "2026-01-02", "stl", "-20000").await;
+    seed_disposal(&pool, user_id, brokerage, "LTG", "2022-01-01", "ltg", "80000").await;
+
+    let body = fetch_summary(&app, &token).await;
+    // Surviving LT gain = 60,000; taxable ordinary = 0 (no income), so the
+    // gain stacks from 0: 49,450 in the 0% band, 10,550 at 15% = 1,582.50
+    // (unverified 2026 single tables). The pre-T5 code would also have pushed
+    // the raw −20,000 into ordinary income.
+    assert!(
+        (body["estimated_liability_us"].as_f64().unwrap() - 1582.50).abs() < 0.01,
+        "estimated_liability_us: {}",
+        body["estimated_liability_us"]
+    );
+    assert!((body["capital_loss_carryforward"].as_f64().unwrap()).abs() < 0.01);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_unknown_acquisition_counts_short_term_but_exports_say_unknown() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let brokerage = seed_typed_account(&pool, user_id, "brokerage").await;
+
+    seed_unknown_term_disposal(&pool, user_id, brokerage, "MYST", "1000").await;
+
+    let body = fetch_summary(&app, &token).await;
+    // Unknown holding period lands in the SHORT-term (higher-rate) bucket —
+    // the pre-T5 code put it in long-term and called that "conservative".
+    assert!(
+        (body["short_term_gains"].as_f64().unwrap() - 1000.0).abs() < 0.01,
+        "short_term_gains: {}",
+        body["short_term_gains"]
+    );
+    assert!((body["long_term_gains"].as_f64().unwrap()).abs() < 0.01);
+
+    // …while the CSV keeps the honest "Unknown" term label for the row.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/export?year=2026&status=Single",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 1024 * 256).await.unwrap();
+    let csv = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(csv.contains("MYST"), "csv:\n{csv}");
+    assert!(csv.contains("Unknown"), "term label kept, csv:\n{csv}");
+    assert!(csv.contains("Short-term gains (USD),1000.00"), "csv:\n{csv}");
+    // T4/T5 summary lines.
+    assert!(csv.contains("Capital-loss carryforward (USD),0.00"), "csv:\n{csv}");
+    assert!(csv.contains("Bracket year used,2026"), "csv:\n{csv}");
+    assert!(
+        csv.contains("Tax constants verified,no - pending human verification"),
+        "csv:\n{csv}"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_term_boundary_is_calendar_year_not_day_count() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let brokerage = seed_typed_account(&pool, user_id, "brokerage").await;
+
+    // Exact anniversary across a leap day: 2023-06-01 → 2024-06-01 is 366
+    // days, which the old `> 365 days` rule classified long-term. The
+    // calendar rule says "more than one year" — sale ON the anniversary is
+    // still short-term.
+    seed_disposal_dated(
+        &pool, user_id, brokerage, "ANNIV", "2023-06-01", "2024-06-01", "anniv", "700",
+    )
+    .await;
+    // One day later: long-term.
+    seed_disposal_dated(
+        &pool, user_id, brokerage, "DAYAFTER", "2023-06-01", "2024-06-02", "after", "300",
+    )
+    .await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/summary?year=2024&status=Single",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let status = res.status();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(status, StatusCode::OK, "tax summary body: {body}");
+    assert!(
+        (body["short_term_gains"].as_f64().unwrap() - 700.0).abs() < 0.01,
+        "short_term_gains: {}",
+        body["short_term_gains"]
+    );
+    assert!(
+        (body["long_term_gains"].as_f64().unwrap() - 300.0).abs() < 0.01,
+        "long_term_gains: {}",
+        body["long_term_gains"]
+    );
+    // 2024 has no bracket table; nearest is 2025 and the response says so.
+    assert_eq!(body["bracket_year_used"], serde_json::json!(2025));
 }

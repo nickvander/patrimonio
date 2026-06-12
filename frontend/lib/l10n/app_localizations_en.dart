@@ -2741,8 +2741,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Income, salary, interest, and investment sale transactions will appear here.';
 
   @override
-  String get taxDisclaimer =>
-      'Disclaimer: Tax estimates are approximations using 2026 IRS/SAT brackets. Consult a qualified tax professional for filing.';
+  String taxDisclaimer(String bracketYear) {
+    return 'Disclaimer: Tax estimates are approximations using $bracketYear IRS/SAT brackets. Consult a qualified tax professional for filing.';
+  }
+
+  @override
+  String get taxConstantsUnverified =>
+      'Estimates — tax constants pending verification';
 
   @override
   String get acctxRenameAccount => 'Rename account';

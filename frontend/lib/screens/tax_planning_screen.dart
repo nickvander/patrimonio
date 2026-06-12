@@ -290,6 +290,15 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         ((_taxSummary?['effective_rate_us'] as num?)?.toDouble() ?? 0) * 100;
     final rateMx =
         ((_taxSummary?['effective_rate_mx'] as num?)?.toDouble() ?? 0) * 100;
+    // T4: the bracket year the backend ACTUALLY applied (nearest populated
+    // table for years without one) — the disclaimer must not claim a
+    // hardcoded vintage. Falls back to the selected year for old payloads.
+    final bracketYearUsed =
+        (_taxSummary?['bracket_year_used'] as num?)?.toInt() ?? _selectedYear;
+    // While the backend's bracket/deduction/tarifa constants are pending
+    // human verification it sends constants_verified == false; badge the
+    // KPIs so the figures aren't mistaken for authoritative numbers.
+    final constantsUnverified = _taxSummary?['constants_verified'] == false;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -502,6 +511,27 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
             ),
           ],
         ),
+        // Subtle "constants pending verification" caption under the KPI
+        // cards — shown only while the backend flags its tax tables as
+        // unverified.
+        if (constantsUnverified) ...[
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.warning_amber_rounded,
+                size: 13,
+                color: context.warning,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                l.taxConstantsUnverified,
+                style: TextStyle(fontSize: 11, color: context.warning),
+              ),
+            ],
+          ),
+        ],
         const SizedBox(height: 24),
         Text(
           l.taxTaxableEvents,
@@ -557,7 +587,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         ),
         const SizedBox(height: 12),
         Text(
-          l.taxDisclaimer,
+          l.taxDisclaimer(bracketYearUsed.toString()),
           style: TextStyle(
             color: context.textFaint,
             fontSize: 10,

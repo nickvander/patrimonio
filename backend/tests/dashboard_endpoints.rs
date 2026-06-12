@@ -3038,11 +3038,12 @@ async fn tax_summary_splits_short_and_long_term_from_lots() {
     assert!((body["short_term_gains"].as_f64().unwrap() - 500.0).abs() < 0.01);
     assert!((body["long_term_gains"].as_f64().unwrap() - 3000.0).abs() < 0.01);
     assert!((body["capital_gains"].as_f64().unwrap() - 3500.0).abs() < 0.01);
-    // No ordinary income: ST ($500) taxed at the 10% bracket = $50; the $3,000
-    // LT gain stacks under the 0% LTCG band → $0. So US liability ≈ $50.
+    // T4 expectation update: this pinned ~$50 when brackets applied from
+    // dollar zero. With the (unverified) standard deduction, the $500 ST gain
+    // is fully absorbed and the $3,000 LT gain sits in the 0% LTCG band → $0.
     assert!(
-        (body["estimated_liability_us"].as_f64().unwrap() - 50.0).abs() < 0.5,
-        "expected ~$50 US liability, got {}",
+        (body["estimated_liability_us"].as_f64().unwrap()).abs() < 0.01,
+        "expected $0 US liability, got {}",
         body["estimated_liability_us"]
     );
 }

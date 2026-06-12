@@ -4607,8 +4607,14 @@ abstract class AppLocalizations {
   /// No description provided for @taxDisclaimer.
   ///
   /// In en, this message translates to:
-  /// **'Disclaimer: Tax estimates are approximations using 2026 IRS/SAT brackets. Consult a qualified tax professional for filing.'**
-  String get taxDisclaimer;
+  /// **'Disclaimer: Tax estimates are approximations using {bracketYear} IRS/SAT brackets. Consult a qualified tax professional for filing.'**
+  String taxDisclaimer(String bracketYear);
+
+  /// No description provided for @taxConstantsUnverified.
+  ///
+  /// In en, this message translates to:
+  /// **'Estimates — tax constants pending verification'**
+  String get taxConstantsUnverified;
 
   /// No description provided for @acctxRenameAccount.
   ///

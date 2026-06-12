@@ -750,7 +750,13 @@
   "taxTaxableEvents": "Eventos gravables",
   "taxNoEventsTitle": "No se encontraron eventos gravables para este año.",
   "taxNoEventsBody": "Aquí aparecerán las transacciones de ingresos, salario, intereses y venta de inversiones.",
-  "taxDisclaimer": "Aviso: las estimaciones fiscales son aproximaciones basadas en los tramos del IRS/SAT 2026. Consulta a un profesional fiscal calificado para tu declaración.",
+  "taxDisclaimer": "Aviso: las estimaciones fiscales son aproximaciones basadas en los tramos del IRS/SAT {bracketYear}. Consulta a un profesional fiscal calificado para tu declaración.",
+  "@taxDisclaimer": {
+    "placeholders": {
+      "bracketYear": { "type": "String" }
+    }
+  },
+  "taxConstantsUnverified": "Estimaciones — constantes fiscales pendientes de verificación",
   "acctxRenameAccount": "Renombrar cuenta",
   "acctxNickname": "Apodo",
   "acctxAccountFallback": "Cuenta",

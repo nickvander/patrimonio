@@ -2767,8 +2767,13 @@ class AppLocalizationsEs extends AppLocalizations {
       'Aquí aparecerán las transacciones de ingresos, salario, intereses y venta de inversiones.';
 
   @override
-  String get taxDisclaimer =>
-      'Aviso: las estimaciones fiscales son aproximaciones basadas en los tramos del IRS/SAT 2026. Consulta a un profesional fiscal calificado para tu declaración.';
+  String taxDisclaimer(String bracketYear) {
+    return 'Aviso: las estimaciones fiscales son aproximaciones basadas en los tramos del IRS/SAT $bracketYear. Consulta a un profesional fiscal calificado para tu declaración.';
+  }
+
+  @override
+  String get taxConstantsUnverified =>
+      'Estimaciones — constantes fiscales pendientes de verificación';
 
   @override
   String get acctxRenameAccount => 'Renombrar cuenta';

@@ -852,7 +852,13 @@
   "taxTaxableEvents": "Taxable events",
   "taxNoEventsTitle": "No taxable events found for this year.",
   "taxNoEventsBody": "Income, salary, interest, and investment sale transactions will appear here.",
-  "taxDisclaimer": "Disclaimer: Tax estimates are approximations using 2026 IRS/SAT brackets. Consult a qualified tax professional for filing.",
+  "taxDisclaimer": "Disclaimer: Tax estimates are approximations using {bracketYear} IRS/SAT brackets. Consult a qualified tax professional for filing.",
+  "@taxDisclaimer": {
+    "placeholders": {
+      "bracketYear": { "type": "String" }
+    }
+  },
+  "taxConstantsUnverified": "Estimates — tax constants pending verification",
   "acctxRenameAccount": "Rename account",
   "acctxNickname": "Nickname",
   "acctxAccountFallback": "Account",

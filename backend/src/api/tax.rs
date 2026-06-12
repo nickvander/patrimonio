@@ -211,6 +211,13 @@ async fn export_tax_csv(
             "Tax-advantaged gains, excluded (USD)",
             &money(est.tax_advantaged_gains),
         ]);
+        // T5: net capital loss beyond the capped ordinary-income offset —
+        // reported so it doesn't silently vanish (the app does not yet apply
+        // it to other years).
+        let _ = wtr.write_record([
+            "Capital-loss carryforward (USD)",
+            &money(est.capital_loss_carryforward),
+        ]);
         let _ = wtr.write_record(["Ordinary income (USD)", &money(est.ordinary_income)]);
         let _ = wtr.write_record(["Ordinary income (MXN)", &money(est.ordinary_income_mxn)]);
         let _ = wtr.write_record(["Total taxable (USD)", &money(est.total_taxable)]);
@@ -240,6 +247,17 @@ async fn export_tax_csv(
             "No lot disposals on file"
         };
         let _ = wtr.write_record(["Capital-gains basis", basis]);
+        // T4: which bracket-year tables were applied, and whether their
+        // constants have passed human verification yet.
+        let _ = wtr.write_record(["Bracket year used", &est.bracket_year_used.to_string()]);
+        let _ = wtr.write_record([
+            "Tax constants verified",
+            if est.constants_verified {
+                "yes"
+            } else {
+                "no - pending human verification"
+            },
+        ]);
     }
 
     let csv_data = wtr.into_inner().unwrap_or_default();
@@ -394,6 +412,37 @@ async fn export_tax_pdf(
             "Estimated Liability (MX SAT): MXN {} (USD {})",
             estimation.estimated_liability_mx_mxn.round_dp(2),
             estimation.estimated_liability_mx.round_dp(2)
+        ),
+    );
+    // T5: a leftover net capital loss is part of the picture — show it.
+    if estimation.capital_loss_carryforward != rust_decimal::Decimal::ZERO {
+        line(
+            &mut ops,
+            &mut y,
+            11,
+            20,
+            format!(
+                "Capital-loss carryforward: ${}",
+                estimation.capital_loss_carryforward.round_dp(2)
+            ),
+        );
+    }
+    // T4: the bracket vintage actually used, flagged while the constant
+    // tables are still pending human verification.
+    y -= 8;
+    line(
+        &mut ops,
+        &mut y,
+        10,
+        0,
+        format!(
+            "Bracket year used: {}{}",
+            estimation.bracket_year_used,
+            if estimation.constants_verified {
+                ""
+            } else {
+                " - tax constants pending human verification; estimates only"
+            }
         ),
     );
 

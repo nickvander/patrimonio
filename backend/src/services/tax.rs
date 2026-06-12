@@ -36,12 +36,16 @@ pub struct TaxEstimation {
     /// Taxable realized capital gains (short + long), in **USD**.
     #[serde(with = "rust_decimal::serde::float")]
     pub capital_gains: Decimal,
-    /// Short-term realized gains (held <= 1 year) in **USD** — taxed as
-    /// ordinary income.
+    /// Net short-term realized gains/losses in **USD**: sold within one
+    /// calendar year of acquisition, plus unknown-acquisition disposals
+    /// (counted short-term — the conservative, higher-rate bucket). Raw
+    /// bucket sum (may be negative) BEFORE the ST/LT netting that feeds the
+    /// liability.
     #[serde(with = "rust_decimal::serde::float")]
     pub short_term_gains: Decimal,
-    /// Long-term realized gains (held > 1 year) in **USD** — preferential
-    /// LTCG rates.
+    /// Net long-term realized gains/losses in **USD**: sold more than one
+    /// calendar year after acquisition. Raw bucket sum (may be negative)
+    /// BEFORE netting.
     #[serde(with = "rust_decimal::serde::float")]
     pub long_term_gains: Decimal,
     /// Realized gains inside tax-advantaged wrappers (401k/IRA/HSA/...), in
@@ -83,6 +87,26 @@ pub struct TaxEstimation {
     /// `estimated_liability_mx / total_taxable` (both USD); dimensionless.
     #[serde(with = "rust_decimal::serde::float")]
     pub effective_rate_mx: Decimal,
+    /// The bracket year whose constant tables were actually applied. Equal to
+    /// the requested tax year when a table exists for it; otherwise the
+    /// nearest populated year (see [`SUPPORTED_BRACKET_YEARS`]).
+    pub bracket_year_used: i32,
+    /// Mirrors [`TAX_CONSTANTS_VERIFIED`]. While `false`, every bracket /
+    /// deduction / tarifa constant behind this estimate is UNVERIFIED and the
+    /// UI must badge the figures as pending human verification.
+    pub constants_verified: bool,
+    /// US standard deduction subtracted before the ordinary brackets and the
+    /// LTCG stacking start, in **USD** (by filing status and bracket year;
+    /// unverified like the rest of the tables).
+    #[serde(with = "rust_decimal::serde::float")]
+    pub standard_deduction_used: Decimal,
+    /// Net capital loss left over after the capped ordinary-income offset, in
+    /// **USD** (>= 0). Under the modeled-but-UNVERIFIED IRS rules this would
+    /// carry forward to next year's netting; the app does not yet apply it to
+    /// any other year — it is reported so the number doesn't silently vanish.
+    /// The ST/LT character split of the carryforward is not modeled.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub capital_loss_carryforward: Decimal,
 }
 
 /// Account subtypes whose internal trades are not taxable events — the
@@ -182,119 +206,325 @@ const AMOUNT_USD_SQL: &str =
 const AMOUNT_MXN_SQL: &str =
     "(CASE WHEN UPPER(t.currency) = 'MXN' THEN t.amount ELSE t.amount * fx.rate END)";
 
+// =====================================================================
+// Year-keyed tax constant tables (T4)
+// =====================================================================
+
+/// ⚠ Single gate for ALL tax constants in this module. Set to `true` ONLY
+/// after a tax professional has verified every table below against its named
+/// primary source (the IRS Revenue Procedure for each US year, SAT Anexo 8
+/// RMF for each MX tarifa) — see "Assumptions a tax professional must verify"
+/// in work/ux/tax_planning_tasks.md. While `false`, every `/tax/summary`
+/// response carries `"constants_verified": false` so the UI badges the
+/// estimates as pending verification.
+pub const TAX_CONSTANTS_VERIFIED: bool = false;
+
+/// Bracket years with populated tables. A requested year without a table
+/// resolves to the NEAREST populated year (ties go to the later year) and the
+/// response reports the year actually used via `bracket_year_used`.
+pub const SUPPORTED_BRACKET_YEARS: &[i32] = &[2025, 2026];
+
+/// One US progressive bracket: `rate` applies to taxable income above the
+/// previous bracket's `upto`, up to this bracket's `upto`.
+///
+/// There is deliberately NO stored cumulative-tax ("base tax") column: the
+/// old hand-maintained `base_tax` values were a redundant second copy of the
+/// rate/cutoff information that had already drifted across vintages in this
+/// file. The cumulative tax is derived at calculation time instead, so the
+/// table cannot be internally inconsistent.
+#[derive(Debug, Clone, Copy)]
+pub struct ProgressiveBracket {
+    pub rate: Decimal,
+    pub upto: Decimal,
+}
+
+/// US constants for one filing status in one bracket year.
+#[derive(Debug, Clone)]
+pub struct UsStatusTables {
+    pub ordinary: Vec<ProgressiveBracket>,
+    /// Standard deduction — subtracted from gross ordinary income before the
+    /// ordinary brackets AND before the LTCG stacking start (itemizing is not
+    /// modeled).
+    pub standard_deduction: Decimal,
+    /// Top of the 0% LTCG band, on the taxable-income axis.
+    pub ltcg_0_top: Decimal,
+    /// Top of the 15% LTCG band; gain stacked above it is taxed at 20%.
+    pub ltcg_15_top: Decimal,
+}
+
+/// All tax constants for one bracket year. Built by [`TaxYearTables::for_year`].
+pub struct TaxYearTables {
+    /// The year these tables claim to describe (may differ from the requested
+    /// tax year — see [`SUPPORTED_BRACKET_YEARS`]).
+    pub bracket_year: i32,
+    pub us_single: UsStatusTables,
+    pub us_married: UsStatusTables,
+    pub us_hoh: UsStatusTables,
+    /// MX annual ISR tarifa: `cutoff` = límite superior, `base_tax` = cuota
+    /// fija (kept as published rather than derived, because SAT's published
+    /// cuotas embed their own rounding).
+    pub mx_tarifa: Vec<TaxBracket>,
+    /// Cap on the net capital loss deductible against ordinary income in one
+    /// year (modeled after IRC §1211(b)'s $3,000; the $1,500
+    /// married-filing-separately variant is not modeled because the app has
+    /// no MFS filing status).
+    /// ⚠ UNVERIFIED — requires human verification (assumptions item 4).
+    pub capital_loss_ordinary_offset_cap: Decimal,
+}
+
+fn pb(rate: Decimal, upto: Decimal) -> ProgressiveBracket {
+    ProgressiveBracket { rate, upto }
+}
+
+/// MX annual ISR tarifa used for BOTH 2025 and 2026 until verified figures
+/// are supplied.
+///
+/// ⚠ UNVERIFIED — requires human verification against SAT Anexo 8 RMF for
+/// each supported year. These are the annual tarifa values believed to be in
+/// force since 2023; the 2026 tarifa may have been inflation-adjusted and
+/// MUST be replaced with the published Anexo 8 figures on verification.
+///
+/// Note: this REPLACES the tarifa previously hardcoded in this file (first
+/// cutoff 11,122.20 @ 1.92%, labeled "Mensual elevated to Annual"), which
+/// could not be matched to any published SAT tarifa, monthly or annual.
+fn mx_tarifa_2023_vintage() -> Vec<TaxBracket> {
+    vec![
+        TaxBracket { rate: dec!(0.0192), cutoff: dec!(8952.49), base_tax: dec!(0) },
+        TaxBracket { rate: dec!(0.0640), cutoff: dec!(75984.55), base_tax: dec!(171.88) },
+        TaxBracket { rate: dec!(0.1088), cutoff: dec!(133536.07), base_tax: dec!(4461.94) },
+        TaxBracket { rate: dec!(0.1600), cutoff: dec!(155229.80), base_tax: dec!(10723.55) },
+        TaxBracket { rate: dec!(0.2136), cutoff: dec!(185852.57), base_tax: dec!(14194.54) },
+        TaxBracket { rate: dec!(0.2352), cutoff: dec!(374837.88), base_tax: dec!(20737.57) },
+        TaxBracket { rate: dec!(0.3000), cutoff: dec!(590795.99), base_tax: dec!(65182.13) },
+        TaxBracket { rate: dec!(0.3200), cutoff: dec!(1127926.84), base_tax: dec!(129969.55) },
+        TaxBracket { rate: dec!(0.3400), cutoff: dec!(3898140.12), base_tax: dec!(301851.45) },
+        TaxBracket { rate: dec!(0.3500), cutoff: Decimal::MAX, base_tax: dec!(1243723.97) },
+    ]
+}
+
+impl TaxYearTables {
+    /// Tables for `year`, falling back to the nearest populated bracket year
+    /// (ties to the later year). `bracket_year` records what was used.
+    pub fn for_year(year: i32) -> TaxYearTables {
+        let nearest = SUPPORTED_BRACKET_YEARS
+            .iter()
+            .copied()
+            .min_by_key(|y| ((y - year).abs(), std::cmp::Reverse(*y)))
+            .expect("SUPPORTED_BRACKET_YEARS is non-empty");
+        match nearest {
+            2025 => Self::tables_2025(),
+            _ => Self::tables_2026(),
+        }
+    }
+
+    /// US 2025 + MX tarifa.
+    ///
+    /// ⚠ UNVERIFIED — requires human verification against IRS Rev. Proc.
+    /// 2024-40 (ordinary brackets, LTCG bands) as amended by the 2025 OBBBA
+    /// for the standard deduction, and SAT Anexo 8 RMF 2025 for the tarifa.
+    /// Do not present these figures as authoritative until
+    /// [`TAX_CONSTANTS_VERIFIED`] is flipped by a human.
+    fn tables_2025() -> TaxYearTables {
+        TaxYearTables {
+            bracket_year: 2025,
+            us_single: UsStatusTables {
+                ordinary: vec![
+                    pb(dec!(0.10), dec!(11925)),
+                    pb(dec!(0.12), dec!(48475)),
+                    pb(dec!(0.22), dec!(103350)),
+                    pb(dec!(0.24), dec!(197300)),
+                    pb(dec!(0.32), dec!(250525)),
+                    pb(dec!(0.35), dec!(626350)),
+                    pb(dec!(0.37), Decimal::MAX),
+                ],
+                standard_deduction: dec!(15750),
+                ltcg_0_top: dec!(48350),
+                ltcg_15_top: dec!(533400),
+            },
+            us_married: UsStatusTables {
+                ordinary: vec![
+                    pb(dec!(0.10), dec!(23850)),
+                    pb(dec!(0.12), dec!(96950)),
+                    pb(dec!(0.22), dec!(206700)),
+                    pb(dec!(0.24), dec!(394600)),
+                    pb(dec!(0.32), dec!(501050)),
+                    pb(dec!(0.35), dec!(751600)),
+                    pb(dec!(0.37), Decimal::MAX),
+                ],
+                standard_deduction: dec!(31500),
+                ltcg_0_top: dec!(96700),
+                ltcg_15_top: dec!(600050),
+            },
+            us_hoh: UsStatusTables {
+                ordinary: vec![
+                    pb(dec!(0.10), dec!(17000)),
+                    pb(dec!(0.12), dec!(64850)),
+                    pb(dec!(0.22), dec!(103350)),
+                    pb(dec!(0.24), dec!(197300)),
+                    pb(dec!(0.32), dec!(250500)),
+                    pb(dec!(0.35), dec!(626350)),
+                    pb(dec!(0.37), Decimal::MAX),
+                ],
+                standard_deduction: dec!(23625),
+                ltcg_0_top: dec!(64750),
+                ltcg_15_top: dec!(566700),
+            },
+            mx_tarifa: mx_tarifa_2023_vintage(),
+            capital_loss_ordinary_offset_cap: dec!(3000),
+        }
+    }
+
+    /// US 2026 + MX tarifa.
+    ///
+    /// ⚠ UNVERIFIED — requires human verification against IRS Rev. Proc.
+    /// 2025-32 (ordinary brackets, LTCG bands, standard deduction, incl. any
+    /// post-OBBBA changes) and SAT Anexo 8 RMF 2026 for the tarifa. The old
+    /// in-file brackets that the UI claimed were "2026" were actually
+    /// 2024-vintage ordinary brackets next to 2025-vintage LTCG bands; they
+    /// were replaced, not kept. Do not present these figures as authoritative
+    /// until [`TAX_CONSTANTS_VERIFIED`] is flipped by a human.
+    fn tables_2026() -> TaxYearTables {
+        TaxYearTables {
+            bracket_year: 2026,
+            us_single: UsStatusTables {
+                ordinary: vec![
+                    pb(dec!(0.10), dec!(12400)),
+                    pb(dec!(0.12), dec!(50400)),
+                    pb(dec!(0.22), dec!(105700)),
+                    pb(dec!(0.24), dec!(201775)),
+                    pb(dec!(0.32), dec!(256225)),
+                    pb(dec!(0.35), dec!(640600)),
+                    pb(dec!(0.37), Decimal::MAX),
+                ],
+                standard_deduction: dec!(16100),
+                ltcg_0_top: dec!(49450),
+                ltcg_15_top: dec!(545500),
+            },
+            us_married: UsStatusTables {
+                ordinary: vec![
+                    pb(dec!(0.10), dec!(24800)),
+                    pb(dec!(0.12), dec!(100800)),
+                    pb(dec!(0.22), dec!(211400)),
+                    pb(dec!(0.24), dec!(403550)),
+                    pb(dec!(0.32), dec!(512450)),
+                    pb(dec!(0.35), dec!(768700)),
+                    pb(dec!(0.37), Decimal::MAX),
+                ],
+                standard_deduction: dec!(32200),
+                ltcg_0_top: dec!(98900),
+                ltcg_15_top: dec!(613700),
+            },
+            us_hoh: UsStatusTables {
+                ordinary: vec![
+                    pb(dec!(0.10), dec!(17700)),
+                    pb(dec!(0.12), dec!(67450)),
+                    pb(dec!(0.22), dec!(105700)),
+                    pb(dec!(0.24), dec!(201775)),
+                    pb(dec!(0.32), dec!(256200)),
+                    pb(dec!(0.35), dec!(640600)),
+                    pb(dec!(0.37), Decimal::MAX),
+                ],
+                standard_deduction: dec!(24150),
+                ltcg_0_top: dec!(66200),
+                ltcg_15_top: dec!(579600),
+            },
+            mx_tarifa: mx_tarifa_2023_vintage(),
+            capital_loss_ordinary_offset_cap: dec!(3000),
+        }
+    }
+
+    /// The per-status US tables. Unknown statuses fall back to Single (the
+    /// same default the API layer applies).
+    pub fn us_status(&self, status: &str) -> &UsStatusTables {
+        match status {
+            "Married" => &self.us_married,
+            "Head of Household" => &self.us_hoh,
+            _ => &self.us_single,
+        }
+    }
+}
+
+/// Result of ST/LT capital netting — see [`TaxService::net_capital_buckets`].
+#[derive(Debug, PartialEq, Eq)]
+pub struct CapitalNetting {
+    /// Net short-term gain surviving the netting (>= 0); taxed at ordinary
+    /// rates on top of ordinary income.
+    pub st_taxable_gain: Decimal,
+    /// Net long-term gain surviving the netting (>= 0); taxed at the LTCG
+    /// band rates, stacked on taxable ordinary income.
+    pub lt_taxable_gain: Decimal,
+    /// Net capital loss applied against ordinary income this year (>= 0,
+    /// capped at the year table's `capital_loss_ordinary_offset_cap`).
+    pub ordinary_loss_offset: Decimal,
+    /// Net capital loss left over after the capped offset (>= 0) — the
+    /// implied carryforward.
+    pub carryforward: Decimal,
+}
+
+/// The pieces of the US liability computation that callers/tests need.
+#[derive(Debug, PartialEq, Eq)]
+pub struct UsLiability {
+    pub liability: Decimal,
+    /// Ordinary income after net ST gains, the capital-loss offset, and the
+    /// standard deduction: `max(0, ordinary + net ST − offset − deduction)`.
+    /// This is also where LT gains start stacking for the LTCG bands.
+    pub taxable_ordinary: Decimal,
+    pub standard_deduction_used: Decimal,
+    pub capital_loss_carryforward: Decimal,
+}
+
 pub struct TaxService;
 
 impl TaxService {
-    // Basic 2026 Single Filer Brackets (Approximation for demonstration)
-    fn get_us_brackets_single() -> Vec<TaxBracket> {
-        vec![
-            TaxBracket { rate: dec!(0.10), cutoff: dec!(11600), base_tax: dec!(0) },
-            TaxBracket { rate: dec!(0.12), cutoff: dec!(47150), base_tax: dec!(1160) },
-            TaxBracket { rate: dec!(0.22), cutoff: dec!(100525), base_tax: dec!(5426) },
-            TaxBracket { rate: dec!(0.24), cutoff: dec!(191950), base_tax: dec!(17168.5) },
-            TaxBracket { rate: dec!(0.32), cutoff: dec!(243725), base_tax: dec!(39110.5) },
-            TaxBracket { rate: dec!(0.35), cutoff: dec!(609350), base_tax: dec!(55678.5) },
-            TaxBracket { rate: dec!(0.37), cutoff: Decimal::MAX, base_tax: dec!(183647.25) },
-        ]
-    }
-
-    // Basic 2026 Married Filing Jointly Brackets (Approximation)
-    fn get_us_brackets_married() -> Vec<TaxBracket> {
-        vec![
-            TaxBracket { rate: dec!(0.10), cutoff: dec!(23200), base_tax: dec!(0) },
-            TaxBracket { rate: dec!(0.12), cutoff: dec!(94300), base_tax: dec!(2320) },
-            TaxBracket { rate: dec!(0.22), cutoff: dec!(201050), base_tax: dec!(10852) },
-            TaxBracket { rate: dec!(0.24), cutoff: dec!(383900), base_tax: dec!(34337) },
-            TaxBracket { rate: dec!(0.32), cutoff: dec!(487450), base_tax: dec!(78221) },
-            TaxBracket { rate: dec!(0.35), cutoff: dec!(731200), base_tax: dec!(111357) },
-            TaxBracket { rate: dec!(0.37), cutoff: Decimal::MAX, base_tax: dec!(196669.5) },
-        ]
-    }
-
-    // Basic 2026 Head of Household Brackets (Approximation)
-    fn get_us_brackets_hoh() -> Vec<TaxBracket> {
-        vec![
-            TaxBracket { rate: dec!(0.10), cutoff: dec!(16550), base_tax: dec!(0) },
-            TaxBracket { rate: dec!(0.12), cutoff: dec!(63100), base_tax: dec!(1655) },
-            TaxBracket { rate: dec!(0.22), cutoff: dec!(100500), base_tax: dec!(7241) },
-            TaxBracket { rate: dec!(0.24), cutoff: dec!(191950), base_tax: dec!(15469) },
-            TaxBracket { rate: dec!(0.32), cutoff: dec!(243700), base_tax: dec!(37417) },
-            TaxBracket { rate: dec!(0.35), cutoff: dec!(609350), base_tax: dec!(53977) },
-            TaxBracket { rate: dec!(0.37), cutoff: Decimal::MAX, base_tax: dec!(181954.5) },
-        ]
-    }
-
-    // Mexico 2026 ISR Mensual elevated to Annual
-    fn get_mx_brackets() -> Vec<TaxBracket> {
-        vec![
-            TaxBracket { rate: dec!(0.0192), cutoff: dec!(11122.20), base_tax: dec!(0) },
-            TaxBracket { rate: dec!(0.0640), cutoff: dec!(94354.08), base_tax: dec!(213.60) },
-            TaxBracket { rate: dec!(0.1088), cutoff: dec!(165842.16), base_tax: dec!(5540.88) },
-            TaxBracket { rate: dec!(0.1600), cutoff: dec!(192809.52), base_tax: dec!(13316.52) },
-            TaxBracket { rate: dec!(0.2136), cutoff: dec!(230867.76), base_tax: dec!(17631.24) },
-            TaxBracket { rate: dec!(0.2352), cutoff: dec!(465660.12), base_tax: dec!(25760.64) },
-            TaxBracket { rate: dec!(0.3000), cutoff: dec!(921098.52), base_tax: dec!(80979.60) },
-            TaxBracket { rate: dec!(0.3200), cutoff: dec!(1758509.64), base_tax: dec!(217611.12) },
-            TaxBracket { rate: dec!(0.3400), cutoff: dec!(5861732.16), base_tax: dec!(485582.76) },
-            TaxBracket { rate: dec!(0.3500), cutoff: Decimal::MAX, base_tax: dec!(1880678.40) },
-        ]
-    }
-
-    pub fn calculate_us_tax(income: Decimal, status: &str) -> Decimal {
-        let brackets = if status == "Married" {
-            Self::get_us_brackets_married()
-        } else if status == "Head of Household" {
-            Self::get_us_brackets_hoh()
-        } else {
-            Self::get_us_brackets_single()
-        };
-
-        if income <= dec!(0) {
+    /// Progressive US ordinary-bracket tax over already-deducted taxable
+    /// income. The cumulative tax is accumulated bracket by bracket — no
+    /// stored base-tax column to drift out of sync with the cutoffs.
+    pub fn calculate_us_ordinary_tax(taxable: Decimal, t: &UsStatusTables) -> Decimal {
+        if taxable <= dec!(0) {
             return dec!(0);
         }
-
-        let mut previous_cutoff = dec!(0);
-        for bracket in brackets {
-            if income <= bracket.cutoff {
-                let amount_in_bracket = income - previous_cutoff;
-                return bracket.base_tax + (amount_in_bracket * bracket.rate);
+        let mut tax = dec!(0);
+        let mut prev = dec!(0);
+        for b in &t.ordinary {
+            tax += (taxable.min(b.upto) - prev).max(dec!(0)) * b.rate;
+            if taxable <= b.upto {
+                break;
             }
-            previous_cutoff = bracket.cutoff;
+            prev = b.upto;
         }
-        dec!(0)
+        tax
     }
 
-    /// Long-term capital-gains tax (US, 2026 approx). LT gains stack ON TOP of
-    /// ordinary taxable income to find the 0% / 15% / 20% bands. Only positive
-    /// gains are taxed (loss handling is left to the ordinary-income side).
-    pub fn calculate_us_ltcg(gain: Decimal, ordinary_taxable: Decimal, status: &str) -> Decimal {
+    /// Long-term capital-gains tax. LT gains stack ON TOP of taxable ordinary
+    /// income (i.e. AFTER the standard deduction) to find the 0% / 15% / 20%
+    /// bands. Only positive gains are taxed — losses must be routed through
+    /// [`Self::net_capital_buckets`] first, never passed here.
+    pub fn calculate_us_ltcg(
+        gain: Decimal,
+        taxable_ordinary: Decimal,
+        t: &UsStatusTables,
+    ) -> Decimal {
         if gain <= dec!(0) {
             return dec!(0);
         }
-        // (top of 0% band, top of 15% band) by filing status.
-        let (t0, t15) = match status {
-            "Married" => (dec!(96700), dec!(600050)),
-            "Head of Household" => (dec!(64750), dec!(566700)),
-            _ => (dec!(48350), dec!(533400)),
-        };
-        let start = ordinary_taxable.max(dec!(0));
+        let start = taxable_ordinary.max(dec!(0));
         let end = start + gain;
         let band = |lo: Decimal, hi: Decimal| -> Decimal {
             (end.min(hi) - start.max(lo)).max(dec!(0))
         };
-        let in15 = band(t0, t15);
-        let in20 = band(t15, Decimal::MAX);
+        let in15 = band(t.ltcg_0_top, t.ltcg_15_top);
+        let in20 = band(t.ltcg_15_top, Decimal::MAX);
         in15 * dec!(0.15) + in20 * dec!(0.20)
     }
 
-    pub fn calculate_mx_tax(income: Decimal) -> Decimal {
-         if income <= dec!(0) {
+    /// MX ISR over the given tarifa (cuota fija + marginal rate above the
+    /// previous límite superior).
+    pub fn calculate_mx_tax(income: Decimal, tarifa: &[TaxBracket]) -> Decimal {
+        if income <= dec!(0) {
             return dec!(0);
         }
-
-        let brackets = Self::get_mx_brackets();
         let mut previous_cutoff = dec!(0);
-        for bracket in brackets {
+        for bracket in tarifa {
             if income <= bracket.cutoff {
                 let amount_in_bracket = income - previous_cutoff;
                 return bracket.base_tax + (amount_in_bracket * bracket.rate);
@@ -302,6 +532,103 @@ impl TaxService {
             previous_cutoff = bracket.cutoff;
         }
         dec!(0)
+    }
+
+    /// ST/LT capital netting, modeled after the standard IRS ordering:
+    /// gains and losses net WITHIN each bucket first (the inputs here are
+    /// already the per-bucket nets); a net loss in one bucket then offsets the
+    /// other bucket's net gain; any remaining net capital loss offsets
+    /// ordinary income up to `cap` per year, and the excess is the implied
+    /// carryforward.
+    ///
+    /// ⚠ The ordering rules themselves are on the human-verification list
+    /// (work/ux/tax_planning_tasks.md, assumptions item 4) — as is the cap
+    /// constant. The carryforward's ST/LT character split is not modeled;
+    /// only its total is reported.
+    pub fn net_capital_buckets(net_st: Decimal, net_lt: Decimal, cap: Decimal) -> CapitalNetting {
+        if net_st >= dec!(0) && net_lt >= dec!(0) {
+            return CapitalNetting {
+                st_taxable_gain: net_st,
+                lt_taxable_gain: net_lt,
+                ordinary_loss_offset: dec!(0),
+                carryforward: dec!(0),
+            };
+        }
+        let combined = net_st + net_lt;
+        if combined >= dec!(0) {
+            // One bucket's loss is fully absorbed by the other's gain; the
+            // survivor keeps the gaining bucket's character.
+            let (st, lt) = if net_st < dec!(0) {
+                (dec!(0), combined)
+            } else {
+                (combined, dec!(0))
+            };
+            return CapitalNetting {
+                st_taxable_gain: st,
+                lt_taxable_gain: lt,
+                ordinary_loss_offset: dec!(0),
+                carryforward: dec!(0),
+            };
+        }
+        let loss = -combined;
+        let offset = loss.min(cap);
+        CapitalNetting {
+            st_taxable_gain: dec!(0),
+            lt_taxable_gain: dec!(0),
+            ordinary_loss_offset: offset,
+            carryforward: loss - offset,
+        }
+    }
+
+    /// The full US-side computation: capital netting, then the standard
+    /// deduction, then ordinary brackets + LTCG stacking. Pure — unit-testable
+    /// without a database.
+    ///
+    /// Order of operations (deduction before brackets AND before the LTCG
+    /// stacking start):
+    ///   1. net ST/LT buckets ([`Self::net_capital_buckets`]);
+    ///   2. gross ordinary = income + surviving net ST gain − capped loss offset;
+    ///   3. taxable ordinary = max(0, gross ordinary − standard deduction);
+    ///   4. liability = ordinary brackets over (3) + LTCG bands over the
+    ///      surviving net LT gain stacked on top of (3).
+    pub fn compute_us_liability(
+        ordinary_income: Decimal,
+        net_st: Decimal,
+        net_lt: Decimal,
+        tables: &TaxYearTables,
+        status: &str,
+    ) -> UsLiability {
+        let t = tables.us_status(status);
+        let n = Self::net_capital_buckets(net_st, net_lt, tables.capital_loss_ordinary_offset_cap);
+        let gross_ordinary = ordinary_income + n.st_taxable_gain - n.ordinary_loss_offset;
+        let taxable_ordinary = (gross_ordinary - t.standard_deduction).max(dec!(0));
+        let liability = Self::calculate_us_ordinary_tax(taxable_ordinary, t)
+            + Self::calculate_us_ltcg(n.lt_taxable_gain, taxable_ordinary, t);
+        UsLiability {
+            liability,
+            taxable_ordinary,
+            standard_deduction_used: t.standard_deduction,
+            capital_loss_carryforward: n.carryforward,
+        }
+    }
+
+    /// Long-term iff `sold > acquired + 1 calendar year` (chrono month
+    /// arithmetic, NOT a 365-day count — "more than one year" is a calendar
+    /// test, so e.g. a 366-day hold across a leap day that lands exactly on
+    /// the anniversary is still short-term).
+    ///
+    /// Feb-29 convention: `checked_add_months(12)` clamps 2024-02-29 + 1 year
+    /// to 2025-02-28, so the first LONG-term sale date for a leap-day lot is
+    /// 2025-03-01. Postgres `date + INTERVAL '1 year'` clamps the same way,
+    /// which keeps this helper in lockstep with the SQL bucket split in
+    /// `calculate_yearly_tax`.
+    /// ⚠ The exact-anniversary edge case is on the human-verification list
+    /// (assumptions item 6).
+    pub fn is_long_term(acquired: chrono::NaiveDate, sold: chrono::NaiveDate) -> bool {
+        match acquired.checked_add_months(chrono::Months::new(12)) {
+            Some(anniversary) => sold > anniversary,
+            None => false,
+        }
     }
 
     pub async fn calculate_yearly_tax(
@@ -350,19 +677,24 @@ impl TaxService {
         //    kept out of both buckets and reported separately. No disposals
         //    means no realized gains — the old "Investment Sale" blended
         //    fallback matched a category no writer ever produced and is gone.
+        //    Term split: long-term iff sell_date > acquired_at + 1 CALENDAR
+        //    year (interval arithmetic, not a 365-day count; Postgres clamps
+        //    Feb-29 + 1 year to Feb 28, matching `Self::is_long_term`).
+        //    Unknown acquisition (source lot deleted) counts as SHORT-term in
+        //    the liability — the genuinely conservative direction, since ST is
+        //    the higher-rate bucket. (The old code sent unknowns to long-term
+        //    and called THAT conservative; it is the opposite.) Exports keep
+        //    the honest "Unknown" label for those rows.
         let disp = sqlx::query(
             r#"
             SELECT
                 COALESCE(SUM(CASE WHEN NOT adv.is_adv
-                                   AND l.acquired_at IS NOT NULL
-                                   AND (d.sell_date - l.acquired_at) <= 365
-                              THEN d.realized_pnl_usd ELSE 0 END), 0) AS short_term,
-                -- Long-term: held > 1 year, OR holding period unknown (the
-                -- source lot was deleted) — most brokerage lots are long-term,
-                -- so this is the conservative default.
-                COALESCE(SUM(CASE WHEN NOT adv.is_adv
                                    AND (l.acquired_at IS NULL
-                                        OR (d.sell_date - l.acquired_at) > 365)
+                                        OR d.sell_date <= (l.acquired_at + INTERVAL '1 year'))
+                              THEN d.realized_pnl_usd ELSE 0 END), 0) AS short_term,
+                COALESCE(SUM(CASE WHEN NOT adv.is_adv
+                                   AND l.acquired_at IS NOT NULL
+                                   AND d.sell_date > (l.acquired_at + INTERVAL '1 year')
                               THEN d.realized_pnl_usd ELSE 0 END), 0) AS long_term,
                 COALESCE(SUM(CASE WHEN adv.is_adv
                               THEN d.realized_pnl_usd ELSE 0 END), 0) AS tax_advantaged,
@@ -392,11 +724,20 @@ impl TaxService {
 
         let capital_gains = short_term_gains + long_term_gains;
 
-        // US: short-term gains stack onto ordinary income (ordinary brackets);
-        // long-term gains get the preferential LTCG rates on top of that.
-        let ordinary_taxable = ordinary_income + short_term_gains;
-        let estimated_liability_us = Self::calculate_us_tax(ordinary_taxable, status)
-            + Self::calculate_us_ltcg(long_term_gains, ordinary_taxable, status);
+        // US: capital netting (ST/LT offsets, capped ordinary-loss offset,
+        // carryforward), then the standard deduction, then ordinary brackets
+        // with LT gains stacking on taxable ordinary income — see
+        // compute_us_liability for the exact order of operations. All bracket
+        // constants come from the year-keyed (and so-far UNVERIFIED) tables.
+        let tables = TaxYearTables::for_year(year);
+        let us = Self::compute_us_liability(
+            ordinary_income,
+            short_term_gains,
+            long_term_gains,
+            &tables,
+            status,
+        );
+        let estimated_liability_us = us.liability;
 
         // MX: no preferential split here — everything flows through the ISR
         // brackets (a deliberate simplification). The tarifa is applied to an
@@ -404,10 +745,12 @@ impl TaxService {
         // converted at the year rate; the resulting MXN liability is also
         // reported back-converted to USD at that same rate so every non-`_mxn`
         // field in the response is USD.
+        // (No standard deduction on the MX side — the deduction is a US
+        // concept; the tarifa-over-everything simplification is unchanged.)
         let total_taxable = ordinary_income + capital_gains;
         let usd_mxn_rate_used = Self::usd_mxn_year_rate(db, year).await?;
         let total_taxable_mxn = ordinary_income_mxn + capital_gains * usd_mxn_rate_used;
-        let estimated_liability_mx_mxn = Self::calculate_mx_tax(total_taxable_mxn);
+        let estimated_liability_mx_mxn = Self::calculate_mx_tax(total_taxable_mxn, &tables.mx_tarifa);
         let estimated_liability_mx = if usd_mxn_rate_used > dec!(0) {
             estimated_liability_mx_mxn / usd_mxn_rate_used
         } else {
@@ -433,6 +776,10 @@ impl TaxService {
             usd_mxn_rate_used,
             effective_rate_us,
             effective_rate_mx,
+            bracket_year_used: tables.bracket_year,
+            constants_verified: TAX_CONSTANTS_VERIFIED,
+            standard_deduction_used: us.standard_deduction_used,
+            capital_loss_carryforward: us.capital_loss_carryforward,
         })
     }
 
@@ -504,8 +851,10 @@ impl TaxService {
     /// detail behind `short_term_gains` / `long_term_gains`. USD proceeds and
     /// cost basis are derived from the stored per-unit prices and FX rates the
     /// same way `/dashboard/realized-gains` does (fx is native-units-per-USD, so
-    /// divide native amounts by it). Long-term = held > 365 days; null when the
-    /// source lot's acquisition date is no longer on file.
+    /// divide native amounts by it). Long-term = sold more than one CALENDAR
+    /// year after acquisition (`Self::is_long_term`); None when the source
+    /// lot's acquisition date is no longer on file — those rows are labeled
+    /// "Unknown" in exports but counted as SHORT-term in the liability.
     pub async fn get_lot_disposals(
         db: &PgPool,
         year: i32,
@@ -518,7 +867,7 @@ impl TaxService {
                    TO_CHAR(d.sell_date, 'YYYY-MM-DD') AS sell_date,
                    d.qty_sold, d.sell_price_per_unit, d.sell_fx_rate,
                    d.cost_per_unit, d.cost_fx_rate, d.realized_pnl_usd,
-                   (d.sell_date - l.acquired_at) AS holding_days,
+                   l.acquired_at AS acquired_on, d.sell_date AS sold_on,
                    a.account_type
             FROM lot_disposals d
             JOIN holdings h ON h.id = d.holding_id
@@ -556,7 +905,10 @@ impl TaxService {
                 } else {
                     qty * cost_px
                 };
-                let holding_days: Option<i32> = r.try_get("holding_days").ok();
+                let acquired_on: Option<chrono::NaiveDate> =
+                    r.try_get::<Option<chrono::NaiveDate>, _>("acquired_on").unwrap_or(None);
+                let sold_on: Option<chrono::NaiveDate> =
+                    r.try_get::<Option<chrono::NaiveDate>, _>("sold_on").unwrap_or(None);
                 let account_type: Option<String> =
                     r.try_get::<Option<String>, _>("account_type").unwrap_or(None);
                 let tax_advantaged = is_tax_advantaged_account_type(account_type.as_deref());
@@ -569,7 +921,13 @@ impl TaxService {
                     proceeds_usd,
                     cost_usd,
                     gain_usd: dec(r, "realized_pnl_usd"),
-                    long_term: holding_days.map(|d| d > 365),
+                    // Calendar-year term test, same convention as the summary
+                    // SQL; None (lot gone) stays None so exports say "Unknown"
+                    // even though the liability buckets it as short-term.
+                    long_term: match (acquired_on, sold_on) {
+                        (Some(a), Some(s)) => Some(Self::is_long_term(a, s)),
+                        _ => None,
+                    },
                     account_type,
                     tax_advantaged,
                 }
@@ -605,7 +963,11 @@ pub struct TaxDisposal {
     pub proceeds_usd: Decimal,
     pub cost_usd: Decimal,
     pub gain_usd: Decimal,
-    /// True = long-term (held > 365d), false = short-term, None = unknown term.
+    /// True = long-term (sold more than one calendar year after acquisition),
+    /// false = short-term, None = unknown term (source lot deleted). Unknown
+    /// rows keep this honest None — exports label them "Unknown" — but the
+    /// liability counts them as short-term (the conservative, higher-rate
+    /// bucket).
     pub long_term: Option<bool>,
     /// `accounts.account_type` of the account the disposal happened in
     /// (lowercase per migration 2026060801).
@@ -619,29 +981,242 @@ pub struct TaxDisposal {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::NaiveDate;
+
+    fn d(y: i32, m: u32, day: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(y, m, day).unwrap()
+    }
+
+    // -----------------------------------------------------------------
+    // T4 — year-keyed tables: pinned cutoffs, fallback, verification gate
+    // -----------------------------------------------------------------
+    // The pins below exist so any silent edit of a constant fails a test;
+    // they assert what the tables CONTAIN, not that the contents are correct
+    // — correctness is gated on TAX_CONSTANTS_VERIFIED / human sign-off.
 
     #[test]
-    fn ltcg_zero_bracket_when_income_low() {
-        // Single, no other income, $40k LT gain — entirely in the 0% band.
-        assert_eq!(
-            TaxService::calculate_us_ltcg(dec!(40000), dec!(0), "Single"),
-            dec!(0)
-        );
+    fn year_tables_2025_pinned_cutoffs() {
+        let t = TaxYearTables::for_year(2025);
+        assert_eq!(t.bracket_year, 2025);
+        // One cutoff per table (per filing status where applicable).
+        assert_eq!(t.us_single.ordinary[0].upto, dec!(11925));
+        assert_eq!(t.us_married.ordinary[0].upto, dec!(23850));
+        assert_eq!(t.us_hoh.ordinary[0].upto, dec!(17000));
+        assert_eq!(t.us_single.standard_deduction, dec!(15750));
+        assert_eq!(t.us_married.standard_deduction, dec!(31500));
+        assert_eq!(t.us_hoh.standard_deduction, dec!(23625));
+        assert_eq!(t.us_single.ltcg_0_top, dec!(48350));
+        assert_eq!(t.us_married.ltcg_0_top, dec!(96700));
+        assert_eq!(t.us_hoh.ltcg_0_top, dec!(64750));
+        assert_eq!(t.mx_tarifa[0].cutoff, dec!(8952.49));
+        assert_eq!(t.capital_loss_ordinary_offset_cap, dec!(3000));
     }
 
     #[test]
-    fn ltcg_stacks_on_ordinary_income() {
-        // Single, $40k ordinary taxable, $20k LT gain: stacked 40k→60k. The 0%
-        // band tops out at 48,350, so 8,350 is free and 11,650 is taxed at 15%.
-        let tax = TaxService::calculate_us_ltcg(dec!(20000), dec!(40000), "Single");
-        assert_eq!(tax, dec!(1747.50));
+    fn year_tables_2026_pinned_cutoffs() {
+        let t = TaxYearTables::for_year(2026);
+        assert_eq!(t.bracket_year, 2026);
+        assert_eq!(t.us_single.ordinary[0].upto, dec!(12400));
+        assert_eq!(t.us_married.ordinary[0].upto, dec!(24800));
+        assert_eq!(t.us_hoh.ordinary[0].upto, dec!(17700));
+        assert_eq!(t.us_single.standard_deduction, dec!(16100));
+        assert_eq!(t.us_married.standard_deduction, dec!(32200));
+        assert_eq!(t.us_hoh.standard_deduction, dec!(24150));
+        assert_eq!(t.us_single.ltcg_0_top, dec!(49450));
+        assert_eq!(t.us_married.ltcg_0_top, dec!(98900));
+        assert_eq!(t.us_hoh.ltcg_0_top, dec!(66200));
+        assert_eq!(t.mx_tarifa[0].cutoff, dec!(8952.49));
+        assert_eq!(t.capital_loss_ordinary_offset_cap, dec!(3000));
+    }
+
+    #[test]
+    fn unknown_years_fall_back_to_nearest_table() {
+        assert_eq!(TaxYearTables::for_year(2019).bracket_year, 2025);
+        assert_eq!(TaxYearTables::for_year(2024).bracket_year, 2025);
+        assert_eq!(TaxYearTables::for_year(2027).bracket_year, 2026);
+        assert_eq!(TaxYearTables::for_year(2030).bracket_year, 2026);
+    }
+
+    #[test]
+    fn constants_are_gated_unverified() {
+        // Flipping this flag is a human/tax-professional decision, not a code
+        // change to make a test pass — see the flag's doc comment.
+        assert!(!TAX_CONSTANTS_VERIFIED);
+    }
+
+    // -----------------------------------------------------------------
+    // T4 — standard deduction before brackets and before LTCG stacking
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn standard_deduction_applies_before_ordinary_brackets() {
+        let t = TaxYearTables::for_year(2025);
+        // $20,000 gross − $15,750 deduction = $4,250 taxable, all at 10%.
+        let us = TaxService::compute_us_liability(dec!(20000), dec!(0), dec!(0), &t, "Single");
+        assert_eq!(us.taxable_ordinary, dec!(4250));
+        assert_eq!(us.liability, dec!(425.00));
+        assert_eq!(us.standard_deduction_used, dec!(15750));
+    }
+
+    #[test]
+    fn income_below_deduction_owes_nothing() {
+        let t = TaxYearTables::for_year(2026);
+        let us = TaxService::compute_us_liability(dec!(6250), dec!(0), dec!(0), &t, "Single");
+        assert_eq!(us.taxable_ordinary, dec!(0));
+        assert_eq!(us.liability, dec!(0));
+    }
+
+    #[test]
+    fn ltcg_stacking_starts_at_post_deduction_taxable_income() {
+        let t = TaxYearTables::for_year(2025);
+        // Gross ordinary exactly equals the deduction → taxable ordinary 0,
+        // so a LT gain the size of the whole 0% band is tax-free…
+        let us = TaxService::compute_us_liability(dec!(15750), dec!(0), dec!(48350), &t, "Single");
+        assert_eq!(us.taxable_ordinary, dec!(0));
+        assert_eq!(us.liability, dec!(0));
+        // …and one extra dollar of gain is taxed at 15%. (Pre-deduction
+        // stacking would have started at 15,750 and taxed 15,751 of it.)
+        let us = TaxService::compute_us_liability(dec!(15750), dec!(0), dec!(48351), &t, "Single");
+        assert_eq!(us.liability, dec!(0.15));
+    }
+
+    #[test]
+    fn ltcg_bands_and_ordinary_brackets_combine_after_deduction() {
+        let t = TaxYearTables::for_year(2025);
+        // Single 2025: $63,000 gross → 47,250 taxable ordinary.
+        // Ordinary: 11,925×10% + 35,325×12% = 1,192.50 + 4,239 = 5,431.50.
+        // LT $20k stacks 47,250→67,250: 1,100 free (0% top 48,350), 18,900
+        // at 15% = 2,835. Total 8,266.50.
+        let us = TaxService::compute_us_liability(dec!(63000), dec!(0), dec!(20000), &t, "Single");
+        assert_eq!(us.taxable_ordinary, dec!(47250));
+        assert_eq!(us.liability, dec!(8266.50));
     }
 
     #[test]
     fn ltcg_twenty_percent_top_band() {
-        // High earner: a $10k gain entirely above the 15% ceiling → 20%.
-        let tax = TaxService::calculate_us_ltcg(dec!(10000), dec!(600000), "Single");
+        let t = TaxYearTables::for_year(2025);
+        // A $10k gain stacked entirely above the 15% ceiling → 20%.
+        let tax = TaxService::calculate_us_ltcg(dec!(10000), dec!(600000), &t.us_single);
         assert_eq!(tax, dec!(2000));
+    }
+
+    #[test]
+    fn ltcg_rejects_raw_losses() {
+        // Losses must go through net_capital_buckets, never the band math.
+        let t = TaxYearTables::for_year(2025);
+        assert_eq!(
+            TaxService::calculate_us_ltcg(dec!(-5000), dec!(50000), &t.us_single),
+            dec!(0)
+        );
+    }
+
+    // -----------------------------------------------------------------
+    // T5 — capital netting matrix (ordering rules: human-verification list)
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn netting_both_gains_pass_through() {
+        let n = TaxService::net_capital_buckets(dec!(500), dec!(3000), dec!(3000));
+        assert_eq!(n.st_taxable_gain, dec!(500));
+        assert_eq!(n.lt_taxable_gain, dec!(3000));
+        assert_eq!(n.ordinary_loss_offset, dec!(0));
+        assert_eq!(n.carryforward, dec!(0));
+    }
+
+    #[test]
+    fn netting_st_gain_absorbs_lt_loss() {
+        // The pre-T5 code dropped LT losses entirely (LTCG calc returned 0).
+        let n = TaxService::net_capital_buckets(dec!(5000), dec!(-2000), dec!(3000));
+        assert_eq!(n.st_taxable_gain, dec!(3000));
+        assert_eq!(n.lt_taxable_gain, dec!(0));
+        assert_eq!(n.ordinary_loss_offset, dec!(0));
+        assert_eq!(n.carryforward, dec!(0));
+    }
+
+    #[test]
+    fn netting_lt_gain_absorbs_st_loss() {
+        // The pre-T5 code fed the raw ST loss uncapped into ordinary income.
+        let n = TaxService::net_capital_buckets(dec!(-2000), dec!(5000), dec!(3000));
+        assert_eq!(n.st_taxable_gain, dec!(0));
+        assert_eq!(n.lt_taxable_gain, dec!(3000));
+        assert_eq!(n.ordinary_loss_offset, dec!(0));
+        assert_eq!(n.carryforward, dec!(0));
+    }
+
+    #[test]
+    fn netting_both_losses_caps_offset_and_carries_forward() {
+        let n = TaxService::net_capital_buckets(dec!(-5000), dec!(-2000), dec!(3000));
+        assert_eq!(n.st_taxable_gain, dec!(0));
+        assert_eq!(n.lt_taxable_gain, dec!(0));
+        assert_eq!(n.ordinary_loss_offset, dec!(3000));
+        assert_eq!(n.carryforward, dec!(4000));
+    }
+
+    #[test]
+    fn netting_residual_loss_after_cross_offset_is_capped() {
+        // ST −5,000 vs LT +1,000 → net loss 4,000: 3,000 offsets ordinary
+        // income, 1,000 carries forward.
+        let n = TaxService::net_capital_buckets(dec!(-5000), dec!(1000), dec!(3000));
+        assert_eq!(n.ordinary_loss_offset, dec!(3000));
+        assert_eq!(n.carryforward, dec!(1000));
+    }
+
+    #[test]
+    fn liability_applies_capped_loss_offset_before_deduction_math() {
+        let t = TaxYearTables::for_year(2026);
+        // 50,000 − 3,000 offset − 16,100 deduction = 30,900 taxable:
+        // 12,400×10% + 18,500×12% = 1,240 + 2,220 = 3,460; carryforward 4,000.
+        let us =
+            TaxService::compute_us_liability(dec!(50000), dec!(-5000), dec!(-2000), &t, "Single");
+        assert_eq!(us.taxable_ordinary, dec!(30900));
+        assert_eq!(us.liability, dec!(3460.00));
+        assert_eq!(us.capital_loss_carryforward, dec!(4000));
+    }
+
+    // -----------------------------------------------------------------
+    // T5 — calendar-year term boundary (incl. the Feb-29 convention)
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn exact_anniversary_is_still_short_term() {
+        // "More than one year": selling ON the anniversary is short-term.
+        assert!(!TaxService::is_long_term(d(2024, 3, 10), d(2025, 3, 10)));
+        assert!(TaxService::is_long_term(d(2024, 3, 10), d(2025, 3, 11)));
+    }
+
+    #[test]
+    fn leap_year_span_is_not_a_day_count() {
+        // 2023-06-01 → 2024-06-01 is 366 days across 2024-02-29; the old
+        // `> 365 days` rule called it long-term, the calendar rule does not.
+        assert!(!TaxService::is_long_term(d(2023, 6, 1), d(2024, 6, 1)));
+        assert!(TaxService::is_long_term(d(2023, 6, 1), d(2024, 6, 2)));
+    }
+
+    #[test]
+    fn leap_day_acquisition_anniversary_clamps_to_feb_28() {
+        // Convention: 2024-02-29 + 1 year clamps to 2025-02-28 (chrono and
+        // Postgres agree), so the first long-term sale date is 2025-03-01.
+        assert!(!TaxService::is_long_term(d(2024, 2, 29), d(2025, 2, 28)));
+        assert!(TaxService::is_long_term(d(2024, 2, 29), d(2025, 3, 1)));
+    }
+
+    #[test]
+    fn well_inside_and_outside_the_boundary() {
+        assert!(!TaxService::is_long_term(d(2024, 6, 1), d(2024, 12, 1)));
+        assert!(TaxService::is_long_term(d(2022, 1, 1), d(2026, 6, 1)));
+    }
+
+    // -----------------------------------------------------------------
+    // Pre-existing coverage
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn ltcg_stacks_on_ordinary_income() {
+        // Single 2025, $40k taxable ordinary, $20k LT gain: stacked 40k→60k.
+        // The 0% band tops out at 48,350, so 8,350 is free and 11,650 at 15%.
+        let t = TaxYearTables::for_year(2025);
+        let tax = TaxService::calculate_us_ltcg(dec!(20000), dec!(40000), &t.us_single);
+        assert_eq!(tax, dec!(1747.50));
     }
 
     #[test]
@@ -653,13 +1228,5 @@ mod tests {
         assert!(!is_tax_advantaged_account_type(Some("brokerage")));
         assert!(!is_tax_advantaged_account_type(Some("depository")));
         assert!(!is_tax_advantaged_account_type(None));
-    }
-
-    #[test]
-    fn ltcg_ignores_losses() {
-        assert_eq!(
-            TaxService::calculate_us_ltcg(dec!(-5000), dec!(50000), "Single"),
-            dec!(0)
-        );
     }
 }
