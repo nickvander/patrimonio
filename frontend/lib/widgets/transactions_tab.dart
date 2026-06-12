@@ -116,6 +116,15 @@ class TransactionsTab extends StatefulWidget {
   /// ApiService for the "Add transaction" button + CSV export URL.
   /// Optional so consumers that don't need those actions can omit it.
   final ApiService? apiService;
+  /// Account preselected in the Add-transaction dialog. Account-scoped
+  /// hosts (the per-account panel) pass their account id so the dialog
+  /// opens on the account the user is already looking at.
+  final String? addTransactionAccountId;
+  /// Force the "this export covers ALL transactions" confirmation on CSV
+  /// export even when no search/filter is active. The backend export has
+  /// no account parameter, so an account-scoped host shows a list that is
+  /// implicitly filtered — exporting silently would be dishonest there.
+  final bool csvExportConfirmAlways;
   /// Invoked after a manual transaction has been added so the parent
   /// can refresh its transaction list.
   final VoidCallback? onTransactionAdded;
@@ -187,6 +196,8 @@ class TransactionsTab extends StatefulWidget {
     this.onDelete,
     this.onAddAccount,
     this.apiService,
+    this.addTransactionAccountId,
+    this.csvExportConfirmAlways = false,
     this.onTransactionAdded,
     this.onLoadMore,
     this.hasMore = false,
@@ -1676,10 +1687,13 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 onPressed: () => _downloadCsv(),
                 icon: const Icon(Icons.file_download_outlined, size: 22),
                 // The backend export has no filter parameters, so when a
-                // filter/search is active the affordance says up front
-                // that the CSV covers everything (and _downloadCsv asks
-                // for confirmation too).
-                tooltip: (_searchQuery.isNotEmpty || _filters.isActive)
+                // filter/search is active — or the host's list is
+                // implicitly scoped (csvExportConfirmAlways) — the
+                // affordance says up front that the CSV covers everything
+                // (and _downloadCsv asks for confirmation too).
+                tooltip: (widget.csvExportConfirmAlways ||
+                        _searchQuery.isNotEmpty ||
+                        _filters.isActive)
                     ? l.txExportCsvAllNote
                     : l.txExportCsv,
               ),
@@ -1714,6 +1728,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
         apiService: widget.apiService!,
         onCreated: () => widget.onTransactionAdded?.call(),
         categorySuggestions: _distinctCategories(),
+        initialAccountId: widget.addTransactionAccountId,
       ),
     );
   }
@@ -1722,8 +1737,11 @@ class _TransactionsTabState extends State<TransactionsTab> {
     if (widget.apiService == null) return;
     // Export honesty: the backend endpoint exports EVERYTHING — it has
     // no filter/search parameters. When the user is looking at a
-    // filtered list, confirm that's understood before handing off.
-    if (_searchQuery.isNotEmpty || _filters.isActive) {
+    // filtered list (explicit filters, or a host whose list is scoped to
+    // one account), confirm that's understood before handing off.
+    if (widget.csvExportConfirmAlways ||
+        _searchQuery.isNotEmpty ||
+        _filters.isActive) {
       final l = AppLocalizations.of(context);
       final confirmed = await showDialog<bool>(
         context: context,

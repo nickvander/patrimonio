@@ -3,15 +3,38 @@ import '../utils/theme_colors.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
+import '../services/transaction_mutation_refresh.dart'
+    show mergeRefetchedTransactions, txRefetchLimit;
 import '../utils/currency.dart';
 import '../widgets/transactions_tab.dart';
 import '../widgets/account_balance_chart.dart';
 import '../widgets/clabe_info.dart';
 import '../widgets/add_holding_dialog.dart';
-import '../services/preferences.dart';
+import '../widgets/add_transaction_dialog.dart';
+// Conditional seam (NOT services/preferences.dart directly): Preferences
+// pulls package:web, which doesn't compile on the Dart test VM. See
+// services/account_alerts_cache.dart.
+import '../services/account_alerts_cache.dart';
 import '../utils/account_category.dart';
 import '../theme/typography.dart';
 import '../l10n/app_localizations.dart';
+
+/// Signature of one paged, newest-first fetch of an account's
+/// transactions (see [AccountTransactionsScreen.transactionsFetcher]).
+typedef AccountTransactionsFetcher = Future<List<dynamic>> Function({
+  required int limit,
+  required int offset,
+});
+
+/// Signature of the single-row PATCH issued from the detail editors
+/// (see [AccountTransactionsScreen.transactionUpdater]).
+typedef AccountTransactionUpdater = Future<void> Function(
+  String id, {
+  String? userCategory,
+  String? userNotes,
+  String? userDescription,
+  String? accountId,
+});
 
 /// Per-account transaction history. Rendered as the body of a slide-from-
 /// right side panel via [showAccountTransactionsPanel] — no Scaffold/AppBar
@@ -32,6 +55,17 @@ class AccountTransactionsScreen extends StatefulWidget {
   /// Fired after a low-balance threshold is saved/removed so the opener
   /// (e.g. the dashboard) can refresh its notifications bell immediately.
   final VoidCallback? onAlertsChanged;
+  /// Test seam: one paged, newest-first fetch of this account's
+  /// transactions. Production leaves it null and the panel uses
+  /// `ApiService.getAccountTransactions` — widget tests inject a fake
+  /// here instead of subclassing ApiService (package:web won't compile
+  /// on the test VM).
+  @visibleForTesting
+  final AccountTransactionsFetcher? transactionsFetcher;
+  /// Test seam: the single-row PATCH behind the detail editors.
+  /// Production leaves it null → `ApiService.updateTransaction`.
+  @visibleForTesting
+  final AccountTransactionUpdater? transactionUpdater;
 
   const AccountTransactionsScreen({
     super.key,
@@ -44,6 +78,8 @@ class AccountTransactionsScreen extends StatefulWidget {
     this.onBalanceUpdate,
     this.onRenameAccount,
     this.onAlertsChanged,
+    this.transactionsFetcher,
+    this.transactionUpdater,
   });
 
   @override
@@ -56,6 +92,13 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   bool _isLoading = true;
   String? _error;
   List<dynamic>? _transactions;
+  // True while the backend may hold rows older than the loaded pages —
+  // drives TransactionsTab's "Load more" button + filter cascade.
+  bool _hasMore = false;
+  // Initial/Load-more page size. Small enough that opening the panel is
+  // one cheap request (was a fixed 1,000-row download), large enough
+  // that the bounded-host virtualised list has a screenful to show.
+  static const int _pageSize = 50;
   List<dynamic> _balanceHistory = const [];
   // Equity holdings (Plaid-synced or manually added by ticker + quantity).
   List<dynamic> _holdings = const [];
@@ -77,7 +120,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     _currentBalance =
         ((widget.account['current_balance'] as num?)?.toDouble()) ?? 0.0;
     _nickname = (widget.account['nickname'] ?? '').toString();
-    _accountAlerts = Preferences.getAccountAlerts();
+    _accountAlerts = readCachedAccountAlerts();
     _fetchTransactions();
     _fetchBalanceHistory();
     _fetchHoldings();
@@ -149,7 +192,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         if (d != null && d > 0) next[k.toString()] = d;
       });
       setState(() => _accountAlerts = next);
-      Preferences.setAccountAlerts(next);
+      writeCachedAccountAlerts(next);
     } catch (_) {
       // localStorage seed stands.
     }
@@ -231,7 +274,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       next[_accountId] = value;
     }
     setState(() => _accountAlerts = next);
-    Preferences.setAccountAlerts(next);
+    writeCachedAccountAlerts(next);
     _apiService.putSetting('account_balance_alerts', next).catchError((_) {});
     widget.onAlertsChanged?.call();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -259,6 +302,24 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     }
   }
 
+  /// One newest-first page from the backend (or the injected test
+  /// fetcher). All transaction reads in this screen go through here so
+  /// paging, the in-place refetch and the tests share one seam.
+  Future<List<dynamic>> _fetchPage({required int limit, required int offset}) {
+    final fetcher = widget.transactionsFetcher;
+    if (fetcher != null) return fetcher(limit: limit, offset: offset);
+    return _apiService.getAccountTransactions(
+      _accountId,
+      limit: limit,
+      offset: offset,
+    );
+  }
+
+  /// Initial load (and the error-state Retry). This is the ONLY path
+  /// that may show the full-body spinner: post-mutation refreshes go
+  /// through [_refetchTransactionsInPlace] and paging appends via
+  /// [_loadMoreTransactions], both of which keep the list mounted so
+  /// scroll position and search/filter state survive.
   Future<void> _fetchTransactions() async {
     setState(() {
       _isLoading = true;
@@ -266,18 +327,82 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     });
 
     try {
-      final txs = await _apiService.getAccountTransactions(
-        widget.account['id'],
-      );
+      final txs = await _fetchPage(limit: _pageSize, offset: 0);
+      if (!mounted) return;
       setState(() {
         _transactions = txs;
+        _hasMore = txs.length >= _pageSize;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  /// Append the next page. [limit] overrides the default page size —
+  /// TransactionsTab's whole-history filter cascade passes the backend's
+  /// per-request cap so a filter over deep history converges in a few
+  /// round-trips. Mirrors the dashboard's `_loadMoreTransactions`.
+  Future<void> _loadMoreTransactions({int? limit}) async {
+    final pageSize = limit ?? _pageSize;
+    final offset = _transactions?.length ?? 0;
+    final more = await _fetchPage(limit: pageSize, offset: offset);
+    if (!mounted) return;
+    setState(() {
+      _transactions = [...(_transactions ?? const []), ...more];
+      // Fewer rows than asked for = we reached the tail of the account.
+      _hasMore = more.length >= pageSize;
+    });
+  }
+
+  /// Manual-entry dialog preselected on this account. Used by the
+  /// zero-transactions empty state; the populated list reaches the same
+  /// dialog through TransactionsTab's toolbar "+" (same preselect).
+  void _openAddTransactionDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (_) => AddTransactionDialog(
+        accounts: widget.allAccounts,
+        apiService: _apiService,
+        initialAccountId: _accountId,
+        onCreated: () {
+          _refetchTransactionsInPlace();
+          _fetchBalanceHistory();
+        },
+      ),
+    );
+  }
+
+  /// Depth-preserving refetch after a mutation (edit / delete / split /
+  /// bulk / manual add). Re-covers at least everything already loaded —
+  /// capped at the backend's per-request max — and overlays the result
+  /// onto the current list, so the panel updates IN PLACE: no full-body
+  /// spinner, no list remount, scroll + search/filter state intact.
+  /// A transient failure keeps the current rows on screen (same policy
+  /// as the dashboard's post-mutation refresh).
+  Future<void> _refetchTransactionsInPlace() async {
+    final previous = _transactions ?? const [];
+    final limit =
+        txRefetchLimit(loadedCount: previous.length, pageSize: _pageSize);
+    try {
+      final refetched = await _fetchPage(limit: limit, offset: 0);
+      if (!mounted) return;
+      setState(() {
+        _transactions = mergeRefetchedTransactions(
+          previous: previous,
+          refetched: refetched,
+          requestedLimit: limit,
+        );
+        // A short page proves we now hold the account's whole history; a
+        // full page tells us nothing new, so leave the flag as-is.
+        if (refetched.length < limit) _hasMore = false;
+      });
+    } catch (e) {
+      debugPrint('Account panel post-mutation refresh error: $e');
     }
   }
 
@@ -907,6 +1032,16 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
               style: TextStyle(color: context.textFaint, fontSize: 12),
               textAlign: TextAlign.center,
             ),
+            const SizedBox(height: 20),
+            // With zero rows the TransactionsTab (and its toolbar's "+")
+            // never mounts, so the empty state carries its own entry
+            // point — otherwise an empty account is the one place a
+            // manual transaction can't be added from.
+            FilledButton.icon(
+              onPressed: _openAddTransactionDialog,
+              icon: const Icon(Icons.add, size: 18),
+              label: Text(l.txAddTransaction),
+            ),
           ],
         ),
       );
@@ -942,32 +1077,84 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
           Expanded(
             child: TransactionsTab(
               transactions: _transactions!,
-        accounts: widget.allAccounts,
-        conversionFactor: widget.conversionFactor,
-        currencyFormat: widget.currencyFormat,
-        targetCurrency: widget.targetCurrency,
-        usdMxnRate: widget.usdMxnRate,
-        onUpdate: (id, {userCategory, userNotes, userDescription, accountId}) async {
-          try {
-            await _apiService.updateTransaction(
-              id,
-              userCategory: userCategory,
-              userNotes: userNotes,
-              userDescription: userDescription,
-              accountId: accountId,
-            );
-            _fetchTransactions();
-          } catch (e) {
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(l.acctxUpdateFailed(e.toString()))),
-            );
-          }
-        },
-        onDelete: (id) async {
-          await _apiService.deleteTransaction(id);
-          _fetchTransactions();
-        },
+              accounts: widget.allAccounts,
+              conversionFactor: widget.conversionFactor,
+              currencyFormat: widget.currencyFormat,
+              targetCurrency: widget.targetCurrency,
+              usdMxnRate: widget.usdMxnRate,
+              // Full action set, mirroring the dashboard's wiring (same
+              // ApiService calls, one in-place refetch per mutation).
+              // apiService unlocks "+ Add transaction" + CSV export;
+              // the Add dialog opens preselected on THIS account, and
+              // CSV always confirms because the export covers every
+              // account while the panel shows just one.
+              apiService: _apiService,
+              addTransactionAccountId: _accountId,
+              csvExportConfirmAlways: true,
+              onTransactionAdded: () {
+                _refetchTransactionsInPlace();
+                _fetchBalanceHistory();
+              },
+              onLoadMore: _loadMoreTransactions,
+              hasMore: _hasMore,
+              onUpdate: (id,
+                  {userCategory, userNotes, userDescription, accountId}) async {
+                try {
+                  final AccountTransactionUpdater update =
+                      widget.transactionUpdater ?? _apiService.updateTransaction;
+                  await update(
+                    id,
+                    userCategory: userCategory,
+                    userNotes: userNotes,
+                    userDescription: userDescription,
+                    accountId: accountId,
+                  );
+                  await _refetchTransactionsInPlace();
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(l.acctxUpdateFailed(e.toString()))),
+                  );
+                }
+              },
+              onBulkUpdate: (ids,
+                  {userCategory, accountId, userDescription}) async {
+                // One batched request → one in-place refresh, exactly like
+                // the dashboard (the old panel omitted this, leaving the
+                // bulk bar half-functional).
+                final n = await _apiService.batchUpdateTransactions(
+                  ids,
+                  category: userCategory,
+                  accountId: accountId,
+                  description: userDescription,
+                );
+                await _refetchTransactionsInPlace();
+                return n;
+              },
+              onBulkDelete: (ids) async {
+                for (final id in ids) {
+                  await _apiService.deleteTransaction(id);
+                }
+                await _refetchTransactionsInPlace();
+                _fetchBalanceHistory();
+              },
+              onDelete: (id) async {
+                await _apiService.deleteTransaction(id);
+                await _refetchTransactionsInPlace();
+                _fetchBalanceHistory();
+              },
+              onSplitTransaction: (parentId, splits) async {
+                await _apiService.splitTransaction(parentId, splits);
+                await _refetchTransactionsInPlace();
+              },
+              onUnsplitTransaction: (parentId) async {
+                await _apiService.unsplitTransaction(parentId);
+                await _refetchTransactionsInPlace();
+              },
+              onReplaceSplits: (parentId, splits) async {
+                await _apiService.replaceSplits(parentId, splits);
+                await _refetchTransactionsInPlace();
+              },
             ),
           ),
         ],

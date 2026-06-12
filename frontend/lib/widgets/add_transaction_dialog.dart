@@ -22,12 +22,19 @@ class AddTransactionDialog extends StatefulWidget {
   /// dialog compiles/renders fine when no suggestions are wired.
   final List<String> categorySuggestions;
 
+  /// Account preselected in the dropdown. Used by account-scoped hosts
+  /// (the per-account transactions panel) so "+ Add transaction" lands on
+  /// the account the user is already looking at. Ignored when it doesn't
+  /// match any entry in [accounts]; the user can still switch accounts.
+  final String? initialAccountId;
+
   const AddTransactionDialog({
     super.key,
     required this.accounts,
     required this.apiService,
     required this.onCreated,
     this.categorySuggestions = const [],
+    this.initialAccountId,
   });
 
   @override
@@ -49,6 +56,14 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   @override
   void initState() {
     super.initState();
+    // Caller-preselected account (account-scoped hosts) wins when it
+    // actually exists in the list.
+    final preferred = widget.initialAccountId;
+    if (preferred != null &&
+        widget.accounts.any((a) => a['id']?.toString() == preferred)) {
+      _accountId = preferred;
+      return;
+    }
     // Default to the first non-credit account that has a non-null balance.
     for (final a in widget.accounts) {
       final t = (a['account_type'] ?? '').toString().toLowerCase();

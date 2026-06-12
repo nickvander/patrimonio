@@ -945,9 +945,23 @@ class ApiService {
         'No se pudieron cargar los movimientos'));
   }
 
-  Future<List<dynamic>> getAccountTransactions(String accountId) async {
+  /// One newest-first page of a single account's transactions. With no
+  /// [limit] the backend keeps its legacy single-shot behavior (up to
+  /// 1,000 rows); an explicit limit is clamped server-side to ≤500 per
+  /// request (same cap as `/dashboard/transactions`, see
+  /// [kTxBackendMaxPageSize] in transaction_mutation_refresh.dart).
+  Future<List<dynamic>> getAccountTransactions(
+    String accountId, {
+    int? limit,
+    int? offset,
+  }) async {
+    final params = <String>[
+      if (limit != null) 'limit=$limit',
+      if (offset != null) 'offset=$offset',
+    ];
+    final query = params.isEmpty ? '' : '?${params.join('&')}';
     final response = await _get(
-      Uri.parse('$_baseUrl/accounts/$accountId/transactions'),
+      Uri.parse('$_baseUrl/accounts/$accountId/transactions$query'),
     );
     if (response.statusCode == 200) {
       return json.decode(response.body);

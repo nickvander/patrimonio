@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Extension, Path, State},
+    extract::{Extension, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, patch, post, delete},
@@ -547,17 +547,34 @@ pub struct TransactionResponse {
     pub institution_name: String,
 }
 
-/// Get historical transactions for a specific account. Capped at
-/// `MAX_ACCOUNT_TRANSACTIONS` rows so a long-lived account doesn't
-/// return tens of thousands and OOM the renderer. The frontend's
-/// account view shows recent history; a future pagination follow-up
-/// will let the user page beyond this cap.
+/// Optional paging for the per-account history. Both params are
+/// optional so the legacy no-param call keeps its original shape.
+#[derive(Deserialize)]
+struct AccountTransactionsQuery {
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
+/// Get historical transactions for a specific account, newest first.
+///
+/// Paged when `limit`/`offset` are supplied: an explicit `limit` is
+/// clamped to 1..=500 per request (mirroring `/dashboard/transactions`),
+/// `offset` is floored at 0. With no `limit` the response keeps the
+/// legacy single-shot behavior — capped at `MAX_ACCOUNT_TRANSACTIONS`
+/// rows so a long-lived account doesn't return tens of thousands and
+/// OOM the renderer.
 async fn get_account_transactions(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
+    Query(q): Query<AccountTransactionsQuery>,
 ) -> Json<Vec<TransactionResponse>> {
     const MAX_ACCOUNT_TRANSACTIONS: i64 = 1000;
+    let limit = q
+        .limit
+        .map(|l| l.clamp(1, 500))
+        .unwrap_or(MAX_ACCOUNT_TRANSACTIONS);
+    let offset = q.offset.unwrap_or(0).max(0);
     // Scoped to the caller. An unknown account id (or one belonging to
     // another user) returns an empty list — the same shape the UI sees
     // for a brand-new empty account.
@@ -576,12 +593,13 @@ async fn get_account_transactions(
         WHERE t.account_id = $1 AND t.user_id = $2
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
         ORDER BY t.date DESC, t.created_at DESC
-        LIMIT $3
+        LIMIT $3 OFFSET $4
         "#
     )
     .bind(id)
     .bind(ctx.user_id)
-    .bind(MAX_ACCOUNT_TRANSACTIONS)
+    .bind(limit)
+    .bind(offset)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();

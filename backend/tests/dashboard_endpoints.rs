@@ -1211,6 +1211,138 @@ async fn batch_partial_owned_and_bogus_ids_updates_only_owned() {
 }
 
 // =====================================================================
+// /api/accounts/{id}/transactions — optional limit/offset paging
+// =====================================================================
+
+/// Insert one transaction dated `days_ago` days back, so ordering
+/// assertions don't depend on `created_at` insertion-order tiebreaks.
+async fn seed_tx_days_ago(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    description: &str,
+    days_ago: i32,
+) -> uuid::Uuid {
+    sqlx::query_scalar(
+        "INSERT INTO transactions (account_id, date, description, amount, currency, source, user_id) \
+         VALUES ($1, CURRENT_DATE - $2::int, $3, 10.00, 'USD', 'manual', $4) RETURNING id",
+    )
+    .bind(account_id)
+    .bind(days_ago)
+    .bind(description)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .expect("seed dated tx")
+}
+
+/// GET the per-account transaction list and return the description
+/// column in response order (the endpoint sorts newest-first).
+async fn account_tx_descriptions(app: &Router, token: &str, uri: &str) -> Vec<String> {
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, uri, None, Some(token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK, "GET {uri} should be 200");
+    let body = body_json(res.into_body()).await;
+    body.as_array()
+        .expect("array body")
+        .iter()
+        .map(|t| t["description"].as_str().unwrap_or_default().to_string())
+        .collect()
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn account_transactions_pages_with_limit_and_offset() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, account) = seed_account(&pool, user_id).await;
+    // T0 newest … T4 oldest (distinct dates → deterministic order).
+    for i in 0..5 {
+        seed_tx_days_ago(&pool, user_id, account, &format!("T{i}"), i).await;
+    }
+
+    // No params → legacy behavior: the whole history, newest first.
+    let all =
+        account_tx_descriptions(&app, &token, &format!("/api/accounts/{account}/transactions"))
+            .await;
+    assert_eq!(all, vec!["T0", "T1", "T2", "T3", "T4"]);
+
+    // limit alone → first page, newest first.
+    let page1 = account_tx_descriptions(
+        &app,
+        &token,
+        &format!("/api/accounts/{account}/transactions?limit=2"),
+    )
+    .await;
+    assert_eq!(page1, vec!["T0", "T1"]);
+
+    // limit + offset → the next slice, no overlap, no gap.
+    let page2 = account_tx_descriptions(
+        &app,
+        &token,
+        &format!("/api/accounts/{account}/transactions?limit=2&offset=2"),
+    )
+    .await;
+    assert_eq!(page2, vec!["T2", "T3"]);
+
+    // Offset past the end → empty list, not an error.
+    let past_end = account_tx_descriptions(
+        &app,
+        &token,
+        &format!("/api/accounts/{account}/transactions?limit=2&offset=50"),
+    )
+    .await;
+    assert!(past_end.is_empty());
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn account_transactions_clamps_degenerate_limit_and_offset() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, account) = seed_account(&pool, user_id).await;
+    for i in 0..3 {
+        seed_tx_days_ago(&pool, user_id, account, &format!("T{i}"), i).await;
+    }
+
+    // limit=0 clamps up to 1 (mirrors the dashboard endpoint's
+    // clamp(1, 500)) instead of 500-ing or returning everything.
+    let clamped_low = account_tx_descriptions(
+        &app,
+        &token,
+        &format!("/api/accounts/{account}/transactions?limit=0"),
+    )
+    .await;
+    assert_eq!(clamped_low, vec!["T0"]);
+
+    // Negative offset floors to 0 → identical to the first page.
+    let negative_offset = account_tx_descriptions(
+        &app,
+        &token,
+        &format!("/api/accounts/{account}/transactions?limit=2&offset=-7"),
+    )
+    .await;
+    assert_eq!(negative_offset, vec!["T0", "T1"]);
+
+    // An absurd limit is accepted (clamped server-side to 500) and the
+    // small table comes back whole — the clamp must not error.
+    let clamped_high = account_tx_descriptions(
+        &app,
+        &token,
+        &format!("/api/accounts/{account}/transactions?limit=99999"),
+    )
+    .await;
+    assert_eq!(clamped_high, vec!["T0", "T1", "T2"]);
+}
+
+// =====================================================================
 // /api/dashboard/since-last-login
 // =====================================================================
 
