@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
+import '../services/transaction_mutation_refresh.dart'
+    show kTxBackendMaxPageSize;
 import '../l10n/app_localizations.dart';
 import '../theme/typography.dart';
 import '../utils/category.dart';
@@ -119,8 +121,11 @@ class TransactionsTab extends StatefulWidget {
   final VoidCallback? onTransactionAdded;
   /// Optional pagination hook. When provided, a "Load more" button shows
   /// under the list and fires the callback. The parent is expected to
-  /// append the next page to [transactions] and rebuild.
-  final Future<void> Function()? onLoadMore;
+  /// append the next page to [transactions] and rebuild. [limit] overrides
+  /// the parent's default page size — the whole-history cascade passes the
+  /// backend's per-request cap so it finishes in a handful of round-trips;
+  /// the "Load more" button omits it and gets the ordinary page.
+  final Future<void> Function({int? limit})? onLoadMore;
   /// Whether the parent thinks there are more transactions available.
   /// When false the "Load more" button is hidden.
   final bool hasMore;
@@ -457,21 +462,61 @@ class _TransactionsTabState extends State<TransactionsTab> {
     return result;
   }
 
-  /// Cascade-load the remaining pages so a client-side filter/search can see
-  /// the user's whole history (bounded by the backend's 500-row cap). Runs at
-  /// most one cascade at a time; stops early if the filter is cleared.
-  Future<void> _loadAllForFilter() async {
-    if (_autoLoading) return;
+  /// Cascade-load the remaining pages so a client-side filter/search (and
+  /// the filter dialog's option lists) can see the user's whole history.
+  /// Each round-trip requests [kTxBackendMaxPageSize] rows — the most the
+  /// backend will honor per call — instead of the default 50-row page, so
+  /// e.g. 3,000 rows costs ≤7 round-trips rather than 60.
+  ///
+  /// Runs at most one cascade at a time: while one is in flight every
+  /// caller gets the same future back (the filter dialog awaits it for its
+  /// loading affordance), and once history is fully loaded `hasMore` is
+  /// false so re-entering is a completed-future no-op. The filter-driven
+  /// cascade stops early if the filter is cleared mid-flight;
+  /// [ignoreFilters] (the dialog-open path) loads to the end regardless,
+  /// since the dialog needs the full option set either way.
+  Future<void> _loadAllForFilter({bool ignoreFilters = false}) {
+    final inFlight = _historyCascade;
+    if (inFlight != null) return inFlight;
     final onLoadMore = widget.onLoadMore;
-    if (onLoadMore == null) return;
+    if (onLoadMore == null || !widget.hasMore) return Future<void>.value();
+    // Clear the memo via whenComplete (always async) rather than inside
+    // _runHistoryCascade's own finally: an async body runs synchronously
+    // up to its first await, so a body that bails out immediately would
+    // otherwise null the field BEFORE this assignment and leave a stale
+    // completed future memoized forever.
+    final run = _runHistoryCascade(onLoadMore, ignoreFilters)
+        .whenComplete(() => _historyCascade = null);
+    _historyCascade = run;
+    return run;
+  }
+
+  Future<void>? _historyCascade;
+
+  Future<void> _runHistoryCascade(
+    Future<void> Function({int? limit}) onLoadMore,
+    bool ignoreFilters,
+  ) async {
     _autoLoading = true;
     if (mounted) setState(() {});
     try {
       while (mounted &&
           widget.hasMore &&
-          (_searchQuery.isNotEmpty || _filters.isActive)) {
-        await onLoadMore();
+          (ignoreFilters || _searchQuery.isNotEmpty || _filters.isActive)) {
+        await onLoadMore(limit: kTxBackendMaxPageSize);
+        // The parent setState()s the new page in, but this State's `widget`
+        // (transactions/hasMore) only updates when that rebuild lands. Wait
+        // for the frame before re-reading the loop condition — otherwise
+        // the final iteration overshoots on stale props and fires one
+        // extra, always-empty request per cascade.
+        await WidgetsBinding.instance.endOfFrame;
       }
+    } catch (_) {
+      // A failed page load just stops the cascade: the user keeps whatever
+      // is loaded and the next filter change / dialog open retries. Never
+      // rethrow — callers (the build trigger, the dialog's whenComplete
+      // chain) don't await this future for errors, so a throw here would
+      // surface as an unhandled async exception.
     } finally {
       if (mounted) setState(() => _autoLoading = false);
     }
@@ -494,12 +539,24 @@ class _TransactionsTabState extends State<TransactionsTab> {
   }
 
   Future<void> _openFilters() async {
+    // Make the option lists (categories especially) reflect the user's
+    // WHOLE history, not just the pages loaded so far — a category that
+    // only occurs in unloaded history was previously impossible to select.
+    // This kicks the same memoized cascade the filters themselves use, so
+    // reopening the dialog when history is already fully loaded (hasMore
+    // false) costs nothing and shows no loading affordance.
+    final Future<void>? historyLoad =
+        widget.hasMore ? _loadAllForFilter(ignoreFilters: true) : null;
     final result = await showDialog<TxFilters>(
       context: context,
       builder: (_) => TxFiltersDialog(
         initial: _filters,
         transactions: widget.transactions,
         accounts: widget.accounts,
+        historyLoad: historyLoad,
+        // Live getter: when the cascade completes the dialog re-reads the
+        // (by then fully loaded) list so its options refresh in place.
+        liveTransactions: () => widget.transactions,
       ),
     );
     if (result != null && mounted) setState(() => _filters = result);

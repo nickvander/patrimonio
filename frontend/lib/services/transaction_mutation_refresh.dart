@@ -9,6 +9,59 @@ library;
 
 import 'dart:async';
 
+/// Hard cap the backend applies to the `limit` query param of
+/// GET /dashboard/transactions — `q.limit.unwrap_or(50).clamp(1, 500)` in
+/// `backend/src/api/dashboard.rs`. Bulk loaders (the filter cascade in
+/// `TransactionsTab` and the depth-preserving refetches below) request at
+/// most this many rows per call: asking for more is silently clamped
+/// server-side, so keep this constant in sync with the backend clamp.
+const int kTxBackendMaxPageSize = 500;
+
+/// Page size for a transaction refetch that must re-cover what's already
+/// on screen: at least one full page, deep enough to span every loaded row
+/// (the user may have cascade-loaded pages for a client-side filter), but
+/// never more than the backend will honor (see [kTxBackendMaxPageSize] —
+/// a bigger ask would be clamped and silently truncate the list).
+int txRefetchLimit({required int loadedCount, required int pageSize}) =>
+    loadedCount.clamp(pageSize, kTxBackendMaxPageSize);
+
+/// Overlay a fresh newest-first refetch onto the previously loaded list,
+/// preserving loaded depth the (capped) refetch couldn't re-cover.
+///
+/// * Refetch came back SHORT of [requestedLimit] → the server ran out of
+///   rows before hitting the limit, so [refetched] is the complete table:
+///   return it as-is (this is what removes deleted rows).
+/// * Refetch filled the limit → the window may have been truncated (either
+///   by the backend cap or by rows added above it since the last load).
+///   Keep the old contiguous tail: previous rows strictly below the
+///   refetched window, found by walking up from the bottom of [previous]
+///   until a row the refetch re-covered.
+///
+/// Known trade-off: a row mutated/deleted DEEPER than the refetch window
+/// keeps its stale copy until the next explicit reload — acceptable next
+/// to the old behavior (snap back to page 1, visibly reset the list, and
+/// re-run the whole-history cascade after every edit).
+List<dynamic> mergeRefetchedTransactions({
+  required List<dynamic> previous,
+  required List<dynamic> refetched,
+  required int requestedLimit,
+}) {
+  if (refetched.length < requestedLimit || previous.isEmpty) return refetched;
+  final refetchedIds = <String>{
+    for (final t in refetched)
+      if (t is Map && t['id'] != null) t['id'].toString(),
+  };
+  final tail = <dynamic>[];
+  for (var i = previous.length - 1; i >= 0; i--) {
+    final row = previous[i];
+    final id = row is Map ? row['id']?.toString() : null;
+    if (id != null && refetchedIds.contains(id)) break;
+    tail.add(row);
+  }
+  if (tail.isEmpty) return refetched;
+  return [...refetched, ...tail.reversed];
+}
+
 /// The reads a transaction mutation can actually affect, freshly fetched.
 class TransactionMutationRefreshData {
   const TransactionMutationRefreshData({
@@ -39,11 +92,17 @@ class TransactionMutationRefreshData {
 /// them used to make a one-row rename cost an external Yahoo re-price plus
 /// a ~18-endpoint dashboard reload. Keep this set minimal — anything not
 /// derived from transactions stays on the explicit-refresh path.
+///
+/// [transactionsLimit] is forwarded verbatim to [getTransactions] so the
+/// refetch can preserve the caller's loaded depth (see [txRefetchLimit])
+/// instead of always snapping back to the default first page. This changes
+/// a query param only — the request SET stays at 3 (4 with FX transfers).
 Future<TransactionMutationRefreshData> fetchAfterTransactionMutation({
-  required Future<List<dynamic>> Function() getTransactions,
+  required Future<List<dynamic>> Function(int limit) getTransactions,
   required Future<Map<String, dynamic>> Function() getOverview,
   required Future<List<dynamic>> Function() getTrends,
   Future<List<dynamic>> Function()? getFxTransfers,
+  int transactionsLimit = 50,
 }) async {
   // Best-effort, like the equivalent fetch in `_loadAllData` — a transfer
   // listing hiccup shouldn't fail the whole post-mutation refresh. try/catch
@@ -59,7 +118,7 @@ Future<TransactionMutationRefreshData> fetchAfterTransactionMutation({
   }
 
   final results = await Future.wait<Object?>([
-    getTransactions(),
+    getTransactions(transactionsLimit),
     getOverview(),
     getTrends(),
     if (getFxTransfers != null) bestEffort(getFxTransfers),

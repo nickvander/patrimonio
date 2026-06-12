@@ -1569,21 +1569,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// that can change it (confirm / unlink / detect).
   Future<void> _refreshAfterTransactionMutation(
       {bool includeFxTransfers = false}) async {
+    // Depth-preserving refetch: ask for as many rows as are already loaded
+    // (the user may have cascade-loaded pages for a client-side filter),
+    // never fewer than one page and never more than the backend honors.
+    // Without this, editing a row under an active filter snapped the list
+    // back to page 1 and re-triggered the whole-history cascade.
+    final refetchLimit = txRefetchLimit(
+        loadedCount: _transactions?.length ?? 0, pageSize: _txPageSize);
     try {
       final data = await fetchAfterTransactionMutation(
-        getTransactions: () =>
-            _apiService.getTransactions(limit: _txPageSize),
+        getTransactions: (limit) => _apiService.getTransactions(limit: limit),
         getOverview: _apiService.getDashboardOverview,
         getTrends: _apiService.getTrendData,
         getFxTransfers:
             includeFxTransfers ? _apiService.getFxTransfers : null,
+        transactionsLimit: refetchLimit,
       );
       if (!mounted) return;
       setState(() {
-        _transactions = data.transactions;
-        // Same first-page semantics as _loadAllData: fewer rows than the
-        // page size means we already hold the tail of the table.
-        _transactionsHasMore = data.transactions.length >= _txPageSize;
+        _transactions = mergeRefetchedTransactions(
+          previous: _transactions ?? const [],
+          refetched: data.transactions,
+          requestedLimit: refetchLimit,
+        );
+        // A short page proves we now hold the tail of the table; a full
+        // page tells us nothing new, so keep the flag as-is (recomputing
+        // `length >= limit` here flipped hasMore back to true on a fully
+        // loaded list and re-ran the filter cascade after every edit).
+        if (data.transactions.length < refetchLimit) {
+          _transactionsHasMore = false;
+        }
         _overview = data.overview;
         _trendData = data.trends;
         if (data.fxTransfers != null) _fxTransfers = data.fxTransfers;
@@ -1613,16 +1628,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
-  Future<void> _loadMoreTransactions() async {
+  /// Append the next page. [limit] overrides the default page size — the
+  /// filter cascade in [TransactionsTab] passes the backend's per-request
+  /// cap (see [kTxBackendMaxPageSize]) so loading the whole history costs
+  /// a handful of round-trips instead of one per 50 rows.
+  Future<void> _loadMoreTransactions({int? limit}) async {
+    final pageSize = limit ?? _txPageSize;
     final offset = _transactions?.length ?? 0;
     final more =
-        await _apiService.getTransactions(limit: _txPageSize, offset: offset);
+        await _apiService.getTransactions(limit: pageSize, offset: offset);
     if (!mounted) return;
     setState(() {
       _transactions = [...(_transactions ?? const []), ...more];
       // If the server returned fewer rows than we asked for, we hit the
       // tail of the table — no point offering Load more again.
-      _transactionsHasMore = more.length >= _txPageSize;
+      _transactionsHasMore = more.length >= pageSize;
     });
   }
 
@@ -1781,6 +1801,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // context.
     final brightness = Theme.of(context).brightness;
 
+    // Depth-preserving reload: silent refreshes (realtime push, sub-screen
+    // return) must not snap a deep-loaded transaction list back to page 1
+    // — that visibly reset the list and re-triggered the filter cascade.
+    final txLimit = txRefetchLimit(
+        loadedCount: _transactions?.length ?? 0, pageSize: _txPageSize);
+
     try {
       final results = await Future.wait([
         _apiService.getDashboardOverview(forceRefresh: forceRefresh),
@@ -1790,7 +1816,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _apiService.getSyncStatus(forceRefresh: forceRefresh),
         _apiService.getSetupStatus(),
         _apiService.getExchangeRate('USD', 'MXN'),
-        _apiService.getTransactions(limit: _txPageSize),
+        _apiService.getTransactions(limit: txLimit),
         _apiService.getAllocationData(forceRefresh: forceRefresh),
         _apiService.getTrendData(forceRefresh: forceRefresh),
         // These two are non-blocking — a failure shouldn't take the
@@ -1856,10 +1882,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _syncData = results[4] as List<dynamic>;
         _setupStatus = results[5] as Map<String, dynamic>;
         _fxRate = results[6] as Map<String, dynamic>;
-        _transactions = results[7] as List<dynamic>;
-        // If the first page came back smaller than the page size, there
-        // can't be more pages. Saves us a wasted "Load more" tap.
-        _transactionsHasMore = _transactions!.length >= _txPageSize;
+        final refetchedTxs = results[7] as List<dynamic>;
+        _transactions = mergeRefetchedTransactions(
+          previous: _transactions ?? const [],
+          refetched: refetchedTxs,
+          requestedLimit: txLimit,
+        );
+        // If the page came back smaller than what we asked for, the server
+        // ran out of rows — there can't be more pages. A full page on a
+        // depth-preserving reload tells us nothing new, so keep the flag.
+        if (refetchedTxs.length < txLimit) {
+          _transactionsHasMore = false;
+        }
 
         _allocationData = allocationRaw.map((e) {
           final category = e['category'] as String;

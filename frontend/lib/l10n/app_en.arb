@@ -123,6 +123,7 @@
   "txCloseSearch": "Close search",
   "txRecentTransactions": "Recent transactions",
   "txFilterTransactions": "Filter transactions",
+  "txFilterLoadingHistory": "Loading your full history so every option is available…",
   "txExitSelectionMode": "Exit selection mode",
   "txSelectMultiple": "Select multiple",
   "txAddTransaction": "Add transaction",

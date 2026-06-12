@@ -213,12 +213,24 @@ class TxFiltersDialog extends StatefulWidget {
   /// Accounts list from the dashboard; used so we have nice names even
   /// when no transactions hit a particular account yet.
   final List<dynamic> accounts;
+  /// Whole-history load kicked off by the opener (the tab's memoized
+  /// cascade). Non-null only when more pages existed at open time: the
+  /// dialog shows a lightweight loading row until it completes, then
+  /// refreshes its option lists via [liveTransactions]. Null = everything
+  /// is already loaded, no affordance shown.
+  final Future<void>? historyLoad;
+  /// Live re-read of the opener's current transaction list — [transactions]
+  /// is a snapshot from open time and won't include pages the cascade
+  /// appends while the dialog is up. Falls back to [transactions] when null.
+  final List<dynamic> Function()? liveTransactions;
 
   const TxFiltersDialog({
     super.key,
     required this.initial,
     required this.transactions,
     required this.accounts,
+    this.historyLoad,
+    this.liveTransactions,
   });
 
   @override
@@ -232,6 +244,10 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
   // never fight the draft state while editing.
   final TextEditingController _minAmountCtrl = TextEditingController();
   final TextEditingController _maxAmountCtrl = TextEditingController();
+  // True while the opener's whole-history cascade is still in flight —
+  // drives the loading row under the option sections. Cleared (with an
+  // option-list refresh) when the load settles, success or failure.
+  bool _loadingHistory = false;
 
   @override
   void initState() {
@@ -242,6 +258,13 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
     }
     if (widget.initial.maxAmount != null) {
       _maxAmountCtrl.text = formatFilterAmount(widget.initial.maxAmount!);
+    }
+    final load = widget.historyLoad;
+    if (load != null) {
+      _loadingHistory = true;
+      load.whenComplete(() {
+        if (mounted) setState(() => _loadingHistory = false);
+      });
     }
   }
 
@@ -279,6 +302,12 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
     );
   }
 
+  // Current transaction list: re-read from the opener when it exposes a
+  // live getter (rows the whole-history cascade appended after open),
+  // otherwise the open-time snapshot.
+  List<dynamic> get _txSource =>
+      widget.liveTransactions?.call() ?? widget.transactions;
+
   // Distinct account (id → label) entries from the dashboard accounts
   // payload. Falls back to whatever appears on transactions if accounts
   // is empty (e.g. only manual entries).
@@ -292,7 +321,7 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
       map[id] = nick.isNotEmpty ? nick : name;
     }
     if (map.isEmpty) {
-      for (final t in widget.transactions) {
+      for (final t in _txSource) {
         final id = t['account_id']?.toString();
         if (id == null) continue;
         map.putIfAbsent(
@@ -305,10 +334,12 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
   }
 
   // Distinct prettified category labels actually present in the list,
-  // so we don't ever offer a filter that would produce zero rows.
+  // so we don't ever offer a filter that would produce zero rows. Once
+  // the whole-history load completes this naturally covers categories
+  // that only occur in older, previously-unloaded pages.
   List<String> _categoryOptions() {
     final set = <String>{};
-    for (final t in widget.transactions) {
+    for (final t in _txSource) {
       final cat = prettyCategory(
         userCategory: t['user_category']?.toString(),
         detailed: t['category_detailed']?.toString(),
@@ -534,6 +565,26 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
                       },
                     );
                   }).toList(),
+                ),
+              ],
+              if (_loadingHistory) ...[
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        l.txFilterLoadingHistory,
+                        style:
+                            TextStyle(color: context.textMuted, fontSize: 12),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ],

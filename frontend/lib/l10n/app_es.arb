@@ -114,6 +114,7 @@
   "txCloseSearch": "Cerrar búsqueda",
   "txRecentTransactions": "Movimientos recientes",
   "txFilterTransactions": "Filtrar movimientos",
+  "txFilterLoadingHistory": "Cargando todo tu historial para que todas las opciones estén disponibles…",
   "txExitSelectionMode": "Salir del modo de selección",
   "txSelectMultiple": "Seleccionar varios",
   "txAddTransaction": "Agregar movimiento",

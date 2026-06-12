@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
 
 import 'package:patrimonio/l10n/app_localizations.dart';
+import 'package:patrimonio/services/transaction_mutation_refresh.dart'
+    show kTxBackendMaxPageSize;
 import 'package:patrimonio/widgets/transaction_filters.dart';
 import 'package:patrimonio/widgets/transactions_tab.dart';
 
@@ -55,6 +57,74 @@ TransactionsTab _tab(List<dynamic> txs) => TransactionsTab(
       targetCurrency: 'USD',
       usdMxnRate: 0,
     );
+
+/// Dashboard-style paginated parent for the Task 13 tests: owns the loaded
+/// window + hasMore exactly like `_DashboardScreenState` does, records the
+/// `limit` of every onLoadMore call, and appends `limit ?? initialPage`
+/// rows per call (mirroring `_loadMoreTransactions`).
+class _PagedHost extends StatefulWidget {
+  static const int initialPage = 50;
+  final List<Map<String, dynamic>> allRows;
+  final List<int?> loadLimits;
+  const _PagedHost({
+    required this.allRows,
+    required this.loadLimits,
+  });
+
+  @override
+  State<_PagedHost> createState() => _PagedHostState();
+}
+
+class _PagedHostState extends State<_PagedHost> {
+  late List<dynamic> _loaded =
+      widget.allRows.take(_PagedHost.initialPage).toList();
+  late bool _hasMore = widget.allRows.length > _loaded.length;
+
+  Future<void> _loadMore({int? limit}) async {
+    widget.loadLimits.add(limit);
+    final page = limit ?? _PagedHost.initialPage;
+    // Yield one event-loop turn like a real network call so the cascade's
+    // await/rebuild interleaving matches production.
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
+    setState(() {
+      final next = widget.allRows.skip(_loaded.length).take(page).toList();
+      _loaded = [..._loaded, ...next];
+      _hasMore = next.length >= page;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => TransactionsTab(
+        transactions: _loaded,
+        conversionFactor: 1.0,
+        currencyFormat: NumberFormat.currency(symbol: r'$'),
+        targetCurrency: 'USD',
+        usdMxnRate: 0,
+        onLoadMore: _loadMore,
+        hasMore: _hasMore,
+      );
+}
+
+/// [n] synthetic rows, newest first. [category] lets a test plant a
+/// category that only exists deep in unloaded history.
+List<Map<String, dynamic>> _pagedRows(int n, {String Function(int)? category}) {
+  final today = DateTime.now();
+  return [
+    for (var i = 0; i < n; i++)
+      {
+        'id': 'tx-$i',
+        'date': DateFormat('yyyy-MM-dd')
+            .format(today.subtract(Duration(days: i))),
+        'amount': 10.0 + i,
+        'currency': 'USD',
+        'description': 'MERCHANT $i',
+        'user_description': 'Row $i',
+        'category': category?.call(i) ?? 'FOOD_AND_DRINK',
+        'account_name': 'Checking',
+      },
+  ];
+}
 
 void _setViewSize(WidgetTester tester, Size size) {
   tester.view.physicalSize = size;
@@ -334,6 +404,86 @@ void main() {
       expect(find.text('No transactions yet'), findsOneWidget);
       expect(find.text('No transactions match'), findsNothing);
       expect(find.text('Clear filters & search'), findsNothing);
+    });
+  });
+
+  group('Task 13 — whole-history cascade & filter dialog options', () {
+    const loadingLabel =
+        'Loading your full history so every option is available…';
+
+    // Drives the whole-history cascade to completion with fixed-duration
+    // pumps. pumpAndSettle can't be used here: between cascade iterations
+    // only the host's fetch timer is pending (no frame scheduled yet), so
+    // it would settle early and leave the cascade mid-flight.
+    Future<void> pumpCascade(WidgetTester tester, [int frames = 12]) async {
+      for (var i = 0; i < frames; i++) {
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+    }
+
+    testWidgets('search cascade pulls pages at the backend cap, not 50',
+        (tester) async {
+      _setViewSize(tester, const Size(1200, 900));
+      final limits = <int?>[];
+      await tester.pumpWidget(_localizedApp(SingleChildScrollView(
+        primary: false,
+        child: _PagedHost(allRows: _pagedRows(1100), loadLimits: limits),
+      )));
+      await tester.pump();
+
+      await _search(tester, 'zzz-no-such-merchant');
+      await pumpCascade(tester);
+
+      // 1050 unloaded rows at the 500-row backend cap: exactly 3 cascade
+      // round-trips (50→550→1050→1100), not the 21 a 50-row page needs.
+      expect(
+        limits,
+        [kTxBackendMaxPageSize, kTxBackendMaxPageSize, kTxBackendMaxPageSize],
+      );
+      expect(find.text('Showing 0 of 1100'), findsOneWidget);
+    });
+
+    testWidgets(
+        'opening the filter dialog loads full history exactly once and '
+        'surfaces categories that only exist in unloaded pages',
+        (tester) async {
+      _setViewSize(tester, const Size(1200, 900));
+      final limits = <int?>[];
+      // 'TRAVEL' only occurs beyond the first page — before this fix it
+      // could never be offered (options were computed from loaded rows).
+      final rows = _pagedRows(60,
+          category: (i) => i >= 50 ? 'TRAVEL' : 'FOOD_AND_DRINK');
+      await tester.pumpWidget(_localizedApp(SingleChildScrollView(
+        primary: false,
+        child: _PagedHost(allRows: rows, loadLimits: limits),
+      )));
+      await tester.pump();
+
+      await tester.tap(find.byTooltip('Filter transactions'));
+      await tester.pump();
+
+      // Cascade in flight: lightweight loading affordance, deep category
+      // not offered yet.
+      expect(find.text(loadingLabel), findsOneWidget);
+      expect(find.text('Travel'), findsNothing);
+
+      await pumpCascade(tester);
+
+      // Exactly ONE full-history pull, at the backend cap.
+      expect(limits, [kTxBackendMaxPageSize]);
+      expect(find.text(loadingLabel), findsNothing);
+      expect(find.text('Travel'), findsOneWidget);
+
+      // Reopen: history already fully loaded — no re-cascade, no spinner,
+      // options still complete.
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Filter transactions'));
+      await tester.pumpAndSettle();
+
+      expect(limits, hasLength(1));
+      expect(find.text(loadingLabel), findsNothing);
+      expect(find.text('Travel'), findsOneWidget);
     });
   });
 }

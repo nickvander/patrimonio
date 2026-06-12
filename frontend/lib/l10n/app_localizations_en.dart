@@ -394,6 +394,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get txFilterTransactions => 'Filter transactions';
 
   @override
+  String get txFilterLoadingHistory =>
+      'Loading your full history so every option is available…';
+
+  @override
   String get txExitSelectionMode => 'Exit selection mode';
 
   @override
