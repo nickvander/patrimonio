@@ -126,12 +126,20 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     final sourceAmount = ((tx['amount'] as num?)?.toDouble() ?? 0.0);
     final sourceCurrency =
         (tx['currency'] ?? widget.targetCurrency).toString();
-    final converted = convertCurrency(
-      sourceAmount,
-      from: sourceCurrency,
-      to: widget.targetCurrency,
-      usdMxnRate: widget.usdMxnRate,
-    );
+    // The backend ships `amount_usd`: the row converted at ITS date's stored
+    // USD/MXN rate — the same per-row FX the summary's ordinary_income (USD)
+    // is built from. Displaying amount_usd × conversionFactor therefore makes
+    // the visible rows sum exactly to the KPI headline, which a client-side
+    // today's-rate conversion of mixed-currency rows would not.
+    final amountUsd = (tx['amount_usd'] as num?)?.toDouble();
+    final converted = amountUsd != null
+        ? amountUsd * widget.conversionFactor
+        : convertCurrency(
+            sourceAmount,
+            from: sourceCurrency,
+            to: widget.targetCurrency,
+            usdMxnRate: widget.usdMxnRate,
+          );
     // /tax/transactions now returns income events only (capital gains come
     // from lot disposals, not transaction categories). Rows match the stored
     // taxonomy — 'INCOME' / user_category override — so anything else is a

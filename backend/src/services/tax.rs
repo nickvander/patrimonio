@@ -14,34 +14,73 @@ pub struct TaxBracket {
     pub base_tax: Decimal,
 }
 
+/// Year-level tax estimate.
+///
+/// CANONICAL UNITS: every money field is **USD** unless its name ends in
+/// `_mxn`. Income rows stored in MXN are converted per-row at the USD→MXN
+/// rate in effect on each transaction's date (see `USD_MXN_ROW_RATE_SQL`),
+/// so the USD fields feed the US brackets and the `_mxn` fields feed the
+/// SAT tarifa — the raw mixed-currency amounts are never summed together.
+/// The frontend multiplies the USD fields by a single USD→display
+/// `conversionFactor`; the `_mxn` fields are additive extras for exports
+/// and reconciliation.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TaxEstimation {
+    /// Income-categorized inflows for the year, in **USD** (per-row FX).
     #[serde(with = "rust_decimal::serde::float")]
     pub ordinary_income: Decimal,
+    /// Same income rows summed in **MXN** (per-row FX) — the base the
+    /// Mexican ISR tarifa is applied to.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub ordinary_income_mxn: Decimal,
+    /// Taxable realized capital gains (short + long), in **USD**.
     #[serde(with = "rust_decimal::serde::float")]
     pub capital_gains: Decimal,
-    /// Short-term realized gains (held <= 1 year) — taxed as ordinary income.
+    /// Short-term realized gains (held <= 1 year) in **USD** — taxed as
+    /// ordinary income.
     #[serde(with = "rust_decimal::serde::float")]
     pub short_term_gains: Decimal,
-    /// Long-term realized gains (held > 1 year) — preferential LTCG rates.
+    /// Long-term realized gains (held > 1 year) in **USD** — preferential
+    /// LTCG rates.
     #[serde(with = "rust_decimal::serde::float")]
     pub long_term_gains: Decimal,
-    /// Realized gains inside tax-advantaged wrappers (401k/IRA/HSA/...). NOT
-    /// part of `capital_gains` or any liability figure — surfaced separately
-    /// so excluded activity is visible rather than silently dropped.
+    /// Realized gains inside tax-advantaged wrappers (401k/IRA/HSA/...), in
+    /// **USD**. NOT part of `capital_gains` or any liability figure —
+    /// surfaced separately so excluded activity is visible rather than
+    /// silently dropped.
     #[serde(with = "rust_decimal::serde::float")]
     pub tax_advantaged_gains: Decimal,
     /// True when the gains came from precise lot-disposal records rather than
     /// the blended cost-basis fallback.
     pub gains_from_lots: bool,
+    /// `ordinary_income + capital_gains`, in **USD**.
     #[serde(with = "rust_decimal::serde::float")]
     pub total_taxable: Decimal,
+    /// `ordinary_income_mxn + capital_gains × usd_mxn_rate_used`, in **MXN**
+    /// — the figure actually fed to the ISR tarifa.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub total_taxable_mxn: Decimal,
+    /// Estimated US (IRS) liability, in **USD**.
     #[serde(with = "rust_decimal::serde::float")]
     pub estimated_liability_us: Decimal,
+    /// Estimated MX (SAT) liability, converted to **USD** at
+    /// `usd_mxn_rate_used` so the response stays single-currency for the
+    /// frontend's `conversionFactor`. The native tarifa output is
+    /// `estimated_liability_mx_mxn`.
     #[serde(with = "rust_decimal::serde::float")]
     pub estimated_liability_mx: Decimal,
+    /// Estimated MX (SAT) liability in **MXN** — the raw tarifa output.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub estimated_liability_mx_mxn: Decimal,
+    /// USD→MXN rate used for the year-level conversions above (gains→MXN and
+    /// MXN liability→USD): the nearest stored rate on-or-before Dec 31 of the
+    /// tax year, else the latest stored rate, else the 20.0 ballpark.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub usd_mxn_rate_used: Decimal,
+    /// `estimated_liability_us / total_taxable` (both USD); dimensionless.
     #[serde(with = "rust_decimal::serde::float")]
     pub effective_rate_us: Decimal,
+    /// `estimated_liability_mx / total_taxable` (both USD); dimensionless.
     #[serde(with = "rust_decimal::serde::float")]
     pub effective_rate_mx: Decimal,
 }
@@ -106,6 +145,42 @@ const INCOME_PREDICATE_SQL: &str = r#"(
              OR UPPER(category_detailed) LIKE 'INCOME\_%'
     END
 )"#;
+
+/// SQL scalar: the USD→MXN rate in effect on a transaction row's date.
+/// Requires the enclosing query to alias `transactions` as `t`; meant to be
+/// wrapped in `CROSS JOIN LATERAL (SELECT {..} AS rate) fx`.
+///
+/// Lookup rule (mirrors sync.rs `lookup_usd_fx_rate`, the same rule the lot
+/// FX columns were stamped with):
+///   1. the latest stored `exchange_rates` row dated on-or-before `t.date`
+///      (`recorded_at < t.date + 1 day` so same-day timestamps count);
+///   2. else the latest stored USD→MXN rate of any date (fresh FX history
+///      that starts after old imported statements);
+///   3. else a hard 20.0 ballpark — wrong-ish magnitude beats the old
+///      behavior of summing raw MXN and USD amounts together, which was off
+///      ~18x by construction. Zero/negative stored rates are skipped so a
+///      bad row can never divide-by-zero a sum into NULL.
+const USD_MXN_ROW_RATE_SQL: &str = r#"COALESCE(
+    (SELECT rate FROM exchange_rates
+      WHERE base_currency = 'USD' AND target_currency = 'MXN'
+        AND rate > 0
+        AND recorded_at < (t.date + INTERVAL '1 day')
+      ORDER BY recorded_at DESC LIMIT 1),
+    (SELECT rate FROM exchange_rates
+      WHERE base_currency = 'USD' AND target_currency = 'MXN'
+        AND rate > 0
+      ORDER BY recorded_at DESC LIMIT 1),
+    20.0
+)"#;
+
+/// SQL expressions converting `t.amount` to USD / MXN using `fx.rate` (the
+/// LATERAL-projected `USD_MXN_ROW_RATE_SQL`). Currencies other than MXN are
+/// treated as USD-equivalent (fx = 1) — the same "trust the native amount"
+/// stance sync.rs takes for unknown currencies.
+const AMOUNT_USD_SQL: &str =
+    "(CASE WHEN UPPER(t.currency) = 'MXN' THEN t.amount / fx.rate ELSE t.amount END)";
+const AMOUNT_MXN_SQL: &str =
+    "(CASE WHEN UPPER(t.currency) = 'MXN' THEN t.amount ELSE t.amount * fx.rate END)";
 
 pub struct TaxService;
 
@@ -240,14 +315,22 @@ impl TaxService {
 
         // 1. Ordinary income: sum of income-categorized inflows — scoped to
         //    user, matching the stored taxonomy (see INCOME_PREDICATE_SQL).
+        //    Each row is converted at ITS OWN date's USD→MXN rate (see
+        //    USD_MXN_ROW_RATE_SQL for the lookup + fallback rule) into two
+        //    bases: a USD total that feeds the US brackets and an MXN total
+        //    that feeds the SAT tarifa. Raw mixed-currency amounts are never
+        //    added together.
         let income_sql = format!(
             r#"
-            SELECT COALESCE(SUM(amount), 0) as total_income
-            FROM transactions
-            WHERE date >= $1 AND date <= $2
-            AND amount > 0
+            SELECT
+                COALESCE(SUM({AMOUNT_USD_SQL}), 0) AS income_usd,
+                COALESCE(SUM({AMOUNT_MXN_SQL}), 0) AS income_mxn
+            FROM transactions t
+            CROSS JOIN LATERAL (SELECT {USD_MXN_ROW_RATE_SQL} AS rate) fx
+            WHERE t.date >= $1 AND t.date <= $2
+            AND t.amount > 0
             AND {INCOME_PREDICATE_SQL}
-            AND user_id = $3
+            AND t.user_id = $3
             "#
         );
         let income_row = sqlx::query(&income_sql)
@@ -257,7 +340,8 @@ impl TaxService {
         .fetch_one(db)
         .await?;
 
-        let ordinary_income: Decimal = income_row.try_get("total_income").unwrap_or_default();
+        let ordinary_income: Decimal = income_row.try_get("income_usd").unwrap_or_default();
+        let ordinary_income_mxn: Decimal = income_row.try_get("income_mxn").unwrap_or_default();
 
         // 2. Realized capital gains from PRECISE lot disposals (actual P&L
         //    with holding periods), split short- vs long-term. Disposals
@@ -315,50 +399,98 @@ impl TaxService {
             + Self::calculate_us_ltcg(long_term_gains, ordinary_taxable, status);
 
         // MX: no preferential split here — everything flows through the ISR
-        // brackets (a deliberate simplification).
+        // brackets (a deliberate simplification). The tarifa is applied to an
+        // MXN base: per-row-converted income plus the USD capital gains
+        // converted at the year rate; the resulting MXN liability is also
+        // reported back-converted to USD at that same rate so every non-`_mxn`
+        // field in the response is USD.
         let total_taxable = ordinary_income + capital_gains;
-        let estimated_liability_mx = Self::calculate_mx_tax(total_taxable);
+        let usd_mxn_rate_used = Self::usd_mxn_year_rate(db, year).await?;
+        let total_taxable_mxn = ordinary_income_mxn + capital_gains * usd_mxn_rate_used;
+        let estimated_liability_mx_mxn = Self::calculate_mx_tax(total_taxable_mxn);
+        let estimated_liability_mx = if usd_mxn_rate_used > dec!(0) {
+            estimated_liability_mx_mxn / usd_mxn_rate_used
+        } else {
+            dec!(0)
+        };
 
         let effective_rate_us = if total_taxable > dec!(0) { estimated_liability_us / total_taxable } else { dec!(0) };
         let effective_rate_mx = if total_taxable > dec!(0) { estimated_liability_mx / total_taxable } else { dec!(0) };
 
         Ok(TaxEstimation {
             ordinary_income,
+            ordinary_income_mxn,
             capital_gains,
             short_term_gains,
             long_term_gains,
             tax_advantaged_gains,
             gains_from_lots,
             total_taxable,
+            total_taxable_mxn,
             estimated_liability_us,
             estimated_liability_mx,
+            estimated_liability_mx_mxn,
+            usd_mxn_rate_used,
             effective_rate_us,
             effective_rate_mx,
         })
+    }
+
+    /// The USD→MXN rate used for year-level conversions (capital gains →
+    /// MXN for the tarifa, and the MXN liability → USD for the response):
+    /// the nearest stored rate on-or-before Dec 31 of the tax year, falling
+    /// back to the latest stored rate, then to the 20.0 ballpark — the same
+    /// chain as the per-row rule, anchored at year-end.
+    async fn usd_mxn_year_rate(db: &PgPool, year: i32) -> Result<Decimal> {
+        let year_end = chrono::NaiveDate::from_ymd_opt(year, 12, 31).unwrap();
+        let row = sqlx::query(
+            r#"
+            SELECT COALESCE(
+                (SELECT rate FROM exchange_rates
+                  WHERE base_currency = 'USD' AND target_currency = 'MXN'
+                    AND rate > 0
+                    AND recorded_at < ($1::date + INTERVAL '1 day')
+                  ORDER BY recorded_at DESC LIMIT 1),
+                (SELECT rate FROM exchange_rates
+                  WHERE base_currency = 'USD' AND target_currency = 'MXN'
+                    AND rate > 0
+                  ORDER BY recorded_at DESC LIMIT 1),
+                20.0
+            ) AS rate
+            "#,
+        )
+        .bind(year_end)
+        .fetch_one(db)
+        .await?;
+        Ok(row.try_get("rate").unwrap_or(dec!(20)))
     }
 
     pub async fn get_taxable_transactions(
         db: &PgPool,
         year: i32,
         user_id: uuid::Uuid,
-    ) -> Result<Vec<crate::models::transaction::Transaction>> {
+    ) -> Result<Vec<TaxableTransaction>> {
         let start_date = chrono::NaiveDate::from_ymd_opt(year, 1, 1).unwrap();
         let end_date = chrono::NaiveDate::from_ymd_opt(year, 12, 31).unwrap();
 
         // Income events only — realized capital gains live in lot_disposals
-        // (see get_lot_disposals), not in a transaction category.
+        // (see get_lot_disposals), not in a transaction category. Each row
+        // carries `amount_usd`, converted at the SAME per-date rate the
+        // summary uses, so the visible rows sum exactly to the headline
+        // `ordinary_income`.
         let tx_sql = format!(
             r#"
-            SELECT *
-            FROM transactions
-            WHERE date >= $1 AND date <= $2
-            AND amount > 0
+            SELECT t.*, {AMOUNT_USD_SQL} AS amount_usd
+            FROM transactions t
+            CROSS JOIN LATERAL (SELECT {USD_MXN_ROW_RATE_SQL} AS rate) fx
+            WHERE t.date >= $1 AND t.date <= $2
+            AND t.amount > 0
             AND {INCOME_PREDICATE_SQL}
-            AND user_id = $3
-            ORDER BY date DESC
+            AND t.user_id = $3
+            ORDER BY t.date DESC
             "#
         );
-        let rows = sqlx::query_as::<_, crate::models::transaction::Transaction>(&tx_sql)
+        let rows = sqlx::query_as::<_, TaxableTransaction>(&tx_sql)
         .bind(start_date)
         .bind(end_date)
         .bind(user_id)
@@ -444,6 +576,21 @@ impl TaxService {
             })
             .collect())
     }
+}
+
+/// An income transaction in the taxable-events list. JSON-wise this is the
+/// plain transaction shape (flattened, so existing consumers keep working)
+/// plus `amount_usd`: the native `amount` converted to **USD** at the row's
+/// own date rate (`USD_MXN_ROW_RATE_SQL`). Summing `amount_usd` over the
+/// year's rows reproduces `TaxEstimation::ordinary_income` exactly.
+#[derive(Debug, Serialize, sqlx::FromRow)]
+pub struct TaxableTransaction {
+    #[sqlx(flatten)]
+    #[serde(flatten)]
+    pub tx: crate::models::transaction::Transaction,
+    /// Native `amount` in USD at the transaction date's stored USD/MXN rate.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub amount_usd: Decimal,
 }
 
 /// One realized capital-gains disposal row for the tax exports.

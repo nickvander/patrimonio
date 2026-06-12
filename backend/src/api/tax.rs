@@ -53,7 +53,9 @@ async fn get_tax_transactions(
     let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
 
     match TaxService::get_taxable_transactions(&state.db, year, ctx.user_id).await {
-        Ok(transactions) => Json::<Vec<crate::models::transaction::Transaction>>(transactions).into_response(),
+        Ok(transactions) => {
+            Json::<Vec<crate::services::tax::TaxableTransaction>>(transactions).into_response()
+        }
         Err(e) => {
              tracing::error!("Failed to fetch taxable transactions: {}", e);
             (
@@ -102,16 +104,28 @@ async fn export_tax_csv(
     let _ = wtr.write_record(["Filing status", &status]);
     let _ = wtr.write_record([""; 0]);
 
-    // Section 1 — taxable income transactions.
+    // Section 1 — taxable income transactions. "Amount (native)" is the
+    // stored amount in the row's own currency; "Amount (USD)" is that amount
+    // converted at the transaction date's USD/MXN rate — the same per-row
+    // conversion the summary's ordinary-income figure is built from, so this
+    // column totals to the summary line below.
     let _ = wtr.write_record(["Taxable income transactions"]);
-    let _ = wtr.write_record(["Date", "Description", "Amount", "Currency", "Category"]);
+    let _ = wtr.write_record([
+        "Date",
+        "Description",
+        "Amount (native)",
+        "Currency",
+        "Amount (USD)",
+        "Category",
+    ]);
     for tx in transactions {
         let _ = wtr.write_record([
-            tx.date.to_string(),
-            tx.description,
-            tx.amount.to_string(),
-            tx.currency,
-            tx.category.unwrap_or_default(),
+            tx.tx.date.to_string(),
+            tx.tx.description,
+            tx.tx.amount.to_string(),
+            tx.tx.currency,
+            money(tx.amount_usd),
+            tx.tx.category.unwrap_or_default(),
         ]);
     }
     let _ = wtr.write_record([""; 0]);
@@ -198,14 +212,27 @@ async fn export_tax_csv(
             &money(est.tax_advantaged_gains),
         ]);
         let _ = wtr.write_record(["Ordinary income (USD)", &money(est.ordinary_income)]);
+        let _ = wtr.write_record(["Ordinary income (MXN)", &money(est.ordinary_income_mxn)]);
         let _ = wtr.write_record(["Total taxable (USD)", &money(est.total_taxable)]);
+        let _ = wtr.write_record([
+            "Total taxable (MXN, basis for SAT tarifa)",
+            &money(est.total_taxable_mxn),
+        ]);
         let _ = wtr.write_record([
             "Estimated liability — US IRS (USD)",
             &money(est.estimated_liability_us),
         ]);
         let _ = wtr.write_record([
+            "Estimated liability — MX SAT (MXN)",
+            &money(est.estimated_liability_mx_mxn),
+        ]);
+        let _ = wtr.write_record([
             "Estimated liability — MX SAT (USD)",
             &money(est.estimated_liability_mx),
+        ]);
+        let _ = wtr.write_record([
+            "USD/MXN rate used for year-level conversions",
+            &est.usd_mxn_rate_used.round_dp(4).to_string(),
         ]);
         let basis = if est.gains_from_lots {
             "Precise lot disposals"
@@ -355,13 +382,17 @@ async fn export_tax_pdf(
             estimation.estimated_liability_us.round_dp(2)
         ),
     );
+    // MX liability: the tarifa's native MXN output first, with the USD
+    // equivalent (at the year-level rate) alongside so the line is unit-
+    // unambiguous and reconciles with both the CSV and the on-screen card.
     line(
         &mut ops,
         &mut y,
         12,
         0,
         format!(
-            "Estimated Liability (MX SAT): ${}",
+            "Estimated Liability (MX SAT): MXN {} (USD {})",
+            estimation.estimated_liability_mx_mxn.round_dp(2),
             estimation.estimated_liability_mx.round_dp(2)
         ),
     );

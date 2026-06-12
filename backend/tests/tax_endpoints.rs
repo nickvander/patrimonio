@@ -1,8 +1,10 @@
-//! HTTP-level integration tests for the tax endpoints (T1/T2 of the tax
+//! HTTP-level integration tests for the tax endpoints (T1/T2/T3 of the tax
 //! backlog): income predicates matching the stored category taxonomy
 //! (sync.rs PFC `'INCOME'`/`'INCOME_*'`, categorize.rs `'INCOME'`,
-//! `user_category` overrides in both directions), and exclusion of
-//! tax-advantaged-account disposals from taxable capital gains.
+//! `user_category` overrides in both directions), exclusion of
+//! tax-advantaged-account disposals from taxable capital gains, and
+//! per-row FX normalization of mixed-currency income into separate USD and
+//! MXN bases before bracket math.
 //!
 //! Like the sibling suites, these need a real Postgres reachable via
 //! `PATRIMONIO_TEST_DATABASE_URL`. When the env var is unset the tests
@@ -234,7 +236,40 @@ async fn seed_typed_account(
 }
 
 /// Insert one categorized transaction with the full taxonomy triple
-/// (category, category_detailed, user_category).
+/// (category, category_detailed, user_category) in the given currency.
+#[allow(clippy::too_many_arguments)]
+async fn seed_categorized_tx_in(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    date: &str,
+    description: &str,
+    amount: &str,
+    currency: &str,
+    category: Option<&str>,
+    category_detailed: Option<&str>,
+    user_category: Option<&str>,
+) {
+    sqlx::query(
+        "INSERT INTO transactions \
+         (account_id, date, description, amount, currency, category, category_detailed, user_category, source, user_id) \
+         VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8, 'manual', $9)",
+    )
+    .bind(account_id)
+    .bind(date)
+    .bind(description)
+    .bind(Decimal::from_str(amount).unwrap())
+    .bind(currency)
+    .bind(category)
+    .bind(category_detailed)
+    .bind(user_category)
+    .bind(user_id)
+    .execute(pool)
+    .await
+    .expect("seed categorized tx");
+}
+
+/// USD-denominated shorthand for [`seed_categorized_tx_in`].
 #[allow(clippy::too_many_arguments)]
 async fn seed_categorized_tx(
     pool: &PgPool,
@@ -247,22 +282,24 @@ async fn seed_categorized_tx(
     category_detailed: Option<&str>,
     user_category: Option<&str>,
 ) {
-    sqlx::query(
-        "INSERT INTO transactions \
-         (account_id, date, description, amount, currency, category, category_detailed, user_category, source, user_id) \
-         VALUES ($1, $2::date, $3, $4, 'USD', $5, $6, $7, 'manual', $8)",
+    seed_categorized_tx_in(
+        pool, user_id, account_id, date, description, amount, "USD", category,
+        category_detailed, user_category,
     )
-    .bind(account_id)
-    .bind(date)
-    .bind(description)
-    .bind(Decimal::from_str(amount).unwrap())
-    .bind(category)
-    .bind(category_detailed)
-    .bind(user_category)
-    .bind(user_id)
+    .await;
+}
+
+/// Store one USD→MXN rate effective at midnight UTC of `recorded_on`.
+async fn seed_usd_mxn_rate(pool: &PgPool, recorded_on: &str, rate: &str) {
+    sqlx::query(
+        "INSERT INTO exchange_rates (base_currency, target_currency, rate, recorded_at) \
+         VALUES ('USD', 'MXN', $1, $2::date::timestamptz)",
+    )
+    .bind(Decimal::from_str(rate).unwrap())
+    .bind(recorded_on)
     .execute(pool)
     .await
-    .expect("seed categorized tx");
+    .expect("seed usd/mxn rate");
 }
 
 /// Seed holding + long-term lot + one disposal with the given realized P&L
@@ -535,4 +572,270 @@ async fn tax_csv_separates_tax_advantaged_section_from_8949() {
         "csv:\n{csv}"
     );
     assert!(csv.contains("Precise lot disposals"), "basis note kept");
+}
+
+// =====================================================================
+// T3 — mixed-currency income is normalized per row before bracket math
+// =====================================================================
+
+/// Fetch /api/tax/summary as JSON.
+async fn fetch_summary(app: &Router, token: &str) -> Value {
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/summary?year=2026&status=Single",
+            None,
+            Some(token),
+        ))
+        .await
+        .unwrap();
+    let status = res.status();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(status, StatusCode::OK, "tax summary body: {body}");
+    body
+}
+
+/// Assert no money field in the summary is the raw mixed-currency blend —
+/// the pre-T3 bug summed MXN and USD amounts as bare numbers.
+fn assert_no_raw_blend(body: &Value, blend: f64) {
+    for field in [
+        "ordinary_income",
+        "ordinary_income_mxn",
+        "total_taxable",
+        "total_taxable_mxn",
+        "estimated_liability_us",
+        "estimated_liability_mx",
+        "estimated_liability_mx_mxn",
+    ] {
+        let v = body[field].as_f64().unwrap_or_else(|| {
+            panic!("field {field} missing from summary: {body}")
+        });
+        assert!(
+            (v - blend).abs() > 1.0,
+            "{field} = {v} equals the raw mixed-currency blend {blend}"
+        );
+    }
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_summary_normalizes_mixed_currency_income_per_row() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let acct = seed_typed_account(&pool, user_id, "depository").await;
+
+    // One stored rate, in effect before both transactions.
+    seed_usd_mxn_rate(&pool, "2026-01-10", "17.5").await;
+    seed_categorized_tx_in(
+        &pool, user_id, acct, "2026-02-01", "US CONSULTING WIRE", "5000.00", "USD",
+        Some("INCOME"), Some("INCOME_WAGES"), None,
+    )
+    .await;
+    seed_categorized_tx_in(
+        &pool, user_id, acct, "2026-03-01", "ABONO NOMINA MXN", "50000.00", "MXN",
+        Some("INCOME"), None, None,
+    )
+    .await;
+
+    let body = fetch_summary(&app, &token).await;
+
+    // USD base: 5,000 + 50,000 / 17.5 = 7,857.142857…
+    let usd_base = 5000.0 + 50000.0 / 17.5;
+    assert!(
+        (body["ordinary_income"].as_f64().unwrap() - usd_base).abs() < 0.01,
+        "ordinary_income: {} (want {usd_base})",
+        body["ordinary_income"]
+    );
+    // MXN base: 50,000 + 5,000 × 17.5 = 137,500.
+    let mxn_base = 50000.0 + 5000.0 * 17.5;
+    assert!(
+        (body["ordinary_income_mxn"].as_f64().unwrap() - mxn_base).abs() < 0.01,
+        "ordinary_income_mxn: {} (want {mxn_base})",
+        body["ordinary_income_mxn"]
+    );
+    // The old bug: SUM(amount) over mixed currencies = 55,000. Nowhere.
+    assert_no_raw_blend(&body, 55000.0);
+
+    // No gains: taxable totals equal the income bases.
+    assert!((body["total_taxable"].as_f64().unwrap() - usd_base).abs() < 0.01);
+    assert!((body["total_taxable_mxn"].as_f64().unwrap() - mxn_base).abs() < 0.01);
+    // Year-level rate = the only stored rate.
+    assert!((body["usd_mxn_rate_used"].as_f64().unwrap() - 17.5).abs() < 1e-6);
+
+    // MX liability: tarifa over the MXN base (137,500 lands in the 10.88%
+    // bracket: 5,540.88 + (137,500 − 94,354.08) × 0.1088), then ÷ 17.5 for
+    // the USD mirror field.
+    let mx_mxn = 5540.88 + (mxn_base - 94354.08) * 0.1088;
+    assert!(
+        (body["estimated_liability_mx_mxn"].as_f64().unwrap() - mx_mxn).abs() < 0.5,
+        "estimated_liability_mx_mxn: {} (want {mx_mxn})",
+        body["estimated_liability_mx_mxn"]
+    );
+    assert!(
+        (body["estimated_liability_mx"].as_f64().unwrap() - mx_mxn / 17.5).abs() < 0.5,
+        "estimated_liability_mx: {}",
+        body["estimated_liability_mx"]
+    );
+
+    // Per-row reconciliation: each /tax/transactions row carries amount_usd
+    // at its own date's rate, and the rows sum to the USD headline.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/transactions?year=2026",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    let rows = body.as_array().expect("array of transactions");
+    assert_eq!(rows.len(), 2);
+    let sum_usd: f64 = rows.iter().map(|r| r["amount_usd"].as_f64().unwrap()).sum();
+    assert!((sum_usd - usd_base).abs() < 0.01, "rows sum {sum_usd} != headline {usd_base}");
+    let mxn_row = rows
+        .iter()
+        .find(|r| r["currency"] == "MXN")
+        .expect("MXN row present");
+    assert!((mxn_row["amount"].as_f64().unwrap() - 50000.0).abs() < 0.01);
+    assert!((mxn_row["amount_usd"].as_f64().unwrap() - 50000.0 / 17.5).abs() < 0.01);
+
+    // CSV: per-row USD column + both bases + both MX liability units labeled.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/export?year=2026&status=Single",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 1024 * 256).await.unwrap();
+    let csv = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(csv.contains("Amount (USD)"), "csv:\n{csv}");
+    assert!(csv.contains("Ordinary income (USD),7857.14"), "csv:\n{csv}");
+    assert!(csv.contains("Ordinary income (MXN),137500.00"), "csv:\n{csv}");
+    assert!(
+        csv.contains("Estimated liability — MX SAT (MXN)"),
+        "csv:\n{csv}"
+    );
+    assert!(
+        csv.contains("USD/MXN rate used for year-level conversions,17.5"),
+        "csv:\n{csv}"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_income_uses_each_rows_own_date_rate() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let acct = seed_typed_account(&pool, user_id, "depository").await;
+
+    // The rate moves mid-year; each row must use the rate in effect on ITS
+    // date (nearest stored rate on-or-before), not one blanket rate.
+    seed_usd_mxn_rate(&pool, "2026-01-10", "17.5").await;
+    seed_usd_mxn_rate(&pool, "2026-06-15", "20.0").await;
+    // 17,500 MXN at 17.5 → 1,000 USD.
+    seed_categorized_tx_in(
+        &pool, user_id, acct, "2026-02-01", "NOMINA FEB", "17500.00", "MXN",
+        Some("INCOME"), None, None,
+    )
+    .await;
+    // 20,000 MXN at 20.0 → 1,000 USD.
+    seed_categorized_tx_in(
+        &pool, user_id, acct, "2026-07-01", "NOMINA JUL", "20000.00", "MXN",
+        Some("INCOME"), None, None,
+    )
+    .await;
+
+    let body = fetch_summary(&app, &token).await;
+    assert!(
+        (body["ordinary_income"].as_f64().unwrap() - 2000.0).abs() < 0.01,
+        "each row should use its own date's rate; got {}",
+        body["ordinary_income"]
+    );
+    assert!((body["ordinary_income_mxn"].as_f64().unwrap() - 37500.0).abs() < 0.01);
+    // Year-level conversions use the latest on-or-before Dec 31 rate.
+    assert!((body["usd_mxn_rate_used"].as_f64().unwrap() - 20.0).abs() < 1e-6);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_income_missing_dated_rate_falls_back_to_latest_stored() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let acct = seed_typed_account(&pool, user_id, "depository").await;
+
+    // The only stored rate postdates both transactions → no on-or-before
+    // match; the lookup must fall back to the latest stored rate, never to
+    // adding the raw amounts.
+    seed_usd_mxn_rate(&pool, "2026-12-01", "18.0").await;
+    seed_categorized_tx_in(
+        &pool, user_id, acct, "2026-02-01", "US WIRE", "5000.00", "USD",
+        Some("INCOME"), Some("INCOME_WAGES"), None,
+    )
+    .await;
+    seed_categorized_tx_in(
+        &pool, user_id, acct, "2026-02-02", "NOMINA MXN", "50000.00", "MXN",
+        Some("INCOME"), None, None,
+    )
+    .await;
+
+    let body = fetch_summary(&app, &token).await;
+    let usd_base = 5000.0 + 50000.0 / 18.0;
+    assert!(
+        (body["ordinary_income"].as_f64().unwrap() - usd_base).abs() < 0.01,
+        "ordinary_income: {} (want {usd_base})",
+        body["ordinary_income"]
+    );
+    assert!(
+        (body["ordinary_income_mxn"].as_f64().unwrap() - (50000.0 + 5000.0 * 18.0)).abs() < 0.01
+    );
+    assert_no_raw_blend(&body, 55000.0);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_income_with_no_stored_rates_uses_ballpark_never_raw_sum() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let acct = seed_typed_account(&pool, user_id, "depository").await;
+
+    // Empty exchange_rates: the documented hard fallback is the 20.0
+    // ballpark (same constant sync.rs uses) — magnitudes stay sane and the
+    // raw MXN+USD blend can never reappear.
+    seed_categorized_tx_in(
+        &pool, user_id, acct, "2026-02-01", "US WIRE", "5000.00", "USD",
+        Some("INCOME"), Some("INCOME_WAGES"), None,
+    )
+    .await;
+    seed_categorized_tx_in(
+        &pool, user_id, acct, "2026-02-02", "NOMINA MXN", "50000.00", "MXN",
+        Some("INCOME"), None, None,
+    )
+    .await;
+
+    let body = fetch_summary(&app, &token).await;
+    assert!(
+        (body["ordinary_income"].as_f64().unwrap() - 7500.0).abs() < 0.01,
+        "ordinary_income: {} (want 5,000 + 50,000/20)",
+        body["ordinary_income"]
+    );
+    assert!((body["ordinary_income_mxn"].as_f64().unwrap() - 150000.0).abs() < 0.01);
+    assert!((body["usd_mxn_rate_used"].as_f64().unwrap() - 20.0).abs() < 1e-6);
+    assert_no_raw_blend(&body, 55000.0);
 }
