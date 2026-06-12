@@ -219,6 +219,21 @@ async fn export_tax_csv(
             &money(est.capital_loss_carryforward),
         ]);
         let _ = wtr.write_record(["Ordinary income (USD)", &money(est.ordinary_income)]);
+        // T6 decomposition — the three lines below re-sum to the ordinary
+        // income total (disjoint buckets on category_detailed; the bracket
+        // math runs over the total, never these parts).
+        let _ = wtr.write_record([
+            "  of which wages & other income (USD)",
+            &money(est.wage_income),
+        ]);
+        let _ = wtr.write_record([
+            "  of which dividends (USD)",
+            &money(est.dividend_income),
+        ]);
+        let _ = wtr.write_record([
+            "  of which interest (USD)",
+            &money(est.interest_income),
+        ]);
         let _ = wtr.write_record(["Ordinary income (MXN)", &money(est.ordinary_income_mxn)]);
         let _ = wtr.write_record(["Total taxable (USD)", &money(est.total_taxable)]);
         let _ = wtr.write_record([
@@ -333,6 +348,37 @@ async fn export_tax_pdf(
         0,
         format!("Ordinary Income: ${}", estimation.ordinary_income.round_dp(2)),
     );
+    // T6: dividends/interest decomposition behind the ordinary-income figure,
+    // indented as sub-detail like the ST/LT split below. Only shown when
+    // there IS investment income — an all-wages year keeps the short layout.
+    if estimation.dividend_income != rust_decimal::Decimal::ZERO
+        || estimation.interest_income != rust_decimal::Decimal::ZERO
+    {
+        line(
+            &mut ops,
+            &mut y,
+            11,
+            20,
+            format!(
+                "Wages & other income: ${}",
+                estimation.wage_income.round_dp(2)
+            ),
+        );
+        line(
+            &mut ops,
+            &mut y,
+            11,
+            20,
+            format!("Dividends: ${}", estimation.dividend_income.round_dp(2)),
+        );
+        line(
+            &mut ops,
+            &mut y,
+            11,
+            20,
+            format!("Interest: ${}", estimation.interest_income.round_dp(2)),
+        );
+    }
     line(
         &mut ops,
         &mut y,

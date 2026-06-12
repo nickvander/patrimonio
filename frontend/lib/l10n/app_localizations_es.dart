@@ -2745,6 +2745,15 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String taxIncomeDecomposition(
+    String wages,
+    String dividends,
+    String interest,
+  ) {
+    return 'Salario $wages · Dividendos $dividends · Intereses $interest';
+  }
+
+  @override
   String get taxUsEstimatedLiability => 'Impuesto estimado EE. UU. (IRS)';
 
   @override

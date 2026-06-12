@@ -27,8 +27,30 @@ pub struct TaxBracket {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TaxEstimation {
     /// Income-categorized inflows for the year, in **USD** (per-row FX).
+    ///
+    /// Decomposition (T6): `ordinary_income = wage_income + dividend_income
+    /// + interest_income` — three disjoint buckets split on
+    /// `category_detailed`, so nothing is double-counted. The bracket math
+    /// still runs over this total; the parts are reporting lines.
     #[serde(with = "rust_decimal::serde::float")]
     pub ordinary_income: Decimal,
+    /// Cash dividends (income rows with `category_detailed =
+    /// 'INCOME_DIVIDENDS'`, the rows the Plaid investment sync persists), in
+    /// **USD** (same per-row FX rule as `ordinary_income`). Part of — never
+    /// in addition to — `ordinary_income`. Qualified-vs-ordinary dividend
+    /// classification is deliberately not modeled yet (deferred in the
+    /// backlog); everything here is taxed at ordinary rates.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub dividend_income: Decimal,
+    /// Brokerage/bank interest (income rows with `category_detailed =
+    /// 'INCOME_INTEREST_EARNED'`), in **USD**. Part of `ordinary_income`.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub interest_income: Decimal,
+    /// The residual bucket: `ordinary_income − dividend_income −
+    /// interest_income`, in **USD** — wages, salary, and any other income
+    /// row that isn't dividends or interest.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub wage_income: Decimal,
     /// Same income rows summed in **MXN** (per-row FX) — the base the
     /// Mexican ISR tarifa is applied to.
     #[serde(with = "rust_decimal::serde::float")]
@@ -647,11 +669,21 @@ impl TaxService {
         //    bases: a USD total that feeds the US brackets and an MXN total
         //    that feeds the SAT tarifa. Raw mixed-currency amounts are never
         //    added together.
+        //    T6 decomposition: the same income rows are additionally split
+        //    into dividends / interest / everything-else on
+        //    `category_detailed` (the values the Plaid investment sync
+        //    writes). The CASE buckets are disjoint by construction, so
+        //    dividend + interest + wage always re-sums to the USD total and
+        //    nothing is double-counted; the bracket input stays the total.
         let income_sql = format!(
             r#"
             SELECT
                 COALESCE(SUM({AMOUNT_USD_SQL}), 0) AS income_usd,
-                COALESCE(SUM({AMOUNT_MXN_SQL}), 0) AS income_mxn
+                COALESCE(SUM({AMOUNT_MXN_SQL}), 0) AS income_mxn,
+                COALESCE(SUM(CASE WHEN UPPER(t.category_detailed) = 'INCOME_DIVIDENDS'
+                              THEN {AMOUNT_USD_SQL} ELSE 0 END), 0) AS dividend_usd,
+                COALESCE(SUM(CASE WHEN UPPER(t.category_detailed) = 'INCOME_INTEREST_EARNED'
+                              THEN {AMOUNT_USD_SQL} ELSE 0 END), 0) AS interest_usd
             FROM transactions t
             CROSS JOIN LATERAL (SELECT {USD_MXN_ROW_RATE_SQL} AS rate) fx
             WHERE t.date >= $1 AND t.date <= $2
@@ -669,6 +701,10 @@ impl TaxService {
 
         let ordinary_income: Decimal = income_row.try_get("income_usd").unwrap_or_default();
         let ordinary_income_mxn: Decimal = income_row.try_get("income_mxn").unwrap_or_default();
+        let dividend_income: Decimal = income_row.try_get("dividend_usd").unwrap_or_default();
+        let interest_income: Decimal = income_row.try_get("interest_usd").unwrap_or_default();
+        // Residual bucket — exact by construction (see the SQL comment).
+        let wage_income = ordinary_income - dividend_income - interest_income;
 
         // 2. Realized capital gains from PRECISE lot disposals (actual P&L
         //    with holding periods), split short- vs long-term. Disposals
@@ -762,6 +798,9 @@ impl TaxService {
 
         Ok(TaxEstimation {
             ordinary_income,
+            dividend_income,
+            interest_income,
+            wage_income,
             ordinary_income_mxn,
             capital_gains,
             short_term_gains,

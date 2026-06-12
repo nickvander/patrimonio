@@ -276,6 +276,18 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         ((_taxSummary?['long_term_gains'] as num?)?.toDouble() ?? 0) *
         widget.conversionFactor;
     final gainsFromLots = _taxSummary?['gains_from_lots'] == true;
+    // T6: dividends/interest carved out of (never added on top of) ordinary
+    // income; wage_income is the residual bucket. Shown only when there IS
+    // investment income, as a muted sub-line like the ST/LT breakdown.
+    final dividendIncome =
+        ((_taxSummary?['dividend_income'] as num?)?.toDouble() ?? 0) *
+        widget.conversionFactor;
+    final interestIncome =
+        ((_taxSummary?['interest_income'] as num?)?.toDouble() ?? 0) *
+        widget.conversionFactor;
+    final wageIncome =
+        ((_taxSummary?['wage_income'] as num?)?.toDouble() ?? 0) *
+        widget.conversionFactor;
     final totalTaxable =
         ((_taxSummary?['total_taxable'] as num?)?.toDouble() ?? 0) *
         widget.conversionFactor;
@@ -421,6 +433,23 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                           ),
                         ],
                       ),
+                      // T6: wages/dividends/interest decomposition of the
+                      // ordinary-income figure, shown only when investment
+                      // income exists (an all-wages year keeps the card short).
+                      if (dividendIncome != 0 || interestIncome != 0) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          l.taxIncomeDecomposition(
+                            widget.currencyFormat.format(wageIncome),
+                            widget.currencyFormat.format(dividendIncome),
+                            widget.currencyFormat.format(interestIncome),
+                          ),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: context.textFaint,
+                          ),
+                        ),
+                      ],
                       // Short- vs long-term breakdown, shown only when it comes
                       // from precise lot disposals (not the blended estimate).
                       if (gainsFromLots) ...[

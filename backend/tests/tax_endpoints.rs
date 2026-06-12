@@ -7,7 +7,9 @@
 //! before bracket math, year-keyed bracket tables + standard deduction with
 //! the `constants_verified` gate (T4), and ST/LT capital-loss netting with
 //! the capped ordinary offset, carryforward, and unknown-term-as-short-term
-//! classification (T5).
+//! classification (T5), and persistence of Plaid cash dividends / brokerage
+//! interest at sync with the dividends/interest/wages decomposition of
+//! ordinary income (T6).
 //!
 //! Like the sibling suites, these need a real Postgres reachable via
 //! `PATRIMONIO_TEST_DATABASE_URL`. When the env var is unset the tests
@@ -1140,4 +1142,245 @@ async fn tax_term_boundary_is_calendar_year_not_day_count() {
     );
     // 2024 has no bracket table; nearest is 2025 and the response says so.
     assert_eq!(body["bracket_year_used"], serde_json::json!(2025));
+}
+
+// =====================================================================
+// T6 — Plaid cash dividends / interest persisted at sync + the
+//      dividends/interest/wages decomposition of ordinary income
+// =====================================================================
+
+/// Stamp a Plaid-style external id onto a seeded account so the sync
+/// engine's `account_id` lookup can find it.
+async fn set_account_external_id(pool: &PgPool, account_id: uuid::Uuid, external_id: &str) {
+    sqlx::query("UPDATE accounts SET external_id = $1 WHERE id = $2")
+        .bind(external_id)
+        .bind(account_id)
+        .execute(pool)
+        .await
+        .expect("set account external_id");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_summary_decomposes_dividend_and_interest_income() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let acct = seed_typed_account(&pool, user_id, "depository").await;
+
+    seed_usd_mxn_rate(&pool, "2026-01-10", "20.0").await;
+    // Wage row (sync.rs PFC shape).
+    seed_categorized_tx(
+        &pool, user_id, acct, "2026-02-13", "ACME CORP PAYROLL", "5000.00",
+        Some("INCOME"), Some("INCOME_WAGES"), None,
+    )
+    .await;
+    // USD dividend + MXN dividend (the decomposition must reuse the same
+    // per-row LATERAL FX rule as the headline: 2,000 MXN / 20 = 100 USD).
+    seed_categorized_tx(
+        &pool, user_id, acct, "2026-03-15", "VTI DIVIDEND", "800.00",
+        Some("INCOME"), Some("INCOME_DIVIDENDS"), None,
+    )
+    .await;
+    seed_categorized_tx_in(
+        &pool, user_id, acct, "2026-04-01", "DIVIDENDO FONDO MX", "2000.00", "MXN",
+        Some("INCOME"), Some("INCOME_DIVIDENDS"), None,
+    )
+    .await;
+    // Interest row.
+    seed_categorized_tx(
+        &pool, user_id, acct, "2026-05-01", "BROKERAGE INTEREST", "200.00",
+        Some("INCOME"), Some("INCOME_INTEREST_EARNED"), None,
+    )
+    .await;
+    // A dividend the user reclassified away must vanish from EVERY bucket
+    // (the predicate excludes it before the decomposition CASEs run).
+    seed_categorized_tx(
+        &pool, user_id, acct, "2026-05-02", "RETURN OF CAPITAL", "999.00",
+        Some("INCOME"), Some("INCOME_DIVIDENDS"), Some("TRANSFER_IN"),
+    )
+    .await;
+
+    let body = fetch_summary(&app, &token).await;
+    let f = |k: &str| body[k].as_f64().unwrap_or_else(|| panic!("{k} missing: {body}"));
+
+    // Buckets: wages 5,000; dividends 800 + 100; interest 200.
+    assert!((f("wage_income") - 5000.0).abs() < 0.01, "wage_income: {body}");
+    assert!((f("dividend_income") - 900.0).abs() < 0.01, "dividend_income: {body}");
+    assert!((f("interest_income") - 200.0).abs() < 0.01, "interest_income: {body}");
+    // Decomposition is exact — the parts re-sum to the bracket input, so
+    // nothing is double-counted (the 999 opt-out is in no bucket at all).
+    assert!((f("ordinary_income") - 6100.0).abs() < 0.01, "ordinary_income: {body}");
+    assert!(
+        (f("wage_income") + f("dividend_income") + f("interest_income") - f("ordinary_income"))
+            .abs()
+            < 1e-9,
+        "decomposition must re-sum to ordinary_income: {body}"
+    );
+    assert!((f("total_taxable") - 6100.0).abs() < 0.01);
+    // Bracket math input unchanged: 6,100 sits under the 2026 single
+    // standard deduction → $0 liability, same as an all-wages 6,100.
+    assert!(f("estimated_liability_us").abs() < 0.01, "liability: {body}");
+
+    // CSV shows the decomposition under the ordinary-income line.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/export?year=2026&status=Single",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 1024 * 256).await.unwrap();
+    let csv = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(csv.contains("Ordinary income (USD),6100.00"), "csv:\n{csv}");
+    assert!(
+        csv.contains("  of which wages & other income (USD),5000.00"),
+        "csv:\n{csv}"
+    );
+    assert!(csv.contains("  of which dividends (USD),900.00"), "csv:\n{csv}");
+    assert!(csv.contains("  of which interest (USD),200.00"), "csv:\n{csv}");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn plaid_investment_income_events_persist_idempotently() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let acct = seed_typed_account(&pool, user_id, "brokerage").await;
+    set_account_external_id(&pool, acct, "plaid-brokerage-1").await;
+
+    // Plaid investments sign convention: positive = cash OUT of the account,
+    // so a received dividend / interest payment arrives negative.
+    let dividend_ev = serde_json::json!({
+        "investment_transaction_id": "ivt-div-1",
+        "account_id": "plaid-brokerage-1",
+        "security_id": "sec-vti",
+        "type": "cash",
+        "subtype": "dividend",
+        "date": "2026-03-15",
+        "name": "VTI CASH DIVIDEND",
+        "amount": -125.50,
+        "quantity": 0.0,
+        "iso_currency_code": "USD"
+    });
+    // Interest events routinely carry NO security_id (cash sleeve) — the old
+    // code's security-id guard silently dropped them.
+    let interest_ev = serde_json::json!({
+        "investment_transaction_id": "ivt-int-1",
+        "account_id": "plaid-brokerage-1",
+        "security_id": null,
+        "type": "cash",
+        "subtype": "interest",
+        "date": "2026-04-02",
+        "name": "CREDIT INTEREST",
+        "amount": -30.25,
+        "quantity": 0.0,
+        "iso_currency_code": "USD"
+    });
+    // Must NOT become income rows: a fee, and a dividend reinvestment (the
+    // latter is a share event that belongs to the lot path).
+    let fee_ev = serde_json::json!({
+        "investment_transaction_id": "ivt-fee-1",
+        "account_id": "plaid-brokerage-1",
+        "security_id": null,
+        "type": "fee",
+        "subtype": "management fee",
+        "date": "2026-04-03",
+        "name": "ADVISORY FEE",
+        "amount": 12.00,
+        "quantity": 0.0,
+        "iso_currency_code": "USD"
+    });
+    let reinvest_ev = serde_json::json!({
+        "investment_transaction_id": "ivt-drip-1",
+        "account_id": "plaid-brokerage-1",
+        "security_id": "sec-vti",
+        "type": "cash",
+        "subtype": "dividend reinvestment",
+        "date": "2026-04-04",
+        "name": "VTI DRIP",
+        "amount": -50.00,
+        "quantity": 0.2,
+        "iso_currency_code": "USD"
+    });
+
+    // Process the whole window TWICE — the re-sync of the same payloads must
+    // upsert in place, not duplicate.
+    for _ in 0..2 {
+        for ev in [&dividend_ev, &interest_ev, &fee_ev, &reinvest_ev] {
+            patrimonio::services::sync::process_investment_event(&pool, ev, user_id)
+                .await
+                .expect("process investment event");
+        }
+    }
+
+    let rows: Vec<(String, rust_decimal::Decimal, Option<String>, Option<String>, String)> =
+        sqlx::query_as(
+            "SELECT external_id, amount, category, category_detailed, source \
+             FROM transactions WHERE user_id = $1 ORDER BY external_id",
+        )
+        .bind(user_id)
+        .fetch_all(&pool)
+        .await
+        .expect("read transactions");
+
+    // Exactly one row per income event; nothing for the fee or the DRIP.
+    assert_eq!(
+        rows.len(),
+        2,
+        "expected exactly the dividend + interest rows, got: {rows:?}"
+    );
+    let div = rows.iter().find(|r| r.0 == "ivt-div-1").expect("dividend row");
+    let int = rows.iter().find(|r| r.0 == "ivt-int-1").expect("interest row");
+    // Sign: Plaid −125.50 (cash in) → app +125.50 (inflow), so the income
+    // predicate's `amount > 0` filter sees it.
+    assert_eq!(div.1, Decimal::from_str("125.50").unwrap());
+    assert_eq!(div.2.as_deref(), Some("INCOME"));
+    assert_eq!(div.3.as_deref(), Some("INCOME_DIVIDENDS"));
+    assert_eq!(div.4, "plaid");
+    assert_eq!(int.1, Decimal::from_str("30.25").unwrap());
+    assert_eq!(int.3.as_deref(), Some("INCOME_INTEREST_EARNED"));
+
+    // A re-sync where Plaid amended the amount updates the same row.
+    let mut amended = dividend_ev.clone();
+    amended["amount"] = serde_json::json!(-130.00);
+    patrimonio::services::sync::process_investment_event(&pool, &amended, user_id)
+        .await
+        .expect("process amended event");
+    let (n, amount): (i64, rust_decimal::Decimal) = sqlx::query_as(
+        "SELECT COUNT(*), MAX(amount) FROM transactions WHERE external_id = 'ivt-div-1'",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("recount dividend row");
+    assert_eq!(n, 1, "amended re-sync must not duplicate");
+    assert_eq!(amount, Decimal::from_str("130.00").unwrap());
+
+    // End to end: the synced rows surface in the tax summary's new lines
+    // (T1's INCOME predicate picks them up automatically) and inside the
+    // ordinary-income total that feeds the brackets.
+    let body = fetch_summary(&app, &token).await;
+    assert!(
+        (body["dividend_income"].as_f64().unwrap() - 130.00).abs() < 0.01,
+        "dividend_income: {body}"
+    );
+    assert!(
+        (body["interest_income"].as_f64().unwrap() - 30.25).abs() < 0.01,
+        "interest_income: {body}"
+    );
+    assert!(
+        (body["wage_income"].as_f64().unwrap()).abs() < 0.01,
+        "wage_income: {body}"
+    );
+    assert!(
+        (body["ordinary_income"].as_f64().unwrap() - 160.25).abs() < 0.01,
+        "ordinary_income: {body}"
+    );
 }

@@ -846,6 +846,14 @@
       "lt": { "type": "String" }
     }
   },
+  "taxIncomeDecomposition": "Wages {wages} · Dividends {dividends} · Interest {interest}",
+  "@taxIncomeDecomposition": {
+    "placeholders": {
+      "wages": { "type": "String" },
+      "dividends": { "type": "String" },
+      "interest": { "type": "String" }
+    }
+  },
   "taxUsEstimatedLiability": "US estimated liability (IRS)",
   "taxMxEstimatedLiability": "MX estimated liability (SAT)",
   "taxEffectiveRate": "Effective rate: {rate}%",

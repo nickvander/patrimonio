@@ -744,6 +744,7 @@
   "taxOrdinaryIncome": "Ingreso ordinario: {amount}",
   "taxCapitalGains": "Ganancias de capital: {amount}",
   "taxStLtBreakdown": "Corto plazo {st} · Largo plazo {lt}",
+  "taxIncomeDecomposition": "Salario {wages} · Dividendos {dividends} · Intereses {interest}",
   "taxUsEstimatedLiability": "Impuesto estimado EE. UU. (IRS)",
   "taxMxEstimatedLiability": "Impuesto estimado MX (SAT)",
   "taxEffectiveRate": "Tasa efectiva: {rate}%",

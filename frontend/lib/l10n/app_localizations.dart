@@ -4568,6 +4568,16 @@ abstract class AppLocalizations {
   /// **'Short-term {st} · Long-term {lt}'**
   String taxStLtBreakdown(String st, String lt);
 
+  /// No description provided for @taxIncomeDecomposition.
+  ///
+  /// In en, this message translates to:
+  /// **'Wages {wages} · Dividends {dividends} · Interest {interest}'**
+  String taxIncomeDecomposition(
+    String wages,
+    String dividends,
+    String interest,
+  );
+
   /// No description provided for @taxUsEstimatedLiability.
   ///
   /// In en, this message translates to:

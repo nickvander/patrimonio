@@ -891,9 +891,13 @@ fn plaid_security_lookup(payload: &serde_json::Value) -> HashMap<String, Securit
 ///     and `dividend` with the reinvestment subtype) → new lot
 ///   * `sell` → FIFO depletion across this user's existing lots
 ///     for the same security
-///   * everything else → skip (cash dividends, fees, deposits don't
-///     change shares; pure cash moves are tracked via the regular
-///     /transactions/sync path)
+///   * cash `dividend` / `interest` → persisted as an income
+///     `transactions` row (see `upsert_investment_income_event`):
+///     investment-account cash events do NOT flow through the regular
+///     /transactions/sync product, so without this they'd vanish and
+///     the 1099-DIV line would silently read $0 (T6)
+///   * everything else → skip (fees, deposits/withdrawals don't
+///     change shares and aren't income)
 ///
 /// Idempotency: the partial unique index on
 /// `(holding_id, source_id)` means re-syncing the same window
@@ -903,7 +907,10 @@ fn plaid_security_lookup(payload: &serde_json::Value) -> HashMap<String, Securit
 /// (a "sell marker") so re-running sees the marker and skips
 /// re-applying the depletion. Without this guard, every re-sync
 /// would FIFO-deplete the same sell twice and wipe genuine lots.
-async fn process_investment_event(
+/// `pub` (rather than private like the rest of the lot pipeline) so the
+/// integration suite can feed it Plaid-shaped payloads directly — there is
+/// no HTTP seam in front of the sync engine to test through.
+pub async fn process_investment_event(
     db: &PgPool,
     ev: &serde_json::Value,
     user_id: uuid::Uuid,
@@ -913,6 +920,16 @@ async fn process_investment_event(
         .ok_or_else(|| anyhow::anyhow!("missing investment_transaction_id"))?;
     let tx_type = ev["type"].as_str().unwrap_or("");
     let subtype = ev["subtype"].as_str().unwrap_or("");
+
+    // T6: cash dividends / brokerage interest are income, not lot events —
+    // persist them as transactions rows and stop here. This must run BEFORE
+    // the security-id guard below: interest events routinely carry a null
+    // `security_id` (the cash sleeve has no security) and would otherwise be
+    // silently dropped.
+    if upsert_investment_income_event(db, ev, user_id).await? {
+        return Ok(());
+    }
+
     let security_external_id = ev["security_id"].as_str().unwrap_or("");
     let account_external_id = ev["account_id"].as_str().unwrap_or("");
     if security_external_id.is_empty() || account_external_id.is_empty() {
@@ -1130,6 +1147,128 @@ async fn process_investment_event(
     .execute(db)
     .await?;
     Ok(())
+}
+
+/// T6: persist a Plaid investment **cash-income** event (cash dividend or
+/// brokerage interest) as a `transactions` row. Returns `Ok(true)` when the
+/// event was recognized as cash income (whether or not a row was written —
+/// e.g. unknown account), `Ok(false)` when it's not an income event and the
+/// caller should continue with the lot pipeline.
+///
+/// Plaid vocabulary handled (see the enum notes in process_investment_event:
+/// it's inconsistent over time, so we match the subtype words):
+///   * type `cash`, subtype `dividend`  → `INCOME` / `INCOME_DIVIDENDS`
+///   * type `cash`, subtype `interest`  → `INCOME` / `INCOME_INTEREST_EARNED`
+///   * subtype `dividend reinvestment` / `reinvestment` → NOT income here;
+///     reinvestments change shares and stay on the lot path.
+///   * type `fee` (account/management fees, margin expense, …) → deliberately
+///     ignored for now: fees are a possible future deduction/expense line,
+///     not income. Revisit when brokerage-fee tracking lands.
+///
+/// The category strings are the exact PFC-detailed values the rest of the
+/// app already understands (sync.rs stores them from /transactions/sync;
+/// frontend/lib/utils/category.dart pretty-prints them), so these rows flow
+/// through the tax income predicate, cash flow, and category UI unchanged.
+///
+/// Idempotency: `external_id` = Plaid's `investment_transaction_id` under
+/// the existing `UNIQUE (account_id, external_id)` constraint — the same
+/// dedup scheme `upsert_plaid_transaction` uses — so re-syncing the same
+/// window upserts in place rather than duplicating rows.
+///
+/// Sign convention: Plaid's investments feed reports amounts positive when
+/// cash LEAVES the account, and the app stores inflows as positive (see
+/// `upsert_plaid_transaction`), so the amount is negated: a received
+/// dividend (negative in Plaid) lands as a positive inflow, which is what
+/// the tax income predicate (`amount > 0`) and cash-flow views expect. A
+/// reversal/clawback keeps its sign and correctly shows as an outflow.
+pub async fn upsert_investment_income_event(
+    db: &PgPool,
+    ev: &serde_json::Value,
+    user_id: uuid::Uuid,
+) -> Result<bool> {
+    let tx_type = ev["type"].as_str().unwrap_or("");
+    let subtype = ev["subtype"].as_str().unwrap_or("");
+
+    // Reinvested dividends are share events, not cash income.
+    if matches!(subtype, "dividend reinvestment" | "reinvestment") {
+        return Ok(false);
+    }
+    // Fees are not income — skipped for now (see doc comment).
+    if tx_type == "fee" {
+        return Ok(false);
+    }
+    let category_detailed = match subtype {
+        "dividend" => "INCOME_DIVIDENDS",
+        "interest" => "INCOME_INTEREST_EARNED",
+        // Tolerate older feeds that used a bare type with no subtype.
+        "" if tx_type == "dividend" => "INCOME_DIVIDENDS",
+        "" if tx_type == "interest" => "INCOME_INTEREST_EARNED",
+        _ => return Ok(false),
+    };
+
+    let source_id = ev["investment_transaction_id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("missing investment_transaction_id"))?;
+    let account_external_id = ev["account_id"].as_str().unwrap_or("");
+    if account_external_id.is_empty() {
+        return Ok(true); // recognized but unaddressable; nothing to write
+    }
+    let date_str = ev["date"].as_str().unwrap_or("");
+    let date = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+        .map_err(|e| anyhow::anyhow!("bad date {}: {}", date_str, e))?;
+    // Negate per the sign convention in the doc comment above.
+    let amount = -ev["amount"].as_f64().unwrap_or(0.0);
+    let currency = ev["iso_currency_code"]
+        .as_str()
+        .or_else(|| ev["unofficial_currency_code"].as_str())
+        .unwrap_or("USD");
+    let description = ev["name"].as_str().filter(|s| !s.trim().is_empty()).unwrap_or(
+        if category_detailed == "INCOME_DIVIDENDS" { "Dividend" } else { "Interest" },
+    );
+
+    // Account lookup scoped by user — same cross-tenant guard as
+    // upsert_plaid_transaction. Unknown account: skip silently (the next
+    // accounts sync creates it; re-running this window then writes the row).
+    let internal_acc =
+        sqlx::query("SELECT id FROM accounts WHERE external_id = $1 AND user_id = $2")
+            .bind(account_external_id)
+            .bind(user_id)
+            .fetch_optional(db)
+            .await?;
+    let Some(acc_row) = internal_acc else {
+        return Ok(true);
+    };
+    let acc_id: uuid::Uuid = acc_row.get("id");
+
+    sqlx::query(
+        r#"
+        INSERT INTO transactions (
+            account_id, external_id, date, description, amount, currency,
+            category, category_detailed, pending, source, user_id
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, 'INCOME', $7, FALSE, 'plaid', $8)
+        ON CONFLICT (account_id, external_id)
+        DO UPDATE SET
+            date = EXCLUDED.date,
+            description = EXCLUDED.description,
+            amount = EXCLUDED.amount,
+            currency = EXCLUDED.currency,
+            category = EXCLUDED.category,
+            category_detailed = EXCLUDED.category_detailed
+        "#,
+    )
+    .bind(acc_id)
+    .bind(source_id)
+    .bind(date)
+    .bind(description)
+    .bind(amount)
+    .bind(currency)
+    .bind(category_detailed)
+    .bind(user_id)
+    .execute(db)
+    .await?;
+
+    Ok(true)
 }
 
 /// Look up the USD/<security currency> conversion in effect on the
