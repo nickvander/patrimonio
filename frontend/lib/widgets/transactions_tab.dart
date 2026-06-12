@@ -84,6 +84,62 @@ String searchHaystackFor(Map<String, dynamic> tx) {
   return parts.join(' || ');
 }
 
+/// Per-row "balance after this transaction" for the single-account
+/// panel, keyed by transaction id.
+///
+/// The input list must be newest-first and contiguous from the top of
+/// the account's history — exactly what the per-account fetch returns
+/// (it always pages from offset 0), so the loaded window satisfies
+/// this by construction.
+///
+/// Per row:
+/// - A persisted `balance_after` (statement imports carry the bank's
+///   own SALDO column) always wins — it's exact — and re-anchors the
+///   walk for the older rows beneath it.
+/// - Otherwise the value is ESTIMATED by walking down from [anchor]
+///   (the account's current native-currency balance): the top row's
+///   balance-after IS the anchor, and each step down adds the newer
+///   row's amount back (Plaid sign convention, verified throughout the
+///   app: positive = outflow, so `balance_before = balance_after +
+///   amount`). No anchor → no estimates.
+/// - A row whose amount is missing/unparseable breaks the walk: every
+///   row below it gets NO estimate (persisted values still show, and
+///   re-anchor) — better to show nothing than a wrong number.
+///
+/// Top-level (not a method) so the arithmetic is unit-testable without
+/// pumping the tab; the widget wraps it with identity-keyed memoization.
+Map<String, ({double value, bool estimated})> runningBalancesFor(
+  List<dynamic> transactions, {
+  double? anchor,
+}) {
+  final out = <String, ({double value, bool estimated})>{};
+  // Balance after the CURRENT row as we walk down the list; null once
+  // the walk has become unsound (no anchor yet, or a gap above).
+  double? running = anchor;
+  for (final tx in transactions) {
+    if (tx is! Map) {
+      running = null;
+      continue;
+    }
+    final id = tx['id']?.toString();
+    final persisted = (tx['balance_after'] as num?)?.toDouble();
+    final amount = (tx['amount'] as num?)?.toDouble();
+    if (persisted != null) {
+      if (id != null && id.isNotEmpty) {
+        out[id] = (value: persisted, estimated: false);
+      }
+      // Exact statement balance re-anchors the walk below.
+      running = persisted;
+    } else if (running != null && id != null && id.isNotEmpty) {
+      out[id] = (value: running, estimated: true);
+    }
+    // Step down: the next (older) row's balance-after is this row's
+    // balance-before. An unparseable amount poisons everything below.
+    running = (running == null || amount == null) ? null : running + amount;
+  }
+  return out;
+}
+
 class TransactionsTab extends StatefulWidget {
   final List<dynamic> transactions;
   final List<dynamic> accounts;
@@ -181,6 +237,19 @@ class TransactionsTab extends StatefulWidget {
     String parentId,
     List<Map<String, dynamic>> splits,
   )? onReplaceSplits;
+  /// Single-account host mode (the per-account panel). Every row in
+  /// that panel belongs to the same account, so the meta line drops
+  /// the redundant account name and the row instead shows a running
+  /// "balance after this transaction" under the amount (persisted
+  /// statement balances exactly; otherwise estimated from
+  /// [runningBalanceAnchor] — see [runningBalancesFor]). The dashboard
+  /// (multi-account) leaves this false: account name stays, no balance.
+  final bool singleAccountContext;
+  /// The account's current balance in its NATIVE currency — the same
+  /// figure the panel header shows. Anchors the estimated running
+  /// balances for rows without a persisted `balance_after`. Null
+  /// disables estimation (persisted values still render).
+  final double? runningBalanceAnchor;
 
   const TransactionsTab({
     super.key,
@@ -212,6 +281,8 @@ class TransactionsTab extends StatefulWidget {
     this.onSplitTransaction,
     this.onUnsplitTransaction,
     this.onReplaceSplits,
+    this.singleAccountContext = false,
+    this.runningBalanceAnchor,
   });
 
   @override
@@ -278,6 +349,32 @@ class _TransactionsTabState extends State<TransactionsTab> {
   TxFilters _filteredCacheFilters = TxFilters.empty;
   final Map<String, String> _haystackCache = {};
   int _haystackCacheIdentity = 0;
+  // Cache for the single-account running balances. Computed over the
+  // FULL unfiltered list (a filtered view would skip rows and corrupt
+  // the walk), identity-keyed on the list + the anchor so a rebuild
+  // with the same page set is a map lookup, not an O(n) re-walk.
+  Map<String, ({double value, bool estimated})>? _balancesCache;
+  int _balancesCacheIdentity = 0;
+  double? _balancesCacheAnchor;
+
+  /// Running balances keyed by tx id (empty outside
+  /// [TransactionsTab.singleAccountContext]). See [runningBalancesFor].
+  Map<String, ({double value, bool estimated})> get _runningBalances {
+    if (!widget.singleAccountContext) return const {};
+    final identity = identityHashCode(widget.transactions);
+    final anchor = widget.runningBalanceAnchor;
+    final cached = _balancesCache;
+    if (cached != null &&
+        _balancesCacheIdentity == identity &&
+        _balancesCacheAnchor == anchor) {
+      return cached;
+    }
+    final next = runningBalancesFor(widget.transactions, anchor: anchor);
+    _balancesCache = next;
+    _balancesCacheIdentity = identity;
+    _balancesCacheAnchor = anchor;
+    return next;
+  }
 
   @override
   void initState() {
@@ -2178,6 +2275,11 @@ class _TransactionsTabState extends State<TransactionsTab> {
     final id = tx['id']?.toString();
     final isSelected = id != null && _selectedIds.contains(id);
 
+    // Single-account panel only: "balance after this transaction" —
+    // exact when the statement import persisted it, '≈'-estimated from
+    // the current balance otherwise, absent when neither is sound.
+    final balanceAfter = id == null ? null : _runningBalances[id];
+
     // FX-transfer leg? null = not linked; true/false = linked and
     // (any-)confirmed / auto-detected only. Drives the TRANSFER pill and
     // the neutral amount treatment — money moving between the user's own
@@ -2471,6 +2573,36 @@ class _TransactionsTabState extends State<TransactionsTab> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                  // Running balance (single-account panel only), in the
+                  // account's NATIVE currency — same formatter as the
+                  // amount above it, never the converted estimate.
+                  // Statement-persisted balances render plain; client-
+                  // side estimates carry a '≈' and a tooltip that says
+                  // where the figure comes from.
+                  if (balanceAfter != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Tooltip(
+                        message: balanceAfter.estimated
+                            ? l.txBalanceAfterEstimatedTooltip
+                            : l.txBalanceAfterTooltip,
+                        child: Text(
+                          l.txBalanceAfter(
+                            '${balanceAfter.estimated ? '≈ ' : ''}'
+                            '${formatCurrencyAmount(balanceAfter.value, sourceCurrency)}',
+                          ),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: context.textSubtle,
+                            fontFeatures: const [
+                              FontFeature.tabularFigures()
+                            ],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
                   if (tx['pending'] == true)
                     Container(
                       margin: const EdgeInsets.only(top: 3),
@@ -2505,8 +2637,14 @@ class _TransactionsTabState extends State<TransactionsTab> {
   /// to one line of meta even when there's a user note attached. The
   /// category is run through prettyCategory so Plaid's screaming
   /// "LOAN_PAYMENTS" reads as "Loan payment" / "Credit card payment".
+  ///
+  /// In a single-account host every row's account is the one the panel
+  /// header already names, so the account segment is dropped there (the
+  /// row shows the running balance under the amount instead).
   String _metaLine(dynamic tx, String notes) {
-    final account = (tx['account_name'] ?? '').toString();
+    final account = widget.singleAccountContext
+        ? ''
+        : (tx['account_name'] ?? '').toString();
     final cat = prettyCategory(
       userCategory: tx['user_category']?.toString(),
       detailed: tx['category_detailed']?.toString(),

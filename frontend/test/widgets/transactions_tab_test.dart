@@ -68,6 +68,8 @@ TransactionsTab _tab(
   List<_Update>? updates,
   List<dynamic> fxTransfers = const [],
   bool hasMore = false,
+  bool singleAccountContext = false,
+  double? runningBalanceAnchor,
 }) {
   return TransactionsTab(
     transactions: txs,
@@ -77,6 +79,8 @@ TransactionsTab _tab(
     usdMxnRate: 0,
     fxTransfers: fxTransfers,
     hasMore: hasMore,
+    singleAccountContext: singleAccountContext,
+    runningBalanceAnchor: runningBalanceAnchor,
     onUpdate: updates == null
         ? null
         : (String id,
@@ -136,6 +140,118 @@ void main() {
 
     test('clearing a prefilled field returns the empty string (clear)', () {
       expect(diffEditedField('', 'Food & drink'), '');
+    });
+  });
+
+  group('Task 14 — running balance (runningBalancesFor)', () {
+    Map<String, dynamic> tx(String id, {double? amount, double? balanceAfter}) {
+      return {
+        'id': id,
+        if (amount != null) 'amount': amount,
+        if (balanceAfter != null) 'balance_after': balanceAfter,
+      };
+    }
+
+    test('top-of-list row gets exactly the anchor, marked estimated', () {
+      final out = runningBalancesFor([tx('a', amount: 50.0)], anchor: 1000.0);
+      expect(out['a'], (value: 1000.0, estimated: true));
+    });
+
+    test('walk with mixed signs: outflow (+) raises older balances, '
+        'inflow (−) lowers them', () {
+      // Newest-first; Plaid sign convention: positive = outflow.
+      final out = runningBalancesFor([
+        tx('a', amount: 50.0), // after a: 1000 (anchor)
+        tx('b', amount: -20.0), // after b: 1000 + 50  = 1050
+        tx('c', amount: 10.0), // after c: 1050 − 20  = 1030
+      ], anchor: 1000.0);
+      expect(out['a'], (value: 1000.0, estimated: true));
+      expect(out['b'], (value: 1050.0, estimated: true));
+      expect(out['c'], (value: 1030.0, estimated: true));
+    });
+
+    test('persisted balance_after wins over the walk and is not marked '
+        'estimated', () {
+      final out = runningBalancesFor([
+        tx('a', amount: 50.0),
+        // Walk would say 1050 — the statement's own figure must win.
+        tx('b', amount: -20.0, balanceAfter: 999.0),
+        // …and re-anchor the rows beneath it: 999 − 20 = 979.
+        tx('c', amount: 10.0),
+      ], anchor: 1000.0);
+      expect(out['b'], (value: 999.0, estimated: false));
+      expect(out['c'], (value: 979.0, estimated: true));
+    });
+
+    test('a row with no amount is a gap: it and everything below get '
+        'nothing (no wrong numbers)', () {
+      final out = runningBalancesFor([
+        tx('a', amount: 50.0),
+        tx('b'), // amount missing → walk below is unsound
+        tx('c', amount: 10.0),
+      ], anchor: 1000.0);
+      expect(out['a'], (value: 1000.0, estimated: true));
+      expect(out['b'], (value: 1050.0, estimated: true));
+      expect(out.containsKey('c'), isFalse);
+    });
+
+    test('no anchor → no estimates; persisted values still render and '
+        're-anchor the rows below', () {
+      final out = runningBalancesFor([
+        tx('a', amount: 50.0),
+        tx('b', amount: -20.0, balanceAfter: 500.0),
+        tx('c', amount: 10.0),
+      ], anchor: null);
+      expect(out.containsKey('a'), isFalse);
+      expect(out['b'], (value: 500.0, estimated: false));
+      expect(out['c'], (value: 480.0, estimated: true));
+    });
+  });
+
+  group('Task 14 — running balance + meta line per host context', () {
+    testWidgets(
+        'single-account context: rows show the balance line (≈ for '
+        'estimates, plain for persisted) and the meta line drops the '
+        'account name', (tester) async {
+      _setViewSize(tester, const Size(1200, 900));
+      final txs = _makeTxs(3); // amounts 10, 11, 12 — all outflows
+      txs[1]['balance_after'] = 555.25; // statement-persisted row
+      await tester.pumpWidget(_unboundedHost(_tab(
+        txs,
+        singleAccountContext: true,
+        runningBalanceAnchor: 1000.0,
+      )));
+      await tester.pump();
+
+      // Top row = anchor, estimated → '≈' prefix.
+      expect(find.text(r'Bal. ≈ $1,000.00'), findsOneWidget);
+      // Persisted statement balance renders plain (no '≈') and wins
+      // over the walk (which would have said 1,010).
+      expect(find.text(r'Bal. $555.25'), findsOneWidget);
+      expect(find.textContaining(r'$1,010.00'), findsNothing);
+      // Row below the persisted one re-anchors: it's OLDER, so its
+      // balance is from BEFORE row b's outflow of 11 left the account:
+      // 555.25 + 11 = 566.25.
+      expect(find.text(r'Bal. ≈ $566.25'), findsOneWidget);
+
+      // Meta line drops the pointless single-account name…
+      expect(find.textContaining('Checking'), findsNothing);
+      // …but keeps the category segment.
+      expect(find.text('Food & drink'), findsOneWidget);
+    });
+
+    testWidgets(
+        'dashboard (multi-account) context unchanged: account name in the '
+        'meta line, no balance line', (tester) async {
+      _setViewSize(tester, const Size(1200, 900));
+      final txs = _makeTxs(3);
+      txs[1]['balance_after'] = 555.25; // even a persisted value stays hidden
+      await tester.pumpWidget(_unboundedHost(_tab(txs)));
+      await tester.pump();
+
+      expect(find.text('Food & drink · Checking 0'), findsOneWidget);
+      expect(find.textContaining('Bal.'), findsNothing);
+      expect(find.textContaining('≈'), findsNothing);
     });
   });
 

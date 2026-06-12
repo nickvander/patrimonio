@@ -543,6 +543,13 @@ pub struct TransactionResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<String>,
     pub source: Option<String>,
+    /// Statement-imported rows persist the bank's own running balance
+    /// (the statement's SALDO column — see the
+    /// 2026060102_transaction_balance_after migration). Null for
+    /// Plaid-synced rows / manual adds; the per-account panel estimates
+    /// those client-side from the account's current balance instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub balance_after: Option<f64>,
     pub account_name: String,
     pub institution_name: String,
 }
@@ -584,7 +591,7 @@ async fn get_account_transactions(
                t.category_detailed, t.payment_channel, t.merchant_name,
                t.original_description, t.counterparty_name, t.counterparty_logo_url,
                t.user_category, t.user_notes, t.user_description, t.source,
-               t.payment_payee, t.payment_payer, t.parent_id,
+               t.payment_payee, t.payment_payer, t.parent_id, t.balance_after,
                COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
                i.name as institution_name
         FROM transactions t
@@ -631,6 +638,11 @@ async fn get_account_transactions(
             .flatten()
             .map(|u| u.to_string()),
         source: row.try_get("source").ok(),
+        balance_after: row
+            .try_get::<Option<rust_decimal::Decimal>, _>("balance_after")
+            .ok()
+            .flatten()
+            .and_then(|d| d.to_string().parse().ok()),
         account_name: row.get("account_name"),
         institution_name: row.get("institution_name"),
     }).collect();

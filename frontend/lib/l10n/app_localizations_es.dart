@@ -448,6 +448,18 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String txBalanceAfter(Object amount) {
+    return 'Saldo $amount';
+  }
+
+  @override
+  String get txBalanceAfterTooltip => 'Saldo después de este movimiento';
+
+  @override
+  String get txBalanceAfterEstimatedTooltip =>
+      'Estimado a partir del saldo actual';
+
+  @override
   String get txInlineEditHint => 'Nueva etiqueta · Enter para guardar';
 
   @override

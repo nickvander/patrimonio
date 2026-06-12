@@ -872,6 +872,24 @@ abstract class AppLocalizations {
   /// **'{amount} net (partial)'**
   String txMonthNetPartial(Object amount);
 
+  /// No description provided for @txBalanceAfter.
+  ///
+  /// In en, this message translates to:
+  /// **'Bal. {amount}'**
+  String txBalanceAfter(Object amount);
+
+  /// No description provided for @txBalanceAfterTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Balance after this transaction'**
+  String get txBalanceAfterTooltip;
+
+  /// No description provided for @txBalanceAfterEstimatedTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Estimated from current balance'**
+  String get txBalanceAfterEstimatedTooltip;
+
   /// No description provided for @txInlineEditHint.
   ///
   /// In en, this message translates to:

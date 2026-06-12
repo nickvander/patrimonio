@@ -1342,6 +1342,52 @@ async fn account_transactions_clamps_degenerate_limit_and_offset() {
     assert_eq!(clamped_high, vec!["T0", "T1", "T2"]);
 }
 
+#[tokio::test]
+#[serial_test::serial]
+async fn account_transactions_include_persisted_balance_after() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, account) = seed_account(&pool, user_id).await;
+    // Newest row carries a statement-imported running balance; the older
+    // one doesn't (Plaid-synced / manual rows leave the column NULL).
+    let with_bal = seed_tx_days_ago(&pool, user_id, account, "WithBal", 0).await;
+    seed_tx_days_ago(&pool, user_id, account, "NoBal", 1).await;
+    sqlx::query("UPDATE transactions SET balance_after = 1234.56 WHERE id = $1")
+        .bind(with_bal)
+        .execute(&pool)
+        .await
+        .expect("persist balance_after");
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/accounts/{account}/transactions"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    let rows = body.as_array().expect("array body");
+    assert_eq!(rows.len(), 2);
+
+    // Newest-first: the statement-imported row surfaces its persisted
+    // balance as a JSON number…
+    assert_eq!(rows[0]["description"], "WithBal");
+    assert_eq!(rows[0]["balance_after"].as_f64(), Some(1234.56));
+    // …and a row without one omits the key entirely
+    // (skip_serializing_if) rather than sending an explicit null.
+    assert_eq!(rows[1]["description"], "NoBal");
+    assert!(
+        rows[1].get("balance_after").is_none(),
+        "NULL balance_after must be omitted from the payload"
+    );
+}
+
 // =====================================================================
 // /api/dashboard/since-last-login
 // =====================================================================

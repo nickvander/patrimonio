@@ -1091,6 +1091,12 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
               apiService: _apiService,
               addTransactionAccountId: _accountId,
               csvExportConfirmAlways: true,
+              // Single-account host: drop the redundant per-row account
+              // name and show a running "balance after this transaction"
+              // instead. The anchor is the panel header's own native-
+              // currency balance, so estimates and header always agree.
+              singleAccountContext: true,
+              runningBalanceAnchor: _currentBalance,
               onTransactionAdded: () {
                 _refetchTransactionsInPlace();
                 _fetchBalanceHistory();
