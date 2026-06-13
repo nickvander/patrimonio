@@ -2378,6 +2378,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get dashSearchCommandsTooltip => 'Search & commands (⌘K)';
+
+  @override
   String get projTitle => 'Wealth projection';
 
   @override

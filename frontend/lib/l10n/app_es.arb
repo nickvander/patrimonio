@@ -645,6 +645,7 @@
   "dashThemeLightShort": "Claro",
   "dashThemeDarkShort": "Oscuro",
   "dashThemeTooltip": "{label} · toca para alternar, mantén presionado para elegir",
+  "dashSearchCommandsTooltip": "Buscar y comandos (⌘K)",
   "projTitle": "Proyección de patrimonio",
   "projSubtitle": "Proyecta tu futuro financiero con base en tus activos actuales y tu estrategia de ahorro.",
   "projMonthlySavings": "Ahorro mensual",

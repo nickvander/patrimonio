@@ -38,6 +38,10 @@ pub fn router() -> Router<AppState> {
         // Static segment must precede the dynamic `/{tx_id}` route so
         // `/transactions/batch` isn't swallowed as a tx_id path param.
         .route("/transactions/batch", patch(batch_update_transactions))
+        // POST (not DELETE) so the body-carrying batch delete is distinct
+        // from the param route below and reuses the static-before-dynamic
+        // ordering already required for `/transactions/batch`.
+        .route("/transactions/batch-delete", post(batch_delete_transactions))
         .route("/transactions/{tx_id}", patch(update_transaction).delete(delete_transaction))
         .route(
             "/transactions/{tx_id}/splits",
@@ -836,6 +840,72 @@ async fn batch_update_transactions(
         }
         Err(e) => {
             error!("Failed to batch-update transactions: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct BatchDeleteTransactionsRequest {
+    /// Transactions to delete. As with the batch update, the `user_id`
+    /// predicate on the DELETE is the security boundary — ids the caller
+    /// doesn't own simply don't match the WHERE clause and are skipped,
+    /// never trusted.
+    ids: Vec<uuid::Uuid>,
+}
+
+#[derive(Serialize)]
+struct BatchDeleteResponse {
+    deleted: u64,
+}
+
+/// Delete many transactions in a single request (and a single SQL
+/// statement). The bulk-action UI uses this to drop a selection without
+/// firing N separate DELETEs.
+///
+/// Semantics mirror `delete_transaction` exactly: a plain DELETE scoped
+/// by `user_id`. Split parents behave the same — the `parent_id` FK is
+/// `ON DELETE CASCADE`, so deleting a parent removes its children
+/// automatically (the returned count reflects the directly-matched rows,
+/// not cascade-deleted children, same as the single delete). Returns
+/// `{ "deleted": <rows_affected> }`.
+async fn batch_delete_transactions(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Json(payload): Json<BatchDeleteTransactionsRequest>,
+) -> impl IntoResponse {
+    info!(
+        "Batch-deleting {} transactions for user {}",
+        payload.ids.len(),
+        ctx.user_id
+    );
+
+    // An empty selection is a client bug, not a no-op we should reward
+    // with 200. Reject it (matches batch_update_transactions).
+    if payload.ids.is_empty() {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+
+    let result = sqlx::query("DELETE FROM transactions WHERE id = ANY($1) AND user_id = $2")
+        .bind(&payload.ids)
+        .bind(ctx.user_id)
+        .execute(&state.db)
+        .await;
+
+    match result {
+        Ok(r) => {
+            state
+                .realtime
+                .publish(
+                    ctx.user_id,
+                    crate::services::realtime::RealtimeEvent::TransactionsChanged,
+                )
+                .await;
+            (StatusCode::OK, Json(BatchDeleteResponse { deleted: r.rows_affected() }))
+                .into_response()
+        }
+        Err(e) => {
+            error!("Failed to batch-delete transactions: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }

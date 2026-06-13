@@ -2028,6 +2028,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // out and theme cycle stay so the user can always escape
             // or change brightness.
             if (!firstRun) ...[
+              // Touch-reachable entry to the command palette — the
+              // ⌘K/Ctrl+K shortcut is keyboard-only, so without this the
+              // palette is unreachable on mobile. Gated on !firstRun like
+              // the other data-dependent actions (the palette items need
+              // loaded data).
+              IconButton(
+                icon: const Icon(Icons.search),
+                tooltip: AppLocalizations.of(context).dashSearchCommandsTooltip,
+                onPressed: _openPalette,
+              ),
               // Sandbox / Development indicator.
               if (!isCompact) _buildEnvChip(),
               if (!isCompact) const SizedBox(width: 4),
@@ -3060,11 +3070,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           await _refreshAfterTransactionMutation();
           return n;
         },
-        // Bulk delete: N deletes then ONE refresh (no per-row reload).
+        // Bulk delete: ONE request + ONE refresh (instead of N per-row
+        // DELETEs). Split parents cascade to their children server-side.
         onBulkDelete: (ids) async {
-          for (final id in ids) {
-            await _apiService.deleteTransaction(id);
-          }
+          await _apiService.batchDeleteTransactions(ids);
           await _refreshAfterTransactionMutation();
         },
         onDelete: (id) async {

@@ -741,6 +741,7 @@
   "dashThemeLightShort": "Light",
   "dashThemeDarkShort": "Dark",
   "dashThemeTooltip": "{label} · tap to cycle, long-press to pick",
+  "dashSearchCommandsTooltip": "Search & commands (⌘K)",
   "projTitle": "Wealth projection",
   "projSubtitle": "Project your financial future based on current assets and savings strategy.",
   "projMonthlySavings": "Monthly savings",

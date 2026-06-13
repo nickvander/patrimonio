@@ -2402,6 +2402,9 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get dashSearchCommandsTooltip => 'Buscar y comandos (⌘K)';
+
+  @override
   String get projTitle => 'Proyección de patrimonio';
 
   @override

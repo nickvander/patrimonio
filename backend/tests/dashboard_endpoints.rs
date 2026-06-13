@@ -1211,6 +1211,177 @@ async fn batch_partial_owned_and_bogus_ids_updates_only_owned() {
 }
 
 // =====================================================================
+// /api/accounts/transactions/batch-delete — bulk delete
+// =====================================================================
+
+/// True if a transaction row still exists (any owner).
+async fn tx_exists(pool: &PgPool, tx_id: uuid::Uuid) -> bool {
+    sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM transactions WHERE id = $1")
+        .bind(tx_id)
+        .fetch_one(pool)
+        .await
+        .expect("count tx")
+        > 0
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn batch_delete_removes_many_txns() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, account) = seed_account(&pool, user_id).await;
+    let t1 = seed_tx(&pool, user_id, account, "Coffee", "4.50").await;
+    let t2 = seed_tx(&pool, user_id, account, "Lunch", "12.00").await;
+    let t3 = seed_tx(&pool, user_id, account, "Dinner", "30.00").await;
+    // A fourth row that is NOT in the batch — must survive.
+    let keep = seed_tx(&pool, user_id, account, "Keep", "1.00").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            "/api/accounts/transactions/batch-delete",
+            Some(&serde_json::json!({
+                "ids": [t1.to_string(), t2.to_string(), t3.to_string()]
+            })),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["deleted"], 3);
+
+    for t in [t1, t2, t3] {
+        assert!(!tx_exists(&pool, t).await, "deleted rows must be gone");
+    }
+    assert!(tx_exists(&pool, keep).await, "untouched row must survive");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn batch_delete_empty_ids_is_400() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            "/api/accounts/transactions/batch-delete",
+            Some(&serde_json::json!({ "ids": [] })),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn batch_delete_cannot_touch_other_users_txns() {
+    // Rows belonging to another user must be untouchable: the `user_id`
+    // predicate filters them out → they're excluded from the deleted
+    // count AND still present afterward.
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let _ = bootstrap(&app, &pool).await;
+    let (alice_id, alice_token) = seed_owner(&pool, "alice").await;
+    let (bob_id, _bob_token) = seed_owner(&pool, "bob").await;
+
+    let (_a_inst, a_acct) = seed_account(&pool, alice_id).await;
+    let a_tx = seed_tx(&pool, alice_id, a_acct, "Alice tx", "10.00").await;
+    let (_b_inst, b_acct) = seed_account(&pool, bob_id).await;
+    let b_tx = seed_tx(&pool, bob_id, b_acct, "Bob tx", "20.00").await;
+
+    // Alice tries to delete BOTH her tx and Bob's tx in one batch.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            "/api/accounts/transactions/batch-delete",
+            Some(&serde_json::json!({
+                "ids": [a_tx.to_string(), b_tx.to_string()]
+            })),
+            Some(&alice_token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    // Only Alice's row matches the user_id filter.
+    assert_eq!(body["deleted"], 1, "Bob's tx must be filtered out");
+
+    assert!(!tx_exists(&pool, a_tx).await, "Alice's row deleted");
+    assert!(
+        tx_exists(&pool, b_tx).await,
+        "Bob's tx must survive — cross-tenant delete blocked"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn batch_delete_parent_cascades_to_split_children() {
+    // Deleting a split parent must remove its children too (parent_id FK
+    // is ON DELETE CASCADE), matching the single delete. The returned
+    // count reflects only the directly-matched parent row.
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, account) = seed_account(&pool, user_id).await;
+    let parent = seed_tx(&pool, user_id, account, "ATM withdrawal", "-200.00").await;
+
+    // Two split children pointing at the parent.
+    let child_a: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO transactions (account_id, parent_id, date, description, amount, currency, source, user_id) \
+         VALUES ($1, $2, CURRENT_DATE, 'Groceries', $3, 'USD', 'manual', $4) RETURNING id",
+    )
+    .bind(account)
+    .bind(parent)
+    .bind(Decimal::from_str("-120.00").unwrap())
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .expect("seed split child a");
+    let child_b: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO transactions (account_id, parent_id, date, description, amount, currency, source, user_id) \
+         VALUES ($1, $2, CURRENT_DATE, 'Dinner', $3, 'USD', 'manual', $4) RETURNING id",
+    )
+    .bind(account)
+    .bind(parent)
+    .bind(Decimal::from_str("-80.00").unwrap())
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .expect("seed split child b");
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            "/api/accounts/transactions/batch-delete",
+            Some(&serde_json::json!({ "ids": [parent.to_string()] })),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    // Only the parent is directly matched; children are cascade-deleted.
+    assert_eq!(body["deleted"], 1);
+
+    assert!(!tx_exists(&pool, parent).await, "parent deleted");
+    assert!(!tx_exists(&pool, child_a).await, "child cascade-deleted");
+    assert!(!tx_exists(&pool, child_b).await, "child cascade-deleted");
+}
+
+// =====================================================================
 // /api/accounts/{id}/transactions — optional limit/offset paging
 // =====================================================================
 

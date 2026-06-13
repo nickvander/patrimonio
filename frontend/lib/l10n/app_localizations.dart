@@ -3974,6 +3974,12 @@ abstract class AppLocalizations {
   /// **'{label} · tap to cycle, long-press to pick'**
   String dashThemeTooltip(Object label);
 
+  /// No description provided for @dashSearchCommandsTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Search & commands (⌘K)'**
+  String get dashSearchCommandsTooltip;
+
   /// No description provided for @projTitle.
   ///
   /// In en, this message translates to:

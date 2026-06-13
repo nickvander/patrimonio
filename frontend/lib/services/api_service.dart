@@ -1698,6 +1698,29 @@ class ApiService {
     return (decoded['updated'] as num).toInt();
   }
 
+  /// Delete many transactions in ONE request — used by the bulk-action
+  /// toolbar so a multi-row selection is a single round-trip, not N
+  /// DELETEs. Posts to `/accounts/transactions/batch-delete` (POST, not
+  /// DELETE, since it carries an ids body). Returns the number of rows
+  /// the server actually deleted (ids the user doesn't own are filtered
+  /// out by the `user_id` predicate and never counted). Split parents
+  /// cascade to their children server-side, same as the single delete.
+  /// The `_post` wrapper invalidates the dashboard cache on success,
+  /// like every other mutation here.
+  Future<int> batchDeleteTransactions(List<String> ids) async {
+    final response = await _post(
+      Uri.parse('$_baseUrl/accounts/transactions/batch-delete'),
+      headers: _withCsrf({'Content-Type': 'application/json'}),
+      body: json.encode({'ids': ids}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(_t('Failed to batch-delete transactions',
+          'No se pudieron eliminar los movimientos en lote'));
+    }
+    final decoded = json.decode(response.body) as Map<String, dynamic>;
+    return (decoded['deleted'] as num).toInt();
+  }
+
   /// URL of the CSV export endpoint. We hand this to the browser via an
   /// anchor click rather than fetching + blobbing in Dart — the backend
   /// returns Content-Disposition: attachment so the browser downloads
