@@ -2003,3 +2003,283 @@ async fn tax_non_wash_loss_reduces_liability_normally() {
         "{body}"
     );
 }
+
+// =====================================================================
+// T13 — FBAR/FATCA threshold monitor
+// =====================================================================
+
+/// Seed an institution (with a country) + one account (with a currency),
+/// returning the account id. Lets the FBAR foreign-account signal be exercised
+/// in both directions (non-US country, and MXN currency under a US country).
+async fn seed_account_with_country_currency(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    inst_name: &str,
+    country: &str,
+    acct_name: &str,
+    currency: &str,
+) -> uuid::Uuid {
+    let inst_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO institutions (name, institution_type, country, integration_type, sync_status, user_id) \
+         VALUES ($1, 'bank', $2, 'manual', 'ok', $3) RETURNING id",
+    )
+    .bind(inst_name)
+    .bind(country)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .expect("seed institution");
+    sqlx::query_scalar(
+        "INSERT INTO accounts (institution_id, name, account_type, currency, current_balance, user_id) \
+         VALUES ($1, $2, 'depository', $3, 0, $4) RETURNING id",
+    )
+    .bind(inst_id)
+    .bind(acct_name)
+    .bind(currency)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .expect("seed account")
+}
+
+/// Seed a daily balance snapshot (with its USD value) for an account.
+async fn seed_snapshot(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    as_of: &str,
+    currency: &str,
+    balance_usd: &str,
+) {
+    sqlx::query(
+        "INSERT INTO balance_snapshots (account_id, balance, as_of_date, currency, balance_usd, user_id) \
+         VALUES ($1, $2, $3::date, $4, $5, $6)",
+    )
+    .bind(account_id)
+    .bind(Decimal::from_str(balance_usd).unwrap())
+    .bind(as_of)
+    .bind(currency)
+    .bind(Decimal::from_str(balance_usd).unwrap())
+    .bind(user_id)
+    .execute(pool)
+    .await
+    .expect("seed snapshot");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn fbar_flags_aggregate_foreign_balance_crossing_10k() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+
+    // Two foreign accounts: one by institution country (MX), one by MXN
+    // currency under a US-country institution. Plus a US/USD account that must
+    // NOT count toward the aggregate.
+    let mx_bank = seed_account_with_country_currency(
+        &pool, user_id, "Banamex", "MX", "Cuenta MXN", "MXN",
+    )
+    .await;
+    let mxn_under_us = seed_account_with_country_currency(
+        &pool, user_id, "Frontier US-MX", "US", "USD-labeled MXN", "MXN",
+    )
+    .await;
+    let domestic = seed_account_with_country_currency(
+        &pool, user_id, "Chase", "US", "Checking", "USD",
+    )
+    .await;
+
+    // On 2026-03-10 the two foreign accounts sum to 6,000 + 5,000 = 11,000 USD
+    // (> 10k). On other days they're lower. The domestic 50k must be ignored.
+    seed_snapshot(&pool, user_id, mx_bank, "2026-03-10", "MXN", "6000").await;
+    seed_snapshot(&pool, user_id, mxn_under_us, "2026-03-10", "MXN", "5000").await;
+    seed_snapshot(&pool, user_id, mx_bank, "2026-02-01", "MXN", "4000").await;
+    seed_snapshot(&pool, user_id, domestic, "2026-03-10", "USD", "50000").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/tax/fbar?year=2026", None, Some(&token)))
+        .await
+        .unwrap();
+    let status = res.status();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(status, StatusCode::OK, "fbar body: {body}");
+
+    assert_eq!(body["exceeded"], serde_json::json!(true), "{body}");
+    assert!(
+        (body["peak_aggregate_usd"].as_f64().unwrap() - 11000.0).abs() < 0.01,
+        "peak should be the 11,000 aggregate, not include the 50k domestic: {body}"
+    );
+    assert_eq!(body["peak_date"], serde_json::json!("2026-03-10"), "{body}");
+    assert!((body["threshold_usd"].as_f64().unwrap() - 10000.0).abs() < 0.01);
+    assert_eq!(body["constants_verified"], serde_json::json!(false));
+    // Exactly the two foreign accounts, domestic excluded.
+    let accts = body["foreign_accounts"].as_array().expect("array");
+    assert_eq!(accts.len(), 2, "{body}");
+    let names: Vec<&str> = accts
+        .iter()
+        .map(|a| a["name"].as_str().unwrap())
+        .collect();
+    assert!(names.contains(&"Cuenta MXN"));
+    assert!(names.contains(&"USD-labeled MXN"));
+    assert!(!names.contains(&"Checking"));
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn fbar_below_threshold_and_empty_case() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+
+    // No foreign accounts/snapshots yet → graceful empty case.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/tax/fbar?year=2026", None, Some(&token)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["exceeded"], serde_json::json!(false), "{body}");
+    assert!((body["peak_aggregate_usd"].as_f64().unwrap()).abs() < 0.01);
+    assert_eq!(body["peak_date"], Value::Null);
+    assert!(body["foreign_accounts"].as_array().unwrap().is_empty());
+
+    // One foreign account peaking at 8,000 (< 10k) → not exceeded.
+    let mx_bank = seed_account_with_country_currency(
+        &pool, user_id, "BBVA MX", "MX", "Cuenta", "MXN",
+    )
+    .await;
+    seed_snapshot(&pool, user_id, mx_bank, "2026-05-01", "MXN", "8000").await;
+    seed_snapshot(&pool, user_id, mx_bank, "2026-06-01", "MXN", "3000").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/tax/fbar?year=2026", None, Some(&token)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["exceeded"], serde_json::json!(false), "{body}");
+    assert!(
+        (body["peak_aggregate_usd"].as_f64().unwrap() - 8000.0).abs() < 0.01,
+        "{body}"
+    );
+    assert_eq!(body["peak_date"], serde_json::json!("2026-05-01"));
+    let accts = body["foreign_accounts"].as_array().unwrap();
+    assert_eq!(accts.len(), 1);
+    assert!((accts[0]["ytd_max_usd"].as_f64().unwrap() - 8000.0).abs() < 0.01);
+}
+
+// =====================================================================
+// T15 — retirement-contribution tracking vs annual limits
+// =====================================================================
+
+/// Seed one lot buy (a contribution inflow) into `account_id`.
+async fn seed_lot_buy(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    symbol: &str,
+    acquired_at: &str,
+    qty: &str,
+    cost_per_unit: &str,
+) {
+    let holding_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO holdings (account_id, symbol, name, currency, user_id) \
+         VALUES ($1, $2, 'Fund', 'USD', $3) RETURNING id",
+    )
+    .bind(account_id)
+    .bind(symbol)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) \
+         VALUES ($1,$2,$3,$4::date,$5,$6,'USD',1.0,$7)",
+    )
+    .bind(holding_id)
+    .bind(account_id)
+    .bind(user_id)
+    .bind(acquired_at)
+    .bind(Decimal::from_str(qty).unwrap())
+    .bind(Decimal::from_str(cost_per_unit).unwrap())
+    .bind(format!("buy-{symbol}"))
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn retirement_contributions_sum_per_group_with_room_and_deadline() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+
+    let k401 = seed_typed_account(&pool, user_id, "401k").await;
+    let ira = seed_typed_account(&pool, user_id, "ira").await;
+    let roth = seed_typed_account(&pool, user_id, "roth").await;
+    let brokerage = seed_typed_account(&pool, user_id, "brokerage").await;
+
+    // 401k: 100 units @ $50 = $5,000 contributed in 2026.
+    seed_lot_buy(&pool, user_id, k401, "TDF", "2026-02-01", "100", "50").await;
+    // IRA group is traditional + Roth aggregated: $2,000 + $1,500 = $3,500.
+    seed_lot_buy(&pool, user_id, ira, "VTI", "2026-03-01", "20", "100").await;
+    seed_lot_buy(&pool, user_id, roth, "VXUS", "2026-04-01", "30", "50").await;
+    // A taxable brokerage buy must NOT count toward any retirement group.
+    seed_lot_buy(&pool, user_id, brokerage, "AAPL", "2026-05-01", "10", "200").await;
+    // A prior-year lot must not count toward 2026.
+    seed_lot_buy(&pool, user_id, k401, "OLD", "2025-12-01", "100", "10").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/contributions?year=2026",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let status = res.status();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(status, StatusCode::OK, "contributions body: {body}");
+    assert_eq!(body["constants_verified"], serde_json::json!(false));
+    assert_eq!(body["limit_year_used"], serde_json::json!(2026));
+
+    let groups = body["groups"].as_array().expect("groups array");
+    let by_key = |k: &str| groups.iter().find(|g| g["group"] == k).expect("group present");
+
+    let k = by_key("401k");
+    assert!(
+        (k["ytd_contributions_usd"].as_f64().unwrap() - 5000.0).abs() < 0.01,
+        "401k YTD (2025 lot excluded): {k}"
+    );
+    // 2026 (unverified) base 24,500 → remaining 19,500.
+    assert!((k["limit_base_usd"].as_f64().unwrap() - 24500.0).abs() < 0.01, "{k}");
+    assert!((k["remaining_room_usd"].as_f64().unwrap() - 19500.0).abs() < 0.01, "{k}");
+    assert!((k["catch_up_usd"].as_f64().unwrap() - 8000.0).abs() < 0.01, "{k}");
+    // 401k deadline is the calendar-year end, not the prior-year window.
+    assert_eq!(k["deadline"], serde_json::json!("2026-12-31"), "{k}");
+    assert_eq!(k["prior_year_window"], serde_json::json!(false), "{k}");
+    // Any contribution → match/rollover can't be ruled out.
+    assert_eq!(k["match_rollover_caveat"], serde_json::json!(true), "{k}");
+
+    let i = by_key("ira");
+    assert!(
+        (i["ytd_contributions_usd"].as_f64().unwrap() - 3500.0).abs() < 0.01,
+        "IRA aggregates traditional + Roth: {i}"
+    );
+    // IRA uses the prior-year window → Apr 15 of the following year.
+    assert_eq!(i["deadline"], serde_json::json!("2027-04-15"), "{i}");
+    assert_eq!(i["prior_year_window"], serde_json::json!(true), "{i}");
+
+    let h = by_key("hsa");
+    // No HSA contributions → zero, full room, no caveat.
+    assert!((h["ytd_contributions_usd"].as_f64().unwrap()).abs() < 0.01, "{h}");
+    assert_eq!(h["match_rollover_caveat"], serde_json::json!(false), "{h}");
+    assert_eq!(h["prior_year_window"], serde_json::json!(true), "{h}");
+}

@@ -2076,6 +2076,43 @@ class ApiService {
         'No se pudieron cargar las posiciones no realizadas'));
   }
 
+  /// FBAR/FATCA threshold monitor for a year (T13): the peak aggregate USD
+  /// balance across foreign accounts, the $10,000 threshold, an `exceeded`
+  /// flag, the peak date, and the foreign accounts involved. Informational
+  /// only — the `constants_verified` flag gates how authoritative the
+  /// threshold copy is shown. Returns the raw decoded JSON map.
+  Future<Map<String, dynamic>> getFbarStatus(int year) async {
+    final uri = Uri.parse(
+      '$_baseUrl/tax/fbar',
+    ).replace(queryParameters: {'year': year.toString()});
+    final response = await _get(uri);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception(_t('Failed to load FBAR status',
+        'No se pudo cargar el estado FBAR'));
+  }
+
+  /// YTD retirement contributions vs annual limits (T15): per account-type
+  /// group (401k, IRA, HSA), the YTD contributions, the year's base limit +
+  /// catch-up, remaining room, the contribution deadline, and a
+  /// `match_rollover_caveat` flag. Limits ride the UNVERIFIED constant tables,
+  /// so the response's `constants_verified` flag must gate how authoritative
+  /// the figures are shown. Returns the raw decoded JSON map.
+  Future<Map<String, dynamic>> getRetirementContributions(int year) async {
+    final uri = Uri.parse(
+      '$_baseUrl/tax/contributions',
+    ).replace(queryParameters: {'year': year.toString()});
+    final response = await _get(uri);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception(_t('Failed to load retirement contributions',
+        'No se pudieron cargar las aportaciones de retiro'));
+  }
+
   /// Sync a single institution. Cheaper than the global sync when only
   /// one or two institutions are stuck.
   Future<void> syncInstitution(String institutionId) async {

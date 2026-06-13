@@ -16,6 +16,8 @@ pub fn router() -> Router<AppState> {
         .route("/transactions", get(get_tax_transactions))
         .route("/disposals", get(get_tax_disposals))
         .route("/unrealized", get(get_tax_unrealized))
+        .route("/fbar", get(get_fbar_status))
+        .route("/contributions", get(get_retirement_contributions))
         .route("/export", get(export_tax_csv))
         .route("/export/pdf", get(export_tax_pdf))
 }
@@ -171,6 +173,65 @@ async fn get_tax_unrealized(
         }
         Err(e) => {
             tracing::error!("Failed to compute unrealized lots: {}", e);
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// T13: FBAR/FATCA threshold monitor for the year — the MAX over the year of
+/// the daily aggregate USD balance across FOREIGN accounts (institution
+/// country <> US, or MXN currency), the $10,000 threshold (gated UNVERIFIED
+/// via `constants_verified`), an `exceeded` flag, the peak date, and the
+/// foreign accounts involved with each one's peak-date contribution + YTD max.
+/// INFORMATIONAL ONLY — does not decide a filing obligation and does not
+/// compute FATCA Form 8938 (different, higher thresholds). Empty case (no
+/// foreign accounts / no snapshots) returns `exceeded = false`, peak 0, no
+/// peak date, empty account list.
+async fn get_fbar_status(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Query(query): Query<TaxQuery>,
+) -> axum::response::Response {
+    let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
+
+    match TaxService::fbar_status(&state.db, year, ctx.user_id).await {
+        Ok(status) => Json::<crate::services::tax::FbarStatus>(status).into_response(),
+        Err(e) => {
+            tracing::error!("Failed to compute FBAR status: {}", e);
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// T15: YTD retirement contributions vs annual limits, per account-type group
+/// (401k-family, IRA traditional+Roth aggregate, HSA). Each group carries its
+/// YTD contributions, the year's (UNVERIFIED) base limit + catch-up, remaining
+/// room, the contribution deadline (IRA/HSA prior-year window vs 401k
+/// calendar-year end), and a `match_rollover_caveat` flag when employer
+/// match / rollovers can't be separated. The limits ride the UNVERIFIED
+/// constant tables, so the response carries `constants_verified` for the UI to
+/// badge.
+async fn get_retirement_contributions(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Query(query): Query<TaxQuery>,
+) -> axum::response::Response {
+    let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
+
+    match TaxService::retirement_contributions(&state.db, year, ctx.user_id).await {
+        Ok(contributions) => {
+            Json::<crate::services::tax::RetirementContributions>(contributions).into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to compute retirement contributions: {}", e);
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({ "error": e.to_string() })),

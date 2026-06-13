@@ -258,6 +258,129 @@ const AMOUNT_MXN_SQL: &str =
 const WASH_SALE_WINDOW_DAYS: i64 = 30;
 
 // =====================================================================
+// T13 — FBAR/FATCA threshold monitor constants
+// =====================================================================
+
+/// The FBAR aggregate-balance reporting threshold, in USD.
+///
+/// ⚠ UNVERIFIED — requires human verification against the FinCEN FBAR
+/// instructions (FinCEN Form 114) / 31 CFR 1010.350. Surfaced behind the
+/// `constants_verified` flag on the FBAR response so the UI badges it as
+/// pending verification — see "Assumptions a tax professional must verify"
+/// (work/ux/tax_planning_tasks.md, item 8). The reporting trigger is whether
+/// the AGGREGATE value of all foreign financial accounts exceeded this amount
+/// at ANY point in the calendar year.
+///
+/// ⚠ INFORMATIONAL ONLY — this monitor does NOT decide FBAR/FATCA filing
+/// obligations. It does not capture: the highest-balance valuation rules
+/// (FBAR uses the maximum value during the year, converted at the Treasury
+/// year-end rate, not necessarily a daily snapshot); account types in scope
+/// (signature authority, jointly-owned, certain retirement/insurance
+/// accounts); or the FATCA Form 8938 thresholds, which are DIFFERENT and
+/// higher (and vary by filing status and US-vs-abroad residency). Form 8938
+/// is deliberately NOT computed here.
+pub const FBAR_THRESHOLD_USD: Decimal = dec!(10000);
+
+// =====================================================================
+// T15 — retirement-contribution limit tables (per year, gated UNVERIFIED)
+// =====================================================================
+
+/// Contribution limit + catch-up for one account-type group in one year, USD.
+///
+/// ⚠ UNVERIFIED — every figure here requires human verification against the
+/// IRS limits for the year (Notice / news release for 401k & IRA COLA
+/// limits; Rev. Proc. for HSA limits) — see "Assumptions a tax professional
+/// must verify" (work/ux/tax_planning_tasks.md, item 9). Surfaced behind the
+/// `constants_verified` flag on the contributions response.
+#[derive(Debug, Clone, Copy)]
+pub struct ContributionLimit {
+    /// The base elective/personal contribution limit (under the catch-up age).
+    pub base: Decimal,
+    /// The additional catch-up amount allowed at/after the catch-up age
+    /// (50 for 401k/IRA, 55 for HSA). The app does not know the user's age,
+    /// so the response reports base, catch-up, and base+catch-up separately
+    /// and lets the UI/user pick — it never silently assumes eligibility.
+    pub catch_up: Decimal,
+}
+
+/// The retirement account-type groups the contribution tracker reports on.
+/// Each maps onto one or more `accounts.account_type` values from
+/// [`TAX_ADVANTAGED_ACCOUNT_TYPES`] (the T2 mapping). Traditional and Roth
+/// IRAs SHARE one IRS limit, so they are aggregated into a single `Ira` group.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RetirementGroup {
+    /// Elective-deferral plans: 401k, 403b, 457b, designated Roth 401k.
+    /// (The §402(g) elective-deferral limit is shared across 401k/403b; 457b
+    /// has its own identical-valued limit. Modeled as one group — a
+    /// simplification on the verification list.)
+    Plan401k,
+    /// Traditional + Roth IRA, aggregated (shared IRS limit).
+    Ira,
+    /// Health Savings Account (self-only coverage limit; the family limit and
+    /// the 55+ catch-up are NOT auto-selected — see `ContributionLimit`).
+    Hsa,
+}
+
+impl RetirementGroup {
+    /// Stable machine string for the JSON response.
+    pub fn key(&self) -> &'static str {
+        match self {
+            RetirementGroup::Plan401k => "401k",
+            RetirementGroup::Ira => "ira",
+            RetirementGroup::Hsa => "hsa",
+        }
+    }
+
+    /// The `accounts.account_type` values (lowercase, from
+    /// TAX_ADVANTAGED_ACCOUNT_TYPES) that belong to this group.
+    pub fn account_types(&self) -> &'static [&'static str] {
+        match self {
+            RetirementGroup::Plan401k => &["401k", "403b", "457b", "roth 401k"],
+            RetirementGroup::Ira => &["ira", "roth"],
+            RetirementGroup::Hsa => &["hsa"],
+        }
+    }
+
+    /// All groups, in display order.
+    pub fn all() -> [RetirementGroup; 3] {
+        [
+            RetirementGroup::Plan401k,
+            RetirementGroup::Ira,
+            RetirementGroup::Hsa,
+        ]
+    }
+}
+
+/// Per-year contribution limits for each [`RetirementGroup`].
+///
+/// ⚠ UNVERIFIED — see [`ContributionLimit`] and item 9 of the
+/// verification list. Falls back to the nearest [`SUPPORTED_BRACKET_YEARS`]
+/// year exactly like [`TaxYearTables::for_year`], so the limit year used is
+/// reported alongside the figures. HSA limits are the SELF-ONLY coverage
+/// figures (the family limit is not auto-selected — the app can't tell the
+/// user's coverage tier).
+fn contribution_limit(group: RetirementGroup, year: i32) -> (i32, ContributionLimit) {
+    let nearest = SUPPORTED_BRACKET_YEARS
+        .iter()
+        .copied()
+        .min_by_key(|y| ((y - year).abs(), std::cmp::Reverse(*y)))
+        .expect("SUPPORTED_BRACKET_YEARS is non-empty");
+    let limit = match (group, nearest) {
+        // 2025: 401k elective $23,500 + $7,500 catch-up; IRA $7,000 + $1,000;
+        // HSA self-only $4,300 + $1,000 (55+).
+        (RetirementGroup::Plan401k, 2025) => ContributionLimit { base: dec!(23500), catch_up: dec!(7500) },
+        (RetirementGroup::Ira, 2025) => ContributionLimit { base: dec!(7000), catch_up: dec!(1000) },
+        (RetirementGroup::Hsa, 2025) => ContributionLimit { base: dec!(4300), catch_up: dec!(1000) },
+        // 2026: 401k elective $24,500 + $8,000 catch-up; IRA $7,500 + $1,100;
+        // HSA self-only $4,400 + $1,000 (55+).
+        (RetirementGroup::Plan401k, _) => ContributionLimit { base: dec!(24500), catch_up: dec!(8000) },
+        (RetirementGroup::Ira, _) => ContributionLimit { base: dec!(7500), catch_up: dec!(1100) },
+        (RetirementGroup::Hsa, _) => ContributionLimit { base: dec!(4400), catch_up: dec!(1000) },
+    };
+    (nearest, limit)
+}
+
+// =====================================================================
 // Year-keyed tax constant tables (T4)
 // =====================================================================
 
@@ -1280,6 +1403,245 @@ impl TaxService {
             lots,
         })
     }
+
+    /// T13: FBAR/FATCA threshold monitor for one calendar year.
+    ///
+    /// Answers "did the aggregate value of foreign financial accounts exceed
+    /// $10,000 at ANY point in the year?" — the FBAR trigger question — from
+    /// the daily `balance_snapshots.balance_usd` series.
+    ///
+    /// FOREIGN-ACCOUNT SIGNAL (documented choice): an account is treated as
+    /// foreign when its institution's `country <> 'US'` (the explicit,
+    /// operator-set signal) OR its `accounts.currency = 'MXN'` (the
+    /// product's defining cross-border case). `country` is the primary,
+    /// most-reliable signal — it is set per institution at link/creation —
+    /// and the MXN-currency fallback catches a Mexican account whose
+    /// institution row was created without a country. Both are surfaced so
+    /// the user can sanity-check the classification. (Country codes are
+    /// upper-cased for the comparison; a NULL/empty country is NOT treated as
+    /// foreign — only a positively non-US country counts.)
+    ///
+    /// AGGREGATE-MAX METHOD: for each day that has ANY foreign snapshot, sum
+    /// the foreign accounts' `balance_usd`, then take the MAX of those daily
+    /// sums over the year — the peak aggregate. The peak date's per-account
+    /// contributions are reported, plus each account's own YTD max. This is a
+    /// daily-snapshot proxy for FBAR's "maximum value during the year" rule
+    /// (which has its own valuation + year-end-rate mechanics this does NOT
+    /// implement — see [`FBAR_THRESHOLD_USD`]'s doc). INFORMATIONAL ONLY.
+    ///
+    /// Empty case: no foreign accounts or no snapshots → `exceeded = false`,
+    /// `peak_aggregate_usd = 0`, `peak_date = None`, empty `accounts`.
+    pub async fn fbar_status(db: &PgPool, year: i32, user_id: uuid::Uuid) -> Result<FbarStatus> {
+        let start_date = chrono::NaiveDate::from_ymd_opt(year, 1, 1).unwrap();
+        let end_date = chrono::NaiveDate::from_ymd_opt(year, 12, 31).unwrap();
+
+        // Daily aggregate of foreign accounts' USD balances. We only sum days
+        // that actually have snapshots (no forward-fill), and pick the day
+        // with the largest aggregate. COALESCE(balance_usd, 0) so a missing
+        // USD conversion doesn't NULL the whole day's sum.
+        let peak = sqlx::query(
+            r#"
+            WITH foreign_snaps AS (
+                SELECT b.as_of_date,
+                       COALESCE(b.balance_usd, 0) AS bal
+                FROM balance_snapshots b
+                JOIN accounts a ON a.id = b.account_id
+                JOIN institutions i ON i.id = a.institution_id
+                WHERE b.user_id = $1
+                  AND b.as_of_date >= $2 AND b.as_of_date <= $3
+                  AND (UPPER(COALESCE(i.country, '')) NOT IN ('US', '')
+                       OR UPPER(COALESCE(a.currency, '')) = 'MXN')
+            ),
+            daily AS (
+                SELECT as_of_date, SUM(bal) AS agg
+                FROM foreign_snaps
+                GROUP BY as_of_date
+            )
+            SELECT as_of_date, agg
+            FROM daily
+            ORDER BY agg DESC, as_of_date DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(user_id)
+        .bind(start_date)
+        .bind(end_date)
+        .fetch_optional(db)
+        .await?;
+
+        let (peak_aggregate_usd, peak_date): (Decimal, Option<chrono::NaiveDate>) = match peak {
+            Some(row) => (
+                row.try_get::<Decimal, _>("agg").unwrap_or_default(),
+                row.try_get::<chrono::NaiveDate, _>("as_of_date").ok(),
+            ),
+            None => (dec!(0), None),
+        };
+
+        // Per foreign account: its balance on the peak date (its contribution
+        // to the peak aggregate; 0 if it had no snapshot that exact day) and
+        // its own YTD max balance. Only accounts that have at least one
+        // foreign snapshot in the year appear.
+        let accounts = sqlx::query(
+            r#"
+            SELECT
+                a.id AS account_id,
+                COALESCE(NULLIF(a.nickname, ''), a.name) AS account_name,
+                i.name AS institution,
+                UPPER(COALESCE(i.country, '')) AS country,
+                UPPER(COALESCE(a.currency, '')) AS currency,
+                COALESCE((
+                    SELECT b2.balance_usd FROM balance_snapshots b2
+                    WHERE b2.account_id = a.id AND b2.as_of_date = $4
+                ), 0) AS peak_contribution_usd,
+                COALESCE(MAX(b.balance_usd), 0) AS ytd_max_usd
+            FROM balance_snapshots b
+            JOIN accounts a ON a.id = b.account_id
+            JOIN institutions i ON i.id = a.institution_id
+            WHERE b.user_id = $1
+              AND b.as_of_date >= $2 AND b.as_of_date <= $3
+              AND (UPPER(COALESCE(i.country, '')) NOT IN ('US', '')
+                   OR UPPER(COALESCE(a.currency, '')) = 'MXN')
+            GROUP BY a.id, account_name, i.name, country, currency
+            ORDER BY ytd_max_usd DESC
+            "#,
+        )
+        .bind(user_id)
+        .bind(start_date)
+        .bind(end_date)
+        .bind(peak_date)
+        .fetch_all(db)
+        .await?;
+
+        let foreign_accounts: Vec<FbarAccount> = accounts
+            .iter()
+            .map(|r| FbarAccount {
+                account_id: r.try_get("account_id").ok(),
+                name: r.try_get("account_name").unwrap_or_default(),
+                institution: r.try_get("institution").unwrap_or_default(),
+                country: {
+                    let c: String = r.try_get("country").unwrap_or_default();
+                    if c.is_empty() { None } else { Some(c) }
+                },
+                currency: r.try_get("currency").unwrap_or_default(),
+                peak_contribution_usd: r.try_get("peak_contribution_usd").unwrap_or_default(),
+                ytd_max_usd: r.try_get("ytd_max_usd").unwrap_or_default(),
+            })
+            .collect();
+
+        Ok(FbarStatus {
+            year,
+            threshold_usd: FBAR_THRESHOLD_USD,
+            peak_aggregate_usd,
+            exceeded: peak_aggregate_usd > FBAR_THRESHOLD_USD,
+            peak_date: peak_date.map(|d| d.to_string()),
+            foreign_accounts,
+            constants_verified: TAX_CONSTANTS_VERIFIED,
+        })
+    }
+
+    /// T15: YTD retirement contributions vs the annual limit, per account-type
+    /// group (401k-family, IRA traditional+Roth aggregate, HSA).
+    ///
+    /// CONTRIBUTION INFLOW (defined carefully): a contribution is a CASH-IN
+    /// into an account of the group — modeled as the positive lot buys
+    /// (`holding_lots` with `qty > 0`) recorded in the year, valued at the
+    /// lot's own cost in USD (`qty × cost_per_unit`, converted at the lot's
+    /// recorded `usd_fx_rate`). This mirrors how the rest of the tax module
+    /// values lots and captures both broker buys and the HSA statement
+    /// imports (which land as lots).
+    ///
+    /// ⚠ CAVEAT — employer match / rollovers: the app has no reliable signal
+    /// separating a personal contribution from an employer match or a
+    /// rollover/transfer-in (those also arrive as lot buys). So the YTD figure
+    /// may OVERCOUNT personal contributions. Rather than silently guess, every
+    /// group with any contribution carries `match_rollover_caveat = true`, and
+    /// the response's `constants_verified` flag still gates the limits. The
+    /// number is surfaced WITH the caveat, never as an authoritative
+    /// "you contributed exactly $X personally".
+    ///
+    /// LIMIT + DEADLINE: the per-year (UNVERIFIED) limit and catch-up come
+    /// from [`contribution_limit`]; `remaining_room` is `max(0, base − ytd)`
+    /// (against the BASE limit — catch-up eligibility depends on age the app
+    /// doesn't know, so it is reported separately). The contribution DEADLINE
+    /// differs by group: IRA and HSA allow prior-year contributions up to the
+    /// federal tax-filing deadline of the FOLLOWING year (~Apr 15 of year+1);
+    /// 401k-family contributions must land by Dec 31 of the contribution year.
+    pub async fn retirement_contributions(
+        db: &PgPool,
+        year: i32,
+        user_id: uuid::Uuid,
+    ) -> Result<RetirementContributions> {
+        let start_date = chrono::NaiveDate::from_ymd_opt(year, 1, 1).unwrap();
+        let end_date = chrono::NaiveDate::from_ymd_opt(year, 12, 31).unwrap();
+
+        let mut groups = Vec::new();
+        let mut limit_year_used = year;
+        for group in RetirementGroup::all() {
+            let types: Vec<String> = group.account_types().iter().map(|s| s.to_string()).collect();
+            // YTD contribution inflows = positive lot buys into this group's
+            // accounts in the year, valued in USD at the lot's own FX. Lot
+            // acquisition date is the contribution date.
+            let row = sqlx::query(
+                r#"
+                SELECT COALESCE(SUM(
+                    l.qty * l.cost_per_unit
+                    / (CASE WHEN UPPER(l.currency) = 'MXN' AND l.usd_fx_rate > 0
+                            THEN l.usd_fx_rate ELSE 1 END)
+                ), 0) AS ytd_usd,
+                COUNT(*) AS n
+                FROM holding_lots l
+                JOIN accounts a ON a.id = l.account_id
+                WHERE l.user_id = $1
+                  AND l.qty > 0
+                  AND l.acquired_at >= $2 AND l.acquired_at <= $3
+                  AND LOWER(COALESCE(a.account_type, '')) = ANY($4)
+                "#,
+            )
+            .bind(user_id)
+            .bind(start_date)
+            .bind(end_date)
+            .bind(&types)
+            .fetch_one(db)
+            .await?;
+
+            let ytd_contributions_usd: Decimal = row.try_get("ytd_usd").unwrap_or_default();
+            let lot_count: i64 = row.try_get("n").unwrap_or(0);
+            let (ly, limit) = contribution_limit(group, year);
+            limit_year_used = ly;
+            let remaining_room_usd = (limit.base - ytd_contributions_usd).max(dec!(0));
+            // IRA & HSA: prior-year window — tax day (~Apr 15) of year+1.
+            // 401k-family: calendar-year end (Dec 31 of the contribution year).
+            let (deadline, prior_year_window) = match group {
+                RetirementGroup::Plan401k => {
+                    (format!("{}-12-31", year), false)
+                }
+                RetirementGroup::Ira | RetirementGroup::Hsa => {
+                    (format!("{}-04-15", year + 1), true)
+                }
+            };
+
+            groups.push(ContributionGroup {
+                group: group.key().to_string(),
+                account_types: group.account_types().iter().map(|s| s.to_string()).collect(),
+                ytd_contributions_usd,
+                limit_base_usd: limit.base,
+                catch_up_usd: limit.catch_up,
+                limit_with_catch_up_usd: limit.base + limit.catch_up,
+                remaining_room_usd,
+                deadline,
+                prior_year_window,
+                // Any contribution at all → can't rule out match/rollover.
+                match_rollover_caveat: lot_count > 0,
+            });
+        }
+
+        Ok(RetirementContributions {
+            year,
+            limit_year_used,
+            groups,
+            constants_verified: TAX_CONSTANTS_VERIFIED,
+        })
+    }
 }
 
 /// An income transaction in the taxable-events list. JSON-wise this is the
@@ -1419,6 +1781,104 @@ pub struct UnrealizedLots {
     /// `estimated_tax_savings_usd` and the marginal rates are UNVERIFIED
     /// estimates the UI must badge as pending human verification.
     pub constants_verified: bool,
+}
+
+/// T13: FBAR/FATCA threshold-monitor response. INFORMATIONAL ONLY — see
+/// [`TaxService::fbar_status`] and [`FBAR_THRESHOLD_USD`]; this does not
+/// decide a filing obligation and does not compute FATCA Form 8938
+/// (whose thresholds are different and higher).
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FbarStatus {
+    pub year: i32,
+    /// The aggregate-balance reporting threshold, USD (UNVERIFIED constant).
+    #[serde(with = "rust_decimal::serde::float")]
+    pub threshold_usd: Decimal,
+    /// MAX over the year of the daily aggregate USD balance across foreign
+    /// accounts (the peak). 0 when there are no foreign snapshots.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub peak_aggregate_usd: Decimal,
+    /// `peak_aggregate_usd > threshold_usd`. Strictly informational.
+    pub exceeded: bool,
+    /// The date (YYYY-MM-DD) of the peak aggregate; `None` in the empty case.
+    pub peak_date: Option<String>,
+    /// The foreign accounts involved, each with its peak-date contribution and
+    /// its own YTD max. Empty when there are no foreign accounts/snapshots.
+    pub foreign_accounts: Vec<FbarAccount>,
+    /// Mirrors [`TAX_CONSTANTS_VERIFIED`]: while false, the threshold (and the
+    /// FBAR/FATCA copy around it) is pending human verification.
+    pub constants_verified: bool,
+}
+
+/// One foreign account's contribution to the FBAR aggregate (T13).
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FbarAccount {
+    pub account_id: Option<uuid::Uuid>,
+    pub name: String,
+    pub institution: String,
+    /// The institution's country code (upper-cased), when set — the primary
+    /// foreign signal. `None` when the account was classified foreign only by
+    /// its MXN currency.
+    pub country: Option<String>,
+    /// The account's currency (upper-cased) — the secondary foreign signal.
+    pub currency: String,
+    /// This account's `balance_usd` on the peak aggregate date (0 if it had no
+    /// snapshot that exact day).
+    #[serde(with = "rust_decimal::serde::float")]
+    pub peak_contribution_usd: Decimal,
+    /// This account's OWN maximum `balance_usd` across the year.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub ytd_max_usd: Decimal,
+}
+
+/// T15: retirement-contributions-vs-limits response.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RetirementContributions {
+    pub year: i32,
+    /// The year whose (UNVERIFIED) limit table was actually used — equals
+    /// `year` when supported, else the nearest [`SUPPORTED_BRACKET_YEARS`].
+    pub limit_year_used: i32,
+    pub groups: Vec<ContributionGroup>,
+    /// Mirrors [`TAX_CONSTANTS_VERIFIED`]: while false, every limit/catch-up
+    /// figure is UNVERIFIED and the UI must badge it pending verification.
+    pub constants_verified: bool,
+}
+
+/// One account-type group's YTD contributions vs its annual limit (T15).
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ContributionGroup {
+    /// Machine key: `401k` | `ira` | `hsa` (see [`RetirementGroup::key`]).
+    pub group: String,
+    /// The `accounts.account_type` values aggregated into this group.
+    pub account_types: Vec<String>,
+    /// YTD contribution inflows (positive lot buys) into this group's
+    /// accounts, USD. ⚠ May include employer match / rollovers — see
+    /// `match_rollover_caveat`.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub ytd_contributions_usd: Decimal,
+    /// The base annual limit, USD (UNVERIFIED).
+    #[serde(with = "rust_decimal::serde::float")]
+    pub limit_base_usd: Decimal,
+    /// The additional catch-up amount (age 50/55+), USD (UNVERIFIED). Reported
+    /// separately because the app does not know the user's age.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub catch_up_usd: Decimal,
+    /// `limit_base_usd + catch_up_usd`, USD (UNVERIFIED).
+    #[serde(with = "rust_decimal::serde::float")]
+    pub limit_with_catch_up_usd: Decimal,
+    /// `max(0, limit_base_usd − ytd_contributions_usd)`, USD. Measured against
+    /// the BASE limit (catch-up eligibility is age-dependent and not assumed).
+    #[serde(with = "rust_decimal::serde::float")]
+    pub remaining_room_usd: Decimal,
+    /// Contribution deadline (YYYY-MM-DD). IRA/HSA use the prior-year window
+    /// (~Apr 15 of the following year); 401k-family use Dec 31 of the year.
+    pub deadline: String,
+    /// True when this group's deadline reflects the IRA/HSA prior-year window.
+    pub prior_year_window: bool,
+    /// True when there is ANY contribution, so an employer match or a
+    /// rollover/transfer-in CANNOT be ruled out of `ytd_contributions_usd` —
+    /// the figure may overcount personal contributions. Surfaced rather than
+    /// silently netted (the app has no signal to separate them).
+    pub match_rollover_caveat: bool,
 }
 
 #[cfg(test)]

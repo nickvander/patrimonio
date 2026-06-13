@@ -26,13 +26,20 @@ pub fn parse_csv(data: &[u8]) -> Result<Vec<ParsedTransaction>> {
             
         let amount = amount_str.parse::<Decimal>()
             .map_err(|_| anyhow!("Invalid amount: {}", amount_str))?;
-            
+
+        // T14: tag explicit interest/maturity-premium credits as income so
+        // CETES yield reaches the tax base; principal movements (buys/
+        // redemptions/deposits) and ISR retentions stay uncategorized. See
+        // `categorize::classify_cetes_movement` for the yield-vs-principal
+        // separation rule (income is the canonical positive inflow).
+        let category = crate::services::categorize::classify_cetes_movement(&description, amount);
+
         transactions.push(ParsedTransaction {
             date,
             description,
             amount,
             currency: "MXN".to_string(),
-            category: None,
+            category,
             original_description: None,
             balance_after: None,
             account_label: None,

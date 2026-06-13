@@ -132,12 +132,25 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
             continue;
         }
 
+        // T14: tag explicit YIELD/interest credits as income so cetesdirecto
+        // returns reach the tax base. Principal movements (INGEFVO funding,
+        // COMPRA buys, VENTA redemptions that bundle principal+yield) and ISR
+        // retentions stay uncategorized — see
+        // `categorize::classify_cetes_movement` for how yield is separated
+        // from principal (by movement type, not by netting a redemption).
+        // TODO(T14): when the import insert path persists ISR retenido, route
+        // `categorize::is_cetes_isr_withholding(&description)` rows into a
+        // withholding field so the MX card can show "estimated minus
+        // withheld". `ParsedTransaction` has no such field today (no migration
+        // here), so a retention row stays an ordinary outflow.
+        let category = crate::services::categorize::classify_cetes_movement(&description, amount);
+
         txs.push(ParsedTransaction {
             date,
             description,
             amount,
             currency: "MXN".to_string(),
-            category: None,
+            category,
             original_description: None,
             // The "Saldo efectivo" is just idle cash (~0); the account's real
             // value is the portfolio "Total final". Leaving balance_after None
