@@ -293,6 +293,7 @@ fn parse_section(lines: &[&str], resolve_year: &dyn Fn(u32) -> i32) -> Vec<Parse
                 amount: signed,
                 currency: "MXN".to_string(),
                 category: None,
+                category_detailed: None,
                 original_description: None,
                 balance_after: Some(saldo),
                 account_label: None,

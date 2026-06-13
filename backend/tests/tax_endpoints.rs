@@ -520,6 +520,111 @@ async fn tax_summary_and_transactions_match_stored_income_taxonomy() {
 }
 
 // =====================================================================
+// T14 follow-up — CETES interest itemizes as interest_income; ISR
+// withholding is excluded from income and totalled in isr_withheld_*.
+// These mirror exactly what the cetesdirecto parsers now stamp through the
+// statement-import path: a yield credit tagged
+// (category='INCOME', category_detailed='INCOME_INTEREST_EARNED'), and an
+// ISR retention tagged (category='GOVERNMENT_AND_NON_PROFIT',
+// category_detailed='TAX_ISR_WITHHELD') on a negative (outflow) amount.
+// =====================================================================
+
+#[tokio::test]
+#[serial_test::serial]
+async fn cetes_interest_lands_in_interest_income_not_wages() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let acct = seed_typed_account(&pool, user_id, "depository").await;
+    seed_usd_mxn_rate(&pool, "2026-01-01", "20.0").await;
+
+    // A CETES yield credit as the parser now stamps it (MXN, positive inflow).
+    seed_categorized_tx_in(
+        &pool, user_id, acct, "2026-06-01", "PREMIO CETES 260601", "2000.00", "MXN",
+        Some("INCOME"), Some("INCOME_INTEREST_EARNED"), None,
+    )
+    .await;
+    // A plain payroll row so wage_income is non-zero and the split is visible.
+    seed_categorized_tx_in(
+        &pool, user_id, acct, "2026-06-02", "ACME PAYROLL", "5000.00", "USD",
+        Some("INCOME"), Some("INCOME_WAGES"), None,
+    )
+    .await;
+
+    let body = fetch_summary(&app, &token).await;
+
+    // 2,000 MXN / 20 = 100 USD of interest; it must land in interest_income,
+    // NOT in the wage residual.
+    assert!(
+        (body["interest_income"].as_f64().unwrap() - 100.0).abs() < 0.01,
+        "interest_income: {} (want 100)",
+        body["interest_income"]
+    );
+    assert!(
+        (body["wage_income"].as_f64().unwrap() - 5000.0).abs() < 0.01,
+        "wage_income: {} (want 5000, CETES yield must not leak here)",
+        body["wage_income"]
+    );
+    // Decomposition still re-sums to ordinary_income (100 + 5000).
+    assert!((body["ordinary_income"].as_f64().unwrap() - 5100.0).abs() < 0.01);
+    assert!((body["dividend_income"].as_f64().unwrap()).abs() < 0.01);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn isr_withholding_excluded_from_income_and_totalled() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let acct = seed_typed_account(&pool, user_id, "depository").await;
+    seed_usd_mxn_rate(&pool, "2026-01-01", "20.0").await;
+
+    // CETES yield (income) + the ISR the broker retained on it (an outflow,
+    // tagged TAX_ISR_WITHHELD with a NON-income category).
+    seed_categorized_tx_in(
+        &pool, user_id, acct, "2026-06-01", "PREMIO CETES 260601", "2000.00", "MXN",
+        Some("INCOME"), Some("INCOME_INTEREST_EARNED"), None,
+    )
+    .await;
+    seed_categorized_tx_in(
+        &pool, user_id, acct, "2026-06-01", "RETENCION ISR CETES", "-200.00", "MXN",
+        Some("GOVERNMENT_AND_NON_PROFIT"), Some("TAX_ISR_WITHHELD"), None,
+    )
+    .await;
+
+    let body = fetch_summary(&app, &token).await;
+
+    // Income is ONLY the 2,000 MXN yield (100 USD). The −200 ISR is excluded:
+    // its category is not INCOME and its detail does not start with INCOME_.
+    assert!(
+        (body["ordinary_income"].as_f64().unwrap() - 100.0).abs() < 0.01,
+        "ordinary_income: {} (ISR must not count as income)",
+        body["ordinary_income"]
+    );
+    assert!((body["interest_income"].as_f64().unwrap() - 100.0).abs() < 0.01);
+
+    // Withheld total = |−200 MXN| in both bases: 200 MXN, 10 USD (÷ 20).
+    assert!(
+        (body["isr_withheld_mxn"].as_f64().unwrap() - 200.0).abs() < 0.01,
+        "isr_withheld_mxn: {} (want 200)",
+        body["isr_withheld_mxn"]
+    );
+    assert!(
+        (body["isr_withheld_usd"].as_f64().unwrap() - 10.0).abs() < 0.01,
+        "isr_withheld_usd: {} (want 10)",
+        body["isr_withheld_usd"]
+    );
+
+    // It is informational only — the MX liability is NOT reduced by it. With
+    // 100 USD = 2,000 MXN of income (well under the lowest tarifa step that
+    // produces a cuota), the liability is whatever the tarifa yields, and the
+    // withheld total is reported alongside, never subtracted in.
+    assert!(body["estimated_liability_mx_mxn"].as_f64().is_some());
+}
+
+// =====================================================================
 // T2 — tax-advantaged accounts excluded from taxable capital gains
 // =====================================================================
 

@@ -513,6 +513,12 @@ async fn confirm_handler(
         let category = tx.category.clone().or_else(|| {
             crate::services::categorize::categorize(&basis, tx.amount)
         });
+        // The detailed category (e.g. CETES `INCOME_INTEREST_EARNED` / ISR
+        // `TAX_ISR_WITHHELD`) is parser-provided and survives the preview→
+        // confirm round-trip via the flattened ParsedTransaction. The
+        // safety-net `categorize` only yields a PFC primary, so there's no
+        // detail to derive on the fallback path — leave it None then.
+        let category_detailed = tx.category_detailed.clone();
         // Learn-from-edits override: if the user has labeled this merchant
         // before, carry their label onto the new row (display prefers
         // user_category). Only on fresh inserts — the conflict path never
@@ -540,8 +546,8 @@ async fn confirm_handler(
         // tells insert (true) from conflict-update (false) so the new-vs-
         // duplicate counts stay accurate despite the upsert.
         let result = sqlx::query(
-            "INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, source, source_id, user_id, original_description, import_batch_id, import_file, balance_after, user_category)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 'csv', $8, $9, $10, $11, $12, $13, $14)
+            "INSERT INTO transactions (account_id, external_id, date, description, amount, currency, category, source, source_id, user_id, original_description, import_batch_id, import_file, balance_after, user_category, category_detailed)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'csv', $8, $9, $10, $11, $12, $13, $14, $15)
              ON CONFLICT (account_id, external_id) DO UPDATE
                  SET balance_after = COALESCE(transactions.balance_after, EXCLUDED.balance_after)
              RETURNING (xmax = 0) AS inserted",
@@ -560,6 +566,10 @@ async fn confirm_handler(
         .bind(source_file.as_deref())
         .bind(tx.balance_after)
         .bind(user_category)
+        // Mirrors `category`: written on INSERT, and NOT in the ON CONFLICT
+        // SET clause, so a re-import never clobbers a detail already stored
+        // (only balance_after is backfilled on conflict).
+        .bind(category_detailed)
         .fetch_optional(&state.db)
         .await;
 

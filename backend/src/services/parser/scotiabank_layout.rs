@@ -141,6 +141,7 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
             amount,
             currency: "MXN".to_string(),
             category: None,
+            category_detailed: None,
             original_description: None,
             balance_after: rec.saldo,
             account_label: None,

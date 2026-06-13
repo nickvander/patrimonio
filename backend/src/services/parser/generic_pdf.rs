@@ -96,6 +96,7 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
                     amount: amt,
                     currency: "MXN".to_string(),
                     category: None,
+                    category_detailed: None,
                     original_description: None,
                     balance_after: None,
                     account_label: None,

@@ -141,6 +141,7 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
         amount: Decimal::ZERO,
         currency: "USD".to_string(),
         category: None,
+        category_detailed: None,
         original_description: None,
         balance_after: Some(value),
         account_label: None,

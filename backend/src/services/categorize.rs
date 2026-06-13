@@ -232,17 +232,35 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
 /// understand. Exposed so the cetesdirecto parsers can tag a maturity
 /// premium / interest row with the identical taxonomy.
 ///
-/// NOTE (T14 limitation): the statement-import insert path
-/// (`api/imports.rs`) only persists the `category` column — there is no
-/// `category_detailed` for imported rows (see the `categorize` module doc
-/// and `ParsedTransaction`, which has no `category_detailed` field). So a
-/// CETES interest row reaches the income predicate (`UPPER(category) =
-/// 'INCOME'`) and the MX tax base, but cannot reach the dividends/interest
-/// *decomposition* (`interest_income`) without a migration + insert change,
-/// which is out of scope here. This constant is provided for the day that
-/// detail column is wired through imports, and is asserted in tests so it
-/// stays in lockstep with the tax-side string.
+/// As of the T14 follow-up the statement-import insert path
+/// (`api/imports.rs`) DOES persist `category_detailed` (the
+/// `transactions.category_detailed` column from migration 2026051501, and
+/// `ParsedTransaction::category_detailed`). So a CETES interest row tagged
+/// with this detail now reaches BOTH the income predicate (`UPPER(category)
+/// = 'INCOME'`) AND the dividends/interest *decomposition*
+/// (`TaxEstimation::interest_income`, keyed on `category_detailed =
+/// 'INCOME_INTEREST_EARNED'`). Asserted in tests so it stays in lockstep
+/// with the tax-side string.
 pub const INCOME_INTEREST_DETAIL: &str = "INCOME_INTEREST_EARNED";
+
+/// `category_detailed` tag for an ISR (Mexican income tax) withholding that
+/// cetesdirecto retains on yield (T14 follow-up). These rows stay ordinary
+/// negative (outflow) transactions whose `category` is deliberately a
+/// NON-income value (see [`TAX_WITHHELD_ISR_CATEGORY`]) so the income
+/// predicate (`UPPER(category) = 'INCOME' OR category_detailed LIKE
+/// 'INCOME\_%'`) does NOT pick them up — the detail string intentionally
+/// does NOT start with `INCOME_`. The tax summary sums these into
+/// `isr_withheld_usd` / `isr_withheld_mxn` so the MX card can show
+/// "estimated minus withheld" (informational only; never auto-subtracted
+/// from a liability).
+pub const TAX_WITHHELD_ISR_DETAIL: &str = "TAX_ISR_WITHHELD";
+
+/// The PFC-primary `category` we stamp on an ISR-withholding row. SAT is a
+/// government tax authority, so `GOVERNMENT_AND_NON_PROFIT` keeps the row in
+/// the same bucket as other MX tax/government outflows (PREDIAL, TENENCIA,
+/// SAT — see the rule in [`categorize`]) and, crucially, is NOT `INCOME`, so
+/// the income predicate excludes it.
+pub const TAX_WITHHELD_ISR_CATEGORY: &str = "GOVERNMENT_AND_NON_PROFIT";
 
 /// Classify ONE cetesdirecto cash-movement description (T14).
 ///
@@ -261,22 +279,43 @@ pub const INCOME_INTEREST_DETAIL: &str = "INCOME_INTEREST_EARNED";
 /// (`INTERES`, `RENDIMIENTO`, `PREMIO`, and the `LIQUIDA…`/`VENCIMIENTO`
 /// yield-liquidation rows). For those — and only when the amount is a
 /// positive inflow (the canonical sign for income in this app: outflow is
-/// negative) — we return `"INCOME"`. This is the documented way principal is
+/// negative) — we return income. This is the documented way principal is
 /// separated from yield: by movement TYPE (explicit yield credit) rather than
 /// by trying to net a redemption against an earlier purchase the cash ledger
 /// doesn't link.
 ///
-/// Returns `Some("INCOME")` for a yield/interest credit, else `None` (the
-/// row stays honestly uncategorized — principal movements and ISR retentions
-/// included). `None` for any non-positive amount, since income is an inflow.
-pub fn classify_cetes_movement(description: &str, amount: Decimal) -> Option<String> {
+/// Returns BOTH the PFC-primary `category` and the `category_detailed` so the
+/// two cetesdirecto parsers (`cetes.rs`, `cetes_pdf.rs`) stay in sync:
+///   - yield/interest credit (positive)  → `Some(("INCOME",
+///     Some("INCOME_INTEREST_EARNED")))` — reaches the income predicate AND
+///     the interest decomposition;
+///   - ISR-retenido row (an outflow)     → `Some(("GOVERNMENT_AND_NON_PROFIT",
+///     Some("TAX_ISR_WITHHELD")))` — a NON-income category so it is excluded
+///     from income, with a detail the tax summary sums into `isr_withheld_*`;
+///   - principal movement / unrecognised → `None` (stays honestly
+///     uncategorized — INGEFVO funding, COMPRA buys, VENTA redemptions).
+pub fn classify_cetes_movement(
+    description: &str,
+    amount: Decimal,
+) -> Option<(String, Option<String>)> {
+    let u = description.to_uppercase();
+    let has = |needles: &[&str]| needles.iter().any(|n| u.contains(n));
+
+    // ISR withholding is an OUTFLOW (negative Cargo). Tag it regardless of
+    // sign-of-amount wording so it can feed the withheld total; it is a
+    // government tax outflow, never income.
+    if is_cetes_isr_withholding(description) {
+        return Some((
+            TAX_WITHHELD_ISR_CATEGORY.to_string(),
+            Some(TAX_WITHHELD_ISR_DETAIL.to_string()),
+        ));
+    }
+
     // Income is an INFLOW → positive. A negative amount here is a Cargo
     // (buy / withholding / fee); never income regardless of wording.
     if amount <= Decimal::ZERO {
         return None;
     }
-    let u = description.to_uppercase();
-    let has = |needles: &[&str]| needles.iter().any(|n| u.contains(n));
     // Explicit yield / interest / maturity-premium credits. "PREMIO" is the
     // CETES maturity premium (discount instrument redeemed at par). The
     // accented and unaccented spellings both appear depending on the export.
@@ -284,19 +323,24 @@ pub fn classify_cetes_movement(description: &str, amount: Decimal) -> Option<Str
         "INTERES", "INTERÉS", "RENDIMIENTO", "PREMIO",
         "VENCIMIENTO", "LIQUIDA",
     ]) {
-        return Some("INCOME".to_string());
+        return Some((
+            "INCOME".to_string(),
+            Some(INCOME_INTEREST_DETAIL.to_string()),
+        ));
     }
     None
 }
 
 /// True when a cetesdirecto movement description denotes an ISR withholding
 /// (the SAT tax retained on yield, `RETSI` / "RETENCION ISR"). cetesdirecto
-/// books retention as its own `Cargo` (outflow) movement. T14 wants this
-/// stored so the MX card can later show "estimated minus withheld", but
-/// `ParsedTransaction` has no withholding field and adding one needs a
-/// migration + insert change (out of scope). This predicate is provided so a
-/// future change can route these rows; today the row stays an ordinary
-/// outflow transaction. See the TODO in the cetes parsers.
+/// books retention as its own `Cargo` (outflow) movement. The T14 follow-up
+/// routes these rows: [`classify_cetes_movement`] returns
+/// [`TAX_WITHHELD_ISR_CATEGORY`] + [`TAX_WITHHELD_ISR_DETAIL`] for them, the
+/// import insert persists `category_detailed`, and the tax summary sums them
+/// into `isr_withheld_usd` / `isr_withheld_mxn` so the MX card can show
+/// "estimated minus withheld". The row stays an ordinary outflow transaction
+/// (negative amount) — the withheld total is informational, never subtracted
+/// from a liability automatically.
 pub fn is_cetes_isr_withholding(description: &str) -> bool {
     let u = description.to_uppercase();
     (u.contains("RETEN") || u.contains("RETSI") || u.contains("RET ISR"))
@@ -357,19 +401,56 @@ mod tests {
         assert_eq!(categorize("ABONO INTERESES", pos("12.95")).as_deref(), Some("INCOME"));
     }
 
+    // Helper: unwrap the (category, detail) shape into (&str, Option<&str>).
+    fn cls(d: &str, a: Decimal) -> Option<(String, Option<String>)> {
+        classify_cetes_movement(d, a)
+    }
+
     #[test]
-    fn cetes_yield_is_income_principal_is_not() {
-        // T14: explicit yield/interest/premium credits → income (positive).
-        assert_eq!(classify_cetes_movement("PREMIO CETES 240725", pos("258.74")).as_deref(), Some("INCOME"));
-        assert_eq!(classify_cetes_movement("INTERESES CETES", pos("18.42")).as_deref(), Some("INCOME"));
-        assert_eq!(classify_cetes_movement("RENDIMIENTO BONDDIA", pos("4.10")).as_deref(), Some("INCOME"));
-        assert_eq!(classify_cetes_movement("LIQUIDA VENCIMIENTO", pos("100.00")).as_deref(), Some("INCOME"));
+    fn cetes_yield_is_income_with_interest_detail() {
+        // T14: explicit yield/interest/premium credits → income (positive),
+        // now ALSO tagged with the interest detail so the tax decomposition
+        // routes them into interest_income (not the wage residual).
+        for (desc, amt) in [
+            ("PREMIO CETES 240725", "258.74"),
+            ("INTERESES CETES", "18.42"),
+            ("RENDIMIENTO BONDDIA", "4.10"),
+            ("LIQUIDA VENCIMIENTO", "100.00"),
+        ] {
+            assert_eq!(
+                cls(desc, pos(amt)),
+                Some(("INCOME".to_string(), Some("INCOME_INTEREST_EARNED".to_string()))),
+                "{desc}"
+            );
+        }
+    }
+
+    #[test]
+    fn cetes_principal_is_not_classified() {
         // Principal movements are NOT income, even though they share the ledger.
-        assert_eq!(classify_cetes_movement("COMPRA CETES 241003", neg("23995.12")), None);
-        assert_eq!(classify_cetes_movement("VTASI BONDDIA PF2", pos("23995.82")), None);
-        assert_eq!(classify_cetes_movement("INGEFVO", pos("24000.00")), None);
-        // A yield word on a NEGATIVE amount (an outflow) is never income.
-        assert_eq!(classify_cetes_movement("RETENCION ISR INTERES", neg("2.50")), None);
+        assert_eq!(cls("COMPRA CETES 241003", neg("23995.12")), None);
+        assert_eq!(cls("VTASI BONDDIA PF2", pos("23995.82")), None);
+        assert_eq!(cls("INGEFVO", pos("24000.00")), None);
+    }
+
+    #[test]
+    fn cetes_isr_retained_is_withholding_not_income() {
+        // ISR retention (an outflow) → a NON-income government category plus
+        // the withheld detail, so it is excluded from income but reachable by
+        // the isr_withheld_* summary. Tagged even though "INTERES" appears.
+        assert_eq!(
+            cls("RETENCION ISR INTERES", neg("2.50")),
+            Some(("GOVERNMENT_AND_NON_PROFIT".to_string(), Some("TAX_ISR_WITHHELD".to_string())))
+        );
+        assert_eq!(
+            cls("RETSI CETES", neg("12.30")),
+            Some(("GOVERNMENT_AND_NON_PROFIT".to_string(), Some("TAX_ISR_WITHHELD".to_string())))
+        );
+        // The withholding category is NOT income, so the income predicate
+        // (UPPER(category)='INCOME' OR category_detailed LIKE 'INCOME\_%')
+        // excludes it: neither the category nor the detail starts with INCOME.
+        assert_ne!(TAX_WITHHELD_ISR_CATEGORY, "INCOME");
+        assert!(!TAX_WITHHELD_ISR_DETAIL.starts_with("INCOME_"));
     }
 
     #[test]
@@ -384,6 +465,8 @@ mod tests {
     fn income_interest_detail_matches_tax_taxonomy() {
         // Stays in lockstep with the tax summary's interest decomposition.
         assert_eq!(INCOME_INTEREST_DETAIL, "INCOME_INTEREST_EARNED");
+        // And the withheld detail stays in lockstep with the tax-side string.
+        assert_eq!(TAX_WITHHELD_ISR_DETAIL, "TAX_ISR_WITHHELD");
     }
 
     #[test]

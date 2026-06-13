@@ -121,6 +121,7 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
             amount,
             currency: "USD".to_string(),
             category: None,
+            category_detailed: None,
             original_description: None,
             // Cash balance (~$500) isn't the account's worth — the total is
             // stamped onto the latest row below. Leaving these None keeps the

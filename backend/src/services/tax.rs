@@ -139,6 +139,25 @@ pub struct TaxEstimation {
     /// the human-verification list (assumptions item 5).
     #[serde(with = "rust_decimal::serde::float")]
     pub wash_sale_disallowed_loss: Decimal,
+    /// ISR (Mexican income tax) WITHHELD at source on MX yield this year, in
+    /// **USD** (per-row FX, same rule as the income sums). Sum of the absolute
+    /// value of rows tagged `category_detailed = 'TAX_ISR_WITHHELD'` — today
+    /// the ISR cetesdirecto retains on CETES/BONDDIA yield (T14). These are
+    /// stored as ordinary outflow transactions and are NOT income, so they do
+    /// not appear in `ordinary_income`.
+    ///
+    /// INFORMATIONAL ONLY: this is surfaced so the MX card can show "estimated
+    /// minus withheld", but it is NOT subtracted from `estimated_liability_mx`
+    /// (or any liability) automatically — the MX scenario is already a
+    /// tarifa-over-everything simplification, and silently crediting withholding
+    /// against it would compound that approximation. The consumer decides how to
+    /// present it.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub isr_withheld_usd: Decimal,
+    /// The same withheld total in **MXN** (per-row FX). Companion to
+    /// `isr_withheld_usd`; informational, never auto-applied to a liability.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub isr_withheld_mxn: Decimal,
 }
 
 /// Account subtypes whose internal trades are not taxable events — the
@@ -890,6 +909,34 @@ impl TaxService {
         // Residual bucket — exact by construction (see the SQL comment).
         let wage_income = ordinary_income - dividend_income - interest_income;
 
+        // T14: ISR (Mexican income tax) WITHHELD at source on MX yield —
+        // cetesdirecto rows tagged `category_detailed = 'TAX_ISR_WITHHELD'`.
+        // They are stored as outflows (negative amount), so we sum ABS(amount)
+        // to report the magnitude withheld, in both USD and MXN using the same
+        // per-row LATERAL FX rule the income sums use. Informational only — the
+        // summary exposes it for the MX "estimated minus withheld" card but
+        // never subtracts it from a liability (see the field docs).
+        let isr_sql = format!(
+            r#"
+            SELECT
+                COALESCE(SUM(ABS({AMOUNT_USD_SQL})), 0) AS isr_usd,
+                COALESCE(SUM(ABS({AMOUNT_MXN_SQL})), 0) AS isr_mxn
+            FROM transactions t
+            CROSS JOIN LATERAL (SELECT {USD_MXN_ROW_RATE_SQL} AS rate) fx
+            WHERE t.date >= $1 AND t.date <= $2
+            AND t.user_id = $3
+            AND UPPER(t.category_detailed) = 'TAX_ISR_WITHHELD'
+            "#
+        );
+        let isr_row = sqlx::query(&isr_sql)
+            .bind(start_date)
+            .bind(end_date)
+            .bind(user_id)
+            .fetch_one(db)
+            .await?;
+        let isr_withheld_usd: Decimal = isr_row.try_get("isr_usd").unwrap_or_default();
+        let isr_withheld_mxn: Decimal = isr_row.try_get("isr_mxn").unwrap_or_default();
+
         // 2. Realized capital gains from PRECISE lot disposals (actual P&L
         //    with holding periods), split short- vs long-term. Disposals
         //    inside tax-advantaged wrappers (401k/IRA/HSA/... — see
@@ -1024,6 +1071,8 @@ impl TaxService {
             standard_deduction_used: us.standard_deduction_used,
             capital_loss_carryforward: us.capital_loss_carryforward,
             wash_sale_disallowed_loss,
+            isr_withheld_usd,
+            isr_withheld_mxn,
         })
     }
 

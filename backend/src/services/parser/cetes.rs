@@ -27,12 +27,19 @@ pub fn parse_csv(data: &[u8]) -> Result<Vec<ParsedTransaction>> {
         let amount = amount_str.parse::<Decimal>()
             .map_err(|_| anyhow!("Invalid amount: {}", amount_str))?;
 
-        // T14: tag explicit interest/maturity-premium credits as income so
-        // CETES yield reaches the tax base; principal movements (buys/
-        // redemptions/deposits) and ISR retentions stay uncategorized. See
-        // `categorize::classify_cetes_movement` for the yield-vs-principal
-        // separation rule (income is the canonical positive inflow).
-        let category = crate::services::categorize::classify_cetes_movement(&description, amount);
+        // T14: tag explicit interest/maturity-premium credits as interest
+        // income so CETES yield reaches the tax base AND itemizes in the
+        // interest decomposition; ISR retentions get a withheld tag (a
+        // non-income category) so the summary can total tax withheld;
+        // principal movements (buys/redemptions/deposits) stay uncategorized.
+        // `classify_cetes_movement` returns BOTH (category, category_detailed)
+        // so this CSV parser and the PDF parser stay in sync.
+        let (category, category_detailed) = match
+            crate::services::categorize::classify_cetes_movement(&description, amount)
+        {
+            Some((c, d)) => (Some(c), d),
+            None => (None, None),
+        };
 
         transactions.push(ParsedTransaction {
             date,
@@ -40,12 +47,39 @@ pub fn parse_csv(data: &[u8]) -> Result<Vec<ParsedTransaction>> {
             amount,
             currency: "MXN".to_string(),
             category,
+            category_detailed,
             original_description: None,
             balance_after: None,
             account_label: None,
             from_ocr: false,
         });
     }
-    
+
     Ok(transactions)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn csv_tags_yield_interest_and_isr_withholding() {
+        // Yield credit → interest income; ISR retention → withheld (non-income
+        // category + detail); principal buy → uncategorized.
+        let csv = "Fecha,Operacion,Monto\n\
+            2026-06-01,PREMIO CETES 260601,2000.00\n\
+            2026-06-01,RETENCION ISR CETES,-200.00\n\
+            2026-06-02,COMPRA CETES 261003,-5000.00\n";
+        let txs = parse_csv(csv.as_bytes()).unwrap();
+        assert_eq!(txs.len(), 3);
+
+        assert_eq!(txs[0].category.as_deref(), Some("INCOME"));
+        assert_eq!(txs[0].category_detailed.as_deref(), Some("INCOME_INTEREST_EARNED"));
+
+        assert_eq!(txs[1].category.as_deref(), Some("GOVERNMENT_AND_NON_PROFIT"));
+        assert_eq!(txs[1].category_detailed.as_deref(), Some("TAX_ISR_WITHHELD"));
+
+        assert_eq!(txs[2].category, None);
+        assert_eq!(txs[2].category_detailed, None);
+    }
 }

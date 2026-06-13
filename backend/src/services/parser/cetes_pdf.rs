@@ -132,18 +132,22 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
             continue;
         }
 
-        // T14: tag explicit YIELD/interest credits as income so cetesdirecto
-        // returns reach the tax base. Principal movements (INGEFVO funding,
-        // COMPRA buys, VENTA redemptions that bundle principal+yield) and ISR
-        // retentions stay uncategorized — see
-        // `categorize::classify_cetes_movement` for how yield is separated
-        // from principal (by movement type, not by netting a redemption).
-        // TODO(T14): when the import insert path persists ISR retenido, route
-        // `categorize::is_cetes_isr_withholding(&description)` rows into a
-        // withholding field so the MX card can show "estimated minus
-        // withheld". `ParsedTransaction` has no such field today (no migration
-        // here), so a retention row stays an ordinary outflow.
-        let category = crate::services::categorize::classify_cetes_movement(&description, amount);
+        // T14: tag explicit YIELD/interest credits as interest income so
+        // cetesdirecto returns reach the tax base AND itemize in the interest
+        // decomposition. ISR retentions are tagged with a non-income
+        // withholding detail (`TAX_ISR_WITHHELD`) so the tax summary can total
+        // tax withheld for the MX "estimated minus withheld" card — they stay
+        // ordinary outflows (negative amount). Principal movements (INGEFVO
+        // funding, COMPRA buys, VENTA redemptions that bundle principal+yield)
+        // stay uncategorized — see `categorize::classify_cetes_movement`,
+        // which returns BOTH (category, category_detailed) so this PDF parser
+        // and the CSV parser stay in sync.
+        let (category, category_detailed) = match
+            crate::services::categorize::classify_cetes_movement(&description, amount)
+        {
+            Some((c, d)) => (Some(c), d),
+            None => (None, None),
+        };
 
         txs.push(ParsedTransaction {
             date,
@@ -151,6 +155,7 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
             amount,
             currency: "MXN".to_string(),
             category,
+            category_detailed,
             original_description: None,
             // The "Saldo efectivo" is just idle cash (~0); the account's real
             // value is the portfolio "Total final". Leaving balance_after None
@@ -253,5 +258,34 @@ Saldo final                                                                     
     fn ignores_non_movement_text() {
         let txs = parse_text("Resumen del portafolio\nTotal final: $1,000.00\n").unwrap();
         assert!(txs.is_empty());
+    }
+
+    // A "Movimientos del período" page with an explicit yield (PREMIO, an
+    // Abono) and an ISR retention (RETENCION, a Cargo) so we can prove the
+    // T14 detailed tags reach the parsed rows.
+    const YIELD_SAMPLE: &str = "\
+Movimientos del período
+Fecha de   Fecha de   Folio        Descripción  Emisora  Serie   Títulos  Precio      Plazo Tasa   Cargo      Abono      Saldo efectivo
+registro   liquidación
+12/06/26   12/06/26   SVD400000001PREMIO        CETES    260612  0        0           0     0.00   0.00       258.74     258.74
+12/06/26   12/06/26   SVD400000002RETENCION     ISR      ISR     0        0           0     0.00   25.87      0.00       232.87
+Saldo final                                                                                                                       232.87
+";
+
+    #[test]
+    fn pdf_tags_yield_interest_and_isr_withholding() {
+        let txs = parse_text(YIELD_SAMPLE).unwrap();
+        assert_eq!(txs.len(), 2, "got {txs:#?}");
+
+        // PREMIO is a positive Abono → interest income.
+        assert!(txs[0].amount > Decimal::ZERO);
+        assert!(txs[0].description.contains("PREMIO"));
+        assert_eq!(txs[0].category.as_deref(), Some("INCOME"));
+        assert_eq!(txs[0].category_detailed.as_deref(), Some("INCOME_INTEREST_EARNED"));
+
+        // RETENCION ISR is a Cargo (outflow) → withheld, non-income.
+        assert!(txs[1].amount < Decimal::ZERO);
+        assert_eq!(txs[1].category.as_deref(), Some("GOVERNMENT_AND_NON_PROFIT"));
+        assert_eq!(txs[1].category_detailed.as_deref(), Some("TAX_ISR_WITHHELD"));
     }
 }
