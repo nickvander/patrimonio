@@ -4626,6 +4626,198 @@ abstract class AppLocalizations {
   /// **'Estimates — tax constants pending verification'**
   String get taxConstantsUnverified;
 
+  /// No description provided for @taxFilingStatusLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Filing status'**
+  String get taxFilingStatusLabel;
+
+  /// No description provided for @taxYearLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Tax year'**
+  String get taxYearLabel;
+
+  /// No description provided for @taxRealizedGainsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Realized gains'**
+  String get taxRealizedGainsTitle;
+
+  /// No description provided for @taxIncomeSectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Income'**
+  String get taxIncomeSectionTitle;
+
+  /// No description provided for @taxTermShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Short'**
+  String get taxTermShort;
+
+  /// No description provided for @taxTermLong.
+  ///
+  /// In en, this message translates to:
+  /// **'Long'**
+  String get taxTermLong;
+
+  /// No description provided for @taxTermUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get taxTermUnknown;
+
+  /// No description provided for @taxColProceeds.
+  ///
+  /// In en, this message translates to:
+  /// **'Proceeds'**
+  String get taxColProceeds;
+
+  /// No description provided for @taxColCost.
+  ///
+  /// In en, this message translates to:
+  /// **'Cost'**
+  String get taxColCost;
+
+  /// No description provided for @taxAcquiredUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Acquired —'**
+  String get taxAcquiredUnknown;
+
+  /// No description provided for @taxAcquiredToSold.
+  ///
+  /// In en, this message translates to:
+  /// **'{acquired} → {sold}'**
+  String taxAcquiredToSold(String acquired, String sold);
+
+  /// No description provided for @taxTaxAdvantagedBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Tax-advantaged'**
+  String get taxTaxAdvantagedBadge;
+
+  /// No description provided for @taxTaxAdvantagedSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Tax-advantaged accounts (excluded from taxable totals)'**
+  String get taxTaxAdvantagedSection;
+
+  /// No description provided for @taxTaxAdvantagedNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Disposals inside 401(k)/IRA/HSA-type accounts. Not part of the taxable headline above.'**
+  String get taxTaxAdvantagedNote;
+
+  /// No description provided for @taxGainsSubtotal.
+  ///
+  /// In en, this message translates to:
+  /// **'Net realized gain: {amount}'**
+  String taxGainsSubtotal(String amount);
+
+  /// No description provided for @taxIncomeSubtotal.
+  ///
+  /// In en, this message translates to:
+  /// **'Total income: {amount}'**
+  String taxIncomeSubtotal(String amount);
+
+  /// No description provided for @taxSubtotalReconcileNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Matches the {kpi} card above.'**
+  String taxSubtotalReconcileNote(String kpi);
+
+  /// No description provided for @taxNoDisposals.
+  ///
+  /// In en, this message translates to:
+  /// **'No realized disposals for this year.'**
+  String get taxNoDisposals;
+
+  /// No description provided for @taxScenarioUsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'If all income were taxed in the US'**
+  String get taxScenarioUsSubtitle;
+
+  /// No description provided for @taxScenarioMxSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'If all income were taxed in Mexico'**
+  String get taxScenarioMxSubtitle;
+
+  /// No description provided for @taxScenarioUsCaveat.
+  ///
+  /// In en, this message translates to:
+  /// **'Federal only — excludes NIIT and state tax, no foreign tax credit.'**
+  String get taxScenarioUsCaveat;
+
+  /// No description provided for @taxScenarioMxCaveat.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything run through the salary ISR tarifa (a simplification).'**
+  String get taxScenarioMxCaveat;
+
+  /// No description provided for @taxScenariosNote.
+  ///
+  /// In en, this message translates to:
+  /// **'These are two alternative scenarios over the same income, not amounts you add together.'**
+  String get taxScenariosNote;
+
+  /// No description provided for @taxRoughEstimateBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Rough estimate'**
+  String get taxRoughEstimateBadge;
+
+  /// No description provided for @taxRoughEstimateTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'No purchase lots on record — gains use a blended cost-basis guess.'**
+  String get taxRoughEstimateTooltip;
+
+  /// No description provided for @taxAssumptionsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Assumptions'**
+  String get taxAssumptionsTitle;
+
+  /// No description provided for @taxAssumptionBracketYear.
+  ///
+  /// In en, this message translates to:
+  /// **'Bracket year: {year}'**
+  String taxAssumptionBracketYear(String year);
+
+  /// No description provided for @taxAssumptionFx.
+  ///
+  /// In en, this message translates to:
+  /// **'FX: each row converted at its own date\'s stored USD/MXN rate.'**
+  String get taxAssumptionFx;
+
+  /// No description provided for @taxAssumptionFilingStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Filing status: {status}'**
+  String taxAssumptionFilingStatus(String status);
+
+  /// No description provided for @taxAssumptionExclusions.
+  ///
+  /// In en, this message translates to:
+  /// **'Excludes tax-advantaged accounts (401(k)/IRA/HSA).'**
+  String get taxAssumptionExclusions;
+
+  /// No description provided for @taxAssumptionHoldingsNoBasis.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 holding has no cost basis on record} other{{count} holdings have no cost basis on record}}'**
+  String taxAssumptionHoldingsNoBasis(int count);
+
+  /// No description provided for @taxAssumptionProReview.
+  ///
+  /// In en, this message translates to:
+  /// **'Wording and constants are pending review by a tax professional — treat as guidance, not advice.'**
+  String get taxAssumptionProReview;
+
   /// No description provided for @acctxRenameAccount.
   ///
   /// In en, this message translates to:

@@ -867,6 +867,74 @@
     }
   },
   "taxConstantsUnverified": "Estimates — tax constants pending verification",
+  "taxFilingStatusLabel": "Filing status",
+  "taxYearLabel": "Tax year",
+  "taxRealizedGainsTitle": "Realized gains",
+  "taxIncomeSectionTitle": "Income",
+  "taxTermShort": "Short",
+  "taxTermLong": "Long",
+  "taxTermUnknown": "Unknown",
+  "taxColProceeds": "Proceeds",
+  "taxColCost": "Cost",
+  "taxAcquiredUnknown": "Acquired —",
+  "taxAcquiredToSold": "{acquired} → {sold}",
+  "@taxAcquiredToSold": {
+    "placeholders": {
+      "acquired": { "type": "String" },
+      "sold": { "type": "String" }
+    }
+  },
+  "taxTaxAdvantagedBadge": "Tax-advantaged",
+  "taxTaxAdvantagedSection": "Tax-advantaged accounts (excluded from taxable totals)",
+  "taxTaxAdvantagedNote": "Disposals inside 401(k)/IRA/HSA-type accounts. Not part of the taxable headline above.",
+  "taxGainsSubtotal": "Net realized gain: {amount}",
+  "@taxGainsSubtotal": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "taxIncomeSubtotal": "Total income: {amount}",
+  "@taxIncomeSubtotal": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "taxSubtotalReconcileNote": "Matches the {kpi} card above.",
+  "@taxSubtotalReconcileNote": {
+    "placeholders": {
+      "kpi": { "type": "String" }
+    }
+  },
+  "taxNoDisposals": "No realized disposals for this year.",
+  "taxScenarioUsSubtitle": "If all income were taxed in the US",
+  "taxScenarioMxSubtitle": "If all income were taxed in Mexico",
+  "taxScenarioUsCaveat": "Federal only — excludes NIIT and state tax, no foreign tax credit.",
+  "taxScenarioMxCaveat": "Everything run through the salary ISR tarifa (a simplification).",
+  "taxScenariosNote": "These are two alternative scenarios over the same income, not amounts you add together.",
+  "taxRoughEstimateBadge": "Rough estimate",
+  "taxRoughEstimateTooltip": "No purchase lots on record — gains use a blended cost-basis guess.",
+  "taxAssumptionsTitle": "Assumptions",
+  "taxAssumptionBracketYear": "Bracket year: {year}",
+  "@taxAssumptionBracketYear": {
+    "placeholders": {
+      "year": { "type": "String" }
+    }
+  },
+  "taxAssumptionFx": "FX: each row converted at its own date's stored USD/MXN rate.",
+  "taxAssumptionFilingStatus": "Filing status: {status}",
+  "@taxAssumptionFilingStatus": {
+    "placeholders": {
+      "status": { "type": "String" }
+    }
+  },
+  "taxAssumptionExclusions": "Excludes tax-advantaged accounts (401(k)/IRA/HSA).",
+  "taxAssumptionHoldingsNoBasis": "{count, plural, =1{1 holding has no cost basis on record} other{{count} holdings have no cost basis on record}}",
+  "@taxAssumptionHoldingsNoBasis": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "taxAssumptionProReview": "Wording and constants are pending review by a tax professional — treat as guidance, not advice.",
   "acctxRenameAccount": "Rename account",
   "acctxNickname": "Nickname",
   "acctxAccountFallback": "Account",

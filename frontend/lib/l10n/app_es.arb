@@ -758,6 +758,74 @@
     }
   },
   "taxConstantsUnverified": "Estimaciones — constantes fiscales pendientes de verificación",
+  "taxFilingStatusLabel": "Estado civil fiscal",
+  "taxYearLabel": "Año fiscal",
+  "taxRealizedGainsTitle": "Ganancias realizadas",
+  "taxIncomeSectionTitle": "Ingresos",
+  "taxTermShort": "Corto",
+  "taxTermLong": "Largo",
+  "taxTermUnknown": "Desconocido",
+  "taxColProceeds": "Ingresos",
+  "taxColCost": "Costo",
+  "taxAcquiredUnknown": "Adquirido —",
+  "taxAcquiredToSold": "{acquired} → {sold}",
+  "@taxAcquiredToSold": {
+    "placeholders": {
+      "acquired": { "type": "String" },
+      "sold": { "type": "String" }
+    }
+  },
+  "taxTaxAdvantagedBadge": "Con beneficio fiscal",
+  "taxTaxAdvantagedSection": "Cuentas con beneficio fiscal (excluidas de los totales gravables)",
+  "taxTaxAdvantagedNote": "Disposiciones dentro de cuentas tipo 401(k)/IRA/HSA. No forman parte del total gravable de arriba.",
+  "taxGainsSubtotal": "Ganancia realizada neta: {amount}",
+  "@taxGainsSubtotal": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "taxIncomeSubtotal": "Ingreso total: {amount}",
+  "@taxIncomeSubtotal": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "taxSubtotalReconcileNote": "Coincide con la tarjeta {kpi} de arriba.",
+  "@taxSubtotalReconcileNote": {
+    "placeholders": {
+      "kpi": { "type": "String" }
+    }
+  },
+  "taxNoDisposals": "No hay disposiciones realizadas para este año.",
+  "taxScenarioUsSubtitle": "Si todo el ingreso se gravara en EE. UU.",
+  "taxScenarioMxSubtitle": "Si todo el ingreso se gravara en México",
+  "taxScenarioUsCaveat": "Solo federal — sin NIIT ni impuesto estatal, sin crédito por impuestos extranjeros.",
+  "taxScenarioMxCaveat": "Todo pasado por la tarifa de ISR de salarios (una simplificación).",
+  "taxScenariosNote": "Son dos escenarios alternativos sobre el mismo ingreso, no cantidades que se sumen entre sí.",
+  "taxRoughEstimateBadge": "Estimación aproximada",
+  "taxRoughEstimateTooltip": "Sin lotes de compra registrados — las ganancias usan un costo base estimado.",
+  "taxAssumptionsTitle": "Supuestos",
+  "taxAssumptionBracketYear": "Año de tramos: {year}",
+  "@taxAssumptionBracketYear": {
+    "placeholders": {
+      "year": { "type": "String" }
+    }
+  },
+  "taxAssumptionFx": "Tipo de cambio: cada fila convertida al tipo USD/MXN guardado de su propia fecha.",
+  "taxAssumptionFilingStatus": "Estado civil fiscal: {status}",
+  "@taxAssumptionFilingStatus": {
+    "placeholders": {
+      "status": { "type": "String" }
+    }
+  },
+  "taxAssumptionExclusions": "Excluye cuentas con beneficio fiscal (401(k)/IRA/HSA).",
+  "taxAssumptionHoldingsNoBasis": "{count, plural, =1{1 posición sin costo base registrado} other{{count} posiciones sin costo base registrado}}",
+  "@taxAssumptionHoldingsNoBasis": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "taxAssumptionProReview": "La redacción y las constantes están pendientes de revisión por un profesional fiscal — tómalo como orientación, no como asesoría.",
   "acctxRenameAccount": "Renombrar cuenta",
   "acctxNickname": "Apodo",
   "acctxAccountFallback": "Cuenta",

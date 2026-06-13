@@ -2759,6 +2759,131 @@ class AppLocalizationsEn extends AppLocalizations {
       'Estimates — tax constants pending verification';
 
   @override
+  String get taxFilingStatusLabel => 'Filing status';
+
+  @override
+  String get taxYearLabel => 'Tax year';
+
+  @override
+  String get taxRealizedGainsTitle => 'Realized gains';
+
+  @override
+  String get taxIncomeSectionTitle => 'Income';
+
+  @override
+  String get taxTermShort => 'Short';
+
+  @override
+  String get taxTermLong => 'Long';
+
+  @override
+  String get taxTermUnknown => 'Unknown';
+
+  @override
+  String get taxColProceeds => 'Proceeds';
+
+  @override
+  String get taxColCost => 'Cost';
+
+  @override
+  String get taxAcquiredUnknown => 'Acquired —';
+
+  @override
+  String taxAcquiredToSold(String acquired, String sold) {
+    return '$acquired → $sold';
+  }
+
+  @override
+  String get taxTaxAdvantagedBadge => 'Tax-advantaged';
+
+  @override
+  String get taxTaxAdvantagedSection =>
+      'Tax-advantaged accounts (excluded from taxable totals)';
+
+  @override
+  String get taxTaxAdvantagedNote =>
+      'Disposals inside 401(k)/IRA/HSA-type accounts. Not part of the taxable headline above.';
+
+  @override
+  String taxGainsSubtotal(String amount) {
+    return 'Net realized gain: $amount';
+  }
+
+  @override
+  String taxIncomeSubtotal(String amount) {
+    return 'Total income: $amount';
+  }
+
+  @override
+  String taxSubtotalReconcileNote(String kpi) {
+    return 'Matches the $kpi card above.';
+  }
+
+  @override
+  String get taxNoDisposals => 'No realized disposals for this year.';
+
+  @override
+  String get taxScenarioUsSubtitle => 'If all income were taxed in the US';
+
+  @override
+  String get taxScenarioMxSubtitle => 'If all income were taxed in Mexico';
+
+  @override
+  String get taxScenarioUsCaveat =>
+      'Federal only — excludes NIIT and state tax, no foreign tax credit.';
+
+  @override
+  String get taxScenarioMxCaveat =>
+      'Everything run through the salary ISR tarifa (a simplification).';
+
+  @override
+  String get taxScenariosNote =>
+      'These are two alternative scenarios over the same income, not amounts you add together.';
+
+  @override
+  String get taxRoughEstimateBadge => 'Rough estimate';
+
+  @override
+  String get taxRoughEstimateTooltip =>
+      'No purchase lots on record — gains use a blended cost-basis guess.';
+
+  @override
+  String get taxAssumptionsTitle => 'Assumptions';
+
+  @override
+  String taxAssumptionBracketYear(String year) {
+    return 'Bracket year: $year';
+  }
+
+  @override
+  String get taxAssumptionFx =>
+      'FX: each row converted at its own date\'s stored USD/MXN rate.';
+
+  @override
+  String taxAssumptionFilingStatus(String status) {
+    return 'Filing status: $status';
+  }
+
+  @override
+  String get taxAssumptionExclusions =>
+      'Excludes tax-advantaged accounts (401(k)/IRA/HSA).';
+
+  @override
+  String taxAssumptionHoldingsNoBasis(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count holdings have no cost basis on record',
+      one: '1 holding has no cost basis on record',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get taxAssumptionProReview =>
+      'Wording and constants are pending review by a tax professional — treat as guidance, not advice.';
+
+  @override
   String get acctxRenameAccount => 'Rename account';
 
   @override
