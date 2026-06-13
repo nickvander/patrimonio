@@ -239,8 +239,10 @@ class _BudgetsCardState extends State<BudgetsCard> {
     );
   }
 
-  /// Sum positive-amount transactions in the current month by prettified
-  /// category. Skips income (negative amounts) and pending rows.
+  /// Sum outflow transactions in the current month by prettified
+  /// category. Storage sign convention (backend sync.rs:659): negative =
+  /// outflow, positive = inflow — so spend is the negative rows, summed
+  /// as their absolute value. Skips income (positive amounts) and pending rows.
   Map<String, double> _monthlySpendByCategory() {
     final out = <String, double>{};
     final now = DateTime.now();
@@ -252,13 +254,13 @@ class _BudgetsCardState extends State<BudgetsCard> {
       final d = DateTime.tryParse(ds);
       if (d == null || d.isBefore(monthStart)) continue;
       final amount = (m['amount'] as num?)?.toDouble() ?? 0.0;
-      if (amount <= 0) continue;
+      if (amount >= 0) continue;
       final cat = prettyCategory(
         userCategory: m['user_category']?.toString(),
         detailed: m['category_detailed']?.toString(),
         primary: m['category']?.toString(),
       );
-      out[cat] = (out[cat] ?? 0.0) + amount;
+      out[cat] = (out[cat] ?? 0.0) + amount.abs();
     }
     return out;
   }

@@ -157,30 +157,31 @@ void main() {
       expect(out['a'], (value: 1000.0, estimated: true));
     });
 
-    test('walk with mixed signs: outflow (+) raises older balances, '
-        'inflow (−) lowers them', () {
-      // Newest-first; Plaid sign convention: positive = outflow.
+    test('walk with mixed signs: inflow (+) lowers older balances, '
+        'outflow (−) raises them', () {
+      // Newest-first; storage sign convention: positive = inflow,
+      // negative = outflow, so balance_before = balance_after − amount.
       final out = runningBalancesFor([
         tx('a', amount: 50.0), // after a: 1000 (anchor)
-        tx('b', amount: -20.0), // after b: 1000 + 50  = 1050
-        tx('c', amount: 10.0), // after c: 1050 − 20  = 1030
+        tx('b', amount: -20.0), // after b: 1000 − 50   = 950
+        tx('c', amount: 10.0), // after c: 950 − (−20) = 970
       ], anchor: 1000.0);
       expect(out['a'], (value: 1000.0, estimated: true));
-      expect(out['b'], (value: 1050.0, estimated: true));
-      expect(out['c'], (value: 1030.0, estimated: true));
+      expect(out['b'], (value: 950.0, estimated: true));
+      expect(out['c'], (value: 970.0, estimated: true));
     });
 
     test('persisted balance_after wins over the walk and is not marked '
         'estimated', () {
       final out = runningBalancesFor([
         tx('a', amount: 50.0),
-        // Walk would say 1050 — the statement's own figure must win.
+        // Walk would say 950 — the statement's own figure must win.
         tx('b', amount: -20.0, balanceAfter: 999.0),
-        // …and re-anchor the rows beneath it: 999 − 20 = 979.
+        // …and re-anchor the rows beneath it: 999 − (−20) = 1019.
         tx('c', amount: 10.0),
       ], anchor: 1000.0);
       expect(out['b'], (value: 999.0, estimated: false));
-      expect(out['c'], (value: 979.0, estimated: true));
+      expect(out['c'], (value: 1019.0, estimated: true));
     });
 
     test('a row with no amount is a gap: it and everything below get '
@@ -191,7 +192,7 @@ void main() {
         tx('c', amount: 10.0),
       ], anchor: 1000.0);
       expect(out['a'], (value: 1000.0, estimated: true));
-      expect(out['b'], (value: 1050.0, estimated: true));
+      expect(out['b'], (value: 950.0, estimated: true));
       expect(out.containsKey('c'), isFalse);
     });
 
@@ -204,7 +205,7 @@ void main() {
       ], anchor: null);
       expect(out.containsKey('a'), isFalse);
       expect(out['b'], (value: 500.0, estimated: false));
-      expect(out['c'], (value: 480.0, estimated: true));
+      expect(out['c'], (value: 520.0, estimated: true));
     });
   });
 
@@ -214,7 +215,7 @@ void main() {
         'estimates, plain for persisted) and the meta line drops the '
         'account name', (tester) async {
       _setViewSize(tester, const Size(1200, 900));
-      final txs = _makeTxs(3); // amounts 10, 11, 12 — all outflows
+      final txs = _makeTxs(3); // amounts 10, 11, 12 — all inflows (positive)
       txs[1]['balance_after'] = 555.25; // statement-persisted row
       await tester.pumpWidget(_unboundedHost(_tab(
         txs,
@@ -226,13 +227,13 @@ void main() {
       // Top row = anchor, estimated → '≈' prefix.
       expect(find.text(r'Bal. ≈ $1,000.00'), findsOneWidget);
       // Persisted statement balance renders plain (no '≈') and wins
-      // over the walk (which would have said 1,010).
+      // over the walk (which would have said 990.00).
       expect(find.text(r'Bal. $555.25'), findsOneWidget);
-      expect(find.textContaining(r'$1,010.00'), findsNothing);
+      expect(find.textContaining(r'$990.00'), findsNothing);
       // Row below the persisted one re-anchors: it's OLDER, so its
-      // balance is from BEFORE row b's outflow of 11 left the account:
-      // 555.25 + 11 = 566.25.
-      expect(find.text(r'Bal. ≈ $566.25'), findsOneWidget);
+      // balance predates row b's inflow of 11 arriving:
+      // 555.25 − 11 = 544.25.
+      expect(find.text(r'Bal. ≈ $544.25'), findsOneWidget);
 
       // Meta line drops the pointless single-account name…
       expect(find.textContaining('Checking'), findsNothing);
@@ -377,11 +378,12 @@ void main() {
         'keeps income/expense styling and no pill', (tester) async {
       _setViewSize(tester, const Size(1200, 900));
       final txs = _makeTxs(3);
-      // Row 0 is the RECEIVING leg (negative amount = inflow in the
-      // Plaid sign convention) — exactly the case that used to render
-      // as +green income. Row 2 is a genuine income row for contrast.
-      txs[0]['amount'] = -25.0;
-      txs[2]['amount'] = -12.0;
+      // Row 0 is the RECEIVING leg (positive amount = inflow in the
+      // storage sign convention) — exactly the case that must NOT render
+      // as +green income because it's a transfer. Row 2 is a genuine
+      // income row (positive = inflow) for contrast.
+      txs[0]['amount'] = 25.0;
+      txs[2]['amount'] = 12.0;
 
       await tester.pumpWidget(
           _unboundedHost(_tab(txs, fxTransfers: link(confirmed: false))));
@@ -440,8 +442,9 @@ void main() {
 
     /// Rows pinned to two calendar months safely outside the
     /// Today/Yesterday band (2 and 3 months back from the test run date).
-    /// Month A nets to −\$60 (100 out, 40 in); month B to +\$40
-    /// (10 out, 50 in) so both subtotal signs are exercised.
+    /// Storage sign convention: positive = inflow, negative = outflow, so
+    /// month A nets to +\$60 (100 in, 40 out); month B to −\$40
+    /// (10 in, 50 out) so both subtotal signs are exercised.
     ({DateTime monthA, DateTime monthB, List<Map<String, dynamic>> txs})
         twoMonths() {
       final now = DateTime.now();
@@ -497,10 +500,10 @@ void main() {
 
       expect(find.text(monthLabel(data.monthA)), findsOneWidget);
       expect(find.text(monthLabel(data.monthB)), findsOneWidget);
-      // Month A: 100 out − 40 in → −$60 net; month B: 10 out − 50 in →
-      // +$40 net. No "(partial)" suffix when hasMore is false.
-      expect(find.text('−\$60.00 net'), findsOneWidget);
-      expect(find.text('+\$40.00 net'), findsOneWidget);
+      // Month A: 100 in − 40 out → +$60 net; month B: 10 in − 50 out →
+      // −$40 net. No "(partial)" suffix when hasMore is false.
+      expect(find.text('+\$60.00 net'), findsOneWidget);
+      expect(find.text('−\$40.00 net'), findsOneWidget);
       expect(find.textContaining('(partial)'), findsNothing);
     });
 
@@ -514,8 +517,8 @@ void main() {
 
       // Month A is fully ahead of the pagination boundary → plain net;
       // month B may be cut off mid-month → honest "(partial)" suffix.
-      expect(find.text('−\$60.00 net'), findsOneWidget);
-      expect(find.text('+\$40.00 net (partial)'), findsOneWidget);
+      expect(find.text('+\$60.00 net'), findsOneWidget);
+      expect(find.text('−\$40.00 net (partial)'), findsOneWidget);
     });
 
     testWidgets('the virtualised (>50 rows) path gets the same month '

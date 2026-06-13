@@ -159,11 +159,13 @@ class TxFilters {
       if (!categories.contains(cat)) return false;
     }
     final amount = (tx['amount'] as num?)?.toDouble() ?? 0.0;
-    if (flow == TxFlow.expense && amount <= 0) return false;
-    if (flow == TxFlow.income && amount >= 0) return false;
-    // Amount window on the absolute value: the Plaid sign convention
-    // (positive = outflow) is an implementation detail users searching
-    // for "the ~$450 one" shouldn't have to know about.
+    // Storage sign convention (backend sync.rs:659): negative = outflow
+    // (expense), positive = inflow (income).
+    if (flow == TxFlow.expense && amount >= 0) return false;
+    if (flow == TxFlow.income && amount <= 0) return false;
+    // Amount window on the absolute value: the storage sign convention
+    // is an implementation detail users searching for "the ~$450 one"
+    // shouldn't have to know about.
     final absAmount = amount.abs();
     if (minAmount != null && absAmount < minAmount!) return false;
     if (maxAmount != null && absAmount > maxAmount!) return false;

@@ -89,13 +89,14 @@ String displayLabel(Map<String, dynamic> tx) {
 
   final desc = nonEmpty(tx['description']);
   final orig = nonEmpty(tx['original_description']);
-  // Sign convention: amount > 0 is an outflow (expense). We prefer
-  // payee for outflows and payer for inflows; if only one side is
-  // populated we fall through to it regardless of sign.
+  // Storage sign convention (backend sync.rs:659): amount < 0 is an
+  // outflow (expense). We prefer payee for outflows and payer for
+  // inflows; if only one side is populated we fall through to it
+  // regardless of sign.
   final amount = (tx['amount'] as num?)?.toDouble() ?? 0.0;
   final payee = nonEmpty(tx['payment_payee']);
   final payer = nonEmpty(tx['payment_payer']);
-  final paymentSide = amount > 0
+  final paymentSide = amount < 0
       ? (payee ?? payer)
       : (payer ?? payee);
 

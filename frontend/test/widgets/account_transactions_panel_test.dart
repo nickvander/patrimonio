@@ -175,7 +175,7 @@ void main() {
         '= current balance, older rows walk back through the amounts',
         (tester) async {
       _setViewSize(tester, const Size(1000, 900));
-      // 3 rows, amounts 10/11/12 (all outflows), account balance 1000.
+      // 3 rows, amounts 10/11/12 (all inflows, positive), account balance 1000.
       final table = _makeTable(3);
       // Row 1 carries a statement-persisted balance — exact, no '≈'.
       table[1]['balance_after'] = 555.25;
@@ -190,8 +190,8 @@ void main() {
       // The persisted statement figure wins and renders plain.
       expect(find.text(r'Bal. $555.25'), findsOneWidget);
       // The row below it re-anchors on the exact figure: the older row's
-      // balance predates row 1's outflow of 11, so 555.25 + 11 = 566.25.
-      expect(find.text(r'Bal. ≈ $566.25'), findsOneWidget);
+      // balance predates row 1's inflow of 11 arriving, so 555.25 − 11 = 544.25.
+      expect(find.text(r'Bal. ≈ $544.25'), findsOneWidget);
 
       // Single-account host: the meta line no longer repeats the
       // account name the panel header already shows.

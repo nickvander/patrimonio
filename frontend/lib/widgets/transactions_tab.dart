@@ -47,7 +47,8 @@ final RegExp _trailingZeros = RegExp(r'\.?0+$');
 /// the amount in plain numeric forms. The amount is the absolute value
 /// as both "450.00" and "450" (trailing zeros trimmed), so searching
 /// "450" or "450.00" finds a 450.00 transaction regardless of the
-/// Plaid sign convention or how the row formats the currency.
+/// storage sign convention (negative = outflow; see backend
+/// services/sync.rs:659) or how the row formats the currency.
 ///
 /// Top-level (not a method) so the field list is unit-testable without
 /// pumping the tab; [_TransactionsTabState._haystackFor] wraps it with
@@ -98,10 +99,12 @@ String searchHaystackFor(Map<String, dynamic> tx) {
 ///   walk for the older rows beneath it.
 /// - Otherwise the value is ESTIMATED by walking down from [anchor]
 ///   (the account's current native-currency balance): the top row's
-///   balance-after IS the anchor, and each step down adds the newer
-///   row's amount back (Plaid sign convention, verified throughout the
-///   app: positive = outflow, so `balance_before = balance_after +
-///   amount`). No anchor → no estimates.
+///   balance-after IS the anchor, and each step down removes the newer
+///   row's amount (storage sign convention, see backend
+///   services/sync.rs:659: negative = outflow, positive = inflow, so
+///   `balance_after = balance_before + amount`, i.e.
+///   `balance_before = balance_after − amount`). No anchor → no
+///   estimates.
 /// - A row whose amount is missing/unparseable breaks the walk: every
 ///   row below it gets NO estimate (persisted values still show, and
 ///   re-anchor) — better to show nothing than a wrong number.
@@ -134,8 +137,10 @@ Map<String, ({double value, bool estimated})> runningBalancesFor(
       out[id] = (value: running, estimated: true);
     }
     // Step down: the next (older) row's balance-after is this row's
-    // balance-before. An unparseable amount poisons everything below.
-    running = (running == null || amount == null) ? null : running + amount;
+    // balance-before, i.e. balance_after − amount (a negative outflow
+    // REDUCED the balance, so before it the balance was higher). An
+    // unparseable amount poisons everything below.
+    running = (running == null || amount == null) ? null : running - amount;
   }
   return out;
 }
@@ -2103,8 +2108,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
         to: widget.targetCurrency,
         usdMxnRate: widget.usdMxnRate,
       );
-      // Plaid sign convention: positive = outflow. Net is income-positive.
-      next[key] = next[key]! - converted;
+      // Storage sign convention (backend sync.rs:659): negative =
+      // outflow, positive = inflow — so the income-positive net is a
+      // plain sum of amounts (transfer legs excluded above).
+      next[key] = next[key]! + converted;
     }
     _monthNets = next;
     _monthNetsTxIdentity = identity;
@@ -2256,7 +2263,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
       to: widget.targetCurrency,
       usdMxnRate: widget.usdMxnRate,
     );
-    final isExpense = sourceAmount > 0;
+    // Storage sign convention (backend sync.rs:659): negative = outflow,
+    // positive = inflow.
+    final isExpense = sourceAmount < 0;
     final notes = (tx['user_notes'] ?? '').toString();
     // Same prettified label the row's meta line shows — the registry is
     // keyed on it, so a Spanish import category ("Supermercado") and the
@@ -2707,7 +2716,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
     );
     final needsConversion =
         widget.usdMxnRate > 0 && sourceCurrency != widget.targetCurrency;
-    final isExpense = sourceAmount > 0;
+    // Storage sign convention (backend sync.rs:659): negative = outflow,
+    // positive = inflow.
+    final isExpense = sourceAmount < 0;
     // ONE accent pair for the binary in/out concept, applied to the hero
     // border, caption and amount alike: inflow = jade positive, outflow =
     // neutral text. The red `negative` token stays reserved for
@@ -3516,7 +3527,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
         ((other['amount'] as num?)?.toDouble() ?? 0.0);
     final otherSourceCurrency =
         (other['currency'] ?? widget.targetCurrency).toString();
-    final otherIsExpense = otherSourceAmount > 0;
+    // Storage sign convention (backend sync.rs:659): negative = outflow.
+    final otherIsExpense = otherSourceAmount < 0;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),

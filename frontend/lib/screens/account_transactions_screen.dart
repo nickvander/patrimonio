@@ -455,8 +455,10 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     final txs = _transactions ?? const [];
     final current = _currentBalance;
 
-    // Walk transactions newest-first, treating amount > 0 as outflow:
-    // balance(date - 1) = balance(date) + amount.
+    // Walk transactions newest-first. Storage sign convention (backend
+    // sync.rs:659): negative = outflow, positive = inflow, so a row's
+    // balance-before is balance(date) − amount, i.e. the day before an
+    // outflow the balance was higher: balance(date - 1) = balance(date) − amount.
     final sorted = [...txs];
     sorted.sort((a, b) {
       final ad = DateTime.tryParse(a['date']?.toString() ?? '') ?? DateTime(2000);
@@ -473,7 +475,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       if (d == null) continue;
       if (d.isBefore(cutoff)) break;
       final amt = ((tx['amount'] as num?)?.toDouble() ?? 0.0);
-      running += amt;
+      running -= amt;
       dailyBalances[DateTime(d.year, d.month, d.day)] = running;
     }
 

@@ -210,10 +210,10 @@ void main() {
 
     test('min+max window combines with the other filters', () {
       const f = TxFilters(minAmount: 100, maxAmount: 200, flow: TxFlow.expense);
-      expect(f.matches(tx(150.0)), isTrue); // positive = expense
-      expect(f.matches(tx(-150.0)), isFalse); // in window but income
-      expect(f.matches(tx(99.0)), isFalse);
-      expect(f.matches(tx(201.0)), isFalse);
+      expect(f.matches(tx(-150.0)), isTrue); // negative = expense, in window
+      expect(f.matches(tx(150.0)), isFalse); // in window but income (positive)
+      expect(f.matches(tx(-99.0)), isFalse); // expense but below window
+      expect(f.matches(tx(-201.0)), isFalse); // expense but above window
       expect(f.badgeCount, 2); // amount counts as ONE filter + flow
     });
 

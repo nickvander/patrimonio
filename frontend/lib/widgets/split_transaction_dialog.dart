@@ -50,7 +50,8 @@ class _SplitDraft {
 ///   already-split parent).
 class SplitTransactionDialog extends StatefulWidget {
   /// Parent transaction's amount. Same sign convention as the rest of
-  /// the app (amount > 0 = expense / outflow).
+  /// the app (backend sync.rs:659): amount < 0 = expense / outflow,
+  /// amount > 0 = income / inflow.
   final double parentAmount;
   final String parentCurrency;
   /// Hint shown above the editor: the parent's display label.
@@ -352,7 +353,7 @@ class _SplitTransactionDialogState extends State<SplitTransactionDialog> {
             Text(
               l.txSplitTotal(
                 native.format(widget.parentAmount.abs()),
-                widget.parentAmount > 0 ? l.txSplitExpenseTag : l.txSplitIncomeTag,
+                widget.parentAmount < 0 ? l.txSplitExpenseTag : l.txSplitIncomeTag,
               ),
               style: TextStyle(fontSize: 12, color: context.textSubtle),
             ),
