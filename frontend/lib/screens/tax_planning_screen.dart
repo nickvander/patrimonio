@@ -331,6 +331,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     final totalTaxable = usd('total_taxable');
     final liabUs = usd('estimated_liability_us');
     final liabMx = usd('estimated_liability_mx');
+    final isrWithheld = usd('isr_withheld_usd');
 
     final gainsFromLots = summary['gains_from_lots'] == true;
     final rateUs = ((summary['effective_rate_us'] as num?)?.toDouble() ?? 0) * 100;
@@ -360,6 +361,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
             interestIncome: interestIncome,
             liabUs: liabUs,
             liabMx: liabMx,
+            isrWithheld: isrWithheld,
             rateUs: rateUs,
             rateMx: rateMx,
             gainsFromLots: gainsFromLots,
@@ -544,6 +546,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     required double interestIncome,
     required double liabUs,
     required double liabMx,
+    required double isrWithheld,
     required double rateUs,
     required double rateMx,
     required bool gainsFromLots,
@@ -665,6 +668,17 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
             l.taxEffectiveRate(rateMx.toStringAsFixed(2)),
             style: TextStyle(fontSize: 12, color: context.textSubtle),
           ),
+          if (isrWithheld > 0) ...[
+            const SizedBox(height: 6),
+            Text(
+              l.taxMxWithheld(
+                widget.currencyFormat.format(isrWithheld),
+                widget.currencyFormat
+                    .format((liabMx - isrWithheld).clamp(0, double.infinity)),
+              ),
+              style: TextStyle(fontSize: 11, color: context.textMuted),
+            ),
+          ],
           if (!gainsFromLots) ...[
             const SizedBox(height: 8),
             _roughEstimateBadge(l),

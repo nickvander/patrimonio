@@ -854,6 +854,13 @@
       "interest": { "type": "String" }
     }
   },
+  "taxMxWithheld": "ISR already withheld {withheld} · est. remaining {net}",
+  "@taxMxWithheld": {
+    "placeholders": {
+      "withheld": { "type": "String" },
+      "net": { "type": "String" }
+    }
+  },
   "taxUsEstimatedLiability": "US estimated liability (IRS)",
   "taxMxEstimatedLiability": "MX estimated liability (SAT)",
   "taxEffectiveRate": "Effective rate: {rate}%",

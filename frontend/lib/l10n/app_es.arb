@@ -745,6 +745,7 @@
   "taxCapitalGains": "Ganancias de capital: {amount}",
   "taxStLtBreakdown": "Corto plazo {st} · Largo plazo {lt}",
   "taxIncomeDecomposition": "Salario {wages} · Dividendos {dividends} · Intereses {interest}",
+  "taxMxWithheld": "ISR ya retenido {withheld} · est. restante {net}",
   "taxUsEstimatedLiability": "Impuesto estimado EE. UU. (IRS)",
   "taxMxEstimatedLiability": "Impuesto estimado MX (SAT)",
   "taxEffectiveRate": "Tasa efectiva: {rate}%",

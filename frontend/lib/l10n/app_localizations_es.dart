@@ -2754,6 +2754,11 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String taxMxWithheld(String withheld, String net) {
+    return 'ISR ya retenido $withheld · est. restante $net';
+  }
+
+  @override
   String get taxUsEstimatedLiability => 'Impuesto estimado EE. UU. (IRS)';
 
   @override

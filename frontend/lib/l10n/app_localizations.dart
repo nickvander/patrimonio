@@ -4578,6 +4578,12 @@ abstract class AppLocalizations {
     String interest,
   );
 
+  /// No description provided for @taxMxWithheld.
+  ///
+  /// In en, this message translates to:
+  /// **'ISR already withheld {withheld} · est. remaining {net}'**
+  String taxMxWithheld(String withheld, String net);
+
   /// No description provided for @taxUsEstimatedLiability.
   ///
   /// In en, this message translates to:
