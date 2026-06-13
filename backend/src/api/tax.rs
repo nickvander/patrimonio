@@ -14,6 +14,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/summary", get(get_tax_summary))
         .route("/transactions", get(get_tax_transactions))
+        .route("/disposals", get(get_tax_disposals))
         .route("/export", get(export_tax_csv))
         .route("/export/pdf", get(export_tax_pdf))
 }
@@ -24,13 +25,62 @@ struct TaxQuery {
     status: Option<String>,
 }
 
+/// The setting key under which the frontend persists the user's filing
+/// status (via `PUT /settings/{key}`). When a tax endpoint is hit without an
+/// explicit `status` query param — e.g. a direct CSV/PDF link, or a fresh
+/// page load before the screen has wired its dropdown — the backend honors
+/// this persisted value as the default. Stays in lockstep with the key the
+/// frontend writes.
+const FILING_STATUS_SETTING_KEY: &str = "tax_filing_status";
+
+/// Resolve the filing status for a request the same way for every tax
+/// endpoint: an explicit query param wins; otherwise fall back to the user's
+/// persisted `tax_filing_status` setting; otherwise the hardcoded default
+/// (Single). The returned string is normalized to the vocabulary the bracket
+/// tables key on (`Single` / `Married` / `Head of Household`) — anything else
+/// (including a stale or malformed persisted value) collapses to `Single`,
+/// matching `TaxYearTables::us_status`'s own fall-through.
+async fn resolve_filing_status(
+    state: &AppState,
+    user_id: uuid::Uuid,
+    query_status: Option<String>,
+) -> String {
+    let raw = match query_status {
+        Some(s) => Some(s),
+        None => sqlx::query_scalar::<_, serde_json::Value>(
+            "SELECT value FROM app_settings WHERE key = $1 AND user_id = $2",
+        )
+        .bind(FILING_STATUS_SETTING_KEY)
+        .bind(user_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()
+        // The setting stores a JSON string; ignore null / non-string shapes.
+        .and_then(|v| v.as_str().map(|s| s.to_string())),
+    };
+    normalize_filing_status(raw.as_deref())
+}
+
+/// Map any incoming status string onto the canonical vocabulary the year
+/// tables understand; unknown / absent → `Single` (same default the service
+/// layer applies). Case- and whitespace-insensitive so a persisted value or a
+/// query param doesn't have to be character-perfect.
+fn normalize_filing_status(raw: Option<&str>) -> String {
+    match raw.map(|s| s.trim().to_lowercase()).as_deref() {
+        Some("married") => "Married".to_string(),
+        Some("head of household") => "Head of Household".to_string(),
+        _ => "Single".to_string(),
+    }
+}
+
 async fn get_tax_summary(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Query(query): Query<TaxQuery>,
 ) -> axum::response::Response {
     let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
-    let status = query.status.unwrap_or_else(|| "Single".to_string());
+    let status = resolve_filing_status(&state, ctx.user_id, query.status).await;
 
     match TaxService::calculate_yearly_tax(&state.db, year, &status, ctx.user_id).await {
         Ok(estimation) => Json::<TaxEstimation>(estimation).into_response(),
@@ -67,13 +117,42 @@ async fn get_tax_transactions(
     }
 }
 
+/// T7: the realized-capital-gains detail behind the summary's ST/LT figures,
+/// as JSON. Same source query (and the same tax-advantaged flagging) the CSV's
+/// 8949 section uses — but here BOTH taxable and tax-advantaged disposals are
+/// returned, each carrying its `tax_advantaged` flag so the screen can split
+/// or badge them itself. Newest `sell_date` first (the service query returns
+/// ascending, so reverse here without disturbing the CSV's ordering).
+async fn get_tax_disposals(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Query(query): Query<TaxQuery>,
+) -> axum::response::Response {
+    let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
+
+    match TaxService::get_lot_disposals(&state.db, year, ctx.user_id).await {
+        Ok(mut disposals) => {
+            disposals.reverse();
+            Json::<Vec<crate::services::tax::TaxDisposal>>(disposals).into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to fetch lot disposals: {}", e);
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response()
+        }
+    }
+}
+
 async fn export_tax_csv(
      State(state): State<AppState>,
      Extension(ctx): Extension<AuthContext>,
      Query(query): Query<TaxQuery>,
 ) -> axum::response::Response {
     let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
-    let status = query.status.unwrap_or_else(|| "Single".to_string());
+    let status = resolve_filing_status(&state, ctx.user_id, query.status).await;
 
     let transactions = match TaxService::get_taxable_transactions(&state.db, year, ctx.user_id).await {
         Ok(t) => t,
@@ -296,7 +375,7 @@ async fn export_tax_pdf(
      Query(query): Query<TaxQuery>,
 ) -> axum::response::Response {
     let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
-    let status = query.status.unwrap_or_else(|| "Single".to_string());
+    let status = resolve_filing_status(&state, ctx.user_id, query.status).await;
 
     let estimation = match TaxService::calculate_yearly_tax(&state.db, year, &status, ctx.user_id).await {
         Ok(est) => est,

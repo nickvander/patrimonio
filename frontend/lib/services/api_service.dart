@@ -2030,6 +2030,23 @@ class ApiService {
         'No se pudieron cargar los movimientos fiscales'));
   }
 
+  /// Realized capital-gains disposals (Form 8949-style detail) behind the
+  /// summary's ST/LT figures, newest sell date first. Each row carries its
+  /// `tax_advantaged` flag so the screen can split or badge wrapper-account
+  /// disposals separately. Returns the raw decoded JSON list.
+  Future<List<dynamic>> getTaxDisposals(int year) async {
+    final uri = Uri.parse(
+      '$_baseUrl/tax/disposals',
+    ).replace(queryParameters: {'year': year.toString()});
+    final response = await _get(uri);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception(_t('Failed to load realized gains',
+        'No se pudieron cargar las ganancias realizadas'));
+  }
+
   /// Sync a single institution. Cheaper than the global sync when only
   /// one or two institutions are stuck.
   Future<void> syncInstitution(String institutionId) async {

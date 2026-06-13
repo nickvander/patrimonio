@@ -969,6 +969,7 @@ impl TaxService {
                     },
                     account_type,
                     tax_advantaged,
+                    from_lots: true,
                 }
             })
             .collect())
@@ -1015,6 +1016,13 @@ pub struct TaxDisposal {
     /// (TAX_ADVANTAGED_ACCOUNT_TYPES) — excluded from taxable gains and from
     /// the 8949 CSV section, reported in its own section instead.
     pub tax_advantaged: bool,
+    /// True when this row comes from a precise lot disposal (always the case
+    /// for `get_lot_disposals`, which only reads `lot_disposals`). Mirrors the
+    /// summary's `gains_from_lots` so the screen can badge a row as precise
+    /// vs. a blended estimate; the blended-cost-basis fallback the summary
+    /// uses when NO lots exist produces no per-disposal rows, so a disposal in
+    /// this list is never an estimate.
+    pub from_lots: bool,
 }
 
 #[cfg(test)]

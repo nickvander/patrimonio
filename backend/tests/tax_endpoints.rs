@@ -1384,3 +1384,273 @@ async fn plaid_investment_income_events_persist_idempotently() {
         "ordinary_income: {body}"
     );
 }
+
+// =====================================================================
+// T7 — realized disposals as JSON via GET /tax/disposals
+// =====================================================================
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_disposals_endpoint_returns_rows_newest_first_with_advantaged_flag() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+
+    let brokerage = seed_typed_account(&pool, user_id, "brokerage").await;
+    let k401 = seed_typed_account(&pool, user_id, "401k").await;
+
+    // Two taxable disposals on different sell dates (to assert ordering) plus
+    // one inside a 401k wrapper — the endpoint returns ALL of them, flagged.
+    seed_disposal_dated(
+        &pool, user_id, brokerage, "VTI", "2026-01-01", "2026-03-01", "early", "500",
+    )
+    .await;
+    seed_disposal_dated(
+        &pool, user_id, brokerage, "VXUS", "2022-01-01", "2026-09-01", "late", "3000",
+    )
+    .await;
+    seed_disposal_dated(
+        &pool, user_id, k401, "RETF", "2022-01-01", "2026-05-01", "wrap", "7000",
+    )
+    .await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/disposals?year=2026",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let status = res.status();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(status, StatusCode::OK, "disposals body: {body}");
+    let rows = body.as_array().expect("array of disposals");
+    assert_eq!(rows.len(), 3, "all disposals returned, taxable + wrapper: {body}");
+
+    // Newest sell_date first.
+    let dates: Vec<&str> = rows.iter().map(|r| r["sell_date"].as_str().unwrap()).collect();
+    assert_eq!(dates, vec!["2026-09-01", "2026-05-01", "2026-03-01"], "{body}");
+
+    // Field shape the frontend depends on, checked on the first (VXUS, LT)
+    // taxable row: symbol, dates, term, proceeds/basis/signed gain (USD),
+    // flags. Proceeds = 10×100 = 1000, basis = 10×60 = 600 (seed_disposal).
+    let vxus = rows.iter().find(|r| r["symbol"] == "VXUS").expect("VXUS row");
+    assert_eq!(vxus["acquired_date"], serde_json::json!("2022-01-01"));
+    assert_eq!(vxus["sell_date"], serde_json::json!("2026-09-01"));
+    assert_eq!(vxus["long_term"], serde_json::json!(true), "VXUS is long-term");
+    assert!((vxus["proceeds_usd"].as_f64().unwrap() - 1000.0).abs() < 0.01, "{body}");
+    assert!((vxus["cost_usd"].as_f64().unwrap() - 600.0).abs() < 0.01, "{body}");
+    assert!((vxus["gain_usd"].as_f64().unwrap() - 3000.0).abs() < 0.01, "{body}");
+    assert_eq!(vxus["tax_advantaged"], serde_json::json!(false));
+    assert_eq!(vxus["from_lots"], serde_json::json!(true));
+
+    let vti = rows.iter().find(|r| r["symbol"] == "VTI").expect("VTI row");
+    assert_eq!(vti["long_term"], serde_json::json!(false), "VTI is short-term");
+
+    // The wrapper disposal is present but flagged tax_advantaged + carries its
+    // account type, so the screen can separate it — consistent with the
+    // summary, which excludes it from taxable gains.
+    let retf = rows.iter().find(|r| r["symbol"] == "RETF").expect("RETF row");
+    assert_eq!(retf["tax_advantaged"], serde_json::json!(true), "{body}");
+    assert_eq!(retf["account_type"], serde_json::json!("401k"), "{body}");
+
+    // Reconcile with the summary: taxable ST=500, LT=3000; the 7000 wrapper
+    // gain sits in tax_advantaged_gains, NOT capital_gains — exactly the split
+    // the disposals' flags express.
+    let summary = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/summary?year=2026&status=Single",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let summary = body_json(summary.into_body()).await;
+    let taxable_gain: f64 = rows
+        .iter()
+        .filter(|r| !r["tax_advantaged"].as_bool().unwrap())
+        .map(|r| r["gain_usd"].as_f64().unwrap())
+        .sum();
+    assert!(
+        (taxable_gain - summary["capital_gains"].as_f64().unwrap()).abs() < 0.01,
+        "taxable disposal gains must reconcile with summary capital_gains"
+    );
+    let adv_gain: f64 = rows
+        .iter()
+        .filter(|r| r["tax_advantaged"].as_bool().unwrap())
+        .map(|r| r["gain_usd"].as_f64().unwrap())
+        .sum();
+    assert!(
+        (adv_gain - summary["tax_advantaged_gains"].as_f64().unwrap()).abs() < 0.01,
+        "wrapper disposal gains must reconcile with summary tax_advantaged_gains"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_disposals_endpoint_empty_when_no_lots() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, _user_id) = bootstrap(&app, &pool).await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/disposals?year=2026",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body.as_array().expect("array").len(), 0, "no disposals: {body}");
+}
+
+// =====================================================================
+// T9 — filing-status default read from the persisted setting
+// =====================================================================
+
+/// Persist the filing status the way the frontend's `setSetting` would — a
+/// JSON string under the `tax_filing_status` key, scoped to the user (mirrors
+/// settings.rs's INSERT ... ON CONFLICT).
+async fn seed_filing_status_setting(pool: &PgPool, user_id: uuid::Uuid, status: &str) {
+    sqlx::query(
+        "INSERT INTO app_settings (user_id, key, value, updated_at) \
+         VALUES ($1, 'tax_filing_status', $2, NOW()) \
+         ON CONFLICT (user_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()",
+    )
+    .bind(user_id)
+    .bind(serde_json::Value::String(status.to_string()))
+    .execute(pool)
+    .await
+    .expect("seed filing-status setting");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_summary_defaults_filing_status_from_persisted_setting() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let acct = seed_typed_account(&pool, user_id, "depository").await;
+
+    // $50,000 wages. Single vs. Married diverge through the standard
+    // deduction AND the bracket widths, so the resolved status is observable
+    // in estimated_liability_us.
+    seed_categorized_tx(
+        &pool, user_id, acct, "2026-02-13", "ACME CORP PAYROLL", "50000.00",
+        Some("INCOME"), Some("INCOME_WAGES"), None,
+    )
+    .await;
+
+    // Persist "Married".
+    seed_filing_status_setting(&pool, user_id, "Married").await;
+
+    // No status query param → must pick up the persisted "Married".
+    // 2026 Married (UNVERIFIED): 50,000 − 32,200 deduction = 17,800 taxable;
+    // all under the 24,800 10% bracket → 1,780.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/tax/summary?year=2026", None, Some(&token)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert!(
+        (body["standard_deduction_used"].as_f64().unwrap() - 32200.0).abs() < 0.01,
+        "persisted Married deduction expected, got {body}"
+    );
+    assert!(
+        (body["estimated_liability_us"].as_f64().unwrap() - 1780.0).abs() < 0.01,
+        "persisted Married liability expected, got {body}"
+    );
+
+    // An explicit query param still WINS over the persisted setting.
+    // Single 2026: 50,000 − 16,100 = 33,900 → 12,400×10% + 21,500×12% = 3,820.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/summary?year=2026&status=Single",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert!(
+        (body["standard_deduction_used"].as_f64().unwrap() - 16100.0).abs() < 0.01,
+        "query param Single must override persisted Married, got {body}"
+    );
+    assert!(
+        (body["estimated_liability_us"].as_f64().unwrap() - 3820.0).abs() < 0.01,
+        "query param Single liability expected, got {body}"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_summary_falls_back_to_single_with_no_setting() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let acct = seed_typed_account(&pool, user_id, "depository").await;
+
+    seed_categorized_tx(
+        &pool, user_id, acct, "2026-02-13", "ACME CORP PAYROLL", "50000.00",
+        Some("INCOME"), Some("INCOME_WAGES"), None,
+    )
+    .await;
+
+    // Neither a query param NOR a persisted setting → hardcoded Single default.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/tax/summary?year=2026", None, Some(&token)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert!(
+        (body["standard_deduction_used"].as_f64().unwrap() - 16100.0).abs() < 0.01,
+        "absent setting must fall back to Single, got {body}"
+    );
+    assert!(
+        (body["estimated_liability_us"].as_f64().unwrap() - 3820.0).abs() < 0.01,
+        "Single fallback liability expected, got {body}"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_csv_export_honors_persisted_filing_status() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+
+    // A direct CSV link carries no status param; the persisted setting must
+    // still flow into the "Filing status" header line.
+    seed_filing_status_setting(&pool, user_id, "Head of Household").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/tax/export?year=2026", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 1024 * 256).await.unwrap();
+    let csv = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(
+        csv.contains("Filing status,Head of Household"),
+        "CSV should reflect persisted status, csv:\n{csv}"
+    );
+}
