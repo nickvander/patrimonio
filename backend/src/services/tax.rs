@@ -129,6 +129,16 @@ pub struct TaxEstimation {
     /// The ST/LT character split of the carryforward is not modeled.
     #[serde(with = "rust_decimal::serde::float")]
     pub capital_loss_carryforward: Decimal,
+    /// Realized losses (in **USD**, reported as a signed sum so it is <= 0)
+    /// DISALLOWED for the year by the wash-sale rule (T12): taxable-account
+    /// loss disposals with a same-`holding_id` buy inside the ±30-day window
+    /// (see [`WASH_SALE_WINDOW_DAYS`]). These are already excluded from
+    /// `short_term_gains` / `long_term_gains` and therefore from the netting
+    /// and the liability — this field reports the magnitude that was removed
+    /// so the exclusion is visible rather than silent. Wash-sale scope is on
+    /// the human-verification list (assumptions item 5).
+    #[serde(with = "rust_decimal::serde::float")]
+    pub wash_sale_disallowed_loss: Decimal,
 }
 
 /// Account subtypes whose internal trades are not taxable events — the
@@ -227,6 +237,25 @@ const AMOUNT_USD_SQL: &str =
     "(CASE WHEN UPPER(t.currency) = 'MXN' THEN t.amount / fx.rate ELSE t.amount END)";
 const AMOUNT_MXN_SQL: &str =
     "(CASE WHEN UPPER(t.currency) = 'MXN' THEN t.amount ELSE t.amount * fx.rate END)";
+
+/// Wash-sale window (T12). A realized LOSS on `holding_id` at sale date D is a
+/// wash sale if a BUY of the SAME `holding_id` exists in `holding_lots` with
+/// `acquired_at` inside the 61-day window `[D-30, D+30]` (inclusive). The same
+/// window backs the forward-looking harvest guard in T11, with D = the
+/// contemplated sale date (today).
+///
+/// ⚠ SIMPLIFICATIONS ON THE HUMAN-VERIFICATION LIST (work/ux/tax_planning_tasks.md,
+/// assumptions item 5):
+///   - "Same `holding_id`" is a proxy for the IRS "substantially identical
+///     securities" test. It will miss e.g. two share classes / two tickers of
+///     the same fund, and will not catch options or replacement securities in
+///     a different holding row.
+///   - The window is scanned across ALL of the user's accounts (cross-account
+///     scope), with no special handling of IRA/Roth replacement-purchase rules.
+///   - A buy is any `holding_lots` row in the window regardless of its `qty`
+///     (including FIFO-depletion marker rows, which are harmless here because
+///     they carry the same `acquired_at`/`holding_id` as a real buy would).
+const WASH_SALE_WINDOW_DAYS: i64 = 30;
 
 // =====================================================================
 // Year-keyed tax constant tables (T4)
@@ -634,6 +663,38 @@ impl TaxService {
         }
     }
 
+    /// The marginal ORDINARY rate that applies to the next dollar of taxable
+    /// ordinary income at `taxable_ordinary` — i.e. the rate a short-term
+    /// harvested loss would save at the top of the user's income (a
+    /// first-order estimate; a large loss can spill into a lower bracket, not
+    /// modeled). Income at or below $0 still maps to the lowest bracket rate.
+    /// ⚠ Rides the same UNVERIFIED constant tables as everything else.
+    pub fn marginal_ordinary_rate(taxable_ordinary: Decimal, t: &UsStatusTables) -> Decimal {
+        let x = taxable_ordinary.max(dec!(0));
+        for b in &t.ordinary {
+            if x < b.upto {
+                return b.rate;
+            }
+        }
+        t.ordinary.last().map(|b| b.rate).unwrap_or(dec!(0))
+    }
+
+    /// The marginal LONG-TERM capital-gains rate (0% / 15% / 20%) that applies
+    /// to the next dollar of LT gain STACKED on top of `taxable_ordinary` —
+    /// the rate a long-term harvested loss would save against future LT gains
+    /// at that stacking point. Same band edges as [`Self::calculate_us_ltcg`].
+    /// ⚠ Rides the same UNVERIFIED constant tables.
+    pub fn marginal_ltcg_rate(taxable_ordinary: Decimal, t: &UsStatusTables) -> Decimal {
+        let start = taxable_ordinary.max(dec!(0));
+        if start < t.ltcg_0_top {
+            dec!(0)
+        } else if start < t.ltcg_15_top {
+            dec!(0.15)
+        } else {
+            dec!(0.20)
+        }
+    }
+
     /// Long-term iff `sold > acquired + 1 calendar year` (chrono month
     /// arithmetic, NOT a 365-day count — "more than one year" is a calendar
     /// test, so e.g. a 366-day hold across a leap day that lands exactly on
@@ -721,19 +782,28 @@ impl TaxService {
         //    the higher-rate bucket. (The old code sent unknowns to long-term
         //    and called THAT conservative; it is the opposite.) Exports keep
         //    the honest "Unknown" label for those rows.
+        // T12: a realized LOSS whose holding had a same-`holding_id` buy
+        // within ±30 days of the sale is a WASH SALE — its loss is disallowed
+        // for the year, so it is excluded from the ST/LT taxable buckets here
+        // (it neither reduces the liability nor feeds the §1211(b) netting).
+        // Gains are never wash sales; only losses (`realized_pnl_usd < 0`) are
+        // tested, so a wash-flagged GAIN can't exist and the predicate is on
+        // the loss branch only. `wash` is true when such a buy exists.
         let disp = sqlx::query(
             r#"
             SELECT
-                COALESCE(SUM(CASE WHEN NOT adv.is_adv
+                COALESCE(SUM(CASE WHEN NOT adv.is_adv AND NOT wash.is_wash
                                    AND (l.acquired_at IS NULL
                                         OR d.sell_date <= (l.acquired_at + INTERVAL '1 year'))
                               THEN d.realized_pnl_usd ELSE 0 END), 0) AS short_term,
-                COALESCE(SUM(CASE WHEN NOT adv.is_adv
+                COALESCE(SUM(CASE WHEN NOT adv.is_adv AND NOT wash.is_wash
                                    AND l.acquired_at IS NOT NULL
                                    AND d.sell_date > (l.acquired_at + INTERVAL '1 year')
                               THEN d.realized_pnl_usd ELSE 0 END), 0) AS long_term,
                 COALESCE(SUM(CASE WHEN adv.is_adv
                               THEN d.realized_pnl_usd ELSE 0 END), 0) AS tax_advantaged,
+                COALESCE(SUM(CASE WHEN NOT adv.is_adv AND wash.is_wash
+                              THEN d.realized_pnl_usd ELSE 0 END), 0) AS wash_disallowed,
                 COUNT(*) AS n
             FROM lot_disposals d
             LEFT JOIN holding_lots l ON l.id = d.lot_id
@@ -741,6 +811,14 @@ impl TaxService {
             CROSS JOIN LATERAL (
                 SELECT LOWER(COALESCE(a.account_type, '')) = ANY($3) AS is_adv
             ) adv
+            CROSS JOIN LATERAL (
+                SELECT d.realized_pnl_usd < 0 AND EXISTS (
+                    SELECT 1 FROM holding_lots b
+                    WHERE b.user_id = d.user_id
+                      AND b.holding_id = d.holding_id
+                      AND b.acquired_at BETWEEN (d.sell_date - $4::int) AND (d.sell_date + $4::int)
+                ) AS is_wash
+            ) wash
             WHERE d.user_id = $1
               AND EXTRACT(YEAR FROM d.sell_date)::int = $2
             "#,
@@ -748,6 +826,7 @@ impl TaxService {
         .bind(user_id)
         .bind(year)
         .bind(tax_advantaged_types_param())
+        .bind(WASH_SALE_WINDOW_DAYS as i32)
         .fetch_one(db)
         .await?;
 
@@ -757,6 +836,8 @@ impl TaxService {
         let short_term_gains: Decimal = disp.try_get("short_term").unwrap_or_default();
         let long_term_gains: Decimal = disp.try_get("long_term").unwrap_or_default();
         let tax_advantaged_gains: Decimal = disp.try_get("tax_advantaged").unwrap_or_default();
+        let wash_sale_disallowed_loss: Decimal =
+            disp.try_get("wash_disallowed").unwrap_or_default();
 
         let capital_gains = short_term_gains + long_term_gains;
 
@@ -819,6 +900,7 @@ impl TaxService {
             constants_verified: TAX_CONSTANTS_VERIFIED,
             standard_deduction_used: us.standard_deduction_used,
             capital_loss_carryforward: us.capital_loss_carryforward,
+            wash_sale_disallowed_loss,
         })
     }
 
@@ -899,6 +981,12 @@ impl TaxService {
         year: i32,
         user_id: uuid::Uuid,
     ) -> Result<Vec<TaxDisposal>> {
+        // T12: per-disposal wash-sale flag — a LOSS (`realized_pnl_usd < 0`)
+        // with a same-`holding_id` buy in `holding_lots` inside the ±30-day
+        // window around the sale (see WASH_SALE_WINDOW_DAYS). `wash_safe_on`
+        // is the first acquisition date that would NOT fall in the window
+        // (sell_date + 31 days) — i.e. the date after which buying the same
+        // security back no longer triggers the rule for THIS sale.
         let rows = sqlx::query(
             r#"
             SELECT h.symbol, h.name,
@@ -907,7 +995,15 @@ impl TaxService {
                    d.qty_sold, d.sell_price_per_unit, d.sell_fx_rate,
                    d.cost_per_unit, d.cost_fx_rate, d.realized_pnl_usd,
                    l.acquired_at AS acquired_on, d.sell_date AS sold_on,
-                   a.account_type
+                   a.account_type,
+                   (d.realized_pnl_usd < 0 AND EXISTS (
+                       SELECT 1 FROM holding_lots b
+                       WHERE b.user_id = d.user_id
+                         AND b.holding_id = d.holding_id
+                         AND b.acquired_at BETWEEN (d.sell_date - $3::int)
+                                              AND (d.sell_date + $3::int)
+                   )) AS wash_sale,
+                   TO_CHAR(d.sell_date + ($3::int + 1), 'YYYY-MM-DD') AS wash_safe_on
             FROM lot_disposals d
             JOIN holdings h ON h.id = d.holding_id
             JOIN accounts a ON a.id = d.account_id
@@ -919,6 +1015,7 @@ impl TaxService {
         )
         .bind(user_id)
         .bind(year)
+        .bind(WASH_SALE_WINDOW_DAYS as i32)
         .fetch_all(db)
         .await?;
 
@@ -951,6 +1048,11 @@ impl TaxService {
                 let account_type: Option<String> =
                     r.try_get::<Option<String>, _>("account_type").unwrap_or(None);
                 let tax_advantaged = is_tax_advantaged_account_type(account_type.as_deref());
+                let wash_sale: bool = r.try_get("wash_sale").unwrap_or(false);
+                // Only meaningful when wash_sale is true; carried regardless so
+                // the field shape is stable for the frontend.
+                let wash_sale_safe_after: Option<String> =
+                    if wash_sale { r.try_get("wash_safe_on").ok() } else { None };
                 TaxDisposal {
                     symbol: r.try_get("symbol").unwrap_or_default(),
                     name: r.try_get("name").unwrap_or_default(),
@@ -969,10 +1071,214 @@ impl TaxService {
                     },
                     account_type,
                     tax_advantaged,
+                    wash_sale,
+                    wash_sale_safe_after,
                     from_lots: true,
                 }
             })
             .collect())
+    }
+
+    /// T11: unrealized per-lot gain/loss for TAXABLE accounts only — the
+    /// "what if I sell" view. Tax-advantaged wrappers
+    /// (TAX_ADVANTAGED_ACCOUNT_TYPES) are excluded entirely (their internal
+    /// trades aren't taxable events, so harvesting there is meaningless).
+    /// Zero-qty rows are FIFO-depletion markers (no owned shares) and are
+    /// filtered out, matching the dashboard's holdings handler.
+    ///
+    /// Valuation reconciles with `/dashboard/holdings`:
+    ///   - cost basis (USD) = qty × cost_per_unit converted at the LOT's own
+    ///     recorded `usd_fx_rate` (native ÷ fx for MXN, native for USD);
+    ///   - current value (USD) = qty × current `holdings.price` converted at
+    ///     the CURRENT USD→MXN rate (the same `fx_usd_to_mxn` the dashboard
+    ///     uses), since the live price is quoted in the holding's currency;
+    ///   - unrealized gain (USD) = current value − cost basis, signed.
+    ///
+    /// Term is the calendar-year test (`is_long_term`) as of `today`; short
+    /// lots carry `days_until_long_term` and the `long_term_date` they flip.
+    /// Loss lots carry an `estimated_tax_savings_usd` = |loss| × the marginal
+    /// rate (ordinary for short, LTCG for long) at the user's taxable-ordinary
+    /// income for `year`, and a forward-looking `wash_sale_risk` (a
+    /// same-`holding_id` buy within ±30 days of `today`) plus the `safe_after`
+    /// date — see [`WASH_SALE_WINDOW_DAYS`]. Savings ride the UNVERIFIED
+    /// constant tables (`constants_verified`).
+    pub async fn get_unrealized_lots(
+        db: &PgPool,
+        year: i32,
+        status: &str,
+        user_id: uuid::Uuid,
+        today: chrono::NaiveDate,
+    ) -> Result<UnrealizedLots> {
+        // Current USD→MXN rate for valuing live prices — the same nearest
+        // stored rate the dashboard uses, anchored at today.
+        use chrono::Datelike;
+        let usd_mxn_rate = Self::usd_mxn_year_rate(db, today.year()).await?;
+
+        // The marginal rates depend on where the user's taxable ORDINARY
+        // income for the year sits; derive it from the same summary math so a
+        // harvest at the top of income is estimated against the right bracket.
+        let est = Self::calculate_yearly_tax(db, year, status, user_id).await?;
+        let tables = TaxYearTables::for_year(year);
+        let t = tables.us_status(status);
+        // Reconstruct taxable ordinary the summary used: gross ordinary income
+        // + surviving net ST gain − capped loss offset − standard deduction.
+        let netting = Self::net_capital_buckets(
+            est.short_term_gains,
+            est.long_term_gains,
+            tables.capital_loss_ordinary_offset_cap,
+        );
+        let taxable_ordinary = (est.ordinary_income + netting.st_taxable_gain
+            - netting.ordinary_loss_offset
+            - t.standard_deduction)
+            .max(dec!(0));
+        let ordinary_rate = Self::marginal_ordinary_rate(taxable_ordinary, t);
+        // LT gain harvested stacks on ordinary income PLUS any surviving net
+        // LT gain already in play; estimate at the top of that stack.
+        let ltcg_rate =
+            Self::marginal_ltcg_rate(taxable_ordinary + netting.lt_taxable_gain.max(dec!(0)), t);
+
+        let rows = sqlx::query(
+            r#"
+            SELECT h.symbol, h.name,
+                   COALESCE(NULLIF(a.nickname, ''), a.name) AS account_name,
+                   a.account_type,
+                   l.acquired_at,
+                   TO_CHAR(l.acquired_at, 'YYYY-MM-DD') AS acquired_date,
+                   l.qty, l.cost_per_unit, l.currency AS lot_currency, l.usd_fx_rate,
+                   h.id AS holding_id,
+                   h.price AS current_price, h.currency AS holding_currency,
+                   (EXISTS (
+                       SELECT 1 FROM holding_lots b
+                       WHERE b.user_id = l.user_id
+                         AND b.holding_id = l.holding_id
+                         AND b.acquired_at BETWEEN ($3::date - $4::int)
+                                              AND ($3::date + $4::int)
+                   )) AS recent_buy
+            FROM holding_lots l
+            JOIN holdings h ON h.id = l.holding_id
+            JOIN accounts a ON a.id = l.account_id
+            WHERE l.user_id = $1
+              AND l.qty > 0
+              AND NOT (LOWER(COALESCE(a.account_type, '')) = ANY($2))
+            ORDER BY l.acquired_at ASC, l.id ASC
+            "#,
+        )
+        .bind(user_id)
+        .bind(tax_advantaged_types_param())
+        .bind(today)
+        .bind(WASH_SALE_WINDOW_DAYS as i32)
+        .fetch_all(db)
+        .await?;
+
+        let getdec = |r: &sqlx::postgres::PgRow, col: &str| -> Decimal {
+            r.try_get::<Decimal, _>(col)
+                .or_else(|_| r.try_get::<Option<Decimal>, _>(col).map(|o| o.unwrap_or_default()))
+                .unwrap_or_default()
+        };
+
+        let lots: Vec<UnrealizedLot> = rows
+            .iter()
+            .map(|r| {
+                let qty = getdec(r, "qty");
+                let cost_px = getdec(r, "cost_per_unit");
+                let lot_fx = getdec(r, "usd_fx_rate");
+                let lot_ccy: String = r.try_get("lot_currency").unwrap_or_default();
+                let price = getdec(r, "current_price");
+                let holding_ccy: String = r.try_get("holding_currency").unwrap_or_default();
+
+                // Cost basis in USD via the lot's OWN historical fx.
+                let native_cost = qty * cost_px;
+                let cost_basis_usd = match lot_ccy.to_uppercase().as_str() {
+                    "MXN" => if lot_fx > Decimal::ZERO { native_cost / lot_fx } else { native_cost },
+                    _ => native_cost,
+                };
+                // Current value in USD via the CURRENT rate (live price is
+                // quoted in the holding's currency).
+                let native_value = qty * price;
+                let current_value_usd = match holding_ccy.to_uppercase().as_str() {
+                    "MXN" => if usd_mxn_rate > Decimal::ZERO { native_value / usd_mxn_rate } else { native_value },
+                    _ => native_value,
+                };
+                let unrealized_gain_usd = current_value_usd - cost_basis_usd;
+
+                let acquired_on: Option<chrono::NaiveDate> =
+                    r.try_get::<Option<chrono::NaiveDate>, _>("acquired_at").unwrap_or(None);
+                let long_term = acquired_on
+                    .map(|a| Self::is_long_term(a, today))
+                    .unwrap_or(false);
+                // For SHORT lots: the date it flips long-term (anniversary + 1
+                // day) and the days from today until then.
+                let (long_term_date, days_until_long_term) = if long_term {
+                    (None, None)
+                } else if let Some(a) = acquired_on {
+                    let flip = a
+                        .checked_add_months(chrono::Months::new(12))
+                        .and_then(|d| d.succ_opt());
+                    let days = flip.map(|f| (f - today).num_days().max(0));
+                    (flip.map(|f| f.to_string()), days)
+                } else {
+                    (None, None)
+                };
+
+                // Harvest economics — only for losses.
+                let is_loss = unrealized_gain_usd < Decimal::ZERO;
+                let recent_buy: bool = r.try_get("recent_buy").unwrap_or(false);
+                let (estimated_tax_savings_usd, wash_sale_risk, wash_sale_safe_after) = if is_loss {
+                    let rate = if long_term { ltcg_rate } else { ordinary_rate };
+                    let savings = (-unrealized_gain_usd) * rate;
+                    let safe = if recent_buy {
+                        // Buying back any time up to today+30 keeps the wash
+                        // window open; the first clear date is today+31.
+                        today
+                            .checked_add_days(chrono::Days::new(
+                                (WASH_SALE_WINDOW_DAYS + 1) as u64,
+                            ))
+                            .map(|d| d.to_string())
+                    } else {
+                        None
+                    };
+                    (Some(savings), recent_buy, safe)
+                } else {
+                    (None, false, None)
+                };
+
+                UnrealizedLot {
+                    symbol: r.try_get("symbol").unwrap_or_default(),
+                    name: r.try_get("name").unwrap_or_default(),
+                    account_name: r.try_get("account_name").unwrap_or_default(),
+                    account_type: r.try_get::<Option<String>, _>("account_type").unwrap_or(None),
+                    acquired_date: r.try_get("acquired_date").ok(),
+                    qty,
+                    cost_basis_usd,
+                    current_value_usd,
+                    unrealized_gain_usd,
+                    long_term,
+                    days_until_long_term,
+                    long_term_date,
+                    estimated_tax_savings_usd,
+                    wash_sale_risk,
+                    wash_sale_safe_after,
+                }
+            })
+            .collect();
+
+        Ok(UnrealizedLots {
+            short_term_gain: lots
+                .iter()
+                .filter(|l| !l.long_term)
+                .map(|l| l.unrealized_gain_usd)
+                .sum(),
+            long_term_gain: lots
+                .iter()
+                .filter(|l| l.long_term)
+                .map(|l| l.unrealized_gain_usd)
+                .sum(),
+            ordinary_marginal_rate: ordinary_rate,
+            ltcg_marginal_rate: ltcg_rate,
+            bracket_year_used: tables.bracket_year,
+            constants_verified: TAX_CONSTANTS_VERIFIED,
+            lots,
+        })
     }
 }
 
@@ -1016,6 +1322,17 @@ pub struct TaxDisposal {
     /// (TAX_ADVANTAGED_ACCOUNT_TYPES) — excluded from taxable gains and from
     /// the 8949 CSV section, reported in its own section instead.
     pub tax_advantaged: bool,
+    /// True when this is a wash sale (T12): a realized LOSS with a
+    /// same-`holding_id` buy inside the ±30-day window around the sale (see
+    /// [`WASH_SALE_WINDOW_DAYS`]). A wash-flagged loss is DISALLOWED for the
+    /// year — it is excluded from the summary's taxable ST/LT gains and from
+    /// the liability. Always `false` for gains. The same-`holding_id` /
+    /// cross-account simplifications are on the human-verification list.
+    pub wash_sale: bool,
+    /// First acquisition date (YYYY-MM-DD) on which re-buying the same
+    /// security would NOT trigger the wash-sale rule for this sale —
+    /// `sell_date + 31 days`. `None` unless `wash_sale` is true.
+    pub wash_sale_safe_after: Option<String>,
     /// True when this row comes from a precise lot disposal (always the case
     /// for `get_lot_disposals`, which only reads `lot_disposals`). Mirrors the
     /// summary's `gains_from_lots` so the screen can badge a row as precise
@@ -1023,6 +1340,85 @@ pub struct TaxDisposal {
     /// uses when NO lots exist produces no per-disposal rows, so a disposal in
     /// this list is never an estimate.
     pub from_lots: bool,
+}
+
+/// T11: one taxable lot's unrealized position. All money fields are **USD**
+/// (see [`TaxService::get_unrealized_lots`] for the valuation convention,
+/// which reconciles with `/dashboard/holdings`).
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UnrealizedLot {
+    pub symbol: String,
+    pub name: String,
+    /// Account display name (nickname or name) the lot sits in.
+    pub account_name: String,
+    /// `accounts.account_type` (lowercase) — always a TAXABLE subtype here
+    /// (tax-advantaged wrappers are excluded from this view).
+    pub account_type: Option<String>,
+    /// Acquisition date (YYYY-MM-DD).
+    pub acquired_date: Option<String>,
+    pub qty: Decimal,
+    /// qty × cost_per_unit, converted at the lot's recorded `usd_fx_rate`.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub cost_basis_usd: Decimal,
+    /// qty × current price, converted at the current USD→MXN rate.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub current_value_usd: Decimal,
+    /// Signed: `current_value_usd − cost_basis_usd` (negative = loss).
+    #[serde(with = "rust_decimal::serde::float")]
+    pub unrealized_gain_usd: Decimal,
+    /// True when the lot is already long-term as of today (held more than one
+    /// calendar year).
+    pub long_term: bool,
+    /// For SHORT lots only: days from today until the lot becomes long-term.
+    /// The frontend can flag lots `<= 60` to highlight near-long-term lots.
+    /// `None` for already-long-term lots (or unknown acquisition).
+    pub days_until_long_term: Option<i64>,
+    /// For SHORT lots only: the date (YYYY-MM-DD) the lot flips to long-term
+    /// (acquisition anniversary + 1 day). `None` once long-term.
+    pub long_term_date: Option<String>,
+    /// Harvest economics — present only for LOSS lots: |loss| × the user's
+    /// applicable marginal rate (ordinary for short, LTCG for long) at their
+    /// taxable income for the selected year. ⚠ ESTIMATE — rides the UNVERIFIED
+    /// constant tables (see `constants_verified` on [`UnrealizedLots`]); never
+    /// present it as an authoritative figure while that flag is false.
+    #[serde(
+        default,
+        with = "rust_decimal::serde::float_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub estimated_tax_savings_usd: Option<Decimal>,
+    /// Forward-looking wash-sale guard (T12): true when a same-`holding_id`
+    /// buy occurred within ±30 days of today, so harvesting this loss now
+    /// would be (at least partly) a wash sale. Only set for loss lots.
+    pub wash_sale_risk: bool,
+    /// When `wash_sale_risk` is true: the first date (today + 31 days) a
+    /// re-buy would no longer re-trigger the rule for a sale made today.
+    pub wash_sale_safe_after: Option<String>,
+}
+
+/// T11 response: the per-lot unrealized rows plus ST/LT subtotals and the
+/// marginal rates / verification context behind the harvest estimates.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UnrealizedLots {
+    pub lots: Vec<UnrealizedLot>,
+    /// Sum of unrealized gain (USD, signed) across SHORT-term lots.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub short_term_gain: Decimal,
+    /// Sum of unrealized gain (USD, signed) across LONG-term lots.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub long_term_gain: Decimal,
+    /// Marginal ORDINARY rate used for short-lot harvest savings (UNVERIFIED).
+    #[serde(with = "rust_decimal::serde::float")]
+    pub ordinary_marginal_rate: Decimal,
+    /// Marginal LTCG rate used for long-lot harvest savings (UNVERIFIED).
+    #[serde(with = "rust_decimal::serde::float")]
+    pub ltcg_marginal_rate: Decimal,
+    /// Bracket year whose tables backed the rates above.
+    pub bracket_year_used: i32,
+    /// Mirrors [`TAX_CONSTANTS_VERIFIED`]: while false, every
+    /// `estimated_tax_savings_usd` and the marginal rates are UNVERIFIED
+    /// estimates the UI must badge as pending human verification.
+    pub constants_verified: bool,
 }
 
 #[cfg(test)]
@@ -1264,6 +1660,34 @@ mod tests {
         let t = TaxYearTables::for_year(2025);
         let tax = TaxService::calculate_us_ltcg(dec!(20000), dec!(40000), &t.us_single);
         assert_eq!(tax, dec!(1747.50));
+    }
+
+    // -----------------------------------------------------------------
+    // T11 — marginal-rate helpers behind the harvest-savings estimate
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn marginal_ordinary_rate_picks_the_bracket_of_the_next_dollar() {
+        let t = TaxYearTables::for_year(2026);
+        let s = &t.us_single;
+        // 0 / below first cutoff → lowest bracket.
+        assert_eq!(TaxService::marginal_ordinary_rate(dec!(0), s), dec!(0.10));
+        assert_eq!(TaxService::marginal_ordinary_rate(dec!(-100), s), dec!(0.10));
+        // Inside the 12% band (first cutoff 12,400, second 50,400).
+        assert_eq!(TaxService::marginal_ordinary_rate(dec!(30000), s), dec!(0.12));
+        // Above the top cutoff → top rate.
+        assert_eq!(TaxService::marginal_ordinary_rate(dec!(2_000_000), s), dec!(0.37));
+    }
+
+    #[test]
+    fn marginal_ltcg_rate_tracks_the_stacking_band() {
+        let t = TaxYearTables::for_year(2026);
+        let s = &t.us_single; // ltcg_0_top 49,450, ltcg_15_top 545,500
+        assert_eq!(TaxService::marginal_ltcg_rate(dec!(0), s), dec!(0));
+        assert_eq!(TaxService::marginal_ltcg_rate(dec!(49_449), s), dec!(0));
+        assert_eq!(TaxService::marginal_ltcg_rate(dec!(49_450), s), dec!(0.15));
+        assert_eq!(TaxService::marginal_ltcg_rate(dec!(100_000), s), dec!(0.15));
+        assert_eq!(TaxService::marginal_ltcg_rate(dec!(545_500), s), dec!(0.20));
     }
 
     #[test]

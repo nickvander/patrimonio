@@ -15,6 +15,7 @@ pub fn router() -> Router<AppState> {
         .route("/summary", get(get_tax_summary))
         .route("/transactions", get(get_tax_transactions))
         .route("/disposals", get(get_tax_disposals))
+        .route("/unrealized", get(get_tax_unrealized))
         .route("/export", get(export_tax_csv))
         .route("/export/pdf", get(export_tax_pdf))
 }
@@ -146,6 +147,39 @@ async fn get_tax_disposals(
     }
 }
 
+/// T11: the unrealized per-lot "what if I sell" view for TAXABLE accounts —
+/// per-lot signed USD gain/loss, ST/LT term with days-until-long-term, and
+/// loss-harvest candidates with an estimated marginal-rate tax saving and a
+/// forward-looking wash-sale guard (T12). The marginal rates and savings ride
+/// the UNVERIFIED constant tables, so the response carries `constants_verified`
+/// for the UI to badge. Filing status is resolved like the other endpoints
+/// (query param > persisted setting > Single), since the marginal rate is
+/// status-dependent. Loss harvesting is evaluated as of today (the FX rate for
+/// valuing live prices and the wash-sale window are both anchored at today).
+async fn get_tax_unrealized(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Query(query): Query<TaxQuery>,
+) -> axum::response::Response {
+    let year = query.year.unwrap_or_else(|| chrono::Utc::now().naive_utc().year());
+    let status = resolve_filing_status(&state, ctx.user_id, query.status).await;
+    let today = chrono::Utc::now().naive_utc().date();
+
+    match TaxService::get_unrealized_lots(&state.db, year, &status, ctx.user_id, today).await {
+        Ok(unrealized) => {
+            Json::<crate::services::tax::UnrealizedLots>(unrealized).into_response()
+        }
+        Err(e) => {
+            tracing::error!("Failed to compute unrealized lots: {}", e);
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "error": e.to_string() })),
+            )
+                .into_response()
+        }
+    }
+}
+
 async fn export_tax_csv(
      State(state): State<AppState>,
      Extension(ctx): Extension<AuthContext>,
@@ -218,6 +252,10 @@ async fn export_tax_csv(
         Some(false) => "Short-term",
         None => "Unknown",
     };
+    // T12: a "Wash sale" column flags loss disposals disallowed by the
+    // same-holding ±30-day rule; "safe to rebuy after" gives the first clear
+    // date. Flagged losses are excluded from the liability (see the summary's
+    // wash-sale-disallowed line) but still listed here for the 8949 trail.
     let _ = wtr.write_record(["Realized capital gains (lot disposals)"]);
     let _ = wtr.write_record([
         "Symbol",
@@ -229,6 +267,8 @@ async fn export_tax_csv(
         "Proceeds (USD)",
         "Cost basis (USD)",
         "Gain/loss (USD)",
+        "Wash sale",
+        "Safe to rebuy after",
     ]);
     for d in disposals.iter().filter(|d| !d.tax_advantaged) {
         let _ = wtr.write_record([
@@ -241,6 +281,8 @@ async fn export_tax_csv(
             money(d.proceeds_usd),
             money(d.cost_usd),
             money(d.gain_usd),
+            if d.wash_sale { "Yes" } else { "No" }.to_string(),
+            d.wash_sale_safe_after.clone().unwrap_or_default(),
         ]);
     }
     let _ = wtr.write_record([""; 0]);
@@ -296,6 +338,13 @@ async fn export_tax_csv(
         let _ = wtr.write_record([
             "Capital-loss carryforward (USD)",
             &money(est.capital_loss_carryforward),
+        ]);
+        // T12: losses disallowed by the wash-sale rule — already removed from
+        // the ST/LT gains and the liability above, reported so the exclusion
+        // is visible. Signed (<= 0).
+        let _ = wtr.write_record([
+            "Wash-sale disallowed loss (USD, excluded from liability)",
+            &money(est.wash_sale_disallowed_loss),
         ]);
         let _ = wtr.write_record(["Ordinary income (USD)", &money(est.ordinary_income)]);
         // T6 decomposition — the three lines below re-sum to the ordinary

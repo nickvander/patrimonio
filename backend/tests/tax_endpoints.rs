@@ -1654,3 +1654,352 @@ async fn tax_csv_export_honors_persisted_filing_status() {
         "CSV should reflect persisted status, csv:\n{csv}"
     );
 }
+
+// =====================================================================
+// T11 — unrealized per-lot view, days-to-long-term, harvest candidates
+// =====================================================================
+
+/// Seed a holding with a current per-unit `price` and ONE owned lot (qty > 0)
+/// acquired on `acquired_at` at `cost_per_unit` (USD). Returns the holding id
+/// so a "recent buy" lot can be added to the same holding for wash-sale tests.
+#[allow(clippy::too_many_arguments)]
+async fn seed_unrealized_lot(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    symbol: &str,
+    acquired_at: &str,
+    qty: &str,
+    cost_per_unit: &str,
+    current_price: &str,
+) -> uuid::Uuid {
+    let holding_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO holdings (account_id, symbol, name, quantity, price, currency, user_id) \
+         VALUES ($1, $2, 'Fund', $3, $4, 'USD', $5) RETURNING id",
+    )
+    .bind(account_id)
+    .bind(symbol)
+    .bind(Decimal::from_str(qty).unwrap())
+    .bind(Decimal::from_str(current_price).unwrap())
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .expect("seed unrealized holding");
+    sqlx::query(
+        "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) \
+         VALUES ($1,$2,$3,$4::date,$5,$6,'USD',1.0,$7)",
+    )
+    .bind(holding_id)
+    .bind(account_id)
+    .bind(user_id)
+    .bind(acquired_at)
+    .bind(Decimal::from_str(qty).unwrap())
+    .bind(Decimal::from_str(cost_per_unit).unwrap())
+    .bind(format!("lot-{symbol}"))
+    .execute(pool)
+    .await
+    .expect("seed unrealized lot");
+    holding_id
+}
+
+/// Add another owned lot to an EXISTING holding acquired on `acquired_at` —
+/// used to plant a "recent buy" inside the wash-sale window.
+async fn seed_extra_lot(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    holding_id: uuid::Uuid,
+    acquired_at: &str,
+) {
+    sqlx::query(
+        "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) \
+         VALUES ($1,$2,$3,$4::date,1,50,'USD',1.0,$5)",
+    )
+    .bind(holding_id)
+    .bind(account_id)
+    .bind(user_id)
+    .bind(acquired_at)
+    .bind(format!("rebuy-{}", uuid::Uuid::new_v4()))
+    .execute(pool)
+    .await
+    .expect("seed extra lot");
+}
+
+/// Fetch /api/tax/unrealized as JSON.
+async fn fetch_unrealized(app: &Router, token: &str) -> Value {
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/unrealized?status=Single",
+            None,
+            Some(token),
+        ))
+        .await
+        .unwrap();
+    let status = res.status();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(status, StatusCode::OK, "unrealized body: {body}");
+    body
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_unrealized_signs_terms_excludes_tax_advantaged_and_flags_harvest() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let today = chrono::Utc::now().naive_utc().date();
+
+    let brokerage = seed_typed_account(&pool, user_id, "brokerage").await;
+    let k401 = seed_typed_account(&pool, user_id, "401k").await;
+
+    // GAIN lot, long-term (acquired well over a year ago): qty 10, cost 50,
+    // price 80 → cost 500, value 800, +300, LT.
+    let acq_lt = (today - chrono::Duration::days(800)).to_string();
+    seed_unrealized_lot(&pool, user_id, brokerage, "GAINLT", &acq_lt, "10", "50", "80").await;
+
+    // LOSS lot, short-term (acquired 100 days ago): qty 10, cost 100,
+    // price 70 → cost 1000, value 700, −300, ST. No recent buy → harvestable.
+    let acq_st = (today - chrono::Duration::days(100)).to_string();
+    seed_unrealized_lot(&pool, user_id, brokerage, "LOSSST", &acq_st, "10", "100", "70").await;
+
+    // LOSS lot inside a 401k wrapper — must be EXCLUDED from the view entirely.
+    seed_unrealized_lot(&pool, user_id, k401, "WRAP", &acq_st, "10", "100", "70").await;
+
+    let body = fetch_unrealized(&app, &token).await;
+    let lots = body["lots"].as_array().expect("array of lots");
+    // Wrapper lot excluded → exactly the two taxable lots.
+    assert_eq!(lots.len(), 2, "tax-advantaged lot must be excluded: {body}");
+    assert!(
+        !lots.iter().any(|l| l["symbol"] == "WRAP"),
+        "401k lot leaked into the taxable view: {body}"
+    );
+
+    let gain = lots.iter().find(|l| l["symbol"] == "GAINLT").expect("gain lot");
+    assert!((gain["cost_basis_usd"].as_f64().unwrap() - 500.0).abs() < 0.01, "{body}");
+    assert!((gain["current_value_usd"].as_f64().unwrap() - 800.0).abs() < 0.01, "{body}");
+    assert!((gain["unrealized_gain_usd"].as_f64().unwrap() - 300.0).abs() < 0.01, "{body}");
+    assert_eq!(gain["long_term"], serde_json::json!(true), "{body}");
+    // Already long-term → no days_until / savings / wash fields.
+    assert!(gain["days_until_long_term"].is_null(), "{body}");
+    assert!(gain["estimated_tax_savings_usd"].is_null(), "gains aren't harvest candidates: {body}");
+    assert_eq!(gain["wash_sale_risk"], serde_json::json!(false));
+
+    let loss = lots.iter().find(|l| l["symbol"] == "LOSSST").expect("loss lot");
+    assert!((loss["unrealized_gain_usd"].as_f64().unwrap() + 300.0).abs() < 0.01, "signed loss: {body}");
+    assert_eq!(loss["long_term"], serde_json::json!(false), "{body}");
+    // Short lot reports days_until_long_term + the flip date. Acquired 100
+    // days ago → ~266 days left (1yr + 1 day − 100). Allow slack for the
+    // calendar-month arithmetic.
+    let days = loss["days_until_long_term"].as_i64().expect("days present");
+    assert!((260..=270).contains(&days), "days_until_long_term={days}: {body}");
+    assert!(loss["long_term_date"].as_str().is_some(), "flip date present: {body}");
+    // Harvest candidate: |−300| × the Single marginal ordinary rate. With no
+    // ordinary income, taxable ordinary is 0 → lowest bracket (10%) → $30.
+    // It rides the unverified tables, so just assert it's the loss × that rate.
+    let rate = body["ordinary_marginal_rate"].as_f64().unwrap();
+    let savings = loss["estimated_tax_savings_usd"].as_f64().expect("savings present");
+    assert!((savings - 300.0 * rate).abs() < 0.01, "savings {savings} != 300×{rate}: {body}");
+    // No recent same-holding buy → not a wash-sale risk.
+    assert_eq!(loss["wash_sale_risk"], serde_json::json!(false), "{body}");
+
+    // Subtotals + the verification gate ride through.
+    assert!((body["long_term_gain"].as_f64().unwrap() - 300.0).abs() < 0.01, "{body}");
+    assert!((body["short_term_gain"].as_f64().unwrap() + 300.0).abs() < 0.01, "{body}");
+    assert_eq!(body["constants_verified"], serde_json::json!(false), "{body}");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_unrealized_loss_with_recent_buy_flags_wash_sale_risk() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let today = chrono::Utc::now().naive_utc().date();
+    let brokerage = seed_typed_account(&pool, user_id, "brokerage").await;
+
+    // LOSS lot acquired 200 days ago; plus a SECOND buy of the SAME holding
+    // 10 days ago — inside the ±30-day window around a contemplated sale
+    // today → harvesting now is a wash-sale risk.
+    let acq = (today - chrono::Duration::days(200)).to_string();
+    let recent = (today - chrono::Duration::days(10)).to_string();
+    let hid =
+        seed_unrealized_lot(&pool, user_id, brokerage, "WASHME", &acq, "10", "100", "70").await;
+    seed_extra_lot(&pool, user_id, brokerage, hid, &recent).await;
+
+    let body = fetch_unrealized(&app, &token).await;
+    let lots = body["lots"].as_array().expect("array");
+    let washme = lots.iter().find(|l| l["symbol"] == "WASHME").expect("loss lot");
+    assert_eq!(washme["wash_sale_risk"], serde_json::json!(true), "{body}");
+    // safe_after = today + 31 days.
+    let expected_safe = (today + chrono::Duration::days(31)).to_string();
+    assert_eq!(
+        washme["wash_sale_safe_after"].as_str().unwrap(),
+        expected_safe,
+        "{body}"
+    );
+    // Still a harvest candidate (savings present) — the flag is a warning, not
+    // a removal.
+    assert!(washme["estimated_tax_savings_usd"].as_f64().is_some(), "{body}");
+}
+
+// =====================================================================
+// T12 — wash-sale detection on realized disposals
+// =====================================================================
+
+/// Seed a loss disposal of `symbol` sold on `sell_date`, and OPTIONALLY plant
+/// a same-holding buy at `rebuy_at` (inside or outside the window). Returns the
+/// holding id. Built on the existing disposal seeder, then adds the rebuy lot.
+#[allow(clippy::too_many_arguments)]
+async fn seed_loss_disposal_with_optional_rebuy(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    symbol: &str,
+    acquired_at: &str,
+    sell_date: &str,
+    pnl: &str,
+    rebuy_at: Option<&str>,
+) {
+    seed_disposal_dated(
+        pool, user_id, account_id, symbol, acquired_at, sell_date, symbol, pnl,
+    )
+    .await;
+    if let Some(rebuy) = rebuy_at {
+        // The disposal seeder made a holding named 'Fund' with this symbol;
+        // find it and attach a fresh buy lot.
+        let hid: uuid::Uuid =
+            sqlx::query_scalar("SELECT id FROM holdings WHERE symbol = $1 AND user_id = $2")
+                .bind(symbol)
+                .bind(user_id)
+                .fetch_one(pool)
+                .await
+                .expect("find holding for rebuy");
+        seed_extra_lot(pool, user_id, account_id, hid, rebuy).await;
+    }
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_wash_sale_excludes_disallowed_loss_from_liability() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let depo = seed_typed_account(&pool, user_id, "depository").await;
+    let brokerage = seed_typed_account(&pool, user_id, "brokerage").await;
+
+    // Baseline ordinary income so a loss has something to offset.
+    seed_categorized_tx(
+        &pool, user_id, depo, "2026-02-13", "ACME CORP PAYROLL", "50000.00",
+        Some("INCOME"), Some("INCOME_WAGES"), None,
+    )
+    .await;
+
+    // WASH loss: −4,000 sold 2026-06-15 with a same-holding buy on 2026-06-20
+    // (5 days later, inside the ±30-day window) → disallowed, must NOT reduce
+    // the liability.
+    seed_loss_disposal_with_optional_rebuy(
+        &pool, user_id, brokerage, "WASH", "2026-01-02", "2026-06-15", "-4000",
+        Some("2026-06-20"),
+    )
+    .await;
+
+    let body = fetch_summary(&app, &token).await;
+    // The disallowed loss is reported but kept out of the ST bucket: the only
+    // ST contributor is wash → short_term_gains is 0, not −4,000.
+    assert!(
+        (body["short_term_gains"].as_f64().unwrap()).abs() < 0.01,
+        "wash loss must be excluded from short_term_gains: {body}"
+    );
+    assert!(
+        (body["wash_sale_disallowed_loss"].as_f64().unwrap() + 4000.0).abs() < 0.01,
+        "disallowed loss reported (signed): {body}"
+    );
+    // Liability is the no-loss baseline: 50,000 − 16,100 = 33,900 →
+    // 12,400×10% + 21,500×12% = 3,820 (unverified 2026 Single tables).
+    assert!(
+        (body["estimated_liability_us"].as_f64().unwrap() - 3820.0).abs() < 0.01,
+        "wash loss must not reduce the liability: {body}"
+    );
+    assert!(
+        (body["capital_loss_carryforward"].as_f64().unwrap()).abs() < 0.01,
+        "a disallowed loss does not become a carryforward here: {body}"
+    );
+
+    // The disposal endpoint flags the row + gives the safe-after date.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/tax/disposals?year=2026", None, Some(&token)))
+        .await
+        .unwrap();
+    let disp = body_json(res.into_body()).await;
+    let row = disp.as_array().unwrap().iter().find(|r| r["symbol"] == "WASH").expect("WASH row");
+    assert_eq!(row["wash_sale"], serde_json::json!(true), "{disp}");
+    // safe-after = sell_date + 31: a buy on sell_date+30 is still inside the
+    // inclusive window, so the first clear acquisition date is +31.
+    assert_eq!(row["wash_sale_safe_after"], serde_json::json!("2026-07-16"), "{disp}");
+
+    // The CSV 8949 section carries the wash-sale columns and the summary line.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/tax/export?year=2026&status=Single", None, Some(&token)))
+        .await
+        .unwrap();
+    let bytes = to_bytes(res.into_body(), 1024 * 256).await.unwrap();
+    let csv = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(csv.contains("Wash sale"), "wash-sale column header: \n{csv}");
+    assert!(csv.contains("Safe to rebuy after"), "safe-after column header: \n{csv}");
+    assert!(
+        csv.contains("Wash-sale disallowed loss (USD, excluded from liability),-4000.00"),
+        "summary wash line: \n{csv}"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn tax_non_wash_loss_reduces_liability_normally() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let depo = seed_typed_account(&pool, user_id, "depository").await;
+    let brokerage = seed_typed_account(&pool, user_id, "brokerage").await;
+
+    seed_categorized_tx(
+        &pool, user_id, depo, "2026-02-13", "ACME CORP PAYROLL", "50000.00",
+        Some("INCOME"), Some("INCOME_WAGES"), None,
+    )
+    .await;
+
+    // The SAME −4,000 loss but with NO nearby buy (rebuy far outside the
+    // window, in a different month) → allowed: 3,000 offsets ordinary income.
+    seed_loss_disposal_with_optional_rebuy(
+        &pool, user_id, brokerage, "CLEAN", "2026-01-02", "2026-06-15", "-4000",
+        Some("2026-09-30"),
+    )
+    .await;
+
+    let body = fetch_summary(&app, &token).await;
+    assert!(
+        (body["short_term_gains"].as_f64().unwrap() + 4000.0).abs() < 0.01,
+        "clean loss stays in the ST bucket: {body}"
+    );
+    assert!(
+        (body["wash_sale_disallowed_loss"].as_f64().unwrap()).abs() < 0.01,
+        "no disallowed loss: {body}"
+    );
+    // 3,000 of the loss offsets ordinary income (capped): 50,000 − 3,000 −
+    // 16,100 = 30,900 → 12,400×10% + 18,500×12% = 3,460; 1,000 carries forward.
+    assert!(
+        (body["estimated_liability_us"].as_f64().unwrap() - 3460.0).abs() < 0.01,
+        "clean loss must reduce the liability: {body}"
+    );
+    assert!(
+        (body["capital_loss_carryforward"].as_f64().unwrap() - 1000.0).abs() < 0.01,
+        "{body}"
+    );
+}

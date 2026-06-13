@@ -2047,6 +2047,35 @@ class ApiService {
         'No se pudieron cargar las ganancias realizadas'));
   }
 
+  /// Unrealized per-lot "what if I sell" view for taxable accounts (T11):
+  /// per-lot signed USD gain/loss, short/long-term term with
+  /// `days_until_long_term`, and loss-harvest candidates carrying an
+  /// `estimated_tax_savings_usd` and a forward-looking `wash_sale_risk` guard.
+  /// The savings and marginal rates ride the UNVERIFIED constant tables, so
+  /// the response's `constants_verified` flag must gate how authoritative the
+  /// figures are shown. `status` is optional; the backend falls back to the
+  /// persisted filing status. Returns the raw decoded JSON map (`lots` plus
+  /// ST/LT subtotals, marginal rates, and the verification context).
+  Future<Map<String, dynamic>> getUnrealizedLots({
+    int? year,
+    String? status,
+  }) async {
+    final queryParams = <String, String>{};
+    if (year != null) queryParams['year'] = year.toString();
+    if (status != null) queryParams['status'] = status;
+
+    final uri = Uri.parse(
+      '$_baseUrl/tax/unrealized',
+    ).replace(queryParameters: queryParams);
+    final response = await _get(uri);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception(_t('Failed to load unrealized positions',
+        'No se pudieron cargar las posiciones no realizadas'));
+  }
+
   /// Sync a single institution. Cheaper than the global sync when only
   /// one or two institutions are stuck.
   Future<void> syncInstitution(String institutionId) async {
