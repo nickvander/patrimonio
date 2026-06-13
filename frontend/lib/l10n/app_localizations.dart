@@ -4818,6 +4818,246 @@ abstract class AppLocalizations {
   /// **'Wording and constants are pending review by a tax professional — treat as guidance, not advice.'**
   String get taxAssumptionProReview;
 
+  /// No description provided for @taxUnrealizedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Unrealized positions — what if I sell'**
+  String get taxUnrealizedTitle;
+
+  /// No description provided for @taxUnrealizedShortTerm.
+  ///
+  /// In en, this message translates to:
+  /// **'Short-term lots'**
+  String get taxUnrealizedShortTerm;
+
+  /// No description provided for @taxUnrealizedLongTerm.
+  ///
+  /// In en, this message translates to:
+  /// **'Long-term lots'**
+  String get taxUnrealizedLongTerm;
+
+  /// No description provided for @taxNoUnrealizedLots.
+  ///
+  /// In en, this message translates to:
+  /// **'No taxable lots to evaluate.'**
+  String get taxNoUnrealizedLots;
+
+  /// No description provided for @taxUnrealizedSubtotal.
+  ///
+  /// In en, this message translates to:
+  /// **'Unrealized: {amount}'**
+  String taxUnrealizedSubtotal(String amount);
+
+  /// No description provided for @taxFlipsToLongIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Long-term in {days}d — {date}'**
+  String taxFlipsToLongIn(String days, String date);
+
+  /// No description provided for @taxColBasis.
+  ///
+  /// In en, this message translates to:
+  /// **'Basis'**
+  String get taxColBasis;
+
+  /// No description provided for @taxColValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Value'**
+  String get taxColValue;
+
+  /// No description provided for @taxHarvestTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Harvest candidates'**
+  String get taxHarvestTitle;
+
+  /// No description provided for @taxHarvestEstimate.
+  ///
+  /// In en, this message translates to:
+  /// **'Est. tax saving {amount}'**
+  String taxHarvestEstimate(String amount);
+
+  /// No description provided for @taxHarvestEstimateBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Estimate'**
+  String get taxHarvestEstimateBadge;
+
+  /// No description provided for @taxHarvestEstimateTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Loss × your marginal rate — an estimate on unverified constants, not a guaranteed saving.'**
+  String get taxHarvestEstimateTooltip;
+
+  /// No description provided for @taxHarvestNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Selling these losers could offset gains. Estimated saving = loss × your marginal rate.'**
+  String get taxHarvestNote;
+
+  /// No description provided for @taxNoHarvestCandidates.
+  ///
+  /// In en, this message translates to:
+  /// **'No loss lots to harvest right now.'**
+  String get taxNoHarvestCandidates;
+
+  /// No description provided for @taxWashSaleMarker.
+  ///
+  /// In en, this message translates to:
+  /// **'Wash sale'**
+  String get taxWashSaleMarker;
+
+  /// No description provided for @taxWashSaleSafeAfter.
+  ///
+  /// In en, this message translates to:
+  /// **'Safe to re-buy after {date}'**
+  String taxWashSaleSafeAfter(String date);
+
+  /// No description provided for @taxWashSaleTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'A same-security buy near this date can disallow the loss. Re-buying after the safe date avoids the wash-sale rule.'**
+  String get taxWashSaleTooltip;
+
+  /// No description provided for @taxFbarTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Foreign accounts — FBAR monitor'**
+  String get taxFbarTitle;
+
+  /// No description provided for @taxFbarPeakAggregate.
+  ///
+  /// In en, this message translates to:
+  /// **'Peak aggregate foreign balance (this year)'**
+  String get taxFbarPeakAggregate;
+
+  /// No description provided for @taxFbarThreshold.
+  ///
+  /// In en, this message translates to:
+  /// **'FBAR reporting threshold: {amount}'**
+  String taxFbarThreshold(String amount);
+
+  /// No description provided for @taxFbarExceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Aggregate exceeded the threshold this year'**
+  String get taxFbarExceeded;
+
+  /// No description provided for @taxFbarUnder.
+  ///
+  /// In en, this message translates to:
+  /// **'Aggregate stayed under the threshold this year'**
+  String get taxFbarUnder;
+
+  /// No description provided for @taxFbarPeakDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Peak on {date}'**
+  String taxFbarPeakDate(String date);
+
+  /// No description provided for @taxFbarInformational.
+  ///
+  /// In en, this message translates to:
+  /// **'Informational only — this does not decide an FBAR filing obligation. Consult a tax professional.'**
+  String get taxFbarInformational;
+
+  /// No description provided for @taxFbarFatcaNote.
+  ///
+  /// In en, this message translates to:
+  /// **'FATCA Form 8938 thresholds are different and higher, and are not computed here.'**
+  String get taxFbarFatcaNote;
+
+  /// No description provided for @taxFbarNoForeignAccounts.
+  ///
+  /// In en, this message translates to:
+  /// **'No foreign accounts detected for this year.'**
+  String get taxFbarNoForeignAccounts;
+
+  /// No description provided for @taxFbarAccountPeak.
+  ///
+  /// In en, this message translates to:
+  /// **'On peak date: {amount}'**
+  String taxFbarAccountPeak(String amount);
+
+  /// No description provided for @taxFbarAccountYtdMax.
+  ///
+  /// In en, this message translates to:
+  /// **'Own YTD max: {amount}'**
+  String taxFbarAccountYtdMax(String amount);
+
+  /// No description provided for @taxRetirementTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Retirement contributions'**
+  String get taxRetirementTitle;
+
+  /// No description provided for @taxRetirementGroup401k.
+  ///
+  /// In en, this message translates to:
+  /// **'401(k) / 403(b) / 457(b)'**
+  String get taxRetirementGroup401k;
+
+  /// No description provided for @taxRetirementGroupIra.
+  ///
+  /// In en, this message translates to:
+  /// **'IRA (Traditional + Roth)'**
+  String get taxRetirementGroupIra;
+
+  /// No description provided for @taxRetirementGroupHsa.
+  ///
+  /// In en, this message translates to:
+  /// **'HSA'**
+  String get taxRetirementGroupHsa;
+
+  /// No description provided for @taxContributedOfLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'{ytd} of {limit}'**
+  String taxContributedOfLimit(String ytd, String limit);
+
+  /// No description provided for @taxRemainingRoom.
+  ///
+  /// In en, this message translates to:
+  /// **'Room left: {amount}'**
+  String taxRemainingRoom(String amount);
+
+  /// No description provided for @taxContributionDeadline.
+  ///
+  /// In en, this message translates to:
+  /// **'Deadline: {date}'**
+  String taxContributionDeadline(String date);
+
+  /// No description provided for @taxPriorYearWindowNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Prior-year contributions allowed until this deadline.'**
+  String get taxPriorYearWindowNote;
+
+  /// No description provided for @taxMatchRolloverCaveat.
+  ///
+  /// In en, this message translates to:
+  /// **'May include employer match or rollovers — personal contributions could be overcounted.'**
+  String get taxMatchRolloverCaveat;
+
+  /// No description provided for @taxContributionOverLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Over the base limit'**
+  String get taxContributionOverLimit;
+
+  /// No description provided for @taxCatchUpNote.
+  ///
+  /// In en, this message translates to:
+  /// **'+{amount} catch-up if age-eligible'**
+  String taxCatchUpNote(String amount);
+
+  /// No description provided for @taxNoRetirementAccounts.
+  ///
+  /// In en, this message translates to:
+  /// **'No retirement accounts with contributions this year.'**
+  String get taxNoRetirementAccounts;
+
   /// No description provided for @acctxRenameAccount.
   ///
   /// In en, this message translates to:

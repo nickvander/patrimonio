@@ -18,6 +18,11 @@ typedef TaxTransactionsFetcher = Future<List<dynamic>> Function({required int ye
 typedef TaxDisposalsFetcher = Future<List<dynamic>> Function(int year);
 typedef SettingReader = Future<dynamic> Function(String key);
 typedef SettingWriter = Future<void> Function(String key, dynamic value);
+// M3 planning sections — same fixtureable-fetcher pattern as above.
+typedef TaxUnrealizedFetcher = Future<Map<String, dynamic>> Function(
+    {required int year, required String status});
+typedef TaxFbarFetcher = Future<Map<String, dynamic>> Function(int year);
+typedef TaxContributionsFetcher = Future<Map<String, dynamic>> Function(int year);
 
 /// Backend setting key the tax estimator reads as the default filing status
 /// when the query param is absent (so the persisted choice also reaches the
@@ -36,6 +41,9 @@ class TaxPlanningScreen extends StatefulWidget {
   final TaxDisposalsFetcher? disposalsFetcher;
   final SettingReader? settingReader;
   final SettingWriter? settingWriter;
+  final TaxUnrealizedFetcher? unrealizedFetcher;
+  final TaxFbarFetcher? fbarFetcher;
+  final TaxContributionsFetcher? contributionsFetcher;
 
   const TaxPlanningScreen({
     super.key,
@@ -48,6 +56,9 @@ class TaxPlanningScreen extends StatefulWidget {
     this.disposalsFetcher,
     this.settingReader,
     this.settingWriter,
+    this.unrealizedFetcher,
+    this.fbarFetcher,
+    this.contributionsFetcher,
   });
 
   @override
@@ -67,6 +78,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   Map<String, dynamic>? _taxSummary;
   List<dynamic>? _taxTransactions;
   List<dynamic>? _taxDisposals;
+  Map<String, dynamic>? _unrealized;
+  Map<String, dynamic>? _fbar;
+  Map<String, dynamic>? _contributions;
 
   int _selectedYear = DateTime.now().year;
   // Backend filing-status vocabulary (normalize accepts these exact tokens).
@@ -90,6 +104,14 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       widget.settingReader ?? _apiService.getSetting;
   SettingWriter get _writeSetting =>
       widget.settingWriter ?? _apiService.putSetting;
+  TaxUnrealizedFetcher get _fetchUnrealized =>
+      widget.unrealizedFetcher ??
+      ({required int year, required String status}) =>
+          _apiService.getUnrealizedLots(year: year, status: status);
+  TaxFbarFetcher get _fetchFbar =>
+      widget.fbarFetcher ?? _apiService.getFbarStatus;
+  TaxContributionsFetcher get _fetchContributions =>
+      widget.contributionsFetcher ?? _apiService.getRetirementContributions;
 
   @override
   void initState() {
@@ -123,11 +145,16 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     });
 
     try {
-      // Fetch all three concurrently rather than awaiting in series.
+      // Fetch summary/transactions/disposals AND the three M3 planning
+      // sections (unrealized / FBAR / contributions) concurrently rather than
+      // awaiting in series.
       final results = await Future.wait([
         _fetchSummary(year: _selectedYear, status: _filingStatus),
         _fetchTransactions(year: _selectedYear),
         _fetchDisposals(_selectedYear),
+        _fetchUnrealized(year: _selectedYear, status: _filingStatus),
+        _fetchFbar(_selectedYear),
+        _fetchContributions(_selectedYear),
       ]);
 
       if (!mounted) return;
@@ -135,6 +162,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         _taxSummary = results[0] as Map<String, dynamic>;
         _taxTransactions = results[1] as List<dynamic>;
         _taxDisposals = results[2] as List<dynamic>;
+        _unrealized = results[3] as Map<String, dynamic>;
+        _fbar = results[4] as Map<String, dynamic>;
+        _contributions = results[5] as Map<String, dynamic>;
         _firstLoad = false;
         _refetching = false;
       });
@@ -348,6 +378,12 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           ),
           const SizedBox(height: 24),
           _buildRealizedGainsSection(l),
+          const SizedBox(height: 24),
+          _buildUnrealizedSection(l),
+          const SizedBox(height: 24),
+          _buildFbarSection(l),
+          const SizedBox(height: 24),
+          _buildRetirementSection(l),
           const SizedBox(height: 24),
           _buildIncomeSection(l),
           const SizedBox(height: 12),
@@ -905,6 +941,8 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     final proceeds = (d['proceeds_usd'] as num?)?.toDouble() ?? 0;
     final cost = (d['cost_usd'] as num?)?.toDouble() ?? 0;
     final term = disposalTerm(d['long_term']);
+    final washSale = d['wash_sale'] == true;
+    final washSafeAfter = d['wash_sale_safe_after']?.toString();
 
     final acquiredLabel = (acquired == null || acquired.isEmpty)
         ? null
@@ -938,6 +976,10 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                     ),
                     const SizedBox(width: 8),
                     _termChip(l, term),
+                    if (washSale) ...[
+                      const SizedBox(width: 6),
+                      _washSaleMarker(l, washSafeAfter),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 2),
@@ -950,6 +992,15 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                   '${l.taxColProceeds} ${_money(proceeds)} · ${l.taxColCost} ${_money(cost)}',
                   style: TextStyle(color: context.textSubtle, fontSize: 11),
                 ),
+                if (washSale &&
+                    washSafeAfter != null &&
+                    washSafeAfter.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    l.taxWashSaleSafeAfter(_fmtDate(washSafeAfter)),
+                    style: TextStyle(color: context.warning, fontSize: 11),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1011,6 +1062,763 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         ],
       ),
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // T11 — Unrealized "what if I sell" + harvest candidates
+  // ---------------------------------------------------------------------------
+
+  Widget _buildUnrealizedSection(AppLocalizations l) {
+    final data = _unrealized ?? const {};
+    final lots = (data['lots'] as List<dynamic>?) ?? const [];
+    final buckets = bucketUnrealizedLots(lots);
+    final candidates = harvestCandidates(lots);
+    final unverified = data['constants_verified'] == false;
+    final stGain = (data['short_term_gain'] as num?)?.toDouble() ?? 0;
+    final ltGain = (data['long_term_gain'] as num?)?.toDouble() ?? 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle(l.taxUnrealizedTitle),
+        const SizedBox(height: 12),
+        if (lots.isEmpty)
+          _emptyCard(l.taxNoUnrealizedLots, Icons.inventory_2_outlined)
+        else ...[
+          _unrealizedBucketCard(
+            l,
+            title: l.taxUnrealizedShortTerm,
+            rows: buckets.shortTerm,
+            subtotalUsd: stGain,
+          ),
+          if (buckets.longTerm.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _unrealizedBucketCard(
+              l,
+              title: l.taxUnrealizedLongTerm,
+              rows: buckets.longTerm,
+              subtotalUsd: ltGain,
+            ),
+          ],
+          const SizedBox(height: 16),
+          _harvestCard(l, candidates, unverified),
+        ],
+      ],
+    );
+  }
+
+  Widget _unrealizedBucketCard(
+    AppLocalizations l, {
+    required String title,
+    required List<Map<String, dynamic>> rows,
+    required double subtotalUsd,
+  }) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: context.textMuted,
+              ),
+            ),
+          ),
+          if (rows.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: Text(
+                l.taxNoUnrealizedLots,
+                style: TextStyle(color: context.textFaint, fontSize: 12),
+              ),
+            )
+          else
+            for (var i = 0; i < rows.length; i++) ...[
+              if (i > 0)
+                Divider(height: 1, color: context.tint(0.04), indent: 16),
+              _unrealizedRow(l, rows[i]),
+            ],
+          Divider(height: 1, color: context.hairline),
+          _subtotalRow(
+            l.taxUnrealizedSubtotal(_signedMoney(subtotalUsd)),
+            title,
+            _pnlColor(subtotalUsd),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _unrealizedRow(AppLocalizations l, Map<String, dynamic> lot) {
+    final symbol = lot['symbol']?.toString() ?? '';
+    final name = lot['name']?.toString() ?? '';
+    final accountName = lot['account_name']?.toString() ?? '';
+    final gain = (lot['unrealized_gain_usd'] as num?)?.toDouble() ?? 0;
+    final basis = (lot['cost_basis_usd'] as num?)?.toDouble() ?? 0;
+    final value = (lot['current_value_usd'] as num?)?.toDouble() ?? 0;
+    final daysRaw = lot['days_until_long_term'];
+    final near = isNearLongTerm(daysRaw);
+    final flipDate = lot['long_term_date']?.toString();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  symbol.isNotEmpty ? symbol : name,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                if (accountName.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    accountName,
+                    style: TextStyle(color: context.textFaint, fontSize: 11),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                const SizedBox(height: 2),
+                Text(
+                  '${l.taxColBasis} ${_money(basis)} · ${l.taxColValue} ${_money(value)}',
+                  style: TextStyle(color: context.textSubtle, fontSize: 11),
+                ),
+                if (near && (daysRaw is num)) ...[
+                  const SizedBox(height: 4),
+                  _nearLongTermChip(
+                    l,
+                    daysRaw.toInt(),
+                    flipDate,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            _signedMoney(gain),
+            style: TextStyle(
+              color: _pnlColor(gain),
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _nearLongTermChip(AppLocalizations l, int days, String? flipDate) {
+    final dateLabel = (flipDate == null || flipDate.isEmpty)
+        ? ''
+        : _fmtDate(flipDate);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: context.info.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.schedule, size: 11, color: context.info),
+          const SizedBox(width: 4),
+          Text(
+            l.taxFlipsToLongIn(days.toString(), dateLabel),
+            style: TextStyle(
+              color: context.info,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _harvestCard(
+    AppLocalizations l,
+    List<Map<String, dynamic>> candidates,
+    bool unverified,
+  ) {
+    return Card(
+      elevation: 0,
+      color: context.tileSurface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+            child: Row(
+              children: [
+                Icon(Icons.content_cut, size: 14, color: context.textMuted),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    l.taxHarvestTitle,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: context.textMuted,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(
+              l.taxHarvestNote,
+              style: TextStyle(fontSize: 11, color: context.textFaint),
+            ),
+          ),
+          if (candidates.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+              child: Text(
+                l.taxNoHarvestCandidates,
+                style: TextStyle(color: context.textSubtle, fontSize: 12),
+              ),
+            )
+          else
+            for (var i = 0; i < candidates.length; i++) ...[
+              if (i > 0)
+                Divider(height: 1, color: context.tint(0.04), indent: 16),
+              _harvestRow(l, candidates[i], unverified),
+            ],
+        ],
+      ),
+    );
+  }
+
+  Widget _harvestRow(
+      AppLocalizations l, Map<String, dynamic> lot, bool unverified) {
+    final symbol = lot['symbol']?.toString() ?? '';
+    final name = lot['name']?.toString() ?? '';
+    final loss = (lot['unrealized_gain_usd'] as num?)?.toDouble() ?? 0;
+    final savings =
+        (lot['estimated_tax_savings_usd'] as num?)?.toDouble() ?? 0;
+    final washRisk = lot['wash_sale_risk'] == true;
+    final washSafeAfter = lot['wash_sale_safe_after']?.toString();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  symbol.isNotEmpty ? symbol : name,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                // Loss is negative → renders red via _pnlColor.
+                _signedMoney(loss),
+                style: TextStyle(
+                  color: _pnlColor(loss),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Flexible(
+                child: Text(
+                  // The savings estimate is positive money; show it green.
+                  l.taxHarvestEstimate(_money(savings)),
+                  style: TextStyle(
+                    color: context.positive,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 6),
+              _estimateBadge(l, unverified),
+            ],
+          ),
+          if (washRisk) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                _washSaleMarker(l, washSafeAfter),
+                if (washSafeAfter != null && washSafeAfter.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      l.taxWashSaleSafeAfter(_fmtDate(washSafeAfter)),
+                      style:
+                          TextStyle(color: context.warning, fontSize: 11),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// "Estimate" badge for harvest savings; carries the pending-verification
+  /// tone (warning) when constants are unverified, otherwise a calm info tint.
+  Widget _estimateBadge(AppLocalizations l, bool unverified) {
+    final color = unverified ? context.warning : context.info;
+    return Tooltip(
+      message: l.taxHarvestEstimateTooltip,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              unverified ? Icons.warning_amber_rounded : Icons.info_outline,
+              size: 11,
+              color: color,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              l.taxHarvestEstimateBadge,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // T13 — FBAR / foreign-account threshold monitor (informational)
+  // ---------------------------------------------------------------------------
+
+  Widget _buildFbarSection(AppLocalizations l) {
+    final data = _fbar ?? const {};
+    final peak = (data['peak_aggregate_usd'] as num?)?.toDouble() ?? 0;
+    final threshold = (data['threshold_usd'] as num?)?.toDouble() ?? 0;
+    final exceeded = data['exceeded'] == true;
+    final unverified = data['constants_verified'] == false;
+    final peakDate = data['peak_date']?.toString();
+    final accounts = (data['foreign_accounts'] as List<dynamic>?) ?? const [];
+
+    final statusColor = exceeded ? context.warning : context.positive;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle(l.taxFbarTitle),
+        const SizedBox(height: 12),
+        Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16)),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l.taxFbarPeakAggregate,
+                  style: TextStyle(color: context.textMuted, fontSize: 12),
+                ),
+                const SizedBox(height: 6),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    widget.currencyFormat
+                        .format(peak * widget.conversionFactor),
+                    style: brandDisplayStyle(
+                      fontSize: 26,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      exceeded
+                          ? Icons.flag_outlined
+                          : Icons.check_circle_outline,
+                      size: 14,
+                      color: statusColor,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        exceeded ? l.taxFbarExceeded : l.taxFbarUnder,
+                        style: TextStyle(
+                          color: statusColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        l.taxFbarThreshold(
+                          widget.currencyFormat
+                              .format(threshold * widget.conversionFactor),
+                        ),
+                        style: TextStyle(
+                            color: context.textSubtle, fontSize: 11),
+                      ),
+                    ),
+                    if (unverified) ...[
+                      const SizedBox(width: 8),
+                      Icon(Icons.warning_amber_rounded,
+                          size: 12, color: context.warning),
+                      const SizedBox(width: 2),
+                      Text(
+                        l.taxConstantsUnverified,
+                        style:
+                            TextStyle(color: context.warning, fontSize: 10),
+                      ),
+                    ],
+                  ],
+                ),
+                if (peakDate != null && peakDate.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    l.taxFbarPeakDate(_fmtDate(peakDate)),
+                    style: TextStyle(color: context.textFaint, fontSize: 11),
+                  ),
+                ],
+                if (accounts.isEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    l.taxFbarNoForeignAccounts,
+                    style: TextStyle(color: context.textFaint, fontSize: 11),
+                  ),
+                ] else ...[
+                  const SizedBox(height: 12),
+                  Divider(height: 1, color: context.hairline),
+                  for (final a in accounts) _fbarAccountRow(l, a),
+                ],
+                const SizedBox(height: 12),
+                Text(
+                  l.taxFbarInformational,
+                  style: TextStyle(
+                    color: context.textFaint,
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  l.taxFbarFatcaNote,
+                  style: TextStyle(
+                    color: context.textFaint,
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _fbarAccountRow(AppLocalizations l, dynamic raw) {
+    if (raw is! Map) return const SizedBox.shrink();
+    final name = raw['name']?.toString() ?? '';
+    final institution = raw['institution']?.toString() ?? '';
+    final country = raw['country']?.toString();
+    final currency = raw['currency']?.toString() ?? '';
+    final peakContrib =
+        (raw['peak_contribution_usd'] as num?)?.toDouble() ?? 0;
+    final ytdMax = (raw['ytd_max_usd'] as num?)?.toDouble() ?? 0;
+
+    final tags = <String>[
+      if (institution.isNotEmpty) institution,
+      if (country != null && country.isNotEmpty) country,
+      if (currency.isNotEmpty) currency,
+    ].join(' · ');
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (tags.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    tags,
+                    style: TextStyle(color: context.textFaint, fontSize: 11),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                l.taxFbarAccountYtdMax(_money(ytdMax)),
+                style: TextStyle(
+                  color: context.textPrimary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                l.taxFbarAccountPeak(_money(peakContrib)),
+                style: TextStyle(color: context.textSubtle, fontSize: 11),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // T15 — Retirement contributions vs limits
+  // ---------------------------------------------------------------------------
+
+  Widget _buildRetirementSection(AppLocalizations l) {
+    final data = _contributions ?? const {};
+    final groups = (data['groups'] as List<dynamic>?) ?? const [];
+    final unverified = data['constants_verified'] == false;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle(l.taxRetirementTitle),
+        const SizedBox(height: 12),
+        if (groups.isEmpty)
+          _emptyCard(l.taxNoRetirementAccounts, Icons.savings_outlined)
+        else
+          Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16)),
+            child: Column(
+              children: [
+                for (var i = 0; i < groups.length; i++) ...[
+                  if (i > 0)
+                    Divider(height: 1, color: context.hairline),
+                  _contributionRow(l, groups[i], unverified),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _contributionRow(
+      AppLocalizations l, dynamic raw, bool unverified) {
+    if (raw is! Map) return const SizedBox.shrink();
+    final groupKey = raw['group']?.toString() ?? '';
+    final ytd = (raw['ytd_contributions_usd'] as num?)?.toDouble() ?? 0;
+    final baseLimit = (raw['limit_base_usd'] as num?)?.toDouble() ?? 0;
+    final catchUp = (raw['catch_up_usd'] as num?)?.toDouble() ?? 0;
+    final remainingApi = (raw['remaining_room_usd'] as num?)?.toDouble();
+    final deadline = raw['deadline']?.toString();
+    final priorYearWindow = raw['prior_year_window'] == true;
+    final matchCaveat = raw['match_rollover_caveat'] == true;
+
+    final progress = contributionProgress(
+      ytd: ytd,
+      baseLimit: baseLimit,
+      remainingRoomFromApi: remainingApi,
+    );
+    final barColor = progress.over ? context.warning : context.positive;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _retirementGroupLabel(l, groupKey),
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                l.taxContributedOfLimit(_money(ytd), _money(baseLimit)),
+                style: TextStyle(
+                  color: context.textMuted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // Progress bar reads in both themes: a tinted track + a solid fill.
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: progress.fraction,
+              minHeight: 8,
+              backgroundColor: context.tint(0.08),
+              valueColor: AlwaysStoppedAnimation<Color>(barColor),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  progress.over
+                      ? l.taxContributionOverLimit
+                      : l.taxRemainingRoom(_money(progress.remainingRoom)),
+                  style: TextStyle(
+                    color: progress.over ? context.warning : context.positive,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (catchUp > 0)
+                Flexible(
+                  child: Text(
+                    l.taxCatchUpNote(_money(catchUp)),
+                    style:
+                        TextStyle(color: context.textFaint, fontSize: 11),
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+          ),
+          if (deadline != null && deadline.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              l.taxContributionDeadline(_fmtDate(deadline)),
+              style: TextStyle(color: context.textSubtle, fontSize: 11),
+            ),
+          ],
+          if (priorYearWindow) ...[
+            const SizedBox(height: 4),
+            Text(
+              l.taxPriorYearWindowNote,
+              style: TextStyle(color: context.textFaint, fontSize: 11),
+            ),
+          ],
+          if (matchCaveat) ...[
+            const SizedBox(height: 4),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline, size: 12, color: context.textFaint),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    l.taxMatchRolloverCaveat,
+                    style:
+                        TextStyle(color: context.textFaint, fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (unverified) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(Icons.warning_amber_rounded,
+                    size: 12, color: context.warning),
+                const SizedBox(width: 4),
+                Text(
+                  l.taxConstantsUnverified,
+                  style: TextStyle(color: context.warning, fontSize: 10),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _retirementGroupLabel(AppLocalizations l, String key) {
+    switch (key) {
+      case '401k':
+        return l.taxRetirementGroup401k;
+      case 'ira':
+        return l.taxRetirementGroupIra;
+      case 'hsa':
+        return l.taxRetirementGroupHsa;
+      default:
+        return key;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -1218,6 +2026,39 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     );
   }
 
+  /// Small "wash sale" marker (T12) for a flagged disposal/harvest row. The
+  /// tooltip carries the safe-after date when present so the chip stays compact.
+  Widget _washSaleMarker(AppLocalizations l, String? safeAfter) {
+    final tip = (safeAfter == null || safeAfter.isEmpty)
+        ? l.taxWashSaleTooltip
+        : '${l.taxWashSaleTooltip} ${l.taxWashSaleSafeAfter(_fmtDate(safeAfter))}';
+    return Tooltip(
+      message: tip,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        decoration: BoxDecoration(
+          color: context.warning.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.warning_amber_rounded, size: 11, color: context.warning),
+            const SizedBox(width: 4),
+            Text(
+              l.taxWashSaleMarker,
+              style: TextStyle(
+                color: context.warning,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _emptyCard(String text, IconData icon) {
     return Card(
       child: Padding(
@@ -1327,6 +2168,22 @@ class _TaxSkeleton extends StatelessWidget {
               const SkeletonBox(width: 160, height: 20),
               const SizedBox(height: 12),
               const SkeletonBox(height: 200),
+              // T11 unrealized + harvest
+              const SizedBox(height: 24),
+              const SkeletonBox(width: 220, height: 20),
+              const SizedBox(height: 12),
+              const SkeletonBox(height: 180),
+              // T13 FBAR
+              const SizedBox(height: 24),
+              const SkeletonBox(width: 200, height: 20),
+              const SizedBox(height: 12),
+              const SkeletonBox(height: 160),
+              // T15 retirement
+              const SizedBox(height: 24),
+              const SkeletonBox(width: 180, height: 20),
+              const SizedBox(height: 12),
+              const SkeletonBox(height: 180),
+              // Income
               const SizedBox(height: 24),
               const SkeletonBox(width: 120, height: 20),
               const SizedBox(height: 12),

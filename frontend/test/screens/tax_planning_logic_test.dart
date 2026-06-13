@@ -125,4 +125,104 @@ void main() {
       expect(disposalTerm(null), DisposalTerm.unknown);
     });
   });
+
+  group('isNearLongTerm', () {
+    test('highlights lots within the 60-day window', () {
+      expect(isNearLongTerm(60), isTrue);
+      expect(isNearLongTerm(1), isTrue);
+      expect(isNearLongTerm(0), isTrue); // flips today → still short
+    });
+
+    test('does not highlight lots beyond the window or already long-term', () {
+      expect(isNearLongTerm(61), isFalse);
+      expect(isNearLongTerm(365), isFalse);
+      expect(isNearLongTerm(null), isFalse); // already long-term ships null
+      expect(isNearLongTerm('soon'), isFalse);
+    });
+  });
+
+  group('bucketUnrealizedLots', () {
+    test('splits long_term==true into the long bucket, else short', () {
+      final lots = [
+        {'symbol': 'A', 'long_term': true},
+        {'symbol': 'B', 'long_term': false},
+        {'symbol': 'C'}, // missing flag → short (conservative)
+        'not-a-map',
+      ];
+      final b = bucketUnrealizedLots(lots);
+      expect(b.longTerm.map((m) => m['symbol']), ['A']);
+      expect(b.shortTerm.map((m) => m['symbol']), ['B', 'C']);
+    });
+
+    test('null lots yields empty buckets', () {
+      final b = bucketUnrealizedLots(null);
+      expect(b.shortTerm, isEmpty);
+      expect(b.longTerm, isEmpty);
+    });
+  });
+
+  group('harvestCandidates', () {
+    test('keeps only loss lots with a savings estimate, largest saving first',
+        () {
+      final lots = [
+        {
+          'symbol': 'LOSS_SMALL',
+          'unrealized_gain_usd': -100.0,
+          'estimated_tax_savings_usd': 22.0,
+        },
+        {
+          'symbol': 'LOSS_BIG',
+          'unrealized_gain_usd': -500.0,
+          'estimated_tax_savings_usd': 110.0,
+        },
+        // a gain → never a candidate
+        {
+          'symbol': 'GAIN',
+          'unrealized_gain_usd': 300.0,
+        },
+        // a loss but no estimate → excluded (no phantom $0 saving)
+        {
+          'symbol': 'LOSS_NO_EST',
+          'unrealized_gain_usd': -40.0,
+        },
+      ];
+      final c = harvestCandidates(lots);
+      expect(c.map((m) => m['symbol']), ['LOSS_BIG', 'LOSS_SMALL']);
+    });
+
+    test('null lots yields no candidates', () {
+      expect(harvestCandidates(null), isEmpty);
+    });
+  });
+
+  group('contributionProgress', () {
+    test('fraction and room for a partial contribution', () {
+      final p = contributionProgress(
+        ytd: 5000,
+        baseLimit: 23500,
+        remainingRoomFromApi: 18500,
+      );
+      expect(p.fraction, closeTo(5000 / 23500, 1e-9));
+      expect(p.remainingRoom, 18500);
+      expect(p.over, isFalse);
+    });
+
+    test('caps the bar and floors room when over the limit', () {
+      final p = contributionProgress(
+        ytd: 25000,
+        baseLimit: 23500,
+        remainingRoomFromApi: 0,
+      );
+      expect(p.fraction, 1.0); // clamped, never overflows
+      expect(p.remainingRoom, 0);
+      expect(p.over, isTrue);
+    });
+
+    test('derives room when the API omits it; guards a zero limit', () {
+      final p = contributionProgress(ytd: 3000, baseLimit: 7000);
+      expect(p.remainingRoom, 4000);
+      final z = contributionProgress(ytd: 100, baseLimit: 0);
+      expect(z.fraction, 0.0);
+    });
+  });
 }

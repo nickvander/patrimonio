@@ -935,6 +935,108 @@
     }
   },
   "taxAssumptionProReview": "Wording and constants are pending review by a tax professional — treat as guidance, not advice.",
+  "taxUnrealizedTitle": "Unrealized positions — what if I sell",
+  "taxUnrealizedShortTerm": "Short-term lots",
+  "taxUnrealizedLongTerm": "Long-term lots",
+  "taxNoUnrealizedLots": "No taxable lots to evaluate.",
+  "taxUnrealizedSubtotal": "Unrealized: {amount}",
+  "@taxUnrealizedSubtotal": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "taxFlipsToLongIn": "Long-term in {days}d — {date}",
+  "@taxFlipsToLongIn": {
+    "placeholders": {
+      "days": { "type": "String" },
+      "date": { "type": "String" }
+    }
+  },
+  "taxColBasis": "Basis",
+  "taxColValue": "Value",
+  "taxHarvestTitle": "Harvest candidates",
+  "taxHarvestEstimate": "Est. tax saving {amount}",
+  "@taxHarvestEstimate": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "taxHarvestEstimateBadge": "Estimate",
+  "taxHarvestEstimateTooltip": "Loss × your marginal rate — an estimate on unverified constants, not a guaranteed saving.",
+  "taxHarvestNote": "Selling these losers could offset gains. Estimated saving = loss × your marginal rate.",
+  "taxNoHarvestCandidates": "No loss lots to harvest right now.",
+  "taxWashSaleMarker": "Wash sale",
+  "taxWashSaleSafeAfter": "Safe to re-buy after {date}",
+  "@taxWashSaleSafeAfter": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
+  "taxWashSaleTooltip": "A same-security buy near this date can disallow the loss. Re-buying after the safe date avoids the wash-sale rule.",
+  "taxFbarTitle": "Foreign accounts — FBAR monitor",
+  "taxFbarPeakAggregate": "Peak aggregate foreign balance (this year)",
+  "taxFbarThreshold": "FBAR reporting threshold: {amount}",
+  "@taxFbarThreshold": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "taxFbarExceeded": "Aggregate exceeded the threshold this year",
+  "taxFbarUnder": "Aggregate stayed under the threshold this year",
+  "taxFbarPeakDate": "Peak on {date}",
+  "@taxFbarPeakDate": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
+  "taxFbarInformational": "Informational only — this does not decide an FBAR filing obligation. Consult a tax professional.",
+  "taxFbarFatcaNote": "FATCA Form 8938 thresholds are different and higher, and are not computed here.",
+  "taxFbarNoForeignAccounts": "No foreign accounts detected for this year.",
+  "taxFbarAccountPeak": "On peak date: {amount}",
+  "@taxFbarAccountPeak": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "taxFbarAccountYtdMax": "Own YTD max: {amount}",
+  "@taxFbarAccountYtdMax": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "taxRetirementTitle": "Retirement contributions",
+  "taxRetirementGroup401k": "401(k) / 403(b) / 457(b)",
+  "taxRetirementGroupIra": "IRA (Traditional + Roth)",
+  "taxRetirementGroupHsa": "HSA",
+  "taxContributedOfLimit": "{ytd} of {limit}",
+  "@taxContributedOfLimit": {
+    "placeholders": {
+      "ytd": { "type": "String" },
+      "limit": { "type": "String" }
+    }
+  },
+  "taxRemainingRoom": "Room left: {amount}",
+  "@taxRemainingRoom": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "taxContributionDeadline": "Deadline: {date}",
+  "@taxContributionDeadline": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
+  "taxPriorYearWindowNote": "Prior-year contributions allowed until this deadline.",
+  "taxMatchRolloverCaveat": "May include employer match or rollovers — personal contributions could be overcounted.",
+  "taxContributionOverLimit": "Over the base limit",
+  "taxCatchUpNote": "+{amount} catch-up if age-eligible",
+  "@taxCatchUpNote": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "taxNoRetirementAccounts": "No retirement accounts with contributions this year.",
   "acctxRenameAccount": "Rename account",
   "acctxNickname": "Nickname",
   "acctxAccountFallback": "Account",

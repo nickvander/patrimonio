@@ -2884,6 +2884,160 @@ class AppLocalizationsEn extends AppLocalizations {
       'Wording and constants are pending review by a tax professional — treat as guidance, not advice.';
 
   @override
+  String get taxUnrealizedTitle => 'Unrealized positions — what if I sell';
+
+  @override
+  String get taxUnrealizedShortTerm => 'Short-term lots';
+
+  @override
+  String get taxUnrealizedLongTerm => 'Long-term lots';
+
+  @override
+  String get taxNoUnrealizedLots => 'No taxable lots to evaluate.';
+
+  @override
+  String taxUnrealizedSubtotal(String amount) {
+    return 'Unrealized: $amount';
+  }
+
+  @override
+  String taxFlipsToLongIn(String days, String date) {
+    return 'Long-term in ${days}d — $date';
+  }
+
+  @override
+  String get taxColBasis => 'Basis';
+
+  @override
+  String get taxColValue => 'Value';
+
+  @override
+  String get taxHarvestTitle => 'Harvest candidates';
+
+  @override
+  String taxHarvestEstimate(String amount) {
+    return 'Est. tax saving $amount';
+  }
+
+  @override
+  String get taxHarvestEstimateBadge => 'Estimate';
+
+  @override
+  String get taxHarvestEstimateTooltip =>
+      'Loss × your marginal rate — an estimate on unverified constants, not a guaranteed saving.';
+
+  @override
+  String get taxHarvestNote =>
+      'Selling these losers could offset gains. Estimated saving = loss × your marginal rate.';
+
+  @override
+  String get taxNoHarvestCandidates => 'No loss lots to harvest right now.';
+
+  @override
+  String get taxWashSaleMarker => 'Wash sale';
+
+  @override
+  String taxWashSaleSafeAfter(String date) {
+    return 'Safe to re-buy after $date';
+  }
+
+  @override
+  String get taxWashSaleTooltip =>
+      'A same-security buy near this date can disallow the loss. Re-buying after the safe date avoids the wash-sale rule.';
+
+  @override
+  String get taxFbarTitle => 'Foreign accounts — FBAR monitor';
+
+  @override
+  String get taxFbarPeakAggregate =>
+      'Peak aggregate foreign balance (this year)';
+
+  @override
+  String taxFbarThreshold(String amount) {
+    return 'FBAR reporting threshold: $amount';
+  }
+
+  @override
+  String get taxFbarExceeded => 'Aggregate exceeded the threshold this year';
+
+  @override
+  String get taxFbarUnder => 'Aggregate stayed under the threshold this year';
+
+  @override
+  String taxFbarPeakDate(String date) {
+    return 'Peak on $date';
+  }
+
+  @override
+  String get taxFbarInformational =>
+      'Informational only — this does not decide an FBAR filing obligation. Consult a tax professional.';
+
+  @override
+  String get taxFbarFatcaNote =>
+      'FATCA Form 8938 thresholds are different and higher, and are not computed here.';
+
+  @override
+  String get taxFbarNoForeignAccounts =>
+      'No foreign accounts detected for this year.';
+
+  @override
+  String taxFbarAccountPeak(String amount) {
+    return 'On peak date: $amount';
+  }
+
+  @override
+  String taxFbarAccountYtdMax(String amount) {
+    return 'Own YTD max: $amount';
+  }
+
+  @override
+  String get taxRetirementTitle => 'Retirement contributions';
+
+  @override
+  String get taxRetirementGroup401k => '401(k) / 403(b) / 457(b)';
+
+  @override
+  String get taxRetirementGroupIra => 'IRA (Traditional + Roth)';
+
+  @override
+  String get taxRetirementGroupHsa => 'HSA';
+
+  @override
+  String taxContributedOfLimit(String ytd, String limit) {
+    return '$ytd of $limit';
+  }
+
+  @override
+  String taxRemainingRoom(String amount) {
+    return 'Room left: $amount';
+  }
+
+  @override
+  String taxContributionDeadline(String date) {
+    return 'Deadline: $date';
+  }
+
+  @override
+  String get taxPriorYearWindowNote =>
+      'Prior-year contributions allowed until this deadline.';
+
+  @override
+  String get taxMatchRolloverCaveat =>
+      'May include employer match or rollovers — personal contributions could be overcounted.';
+
+  @override
+  String get taxContributionOverLimit => 'Over the base limit';
+
+  @override
+  String taxCatchUpNote(String amount) {
+    return '+$amount catch-up if age-eligible';
+  }
+
+  @override
+  String get taxNoRetirementAccounts =>
+      'No retirement accounts with contributions this year.';
+
+  @override
   String get acctxRenameAccount => 'Rename account';
 
   @override

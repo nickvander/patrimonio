@@ -826,6 +826,108 @@
     }
   },
   "taxAssumptionProReview": "La redacción y las constantes están pendientes de revisión por un profesional fiscal — tómalo como orientación, no como asesoría.",
+  "taxUnrealizedTitle": "Posiciones no realizadas — qué pasa si vendo",
+  "taxUnrealizedShortTerm": "Lotes a corto plazo",
+  "taxUnrealizedLongTerm": "Lotes a largo plazo",
+  "taxNoUnrealizedLots": "No hay lotes gravables para evaluar.",
+  "taxUnrealizedSubtotal": "No realizada: {amount}",
+  "@taxUnrealizedSubtotal": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "taxFlipsToLongIn": "Largo plazo en {days} d — {date}",
+  "@taxFlipsToLongIn": {
+    "placeholders": {
+      "days": { "type": "String" },
+      "date": { "type": "String" }
+    }
+  },
+  "taxColBasis": "Costo base",
+  "taxColValue": "Valor",
+  "taxHarvestTitle": "Candidatos para cosechar pérdidas",
+  "taxHarvestEstimate": "Ahorro fiscal est. {amount}",
+  "@taxHarvestEstimate": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "taxHarvestEstimateBadge": "Estimado",
+  "taxHarvestEstimateTooltip": "Pérdida × tu tasa marginal — un estimado con constantes sin verificar, no un ahorro garantizado.",
+  "taxHarvestNote": "Vender estas posiciones en pérdida podría compensar ganancias. Ahorro estimado = pérdida × tu tasa marginal.",
+  "taxNoHarvestCandidates": "No hay lotes en pérdida para cosechar por ahora.",
+  "taxWashSaleMarker": "Venta ficticia",
+  "taxWashSaleSafeAfter": "Se puede recomprar después del {date}",
+  "@taxWashSaleSafeAfter": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
+  "taxWashSaleTooltip": "Una recompra del mismo valor cerca de esta fecha puede anular la pérdida. Recomprar después de la fecha segura evita la regla de venta ficticia (wash sale).",
+  "taxFbarTitle": "Cuentas en el extranjero — monitor FBAR",
+  "taxFbarPeakAggregate": "Saldo extranjero agregado máximo (este año)",
+  "taxFbarThreshold": "Umbral de reporte FBAR: {amount}",
+  "@taxFbarThreshold": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "taxFbarExceeded": "El agregado superó el umbral este año",
+  "taxFbarUnder": "El agregado se mantuvo bajo el umbral este año",
+  "taxFbarPeakDate": "Máximo el {date}",
+  "@taxFbarPeakDate": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
+  "taxFbarInformational": "Solo informativo — esto no determina una obligación de presentar el FBAR. Consulta a un profesional fiscal.",
+  "taxFbarFatcaNote": "Los umbrales del Formulario 8938 (FATCA) son distintos y más altos, y no se calculan aquí.",
+  "taxFbarNoForeignAccounts": "No se detectaron cuentas en el extranjero para este año.",
+  "taxFbarAccountPeak": "En la fecha máxima: {amount}",
+  "@taxFbarAccountPeak": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "taxFbarAccountYtdMax": "Máximo propio del año: {amount}",
+  "@taxFbarAccountYtdMax": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "taxRetirementTitle": "Aportaciones para el retiro",
+  "taxRetirementGroup401k": "401(k) / 403(b) / 457(b)",
+  "taxRetirementGroupIra": "IRA (Tradicional + Roth)",
+  "taxRetirementGroupHsa": "HSA",
+  "taxContributedOfLimit": "{ytd} de {limit}",
+  "@taxContributedOfLimit": {
+    "placeholders": {
+      "ytd": { "type": "String" },
+      "limit": { "type": "String" }
+    }
+  },
+  "taxRemainingRoom": "Espacio restante: {amount}",
+  "@taxRemainingRoom": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "taxContributionDeadline": "Fecha límite: {date}",
+  "@taxContributionDeadline": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
+  "taxPriorYearWindowNote": "Se permiten aportaciones del año anterior hasta esta fecha límite.",
+  "taxMatchRolloverCaveat": "Puede incluir aportación del empleador o traspasos — las aportaciones personales podrían sobrecontarse.",
+  "taxContributionOverLimit": "Por encima del límite base",
+  "taxCatchUpNote": "+{amount} de recuperación si cumples la edad",
+  "@taxCatchUpNote": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "taxNoRetirementAccounts": "No hay cuentas de retiro con aportaciones este año.",
   "acctxRenameAccount": "Renombrar cuenta",
   "acctxNickname": "Apodo",
   "acctxAccountFallback": "Cuenta",

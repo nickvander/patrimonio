@@ -84,6 +84,104 @@ final List<dynamic> _disposals = [
   },
 ];
 
+// T11 — unrealized lots: one near-long-term short lot, one loss lot that is a
+// harvest candidate with a wash-sale risk, one long-term gain lot.
+const Map<String, dynamic> _unrealized = {
+  'lots': [
+    {
+      'symbol': 'NVDA',
+      'name': 'NVIDIA',
+      'account_name': 'Fidelity Brokerage',
+      'account_type': 'brokerage',
+      'acquired_date': '2024-12-01',
+      'qty': 3,
+      'cost_basis_usd': 900.0,
+      'current_value_usd': 1200.0,
+      'unrealized_gain_usd': 300.0, // gain → green
+      'long_term': false,
+      'days_until_long_term': 30, // within 60 → near-long-term highlight
+      'long_term_date': '2025-12-02',
+    },
+    {
+      'symbol': 'PLTR',
+      'name': 'Palantir',
+      'account_name': 'Fidelity Brokerage',
+      'account_type': 'brokerage',
+      'acquired_date': '2025-01-15',
+      'qty': 10,
+      'cost_basis_usd': 500.0,
+      'current_value_usd': 350.0,
+      'unrealized_gain_usd': -150.0, // LOSS → red + harvest candidate
+      'long_term': false,
+      'days_until_long_term': 220,
+      'long_term_date': '2026-01-16',
+      'estimated_tax_savings_usd': 33.0,
+      'wash_sale_risk': true,
+      'wash_sale_safe_after': '2026-07-13',
+    },
+    {
+      'symbol': 'VOO',
+      'name': 'Vanguard S&P 500',
+      'account_name': 'Fidelity Brokerage',
+      'account_type': 'brokerage',
+      'acquired_date': '2020-01-01',
+      'qty': 4,
+      'cost_basis_usd': 1000.0,
+      'current_value_usd': 1800.0,
+      'unrealized_gain_usd': 800.0,
+      'long_term': true,
+    },
+  ],
+  'short_term_gain': 150.0,
+  'long_term_gain': 800.0,
+  'ordinary_marginal_rate': 0.22,
+  'ltcg_marginal_rate': 0.15,
+  'bracket_year_used': 2025,
+  'constants_verified': false,
+};
+
+// T13 — FBAR: peak over the $10k threshold, one foreign MXN account.
+const Map<String, dynamic> _fbar = {
+  'year': 2025,
+  'threshold_usd': 10000.0,
+  'peak_aggregate_usd': 14500.0,
+  'exceeded': true,
+  'peak_date': '2025-08-15',
+  'foreign_accounts': [
+    {
+      'account_id': null,
+      'name': 'Banamex Checking',
+      'institution': 'Banamex',
+      'country': 'MX',
+      'currency': 'MXN',
+      'peak_contribution_usd': 14500.0,
+      'ytd_max_usd': 14500.0,
+    },
+  ],
+  'constants_verified': false,
+};
+
+// T15 — retirement: a 401k group with room left, prior-year window false.
+const Map<String, dynamic> _contributions = {
+  'year': 2025,
+  'limit_year_used': 2025,
+  'groups': [
+    {
+      'group': '401k',
+      'account_types': ['401k'],
+      'ytd_contributions_usd': 5000.0,
+      'limit_base_usd': 23500.0,
+      'catch_up_usd': 7500.0,
+      'limit_with_catch_up_usd': 31000.0,
+      'remaining_room_usd': 18500.0,
+      'deadline': '2025-12-31',
+      'prior_year_window': false,
+      'match_rollover_caveat': true,
+    },
+  ],
+  'constants_verified': false,
+};
+
 Widget _host({Map<String, dynamic>? settingStore}) {
   final store = settingStore ?? <String, dynamic>{};
   return MaterialApp(
@@ -99,6 +197,10 @@ Widget _host({Map<String, dynamic>? settingStore}) {
             _summary,
         transactionsFetcher: ({required int year}) async => _transactions,
         disposalsFetcher: (int year) async => _disposals,
+        unrealizedFetcher:
+            ({required int year, required String status}) async => _unrealized,
+        fbarFetcher: (int year) async => _fbar,
+        contributionsFetcher: (int year) async => _contributions,
         settingReader: (key) async => store[key],
         settingWriter: (key, value) async => store[key] = value,
       ),
@@ -155,5 +257,52 @@ void main() {
     final l = await AppLocalizations.delegate.load(const Locale('en'));
     // The Married label shows in the filing-status dropdown.
     expect(find.text(l.taxFilingMarried), findsWidgets);
+  });
+
+  testWidgets('T11: a loss lot renders red and shows a harvest estimate',
+      (tester) async {
+    _setSize(tester, const Size(1100, 2600));
+    await tester.pumpWidget(_host());
+    await tester.pumpAndSettle();
+
+    final l = await AppLocalizations.delegate.load(const Locale('en'));
+
+    // The loss lot (PLTR, -$150) is present and rendered with the negative
+    // sign-color; the gain lot (NVDA, +$300) is positive — distinct colors.
+    // (-$150 appears in both the ST bucket row and the harvest sub-card, so
+    // take the first.)
+    final lossText = tester.widget<Text>(find.text(r'-$150').first);
+    final gainText = tester.widget<Text>(find.text(r'+$300'));
+    expect(lossText.style!.color, isNot(equals(gainText.style!.color)));
+
+    // The harvest sub-card surfaces the gated tax-saving estimate for it.
+    expect(find.text(l.taxHarvestTitle), findsOneWidget);
+    expect(find.text(l.taxHarvestEstimate(r'$33')), findsOneWidget);
+    // …with the wash-sale marker on the flagged loss.
+    expect(find.text(l.taxWashSaleMarker), findsWidgets);
+  });
+
+  testWidgets('T13: FBAR exceeded state is surfaced', (tester) async {
+    _setSize(tester, const Size(1100, 2600));
+    await tester.pumpWidget(_host());
+    await tester.pumpAndSettle();
+
+    final l = await AppLocalizations.delegate.load(const Locale('en'));
+    expect(find.text(l.taxFbarTitle), findsOneWidget);
+    expect(find.text(l.taxFbarExceeded), findsOneWidget);
+    // The foreign account contributing to the peak is listed.
+    expect(find.text('Banamex Checking'), findsOneWidget);
+  });
+
+  testWidgets('T15: a contribution row shows remaining room', (tester) async {
+    _setSize(tester, const Size(1100, 2600));
+    await tester.pumpWidget(_host());
+    await tester.pumpAndSettle();
+
+    final l = await AppLocalizations.delegate.load(const Locale('en'));
+    expect(find.text(l.taxRetirementTitle), findsOneWidget);
+    expect(find.text(l.taxRetirementGroup401k), findsOneWidget);
+    // 23,500 limit − 5,000 YTD = 18,500 room left.
+    expect(find.text(l.taxRemainingRoom(r'$18,500')), findsOneWidget);
   });
 }

@@ -2911,6 +2911,162 @@ class AppLocalizationsEs extends AppLocalizations {
       'La redacción y las constantes están pendientes de revisión por un profesional fiscal — tómalo como orientación, no como asesoría.';
 
   @override
+  String get taxUnrealizedTitle =>
+      'Posiciones no realizadas — qué pasa si vendo';
+
+  @override
+  String get taxUnrealizedShortTerm => 'Lotes a corto plazo';
+
+  @override
+  String get taxUnrealizedLongTerm => 'Lotes a largo plazo';
+
+  @override
+  String get taxNoUnrealizedLots => 'No hay lotes gravables para evaluar.';
+
+  @override
+  String taxUnrealizedSubtotal(String amount) {
+    return 'No realizada: $amount';
+  }
+
+  @override
+  String taxFlipsToLongIn(String days, String date) {
+    return 'Largo plazo en $days d — $date';
+  }
+
+  @override
+  String get taxColBasis => 'Costo base';
+
+  @override
+  String get taxColValue => 'Valor';
+
+  @override
+  String get taxHarvestTitle => 'Candidatos para cosechar pérdidas';
+
+  @override
+  String taxHarvestEstimate(String amount) {
+    return 'Ahorro fiscal est. $amount';
+  }
+
+  @override
+  String get taxHarvestEstimateBadge => 'Estimado';
+
+  @override
+  String get taxHarvestEstimateTooltip =>
+      'Pérdida × tu tasa marginal — un estimado con constantes sin verificar, no un ahorro garantizado.';
+
+  @override
+  String get taxHarvestNote =>
+      'Vender estas posiciones en pérdida podría compensar ganancias. Ahorro estimado = pérdida × tu tasa marginal.';
+
+  @override
+  String get taxNoHarvestCandidates =>
+      'No hay lotes en pérdida para cosechar por ahora.';
+
+  @override
+  String get taxWashSaleMarker => 'Venta ficticia';
+
+  @override
+  String taxWashSaleSafeAfter(String date) {
+    return 'Se puede recomprar después del $date';
+  }
+
+  @override
+  String get taxWashSaleTooltip =>
+      'Una recompra del mismo valor cerca de esta fecha puede anular la pérdida. Recomprar después de la fecha segura evita la regla de venta ficticia (wash sale).';
+
+  @override
+  String get taxFbarTitle => 'Cuentas en el extranjero — monitor FBAR';
+
+  @override
+  String get taxFbarPeakAggregate =>
+      'Saldo extranjero agregado máximo (este año)';
+
+  @override
+  String taxFbarThreshold(String amount) {
+    return 'Umbral de reporte FBAR: $amount';
+  }
+
+  @override
+  String get taxFbarExceeded => 'El agregado superó el umbral este año';
+
+  @override
+  String get taxFbarUnder => 'El agregado se mantuvo bajo el umbral este año';
+
+  @override
+  String taxFbarPeakDate(String date) {
+    return 'Máximo el $date';
+  }
+
+  @override
+  String get taxFbarInformational =>
+      'Solo informativo — esto no determina una obligación de presentar el FBAR. Consulta a un profesional fiscal.';
+
+  @override
+  String get taxFbarFatcaNote =>
+      'Los umbrales del Formulario 8938 (FATCA) son distintos y más altos, y no se calculan aquí.';
+
+  @override
+  String get taxFbarNoForeignAccounts =>
+      'No se detectaron cuentas en el extranjero para este año.';
+
+  @override
+  String taxFbarAccountPeak(String amount) {
+    return 'En la fecha máxima: $amount';
+  }
+
+  @override
+  String taxFbarAccountYtdMax(String amount) {
+    return 'Máximo propio del año: $amount';
+  }
+
+  @override
+  String get taxRetirementTitle => 'Aportaciones para el retiro';
+
+  @override
+  String get taxRetirementGroup401k => '401(k) / 403(b) / 457(b)';
+
+  @override
+  String get taxRetirementGroupIra => 'IRA (Tradicional + Roth)';
+
+  @override
+  String get taxRetirementGroupHsa => 'HSA';
+
+  @override
+  String taxContributedOfLimit(String ytd, String limit) {
+    return '$ytd de $limit';
+  }
+
+  @override
+  String taxRemainingRoom(String amount) {
+    return 'Espacio restante: $amount';
+  }
+
+  @override
+  String taxContributionDeadline(String date) {
+    return 'Fecha límite: $date';
+  }
+
+  @override
+  String get taxPriorYearWindowNote =>
+      'Se permiten aportaciones del año anterior hasta esta fecha límite.';
+
+  @override
+  String get taxMatchRolloverCaveat =>
+      'Puede incluir aportación del empleador o traspasos — las aportaciones personales podrían sobrecontarse.';
+
+  @override
+  String get taxContributionOverLimit => 'Por encima del límite base';
+
+  @override
+  String taxCatchUpNote(String amount) {
+    return '+$amount de recuperación si cumples la edad';
+  }
+
+  @override
+  String get taxNoRetirementAccounts =>
+      'No hay cuentas de retiro con aportaciones este año.';
+
+  @override
   String get acctxRenameAccount => 'Renombrar cuenta';
 
   @override
