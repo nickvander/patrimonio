@@ -35,13 +35,21 @@ use webauthn_rs::prelude::{
     Webauthn, WebauthnBuilder,
 };
 
-use crate::api::session::{build_session_cookie, client_ip, internal, user_agent, ApiError, AuthContext};
-use crate::services::sessions;
+use crate::api::session::{
+    build_session_cookie, client_ip, enforce_password_policy, internal, record_audit, user_agent,
+    ApiError, AuthContext,
+};
+use crate::services::{password, sessions};
 use crate::AppState;
 
 const CHALLENGE_TTL_SECONDS: u64 = 300;
 const REG_KEY_PREFIX: &str = "webauthn:reg:";
 const LOGIN_KEY_PREFIX: &str = "webauthn:login:";
+/// Step-up assertion state for an already-authenticated user who is
+/// about to set a new password without proving the old one. Keyed by
+/// `user_id` + nonce so a challenge issued for one user can never be
+/// redeemed by another, even if the nonce leaks.
+const REAUTH_KEY_PREFIX: &str = "webauthn:reauth:";
 
 pub fn public_router() -> Router<AppState> {
     Router::new()
@@ -55,6 +63,18 @@ pub fn protected_router() -> Router<AppState> {
         .route("/register/finish", post(register_finish))
         .route("/", get(list_passkeys))
         .route("/{id}", delete(remove_passkey))
+}
+
+/// Step-up + set-password endpoints. Mounted under `/api/auth` (NOT
+/// `/api/auth/passkeys`) so the public paths read as
+/// `/api/auth/reauth/passkey/start` and `/api/auth/set-password`, next
+/// to the password-management endpoints they complement. Both require a
+/// valid session — they sit behind the same require_auth layer as the
+/// other account-management routes.
+pub fn reauth_protected_router() -> Router<AppState> {
+    Router::new()
+        .route("/reauth/passkey/start", post(reauth_passkey_start))
+        .route("/set-password", post(set_password))
 }
 
 // ---------------------------------------------------------------------------
@@ -518,6 +538,219 @@ async fn login_finish(
         .map_err(internal)?;
 
     Ok((jar, Json(LoginFinishResponse { user })))
+}
+
+// ---------------------------------------------------------------------------
+// Step-up: authenticated user asserts a passkey to authorise a
+// password change without knowing the old password.
+//
+// Security model — this is the gate that makes "set password without
+// the old one" safe:
+//   - The challenge is built ONLY over THIS user's registered
+//     credentials (allowCredentials = ctx.user_id's passkeys). The
+//     browser will only let an authenticator the user actually owns
+//     respond.
+//   - The pending auth state is stored in Redis keyed by
+//     `user_id + nonce`. /set-password re-derives that exact key from
+//     the SESSION's user_id, so a nonce minted for user A can't be
+//     redeemed by user B even if it leaks.
+//   - `take_state` DELs on read → the assertion is single-use. A
+//     replay (or a second /set-password with the same nonce) finds no
+//     state and is rejected.
+//   - A valid session ALONE is insufficient: a hijacked session still
+//     has to produce a fresh assertion from the victim's authenticator,
+//     which the attacker does not possess. This mirrors how
+//     change_password demands the old password as proof.
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+pub struct ReauthStartResponse {
+    pub nonce: String,
+    pub options: RequestChallengeResponse,
+}
+
+#[derive(Deserialize)]
+pub struct SetPasswordRequest {
+    /// The nonce handed back by /reauth/passkey/start.
+    pub nonce: String,
+    /// The assertion the browser produced from navigator.credentials.get().
+    pub credential: PublicKeyCredential,
+    pub new_password: String,
+}
+
+async fn reauth_passkey_start(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Result<Json<ReauthStartResponse>, ApiError> {
+    // Build the assertion over exactly the current user's credentials —
+    // scoped by id, never by a client-supplied username.
+    let rows: Vec<serde_json::Value> = sqlx::query_scalar(
+        "SELECT passkey_json FROM passkey_credentials WHERE user_id = $1",
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(internal)?;
+
+    let passkeys: Vec<Passkey> = rows
+        .into_iter()
+        .map(serde_json::from_value::<Passkey>)
+        .collect::<Result<_, _>>()
+        .map_err(internal)?;
+
+    if passkeys.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "No passkey registered on this account. Add a passkey first, \
+             or change your password using your current one.",
+        ));
+    }
+
+    let (options, auth_state) = state
+        .webauthn
+        .start_passkey_authentication(&passkeys)
+        .map_err(|e| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                &format!("webauthn start: {e}"),
+            )
+        })?;
+
+    let nonce = random_nonce();
+    let key = format!("{REAUTH_KEY_PREFIX}{}:{}", ctx.user_id, nonce);
+    store_state(&state, &key, &auth_state).await?;
+
+    Ok(Json(ReauthStartResponse { nonce, options }))
+}
+
+async fn set_password(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    headers: HeaderMap,
+    Json(body): Json<SetPasswordRequest>,
+) -> Result<StatusCode, ApiError> {
+    let ua = user_agent(&headers);
+    let ip = client_ip(&headers);
+
+    // Validate the candidate password BEFORE we consume the assertion
+    // nonce — a weak-password rejection shouldn't burn the user's
+    // single-use challenge and force a fresh OS prompt.
+    enforce_password_policy(&state, &body.new_password).await?;
+
+    // Key is derived from the SESSION's user_id, not from anything the
+    // client sent. The nonce alone can't unlock another user's state.
+    let key = format!("{REAUTH_KEY_PREFIX}{}:{}", ctx.user_id, body.nonce);
+    // take_state DELs on read → single-use. A missing/expired/garbage
+    // nonce surfaces here as a 400 ("challenge expired or unknown").
+    // Map every assertion-side failure below to 401 (unauthorized),
+    // but the not-found case is genuinely a stale/forged nonce.
+    let auth_state: PasskeyAuthentication = take_state(&state, &key).await.map_err(|_| {
+        ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "Passkey challenge expired or unknown. Start the step-up again.",
+        )
+    })?;
+
+    let result = match state
+        .webauthn
+        .finish_passkey_authentication(&body.credential, &auth_state)
+    {
+        Ok(r) => r,
+        Err(_) => {
+            record_audit(
+                &state.db,
+                "set_password_via_passkey",
+                None,
+                Some(ctx.user_id),
+                ip.as_deref(),
+                ua.as_deref(),
+                false,
+                Some("assertion_failed"),
+            )
+            .await;
+            return Err(ApiError::new(
+                StatusCode::UNAUTHORIZED,
+                "Passkey verification failed.",
+            ));
+        }
+    };
+
+    // The asserted credential MUST belong to the current user. The
+    // challenge was built from this user's allow-list, but we re-check
+    // against the DB by (user_id, credential_id) as defence-in-depth —
+    // the row lookup is the authoritative ownership proof.
+    let used_cred_id: &[u8] = result.cred_id().as_ref();
+    let row: Option<(Uuid, serde_json::Value)> = sqlx::query_as(
+        "SELECT id, passkey_json FROM passkey_credentials
+            WHERE user_id = $1 AND credential_id = $2",
+    )
+    .bind(ctx.user_id)
+    .bind(used_cred_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(internal)?;
+
+    let Some((row_id, json)) = row else {
+        record_audit(
+            &state.db,
+            "set_password_via_passkey",
+            None,
+            Some(ctx.user_id),
+            ip.as_deref(),
+            ua.as_deref(),
+            false,
+            Some("credential_not_owned"),
+        )
+        .await;
+        return Err(ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "Authenticated credential is not registered for this user.",
+        ));
+    };
+
+    // Bump the sign counter on the credential we just used, exactly as
+    // login_finish does — keeps replay/clone detection accurate.
+    if let Ok(mut updated) = serde_json::from_value::<Passkey>(json) {
+        updated.update_credential(&result);
+        if let Ok(new_json) = serde_json::to_value(&updated) {
+            let _ = sqlx::query(
+                "UPDATE passkey_credentials
+                    SET passkey_json = $1, last_used_at = NOW()
+                  WHERE id = $2",
+            )
+            .bind(&new_json)
+            .bind(row_id)
+            .execute(&state.db)
+            .await;
+        }
+    }
+
+    // Assertion verified + ownership confirmed → set the new hash. No
+    // current-password check; the passkey IS the proof.
+    let new_hash = password::hash_password(&body.new_password).map_err(internal)?;
+    sqlx::query("UPDATE users SET password_hash = $1 WHERE id = $2")
+        .bind(&new_hash)
+        .bind(ctx.user_id)
+        .execute(&state.db)
+        .await
+        .map_err(internal)?;
+
+    // Force re-login everywhere — same posture as change_password.
+    let _ = sessions::revoke_all_for_user(&state.db, ctx.user_id).await;
+
+    record_audit(
+        &state.db,
+        "set_password_via_passkey",
+        None,
+        Some(ctx.user_id),
+        ip.as_deref(),
+        ua.as_deref(),
+        true,
+        None,
+    )
+    .await;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // ---------------------------------------------------------------------------

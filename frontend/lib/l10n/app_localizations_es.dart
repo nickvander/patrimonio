@@ -729,6 +729,14 @@ class AppLocalizationsEs extends AppLocalizations {
       'Cierra la sesión en todos los demás dispositivos.';
 
   @override
+  String get secSetPasswordWithPasskey =>
+      'Crear una nueva contraseña (con clave de acceso)';
+
+  @override
+  String get secSetPasswordWithPasskeySubtitle =>
+      'Usa tu clave de acceso en lugar de tu contraseña actual.';
+
+  @override
   String get secTwoFactorSection => 'Autenticación de dos factores';
 
   @override
@@ -1090,6 +1098,16 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get secChangeButton => 'Cambiar';
+
+  @override
+  String get secSetPasswordWithPasskeyTitle => 'Crear una nueva contraseña';
+
+  @override
+  String get secSetPasswordWithPasskeyBody =>
+      'Tu clave de acceso te verificó. Elige una nueva contraseña; no necesitarás la anterior.';
+
+  @override
+  String get secSetPasswordButton => 'Guardar contraseña';
 
   @override
   String get secEnterSixDigitCode =>

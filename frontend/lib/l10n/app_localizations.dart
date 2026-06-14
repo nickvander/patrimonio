@@ -1352,6 +1352,18 @@ abstract class AppLocalizations {
   /// **'Sign out of every other session.'**
   String get secChangePasswordSubtitle;
 
+  /// No description provided for @secSetPasswordWithPasskey.
+  ///
+  /// In en, this message translates to:
+  /// **'Set a new password (with passkey)'**
+  String get secSetPasswordWithPasskey;
+
+  /// No description provided for @secSetPasswordWithPasskeySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Use your passkey instead of your current password.'**
+  String get secSetPasswordWithPasskeySubtitle;
+
   /// No description provided for @secTwoFactorSection.
   ///
   /// In en, this message translates to:
@@ -1903,6 +1915,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Change'**
   String get secChangeButton;
+
+  /// No description provided for @secSetPasswordWithPasskeyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Set a new password'**
+  String get secSetPasswordWithPasskeyTitle;
+
+  /// No description provided for @secSetPasswordWithPasskeyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your passkey verified you. Choose a new password — you won\'t need your old one.'**
+  String get secSetPasswordWithPasskeyBody;
+
+  /// No description provided for @secSetPasswordButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Set password'**
+  String get secSetPasswordButton;
 
   /// No description provided for @secEnterSixDigitCode.
   ///

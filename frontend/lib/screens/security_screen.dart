@@ -98,6 +98,54 @@ class _SecurityScreenState extends State<SecurityScreen> {
     }
   }
 
+  /// Set a NEW password without the old one, authorised by a fresh passkey
+  /// assertion (step-up). Flow: run the assertion → on success show a
+  /// new-password dialog (new + confirm only) → POST /set-password. The
+  /// server revokes every session on success, so refreshStatus drops us to
+  /// login — same end-state as _changePassword.
+  Future<void> _setPasswordWithPasskey() async {
+    final l = AppLocalizations.of(context);
+    // 1. Step-up assertion. The OS passkey prompt appears here; cancelling
+    //    or a failed assertion throws PasskeyException — show it and stop,
+    //    WITHOUT opening the password dialog.
+    final ({Map<String, dynamic> credential, String nonce}) stepUp;
+    try {
+      stepUp = await PasskeyService.instance.reauthWithPasskey();
+    } on UnauthorizedException {
+      // Session already gone — let the auth listener route to login.
+      await AuthService.instance.refreshStatus();
+      return;
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l.secFailedWithReason(
+              e.toString().replaceFirst('Exception: ', ''))),
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+
+    // 2. Collect the new password (no current-password field). The dialog
+    //    itself calls /set-password so it can show inline errors (e.g. a
+    //    weak/breached password) without closing.
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => _SetPasswordWithPasskeyDialog(
+        credential: stepUp.credential,
+        nonce: stepUp.nonce,
+      ),
+    );
+    if (result == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l.secPasswordChangedSnack)),
+      );
+      // Sessions were revoked server-side — drop back to login.
+      await AuthService.instance.refreshStatus();
+    }
+  }
+
   Future<void> _regenerateRecoveryCodes() async {
     final l = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
@@ -383,12 +431,31 @@ class _SecurityScreenState extends State<SecurityScreen> {
                     const SizedBox(height: 16),
                     _section(l.secPasswordSection),
                     Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.lock_outline),
-                        title: Text(l.secChangePassword),
-                        subtitle: Text(l.secChangePasswordSubtitle),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: _changePassword,
+                      child: Column(
+                        children: [
+                          ListTile(
+                            leading: const Icon(Icons.lock_outline),
+                            title: Text(l.secChangePassword),
+                            subtitle: Text(l.secChangePasswordSubtitle),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: _changePassword,
+                          ),
+                          // Passkey-gated set-password: only offered when the
+                          // user actually holds a passkey to step up with. A
+                          // user who knows their password but has no passkey
+                          // simply uses "Change password" above.
+                          if ((_passkeys ?? const []).isNotEmpty) ...[
+                            const Divider(height: 1),
+                            ListTile(
+                              leading: const Icon(Icons.key_outlined),
+                              title: Text(l.secSetPasswordWithPasskey),
+                              subtitle:
+                                  Text(l.secSetPasswordWithPasskeySubtitle),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: _setPasswordWithPasskey,
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -1132,6 +1199,129 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : Text(l.secChangeButton),
+        ),
+      ],
+    );
+  }
+}
+
+/// New-password dialog for the passkey-gated set-password flow. Reuses the
+/// same validation as _ChangePasswordDialog (new ≥ 12 chars, confirm must
+/// match) but has NO current-password field — the step-up assertion already
+/// authorised the change. The assertion + nonce are passed in and submitted
+/// together with the new password.
+class _SetPasswordWithPasskeyDialog extends StatefulWidget {
+  final Map<String, dynamic> credential;
+  final String nonce;
+  const _SetPasswordWithPasskeyDialog({
+    required this.credential,
+    required this.nonce,
+  });
+
+  @override
+  State<_SetPasswordWithPasskeyDialog> createState() =>
+      _SetPasswordWithPasskeyDialogState();
+}
+
+class _SetPasswordWithPasskeyDialogState
+    extends State<_SetPasswordWithPasskeyDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _next = TextEditingController();
+  final _confirm = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _next.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await PasskeyService.instance.setPasswordWithPasskey(
+        credential: widget.credential,
+        nonce: widget.nonce,
+        newPassword: _next.text,
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return AlertDialog(
+      title: Text(l.secSetPasswordWithPasskeyTitle),
+      content: SizedBox(
+        width: 360,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                l.secSetPasswordWithPasskeyBody,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _next,
+                obscureText: true,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: l.secNewPasswordLabel,
+                  border: const OutlineInputBorder(),
+                ),
+                validator: (v) =>
+                    (v == null || v.length < 12) ? l.secPasswordTooShort : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _confirm,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: l.secConfirmPasswordLabel,
+                  border: const OutlineInputBorder(),
+                ),
+                validator: (v) =>
+                    v == _next.text ? null : l.secPasswordsDoNotMatch,
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+          child: Text(l.actionCancel),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _submit,
+          child: _busy
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Text(l.secSetPasswordButton),
         ),
       ],
     );

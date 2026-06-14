@@ -1312,7 +1312,7 @@ async fn backoff_sleep(excess: i64) {
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn record_audit(
+pub(crate) async fn record_audit(
     db: &PgPool,
     event: &str,
     username: Option<&str>,
@@ -1396,7 +1396,7 @@ fn invalid_credentials() -> ApiError {
 /// recover). HIBP is fail-open — a network error here never blocks
 /// signup; the embedded list still catches the embarrassingly-common
 /// picks regardless.
-async fn enforce_password_policy(
+pub(crate) async fn enforce_password_policy(
     state: &AppState,
     password: &str,
 ) -> Result<(), ApiError> {

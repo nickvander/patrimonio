@@ -248,6 +248,13 @@ async fn main() -> Result<()> {
             "/api/auth/passkeys",
             patrimonio::api::passkeys::protected_router(),
         )
+        // Step-up assertion + passkey-gated set-password. Account
+        // management (every authenticated user manages their own
+        // password), NOT owner-gated — sits next to /change-password.
+        .nest(
+            "/api/auth",
+            patrimonio::api::passkeys::reauth_protected_router(),
+        )
         // Coinbase OAuth lives under /api/auth/coinbase historically.
         // Initiating an OAuth link MUTATES (writes the new
         // institution row), so when roles ship this should arguably

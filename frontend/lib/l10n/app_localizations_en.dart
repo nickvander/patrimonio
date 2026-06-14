@@ -726,6 +726,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get secChangePasswordSubtitle => 'Sign out of every other session.';
 
   @override
+  String get secSetPasswordWithPasskey => 'Set a new password (with passkey)';
+
+  @override
+  String get secSetPasswordWithPasskeySubtitle =>
+      'Use your passkey instead of your current password.';
+
+  @override
   String get secTwoFactorSection => 'Two-factor authentication';
 
   @override
@@ -1074,6 +1081,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get secChangeButton => 'Change';
+
+  @override
+  String get secSetPasswordWithPasskeyTitle => 'Set a new password';
+
+  @override
+  String get secSetPasswordWithPasskeyBody =>
+      'Your passkey verified you. Choose a new password — you won\'t need your old one.';
+
+  @override
+  String get secSetPasswordButton => 'Set password';
 
   @override
   String get secEnterSixDigitCode => 'Enter the 6-digit code from your app.';

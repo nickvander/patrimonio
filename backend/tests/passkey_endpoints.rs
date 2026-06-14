@@ -97,6 +97,15 @@ async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
             "/api/auth/passkeys",
             patrimonio::api::passkeys::protected_router(),
         )
+        // Step-up + passkey-gated set-password, mounted exactly as
+        // main.rs does (under /api/auth, behind require_auth).
+        .nest(
+            "/api/auth",
+            patrimonio::api::passkeys::reauth_protected_router(),
+        )
+        // Plus the session protected router so tests can exercise
+        // login/change-password side effects (session revocation).
+        .nest("/api/auth", patrimonio::api::session::protected_router())
         .layer(from_fn_with_state(
             state.clone(),
             patrimonio::api::session::require_auth,
@@ -274,4 +283,205 @@ async fn duplicate_credential_id_is_rejected_not_silently_upserted() {
         dup.is_err(),
         "a duplicate credential_id must violate UNIQUE, not silently insert"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Passkey-gated set-password (step-up).
+//
+// The full WebAuthn assertion can't be forged without a software
+// authenticator, so these tests pin down the GATES around it:
+//   - reauth/start refuses when the user has no passkey (400)
+//   - set-password rejects a missing / garbage / already-consumed nonce
+//     (401) and leaves the password hash untouched
+//   - a weak new_password is rejected by the policy (400) BEFORE the
+//     nonce is consumed
+//   - set-password requires auth (401 without a session cookie)
+// The successful assertion path (verify → set hash → revoke sessions →
+// audit row) is covered by the same finish_passkey_authentication used
+// by the passkey LOGIN tests / frontend e2e; it can't be exercised here
+// without a real authenticator.
+// ---------------------------------------------------------------------------
+
+fn post_json(uri: &str, cookie: Option<&str>, body: Value) -> Request<Body> {
+    let mut builder = Request::builder()
+        .method(Method::POST)
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "application/json");
+    if let Some(c) = cookie {
+        builder = builder.header(header::COOKIE, cookie_header(c));
+    }
+    builder
+        .body(Body::from(serde_json::to_vec(&body).unwrap()))
+        .unwrap()
+}
+
+async fn password_hash(pool: &PgPool, user_id: Uuid) -> String {
+    sqlx::query_scalar("SELECT password_hash FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn reauth_start_rejects_user_with_no_passkey() {
+    let Some((app, _pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let cookie = bootstrap_owner(&app).await;
+    // No passkey seeded → reauth/start must 400, never mint a challenge.
+    let res = app
+        .clone()
+        .oneshot(post_json(
+            "/api/auth/reauth/passkey/start",
+            Some(&cookie),
+            serde_json::json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn reauth_start_requires_authentication() {
+    let Some((app, _pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let _ = bootstrap_owner(&app).await;
+    // No cookie → require_auth rejects before the handler runs.
+    let res = app
+        .clone()
+        .oneshot(post_json(
+            "/api/auth/reauth/passkey/start",
+            None,
+            serde_json::json!({}),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn set_password_requires_authentication() {
+    let Some((app, _pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let _ = bootstrap_owner(&app).await;
+    let res = app
+        .clone()
+        .oneshot(post_json(
+            "/api/auth/set-password",
+            None,
+            serde_json::json!({
+                "nonce": "whatever",
+                "credential": fake_assertion_credential(),
+                "new_password": "correct-horse-battery-staple-9"
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn set_password_with_unknown_nonce_is_rejected_and_password_unchanged() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let cookie = bootstrap_owner(&app).await;
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'owner'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    // User even HAS a passkey — the missing pending state is what fails.
+    seed_passkey(&pool, user_id, b"credential-id-XYZ", "Key").await;
+    let before = password_hash(&pool, user_id).await;
+
+    let res = app
+        .clone()
+        .oneshot(post_json(
+            "/api/auth/set-password",
+            Some(&cookie),
+            serde_json::json!({
+                "nonce": "this-nonce-was-never-issued",
+                "credential": fake_assertion_credential(),
+                "new_password": "correct-horse-battery-staple-9"
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::UNAUTHORIZED,
+        "an unknown/expired nonce must be 401, never let a password through"
+    );
+
+    let after = password_hash(&pool, user_id).await;
+    assert_eq!(before, after, "password hash must be untouched on failure");
+
+    // No success audit row should exist.
+    let success_rows: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM auth_audit WHERE event = 'set_password_via_passkey' AND success = true",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(success_rows, 0, "no successful set-password audit on a rejected attempt");
+
+    // Sessions must NOT have been revoked — the original cookie still works.
+    let res = app
+        .clone()
+        .oneshot(get_request("/api/auth/passkeys", &cookie))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK, "session must survive a failed set-password");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn set_password_rejects_weak_password_before_consuming_nonce() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else { return };
+    let cookie = bootstrap_owner(&app).await;
+    let user_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE username = 'owner'")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let before = password_hash(&pool, user_id).await;
+
+    // "password" is short + on the embedded breach list → policy rejects
+    // with 400 (NOT 401), and the hash is unchanged.
+    let res = app
+        .clone()
+        .oneshot(post_json(
+            "/api/auth/set-password",
+            Some(&cookie),
+            serde_json::json!({
+                "nonce": "irrelevant",
+                "credential": fake_assertion_credential(),
+                "new_password": "password"
+            }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::BAD_REQUEST,
+        "weak password must be rejected by the policy with 400"
+    );
+    let after = password_hash(&pool, user_id).await;
+    assert_eq!(before, after, "password hash must be untouched");
+}
+
+/// A spec-shaped but bogus assertion credential. It's enough to let the
+/// JSON deserialize into `PublicKeyCredential`; the request is rejected
+/// long before the assertion is verified (no pending state / bad
+/// password), so the contents never need to be cryptographically valid.
+fn fake_assertion_credential() -> Value {
+    serde_json::json!({
+        "id": "AAAAAAAAAAAAAAAAAAAAAA",
+        "rawId": "AAAAAAAAAAAAAAAAAAAAAA",
+        "type": "public-key",
+        "response": {
+            "authenticatorData": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "clientDataJSON": "e30",
+            "signature": "AAAA"
+        },
+        "extensions": {}
+    })
 }

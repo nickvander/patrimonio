@@ -274,6 +274,91 @@ class PasskeyService {
   }
 
   // ---------------------------------------------------------------------------
+  // Step-up assertion (authenticated user proves a passkey to authorise a
+  // password change WITHOUT the old password).
+  //
+  // This runs the SAME credentials.get ceremony as signInWithPasskey, but
+  // against /api/auth/reauth/passkey/start — which scopes the challenge to
+  // the CURRENT session's user (no username input). It returns the encoded
+  // assertion + nonce WITHOUT calling any finish step; the caller hands both
+  // to [setPasswordWithPasskey], where the server verifies the assertion and
+  // sets the new password atomically.
+  // ---------------------------------------------------------------------------
+
+  /// Run a fresh passkey assertion for step-up auth. Returns the encoded
+  /// assertion credential + the server nonce. Throws [PasskeyException] if
+  /// the user has no passkey, cancels the OS prompt, or the assertion fails.
+  Future<({Map<String, dynamic> credential, String nonce})>
+      reauthWithPasskey() async {
+    if (!isAvailable) {
+      throw PasskeyException(_t(
+        'This browser doesn\'t support passkeys. Try Chrome/Safari/Edge on a recent OS.',
+        'Este navegador no admite claves de acceso. Prueba con Chrome/Safari/Edge en un sistema reciente.',
+      ));
+    }
+
+    final startRes = await _client.post(
+      Uri.parse('${_api.baseUrl}/auth/reauth/passkey/start'),
+      headers: const {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'fetch',
+      },
+    );
+    if (startRes.statusCode == 401) {
+      throw UnauthorizedException();
+    }
+    if (startRes.statusCode != 200) {
+      throw PasskeyException(
+        _decodeError(startRes.body, _t('Could not start passkey verification.',
+            'No se pudo iniciar la verificación con clave de acceso.')),
+      );
+    }
+    final startJson = jsonDecode(startRes.body) as Map<String, dynamic>;
+    final nonce = startJson['nonce'] as String;
+    final options = startJson['options'] as Map<String, dynamic>;
+
+    final publicKey =
+        _coerceRequestOptions(options['publicKey'] as Map<String, dynamic>);
+    final assertion = await _callCredentialsGet(publicKey);
+    final credJson = _encodeAssertionCredential(assertion);
+
+    return (credential: credJson, nonce: nonce);
+  }
+
+  /// Set a NEW password authorised by a fresh passkey assertion (from
+  /// [reauthWithPasskey]) — no current password required. On success the
+  /// server revokes ALL of this user's sessions, so the caller should
+  /// re-check auth status (it will drop to the login screen).
+  Future<void> setPasswordWithPasskey({
+    required Map<String, dynamic> credential,
+    required String nonce,
+    required String newPassword,
+  }) async {
+    final res = await _client.post(
+      Uri.parse('${_api.baseUrl}/auth/set-password'),
+      headers: const {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'fetch',
+      },
+      body: jsonEncode({
+        'nonce': nonce,
+        'credential': credential,
+        'new_password': newPassword,
+      }),
+    );
+    if (res.statusCode == 204) return;
+    // 401 here means the assertion was rejected (expired/garbage nonce or a
+    // verification failure) — surface as a passkey error, not a generic
+    // "session expired", since the user IS logged in. A genuine missing
+    // session would have been a 401 from require_auth, but the body text
+    // differs; either way the actionable message is "try the step-up again".
+    throw PasskeyException(
+      _decodeError(res.body, _t('Could not set the new password.',
+          'No se pudo establecer la nueva contraseña.')),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // List / remove (authenticated).
   // ---------------------------------------------------------------------------
 
