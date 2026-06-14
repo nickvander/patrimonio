@@ -1191,6 +1191,14 @@ async fn cash_flow_trends(
           -- indexes on these columns make the anti-joins index probes.
           AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
           AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
+          -- Internal cross-currency transfers move money between the user's
+          -- own accounts — neither income nor spend. Anti-join the confirmed
+          -- detected pairs so a mis-filed transfer leg can't distort the bars.
+          AND NOT EXISTS (
+              SELECT 1 FROM cash_fx_transfers f
+              WHERE (f.source_tx_id = t.id OR f.dest_tx_id = t.id)
+                AND (f.user_confirmed OR f.detection_confidence >= 70)
+          )
         GROUP BY month
         ORDER BY month ASC
         "#
@@ -1282,6 +1290,17 @@ async fn spending_by_category(
           AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
           AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
           AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
+          -- Linked cross-currency internal transfers are money moving between
+          -- the user's own accounts, not spend. The category-code filter above
+          -- misses them when an importer mis-filed a SPEI leg (e.g. a "RENTA"
+          -- substring → RENT_AND_UTILITIES), so anti-join the detected pairs.
+          -- Gated on confirmed / high-confidence so shaky pending matches don't
+          -- silently hide real expenses.
+          AND NOT EXISTS (
+              SELECT 1 FROM cash_fx_transfers f
+              WHERE (f.source_tx_id = t.id OR f.dest_tx_id = t.id)
+                AND (f.user_confirmed OR f.detection_confidence >= 70)
+          )
         GROUP BY TO_CHAR(t.date, 'YYYY-MM'),
                  COALESCE(NULLIF(t.user_category, ''), t.category, 'UNCATEGORIZED')
         ORDER BY month ASC
@@ -1480,6 +1499,14 @@ async fn spending_insights(
           AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
           AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
           AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
+          -- Internal cross-currency transfers move money between the user's
+          -- own accounts — neither income nor spend. Anti-join the confirmed
+          -- detected pairs so a mis-filed transfer leg can't distort the spikes.
+          AND NOT EXISTS (
+              SELECT 1 FROM cash_fx_transfers f
+              WHERE (f.source_tx_id = t.id OR f.dest_tx_id = t.id)
+                AND (f.user_confirmed OR f.detection_confidence >= 70)
+          )
         GROUP BY month, t.user_category, t.category_detailed, t.category
         "#,
     )
@@ -1707,6 +1734,14 @@ async fn emergency_fund(
           AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
           AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
           AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
+          -- Internal cross-currency transfers move money between the user's
+          -- own accounts — neither income nor spend. Anti-join the confirmed
+          -- detected pairs so a mis-filed transfer leg can't distort the trend.
+          AND NOT EXISTS (
+              SELECT 1 FROM cash_fx_transfers f
+              WHERE (f.source_tx_id = t.id OR f.dest_tx_id = t.id)
+                AND (f.user_confirmed OR f.detection_confidence >= 70)
+          )
         "#,
     )
     .bind(ctx.user_id)

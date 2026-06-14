@@ -1,0 +1,18 @@
+-- Backfill for the cross-currency transfer matcher rewrite
+-- (services/fx_transfer_link.rs). The old detector inserted EVERY qualifying
+-- (outflow, inflow) pair, so several similar person-to-person transfers in the
+-- same window produced an N×N cross-product of bogus links — the "transfers
+-- with Andrea look random" report. The new detector adds shared-counterparty
+-- identity scoring and assigns pairs greedily one-to-one (best confidence,
+-- then closest dates), reserving each transaction so it appears in at most one
+-- link.
+--
+-- Clear the auto-detected, NOT-yet-user-confirmed links so the next detection
+-- sweep (runs on every Plaid sync and on the manual "scan" action) regenerates
+-- them under the new rules instead of inheriting the old cross-product. User-
+-- confirmed pairs are preserved — the user vouched for those, and the detector
+-- reserves their legs so they're never re-paired.
+--
+-- The matching dismissed_fx_pairs rows are intentionally left untouched: a
+-- "never suggest this pair again" decision still holds.
+DELETE FROM cash_fx_transfers WHERE user_confirmed = FALSE;

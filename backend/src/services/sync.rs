@@ -785,12 +785,28 @@ fn best_counterparty(arr: &serde_json::Value) -> (Option<String>, Option<String>
             "MEDIUM" => 10,
             _ => 0,
         };
-        let type_score = match kind {
-            "merchant" | "MERCHANT" => 5,
-            "marketplace" | "MARKETPLACE" => 3,
-            _ => 0,
+        // Type is the PRIMARY sort key — its weights are spaced wider than
+        // the 0..30 confidence range so a real MERCHANT always beats an
+        // aggregator/middleman, even a VERY_HIGH-confidence one. This is
+        // what makes "SQ *COFFEESHOP" surface as the coffee shop rather
+        // than "Square": Square is a payment_app (base 0 + VERY_HIGH 30 =
+        // 30) while the shop is a merchant (base 100 + e.g. MEDIUM 10 =
+        // 110). Confidence only breaks ties within the same type.
+        let type_base = match kind {
+            "merchant" | "MERCHANT" => 100,
+            "marketplace" | "MARKETPLACE" => 60,
+            // Middlemen the user doesn't think of as "the merchant":
+            // payment processors (Square/Stripe/PayPal/Toast), the issuing
+            // bank, and payroll/income sources. Demoted below the neutral
+            // baseline so any typed merchant wins.
+            "payment_app" | "PAYMENT_APP"
+            | "financial_institution" | "FINANCIAL_INSTITUTION"
+            | "income_source" | "INCOME_SOURCE" => 0,
+            // Untyped / unknown entries sit between merchants and known
+            // middlemen — better than a processor, worse than a named shop.
+            _ => 40,
         };
-        conf_score + type_score
+        type_base + conf_score
     }
     let best = items
         .iter()
@@ -829,6 +845,28 @@ mod counterparty_tests {
         let (name, logo) = best_counterparty(&arr);
         assert_eq!(name.as_deref(), Some("Patagonia"));
         assert_eq!(logo.as_deref(), Some("https://cdn.example/patagonia.png"));
+    }
+
+    #[test]
+    fn prefers_merchant_over_high_confidence_payment_app() {
+        // The "Square vs Coffeeshop" case: the aggregator carries higher
+        // Plaid confidence, but the user recognises the shop. The merchant
+        // must win despite lower confidence.
+        let arr = json!([
+            {"name": "Square", "type": "payment_app", "confidence_level": "VERY_HIGH"},
+            {"name": "Coffeeshop", "type": "merchant", "confidence_level": "MEDIUM"},
+        ]);
+        assert_eq!(best_counterparty(&arr).0.as_deref(), Some("Coffeeshop"));
+    }
+
+    #[test]
+    fn falls_back_to_payment_app_when_no_merchant() {
+        // No merchant in the array — we still surface something rather than
+        // dropping the counterparty entirely.
+        let arr = json!([
+            {"name": "PayPal", "type": "payment_app", "confidence_level": "HIGH"},
+        ]);
+        assert_eq!(best_counterparty(&arr).0.as_deref(), Some("PayPal"));
     }
 
     #[test]

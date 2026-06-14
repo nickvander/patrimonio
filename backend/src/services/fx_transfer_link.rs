@@ -129,6 +129,31 @@ pub async fn detect_for_user(db: &PgPool, user_id: uuid::Uuid) -> Result<(usize,
         })
         .collect();
 
+    // 2c. Transactions already part of a link (especially user-confirmed
+    //     pairs, which we never re-evaluate). Their legs are reserved up
+    //     front so the one-to-one assignment below can't build a second,
+    //     conflicting pairing for a transaction that's already spoken for.
+    //     Auto-detected-but-unconfirmed links are cleared by the
+    //     `2026061402_fx_transfer_relink.sql` backfill on deploy, so on the
+    //     next sweep they get recomputed under the new matching rules rather
+    //     than locking in the old cross-product pairings.
+    let existing_rows = sqlx::query(
+        "SELECT source_tx_id, dest_tx_id FROM cash_fx_transfers WHERE user_id = $1",
+    )
+    .bind(user_id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+    let mut used: std::collections::HashSet<uuid::Uuid> = std::collections::HashSet::new();
+    for r in &existing_rows {
+        if let Ok(s) = r.try_get::<uuid::Uuid, _>("source_tx_id") {
+            used.insert(s);
+        }
+        if let Ok(d) = r.try_get::<uuid::Uuid, _>("dest_tx_id") {
+            used.insert(d);
+        }
+    }
+
     // 3. Walk every (USD-out, MXN-in) pair AND (MXN-out, USD-in)
     //    pair. We only consider expense-on-source + income-on-dest.
     //    Sign convention: outflow is stored as NEGATIVE (matches
@@ -138,16 +163,43 @@ pub async fn detect_for_user(db: &PgPool, user_id: uuid::Uuid) -> Result<(usize,
     //    "amount > 0 is outflow" — that was inverted and caused
     //    every detector run to short-circuit with 0 candidates
     //    against real data.
-    let mut checked = 0usize;
-    let mut inserted = 0usize;
+    // Drop candidates below the value floor measured in USD-equivalent, so a
+    // MXN leg is judged in dollars rather than raw pesos.
+    let candidates: Vec<TxCandidate> = candidates
+        .into_iter()
+        .filter(|c| usd_value(c, reference_rate) >= MIN_USD_VALUE)
+        .collect();
 
-    for source in &candidates {
+    // Pre-compute identity tokens once per candidate — the pairing is O(n²)
+    // and recomputing per pair would be wasteful.
+    let id_tokens: Vec<std::collections::HashSet<String>> =
+        candidates.iter().map(identity_tokens).collect();
+
+    // 3. Score every (outflow, inflow) cross-currency pair that clears the
+    //    bar, but DON'T insert yet. The old code inserted every qualifying
+    //    pair immediately, so N similar outflows and N similar inflows in the
+    //    same window produced an N×N cross-product of links — the "Andrea
+    //    transfers look random" bug. Instead we collect candidates and then
+    //    assign greedily one-to-one below.
+    struct PairScore {
+        source_idx: usize,
+        dest_idx: usize,
+        confidence: i32,
+        gap_days: i64,
+        rate_deviation: f64,
+        implied_rate: f64,
+        matched_keyword: Option<String>,
+    }
+    let mut checked = 0usize;
+    let mut scored: Vec<PairScore> = Vec::new();
+
+    for (si, source) in candidates.iter().enumerate() {
         if source.amount >= 0.0 {
             // source must be an outflow (negative amount in this
             // app's sign convention).
             continue;
         }
-        for dest in &candidates {
+        for (di, dest) in candidates.iter().enumerate() {
             if dest.amount <= 0.0 {
                 // dest must be an inflow (positive amount).
                 continue;
@@ -195,12 +247,19 @@ pub async fn detect_for_user(db: &PgPool, user_id: uuid::Uuid) -> Result<(usize,
 
             // Match a keyword if one is present in either tx.
             let matched_keyword = first_keyword(source).or_else(|| first_keyword(dest));
+            // Shared counterparty identity across the two legs.
+            let has_identity = !id_tokens[si].is_disjoint(&id_tokens[di]);
 
             // Confidence score. Higher = more likely to be a real
             // remittance link. We split into three tiers in the UI:
             //   >= 80 auto-confirm and quiet, 50–79 surface in detail
             //   modal, < 50 discard.
-            let confidence = score_match(rate_deviation, gap_days, matched_keyword.is_some());
+            let confidence = score_match(
+                rate_deviation,
+                gap_days,
+                matched_keyword.is_some(),
+                has_identity,
+            );
             checked += 1;
             if confidence < 50 {
                 continue;
@@ -212,33 +271,75 @@ pub async fn detect_for_user(db: &PgPool, user_id: uuid::Uuid) -> Result<(usize,
                 continue;
             }
 
-            let result = sqlx::query(
-                r#"
-                INSERT INTO cash_fx_transfers (
-                    user_id, source_tx_id, dest_tx_id,
-                    source_amount, source_currency,
-                    dest_amount, dest_currency,
-                    implied_fx_rate, detection_confidence, matched_keyword
-                ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-                )
-                ON CONFLICT (source_tx_id, dest_tx_id) DO NOTHING
-                "#,
-            )
-            .bind(user_id)
-            .bind(source.id)
-            .bind(dest.id)
-            .bind(source_abs)
-            .bind(&source.currency)
-            .bind(dest_abs)
-            .bind(&dest.currency)
-            .bind(implied_rate)
-            .bind(confidence as i16)
-            .bind(matched_keyword)
-            .execute(db)
-            .await?;
+            scored.push(PairScore {
+                source_idx: si,
+                dest_idx: di,
+                confidence,
+                gap_days,
+                rate_deviation,
+                implied_rate,
+                matched_keyword,
+            });
+        }
+    }
 
-            inserted += result.rows_affected() as usize;
+    // 4. Greedy one-to-one assignment. Best pairs first (highest confidence,
+    //    then the closest dates, then the tightest rate), and once a
+    //    transaction is used as either leg it can't appear in another pair.
+    //    This collapses the old cross-product to a clean set of distinct
+    //    transfers and lets date-proximity pick the right counterpart among
+    //    several same-amount legs.
+    scored.sort_by(|a, b| {
+        b.confidence
+            .cmp(&a.confidence)
+            .then(a.gap_days.cmp(&b.gap_days))
+            .then(
+                a.rate_deviation
+                    .partial_cmp(&b.rate_deviation)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+            )
+    });
+
+    let mut inserted = 0usize;
+
+    for p in &scored {
+        let source = &candidates[p.source_idx];
+        let dest = &candidates[p.dest_idx];
+        if used.contains(&source.id) || used.contains(&dest.id) {
+            continue;
+        }
+
+        let result = sqlx::query(
+            r#"
+            INSERT INTO cash_fx_transfers (
+                user_id, source_tx_id, dest_tx_id,
+                source_amount, source_currency,
+                dest_amount, dest_currency,
+                implied_fx_rate, detection_confidence, matched_keyword
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+            )
+            ON CONFLICT (source_tx_id, dest_tx_id) DO NOTHING
+            "#,
+        )
+        .bind(user_id)
+        .bind(source.id)
+        .bind(dest.id)
+        .bind(source.amount.abs())
+        .bind(&source.currency)
+        .bind(dest.amount.abs())
+        .bind(&dest.currency)
+        .bind(p.implied_rate)
+        .bind(p.confidence as i16)
+        .bind(p.matched_keyword.clone())
+        .execute(db)
+        .await?;
+
+        if result.rows_affected() > 0 {
+            inserted += 1;
+            // Reserve both legs so neither pairs with anything else.
+            used.insert(source.id);
+            used.insert(dest.id);
         }
     }
 
@@ -322,7 +423,7 @@ fn first_keyword(tx: &TxCandidate) -> Option<String> {
 /// Confidence scoring. Caps at 95 — we keep a few points of headroom
 /// so a user-confirmed link is always distinguishable in any future
 /// per-link UI (100 = user-confirmed in our convention).
-fn score_match(rate_deviation: f64, gap_days: i64, has_keyword: bool) -> i32 {
+fn score_match(rate_deviation: f64, gap_days: i64, has_keyword: bool, has_identity: bool) -> i32 {
     let mut score = 0i32;
     // Rate-tolerance: 0% off → +50, 10% off → 0. Linear ramp.
     let rate_pct_used = (rate_deviation / RATE_TOLERANCE_PCT).clamp(0.0, 1.0);
@@ -335,7 +436,70 @@ fn score_match(rate_deviation: f64, gap_days: i64, has_keyword: bool) -> i32 {
     if has_keyword {
         score += 20;
     }
+    // Shared counterparty identity (e.g. both legs name "ANDREA") is strong
+    // evidence the two sides are the same transfer, and is what distinguishes
+    // one person-to-person transfer from another of a similar amount in the
+    // same window. Boosts confidence and, via the greedy assignment, wins the
+    // pairing over a coincidental same-ratio leg that doesn't share a name.
+    if has_identity {
+        score += 15;
+    }
     score.min(95)
+}
+
+/// Generic tokens that carry no identity — payment mechanisms, legal
+/// suffixes, and filler that would otherwise cause unrelated transfers to
+/// "share" an identity. Compared upper-cased.
+const IDENTITY_STOPWORDS: &[&str] = &[
+    "TRANSFER", "TRANSFERENCIA", "TRANSFERENCIAS", "SPEI", "PAGO", "PAGOS",
+    "DEPOSITO", "DEPÓSITO", "ABONO", "CARGO", "RETIRO", "PAYMENT", "BILL",
+    "FROM", "WITH", "THE", "AND", "PARA", "POR", "DESDE", "CASH", "ENVIO",
+    "ENVÍO", "INTERNACIONAL", "INTERBANCARIA", "INC", "LLC", "SA", "CV",
+    "SAPI", "SADECV", "BANK", "BANCO", "ACCOUNT", "CUENTA", "REF", "FOLIO",
+];
+
+/// Significant identity tokens drawn from a transaction's name fields —
+/// counterparty / payee / payer first (the people-facing fields), then the
+/// raw description. Tokens are upper-cased, alphabetic, length ≥ 4, and not
+/// stopwords or remittance-service names.
+fn identity_tokens(tx: &TxCandidate) -> std::collections::HashSet<String> {
+    let mut out = std::collections::HashSet::new();
+    let fields = [
+        tx.counterparty_name.as_deref(),
+        tx.payment_payee.as_deref(),
+        tx.payment_payer.as_deref(),
+        tx.merchant_name.as_deref(),
+        Some(tx.description.as_str()),
+        tx.original_description.as_deref(),
+    ];
+    for field in fields.into_iter().flatten() {
+        for raw in field.to_uppercase().split(|c: char| !c.is_alphabetic()) {
+            if raw.len() < 4 {
+                continue;
+            }
+            if IDENTITY_STOPWORDS.contains(&raw) {
+                continue;
+            }
+            if REMITTANCE_KEYWORDS.iter().any(|kw| raw == *kw) {
+                continue;
+            }
+            out.insert(raw.to_string());
+        }
+    }
+    out
+}
+
+/// USD-equivalent magnitude of a transaction, used for the value floor so a
+/// MXN leg is measured in dollars (≈ amount / rate) rather than raw pesos —
+/// otherwise `MIN_USD_VALUE` pesos is only a few dollars and lets a flood of
+/// tiny MXN inflows into the candidate pool.
+fn usd_value(tx: &TxCandidate, reference_rate: f64) -> f64 {
+    let abs = tx.amount.abs();
+    if tx.currency == "MXN" {
+        abs / reference_rate
+    } else {
+        abs
+    }
 }
 
 #[cfg(test)]
@@ -345,22 +509,58 @@ mod tests {
     #[test]
     fn scoring_strong_match_with_keyword_is_high() {
         // 0% deviation, same day, keyword present.
-        let score = score_match(0.0, 0, true);
+        let score = score_match(0.0, 0, true, false);
         assert!(score >= 90, "expected near-max, got {score}");
     }
 
     #[test]
     fn scoring_no_keyword_still_passable_when_tight() {
-        // 0% deviation, same day, no keyword → 50 + 25 + 0 = 75.
-        let score = score_match(0.0, 0, false);
+        // 0% deviation, same day, no keyword/identity → 50 + 25 = 75.
+        let score = score_match(0.0, 0, false, false);
         assert!(score >= 70 && score <= 80);
     }
 
     #[test]
     fn scoring_falls_off_with_deviation() {
         // 100% of the tolerance band consumed → 0 rate pts.
-        let score = score_match(RATE_TOLERANCE_PCT, 0, false);
+        let score = score_match(RATE_TOLERANCE_PCT, 0, false, false);
         assert!(score < 50, "loose match should score below threshold, got {score}");
+    }
+
+    #[test]
+    fn scoring_identity_lifts_a_keywordless_pair() {
+        // A keyword-less but tight pair that shares a counterparty identity
+        // should out-score the same pair without it, and clear auto-confirm.
+        let without = score_match(0.0, 0, false, false);
+        let with = score_match(0.0, 0, false, true);
+        assert!(with > without, "identity should raise the score");
+        assert!(with >= 85, "identity + tight should be high, got {with}");
+    }
+
+    #[test]
+    fn identity_tokens_share_a_person_name_but_not_generic_words() {
+        let mk = |cp: &str| TxCandidate {
+            id: uuid::Uuid::new_v4(),
+            account_id: uuid::Uuid::new_v4(),
+            date: chrono::NaiveDate::from_ymd_opt(2026, 5, 1).unwrap(),
+            amount: 100.0,
+            currency: "USD".into(),
+            description: "SPEI TRANSFERENCIA".into(),
+            merchant_name: None,
+            counterparty_name: Some(cp.to_string()),
+            original_description: None,
+            payment_payee: None,
+            payment_payer: None,
+        };
+        // Two legs that both name Andrea share an identity token...
+        let a = identity_tokens(&mk("Andrea Lopez"));
+        let b = identity_tokens(&mk("ANDREA L"));
+        assert!(!a.is_disjoint(&b), "shared name should overlap");
+        // ...but two legs that only share the generic "SPEI TRANSFERENCIA"
+        // boilerplate do NOT (those are stopwords).
+        let c = identity_tokens(&mk("Carlos"));
+        let d = identity_tokens(&mk("Beatriz"));
+        assert!(c.is_disjoint(&d), "different names must not overlap");
     }
 
     #[test]
