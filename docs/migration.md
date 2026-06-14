@@ -126,6 +126,56 @@ balances refresh, the Plaid tokens decrypted against the carried
   terminating TLS in front of the frontend + `/api`. See the OAuth notes in
   [deployment.md](deployment.md).
 
+## Picking up app updates (migrations & backfills)
+
+Pulling a new build is two images plus a restart — there is **no manual DB
+step**:
+
+1. **Rebuild the API and frontend images** from the new commit and **restart
+   the containers**. Most UI fixes are frontend-only; backend changes ride the
+   API image.
+2. On boot the API runs `sqlx::migrate!("./migrations")`
+   ([`backend/src/main.rs`](../backend/src/main.rs)). Applied migrations are
+   recorded in the `_sqlx_migrations` table, so each runs **exactly once** and
+   is a no-op on every later boot. Your Postgres **data volume is never
+   rebuilt** — migrations transform the existing data in place.
+
+> The migrations only fire on a **fresh API process**. If your daily job
+> rebuilds the image but leaves the old container running, they won't apply —
+> make sure the container actually restarts.
+
+### One-time data backfills (June 2026)
+
+Two of these are *data* migrations — they repair rows that pre-date the fix.
+They run once (the `_sqlx_migrations` guard) and preserve anything the user
+confirmed:
+
+- **`2026061401_counterparty_aggregator_backfill.sql`** — for historical rows
+  whose displayed name was a payment processor ("Square", "Stripe", "PayPal"…)
+  rather than the real shop, promote the real merchant from `merchant_name`
+  into `counterparty_name`.
+- **`2026061402_fx_transfer_relink.sql`** — delete auto-detected, *not* user-
+  confirmed cross-currency transfer links so they get rebuilt under the new
+  one-to-one matcher. **Lazy:** the relink itself happens the next time
+  detection runs — on **any Plaid sync**, or immediately via the **"scan for
+  transfers"** button. User-confirmed pairs are untouched.
+
+### Do future transactions need any of this?
+
+**No.** The backfills exist only to repair data created *before* the fix. The
+code changes correct things at the source, so every transaction ingested from
+here on is handled right with no further action:
+
+- New transactions pick the real merchant over the aggregator at sync time
+  (`best_counterparty`).
+- New cross-currency transfers are matched one-to-one as they arrive
+  (`fx_transfer_link::detect_for_user`, which runs during sync).
+- Spending / cash-flow figures exclude confirmed internal transfers in the
+  live queries.
+
+So these two migrations are a one-shot cleanup of the old rows; you will not
+need to re-run anything for ongoing use.
+
 ## If you get locked out (break-glass)
 
 You can't be permanently locked out of a box you control. If you forget the
