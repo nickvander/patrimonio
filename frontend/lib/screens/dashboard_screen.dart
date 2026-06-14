@@ -937,11 +937,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           runSpacing: 12,
           children: tiles
               .map((t) => SizedBox(
+                    // Wide: one row of n tiles. Anything narrower (incl.
+                    // phones) is a 2-up grid — full-width stacked tiles made
+                    // the strip 4–5 rows tall and crowded the hero.
                     width: c.maxWidth >= 880
                         ? (c.maxWidth - (n - 1) * 12) / n
-                        : c.maxWidth >= 560
-                            ? (c.maxWidth - 12) / 2 - 0.5
-                            : c.maxWidth,
+                        : (c.maxWidth - 12) / 2 - 0.5,
                     child: t,
                   ))
               .toList(),
@@ -2382,12 +2383,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               }
             },
           ),
-          const SizedBox(height: 24),
-          CreditUtilizationCard(
-            creditData: _creditData ?? [],
-            conversionFactor: conversionFactor,
-            currencyFormat: currencyFormat,
-          ),
+          // CreditUtilizationCard self-hides when there are no credit
+          // accounts; only spend the gap when it will actually render.
+          if ((_creditData ?? const []).isNotEmpty) ...[
+            const SizedBox(height: 20),
+            CreditUtilizationCard(
+              creditData: _creditData ?? [],
+              conversionFactor: conversionFactor,
+              currencyFormat: currencyFormat,
+            ),
+          ],
         ],
       );
     }
@@ -2767,7 +2772,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           buildNetWorthHeader(),
           const SizedBox(height: 12),
           SizedBox(
-            height: isNarrow ? 380 : 440,
+            height: isNarrow ? 300 : 440,
             child: NetWorthCard(
               netWorth:
                   ((_overview?['net_worth'] as num?)?.toDouble() ?? 0.0) *
@@ -2811,9 +2816,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final body = isNarrow
               ? Column(
                   children: [
-                    buildAccountsColumn(),
-                    const SizedBox(height: 24),
+                    // On mobile the net-worth trend is the canonical glance,
+                    // so it leads — the long accounts list follows. (On wide
+                    // screens they sit side by side, order doesn't matter.)
                     buildChartsColumn(true),
+                    const SizedBox(height: 20),
+                    buildAccountsColumn(),
                   ],
                 )
               : Row(
@@ -2857,11 +2865,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 conversionFactor: conversionFactor,
                 usdMxnRate: fxRate,
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               buildSyncBar(),
               const SizedBox(height: 12),
               stats,
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               // Net-worth-focused widgets stay on Overview. Cash-flow
               // widgets (monthly card, trends, budgets) moved to the
               // dedicated 'Cash flow' tab so this view stays a
@@ -2872,13 +2880,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 conversionFactor: conversionFactor,
                 currencyFormat: currencyFormat,
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               EmergencyFundCard(
                 apiService: _apiService,
                 conversionFactor: conversionFactor,
                 currencyFormat: currencyFormat,
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               body,
             ],
           );

@@ -223,12 +223,13 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
 
     final showControls =
         accounts.length >= _longListThreshold || _hideZero || _search.isNotEmpty;
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(pad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

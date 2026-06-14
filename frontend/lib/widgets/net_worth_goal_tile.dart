@@ -24,6 +24,9 @@ class NetWorthGoalTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    // Tighter card interior on phones — 24px each side eats ~16% of a 360px
+    // screen's width.
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     final goalUsd = Preferences.getGoalAmountUsd();
     final goalYear = Preferences.getGoalYear();
     if (goalUsd == null || goalYear == null || goalUsd <= 0) {
@@ -45,7 +48,7 @@ class NetWorthGoalTile extends StatelessWidget {
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(pad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

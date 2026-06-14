@@ -28,18 +28,12 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
     final l = AppLocalizations.of(context);
     // Read the props through `widget.` (StatefulWidget body).
     final creditData = widget.creditData;
+    // Nothing to show when the user has no tracked credit accounts — self-hide
+    // rather than render a full empty-state card, matching every other optional
+    // Overview widget (goal, emergency fund, assets bar). Avoids a dead card +
+    // its gap on the space-constrained mobile dashboard.
     if (creditData.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Center(
-            child: Text(
-              l.cfCreditNoAccounts,
-              style: const TextStyle(color: Colors.grey),
-            ),
-          ),
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
     double limitOf(dynamic i) => ((i['credit_limit'] ?? 0.0) as num).toDouble();
@@ -54,12 +48,13 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
     final hasLimits = totalLimit > 0;
     final totalUtilization =
         hasLimits ? (totalBalance / totalLimit) * 100 : 0.0;
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(pad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

@@ -56,6 +56,7 @@ class _EmergencyFundCardState extends State<EmergencyFundCard> {
     // Stay invisible until loaded; the dashboard skeleton covers boot.
     if (_loading || _data == null) return const SizedBox.shrink();
     final l = AppLocalizations.of(context);
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     final cash = (_data!['liquid_cash_usd'] as num?)?.toDouble() ?? 0.0;
     final spend = (_data!['monthly_spend_usd'] as num?)?.toDouble() ?? 0.0;
     final runway = (_data!['months_covered'] as num?)?.toDouble() ?? 0.0;
@@ -73,7 +74,7 @@ class _EmergencyFundCardState extends State<EmergencyFundCard> {
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(pad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
