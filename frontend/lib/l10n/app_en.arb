@@ -212,6 +212,8 @@
   "txSplitEvenlyTitle": "Split evenly",
   "txSplitEvenlyBody": "Divide the parent amount into {count} equal parts.",
   "secTitle": "Security",
+  "secAccountSection": "Account",
+  "secAccountNoEmail": "No email on file",
   "secPasswordSection": "Password",
   "secChangePassword": "Change password",
   "secChangePasswordSubtitle": "Sign out of every other session.",

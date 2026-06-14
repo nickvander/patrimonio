@@ -203,6 +203,8 @@
   "txSplitEvenlyTitle": "Dividir en partes iguales",
   "txSplitEvenlyBody": "Dividir el importe original en {count} partes iguales.",
   "secTitle": "Seguridad",
+  "secAccountSection": "Cuenta",
+  "secAccountNoEmail": "Sin correo registrado",
   "secPasswordSection": "Contraseña",
   "secChangePassword": "Cambiar contraseña",
   "secChangePasswordSubtitle": "Cierra la sesión en todos los demás dispositivos.",

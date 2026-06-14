@@ -713,6 +713,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get secTitle => 'Seguridad';
 
   @override
+  String get secAccountSection => 'Cuenta';
+
+  @override
+  String get secAccountNoEmail => 'Sin correo registrado';
+
+  @override
   String get secPasswordSection => 'Contraseña';
 
   @override

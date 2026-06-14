@@ -711,6 +711,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get secTitle => 'Security';
 
   @override
+  String get secAccountSection => 'Account';
+
+  @override
+  String get secAccountNoEmail => 'No email on file';
+
+  @override
   String get secPasswordSection => 'Password';
 
   @override

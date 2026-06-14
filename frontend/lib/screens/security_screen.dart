@@ -365,6 +365,22 @@ class _SecurityScreenState extends State<SecurityScreen> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 24, vertical: 16),
                   children: [
+                    _section(l.secAccountSection),
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.account_circle_outlined),
+                        title: Text(
+                          _user?.username ?? '—',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(
+                          (_user?.email != null && _user!.email!.isNotEmpty)
+                              ? _user!.email!
+                              : l.secAccountNoEmail,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     _section(l.secPasswordSection),
                     Card(
                       child: ListTile(

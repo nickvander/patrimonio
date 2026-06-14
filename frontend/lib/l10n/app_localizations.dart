@@ -1322,6 +1322,18 @@ abstract class AppLocalizations {
   /// **'Security'**
   String get secTitle;
 
+  /// No description provided for @secAccountSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get secAccountSection;
+
+  /// No description provided for @secAccountNoEmail.
+  ///
+  /// In en, this message translates to:
+  /// **'No email on file'**
+  String get secAccountNoEmail;
+
   /// No description provided for @secPasswordSection.
   ///
   /// In en, this message translates to:
