@@ -177,12 +177,14 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
     final bands = _bandsFor(dim, l);
     final activeTotal = bands.fold<double>(0, (sum, b) => sum + b.value);
 
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+
     return Card(
       elevation: 6,
       shadowColor: Colors.black45,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(pad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -353,7 +355,8 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
     final canTap = b.filterValue.isNotEmpty && widget.onCategorySelected != null;
 
     final inner = Padding(
-      padding: const EdgeInsets.only(bottom: 24.0),
+      padding: EdgeInsets.only(
+          bottom: MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

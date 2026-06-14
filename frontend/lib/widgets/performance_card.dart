@@ -44,6 +44,9 @@ class _PerformanceCardState extends State<PerformanceCard> {
   Map<String, dynamic>? _comparison;
   Map<String, dynamic>? _twr;
   DateRange _range = DateRange.all;
+  // Phone-only: the money-weighted benchmark block sits behind a tap-to-expand
+  // disclosure (collapsed by default). In-memory only — not persisted.
+  bool _benchmarkExpanded = false;
 
   @override
   void initState() {
@@ -136,52 +139,113 @@ class _PerformanceCardState extends State<PerformanceCard> {
     // Nothing to show → don't render an empty card.
     if (!showValue && !hasBenchmark) return const SizedBox.shrink();
 
-    return Padding(
-      padding: const EdgeInsets.only(top: 24),
-      child: Card(
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.show_chart, color: context.tealAccent, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      l.lwPerfTitle,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: context.textPrimary,
-                      ),
+    final isPhone = MediaQuery.sizeOf(context).width < 720;
+    final pad = isPhone ? 16.0 : 24.0;
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: EdgeInsets.all(pad),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.show_chart, color: context.tealAccent, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    l.lwPerfTitle,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: context.textPrimary,
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              if (showValue)
-                _valueSection(context, l)
-              else
-                Text(
-                  l.lwPerfNotEnough,
-                  style: TextStyle(color: context.textFaint, fontSize: 12),
                 ),
-              if (hasBenchmark) ...[
-                if (showValue) ...[
-                  const SizedBox(height: 20),
-                  Divider(color: context.hairline, height: 1),
-                  const SizedBox(height: 16),
-                ],
-                _benchmarkSection(context, l, c, invested, lots),
               ],
+            ),
+            const SizedBox(height: 18),
+            if (showValue)
+              _valueSection(context, l)
+            else
+              Text(
+                l.lwPerfNotEnough,
+                style: TextStyle(color: context.textFaint, fontSize: 12),
+              ),
+            if (hasBenchmark) ...[
+              if (showValue) ...[
+                const SizedBox(height: 20),
+                Divider(color: context.hairline, height: 1),
+                const SizedBox(height: 16),
+              ],
+              // The TWR "glance" above always shows. On phones the
+              // money-weighted benchmark detail collapses behind a tap-to-
+              // expand disclosure; on wider screens it stays inline.
+              if (isPhone)
+                _benchmarkDisclosure(context, l, c, invested, lots)
+              else
+                _benchmarkSection(context, l, c, invested, lots),
             ],
-          ),
+          ],
         ),
       ),
+    );
+  }
+
+  /// Phone-only collapsible wrapper around [_benchmarkSection]: a tappable
+  /// header (insights icon + title via [bmTitle] + chevron) that reveals the
+  /// full money-weighted benchmark block on tap. State is in-memory only.
+  Widget _benchmarkDisclosure(
+    BuildContext context,
+    AppLocalizations l,
+    Map<String, dynamic> c,
+    double invested,
+    int lots,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () =>
+              setState(() => _benchmarkExpanded = !_benchmarkExpanded),
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Icon(Icons.insights_rounded,
+                    color: context.tealAccent, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    l.bmTitle,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: context.textPrimary,
+                    ),
+                  ),
+                ),
+                Icon(
+                  _benchmarkExpanded
+                      ? Icons.expand_less_rounded
+                      : Icons.expand_more_rounded,
+                  color: context.textMuted,
+                  size: 22,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_benchmarkExpanded) ...[
+          const SizedBox(height: 8),
+          // The disclosure header above already shows the icon + title, so
+          // suppress the section's own heading (subtitle still leads).
+          _benchmarkSection(context, l, c, invested, lots, showHeader: false),
+        ],
+      ],
     );
   }
 
@@ -237,7 +301,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
         const SizedBox(height: 14),
         RepaintBoundary(
           child: SizedBox(
-            height: 150,
+            height: MediaQuery.sizeOf(context).width < 720 ? 120.0 : 150.0,
             child: spots.length < 2
                 ? const SizedBox.shrink()
                 : LineChart(
@@ -351,7 +415,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
         const SizedBox(height: 14),
         RepaintBoundary(
           child: SizedBox(
-            height: 150,
+            height: MediaQuery.sizeOf(context).width < 720 ? 120.0 : 150.0,
             child: LineChart(
               LineChartData(
                 gridData: const FlGridData(show: false),
@@ -459,8 +523,12 @@ class _PerformanceCardState extends State<PerformanceCard> {
     AppLocalizations l,
     Map<String, dynamic> c,
     double invested,
-    int lots,
-  ) {
+    int lots, {
+    // When rendered inside the phone disclosure the tappable header already
+    // shows the icon + title, so skip the section's own heading to avoid a
+    // duplicated title; the subtitle still leads the revealed content.
+    bool showHeader = true,
+  }) {
     final yourVal = (c['your_value_usd'] as num?)?.toDouble() ?? 0;
     final benchVal = (c['benchmark_value_usd'] as num?)?.toDouble() ?? 0;
     final youPct = (yourVal / invested - 1) * 100;
@@ -474,23 +542,26 @@ class _PerformanceCardState extends State<PerformanceCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Icon(Icons.insights_rounded, color: context.tealAccent, size: 18),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                l.bmTitle,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: context.textPrimary,
+        if (showHeader) ...[
+          Row(
+            children: [
+              Icon(Icons.insights_rounded,
+                  color: context.tealAccent, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  l.bmTitle,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: context.textPrimary,
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
+            ],
+          ),
+          const SizedBox(height: 4),
+        ],
         Text(l.bmSubtitle,
             style: TextStyle(color: context.textFaint, fontSize: 11)),
         const SizedBox(height: 18),

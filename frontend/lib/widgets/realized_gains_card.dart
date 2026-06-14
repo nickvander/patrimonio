@@ -77,54 +77,53 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
     final ytd = (summary['ytd_realized_usd'] as num?)?.toDouble() ?? 0.0;
     final total = (summary['total_realized_usd'] as num?)?.toDouble() ?? 0.0;
 
-    return Padding(
-      padding: const EdgeInsets.only(top: 24),
-      child: Card(
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.trending_up_rounded,
-                      color: context.tealAccent, size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    l.rgTitle,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: context.textPrimary,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(child: _summaryTile(l.rgThisYear, ytd)),
-                  const SizedBox(width: 16),
-                  Expanded(child: _summaryTile(l.rgAllTime, total)),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Divider(height: 24, color: context.hairline),
-              ...disposals
-                  .take(_maxRows)
-                  .map((d) => _disposalRow(d as Map<String, dynamic>)),
-              if (disposals.length > _maxRows)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    l.rgMoreCount(disposals.length - _maxRows),
-                    style: TextStyle(color: context.textFaint, fontSize: 12),
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: EdgeInsets.all(pad),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.trending_up_rounded,
+                    color: context.tealAccent, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  l.rgTitle,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: context.textPrimary,
                   ),
                 ),
-            ],
-          ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(child: _summaryTile(l.rgThisYear, ytd)),
+                const SizedBox(width: 12),
+                Expanded(child: _summaryTile(l.rgAllTime, total)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Divider(height: 24, color: context.hairline),
+            ...disposals
+                .take(_maxRows)
+                .map((d) => _disposalRow(d as Map<String, dynamic>)),
+            if (disposals.length > _maxRows)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  l.rgMoreCount(disposals.length - _maxRows),
+                  style: TextStyle(color: context.textFaint, fontSize: 12),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -132,7 +131,7 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
 
   Widget _summaryTile(String label, double usd) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: context.tint(0.04),
         borderRadius: BorderRadius.circular(12),

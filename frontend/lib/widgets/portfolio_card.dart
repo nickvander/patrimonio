@@ -255,12 +255,13 @@ class _PortfolioCardState extends State<PortfolioCard> {
         0.0;
 
     final isPositive = totalGainLoss >= 0;
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 
     return Card(
       elevation: 6,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(pad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -376,11 +377,12 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
   /// Holdings slice: search/toolbar + the holdings table (flat or grouped).
   Widget _buildHoldingsCard(BuildContext context) {
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     return Card(
       elevation: 6,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(pad),
         child: Theme(
           data: Theme.of(context).copyWith(
             cardTheme: CardThemeData(
