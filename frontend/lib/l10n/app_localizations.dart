@@ -3752,6 +3752,18 @@ abstract class AppLocalizations {
   /// **'Net worth history'**
   String get dashNetWorthHistory;
 
+  /// No description provided for @ovDetailsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get ovDetailsTitle;
+
+  /// No description provided for @ovDetailsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Stats, goal & emergency fund'**
+  String get ovDetailsSubtitle;
+
   /// No description provided for @dashSyncingAll.
   ///
   /// In en, this message translates to:

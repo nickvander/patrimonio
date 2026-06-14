@@ -2263,6 +2263,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get dashNetWorthHistory => 'Historial de patrimonio neto';
 
   @override
+  String get ovDetailsTitle => 'Detalles';
+
+  @override
+  String get ovDetailsSubtitle => 'Estadísticas, meta y fondo de emergencia';
+
+  @override
   String get dashSyncingAll => 'Sincronizando todas las instituciones…';
 
   @override

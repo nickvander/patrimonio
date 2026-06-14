@@ -608,6 +608,8 @@
   "dashRevaluedNoteSaved": "Revaluada · nota guardada",
   "dashRevalueFailed": "No se pudo revaluar: {error}",
   "dashNetWorthHistory": "Historial de patrimonio neto",
+  "ovDetailsTitle": "Detalles",
+  "ovDetailsSubtitle": "Estadísticas, meta y fondo de emergencia",
   "dashSyncingAll": "Sincronizando todas las instituciones…",
   "dashSyncComplete": "Sincronización completa",
   "dashSyncFailed": "Falló la sincronización: {error}",

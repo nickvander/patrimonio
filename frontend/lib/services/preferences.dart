@@ -134,6 +134,13 @@ class Preferences {
   static void setDismissedNotifications(Set<String> ids) =>
       _write('dismissed_notifications', ids.join('\n'));
 
+  /// Whether the mobile Overview "Details" disclosure (stat strip, goal,
+  /// emergency fund) is expanded. Default collapsed for a calm Glance view.
+  static bool getOverviewDetailsExpanded() =>
+      _read('overviewDetailsExpanded') == 'true';
+  static void setOverviewDetailsExpanded(bool v) =>
+      _write('overviewDetailsExpanded', v.toString());
+
   /// Per-category monthly budgets, stored as a JSON object on the wire:
   /// {"Restaurants": 500.0, "Groceries": 800.0, ...}. Values are in USD
   /// (the backend storage unit); the UI converts for display.

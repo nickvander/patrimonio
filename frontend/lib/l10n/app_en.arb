@@ -704,6 +704,8 @@
   "dashRevaluedNoteSaved": "Revalued · note saved",
   "dashRevalueFailed": "Revalue failed: {error}",
   "dashNetWorthHistory": "Net worth history",
+  "ovDetailsTitle": "Details",
+  "ovDetailsSubtitle": "Stats, goal & emergency fund",
   "dashSyncingAll": "Syncing all institutions…",
   "dashSyncComplete": "Sync complete",
   "dashSyncFailed": "Sync failed: {error}",

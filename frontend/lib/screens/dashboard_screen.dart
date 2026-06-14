@@ -150,6 +150,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Notification ids the user has marked as read — the bell badge only lights
   // for ids not in this set. Persisted in localStorage so it survives refresh.
   Set<String> _dismissedNotifs = const {};
+  // Whether the mobile Overview "Details" disclosure (stat strip, goal,
+  // emergency fund) is expanded. Collapsed by default for a calm Glance view;
+  // remembered across visits via Preferences.
+  bool _overviewDetailsExpanded = false;
   // Configurable reminder lead time (days before due). Server-stored
   // (app_settings 'lending_reminder_lead_days'), surfaced in the
   // Management-tab Modules card.
@@ -227,6 +231,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _accountAlerts = Preferences.getAccountAlerts();
     _hydrateAccountAlerts();
     _dismissedNotifs = Preferences.getDismissedNotifications();
+    _overviewDetailsExpanded = Preferences.getOverviewDetailsExpanded();
     _loadAllData();
     _checkRedirectStatus();
     _resumePlaidOAuthIfNeeded();
@@ -803,6 +808,68 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ?composition,
         ],
       ),
+    );
+  }
+
+  /// Mobile "Details" disclosure — a tappable header that reveals the
+  /// secondary Overview metrics ([children]). Collapsed by default so the
+  /// phone Glance stays hero → trend → accounts; expand-state persists.
+  Widget _buildOverviewDetails(List<Widget> children) {
+    final l = AppLocalizations.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () {
+              setState(
+                  () => _overviewDetailsExpanded = !_overviewDetailsExpanded);
+              Preferences.setOverviewDetailsExpanded(_overviewDetailsExpanded);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              child: Row(
+                children: [
+                  Icon(Icons.insights_rounded,
+                      color: context.tealAccent, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l.ovDetailsTitle,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: context.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          l.ovDetailsSubtitle,
+                          style:
+                              TextStyle(fontSize: 11, color: context.textMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    _overviewDetailsExpanded
+                        ? Icons.expand_less
+                        : Icons.expand_more,
+                    color: context.textMuted,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (_overviewDetailsExpanded) ...[
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ],
     );
   }
 
@@ -2836,6 +2903,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 );
 
+          // Net-worth-focused secondary widgets. On wide screens they sit in
+          // the main stack; on phones they fold into the "Details" disclosure
+          // below so the default Glance view stays hero → trend → accounts.
+          final goalTile = NetWorthGoalTile(
+            netWorthUsd: (_overview?['net_worth'] as num?)?.toDouble() ?? 0.0,
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
+          );
+          final emergencyCard = EmergencyFundCard(
+            apiService: _apiService,
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
+          );
+
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2868,26 +2949,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 12),
               buildSyncBar(),
               const SizedBox(height: 12),
-              stats,
-              const SizedBox(height: 20),
-              // Net-worth-focused widgets stay on Overview. Cash-flow
-              // widgets (monthly card, trends, budgets) moved to the
-              // dedicated 'Cash flow' tab so this view stays a
-              // net-worth-at-a-glance summary.
-              NetWorthGoalTile(
-                netWorthUsd:
-                    (_overview?['net_worth'] as num?)?.toDouble() ?? 0.0,
-                conversionFactor: conversionFactor,
-                currencyFormat: currencyFormat,
-              ),
-              const SizedBox(height: 20),
-              EmergencyFundCard(
-                apiService: _apiService,
-                conversionFactor: conversionFactor,
-                currencyFormat: currencyFormat,
-              ),
-              const SizedBox(height: 20),
-              body,
+              if (isNarrow) ...[
+                // GLANCE (always visible): trend + accounts.
+                body,
+                const SizedBox(height: 20),
+                // DETAILS (one tap): stat strip, goal, emergency fund. Folded
+                // away by default so the phone view isn't a wall of cards;
+                // expand-state is remembered across visits.
+                _buildOverviewDetails([
+                  stats,
+                  const SizedBox(height: 20),
+                  goalTile,
+                  const SizedBox(height: 20),
+                  emergencyCard,
+                ]),
+              ] else ...[
+                stats,
+                const SizedBox(height: 20),
+                goalTile,
+                const SizedBox(height: 20),
+                emergencyCard,
+                const SizedBox(height: 20),
+                body,
+              ],
             ],
           );
         },
