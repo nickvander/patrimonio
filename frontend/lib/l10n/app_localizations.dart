@@ -842,6 +842,12 @@ abstract class AppLocalizations {
   /// **'Scan for cross-currency transfers (Wise / Remitly / etc.)'**
   String get txScanTransfers;
 
+  /// No description provided for @txMoreActions.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get txMoreActions;
+
   /// No description provided for @txSearchTransactions.
   ///
   /// In en, this message translates to:
@@ -2285,7 +2291,7 @@ abstract class AppLocalizations {
   /// No description provided for @bmSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'If your contributions had bought the index, by purchase date'**
+  /// **'Money-weighted, all time — if your contributions had bought the index on each purchase date'**
   String get bmSubtitle;
 
   /// No description provided for @bmAheadPts.
@@ -2587,6 +2593,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No spending recorded in this period yet.'**
   String get spendByCatEmpty;
+
+  /// No description provided for @spendByCatAvgPerMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'Average per month'**
+  String get spendByCatAvgPerMonth;
 
   /// No description provided for @spendByCatTotal.
   ///
@@ -6959,6 +6971,18 @@ abstract class AppLocalizations {
   /// **'No alerts right now.'**
   String get lwNotifNoAlerts;
 
+  /// No description provided for @lwNotifHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications'**
+  String get lwNotifHeader;
+
+  /// No description provided for @lwNotifMarkAllRead.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark all read'**
+  String get lwNotifMarkAllRead;
+
   /// No description provided for @lwPaletteSearchHint.
   ///
   /// In en, this message translates to:
@@ -7185,6 +7209,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'S&P 500'**
   String get lwPerfTwrSp;
+
+  /// No description provided for @lwPerfTwrMethodNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Time-weighted return over the selected period'**
+  String get lwPerfTwrMethodNote;
 
   /// No description provided for @lwPerfTwrCoverage.
   ///

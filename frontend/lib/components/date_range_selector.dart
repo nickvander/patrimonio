@@ -60,14 +60,14 @@ class DateRangeSelector extends StatelessWidget {
         ),
         decoration: BoxDecoration(
           color: isSelected
-              ? Colors.greenAccent.withValues(alpha: 0.2)
+              ? context.accentSoft(context.positive)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.greenAccent : context.textMuted,
+            color: isSelected ? context.positive : context.textMuted,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
             fontSize: 12,
           ),

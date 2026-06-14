@@ -120,6 +120,20 @@ class Preferences {
   static void clearSinceLastLoginDismissal() =>
       _write('sinceLastLoginDismissed', '');
 
+  /// Stable ids of notifications the user has marked as read (the bell-icon
+  /// badge only lights for ids NOT in this set). Stored newline-delimited —
+  /// notification ids can contain ':' but never a newline. "Mark all read"
+  /// replaces the set with exactly the currently-shown ids, so the set stays
+  /// bounded and a condition that clears then recurs re-alerts.
+  static Set<String> getDismissedNotifications() {
+    final raw = _read('dismissed_notifications');
+    if (raw == null || raw.isEmpty) return <String>{};
+    return raw.split('\n').where((s) => s.isNotEmpty).toSet();
+  }
+
+  static void setDismissedNotifications(Set<String> ids) =>
+      _write('dismissed_notifications', ids.join('\n'));
+
   /// Per-category monthly budgets, stored as a JSON object on the wire:
   /// {"Restaurants": 500.0, "Groceries": 800.0, ...}. Values are in USD
   /// (the backend storage unit); the UI converts for display.

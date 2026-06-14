@@ -8,6 +8,11 @@ import '../l10n/app_localizations.dart';
 
 /// One notification row shown in the bell-icon popover.
 class AppNotification {
+  /// Stable identity for read-state tracking — keyed on the type + the
+  /// entity it concerns (and, where a recurrence should re-alert, a
+  /// date/value bucket). Two derivations of the same underlying condition
+  /// produce the same id, so "mark as read" sticks across refreshes.
+  final String id;
   final IconData icon;
   final Color accent;
   final String title;
@@ -15,6 +20,7 @@ class AppNotification {
   final VoidCallback? onTap;
 
   AppNotification({
+    required this.id,
     required this.icon,
     required this.accent,
     required this.title,
@@ -79,6 +85,7 @@ List<AppNotification> deriveNotifications({
     final dueStr = due != null ? DateFormat('MMM d').format(due) : '';
     if (overdue > 0) {
       out.add(AppNotification(
+        id: 'loan_overdue:$borrower:$n',
         icon: Icons.event_busy,
         accent: Colors.redAccent,
         title: l.lwNotifRepaymentOverdueTitle(borrower),
@@ -88,6 +95,7 @@ List<AppNotification> deriveNotifications({
       ));
     } else if (until > 0) {
       out.add(AppNotification(
+        id: 'loan_due:$borrower:$n',
         icon: Icons.event,
         accent: Colors.amber,
         title: l.lwNotifRepaymentDueTitle(borrower, until),
@@ -118,6 +126,7 @@ List<AppNotification> deriveNotifications({
           : (raw['name'] ?? l.lwNotifAccountFallback).toString();
       final cur = (raw['currency'] ?? 'USD').toString();
       out.add(AppNotification(
+        id: 'low_balance:$id',
         icon: Icons.account_balance_wallet_outlined,
         accent: Colors.amber,
         title: l.lwNotifLowBalanceTitle(name),
@@ -136,6 +145,7 @@ List<AppNotification> deriveNotifications({
     final name = (raw['name'] ?? l.lwNotifInstitutionFallback).toString();
     if (status == 'reconnect_required') {
       out.add(AppNotification(
+        id: 'sync_reconnect:$name',
         icon: Icons.link_off,
         accent: Colors.orangeAccent,
         title: l.lwNotifNeedsReconnectTitle(name),
@@ -144,6 +154,7 @@ List<AppNotification> deriveNotifications({
       ));
     } else if (status == 'error' || status == 'failed') {
       out.add(AppNotification(
+        id: 'sync_failed:$name',
         icon: Icons.error_outline,
         accent: Colors.redAccent,
         title: l.lwNotifSyncFailedTitle(name),
@@ -159,6 +170,7 @@ List<AppNotification> deriveNotifications({
           final days = DateTime.now().difference(dt).inDays;
           if (days >= 7) {
             out.add(AppNotification(
+              id: 'sync_stale:$name',
               icon: Icons.access_time,
               accent: Colors.amber,
               title: l.lwNotifStaleSyncTitle(name, days),
@@ -201,6 +213,7 @@ List<AppNotification> deriveNotifications({
         final pct = ((latestNw - refNw) / refNw) * 100;
         if (pct <= -5) {
           out.add(AppNotification(
+            id: 'net_worth_drop:${DateFormat('yyyy-MM-dd').format(latestDt)}',
             icon: Icons.trending_down,
             accent: Colors.redAccent,
             title: l.lwNotifNetWorthDropTitle('${pct.toStringAsFixed(1)}%'),
@@ -222,6 +235,7 @@ List<AppNotification> deriveNotifications({
   //    actionable: a baseline of at least $50 (so a $2→$6 coffee doesn't
   //    scream), a ≥25% jump, and at most the three biggest increases.
   final lookback = (spendingInsights?['lookback'] as num?)?.toInt() ?? 3;
+  final recentMonth = (spendingInsights?['recent_month'] ?? '').toString();
   final insightCats = spendingInsights?['categories'];
   if (insightCats is List) {
     const minBaseline = 50.0;
@@ -229,7 +243,7 @@ List<AppNotification> deriveNotifications({
     // Raw category codes that aren't worth nagging about — they have no
     // single actionable merchant/behaviour behind them.
     const skip = {'UNCATEGORIZED', 'OTHER', 'OTHER_OTHER'};
-    final spikes = <({String label, double pct, double avg})>[];
+    final spikes = <({String code, String label, double pct, double avg})>[];
     for (final raw in insightCats) {
       if (raw is! Map) continue;
       final recent = (raw['recent'] as num?)?.toDouble() ?? 0.0;
@@ -247,12 +261,13 @@ List<AppNotification> deriveNotifications({
         detailed: raw['category_detailed']?.toString(),
         primary: raw['category']?.toString(),
       );
-      spikes.add((label: label, pct: pct, avg: prev));
+      spikes.add((code: code, label: label, pct: pct, avg: prev));
     }
     // Biggest absolute increase first; cap at three so the bell stays calm.
     spikes.sort((a, b) => (b.pct * b.avg).compareTo(a.pct * a.avg));
     for (final s in spikes.take(3)) {
       out.add(AppNotification(
+        id: 'spending_up:${s.code}:$recentMonth',
         icon: Icons.trending_up,
         accent: Colors.orangeAccent,
         title: l.lwNotifSpendingUpTitle(
@@ -327,6 +342,7 @@ List<AppNotification> deriveNotifications({
     hikes.sort((a, b) => (b.now - b.was).compareTo(a.now - a.was));
     for (final h in hikes.take(3)) {
       out.add(AppNotification(
+        id: 'sub_price_up:${h.merchant.toLowerCase()}:${h.now.toStringAsFixed(2)}',
         icon: Icons.price_change_outlined,
         accent: Colors.amber,
         title: l.lwNotifSubPriceUpTitle(h.merchant),
@@ -345,20 +361,37 @@ List<AppNotification> deriveNotifications({
 /// [deriveNotifications]; the parent just supplies the inputs.
 class NotificationsBell extends StatelessWidget {
   final List<AppNotification> notifications;
-  const NotificationsBell({super.key, required this.notifications});
+
+  /// Ids the user has already marked as read. The badge only lights for
+  /// notifications whose id is NOT in this set, so persistent conditions
+  /// (stale sync, overdue loan) stop nagging once acknowledged.
+  final Set<String> dismissedIds;
+
+  /// Marks every currently-shown notification as read. The parent persists
+  /// the set (see Preferences.setDismissedNotifications) and rebuilds.
+  final void Function(Set<String> currentIds)? onMarkAllRead;
+
+  const NotificationsBell({
+    super.key,
+    required this.notifications,
+    this.dismissedIds = const {},
+    this.onMarkAllRead,
+  });
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final unseen =
+        notifications.where((n) => !dismissedIds.contains(n.id)).toList();
     return PopupMenuButton<void>(
-      tooltip: notifications.isEmpty
+      tooltip: unseen.isEmpty
           ? l.lwNotifTooltipNone
-          : l.lwNotifTooltipCount(notifications.length),
+          : l.lwNotifTooltipCount(unseen.length),
       icon: Stack(
         clipBehavior: Clip.none,
         children: [
           const Icon(Icons.notifications_none),
-          if (notifications.isNotEmpty)
+          if (unseen.isNotEmpty)
             Positioned(
               right: -2,
               top: -2,
@@ -377,7 +410,7 @@ class NotificationsBell extends StatelessWidget {
             ),
         ],
       ),
-      itemBuilder: (_) {
+      itemBuilder: (menuContext) {
         if (notifications.isEmpty) {
           return [
             PopupMenuItem(
@@ -392,30 +425,70 @@ class NotificationsBell extends StatelessWidget {
             ),
           ];
         }
-        return notifications
-            .map((n) => PopupMenuItem<void>(
-                  onTap: n.onTap,
-                  child: SizedBox(
-                    width: 360,
-                    child: ListTile(
-                      dense: true,
-                      leading: Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: n.accent.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(n.icon, color: n.accent, size: 16),
-                      ),
-                      title: Text(n.title,
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(n.detail,
-                          maxLines: 2, overflow: TextOverflow.ellipsis),
+        return [
+          // Header: a "Mark all read" affordance, enabled only while
+          // something is still unseen. Closing the menu first keeps the
+          // pop animation clean before the parent rebuilds the badge.
+          PopupMenuItem<void>(
+            enabled: false,
+            child: SizedBox(
+              width: 360,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(l.lwNotifHeader,
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  if (unseen.isNotEmpty && onMarkAllRead != null)
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(menuContext).pop();
+                        onMarkAllRead!(
+                            notifications.map((n) => n.id).toSet());
+                      },
+                      child: Text(l.lwNotifMarkAllRead),
                     ),
+                ],
+              ),
+            ),
+          ),
+          ...notifications.map((n) {
+            final isUnseen = !dismissedIds.contains(n.id);
+            return PopupMenuItem<void>(
+              onTap: n.onTap,
+              child: SizedBox(
+                width: 360,
+                child: ListTile(
+                  dense: true,
+                  leading: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: n.accent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(n.icon, color: n.accent, size: 16),
                   ),
-                ))
-            .toList();
+                  title: Text(n.title,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text(n.detail,
+                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                  // A small dot marks rows the user hasn't acknowledged yet;
+                  // already-read rows stay visible but unmarked.
+                  trailing: isUnseen
+                      ? Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Colors.orangeAccent,
+                            shape: BoxShape.circle,
+                          ),
+                        )
+                      : null,
+                ),
+              ),
+            );
+          }),
+        ];
       },
     );
   }

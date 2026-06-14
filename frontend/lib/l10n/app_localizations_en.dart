@@ -428,6 +428,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Scan for cross-currency transfers (Wise / Remitly / etc.)';
 
   @override
+  String get txMoreActions => 'More actions';
+
+  @override
   String get txSearchTransactions => 'Search transactions';
 
   @override
@@ -1326,7 +1329,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bmSubtitle =>
-      'If your contributions had bought the index, by purchase date';
+      'Money-weighted, all time — if your contributions had bought the index on each purchase date';
 
   @override
   String bmAheadPts(Object pts) {
@@ -1503,6 +1506,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get spendByCatEmpty => 'No spending recorded in this period yet.';
+
+  @override
+  String get spendByCatAvgPerMonth => 'Average per month';
 
   @override
   String get spendByCatTotal => 'Total';
@@ -4249,6 +4255,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lwNotifNoAlerts => 'No alerts right now.';
 
   @override
+  String get lwNotifHeader => 'Notifications';
+
+  @override
+  String get lwNotifMarkAllRead => 'Mark all read';
+
+  @override
   String get lwPaletteSearchHint =>
       'Search accounts, holdings, transactions, or jump to a tab…';
 
@@ -4404,6 +4416,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lwPerfTwrSp => 'S&P 500';
+
+  @override
+  String get lwPerfTwrMethodNote =>
+      'Time-weighted return over the selected period';
 
   @override
   String lwPerfTwrCoverage(Object pct) {

@@ -429,6 +429,9 @@ class AppLocalizationsEs extends AppLocalizations {
       'Buscar transferencias entre divisas (Wise / Remitly / etc.)';
 
   @override
+  String get txMoreActions => 'Más acciones';
+
+  @override
   String get txSearchTransactions => 'Buscar movimientos';
 
   @override
@@ -1346,7 +1349,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get bmSubtitle =>
-      'Si tus aportaciones hubieran comprado el índice, por fecha de compra';
+      'Ponderado por dinero, todo el periodo — si tus aportaciones hubieran comprado el índice en cada fecha de compra';
 
   @override
   String bmAheadPts(Object pts) {
@@ -1524,6 +1527,9 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get spendByCatEmpty =>
       'Aún no hay gastos registrados en este periodo.';
+
+  @override
+  String get spendByCatAvgPerMonth => 'Promedio por mes';
 
   @override
   String get spendByCatTotal => 'Total';
@@ -4286,6 +4292,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get lwNotifNoAlerts => 'No hay alertas por ahora.';
 
   @override
+  String get lwNotifHeader => 'Notificaciones';
+
+  @override
+  String get lwNotifMarkAllRead => 'Marcar todo como leído';
+
+  @override
   String get lwPaletteSearchHint =>
       'Busca cuentas, posiciones, transacciones o salta a una pestaña…';
 
@@ -4442,6 +4454,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get lwPerfTwrSp => 'S&P 500';
+
+  @override
+  String get lwPerfTwrMethodNote =>
+      'Rendimiento ponderado por tiempo en el periodo seleccionado';
 
   @override
   String lwPerfTwrCoverage(Object pct) {

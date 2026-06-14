@@ -1766,25 +1766,32 @@ class _TransactionsTabState extends State<TransactionsTab> {
                   ),
               ],
             ),
-            IconButton(
-              onPressed: () => setState(() {
-                _selectionMode = !_selectionMode;
-                if (!_selectionMode) _selectedIds.clear();
-              }),
-              icon: Icon(
-                _selectionMode ? Icons.close : Icons.checklist,
-                size: 22,
-                color: _selectionMode ? context.positive : null,
+            // On narrow widths the secondary actions (select-multiple, CSV
+            // export, FX-transfer scan) collapse into an overflow menu so
+            // the "Recent transactions" title keeps enough room and no
+            // longer ellipsizes to "Re...". Add + filter + search stay
+            // inline as the primary actions.
+            if (!isNarrow)
+              IconButton(
+                onPressed: () => setState(() {
+                  _selectionMode = !_selectionMode;
+                  if (!_selectionMode) _selectedIds.clear();
+                }),
+                icon: Icon(
+                  _selectionMode ? Icons.close : Icons.checklist,
+                  size: 22,
+                  color: _selectionMode ? context.positive : null,
+                ),
+                tooltip:
+                    _selectionMode ? l.txExitSelectionMode : l.txSelectMultiple,
               ),
-              tooltip:
-                  _selectionMode ? l.txExitSelectionMode : l.txSelectMultiple,
-            ),
-            if (widget.apiService != null) ...[
+            if (widget.apiService != null)
               IconButton(
                 onPressed: () => _openAddDialog(),
                 icon: const Icon(Icons.add, size: 22),
                 tooltip: l.txAddTransaction,
               ),
+            if (!isNarrow && widget.apiService != null)
               IconButton(
                 onPressed: () => _downloadCsv(),
                 icon: const Icon(Icons.file_download_outlined, size: 22),
@@ -1799,21 +1806,83 @@ class _TransactionsTabState extends State<TransactionsTab> {
                     ? l.txExportCsvAllNote
                     : l.txExportCsv,
               ),
-            ],
-            if (widget.onDetectFxTransfers != null)
+            if (!isNarrow && widget.onDetectFxTransfers != null)
               IconButton(
                 tooltip: l.txScanTransfers,
                 icon: const Icon(Icons.swap_horiz, size: 22),
                 onPressed: () => widget.onDetectFxTransfers!(),
               ),
-            if (isNarrow)
+            if (isNarrow) ...[
               IconButton(
                 onPressed: () =>
                     setState(() => _searchOpenOnNarrow = true),
                 icon: const Icon(Icons.search, size: 20),
                 tooltip: l.txSearchTransactions,
-              )
-            else
+              ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert, size: 22),
+                tooltip: l.txMoreActions,
+                onSelected: (value) {
+                  switch (value) {
+                    case 'select':
+                      setState(() {
+                        _selectionMode = !_selectionMode;
+                        if (!_selectionMode) _selectedIds.clear();
+                      });
+                      break;
+                    case 'csv':
+                      _downloadCsv();
+                      break;
+                    case 'fx':
+                      widget.onDetectFxTransfers?.call();
+                      break;
+                  }
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'select',
+                    child: Row(
+                      children: [
+                        Icon(
+                          _selectionMode ? Icons.close : Icons.checklist,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 12),
+                        Text(_selectionMode
+                            ? l.txExitSelectionMode
+                            : l.txSelectMultiple),
+                      ],
+                    ),
+                  ),
+                  if (widget.apiService != null)
+                    PopupMenuItem(
+                      value: 'csv',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.file_download_outlined, size: 20),
+                          const SizedBox(width: 12),
+                          Text((widget.csvExportConfirmAlways ||
+                                  _searchQuery.isNotEmpty ||
+                                  _filters.isActive)
+                              ? l.txExportCsvAllNote
+                              : l.txExportCsv),
+                        ],
+                      ),
+                    ),
+                  if (widget.onDetectFxTransfers != null)
+                    PopupMenuItem(
+                      value: 'fx',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.swap_horiz, size: 20),
+                          const SizedBox(width: 12),
+                          Text(l.txScanTransfers),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ] else
               SizedBox(width: 280, height: 40, child: _searchField()),
           ],
         ),

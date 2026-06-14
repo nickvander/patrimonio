@@ -118,7 +118,15 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
             else ...[
               SizedBox(height: 240, child: _buildChart(months, cats)),
               const SizedBox(height: 16),
-              _buildLegend(cats),
+              // The figures next to each category are an average PER MONTH,
+              // not the window total — the bare window sum (e.g. 6× a $3k
+              // rent) reads as wildly inflated otherwise.
+              Text(
+                l.spendByCatAvgPerMonth,
+                style: TextStyle(color: context.textMuted, fontSize: 11),
+              ),
+              const SizedBox(height: 8),
+              _buildLegend(cats, months.length),
             ],
           ],
         ),
@@ -272,8 +280,10 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
     );
   }
 
-  Widget _buildLegend(List<dynamic> cats) {
+  Widget _buildLegend(List<dynamic> cats, int monthCount) {
     final palette = _palette(context);
+    // Average over the months actually present in the response (never 0).
+    final divisor = monthCount > 0 ? monthCount : 1;
     return Wrap(
       spacing: 16,
       runSpacing: 8,
@@ -282,7 +292,7 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
           _legendItem(
             palette[i % palette.length],
             prettyCategory(primary: cats[i]['category']?.toString()),
-            (cats[i]['total'] as num?)?.toDouble() ?? 0.0,
+            ((cats[i]['total'] as num?)?.toDouble() ?? 0.0) / divisor,
           ),
       ],
     );

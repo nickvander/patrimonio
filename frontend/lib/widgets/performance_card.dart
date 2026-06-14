@@ -395,8 +395,16 @@ class _PerformanceCardState extends State<PerformanceCard> {
             ),
           ),
         ),
+        const SizedBox(height: 8),
+        // Spell out the method so this number reads as distinct from the
+        // money-weighted "Investments vs S&P 500" block below — they use
+        // different math and windows and are not meant to agree.
+        Text(
+          l.lwPerfTwrMethodNote,
+          style: TextStyle(color: context.textFaint, fontSize: 11),
+        ),
         if (coverage < 0.99) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           Text(
             l.lwPerfTwrCoverage('${(coverage * 100).round()}%'),
             style: TextStyle(color: context.textFaint, fontSize: 11),

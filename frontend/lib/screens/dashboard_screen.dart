@@ -147,6 +147,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Per-account low-balance thresholds (account id -> native-currency amount),
   // for the notifications bell. Seeded from localStorage, hydrated from backend.
   Map<String, double> _accountAlerts = const {};
+  // Notification ids the user has marked as read — the bell badge only lights
+  // for ids not in this set. Persisted in localStorage so it survives refresh.
+  Set<String> _dismissedNotifs = const {};
   // Configurable reminder lead time (days before due). Server-stored
   // (app_settings 'lending_reminder_lead_days'), surfaced in the
   // Management-tab Modules card.
@@ -223,6 +226,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // with the backend setting (source of truth across devices).
     _accountAlerts = Preferences.getAccountAlerts();
     _hydrateAccountAlerts();
+    _dismissedNotifs = Preferences.getDismissedNotifications();
     _loadAllData();
     _checkRedirectStatus();
     _resumePlaidOAuthIfNeeded();
@@ -2018,9 +2022,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           autofocus: true,
           child: Scaffold(
               appBar: AppBar(
-          title: const Text(
-            'Patrimonio',
-            style: TextStyle(fontWeight: FontWeight.bold),
+          title: const FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Patrimonio',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
           actions: [
             // First-run hides the dashboard chrome (FX, notifications,
@@ -2046,6 +2054,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _buildFxBadge(compact: true),
               const SizedBox(width: 4),
               NotificationsBell(
+                dismissedIds: _dismissedNotifs,
+                onMarkAllRead: (ids) {
+                  setState(() => _dismissedNotifs = ids);
+                  Preferences.setDismissedNotifications(ids);
+                },
                 notifications: deriveNotifications(
                   l: AppLocalizations.of(context),
                   syncData: _syncData ?? const [],
