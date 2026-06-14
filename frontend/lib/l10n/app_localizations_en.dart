@@ -431,6 +431,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get txMoreActions => 'More actions';
 
   @override
+  String get txDetails => 'Details';
+
+  @override
+  String get txMoreDetails => 'More details';
+
+  @override
+  String get txDate => 'Date';
+
+  @override
+  String get txAccount => 'Account';
+
+  @override
+  String get txAutoCategory => 'Auto-category';
+
+  @override
   String get txSearchTransactions => 'Search transactions';
 
   @override

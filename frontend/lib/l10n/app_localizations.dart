@@ -848,6 +848,36 @@ abstract class AppLocalizations {
   /// **'More actions'**
   String get txMoreActions;
 
+  /// No description provided for @txDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get txDetails;
+
+  /// No description provided for @txMoreDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'More details'**
+  String get txMoreDetails;
+
+  /// No description provided for @txDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Date'**
+  String get txDate;
+
+  /// No description provided for @txAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get txAccount;
+
+  /// No description provided for @txAutoCategory.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-category'**
+  String get txAutoCategory;
+
   /// No description provided for @txSearchTransactions.
   ///
   /// In en, this message translates to:

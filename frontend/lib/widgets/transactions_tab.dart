@@ -2736,113 +2736,15 @@ class _TransactionsTabState extends State<TransactionsTab> {
     return parts.join(' · ');
   }
 
-  /// Detail modal. Layout (top to bottom):
-  /// - Close button
-  /// - Big category icon + description title
-  /// - Hero amount block (target currency, companion currency, in/out)
-  /// - Chip row: Date · Account · Source · Pending
-  /// - Raw bank description (if differs from title)
-  /// - Editable: Category + Notes
-  /// - "Recent at this merchant" — up to 3 other transactions matching description
-  /// - Save / Close footer
+  /// Detail / edit panel. Thin wrapper that hosts the stateful
+  /// [_TransactionDetailPanel] inside a slide-in side panel (wide) or
+  /// bottom sheet (narrow). All the field surfacing, editing, grouping
+  /// and the controller lifecycle live in that widget; this method only
+  /// owns the dialog chrome and the in/out animation so the controllers
+  /// get a proper `dispose()` (the previous inline version leaked a
+  /// TextEditingController + FocusNode on every open).
   void _showTransactionDetails(dynamic tx) {
     final l = AppLocalizations.of(context);
-    // Prefill the category editor with the PRETTIFIED label — the same
-    // string the list row shows — never the raw Plaid enum
-    // ("FOOD_AND_DRINK"). The Save handler diffs the field against this
-    // exact prefill (see [diffEditedField]), so open-then-Save with no
-    // edits sends nothing instead of silently converting the
-    // auto-category into a user override of the raw enum string.
-    final hasAnyCategory =
-        (tx['user_category'] ?? '').toString().trim().isNotEmpty ||
-            (tx['category'] ?? '').toString().trim().isNotEmpty ||
-            (tx['category_detailed'] ?? '').toString().trim().isNotEmpty;
-    final initialCategoryLabel = hasAnyCategory
-        ? prettyCategory(
-            userCategory: tx['user_category']?.toString(),
-            detailed: tx['category_detailed']?.toString(),
-            primary: tx['category']?.toString(),
-          )
-        : '';
-    final initialNotes = (tx['user_notes'] ?? '').toString();
-    final catController = TextEditingController(text: initialCategoryLabel);
-    final catFocusNode = FocusNode();
-    final notesController = TextEditingController(text: initialNotes);
-    // Shared suggestion source — the same list the bulk-categorize and
-    // add-transaction dialogs feed from, so the type-ahead can't drift
-    // into a second divergent taxonomy.
-    final categorySuggestions = _distinctCategories();
-
-    final date = DateTime.parse(tx['date'] as String);
-    final sourceAmount = ((tx['amount'] as num?)?.toDouble() ?? 0.0);
-    final sourceCurrency =
-        (tx['currency'] ?? widget.targetCurrency).toString();
-    final convertedAmount = convertCurrency(
-      sourceAmount,
-      from: sourceCurrency,
-      to: widget.targetCurrency,
-      usdMxnRate: widget.usdMxnRate,
-    );
-    final needsConversion =
-        widget.usdMxnRate > 0 && sourceCurrency != widget.targetCurrency;
-    // Storage sign convention (backend sync.rs:659): negative = outflow,
-    // positive = inflow.
-    final isExpense = sourceAmount < 0;
-    // ONE accent pair for the binary in/out concept, applied to the hero
-    // border, caption and amount alike: inflow = jade positive, outflow =
-    // neutral text. The red `negative` token stays reserved for
-    // destructive/error affordances and teal for transfer/linked
-    // semantics — previously this block mixed four accents (red border +
-    // pink caption + neutral amount for an expense; teal border + teal
-    // caption + green amount for income).
-    final flowAccent = isExpense ? context.textPrimary : context.positive;
-    final source = (tx['source'] ?? 'plaid').toString();
-    final originalCategory = (tx['category'] ?? '').toString();
-    final merchant = (tx['merchant_name'] ?? '').toString();
-    final pending = tx['pending'] == true;
-    final rawDescription = (tx['description'] ?? '').toString();
-    final titleDescription = displayLabel(tx);
-    final logoUrl = counterpartyLogo(tx);
-    // Hero icon style — same registry the list rows use, keyed on the
-    // prettified label (always non-empty: prettyCategory falls back to
-    // "Uncategorized"/"Sin categoría", which has its own neutral style).
-    final catStyle = context.categoryStyle(prettyCategory(
-      userCategory: tx['user_category']?.toString(),
-      detailed: tx['category_detailed']?.toString(),
-      primary: tx['category']?.toString(),
-    ));
-    final color = catStyle.color;
-
-    // All transactions sharing this exact description (excluding the
-    // current one). We use the full set to compute lifetime spend at
-    // this merchant, then take(3) for the visible recent rows.
-    final merchantMatches = widget.transactions.where((other) {
-      if (other['id'] == tx['id']) return false;
-      return (other['description'] ?? '').toString().trim().toLowerCase() ==
-          rawDescription.trim().toLowerCase();
-    }).toList();
-    final similar = merchantMatches.take(3).toList();
-    // Lifetime spend at this merchant (including the current tx),
-    // converted to the reporting currency. Use the absolute value
-    // since incoming/outgoing share a sign convention we don't need
-    // to disambiguate in a single rollup.
-    final merchantTotal = merchantMatches.fold<double>(
-      sourceAmount.abs(),
-      (sum, other) {
-        final amt = ((other['amount'] as num?)?.toDouble() ?? 0.0).abs();
-        final otherCcy = (other['currency'] ?? widget.targetCurrency)
-            .toString();
-        return sum +
-            convertCurrency(
-              amt,
-              from: otherCcy,
-              to: widget.targetCurrency,
-              usdMxnRate: widget.usdMxnRate,
-            );
-      },
-    );
-    final merchantCount = merchantMatches.length + 1;
-
     // Slide-from-right side panel on wide screens, bottom-sheet on narrow.
     // This is the Linear / Notion / Gmail pattern — keeps the underlying
     // list visible (in spirit) instead of slamming a centered modal that
@@ -2878,497 +2780,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
                   ),
                 ],
               ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: IconButton(
-                      icon: const Icon(Icons.close, size: 20),
-                      onPressed: () => Navigator.pop(context),
-                      tooltip: l.actionClose,
-                      // Keep a ≥48px touch target (a11y) instead of the
-                      // zero-padding/empty-constraints ~20px hit area.
-                      constraints: const BoxConstraints(
-                          minWidth: 48, minHeight: 48),
-                    ),
-                  ),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 52,
-                        height: 52,
-                        clipBehavior: Clip.antiAlias,
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        // Counterparty logo when Plaid sent one, else the
-                        // category icon. Logo failures (network drop,
-                        // 404, CSP block) silently fall back to the icon.
-                        child: logoUrl != null
-                            ? Image.network(
-                                logoUrl,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Icon(
-                                  catStyle.icon,
-                                  color: color,
-                                  size: 28,
-                                ),
-                              )
-                            : Icon(
-                                catStyle.icon,
-                                color: color,
-                                size: 28,
-                              ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    titleDescription,
-                                    style: const TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                // Rename pencil — opens a dialog to
-                                // set/clear the per-row override. The
-                                // raw description stays untouched and
-                                // remains visible in "Raw bank text"
-                                // below.
-                                IconButton(
-                                  tooltip: merchantMatches.isEmpty
-                                      ? l.txRename
-                                      : l.txRenamePlusMatching(merchantMatches.length),
-                                  iconSize: 18,
-                                  visualDensity: VisualDensity.compact,
-                                  icon: const Icon(Icons.edit_outlined),
-                                  onPressed: () => _renameTransaction(
-                                    tx,
-                                    similarIds: merchantMatches
-                                        .map((m) => m['id'].toString())
-                                        .toList(),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (merchant.isNotEmpty &&
-                                merchant.toLowerCase() !=
-                                    titleDescription.toLowerCase()) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                merchant,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: context.textSubtle,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  // Hero amount block — biggest visual element
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 16),
-                    decoration: BoxDecoration(
-                      color: context.tint(0.04),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: flowAccent.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          isExpense ? l.txOutflow : l.txInflow,
-                          style: TextStyle(
-                            fontSize: 10,
-                            letterSpacing: 1.2,
-                            color: flowAccent,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        // Hero amount in the transaction's NATIVE currency
-                        // (this is the real, bank-reported value).
-                        // brandDisplayStyle = the bundled JetBrains Mono
-                        // display treatment (caps at a real w700 — the
-                        // old w900 request synthesised a faux bold Inter
-                        // ships no file for) with tabular/lining figures
-                        // like every other hero money figure.
-                        Text(
-                          '${isExpense ? '−' : '+'}${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}',
-                          style: brandDisplayStyle(
-                            fontSize: 32,
-                            color: flowAccent,
-                          ),
-                        ),
-                        if (needsConversion) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            l.txApproxEstimated(
-                                widget.currencyFormat.format(convertedAmount.abs())),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: context.textSubtle,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  // Metadata chips
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _metaChip(
-                        Icons.event,
-                        DateFormat('EEE, MMM d, y').format(date),
-                      ),
-                      if ((tx['account_name'] ?? '').toString().isNotEmpty)
-                        _metaChip(Icons.account_balance,
-                            tx['account_name'].toString()),
-                      _metaChip(Icons.cloud_download, _sourceLabel(context, source)),
-                      // The auto-classified category, prettified from
-                      // Plaid's PFC enum codes. Only shown when the user
-                      // hasn't already overridden it with a hand-typed
-                      // category.
-                      if ((tx['user_category'] ?? '').toString().isEmpty &&
-                          (originalCategory.isNotEmpty ||
-                              (tx['category_detailed'] ?? '')
-                                  .toString()
-                                  .isNotEmpty))
-                        _metaChip(
-                          Icons.label_outline,
-                          prettyCategory(
-                            detailed: tx['category_detailed']?.toString(),
-                            primary: tx['category']?.toString(),
-                          ),
-                        ),
-                      // Hide the channel chip when Plaid only knows it's
-                      // "other" — that adds noise but no information.
-                      // Online / in-store are the useful signal.
-                      if (((tx['payment_channel'] ?? '').toString().isNotEmpty) &&
-                          (tx['payment_channel'] ?? '').toString() != 'other')
-                        _metaChip(
-                          _channelIcon(
-                              (tx['payment_channel'] ?? '').toString()),
-                          _sentence((tx['payment_channel'] ?? '')
-                              .toString()
-                              .replaceAll('_', ' ')),
-                        ),
-                      if ((tx['merchant_name'] ?? '')
-                              .toString()
-                              .isNotEmpty &&
-                          (tx['merchant_name'] ?? '').toString() !=
-                              titleDescription)
-                        _metaChip(Icons.storefront,
-                            (tx['merchant_name'] ?? '').toString()),
-                      if (pending)
-                        _metaChip(Icons.hourglass_empty, l.txStatusPending,
-                            accent: context.warning),
-                    ],
-                  ),
-                  if (rawDescription != titleDescription) ...[
-                    const SizedBox(height: 16),
-                    _sectionLabel(l.txRawBankText),
-                    const SizedBox(height: 4),
-                    SelectableText(
-                      rawDescription,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: context.textMuted,
-                        fontFamily: 'monospace',
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 18),
-                  _sectionLabel(l.txCategoryAndNotes),
-                  const SizedBox(height: 8),
-                  // Category type-ahead. RawAutocomplete (same pattern
-                  // as AddTransactionDialog's category field) so the
-                  // save path keeps reading [catController] directly.
-                  // Suggestions are hints only — a free-typed value not
-                  // in the list is still accepted.
-                  RawAutocomplete<String>(
-                    textEditingController: catController,
-                    focusNode: catFocusNode,
-                    optionsBuilder: (TextEditingValue value) {
-                      final q = value.text.trim().toLowerCase();
-                      if (q.isEmpty) return categorySuggestions;
-                      return categorySuggestions
-                          .where((s) => s.toLowerCase().contains(q));
-                    },
-                    fieldViewBuilder:
-                        (ctx, controller, focusNode, onFieldSubmitted) {
-                      return TextField(
-                        controller: controller,
-                        focusNode: focusNode,
-                        decoration: InputDecoration(
-                          labelText: l.txCategory,
-                          hintText: l.txCategoryHint,
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        onSubmitted: (_) => onFieldSubmitted(),
-                      );
-                    },
-                    optionsViewBuilder: (ctx, onSelected, options) {
-                      final opts = options.toList();
-                      return Align(
-                        alignment: Alignment.topLeft,
-                        child: Material(
-                          elevation: 4,
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(
-                                maxHeight: 200, maxWidth: 420),
-                            child: ListView.builder(
-                              padding: EdgeInsets.zero,
-                              shrinkWrap: true,
-                              itemCount: opts.length,
-                              itemBuilder: (ctx, index) {
-                                final option = opts[index];
-                                return InkWell(
-                                  onTap: () => onSelected(option),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 16, vertical: 12),
-                                    child: Text(option),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: notesController,
-                    decoration: InputDecoration(
-                      labelText: l.txNotes,
-                      hintText: l.txNotesHint,
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                    maxLines: 3,
-                  ),
-                  // Linked cross-currency transfer block — surfaces
-                  // when this tx is one leg of a Wise / Remitly / etc.
-                  // pair. Confirm / Unlink act on the
-                  // cash_fx_transfers row. The block is silent on
-                  // rows that don't participate in any link.
-                  ..._fxTransferBlock(tx['id']?.toString() ?? ''),
-                  if (similar.isNotEmpty) ...[
-                    const SizedBox(height: 20),
-                    _sectionLabel(l.txRecentAtMerchant),
-                    const SizedBox(height: 6),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Text(
-                        l.txMerchantTotal(
-                            widget.currencyFormat.format(merchantTotal),
-                            merchantCount),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: context.textMuted,
-                          fontFeatures: [const FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ),
-                    ...similar.map((other) => _similarRow(other)),
-                  ],
-                  if (widget.accounts.isNotEmpty) ...[
-                    const SizedBox(height: 20),
-                    _sectionLabel(l.txMoveToDifferentAccount),
-                    const SizedBox(height: 6),
-                    _AccountMover(
-                      accounts: widget.accounts,
-                      currentAccountId: tx['account_id']?.toString(),
-                      onMove: (newAccountId) async {
-                        Navigator.pop(context);
-                        try {
-                          await Future.value(widget.onUpdate?.call(
-                            tx['id'],
-                            accountId: newAccountId,
-                          ));
-                        } catch (e) {
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(l.txMoveFailed(e.toString()))),
-                          );
-                        }
-                      },
-                    ),
-                  ],
-                  // Split / Unsplit affordance. A child row offers
-                  // "Unsplit" (restore the parent + delete every
-                  // sibling); a regular row offers "Split". Hidden
-                  // for the very small set of states that don't make
-                  // sense — e.g. a manually-added row that's already
-                  // a child (since it has a parent_id) follows the
-                  // child branch.
-                  if (widget.onSplitTransaction != null ||
-                      widget.onUnsplitTransaction != null) ...[
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        if ((tx['parent_id'] ?? '').toString().isEmpty &&
-                            widget.onSplitTransaction != null)
-                          OutlinedButton.icon(
-                            onPressed: () =>
-                                _openSplitDialog(tx, sourceCurrency, sourceAmount,
-                                    titleDescription, originalCategory),
-                            icon: const Icon(Icons.call_split, size: 16),
-                            label: Text(l.txSplitThisTransaction),
-                          ),
-                        if ((tx['parent_id'] ?? '').toString().isNotEmpty &&
-                            widget.onSplitTransaction != null &&
-                            widget.onUnsplitTransaction != null)
-                          OutlinedButton.icon(
-                            onPressed: () => _openEditSplitDialog(
-                              (tx['parent_id'] ?? '').toString(),
-                              sourceCurrency,
-                              sourceAmount,
-                              titleDescription,
-                              originalCategory,
-                            ),
-                            icon: const Icon(Icons.edit_outlined, size: 16),
-                            label: Text(l.txEditSplit),
-                          ),
-                        if ((tx['parent_id'] ?? '').toString().isNotEmpty &&
-                            widget.onUnsplitTransaction != null)
-                          OutlinedButton.icon(
-                            onPressed: () async {
-                              Navigator.of(context).pop();
-                              try {
-                                await widget.onUnsplitTransaction!(
-                                    (tx['parent_id'] ?? '').toString());
-                                if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(l.txSplitRemoved)),
-                                );
-                              } catch (e) {
-                                if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(l.txUnsplitFailed(e.toString()))),
-                                );
-                              }
-                            },
-                            icon: const Icon(Icons.call_merge, size: 16),
-                            label: Text(l.txUnsplitRestore),
-                          ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      if (widget.onDelete != null)
-                        TextButton.icon(
-                          onPressed: () async {
-                            final confirm = await showDialog<bool>(
-                              context: context,
-                              builder: (ctx) => AlertDialog(
-                                title: Text(l.txDeleteOneTitle),
-                                content: Text(l.txDeleteOneBody),
-                                actions: [
-                                  TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(ctx, false),
-                                      child: Text(l.actionCancel)),
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.pop(ctx, true),
-                                    style: TextButton.styleFrom(
-                                        foregroundColor: ctx.negative),
-                                    child: Text(l.actionDelete),
-                                  ),
-                                ],
-                              ),
-                            );
-                            if (confirm != true) return;
-                            if (!mounted) return;
-                            Navigator.pop(context);
-                            try {
-                              await widget.onDelete!(tx['id']);
-                            } catch (e) {
-                              if (!mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                    content:
-                                        Text(l.txDeleteFailed(e.toString()))),
-                              );
-                            }
-                          },
-                          icon: Icon(Icons.delete_outline,
-                              size: 16, color: context.negative),
-                          label: Text(l.actionDelete,
-                              style: TextStyle(color: context.negative)),
-                        ),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: Text(l.actionClose),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton(
-                        onPressed: () {
-                          // Diff each field against its prefill: only
-                          // what the user actually edited is sent
-                          // (null = "leave alone" in the PATCH). A
-                          // no-edit Save must NOT turn the
-                          // auto-category into a user override of the
-                          // raw enum string.
-                          final newCategory = diffEditedField(
-                              catController.text, initialCategoryLabel);
-                          final newNotes = diffEditedField(
-                              notesController.text, initialNotes);
-                          Navigator.pop(context);
-                          if (newCategory == null && newNotes == null) {
-                            return;
-                          }
-                          widget.onUpdate?.call(
-                            tx['id'],
-                            userCategory: newCategory,
-                            userNotes: newNotes,
-                          );
-                        },
-                        child: Text(l.actionSave),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+              child: _TransactionDetailPanel(state: this, tx: tx),
             ),
           ),
-        ),
-      ),
         );
       },
       transitionBuilder: (ctx, anim, secAnim, child) {
@@ -3628,6 +3042,764 @@ class _TransactionsTabState extends State<TransactionsTab> {
   }
 
   NumberFormat get currencyFormat => widget.currencyFormat;
+}
+
+/// Stateful body of the transaction detail / edit panel.
+///
+/// Owns the editor controllers + focus node (and disposes them — the
+/// previous inline `showGeneralDialog` builder created them in a method
+/// and never freed them, leaking on every open) and the "More details"
+/// disclosure state. Reaches back into the hosting
+/// [_TransactionsTabState] for the shared helpers (`_fxTransferBlock`,
+/// `_metaChip`, `_renameTransaction`, the split/move flows, the suggestion
+/// list, …) and the `widget.*` callbacks, so the editing behaviour is
+/// byte-for-byte the same as before — only the layout is regrouped.
+class _TransactionDetailPanel extends StatefulWidget {
+  final _TransactionsTabState state;
+  final dynamic tx;
+
+  const _TransactionDetailPanel({required this.state, required this.tx});
+
+  @override
+  State<_TransactionDetailPanel> createState() =>
+      _TransactionDetailPanelState();
+}
+
+class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
+  late final TextEditingController _catController;
+  late final FocusNode _catFocusNode;
+  late final TextEditingController _notesController;
+
+  late final String _initialCategoryLabel;
+  late final String _initialNotes;
+  late final List<String> _categorySuggestions;
+
+  _TransactionsTabState get _state => widget.state;
+  dynamic get tx => widget.tx;
+
+  @override
+  void initState() {
+    super.initState();
+    // Prefill the category editor with the PRETTIFIED label — the same
+    // string the list row shows — never the raw Plaid enum
+    // ("FOOD_AND_DRINK"). The Save handler diffs the field against this
+    // exact prefill (see [diffEditedField]), so open-then-Save with no
+    // edits sends nothing instead of silently converting the
+    // auto-category into a user override of the raw enum string.
+    final hasAnyCategory =
+        (tx['user_category'] ?? '').toString().trim().isNotEmpty ||
+            (tx['category'] ?? '').toString().trim().isNotEmpty ||
+            (tx['category_detailed'] ?? '').toString().trim().isNotEmpty;
+    _initialCategoryLabel = hasAnyCategory
+        ? prettyCategory(
+            userCategory: tx['user_category']?.toString(),
+            detailed: tx['category_detailed']?.toString(),
+            primary: tx['category']?.toString(),
+          )
+        : '';
+    _initialNotes = (tx['user_notes'] ?? '').toString();
+    _catController = TextEditingController(text: _initialCategoryLabel);
+    _catFocusNode = FocusNode();
+    _notesController = TextEditingController(text: _initialNotes);
+    // Shared suggestion source — the same list the bulk-categorize and
+    // add-transaction dialogs feed from, so the type-ahead can't drift
+    // into a second divergent taxonomy.
+    _categorySuggestions = _state._distinctCategories();
+  }
+
+  @override
+  void dispose() {
+    _catController.dispose();
+    _catFocusNode.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  /// Pop the hosting dialog route. Uses the panel's own context so it
+  /// targets the showGeneralDialog route regardless of where the state
+  /// context sits in the tree.
+  void _close() => Navigator.of(context).pop();
+
+  /// Quiet label → value row for the compact "Details" group. Distinct
+  /// from the equal-weight `_metaChip` cloud: the label is de-emphasised
+  /// and the value carries the weight, so the group scans as a small
+  /// table instead of a pill soup.
+  Widget _detailRow(IconData icon, String label, String value,
+      {Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 15, color: context.textFaint),
+          const SizedBox(width: 10),
+          Text(
+            label,
+            style: TextStyle(fontSize: 13, color: context.textSubtle),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: valueColor ?? context.textPrimary,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final s = _state;
+
+    final date = DateTime.parse(tx['date'] as String);
+    final sourceAmount = ((tx['amount'] as num?)?.toDouble() ?? 0.0);
+    final sourceCurrency =
+        (tx['currency'] ?? s.widget.targetCurrency).toString();
+    final convertedAmount = convertCurrency(
+      sourceAmount,
+      from: sourceCurrency,
+      to: s.widget.targetCurrency,
+      usdMxnRate: s.widget.usdMxnRate,
+    );
+    final needsConversion = s.widget.usdMxnRate > 0 &&
+        sourceCurrency != s.widget.targetCurrency;
+    // Storage sign convention (backend sync.rs:659): negative = outflow,
+    // positive = inflow.
+    final isExpense = sourceAmount < 0;
+    // ONE accent pair for the binary in/out concept: inflow = jade
+    // positive, outflow = neutral text. The red `negative` token stays
+    // reserved for destructive affordances; teal for transfer/linked.
+    final flowAccent = isExpense ? context.textPrimary : context.positive;
+    final source = (tx['source'] ?? 'plaid').toString();
+    final originalCategory = (tx['category'] ?? '').toString();
+    final merchant = (tx['merchant_name'] ?? '').toString();
+    final pending = tx['pending'] == true;
+    final rawDescription = (tx['description'] ?? '').toString();
+    final titleDescription = displayLabel(tx);
+    final logoUrl = counterpartyLogo(tx);
+    // Hero icon style — same registry the list rows use, keyed on the
+    // prettified label (always non-empty).
+    final catStyle = context.categoryStyle(prettyCategory(
+      userCategory: tx['user_category']?.toString(),
+      detailed: tx['category_detailed']?.toString(),
+      primary: tx['category']?.toString(),
+    ));
+    final color = catStyle.color;
+    final channel = (tx['payment_channel'] ?? '').toString();
+
+    // All transactions sharing this exact description (excluding the
+    // current one). Used for lifetime spend + recent rows.
+    final merchantMatches = s.widget.transactions.where((other) {
+      if (other['id'] == tx['id']) return false;
+      return (other['description'] ?? '').toString().trim().toLowerCase() ==
+          rawDescription.trim().toLowerCase();
+    }).toList();
+    final similar = merchantMatches.take(3).toList();
+    final merchantTotal = merchantMatches.fold<double>(
+      sourceAmount.abs(),
+      (sum, other) {
+        final amt = ((other['amount'] as num?)?.toDouble() ?? 0.0).abs();
+        final otherCcy =
+            (other['currency'] ?? s.widget.targetCurrency).toString();
+        return sum +
+            convertCurrency(
+              amt,
+              from: otherCcy,
+              to: s.widget.targetCurrency,
+              usdMxnRate: s.widget.usdMxnRate,
+            );
+      },
+    );
+    final merchantCount = merchantMatches.length + 1;
+
+    final autoCategoryLabel = ((tx['user_category'] ?? '')
+                .toString()
+                .isEmpty &&
+            (originalCategory.isNotEmpty ||
+                (tx['category_detailed'] ?? '').toString().isNotEmpty))
+        ? prettyCategory(
+            detailed: tx['category_detailed']?.toString(),
+            primary: tx['category']?.toString(),
+          )
+        : null;
+    final hasChannel = channel.isNotEmpty && channel != 'other';
+
+    // Whether the overflow ("More actions") kebab has anything to show.
+    final canMove = s.widget.accounts.isNotEmpty && s.widget.onUpdate != null;
+    final isChild = (tx['parent_id'] ?? '').toString().isNotEmpty;
+    final canSplit = !isChild && s.widget.onSplitTransaction != null;
+    final canEditSplit = isChild &&
+        s.widget.onSplitTransaction != null &&
+        s.widget.onUnsplitTransaction != null;
+    final canUnsplit = isChild && s.widget.onUnsplitTransaction != null;
+    final canDelete = s.widget.onDelete != null;
+    final hasOverflow =
+        canMove || canSplit || canEditSplit || canUnsplit || canDelete;
+
+    Widget detailRows() {
+      // Date is folded into the hero block, so it is intentionally
+      // omitted here to avoid showing it twice.
+      final rows = <Widget>[
+        if ((tx['account_name'] ?? '').toString().isNotEmpty)
+          _detailRow(Icons.account_balance, l.txAccount,
+              tx['account_name'].toString()),
+        if (autoCategoryLabel != null)
+          _detailRow(
+              Icons.label_outline, l.txAutoCategory, autoCategoryLabel),
+        if (pending)
+          _detailRow(Icons.hourglass_empty, l.txStatus, l.txStatusPending,
+              valueColor: context.warning),
+      ];
+      if (rows.isEmpty) return const SizedBox.shrink();
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        decoration: BoxDecoration(
+          color: context.tileSurface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: context.hairline),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < rows.length; i++) ...[
+              if (i > 0) Divider(height: 1, color: context.hairline),
+              rows[i],
+            ],
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // -- Header chrome: close (left) + overflow + rename (right) ----
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.close, size: 20),
+                onPressed: _close,
+                tooltip: l.actionClose,
+                constraints:
+                    const BoxConstraints(minWidth: 48, minHeight: 48),
+              ),
+              const Spacer(),
+              if (hasOverflow)
+                PopupMenuButton<String>(
+                  tooltip: l.txMoreActions,
+                  icon: const Icon(Icons.more_horiz, size: 22),
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'split':
+                        s._openSplitDialog(tx, sourceCurrency, sourceAmount,
+                            titleDescription, originalCategory);
+                        break;
+                      case 'editSplit':
+                        s._openEditSplitDialog(
+                          (tx['parent_id'] ?? '').toString(),
+                          sourceCurrency,
+                          sourceAmount,
+                          titleDescription,
+                          originalCategory,
+                        );
+                        break;
+                      case 'unsplit':
+                        _unsplit(l);
+                        break;
+                      case 'move':
+                        _showMoveSheet(l);
+                        break;
+                      case 'delete':
+                        _confirmDelete(l);
+                        break;
+                    }
+                  },
+                  itemBuilder: (ctx) => [
+                    if (canSplit)
+                      PopupMenuItem(
+                        value: 'split',
+                        child: _menuRow(
+                            Icons.call_split, l.txSplitThisTransaction),
+                      ),
+                    if (canEditSplit)
+                      PopupMenuItem(
+                        value: 'editSplit',
+                        child: _menuRow(Icons.edit_outlined, l.txEditSplit),
+                      ),
+                    if (canUnsplit)
+                      PopupMenuItem(
+                        value: 'unsplit',
+                        child:
+                            _menuRow(Icons.call_merge, l.txUnsplitRestore),
+                      ),
+                    if (canMove)
+                      PopupMenuItem(
+                        value: 'move',
+                        child: _menuRow(Icons.drive_file_move_outlined,
+                            l.txMoveToDifferentAccount),
+                      ),
+                    if (canDelete)
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: _menuRow(Icons.delete_outline, l.actionDelete,
+                            color: context.negative),
+                      ),
+                  ],
+                ),
+              if (s.widget.onUpdate != null)
+                IconButton(
+                  tooltip: merchantMatches.isEmpty
+                      ? l.txRename
+                      : l.txRenamePlusMatching(merchantMatches.length),
+                  iconSize: 20,
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: () => s._renameTransaction(
+                    tx,
+                    similarIds:
+                        merchantMatches.map((m) => m['id'].toString()).toList(),
+                  ),
+                  constraints:
+                      const BoxConstraints(minWidth: 48, minHeight: 48),
+                ),
+            ],
+          ),
+          // -- Scrollable body -------------------------------------------
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // -- Hero: logo + title + subtitle -------------------
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 52,
+                        height: 52,
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: logoUrl != null
+                            ? Image.network(
+                                logoUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    Icon(catStyle.icon, color: color, size: 28),
+                              )
+                            : Icon(catStyle.icon, color: color, size: 28),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              titleDescription,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            // Merchant subtitle (only when it adds info
+                            // over the title) — the single place the
+                            // merchant name appears now (the duplicate
+                            // storefront chip was removed).
+                            if (merchant.isNotEmpty &&
+                                merchant.toLowerCase() !=
+                                    titleDescription.toLowerCase()) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                merchant,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.textSubtle,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  // -- Hero amount block -------------------------------
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: context.tint(0.04),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: flowAccent.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              isExpense ? l.txOutflow : l.txInflow,
+                              style: TextStyle(
+                                fontSize: 10,
+                                letterSpacing: 1.2,
+                                color: flowAccent,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const Spacer(),
+                            // Date folded into the hero — keeps the
+                            // most-glanced fact next to the amount.
+                            Text(
+                              DateFormat('MMM d, y').format(date),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: context.textSubtle,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures()
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${isExpense ? '−' : '+'}${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}',
+                          style: brandDisplayStyle(
+                            fontSize: 32,
+                            color: flowAccent,
+                          ),
+                        ),
+                        if (needsConversion) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            l.txApproxEstimated(s.widget.currencyFormat
+                                .format(convertedAmount.abs())),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: context.textSubtle,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  // -- Primary editable: Category then Notes -----------
+                  RawAutocomplete<String>(
+                    textEditingController: _catController,
+                    focusNode: _catFocusNode,
+                    optionsBuilder: (TextEditingValue value) {
+                      final q = value.text.trim().toLowerCase();
+                      if (q.isEmpty) return _categorySuggestions;
+                      return _categorySuggestions
+                          .where((c) => c.toLowerCase().contains(q));
+                    },
+                    fieldViewBuilder:
+                        (ctx, controller, focusNode, onFieldSubmitted) {
+                      return TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        decoration: InputDecoration(
+                          labelText: l.txCategory,
+                          hintText: l.txCategoryHint,
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onSubmitted: (_) => onFieldSubmitted(),
+                      );
+                    },
+                    optionsViewBuilder: (ctx, onSelected, options) {
+                      final opts = options.toList();
+                      return Align(
+                        alignment: Alignment.topLeft,
+                        child: Material(
+                          elevation: 4,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                                maxHeight: 200, maxWidth: 420),
+                            child: ListView.builder(
+                              padding: EdgeInsets.zero,
+                              shrinkWrap: true,
+                              itemCount: opts.length,
+                              itemBuilder: (ctx, index) {
+                                final option = opts[index];
+                                return InkWell(
+                                  onTap: () => onSelected(option),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 12),
+                                    child: Text(option),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _notesController,
+                    decoration: InputDecoration(
+                      labelText: l.txNotes,
+                      hintText: l.txNotesHint,
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 16),
+                  // -- Compact Details group ---------------------------
+                  detailRows(),
+                  // -- Linked FX transfer (inline, high-signal) --------
+                  ...s._fxTransferBlock(tx['id']?.toString() ?? ''),
+                  // -- More details disclosure -------------------------
+                  const SizedBox(height: 12),
+                  Theme(
+                    data: Theme.of(context)
+                        .copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      childrenPadding:
+                          const EdgeInsets.only(bottom: 8),
+                      expandedCrossAxisAlignment:
+                          CrossAxisAlignment.start,
+                      title: Text(
+                        l.txMoreDetails,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: context.textSubtle,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      children: [
+                        if (rawDescription != titleDescription) ...[
+                          s._sectionLabel(l.txRawBankText),
+                          const SizedBox(height: 4),
+                          SelectableText(
+                            rawDescription,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: context.textMuted,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            s._metaChip(Icons.cloud_download,
+                                s._sourceLabel(context, source)),
+                            if (hasChannel)
+                              s._metaChip(
+                                s._channelIcon(channel),
+                                s._sentence(channel.replaceAll('_', ' ')),
+                              ),
+                          ],
+                        ),
+                        if (similar.isNotEmpty) ...[
+                          const SizedBox(height: 14),
+                          s._sectionLabel(l.txRecentAtMerchant),
+                          const SizedBox(height: 6),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: Text(
+                              l.txMerchantTotal(
+                                  s.widget.currencyFormat
+                                      .format(merchantTotal),
+                                  merchantCount),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: context.textMuted,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures()
+                                ],
+                              ),
+                            ),
+                          ),
+                          ...similar.map((other) => s._similarRow(other)),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            ),
+          ),
+          // -- Footer: Close (secondary) + Save (primary) ----------------
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Spacer(),
+              TextButton(
+                onPressed: _close,
+                child: Text(l.actionClose),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: () {
+                  // Diff each field against its prefill: only what the
+                  // user actually edited is sent (null = "leave alone").
+                  final newCategory = diffEditedField(
+                      _catController.text, _initialCategoryLabel);
+                  final newNotes =
+                      diffEditedField(_notesController.text, _initialNotes);
+                  _close();
+                  if (newCategory == null && newNotes == null) return;
+                  s.widget.onUpdate?.call(
+                    tx['id'],
+                    userCategory: newCategory,
+                    userNotes: newNotes,
+                  );
+                },
+                child: Text(l.actionSave),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _menuRow(IconData icon, String label, {Color? color}) {
+    final c = color ?? context.textPrimary;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 18, color: c),
+        const SizedBox(width: 12),
+        Text(label, style: TextStyle(color: c)),
+      ],
+    );
+  }
+
+  /// Unsplit via the overflow menu — mirrors the old inline button.
+  Future<void> _unsplit(AppLocalizations l) async {
+    final onUnsplit = _state.widget.onUnsplitTransaction;
+    if (onUnsplit == null) return;
+    _close();
+    try {
+      await onUnsplit((tx['parent_id'] ?? '').toString());
+      if (!_state.mounted) return;
+      ScaffoldMessenger.of(_state.context).showSnackBar(
+        SnackBar(content: Text(l.txSplitRemoved)),
+      );
+    } catch (e) {
+      if (!_state.mounted) return;
+      ScaffoldMessenger.of(_state.context).showSnackBar(
+        SnackBar(content: Text(l.txUnsplitFailed(e.toString()))),
+      );
+    }
+  }
+
+  /// Delete via the overflow menu — confirm dialog then `onDelete`.
+  Future<void> _confirmDelete(AppLocalizations l) async {
+    if (_state.widget.onDelete == null) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l.txDeleteOneTitle),
+        content: Text(l.txDeleteOneBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l.actionCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: ctx.negative),
+            child: Text(l.actionDelete),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    if (!mounted) return;
+    _close();
+    try {
+      await _state.widget.onDelete!(tx['id']);
+    } catch (e) {
+      if (!_state.mounted) return;
+      ScaffoldMessenger.of(_state.context).showSnackBar(
+        SnackBar(content: Text(l.txDeleteFailed(e.toString()))),
+      );
+    }
+  }
+
+  /// Move-to-account via the overflow menu. Opens a small bottom sheet
+  /// hosting the existing `_AccountMover` picker (kept verbatim).
+  void _showMoveSheet(AppLocalizations l) {
+    final s = _state;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (sheetCtx) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            20 + MediaQuery.viewInsetsOf(sheetCtx).bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              s._sectionLabel(l.txMoveToDifferentAccount),
+              const SizedBox(height: 12),
+              _AccountMover(
+                accounts: s.widget.accounts,
+                currentAccountId: tx['account_id']?.toString(),
+                onMove: (newAccountId) async {
+                  Navigator.pop(sheetCtx);
+                  _close();
+                  try {
+                    await Future.value(s.widget.onUpdate?.call(
+                      tx['id'],
+                      accountId: newAccountId,
+                    ));
+                  } catch (e) {
+                    if (!s.mounted) return;
+                    ScaffoldMessenger.of(s.context).showSnackBar(
+                      SnackBar(content: Text(l.txMoveFailed(e.toString()))),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// Sealed-style discriminated union for the flat virtualised list.
