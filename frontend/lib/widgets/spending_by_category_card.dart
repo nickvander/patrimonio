@@ -71,12 +71,14 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
     final l = AppLocalizations.of(context);
     final months = (_data?['months'] as List<dynamic>?) ?? const [];
     final cats = (_data?['categories'] as List<dynamic>?) ?? const [];
+    final isPhone = MediaQuery.sizeOf(context).width < 720;
+    final pad = isPhone ? 16.0 : 24.0;
 
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(pad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -116,7 +118,9 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
                 ),
               )
             else ...[
-              SizedBox(height: 240, child: _buildChart(months, cats)),
+              SizedBox(
+                  height: isPhone ? 200.0 : 240.0,
+                  child: _buildChart(months, cats)),
               const SizedBox(height: 16),
               // The figures next to each category are an average PER MONTH,
               // not the window total — the bare window sum (e.g. 6× a $3k

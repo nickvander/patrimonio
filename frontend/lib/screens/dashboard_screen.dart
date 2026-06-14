@@ -3195,6 +3195,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Dedicated cash-flow page: monthly summary, the bar-chart of
     // recent months, and per-category budgets. These used to crowd the
     // Overview; pulling them out keeps Overview focused on net worth.
+    final gap = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     final cashFlowTab = buildTabContainer(
       Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3204,7 +3205,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             conversionFactor: conversionFactor,
             currencyFormat: currencyFormat,
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: gap),
           if (_trendData != null)
             CashFlowTrendsChart(
               trends: _trendData!,
@@ -3224,7 +3225,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _goToNav(NavId.transactions);
               },
             ),
-          const SizedBox(height: 24),
+          SizedBox(height: gap),
           // Cross-currency cash transfers (Wise / Remitly / wires).
           // Lists each detected link with implied vs spot FX, plus
           // Confirm/Unlink inline. Hidden when there are no detected
@@ -3267,7 +3268,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 }
               },
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: gap),
           ],
           // Hidden-from-subscriptions list. Surfaces only when there's
           // something to un-hide — keeps the cash-flow tab quiet for
@@ -3275,7 +3276,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if ((_ignoredSubscriptions ?? const []).isNotEmpty)
             _buildIgnoredSubscriptionsPanel(),
           if ((_ignoredSubscriptions ?? const []).isNotEmpty)
-            const SizedBox(height: 24),
+            SizedBox(height: gap),
           // Detected recurring outflows — surfaces what's silently
           // eating the budget every month. Tapping a row seeds the
           // transactions search with the merchant.
@@ -3306,7 +3307,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 }
               },
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: gap),
           ],
           UpcomingBillsCard(
             subscriptions: _subscriptions ?? const [],
@@ -3314,20 +3315,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             currencyFormat: currencyFormat,
           ),
           if ((_subscriptions ?? const []).isNotEmpty)
-            const SizedBox(height: 24),
+            SizedBox(height: gap),
           SpendingByCategoryCard(
             apiService: _apiService,
             conversionFactor: conversionFactor,
             currencyFormat: currencyFormat,
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: gap),
           BudgetsCard(
             transactions: _transactions ?? const [],
             conversionFactor: conversionFactor,
             currencyFormat: currencyFormat,
             apiService: _apiService,
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: gap),
           DebtPayoffCard(
             accounts: (_overview?['accounts'] as List?) ?? const [],
             apiService: _apiService,

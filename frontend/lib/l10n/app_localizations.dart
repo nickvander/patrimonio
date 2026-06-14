@@ -2444,6 +2444,12 @@ abstract class AppLocalizations {
   /// **'Saves {amount} vs snowball'**
   String dpSaves(Object amount);
 
+  /// No description provided for @dpSimulator.
+  ///
+  /// In en, this message translates to:
+  /// **'Payoff simulator'**
+  String get dpSimulator;
+
   /// No description provided for @dpInfeasible.
   ///
   /// In en, this message translates to:

@@ -33,6 +33,9 @@ class DebtPayoffCard extends StatefulWidget {
 class _DebtPayoffCardState extends State<DebtPayoffCard> {
   Map<String, double> _aprs = const {};
   double? _monthlyPayment; // null until initialized from the debts
+  // Phone-only: the what-if simulator (slider + strategy tiles) collapses
+  // behind a tap-to-expand header so the debt list stays the focus. In-memory.
+  bool _simExpanded = false;
 
   @override
   void initState() {
@@ -113,11 +116,95 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
         avalanche.totalInterest <= snowball.totalInterest;
     final savings = (snowball.totalInterest - avalanche.totalInterest).abs();
 
+    final isPhone = MediaQuery.sizeOf(context).width < 720;
+    final pad = isPhone ? 16.0 : 24.0;
+
+    // The strategy comparison: side-by-side on wide screens, stacked
+    // vertically on phones (the two tiles crush at ~360px side by side).
+    final avalancheTile = _strategyTile(
+      l.dpAvalanche,
+      l.dpAvalancheSub,
+      avalanche,
+      recommended: avalancheWins,
+    );
+    final snowballTile = _strategyTile(
+      l.dpSnowball,
+      l.dpSnowballSub,
+      snowball,
+      recommended: !avalancheWins,
+    );
+    final Widget strategyComparison = isPhone
+        ? Column(
+            children: [
+              avalancheTile,
+              const SizedBox(height: 12),
+              snowballTile,
+            ],
+          )
+        : Row(
+            children: [
+              Expanded(child: avalancheTile),
+              const SizedBox(width: 12),
+              Expanded(child: snowballTile),
+            ],
+          );
+
+    // The what-if simulator: monthly-payment slider + strategy comparison.
+    // Collapsible on phones, always inline on wide screens.
+    final simulator = <Widget>[
+      // Monthly payment slider.
+      Row(
+        children: [
+          Expanded(
+            child: Text(l.dpMonthlyPayment,
+                style: TextStyle(color: context.textMuted, fontSize: 14)),
+          ),
+          Text(
+            _money(clampedBudget),
+            style: TextStyle(
+              color: context.pinkAccent,
+              fontWeight: FontWeight.bold,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+      Slider(
+        value: clampedBudget,
+        min: minTotal,
+        max: sliderMax,
+        activeColor: context.pinkAccent,
+        inactiveColor: context.hairline,
+        onChanged: (v) => setState(() => _monthlyPayment = v),
+      ),
+      const SizedBox(height: 8),
+      if (!feasible)
+        _infeasibleNote(l)
+      else
+        strategyComparison,
+      if (feasible && savings > 1) ...[
+        const SizedBox(height: 10),
+        Center(
+          child: Text(
+            avalancheWins ? l.dpSaves(_money(savings)) : l.dpSaves(_money(0)),
+            style: TextStyle(color: context.textFaint, fontSize: 11),
+          ),
+        ),
+      ],
+    ];
+
+    // Collapsed-summary line: the recommended strategy + projected interest
+    // saved (when meaningful), reusing the already-computed values.
+    final recommendedName = avalancheWins ? l.dpAvalanche : l.dpSnowball;
+    final summaryLine = (feasible && savings > 1 && avalancheWins)
+        ? '$recommendedName · ${l.dpSaves(_money(savings))}'
+        : recommendedName;
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(pad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -140,68 +227,62 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
             ...debts.map(_debtRow),
             const SizedBox(height: 8),
             Divider(height: 24, color: context.hairline),
-            // Monthly payment slider.
-            Row(
-              children: [
-                Expanded(
-                  child: Text(l.dpMonthlyPayment,
-                      style:
-                          TextStyle(color: context.textMuted, fontSize: 14)),
-                ),
-                Text(
-                  _money(clampedBudget),
-                  style: TextStyle(
-                    color: context.pinkAccent,
-                    fontWeight: FontWeight.bold,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+            if (!isPhone)
+              ...simulator
+            else ...[
+              // Tap-to-expand simulator header (phones only).
+              InkWell(
+                onTap: () => setState(() => _simExpanded = !_simExpanded),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(Icons.tune_rounded,
+                          color: context.tealAccent, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              l.dpSimulator,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: context.textPrimary,
+                              ),
+                            ),
+                            if (!_simExpanded) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                summaryLine,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: context.textSubtle,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        _simExpanded
+                            ? Icons.expand_less_rounded
+                            : Icons.expand_more_rounded,
+                        color: context.textMuted,
+                        size: 22,
+                      ),
+                    ],
                   ),
                 ),
+              ),
+              if (_simExpanded) ...[
+                const SizedBox(height: 8),
+                ...simulator,
               ],
-            ),
-            Slider(
-              value: clampedBudget,
-              min: minTotal,
-              max: sliderMax,
-              activeColor: context.pinkAccent,
-              inactiveColor: context.hairline,
-              onChanged: (v) => setState(() => _monthlyPayment = v),
-            ),
-            const SizedBox(height: 8),
-            if (!feasible)
-              _infeasibleNote(l)
-            else
-              Row(
-                children: [
-                  Expanded(
-                    child: _strategyTile(
-                      l.dpAvalanche,
-                      l.dpAvalancheSub,
-                      avalanche,
-                      recommended: avalancheWins,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _strategyTile(
-                      l.dpSnowball,
-                      l.dpSnowballSub,
-                      snowball,
-                      recommended: !avalancheWins,
-                    ),
-                  ),
-                ],
-              ),
-            if (feasible && savings > 1) ...[
-              const SizedBox(height: 10),
-              Center(
-                child: Text(
-                  avalancheWins
-                      ? l.dpSaves(_money(savings))
-                      : l.dpSaves(_money(0)),
-                  style: TextStyle(
-                      color: context.textFaint, fontSize: 11),
-                ),
-              ),
             ],
           ],
         ),

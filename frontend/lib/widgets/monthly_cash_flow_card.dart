@@ -56,11 +56,13 @@ class MonthlyCashFlowCard extends StatelessWidget {
 
     final monthLabel = _formatMonth(current['month'] as String?);
 
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(pad),
         child: LayoutBuilder(
           builder: (ctx, c) {
             final isNarrow = c.maxWidth < 560;
@@ -147,12 +149,12 @@ class MonthlyCashFlowCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   header,
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   netLine,
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   stats,
-                  const SizedBox(height: 16),
-                  SizedBox(height: 56, child: spark),
+                  const SizedBox(height: 12),
+                  SizedBox(height: 48, child: spark),
                 ],
               );
             }
@@ -192,11 +194,12 @@ class MonthlyCashFlowCard extends StatelessWidget {
   }
 
   Widget _buildEmpty(BuildContext context) {
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(pad),
         child: Text(
           AppLocalizations.of(context).cfMonthlyEmpty,
           style: TextStyle(color: context.textSubtle, fontSize: 13),

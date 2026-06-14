@@ -390,6 +390,7 @@
   "dpInterest": "{amount} de interés",
   "dpRecommended": "Recomendado",
   "dpSaves": "Ahorra {amount} vs bola de nieve",
+  "dpSimulator": "Simulador de pago",
   "dpInfeasible": "Aumenta el pago mensual para cubrir los mínimos.",
   "dpSetApr": "Definir TAE",
   "dpAprDialogTitle": "Tasa de interés (TAE)",

@@ -41,11 +41,13 @@ class UpcomingBillsCard extends StatelessWidget {
         .map((m) => m.totalUsd)
         .fold(0.0, (a, b) => a > b ? a : b);
 
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(pad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

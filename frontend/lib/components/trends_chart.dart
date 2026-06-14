@@ -25,11 +25,12 @@ class CashFlowTrendsChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(pad),
         child: LayoutBuilder(builder: (ctx, outer) {
           // Below ~420 the bars themselves and the bottom-axis "Mar 'yy"
           // labels eat into the chart canvas; trim the chart height and
@@ -60,7 +61,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                       Text(
                         l.lwTrendsTitle,
                         style: const TextStyle(
-                          fontSize: 18,
+                          fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -79,7 +80,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                         Text(
                           l.lwTrendsTitle,
                           style: const TextStyle(
-                            fontSize: 18,
+                            fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
                         ),

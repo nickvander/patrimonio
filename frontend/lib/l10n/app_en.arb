@@ -448,6 +448,7 @@
   "dpInterest": "{amount} interest",
   "dpRecommended": "Recommended",
   "dpSaves": "Saves {amount} vs snowball",
+  "dpSimulator": "Payoff simulator",
   "dpInfeasible": "Increase the monthly payment to cover minimums.",
   "dpSetApr": "Set APR",
   "dpAprDialogTitle": "Interest rate (APR)",

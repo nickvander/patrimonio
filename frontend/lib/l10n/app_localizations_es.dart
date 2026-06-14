@@ -1443,6 +1443,9 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get dpSimulator => 'Simulador de pago';
+
+  @override
   String get dpInfeasible => 'Aumenta el pago mensual para cubrir los mínimos.';
 
   @override

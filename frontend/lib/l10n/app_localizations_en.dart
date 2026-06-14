@@ -1423,6 +1423,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get dpSimulator => 'Payoff simulator';
+
+  @override
   String get dpInfeasible => 'Increase the monthly payment to cover minimums.';
 
   @override

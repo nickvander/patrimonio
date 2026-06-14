@@ -286,11 +286,17 @@ class _BudgetsCardState extends State<BudgetsCard> {
       }
     }
 
+    final isPhone = MediaQuery.sizeOf(context).width < 720;
+    final pad = isPhone ? 16.0 : 24.0;
+    // Show fewer rows before the "show all" toggle on phones so the card
+    // doesn't dominate the cash-flow tab; desktop keeps the full limit.
+    final collapseLimit = isPhone ? 4 : _kBudgetCollapseLimit;
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(pad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -340,7 +346,7 @@ class _BudgetsCardState extends State<BudgetsCard> {
             else ...[
               ...(_showAllBudgets
                       ? _budgets.entries
-                      : _budgets.entries.take(_kBudgetCollapseLimit))
+                      : _budgets.entries.take(collapseLimit))
                   .map((e) {
                 final cat = e.key;
                 final budgetUsd = e.value;
@@ -424,7 +430,7 @@ class _BudgetsCardState extends State<BudgetsCard> {
               }),
               // Collapse a long budget list so the card doesn't dominate the
               // cash-flow tab — show the first few, with a toggle for the rest.
-              if (_budgets.length > _kBudgetCollapseLimit)
+              if (_budgets.length > collapseLimit)
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton(
@@ -433,7 +439,7 @@ class _BudgetsCardState extends State<BudgetsCard> {
                     child: Text(_showAllBudgets
                         ? l.cfBudgetsShowFewer
                         : l.cfBudgetsShowAll(
-                            _budgets.length - _kBudgetCollapseLimit)),
+                            _budgets.length - collapseLimit)),
                   ),
                 ),
             ],

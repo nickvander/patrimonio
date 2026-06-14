@@ -79,11 +79,13 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
       return sum + v;
     });
 
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(pad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -98,7 +100,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
                 Text(
                   l.cfSubscriptionsTitle,
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.w700,
                     color: context.textPrimary,
                   ),
