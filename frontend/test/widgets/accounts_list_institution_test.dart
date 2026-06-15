@@ -54,7 +54,9 @@ void main() {
 
     // One collapsed institution header carrying the account count + name.
     expect(find.text('2 accounts'), findsOneWidget);
-    expect(find.text('SoFi'), findsWidgets);
+    // The bank name shows exactly once (the header) — the per-row institution
+    // sub-label is dropped when nested, so it isn't repeated under each account.
+    expect(find.text('SoFi'), findsOneWidget);
     // Collapsed by default → the expand affordance (chevron) is present.
     expect(find.byIcon(Icons.chevron_right), findsOneWidget);
 

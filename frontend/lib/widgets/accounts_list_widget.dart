@@ -785,6 +785,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
           products[i],
           vaultExtraNative: isAttach ? vaultExtra : null,
           vaultCount: isAttach ? vaults.length : null,
+          nested: true,
         ));
         if (isAttach) {
           inner.add(_CollapsibleVaults(
@@ -953,6 +954,10 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
     dynamic acc, {
     double? vaultExtraNative,
     int? vaultCount,
+    // True when the row is rendered inside a collapsed institution group: the
+    // bank name already sits in the group header, so we drop the per-row
+    // institution sub-label to cut the left-side density.
+    bool nested = false,
   }) {
     final l = AppLocalizations.of(context);
     final base = ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
@@ -996,7 +1001,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
       ),
     );
 
-    Widget secondaryMeta = inst.isEmpty
+    Widget secondaryMeta = (inst.isEmpty || nested)
         ? const SizedBox.shrink()
         : Padding(
             padding: const EdgeInsets.only(top: 2),
@@ -1554,9 +1559,21 @@ class _CollapsibleInstitutionState extends State<_CollapsibleInstitution> {
           crossFadeState:
               _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
           firstChild: const SizedBox(width: double.infinity),
-          secondChild: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: widget.rows,
+          // Indent the accounts + a hairline guide rail so they read as nested
+          // under the bank instead of crowding the same left margin.
+          secondChild: Padding(
+            padding: const EdgeInsets.only(left: 20, bottom: 4),
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(color: context.hairline, width: 1.5),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: widget.rows,
+              ),
+            ),
           ),
         ),
       ],
