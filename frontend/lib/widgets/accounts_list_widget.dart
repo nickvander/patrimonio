@@ -772,25 +772,56 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
               usdMxnRate: usdMxnRate,
             ),
       );
+      // Build the bank's account rows (products, with their vaults nested)
+      // into `inner`, then fold the whole institution behind ONE collapsible
+      // summary header (bank · N accounts · combined total). A bank with two
+      // products (e.g. SoFi Checking + Savings, Revolut Cuenta + Savings) then
+      // reads as a single compact line that expands on tap.
+      final inner = <Widget>[];
       for (var i = 0; i < products.length; i++) {
         final isAttach = i == attachIdx && vaults.isNotEmpty;
-        widgets.add(_buildAccountRow(
+        inner.add(_buildAccountRow(
           context,
           products[i],
           vaultExtraNative: isAttach ? vaultExtra : null,
           vaultCount: isAttach ? vaults.length : null,
         ));
         if (isAttach) {
-          // Combined total already shows on the row above; the collapsible is
-          // just the expand affordance + the individual vaults (no redundant
-          // total in its header).
-          widgets.add(_CollapsibleVaults(
+          inner.add(_CollapsibleVaults(
             label: l.pfVaults,
             count: vaults.length,
             rows: vaults.map((v) => _buildVaultRow(context, v)).toList(),
           ));
         }
       }
+
+      // Combined headline: native figure when the bank is single-currency
+      // (reads the way the user thinks of it — Revolut in MXN), else the
+      // target-converted total when it mixes currencies.
+      final curs = cluster
+          .map((a) => (a['currency'] ?? targetCurrency).toString().toUpperCase())
+          .toSet();
+      final nativeSum = cluster.fold<double>(0.0,
+          (s, a) => s + ((a['current_balance'] ?? 0.0) as num).toDouble().abs());
+      final convSum = cluster.fold<double>(
+        0.0,
+        (s, a) =>
+            s +
+            convertCurrency(
+              ((a['current_balance'] ?? 0.0) as num).toDouble().abs(),
+              from: (a['currency'] ?? targetCurrency).toString(),
+              to: targetCurrency,
+              usdMxnRate: usdMxnRate,
+            ),
+      );
+      widgets.add(_CollapsibleInstitution(
+        institution: inst,
+        countLabel: '${cluster.length} ${l.txAccounts.toLowerCase()}',
+        totalLabel: curs.length == 1
+            ? formatCurrencyAmount(nativeSum, curs.first)
+            : currencyFormat.format(convSum),
+        rows: inner,
+      ));
     }
     return widgets;
   }
@@ -1433,6 +1464,102 @@ class _CollapsibleVaultsState extends State<_CollapsibleVaults> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Collapses a single institution's multiple accounts behind one summary
+/// header (bank · N accounts · combined total). Collapsed by default so a
+/// bank with several products/vaults reads as one compact line; tap to
+/// expand the individual account rows (which keep their own vault nesting).
+class _CollapsibleInstitution extends StatefulWidget {
+  final String institution;
+  final String countLabel;
+  final String totalLabel;
+  final List<Widget> rows;
+
+  const _CollapsibleInstitution({
+    required this.institution,
+    required this.countLabel,
+    required this.totalLabel,
+    required this.rows,
+  });
+
+  @override
+  State<_CollapsibleInstitution> createState() =>
+      _CollapsibleInstitutionState();
+}
+
+class _CollapsibleInstitutionState extends State<_CollapsibleInstitution> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final name =
+        widget.institution.isEmpty ? l.pfUnknownAccount : widget.institution;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _open = !_open),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+            child: Row(
+              children: [
+                Icon(_open ? Icons.expand_more : Icons.chevron_right,
+                    size: 20, color: context.textSubtle),
+                const SizedBox(width: 8),
+                Icon(Icons.account_balance_rounded,
+                    size: 18, color: context.textSubtle),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: context.textPrimary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.countLabel,
+                        style:
+                            TextStyle(fontSize: 12, color: context.textSubtle),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  widget.totalLabel,
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: context.textPrimary,
+                      fontFeatures: const [FontFeature.tabularFigures()]),
+                ),
+              ],
+            ),
+          ),
+        ),
+        AnimatedCrossFade(
+          duration: const Duration(milliseconds: 160),
+          sizeCurve: Curves.easeOut,
+          crossFadeState:
+              _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          firstChild: const SizedBox(width: double.infinity),
+          secondChild: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: widget.rows,
+          ),
+        ),
+      ],
     );
   }
 }
