@@ -144,27 +144,42 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       _error = null;
     });
 
+    // Optional planning sections fail SOFT: one failing endpoint (e.g. FBAR)
+    // must not blank the entire tab. Each is fetched independently and yields
+    // null on error, so only its own section degrades to an empty state while
+    // the core tax data still renders.
+    Future<Map<String, dynamic>?> soft(Future<Map<String, dynamic>> f) async {
+      try {
+        return await f;
+      } catch (e) {
+        debugPrint('Tax planning: optional section failed to load: $e');
+        return null;
+      }
+    }
+
     try {
-      // Fetch summary/transactions/disposals AND the three M3 planning
-      // sections (unrealized / FBAR / contributions) concurrently rather than
-      // awaiting in series.
-      final results = await Future.wait([
+      // Core data gates the tab — summary/transactions/disposals must load for
+      // the page to mean anything; a failure here is a real error.
+      final core = await Future.wait([
         _fetchSummary(year: _selectedYear, status: _filingStatus),
         _fetchTransactions(year: _selectedYear),
         _fetchDisposals(_selectedYear),
-        _fetchUnrealized(year: _selectedYear, status: _filingStatus),
-        _fetchFbar(_selectedYear),
-        _fetchContributions(_selectedYear),
+      ]);
+      // Secondary planning sections — fail-soft, fetched alongside the core.
+      final optional = await Future.wait([
+        soft(_fetchUnrealized(year: _selectedYear, status: _filingStatus)),
+        soft(_fetchFbar(_selectedYear)),
+        soft(_fetchContributions(_selectedYear)),
       ]);
 
       if (!mounted) return;
       setState(() {
-        _taxSummary = results[0] as Map<String, dynamic>;
-        _taxTransactions = results[1] as List<dynamic>;
-        _taxDisposals = results[2] as List<dynamic>;
-        _unrealized = results[3] as Map<String, dynamic>;
-        _fbar = results[4] as Map<String, dynamic>;
-        _contributions = results[5] as Map<String, dynamic>;
+        _taxSummary = core[0] as Map<String, dynamic>;
+        _taxTransactions = core[1] as List<dynamic>;
+        _taxDisposals = core[2] as List<dynamic>;
+        _unrealized = optional[0];
+        _fbar = optional[1];
+        _contributions = optional[2];
         _firstLoad = false;
         _refetching = false;
       });

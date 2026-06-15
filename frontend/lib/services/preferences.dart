@@ -1,4 +1,10 @@
-import 'package:web/web.dart' as web;
+// Raw storage backend behind a conditional import: the real localStorage on
+// web, a no-op stub everywhere else. This keeps `package:web` out of the test
+// VM — importing Preferences in a widget test no longer drags package:web in
+// (mirrors account_alerts_cache). The web impl already swallows localStorage
+// exceptions (private-browsing), so _read/_write don't re-wrap.
+import 'preferences_storage_stub.dart'
+    if (dart.library.js_interop) 'preferences_storage_web.dart';
 
 /// Thin wrapper around `window.localStorage` for user preferences that
 /// should survive a page refresh — reporting currency, last selected tab,
@@ -10,20 +16,10 @@ import 'package:web/web.dart' as web;
 class Preferences {
   static const _prefix = 'patrimonio:';
 
-  static String? _read(String key) {
-    try {
-      return web.window.localStorage.getItem('$_prefix$key');
-    } catch (_) {
-      // Private-browsing modes can throw on localStorage reads.
-      return null;
-    }
-  }
+  static String? _read(String key) => prefsRead('$_prefix$key');
 
-  static void _write(String key, String value) {
-    try {
-      web.window.localStorage.setItem('$_prefix$key', value);
-    } catch (_) {/* swallow */}
-  }
+  static void _write(String key, String value) =>
+      prefsWrite('$_prefix$key', value);
 
   // -- Typed accessors ---------------------------------------------------
 

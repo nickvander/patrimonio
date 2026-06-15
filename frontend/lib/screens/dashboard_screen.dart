@@ -43,6 +43,7 @@ import '../theme/palette.dart';
 import '../theme/typography.dart';
 import '../utils/account_category.dart';
 import '../utils/currency.dart';
+import '../utils/sync_progress.dart';
 import '../utils/supported_banks.dart';
 import '../utils/theme_colors.dart';
 import '../utils/transaction_display.dart';
@@ -2585,12 +2586,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (_isSyncing) return;
       // Only Plaid/crypto institutions actually sync (manual/CSV/PDF are
       // skipped server-side), so the total reflects what will really update.
-      const syncableTypes = {'plaid', 'coinbase', 'coinbase_oauth'};
-      final total = (_syncData ?? const [])
-          .where((i) =>
-              i is Map &&
-              syncableTypes.contains((i['integration_type'] ?? '').toString()))
-          .length;
+      final total = syncableInstitutionCount(_syncData);
       final startedAt = DateTime.now();
       setState(() {
         _isSyncing = true;
@@ -2607,14 +2603,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         try {
           final fresh = await _apiService.getSyncStatus(forceRefresh: true);
           if (!mounted) return;
-          final done = fresh.where((i) {
-            if (i is! Map) return false;
-            final ts = DateTime.tryParse(i['last_synced_at']?.toString() ?? '');
-            return ts != null && ts.isAfter(startedAt);
-          }).length;
           setState(() {
             _syncData = fresh;
-            _syncDone = done;
+            _syncDone = syncedSinceCount(fresh, startedAt);
           });
         } catch (_) {
           // Transient poll failure — keep going; the awaited call below is the
