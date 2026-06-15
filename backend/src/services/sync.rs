@@ -4,6 +4,27 @@ use reqwest::Client;
 use crate::config::AppConfig;
 use crate::services::encryption;
 use std::collections::HashMap;
+use futures_util::stream::StreamExt;
+
+/// Max institutions synced at once. Bounds Plaid rate-limit exposure
+/// (each institution can fan out several Plaid HTTP calls) and caps the
+/// number of DB-pool connections the concurrent batch holds at any one
+/// time. Keep modest — 5 is comfortably under typical pool sizes while
+/// still collapsing a multi-institution sync from N round-trips of
+/// latency to ~N/5.
+const SYNC_CONCURRENCY: usize = 5;
+
+/// Plain-data snapshot of one `institutions` row, read off the
+/// `sqlx::Row` BEFORE the concurrent boundary so no non-`Send`/borrowed
+/// row state is held across an `.await` inside a spawned future.
+struct InstRow {
+    id: uuid::Uuid,
+    user_id: uuid::Uuid,
+    name: String,
+    integration_type: String,
+    enc_token: Option<Vec<u8>>,
+    cursor: Option<String>,
+}
 
 /// Sync every institution in the database, regardless of owner. Used
 /// by the cron-scheduled refresh; the per-institution loop pulls
@@ -94,39 +115,91 @@ pub async fn sync_institutions(
         .await?,
     };
 
-    for row in rows {
-        let inst_id: uuid::Uuid = row.get("id");
-        let inst_user_id: uuid::Uuid = row.get("user_id");
-        let inst_name: String = row.get("name");
-        let integration_type: String = row.get("integration_type");
-        update_sync_status(db, inst_id, "syncing", None).await;
+    // Read each row into a plain `InstRow` BEFORE the concurrent
+    // boundary so the borrowed `sqlx::Row` is never held across an
+    // `.await` inside a spawned future.
+    let insts: Vec<InstRow> = rows
+        .into_iter()
+        .map(|row| InstRow {
+            id: row.get("id"),
+            user_id: row.get("user_id"),
+            name: row.get("name"),
+            integration_type: row.get("integration_type"),
+            enc_token: row.try_get("plaid_access_token_enc").unwrap_or(None),
+            cursor: row.try_get("plaid_transactions_cursor").unwrap_or(None),
+        })
+        .collect();
+
+    // Run institutions with BOUNDED concurrency. `db`/`config`/`client`
+    // are shared by reference across the futures (PgPool + reqwest::Client
+    // are Sync); they're only awaited within this scope. A single
+    // institution's failure is isolated inside `sync_one_inst` and never
+    // aborts the batch.
+    futures_util::stream::iter(
+        insts
+            .into_iter()
+            .map(|inst| sync_one_inst(db, config, &client, inst)),
+    )
+    .buffer_unordered(SYNC_CONCURRENCY)
+    .collect::<Vec<()>>()
+    .await;
+
+    run_fx_sweep(db, user_filter).await;
+
+    Ok(())
+}
+
+/// Sync a single institution. This is exactly what one iteration of the
+/// old sequential loop did, lifted into an async helper so the batch can
+/// run institutions concurrently.
+///
+/// Error isolation: the fallible work runs in an inner `async` block
+/// returning `anyhow::Result<bool>` (the bool is the old `sync_ok`). A
+/// propagated `?` error no longer aborts the whole sync — it surfaces
+/// here as `Err`, and unless a more specific status
+/// (reconnect_required / pending / setup_required / manual / …) was
+/// already stamped, we mark the institution `error`. The existing
+/// `continue`-style skips become early `return Ok(...)` from the inner
+/// block.
+async fn sync_one_inst(db: &PgPool, config: &AppConfig, client: &Client, inst: InstRow) {
+    let inst_id = inst.id;
+    let inst_user_id = inst.user_id;
+    let inst_name = inst.name.clone();
+    let integration_type = inst.integration_type.clone();
+    let enc_token = inst.enc_token.clone();
+    let initial_cursor = inst.cursor.clone();
+
+    update_sync_status(db, inst_id, "syncing", None).await;
+
+    // Inner fallible block. Returns the old `sync_ok` flag on success;
+    // any `?` here is caught below instead of aborting the batch.
+    let result: Result<bool> = async {
         let mut sync_ok = true;
 
         match integration_type.as_str() {
             "plaid" => {
-                let enc_token: Option<Vec<u8>> = row.try_get("plaid_access_token_enc").unwrap_or(None);
                 if enc_token.is_none() {
                     update_sync_status(db, inst_id, "pending", None).await;
-                    continue;
+                    return Ok(false);
                 }
 
                 let Some(enc_key) = config.encryption_key.as_ref() else {
                     update_sync_status(db, inst_id, "setup_required", Some("Encryption key missing")).await;
                     tracing::error!("Cannot sync {}: ENCRYPTION_KEY required", inst_name);
-                    continue;
+                    return Ok(false);
                 };
-                let access_token = match encryption::decrypt(enc_key, &enc_token.unwrap()) {
+                let access_token = match encryption::decrypt(enc_key, enc_token.as_ref().unwrap()) {
                     Ok(t) => t,
                     Err(e) => {
                         tracing::error!("Failed to decrypt token for {}: {}", inst_name, e);
                         update_sync_status(db, inst_id, "error", Some(&e.to_string())).await;
-                        continue;
+                        return Ok(false);
                     }
                 };
                 let (Some(client_id), Some(secret)) = (&config.plaid_client_id, &config.plaid_secret) else {
                     update_sync_status(db, inst_id, "setup_required", Some("Plaid credentials missing")).await;
                     tracing::error!("Cannot sync {}: Plaid credentials required", inst_name);
-                    continue;
+                    return Ok(false);
                 };
 
                 // 1. Fetch Accounts & Balances
@@ -143,7 +216,7 @@ pub async fn sync_institutions(
                     let error_msg = res["error_message"].as_str().unwrap_or("Unknown Plaid error");
                     update_sync_status(db, inst_id, status, Some(error_msg)).await;
                     tracing::error!("Plaid balance sync failed for {}: {:?}", inst_name, res);
-                    continue;
+                    return Ok(false);
                 }
 
                 if let Some(accounts) = res["accounts"].as_array() {
@@ -265,7 +338,7 @@ pub async fn sync_institutions(
 
                 // 2. Fetch Transactions (/transactions/sync)
                 let tx_url = format!("https://{}.plaid.com/transactions/sync", config.plaid_env);
-                let mut cursor: Option<String> = row.try_get("plaid_transactions_cursor").unwrap_or(None);
+                let mut cursor: Option<String> = initial_cursor;
                 loop {
                     let mut payload = serde_json::json!({
                         "client_id": client_id,
@@ -328,7 +401,7 @@ pub async fn sync_institutions(
                         .await?;
                 }
                 if !sync_ok {
-                    continue;
+                    return Ok(false);
                 }
 
                 // 3. Fetch Investments (/investments/holdings/get)
@@ -560,7 +633,7 @@ pub async fn sync_institutions(
             },
             "manual" | "csv" | "pdf" => {
                 update_sync_status(db, inst_id, "manual", None).await;
-                continue;
+                return Ok(false);
             },
             _ => {
                 tracing::warn!("Unknown integration type: {} for {}", integration_type, inst_name);
@@ -569,15 +642,36 @@ pub async fn sync_institutions(
             },
         }
 
-        if sync_ok {
+        Ok(sync_ok)
+    }
+    .await;
+
+    match result {
+        Ok(true) => {
             let _ = sqlx::query("UPDATE institutions SET last_synced_at = NOW(), sync_status = 'synced', last_sync_error = NULL WHERE id = $1")
                 .bind(inst_id)
                 .execute(db).await;
+            tracing::info!("Successfully synced {}", inst_name);
         }
-
-        tracing::info!("Successfully synced {}", inst_name);
+        Ok(false) => {
+            // A specific status (pending / setup_required / manual /
+            // reconnect_required / error / …) was already stamped by the
+            // inner block; nothing more to do.
+        }
+        Err(e) => {
+            // A propagated `?` (e.g. a Plaid HTTP/JSON failure or a DB
+            // error) bubbled out instead of aborting the whole batch.
+            // Mark this institution `error` unless a more specific
+            // status was already set, and never touch the others.
+            tracing::error!("Sync failed for {}: {}", inst_name, e);
+            update_sync_status(db, inst_id, "error", Some(&e.to_string())).await;
+        }
     }
+}
 
+/// Per-user FX-transfer detection sweep, run ONCE after the whole
+/// concurrent institution batch finishes (not per-institution).
+async fn run_fx_sweep(db: &PgPool, user_filter: Option<uuid::Uuid>) {
     // Per-user FX-transfer detection sweep. Runs once after every
     // institution belonging to a given user has finished syncing —
     // this is where new candidate pairs first become visible
@@ -616,8 +710,6 @@ pub async fn sync_institutions(
             Err(e) => tracing::warn!("fx_transfer_link: user {} sweep failed: {}", uid, e),
         }
     }
-
-    Ok(())
 }
 
 async fn update_sync_status(db: &PgPool, inst_id: uuid::Uuid, status: &str, error: Option<&str>) {
