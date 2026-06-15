@@ -528,12 +528,16 @@ class _NetWorthCardState extends State<NetWorthCard> {
       processPoint(data.length - 1);
     }
 
-    // Add some padding to Y axis
-    double padding = (maxY - minY) * 0.15;
-    if (padding <= 0) padding = baseValue * 0.15 + 1000;
-    minY -= padding;
-    if (minY > 0) minY = 0; // Stacked areas read best when grounded at 0
-    maxY += padding;
+    // Fit the Y axis. minY/maxY currently hold the raw data extent; the
+    // simple-vs-stacked rules live in computeNetWorthYBounds (unit-tested).
+    final (fitMinY, fitMaxY) = computeNetWorthYBounds(
+      dataMin: minY,
+      dataMax: maxY,
+      baseValue: baseValue,
+      stacked: institutions.isNotEmpty,
+    );
+    minY = fitMinY;
+    maxY = fitMaxY;
 
     // Calculate a smart Y-axis interval to avoid duplicate labels
     final yRange = maxY - minY;
@@ -1052,4 +1056,36 @@ class _DeltaChip extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Y-axis bounds (`(minY, maxY)`) for the net-worth chart. Exposed at the top
+/// level so the fit logic can be unit-tested without an fl_chart render.
+///
+/// - **Simple** (single-line) mode FITS the axis to the data range, so a short
+///   window (e.g. 1 month, where net worth moves only a few % of its total)
+///   fills the chart instead of flat-lining against a $0 baseline that spans
+///   the whole net-worth magnitude.
+/// - **Stacked** (detailed) mode grounds the floor at 0 so the band heights
+///   read honestly (the area fills paint down to the axis floor).
+/// - Neither mode opens empty negative space under an all-positive series: on
+///   a wide range (5Y) the large padding could push the fitted floor below 0,
+///   so it's clamped back to 0 when the data never goes negative.
+(double, double) computeNetWorthYBounds({
+  required double dataMin,
+  required double dataMax,
+  required double baseValue,
+  required bool stacked,
+}) {
+  double minY = dataMin;
+  double maxY = dataMax;
+  double padding = (maxY - minY) * 0.15;
+  if (padding <= 0) padding = baseValue * 0.15 + 1000;
+  minY -= padding;
+  if (stacked) {
+    if (minY > 0) minY = 0;
+  } else if (minY < 0 && dataMin >= 0) {
+    minY = 0;
+  }
+  maxY += padding;
+  return (minY, maxY);
 }
