@@ -119,6 +119,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // True while a manual "Sync all accounts" is in flight — drives the inline
   // spinner on the Settings sync button (instead of a blocking SnackBar).
   bool _isSyncing = false;
+  // Live progress for the in-flight sync: how many syncable institutions have
+  // finished vs the total. Polled from /sync-status while the batch runs so
+  // the button shows "Updating… (3 of 7)" and the SyncStatusCard live-updates.
+  int _syncDone = 0;
+  int _syncTotal = 0;
   Map<String, dynamic>? _setupStatus;
   // When every required check passes, the Launch-setup card collapses to a
   // single "Ready" summary row; this tracks whether the user has expanded it
@@ -2578,8 +2583,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // them. We keep only short (2s) completion/failure toasts, and refresh
       // the data silently when the call returns.
       if (_isSyncing) return;
-      setState(() => _isSyncing = true);
+      // Only Plaid/crypto institutions actually sync (manual/CSV/PDF are
+      // skipped server-side), so the total reflects what will really update.
+      const syncableTypes = {'plaid', 'coinbase', 'coinbase_oauth'};
+      final total = (_syncData ?? const [])
+          .where((i) =>
+              i is Map &&
+              syncableTypes.contains((i['integration_type'] ?? '').toString()))
+          .length;
+      final startedAt = DateTime.now();
+      setState(() {
+        _isSyncing = true;
+        _syncTotal = total;
+        _syncDone = 0;
+      });
       final messenger = ScaffoldMessenger.of(context);
+      // While the backend syncs institutions concurrently, poll /sync-status
+      // so the SyncStatusCard shows each account flip syncing→synced live and
+      // the button shows a "(done/total)" count. An institution counts as done
+      // once its last_synced_at advances past the moment we kicked off.
+      Timer? poll;
+      poll = Timer.periodic(const Duration(milliseconds: 1200), (_) async {
+        try {
+          final fresh = await _apiService.getSyncStatus(forceRefresh: true);
+          if (!mounted) return;
+          final done = fresh.where((i) {
+            if (i is! Map) return false;
+            final ts = DateTime.tryParse(i['last_synced_at']?.toString() ?? '');
+            return ts != null && ts.isAfter(startedAt);
+          }).length;
+          setState(() {
+            _syncData = fresh;
+            _syncDone = done;
+          });
+        } catch (_) {
+          // Transient poll failure — keep going; the awaited call below is the
+          // source of truth for completion.
+        }
+      });
       try {
         await _apiService.syncInstitutions();
         if (!mounted) return;
@@ -2596,6 +2637,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           SnackBar(content: Text(l.dashSyncFailed(e.toString()))),
         );
       } finally {
+        poll.cancel();
         if (mounted) setState(() => _isSyncing = false);
       }
       // Reload without flipping _isLoading — just refresh the data fields.
@@ -2646,7 +2688,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  l.dashSyncingAll,
+                  _syncTotal > 0
+                      ? l.dashSyncingProgress(_syncDone, _syncTotal)
+                      : l.dashSyncingAll,
                   style: TextStyle(fontSize: 12, color: context.textMuted),
                 ),
               ],
@@ -3636,7 +3680,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     )
                   : const Icon(Icons.sync),
               label: Text(
-                _isSyncing ? l.dashSyncingAll : l.dashSyncAllAccounts,
+                _isSyncing
+                    ? (_syncTotal > 0
+                        ? l.dashSyncingProgress(_syncDone, _syncTotal)
+                        : l.dashSyncingAll)
+                    : l.dashSyncAllAccounts,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),

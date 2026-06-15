@@ -622,6 +622,13 @@
   "mgmtConnectionsTitle": "Conexiones y sincronización",
   "mgmtConnectionsSubtitle": "Bancos, estado de sincronización y tipo de cambio",
   "dashSyncingAll": "Sincronizando todas las instituciones…",
+  "dashSyncingProgress": "Actualizando… ({done} de {total})",
+  "@dashSyncingProgress": {
+    "placeholders": {
+      "done": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
   "dashSyncComplete": "Sincronización completa",
   "dashSyncFailed": "Falló la sincronización: {error}",
   "dashSyncedAt": "Sincronizado {when}",

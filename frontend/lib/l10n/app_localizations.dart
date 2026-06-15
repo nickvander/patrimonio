@@ -3794,6 +3794,12 @@ abstract class AppLocalizations {
   /// **'Syncing all institutions…'**
   String get dashSyncingAll;
 
+  /// No description provided for @dashSyncingProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Updating… ({done} of {total})'**
+  String dashSyncingProgress(int done, int total);
+
   /// No description provided for @dashSyncComplete.
   ///
   /// In en, this message translates to:

@@ -2293,6 +2293,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get dashSyncingAll => 'Sincronizando todas las instituciones…';
 
   @override
+  String dashSyncingProgress(int done, int total) {
+    return 'Actualizando… ($done de $total)';
+  }
+
+  @override
   String get dashSyncComplete => 'Sincronización completa';
 
   @override

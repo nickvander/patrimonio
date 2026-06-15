@@ -718,6 +718,13 @@
   "mgmtConnectionsTitle": "Connections & sync",
   "mgmtConnectionsSubtitle": "Banks, sync status & exchange rate",
   "dashSyncingAll": "Syncing all institutions…",
+  "dashSyncingProgress": "Updating… ({done} of {total})",
+  "@dashSyncingProgress": {
+    "placeholders": {
+      "done": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
   "dashSyncComplete": "Sync complete",
   "dashSyncFailed": "Sync failed: {error}",
   "dashSyncedAt": "Synced {when}",
