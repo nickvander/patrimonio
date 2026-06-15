@@ -90,7 +90,7 @@ class _FxWidgetState extends State<FxWidget> {
                       Text(
                         '$base / $target',
                         style: TextStyle(
-                          color: Colors.grey.shade400,
+                          color: context.textMuted,
                           fontSize: 14,
                         ),
                       ),
@@ -153,7 +153,7 @@ class _FxWidgetState extends State<FxWidget> {
     if (parsed == null) {
       return Text(
         l.lwFxUpdatedUnknown,
-        style: const TextStyle(fontSize: 11, color: Colors.grey),
+        style: TextStyle(fontSize: 11, color: context.textMuted),
       );
     }
     final local = parsed.toLocal();

@@ -102,7 +102,7 @@ class SyncStatusCard extends StatelessWidget {
                     icon: const Icon(Icons.refresh, size: 16),
                     label: Text(l.lwSyncRetryFailed(failed)),
                     style: TextButton.styleFrom(
-                      foregroundColor: Colors.orangeAccent,
+                      foregroundColor: context.warning,
                     ),
                   ),
               ],
@@ -128,7 +128,7 @@ class SyncStatusCard extends StatelessWidget {
                       l.lwSyncNoInstitutionsHint,
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: Colors.grey.shade500,
+                        color: context.textMuted,
                         fontSize: 12,
                       ),
                     ),
@@ -165,36 +165,36 @@ class SyncStatusCard extends StatelessWidget {
       case 'success':
       case 'synced':
         statusIcon = Icons.check_circle;
-        statusColor = Colors.green;
+        statusColor = context.positive;
         break;
       case 'syncing':
         statusIcon = Icons.sync;
-        statusColor = Colors.lightBlueAccent;
+        statusColor = context.info;
         break;
       case 'setup_required':
         statusIcon = Icons.settings_suggest;
-        statusColor = Colors.orangeAccent;
+        statusColor = context.warning;
         break;
       case 'reconnect_required':
         statusIcon = Icons.link_off;
-        statusColor = Colors.deepOrangeAccent;
+        statusColor = context.warning;
         break;
       case 'error':
       case 'failed':
         statusIcon = Icons.error;
-        statusColor = Colors.red;
+        statusColor = context.negative;
         break;
       case 'pending':
         statusIcon = Icons.hourglass_empty;
-        statusColor = Colors.orange;
+        statusColor = context.warning;
         break;
       case 'manual':
         statusIcon = Icons.edit_note;
-        statusColor = Colors.grey;
+        statusColor = context.textMuted;
         break;
       default:
         statusIcon = Icons.help;
-        statusColor = Colors.grey;
+        statusColor = context.textMuted;
     }
 
     String lastSyncText = l.lwSyncNever;
@@ -227,7 +227,7 @@ class SyncStatusCard extends StatelessWidget {
                         _statusDetail(context, inst, status, lastSyncText),
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.grey.shade400,
+                          color: context.textMuted,
                         ),
                       ),
                       if (inst['last_sync_error'] != null)
@@ -235,9 +235,9 @@ class SyncStatusCard extends StatelessWidget {
                           padding: const EdgeInsets.only(top: 4.0),
                           child: Text(
                             inst['last_sync_error'],
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
-                              color: Colors.redAccent,
+                              color: context.negative,
                               fontStyle: FontStyle.italic,
                             ),
                           ),
@@ -247,9 +247,9 @@ class SyncStatusCard extends StatelessWidget {
                           padding: const EdgeInsets.only(top: 4.0),
                           child: Text(
                             l.lwSyncFailedUnknownReason,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
-                              color: Colors.redAccent,
+                              color: context.negative,
                               fontStyle: FontStyle.italic,
                             ),
                           ),
@@ -267,8 +267,8 @@ class SyncStatusCard extends StatelessWidget {
                 isNarrow
                     ? IconButton(
                         onPressed: () => onReconnect?.call(inst['id']),
-                        icon: const Icon(Icons.link,
-                            color: Colors.deepOrangeAccent, size: 20),
+                        icon: Icon(Icons.link,
+                            color: context.warning, size: 20),
                         tooltip: l.lwSyncReconnect,
                         padding: const EdgeInsets.all(6),
                         constraints: const BoxConstraints(),
@@ -278,7 +278,7 @@ class SyncStatusCard extends StatelessWidget {
                         icon: const Icon(Icons.link, size: 16),
                         label: Text(l.lwSyncReconnect),
                         style: TextButton.styleFrom(
-                          foregroundColor: Colors.deepOrangeAccent,
+                          foregroundColor: context.warning,
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                         ),
                       ),
@@ -288,15 +288,15 @@ class SyncStatusCard extends StatelessWidget {
                 'setup_required',
               ].contains(status))
                 IconButton(
-                  icon: const Icon(Icons.refresh, color: Colors.teal, size: 20),
+                  icon: Icon(Icons.refresh, color: context.info, size: 20),
                   onPressed: onRetrySync,
                   tooltip: l.lwSyncRetrySync,
                   padding: const EdgeInsets.all(6),
                   constraints: const BoxConstraints(),
                 ),
               IconButton(
-                icon: const Icon(Icons.delete_outline,
-                    color: Colors.redAccent, size: 20),
+                icon: Icon(Icons.delete_outline,
+                    color: context.negative, size: 20),
                 onPressed: () => onDelete?.call(inst['id']),
                 tooltip: l.lwSyncDeleteInstitution,
                 padding: const EdgeInsets.all(6),
