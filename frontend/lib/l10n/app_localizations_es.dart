@@ -2272,6 +2272,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get ovDetailsSubtitle => 'Estadísticas, meta y fondo de emergencia';
 
   @override
+  String get mgmtConnectionsTitle => 'Conexiones y sincronización';
+
+  @override
+  String get mgmtConnectionsSubtitle =>
+      'Bancos, estado de sincronización y tipo de cambio';
+
+  @override
   String get dashSyncingAll => 'Sincronizando todas las instituciones…';
 
   @override

@@ -53,11 +53,12 @@ class SyncStatusCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final failed = _failedCount;
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(pad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -219,6 +220,8 @@ class SyncStatusCard extends StatelessWidget {
                       Text(
                         inst['name'] ?? l.lwSyncUnknownInstitution,
                         style: const TextStyle(fontWeight: FontWeight.w500),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       Text(
                         _statusDetail(context, inst, status, lastSyncText),

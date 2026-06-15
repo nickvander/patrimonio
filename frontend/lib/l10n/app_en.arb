@@ -707,6 +707,8 @@
   "dashNetWorthHistory": "Net worth history",
   "ovDetailsTitle": "Details",
   "ovDetailsSubtitle": "Stats, goal & emergency fund",
+  "mgmtConnectionsTitle": "Connections & sync",
+  "mgmtConnectionsSubtitle": "Banks, sync status & exchange rate",
   "dashSyncingAll": "Syncing all institutions…",
   "dashSyncComplete": "Sync complete",
   "dashSyncFailed": "Sync failed: {error}",

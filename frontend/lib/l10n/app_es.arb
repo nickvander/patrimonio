@@ -611,6 +611,8 @@
   "dashNetWorthHistory": "Historial de patrimonio neto",
   "ovDetailsTitle": "Detalles",
   "ovDetailsSubtitle": "Estadísticas, meta y fondo de emergencia",
+  "mgmtConnectionsTitle": "Conexiones y sincronización",
+  "mgmtConnectionsSubtitle": "Bancos, estado de sincronización y tipo de cambio",
   "dashSyncingAll": "Sincronizando todas las instituciones…",
   "dashSyncComplete": "Sincronización completa",
   "dashSyncFailed": "Falló la sincronización: {error}",

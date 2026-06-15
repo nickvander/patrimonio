@@ -32,11 +32,12 @@ class _FxWidgetState extends State<FxWidget> {
         (latestRate['target'] ?? latestRate['target_currency'] ?? 'MXN')
             .toString();
 
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(pad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -46,7 +47,7 @@ class _FxWidgetState extends State<FxWidget> {
                 Text(
                   l.lwFxExchangeRate,
                   style: const TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.bold),
+                      fontSize: 16, fontWeight: FontWeight.w700),
                 ),
                 if (widget.onRefresh != null)
                   IconButton(

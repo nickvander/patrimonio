@@ -3770,6 +3770,18 @@ abstract class AppLocalizations {
   /// **'Stats, goal & emergency fund'**
   String get ovDetailsSubtitle;
 
+  /// No description provided for @mgmtConnectionsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Connections & sync'**
+  String get mgmtConnectionsTitle;
+
+  /// No description provided for @mgmtConnectionsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Banks, sync status & exchange rate'**
+  String get mgmtConnectionsSubtitle;
+
   /// No description provided for @dashSyncingAll.
   ///
   /// In en, this message translates to:

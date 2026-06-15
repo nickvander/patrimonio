@@ -2247,6 +2247,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ovDetailsSubtitle => 'Stats, goal & emergency fund';
 
   @override
+  String get mgmtConnectionsTitle => 'Connections & sync';
+
+  @override
+  String get mgmtConnectionsSubtitle => 'Banks, sync status & exchange rate';
+
+  @override
   String get dashSyncingAll => 'Syncing all institutions…';
 
   @override

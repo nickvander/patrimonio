@@ -141,6 +141,14 @@ class Preferences {
   static void setOverviewDetailsExpanded(bool v) =>
       _write('overviewDetailsExpanded', v.toString());
 
+  /// Whether the mobile Settings "Connections & sync" disclosure (sync-all
+  /// button, sync-status card, FX rate, modules) is expanded. Default
+  /// collapsed so the phone Settings view stays focused on data sources.
+  static bool getManagementDetailsExpanded() =>
+      _read('managementDetailsExpanded') == 'true';
+  static void setManagementDetailsExpanded(bool v) =>
+      _write('managementDetailsExpanded', v.toString());
+
   /// Per-category monthly budgets, stored as a JSON object on the wire:
   /// {"Restaurants": 500.0, "Groceries": 800.0, ...}. Values are in USD
   /// (the backend storage unit); the UI converts for display.

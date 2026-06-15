@@ -154,6 +154,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // emergency fund) is expanded. Collapsed by default for a calm Glance view;
   // remembered across visits via Preferences.
   bool _overviewDetailsExpanded = false;
+  // Whether the mobile Settings "Connections & sync" disclosure (sync-all,
+  // sync-status, FX, modules) is expanded. Collapsed by default so the phone
+  // Settings view leads with data sources; remembered across visits.
+  bool _managementDetailsExpanded = false;
   // Configurable reminder lead time (days before due). Server-stored
   // (app_settings 'lending_reminder_lead_days'), surfaced in the
   // Management-tab Modules card.
@@ -232,6 +236,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _hydrateAccountAlerts();
     _dismissedNotifs = Preferences.getDismissedNotifications();
     _overviewDetailsExpanded = Preferences.getOverviewDetailsExpanded();
+    _managementDetailsExpanded = Preferences.getManagementDetailsExpanded();
     _loadAllData();
     _checkRedirectStatus();
     _resumePlaidOAuthIfNeeded();
@@ -866,6 +871,69 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
         if (_overviewDetailsExpanded) ...[
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ],
+    );
+  }
+
+  /// Mobile "Connections & sync" disclosure — a tappable header that reveals
+  /// the secondary Settings controls ([children]: sync-all button, sync-status
+  /// card, FX rate, modules). Collapsed by default so the phone Settings view
+  /// leads with the data-source actions; expand-state persists.
+  Widget _buildManagementDetails(List<Widget> children) {
+    final l = AppLocalizations.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () {
+              setState(() =>
+                  _managementDetailsExpanded = !_managementDetailsExpanded);
+              Preferences.setManagementDetailsExpanded(
+                  _managementDetailsExpanded);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              child: Row(
+                children: [
+                  Icon(Icons.tune, color: context.tealAccent, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l.mgmtConnectionsTitle,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: context.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          l.mgmtConnectionsSubtitle,
+                          style:
+                              TextStyle(fontSize: 11, color: context.textMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    _managementDetailsExpanded
+                        ? Icons.expand_less
+                        : Icons.expand_more,
+                    color: context.textMuted,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (_managementDetailsExpanded) ...[
           const SizedBox(height: 12),
           ...children,
         ],
@@ -2630,6 +2698,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     Widget buildSetupStatusCard() {
+      final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
       final checks = (_setupStatus?['checks'] as List?) ?? [];
       final blocking = checks
           .where(
@@ -2681,7 +2750,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(pad),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -3358,6 +3427,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       scrollable: false,
     );
 
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+    final isPhone = MediaQuery.sizeOf(context).width < 720;
     final managementTab = buildTabContainer(
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3373,7 +3444,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // are split into labelled sub-groups.
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(pad),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -3536,7 +3607,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 24),
+          // Secondary Settings controls (sync-all, sync-status, FX, modules).
+          // On phones these fold behind a "Connections & sync" disclosure so
+          // the default view leads with the add-account actions; on wide
+          // screens they stay inline exactly as before. The setup-status card
+          // stays an always-visible sibling below either way.
+          ...(() {
+            final List<Widget> secondaryControls = <Widget>[
           // "Sync all" acts on already-connected accounts, so it sits with
           // the sync-status / FX monitoring row rather than the add-account
           // actions. Inline spinner instead of a blocking SnackBar.
@@ -3673,9 +3750,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             );
           }),
-          const SizedBox(height: 24),
+          SizedBox(height: gap),
           _buildModulesCard(),
-          const SizedBox(height: 24),
+            ];
+            if (isPhone) {
+              return [
+                SizedBox(height: gap),
+                _buildManagementDetails(secondaryControls),
+              ];
+            }
+            return [
+              const SizedBox(height: 24),
+              ...secondaryControls,
+            ];
+          }()),
+          SizedBox(height: gap),
           // Deployment diagnostics sit last — they collapse to a single
           // "Ready" row once required checks pass, so they no longer crowd
           // the top of the tab.
