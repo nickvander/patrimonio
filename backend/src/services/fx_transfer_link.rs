@@ -264,9 +264,13 @@ pub async fn detect_for_user(db: &PgPool, user_id: uuid::Uuid) -> Result<(usize,
             if confidence < 50 {
                 continue;
             }
-            // Keyword-less pairs must clear the strict bar.
+            // Keyword-less pairs are the false-positive risk: without a
+            // remittance keyword we require a shared counterparty identity
+            // (plus the strict window/rate band), so a coincidental
+            // same-week, near-market-rate outflow/inflow with unrelated
+            // counterparties no longer auto-links.
             if matched_keyword.is_none()
-                && (gap_days > STRICT_WINDOW_DAYS || rate_deviation > STRICT_TOLERANCE_PCT)
+                && !keywordless_pair_allowed(has_identity, gap_days, rate_deviation)
             {
                 continue;
             }
@@ -447,6 +451,19 @@ fn score_match(rate_deviation: f64, gap_days: i64, has_keyword: bool, has_identi
     score.min(95)
 }
 
+/// Whether a KEYWORD-LESS candidate pair is trustworthy enough to auto-link.
+///
+/// Pure amount/date/rate coincidence is not enough: an opposite-currency
+/// outflow and inflow that merely land in the same week at a near-market rate
+/// (e.g. a doctor's-office card payment vs an unrelated peso deposit) used to
+/// auto-link. Without a remittance keyword we additionally require a SHARED
+/// COUNTERPARTY IDENTITY (the same person/entity named on both legs), inside
+/// the strict window and rate band. A keyword (WISE, REMITLY, …) bypasses this
+/// gate entirely in the caller.
+fn keywordless_pair_allowed(has_identity: bool, gap_days: i64, rate_deviation: f64) -> bool {
+    has_identity && gap_days <= STRICT_WINDOW_DAYS && rate_deviation <= STRICT_TOLERANCE_PCT
+}
+
 /// Generic tokens that carry no identity — payment mechanisms, legal
 /// suffixes, and filler that would otherwise cause unrelated transfers to
 /// "share" an identity. Compared upper-cased.
@@ -525,6 +542,20 @@ mod tests {
         // 100% of the tolerance band consumed → 0 rate pts.
         let score = score_match(RATE_TOLERANCE_PCT, 0, false, false);
         assert!(score < 50, "loose match should score below threshold, got {score}");
+    }
+
+    #[test]
+    fn keywordless_pair_needs_identity_inside_strict_band() {
+        // Tight rate, same day, shared identity → allowed.
+        assert!(keywordless_pair_allowed(true, 1, 0.01));
+        // Tight + same day but NO shared identity → rejected. This is the
+        // coincidence false-positive (e.g. "Consultorio Andrea" card payment
+        // vs an unrelated peso deposit) the user hit.
+        assert!(!keywordless_pair_allowed(false, 1, 0.01));
+        // Shared identity but outside the strict window → rejected.
+        assert!(!keywordless_pair_allowed(true, 5, 0.01));
+        // Shared identity but rate too far off the day's reference → rejected.
+        assert!(!keywordless_pair_allowed(true, 1, 0.08));
     }
 
     #[test]
