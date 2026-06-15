@@ -2621,6 +2621,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'When you stop contributing and start withdrawing — also sets the Coast FIRE target.';
 
   @override
+  String get projAdvancedAssumptions => 'Advanced assumptions';
+
+  @override
   String get projGlossaryTitle => 'What do these terms mean?';
 
   @override

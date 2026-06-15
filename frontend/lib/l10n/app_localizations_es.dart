@@ -2647,6 +2647,9 @@ class AppLocalizationsEs extends AppLocalizations {
       'Cuándo dejas de aportar y empiezas a retirar — también define el objetivo de Coast FIRE.';
 
   @override
+  String get projAdvancedAssumptions => 'Supuestos avanzados';
+
+  @override
   String get projGlossaryTitle => '¿Qué significan estos términos?';
 
   @override

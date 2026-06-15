@@ -66,6 +66,11 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   // explain it on demand without permanently cluttering the screen.
   bool _showGlossary = false;
 
+  // Phones only: the advanced assumptions (inflation, volatility, expenses,
+  // SWR, barista income, tax drag, guardrails, projection years, goal) collapse
+  // behind a disclosure so the controls card opens on the 3 primary sliders.
+  bool _advancedExpanded = false;
+
   // Which FIRE flavor the headline + chart target line emphasize. Defaults to
   // Full FIRE (the canonical "your number"); Coast / Barista are there to
   // explore, answering "why Coast?" by making it one option among peers.
@@ -189,6 +194,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     return LayoutBuilder(builder: (context, constraints) {
       final isNarrow = constraints.maxWidth < 800;
       if (isNarrow) {
+        final isPhone = constraints.maxWidth < 720;
         return SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -199,11 +205,16 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               const SizedBox(height: 24),
               _buildControls(scrollable: false),
               const SizedBox(height: 24),
-              SizedBox(height: 320, child: _buildChartCard()),
+              SizedBox(
+                  height: isPhone ? 240 : 320, child: _buildChartCard()),
               const SizedBox(height: 16),
               _buildFireStatusStrip(),
               const SizedBox(height: 16),
-              SizedBox(height: 140, child: _buildMilestonesRow()),
+              // On phones the 4-up milestone row clips currency values, so it
+              // lays out as a 2×2 grid (handled inside _buildMilestonesRow).
+              isPhone
+                  ? _buildMilestonesRow()
+                  : SizedBox(height: 140, child: _buildMilestonesRow()),
             ],
           ),
         );
@@ -370,138 +381,197 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
 
   Widget _buildControls({bool scrollable = true}) {
     final l = AppLocalizations.of(context);
+    final isPhone = MediaQuery.sizeOf(context).width < 720;
+    final pad = isPhone ? 16.0 : 24.0;
+    final divH = isPhone ? 20.0 : 32.0;
+    Widget div() => Divider(height: divH, color: context.hairline);
+
+    // The 3 primary sliders stay visible at all widths.
+    final primary = <Widget>[
+      _buildSliderControl(
+        label: l.projMonthlySavings,
+        value: _monthlyContribution,
+        min: 0,
+        max: 10000,
+        isCurrency: true,
+        hint: _prefilledFromData ? l.projFromYourData : null,
+        onChanged: (val) => setState(() => _monthlyContribution = val),
+        onChangeEnd: (_) => _fetchProjection(),
+      ),
+      div(),
+      _buildSliderControl(
+        label: l.projExpectedReturnNominal,
+        value: _annualReturnRate,
+        min: 0,
+        max: 0.15,
+        isPercent: true,
+        help: l.projHelpExpectedReturn,
+        onChanged: (val) => setState(() => _annualReturnRate = val),
+        onChangeEnd: (_) => _fetchProjection(),
+      ),
+      div(),
+      _buildSliderControl(
+        label: l.projYearsToRetirement,
+        value: _yearsToRetirement.toDouble().clamp(
+              0,
+              _projectionYears.toDouble(),
+            ),
+        min: 0,
+        max: _projectionYears.toDouble(),
+        divisions: _projectionYears,
+        help: l.projHelpYearsToRetirement,
+        onChanged: (val) => setState(() => _yearsToRetirement = val.toInt()),
+        onChangeEnd: (_) => _fetchProjection(),
+      ),
+    ];
+
+    // Everything else — collapsed behind a disclosure on phones, inline on wide.
+    final advanced = <Widget>[
+      _buildSliderControl(
+        label: l.projInflation,
+        value: _annualInflation,
+        min: 0,
+        max: 0.06,
+        isPercent: true,
+        help: l.projHelpInflation,
+        onChanged: (val) => setState(() => _annualInflation = val),
+        onChangeEnd: (_) => _fetchProjection(),
+      ),
+      div(),
+      _buildSliderControl(
+        label: l.projVolatility,
+        value: _returnVolatility,
+        min: 0,
+        max: 0.25,
+        isPercent: true,
+        help: l.projHelpVolatility,
+        onChanged: (val) => setState(() => _returnVolatility = val),
+        onChangeEnd: (_) => _fetchProjection(),
+      ),
+      div(),
+      _buildSliderControl(
+        label: l.projAnnualExpenses,
+        value: _annualExpenses,
+        min: 10000,
+        max: _expensesMax,
+        isCurrency: true,
+        help: l.projHelpAnnualExpenses,
+        hint: _prefilledFromData ? l.projFromYourData : null,
+        onChanged: (val) => setState(() => _annualExpenses = val),
+        onChangeEnd: (_) => _fetchProjection(),
+      ),
+      div(),
+      _buildSliderControl(
+        label: l.projSafeWithdrawalRate,
+        value: _withdrawalRate,
+        min: 0.02,
+        max: 0.06,
+        isPercent: true,
+        help: l.projHelpSwr,
+        onChanged: (val) => setState(() => _withdrawalRate = val),
+        onChangeEnd: (_) => _fetchProjection(),
+      ),
+      div(),
+      _buildSliderControl(
+        label: l.projBaristaIncome,
+        value: _baristaMonthlyIncome,
+        min: 0,
+        max: 10000,
+        isCurrency: true,
+        help: l.projHelpBaristaIncome,
+        onChanged: (val) => setState(() => _baristaMonthlyIncome = val),
+        onChangeEnd: (_) => _fetchProjection(),
+      ),
+      div(),
+      _buildSliderControl(
+        label: l.projTaxDrag,
+        value: _annualTaxDrag,
+        min: 0,
+        max: 0.03,
+        isPercent: true,
+        help: l.projHelpTaxDrag,
+        onChanged: (val) => setState(() => _annualTaxDrag = val),
+        onChangeEnd: (_) => _fetchProjection(),
+      ),
+      div(),
+      _buildGuardrailsToggle(),
+      div(),
+      _buildSliderControl(
+        label: l.projProjectionYears,
+        value: _projectionYears.toDouble(),
+        min: 5,
+        max: 50,
+        divisions: 9,
+        onChanged: (val) => setState(() {
+          _projectionYears = val.toInt();
+          if (_yearsToRetirement > _projectionYears) {
+            _yearsToRetirement = _projectionYears;
+          }
+        }),
+        onChangeEnd: (_) => _fetchProjection(),
+      ),
+      div(),
+      _buildGoalEditor(),
+    ];
+
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSliderControl(
-          label: l.projMonthlySavings,
-          value: _monthlyContribution,
-          min: 0,
-          max: 10000,
-          isCurrency: true,
-          hint: _prefilledFromData ? l.projFromYourData : null,
-          onChanged: (val) => setState(() => _monthlyContribution = val),
-          onChangeEnd: (_) => _fetchProjection(),
-        ),
-        Divider(height: 32, color: context.hairline),
-        _buildSliderControl(
-          label: l.projExpectedReturnNominal,
-          value: _annualReturnRate,
-          min: 0,
-          max: 0.15,
-          isPercent: true,
-          help: l.projHelpExpectedReturn,
-          onChanged: (val) => setState(() => _annualReturnRate = val),
-          onChangeEnd: (_) => _fetchProjection(),
-        ),
-        Divider(height: 32, color: context.hairline),
-        _buildSliderControl(
-          label: l.projInflation,
-          value: _annualInflation,
-          min: 0,
-          max: 0.06,
-          isPercent: true,
-          help: l.projHelpInflation,
-          onChanged: (val) => setState(() => _annualInflation = val),
-          onChangeEnd: (_) => _fetchProjection(),
-        ),
-        Divider(height: 32, color: context.hairline),
-        _buildSliderControl(
-          label: l.projVolatility,
-          value: _returnVolatility,
-          min: 0,
-          max: 0.25,
-          isPercent: true,
-          help: l.projHelpVolatility,
-          onChanged: (val) => setState(() => _returnVolatility = val),
-          onChangeEnd: (_) => _fetchProjection(),
-        ),
-        Divider(height: 32, color: context.hairline),
-        _buildSliderControl(
-          label: l.projAnnualExpenses,
-          value: _annualExpenses,
-          min: 10000,
-          max: _expensesMax,
-          isCurrency: true,
-          help: l.projHelpAnnualExpenses,
-          hint: _prefilledFromData ? l.projFromYourData : null,
-          onChanged: (val) => setState(() => _annualExpenses = val),
-          onChangeEnd: (_) => _fetchProjection(),
-        ),
-        Divider(height: 32, color: context.hairline),
-        _buildSliderControl(
-          label: l.projSafeWithdrawalRate,
-          value: _withdrawalRate,
-          min: 0.02,
-          max: 0.06,
-          isPercent: true,
-          help: l.projHelpSwr,
-          onChanged: (val) => setState(() => _withdrawalRate = val),
-          onChangeEnd: (_) => _fetchProjection(),
-        ),
-        Divider(height: 32, color: context.hairline),
-        _buildSliderControl(
-          label: l.projBaristaIncome,
-          value: _baristaMonthlyIncome,
-          min: 0,
-          max: 10000,
-          isCurrency: true,
-          help: l.projHelpBaristaIncome,
-          onChanged: (val) => setState(() => _baristaMonthlyIncome = val),
-          onChangeEnd: (_) => _fetchProjection(),
-        ),
-        Divider(height: 32, color: context.hairline),
-        _buildSliderControl(
-          label: l.projTaxDrag,
-          value: _annualTaxDrag,
-          min: 0,
-          max: 0.03,
-          isPercent: true,
-          help: l.projHelpTaxDrag,
-          onChanged: (val) => setState(() => _annualTaxDrag = val),
-          onChangeEnd: (_) => _fetchProjection(),
-        ),
-        Divider(height: 32, color: context.hairline),
-        _buildGuardrailsToggle(),
-        Divider(height: 32, color: context.hairline),
-        _buildSliderControl(
-          label: l.projYearsToRetirement,
-          value: _yearsToRetirement.toDouble().clamp(
-                0,
-                _projectionYears.toDouble(),
-              ),
-          min: 0,
-          max: _projectionYears.toDouble(),
-          divisions: _projectionYears,
-          help: l.projHelpYearsToRetirement,
-          onChanged: (val) => setState(() => _yearsToRetirement = val.toInt()),
-          onChangeEnd: (_) => _fetchProjection(),
-        ),
-        Divider(height: 32, color: context.hairline),
-        _buildSliderControl(
-          label: l.projProjectionYears,
-          value: _projectionYears.toDouble(),
-          min: 5,
-          max: 50,
-          divisions: 9,
-          onChanged: (val) => setState(() {
-            _projectionYears = val.toInt();
-            if (_yearsToRetirement > _projectionYears) {
-              _yearsToRetirement = _projectionYears;
-            }
-          }),
-          onChangeEnd: (_) => _fetchProjection(),
-        ),
-        Divider(height: 32, color: context.hairline),
-        _buildGoalEditor(),
+        ...primary,
+        if (isPhone) ...[
+          div(),
+          _buildAdvancedDisclosure(l, advanced),
+        ] else ...[
+          div(),
+          ...advanced,
+        ],
       ],
     );
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: EdgeInsets.all(pad),
         child: scrollable ? SingleChildScrollView(child: body) : body,
       ),
+    );
+  }
+
+  // Phone-only disclosure header that reveals the advanced assumption sliders.
+  Widget _buildAdvancedDisclosure(AppLocalizations l, List<Widget> advanced) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _advancedExpanded = !_advancedExpanded),
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Icon(Icons.tune, color: context.tealAccent, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    l.projAdvancedAssumptions,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: context.textPrimary,
+                    ),
+                  ),
+                ),
+                Icon(
+                  _advancedExpanded ? Icons.expand_less : Icons.expand_more,
+                  color: context.textMuted,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_advancedExpanded) ...[
+          const SizedBox(height: 8),
+          ...advanced,
+        ],
+      ],
     );
   }
 
@@ -754,10 +824,11 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
 
   Widget _buildChartCard() {
     final l = AppLocalizations.of(context);
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(pad),
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : Column(
@@ -1281,46 +1352,78 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     final mc = _projectionData!['monte_carlo'] as Map<String, dynamic>?;
     final successRate = (mc?['success_rate'] as num?)?.toDouble() ?? 0.0;
 
+    final cards = <Widget>[
+      _buildMilestoneCard(
+        title: l.projSuccessRate,
+        value: '${(successRate * 100).toStringAsFixed(0)}%',
+        subtitle: l.projSuccessRateSub,
+        icon: Icons.verified_rounded,
+        color: _successColor(successRate),
+      ),
+      _buildMilestoneCard(
+        title: l.projFiNumber,
+        value: widget.currencyFormat.format(
+          (metrics['fi_number'] as num).toDouble() * widget.conversionFactor,
+        ),
+        subtitle: l.projTargetNetWorth,
+        icon: Icons.flag_rounded,
+        color: context.warning,
+      ),
+      _buildMilestoneCard(
+        title: l.projYearsToFi,
+        value: metrics['estimated_years_to_fi'] != null
+            ? (metrics['estimated_years_to_fi'] as num).toStringAsFixed(1)
+            : '∞',
+        subtitle: l.projEstimate,
+        icon: Icons.speed_rounded,
+        color: context.info,
+      ),
+      _buildMilestoneCard(
+        title: l.projFiIncome,
+        value: widget.currencyFormat.format(
+          (metrics['monthly_income_at_retirement'] as num).toDouble() *
+              widget.conversionFactor,
+        ),
+        subtitle: l.projMonthlyAtWithdrawalRate,
+        icon: Icons.account_balance_wallet_rounded,
+        color: context.purpleAccent,
+      ),
+    ];
+
+    // Phones clip currency values in a 4-up row, so stack into two rows of two.
+    if (MediaQuery.sizeOf(context).width < 720) {
+      return Column(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              cards[0],
+              const SizedBox(width: 16),
+              cards[1],
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              cards[2],
+              const SizedBox(width: 16),
+              cards[3],
+            ],
+          ),
+        ],
+      );
+    }
+
     return Row(
       children: [
-        _buildMilestoneCard(
-          title: l.projSuccessRate,
-          value: '${(successRate * 100).toStringAsFixed(0)}%',
-          subtitle: l.projSuccessRateSub,
-          icon: Icons.verified_rounded,
-          color: _successColor(successRate),
-        ),
+        cards[0],
         const SizedBox(width: 16),
-        _buildMilestoneCard(
-          title: l.projFiNumber,
-          value: widget.currencyFormat.format(
-            (metrics['fi_number'] as num).toDouble() * widget.conversionFactor,
-          ),
-          subtitle: l.projTargetNetWorth,
-          icon: Icons.flag_rounded,
-          color: context.warning,
-        ),
+        cards[1],
         const SizedBox(width: 16),
-        _buildMilestoneCard(
-          title: l.projYearsToFi,
-          value: metrics['estimated_years_to_fi'] != null
-              ? (metrics['estimated_years_to_fi'] as num).toStringAsFixed(1)
-              : '∞',
-          subtitle: l.projEstimate,
-          icon: Icons.speed_rounded,
-          color: context.info,
-        ),
+        cards[2],
         const SizedBox(width: 16),
-        _buildMilestoneCard(
-          title: l.projFiIncome,
-          value: widget.currencyFormat.format(
-            (metrics['monthly_income_at_retirement'] as num).toDouble() *
-                widget.conversionFactor,
-          ),
-          subtitle: l.projMonthlyAtWithdrawalRate,
-          icon: Icons.account_balance_wallet_rounded,
-          color: context.purpleAccent,
-        ),
+        cards[3],
       ],
     );
   }
@@ -1332,15 +1435,17 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     required IconData icon,
     required Color color,
   }) {
+    final isPhone = MediaQuery.sizeOf(context).width < 720;
+    final pad = isPhone ? 16.0 : 20.0;
     return Expanded(
       child: Card(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
-          padding: const EdgeInsets.all(20.0),
+          padding: EdgeInsets.all(pad),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: color, size: 32),
+              Icon(icon, color: color, size: isPhone ? 28 : 32),
               const SizedBox(height: 12),
               Text(
                 title,

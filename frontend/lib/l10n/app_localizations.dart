@@ -4412,6 +4412,12 @@ abstract class AppLocalizations {
   /// **'When you stop contributing and start withdrawing — also sets the Coast FIRE target.'**
   String get projHelpYearsToRetirement;
 
+  /// No description provided for @projAdvancedAssumptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced assumptions'**
+  String get projAdvancedAssumptions;
+
   /// No description provided for @projGlossaryTitle.
   ///
   /// In en, this message translates to:

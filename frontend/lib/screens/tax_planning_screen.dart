@@ -287,7 +287,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final stackControls = width < 720;
-        final stackKpis = width < 520;
+        final stackKpis = width < 600;
 
         // Refetching keeps content mounted but dimmed + non-interactive,
         // so year/status switches don't flash the whole page to a spinner.
@@ -342,12 +342,15 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     final holdingsWithoutBasis =
         (summary['holdings_without_basis'] as num?)?.toInt() ?? 0;
 
+    final isPhone = MediaQuery.sizeOf(context).width < 720;
+    final gap = isPhone ? 16.0 : 24.0;
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildHeader(l, stackControls),
-          const SizedBox(height: 24),
+          SizedBox(height: gap),
           _buildKpiRow(
             l,
             stackKpis: stackKpis,
@@ -378,16 +381,35 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
             bracketYearUsed: bracketYearUsed,
             holdingsWithoutBasis: holdingsWithoutBasis,
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: gap),
+          // Realized gains + KPIs are the headline — always visible. On phones
+          // the secondary sections collapse behind tappable headers to cut the
+          // page length; on wide screens everything stays inline.
           _buildRealizedGainsSection(l),
-          const SizedBox(height: 24),
-          _buildUnrealizedSection(l),
-          const SizedBox(height: 24),
-          _buildFbarSection(l),
-          const SizedBox(height: 24),
-          _buildRetirementSection(l),
-          const SizedBox(height: 24),
-          _buildIncomeSection(l),
+          SizedBox(height: gap),
+          _maybeCollapse(
+            isPhone,
+            l.taxUnrealizedTitle,
+            () => _buildUnrealizedSection(l, header: false),
+          ),
+          SizedBox(height: gap),
+          _maybeCollapse(
+            isPhone,
+            l.taxFbarTitle,
+            () => _buildFbarSection(l, header: false),
+          ),
+          SizedBox(height: gap),
+          _maybeCollapse(
+            isPhone,
+            l.taxRetirementTitle,
+            () => _buildRetirementSection(l, header: false),
+          ),
+          SizedBox(height: gap),
+          _maybeCollapse(
+            isPhone,
+            l.taxIncomeSectionTitle,
+            () => _buildIncomeSection(l, header: false),
+          ),
           const SizedBox(height: 12),
           Text(
             l.taxDisclaimer(bracketYearUsed.toString()),
@@ -718,9 +740,10 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     Color? valueColor,
     required Widget child,
   }) {
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(pad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1082,7 +1105,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   // T11 — Unrealized "what if I sell" + harvest candidates
   // ---------------------------------------------------------------------------
 
-  Widget _buildUnrealizedSection(AppLocalizations l) {
+  Widget _buildUnrealizedSection(AppLocalizations l, {bool header = true}) {
     final data = _unrealized ?? const {};
     final lots = (data['lots'] as List<dynamic>?) ?? const [];
     final buckets = bucketUnrealizedLots(lots);
@@ -1094,8 +1117,10 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle(l.taxUnrealizedTitle),
-        const SizedBox(height: 12),
+        if (header) ...[
+          _sectionTitle(l.taxUnrealizedTitle),
+          const SizedBox(height: 12),
+        ],
         if (lots.isEmpty)
           _emptyCard(l.taxNoUnrealizedLots, Icons.inventory_2_outlined)
         else ...[
@@ -1446,7 +1471,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   // T13 — FBAR / foreign-account threshold monitor (informational)
   // ---------------------------------------------------------------------------
 
-  Widget _buildFbarSection(AppLocalizations l) {
+  Widget _buildFbarSection(AppLocalizations l, {bool header = true}) {
     final data = _fbar ?? const {};
     final peak = (data['peak_aggregate_usd'] as num?)?.toDouble() ?? 0;
     final threshold = (data['threshold_usd'] as num?)?.toDouble() ?? 0;
@@ -1460,14 +1485,17 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle(l.taxFbarTitle),
-        const SizedBox(height: 12),
+        if (header) ...[
+          _sectionTitle(l.taxFbarTitle),
+          const SizedBox(height: 12),
+        ],
         Card(
           elevation: 4,
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16)),
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.all(
+                MediaQuery.sizeOf(context).width < 720 ? 16.0 : 20.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1655,7 +1683,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   // T15 — Retirement contributions vs limits
   // ---------------------------------------------------------------------------
 
-  Widget _buildRetirementSection(AppLocalizations l) {
+  Widget _buildRetirementSection(AppLocalizations l, {bool header = true}) {
     final data = _contributions ?? const {};
     final groups = (data['groups'] as List<dynamic>?) ?? const [];
     final unverified = data['constants_verified'] == false;
@@ -1663,8 +1691,10 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle(l.taxRetirementTitle),
-        const SizedBox(height: 12),
+        if (header) ...[
+          _sectionTitle(l.taxRetirementTitle),
+          const SizedBox(height: 12),
+        ],
         if (groups.isEmpty)
           _emptyCard(l.taxNoRetirementAccounts, Icons.savings_outlined)
         else
@@ -1840,15 +1870,17 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   // reconciling subtotal.
   // ---------------------------------------------------------------------------
 
-  Widget _buildIncomeSection(AppLocalizations l) {
+  Widget _buildIncomeSection(AppLocalizations l, {bool header = true}) {
     final txns = _taxTransactions ?? const [];
     final subtotalUsd = sumIncomeUsd(txns);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle(l.taxIncomeSectionTitle),
-        const SizedBox(height: 12),
+        if (header) ...[
+          _sectionTitle(l.taxIncomeSectionTitle),
+          const SizedBox(height: 12),
+        ],
         if (txns.isEmpty)
           _emptyIncomeCard(l)
         else
@@ -1994,6 +2026,38 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
       );
 
+  /// On phones (`collapse` true) wrap a secondary section behind a tappable,
+  /// collapsed-by-default header — reusing the styled `ExpansionTile` look from
+  /// `_buildAssumptions`. On wide screens the section renders inline with its
+  /// own title. `body` is lazy so a collapsed section isn't built until opened.
+  Widget _maybeCollapse(bool collapse, String title, Widget Function() body) {
+    if (!collapse) return body();
+    return Card(
+      color: context.tileSurface,
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Theme(
+        // Strip the default ExpansionTile divider lines for a calmer card.
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          leading: Icon(Icons.insights_rounded,
+              size: 18, color: context.tealAccent),
+          title: Text(
+            title,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: context.textPrimary,
+            ),
+          ),
+          children: [body()],
+        ),
+      ),
+    );
+  }
+
   Widget _subtotalRow(String text, String reconcileNote, Color color) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -2074,9 +2138,10 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   }
 
   Widget _emptyCard(String text, IconData icon) {
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(pad),
         child: Center(
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -2142,7 +2207,7 @@ class _TaxSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, c) {
-        final stackKpis = c.maxWidth < 520;
+        final stackKpis = c.maxWidth < 600;
         final kpi = stackKpis
             ? Column(
                 children: const [
