@@ -50,3 +50,6 @@ redisdata/
 # Local-only Fidelity NetBenefits samples (PII) — never commit
 /work/netbenefits/*.txt
 /work/netbenefits/*.pdf
+
+# Real bank statements — never commit (PII/financial)
+work/revolut-samples/

@@ -374,3 +374,124 @@ fn garbled_extraction_detected_for_ocr() {
     // Genuinely sparse text falls to the length-based OCR trigger, not here.
     assert!(!super::looks_garbled("HSBC"));
 }
+
+// ───────────────────────── Revolut (MX) ─────────────────────────
+// Two layouts; fixtures mirror the real `pdftotext -layout` output (the
+// savings layout splits each record across three physical lines). Sign is
+// derived from the running-balance delta, so it survives the two layouts'
+// opposite Money in / Money out column order.
+
+#[test]
+fn revolut_savings_layout() {
+    // Daily "Net interest paid" credits + a "Deposit" row; the date renders
+    // split (`May 1,` … `2026`) with the amounts on the middle line.
+    let text = "\
+                                        Instant Access Savings
+                                            Generated on May 31, 2026
+                                            Period: May 1, 2026 – May 31, 2026
+
+Balance summary
+ Opening Balance                                  $17,186.79
+ Closing Balance                                  $18,200.28
+
+Transactions from May 1, 2026 to May 31, 2026
+ Date          Description              Gross interest rate earned   Money in   Money out   Balance
+
+ May 1,        Net interest paid to \"Instant Access Savings\" for
+                                        15.00%                       $6.74                  $17,193.53
+ 2026          May 1, 2026
+
+ May 2,        Net interest paid to \"Instant Access Savings\" for
+                                        15.00%                       $6.75                  $17,200.28
+ 2026          May 2, 2026
+
+ May 3,
+               Deposit to \"Instant Access Savings\"                 $1,000.00              $18,200.28
+ 2026
+
+Interest
+";
+    let rows = revolut::parse_text(text).unwrap();
+    assert_eq!(rows.len(), 3);
+
+    assert_eq!(rows[0].date, NaiveDate::from_ymd_opt(2026, 5, 1).unwrap());
+    assert_eq!(rows[0].amount, Decimal::from_str("6.74").unwrap()); // 17193.53 - 17186.79
+    assert_eq!(rows[0].balance_after, Some(Decimal::from_str("17193.53").unwrap()));
+    assert_eq!(rows[0].currency, "MXN");
+    assert_eq!(rows[0].category.as_deref(), Some("INCOME"));
+    assert_eq!(rows[0].category_detailed.as_deref(), Some("INCOME_INTEREST_EARNED"));
+    assert_eq!(rows[0].account_label, None);
+
+    assert_eq!(rows[1].amount, Decimal::from_str("6.75").unwrap());
+
+    // The deposit is an inflow (balance jumped 17200.28 → 18200.28).
+    assert_eq!(rows[2].date, NaiveDate::from_ymd_opt(2026, 5, 3).unwrap());
+    assert_eq!(rows[2].amount, Decimal::from_str("1000.00").unwrap());
+    assert_eq!(rows[2].category.as_deref(), Some("TRANSFER_IN"));
+}
+
+#[test]
+fn revolut_personal_layout() {
+    // Personal "<CCY> Statement": two labelled sections, opposite column order
+    // (Money out | Money in | Balance), per-section opening seeds.
+    let text = "\
+                          MXN Statement
+                                From April 1, 2026 to April 30, 2026
+
+NICK VAN DER
+29 C SERVIA                                  Account Number 8238777
+45167                                        CLABE for SPEI 6469 9040 4082 387772
+
+Balance summary
+ Product                       Opening balance   Money out    Money in     Closing balance
+ Mexican Peso Account          $0.00             $1,000.00    $1,000.00    $0.00
+ Instant Access Savings        $0.00             $0.00        $1,006.74    $1,006.74
+
+Account transactions from April 1, 2026 to April 30, 2026
+Date            Description                          Money out      Money in      Balance
+
+Apr 23, 2026    SPEI Transfer received from STP                     $1,000.00     $1,000.00
+                From: SOMEONE, 123456, NU MEXICO
+                Description: Transferencia
+
+Apr 23, 2026    To Instant Access Savings            $1,000.00                    $0.00
+
+Instant Access Savings transactions from April 1, 2026 to April 30, 2026
+Date            Description                          Money out      Money in      Balance
+
+Apr 23, 2026    To Instant Access Savings                           $1,000.00     $1,000.00
+
+Apr 23, 2026    Net interest paid to \"Instant Access Savings\" for Apr 23,       $6.74    $1,006.74
+                2026
+
+Summary of balances and movements during the period
+";
+    let rows = revolut::parse_text(text).unwrap();
+    assert_eq!(rows.len(), 4);
+
+    // Peso current account (label None): inflow then internal-move outflow.
+    assert_eq!(rows[0].description, "SPEI Transfer received from STP");
+    assert_eq!(rows[0].amount, Decimal::from_str("1000.00").unwrap());
+    assert_eq!(rows[0].category.as_deref(), Some("TRANSFER_IN"));
+    assert_eq!(rows[0].account_label, None);
+    assert_eq!(rows[0].currency, "MXN");
+
+    assert_eq!(rows[1].description, "To Instant Access Savings");
+    assert_eq!(rows[1].amount, Decimal::from_str("-1000.00").unwrap()); // 0 - 1000
+    assert_eq!(rows[1].category.as_deref(), Some("TRANSFER_OUT"));
+    assert_eq!(rows[1].account_label, None);
+
+    // Savings pocket (its own account_label), seeded from its $0.00 opening.
+    assert_eq!(rows[2].amount, Decimal::from_str("1000.00").unwrap());
+    assert_eq!(rows[2].account_label.as_deref(), Some("Instant Access Savings"));
+
+    assert_eq!(rows[3].amount, Decimal::from_str("6.74").unwrap()); // 1006.74 - 1000
+    assert_eq!(rows[3].category_detailed.as_deref(), Some("INCOME_INTEREST_EARNED"));
+    assert_eq!(rows[3].account_label.as_deref(), Some("Instant Access Savings"));
+}
+
+#[test]
+fn revolut_looks_like() {
+    assert!(revolut::looks_like("© 2026 REVOLUT BANK, S.A."));
+    assert!(!revolut::looks_like("BANCO NACIONAL DE MEXICO"));
+}

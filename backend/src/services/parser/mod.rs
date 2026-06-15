@@ -12,6 +12,7 @@ pub mod santander_layout;
 pub mod banorte_layout;
 pub mod scotiabank_layout;
 pub mod hsbc_layout;
+pub mod revolut;
 pub mod column_table;
 pub mod layout_util;
 pub mod generic_pdf;
@@ -548,6 +549,15 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
             );
         }
 
+        // Revolut Bank (Mexico) — unique English issuer marker. Checked
+        // before the Mexican-bank rungs because Revolut transfer rows quote
+        // counterparties like "NU MEXICO" / "STP" that could otherwise
+        // misroute the file to the Nu or broad-Banamex parser.
+        if revolut::looks_like(&sample_text) {
+            try_rows!(revolut::parse_text(&best).unwrap_or_default(), "revolut-layout");
+            try_rows!(revolut::parse(data).unwrap_or_default(), "revolut-lopdf");
+        }
+
         // Nu México — checked FIRST, by issuer-specific markers. Nu's debit
         // statements routinely mention other banks (BANAMEX, BBVA…) inside
         // SPEI transfer descriptions, which would otherwise trip the broad
@@ -804,6 +814,9 @@ pub fn parse_account_info(
     if fidelity_stockplan::looks_like(&upper) {
         return Some(fidelity_stockplan_account_info(&text));
     }
+    if revolut::looks_like(&upper) {
+        return Some(revolut_account_info(&text));
+    }
     if upper.contains("NU MÉXICO FINANCIERA")
         || upper.contains("CUENTA NU")
         || upper.contains("DETALLE DE MOVIMIENTOS EN TU CUENTA")
@@ -882,6 +895,51 @@ fn nu_period_end(text: &str) -> Option<String> {
         "jul" => 7, "ago" => 8, "sep" => 9, "oct" => 10, "nov" => 11, "dic" => 12,
         _ => return None,
     };
+    let year: i32 = c[3].parse().ok()?;
+    Some(format!("{year:04}-{month:02}-{day:02}"))
+}
+
+fn revolut_account_info(text: &str) -> AccountInfo {
+    // Currency from the "<CCY> Statement" header (savings statements have no
+    // such header → default MXN, since Revolut MX is peso-denominated).
+    let currency = re_cap(r"\b([A-Z]{3}) Statement\b", text).unwrap_or_else(|| "MXN".into());
+    // The newest closing balance: the personal statement bundles months, so
+    // the LAST "Closing balance"/"Closing Balance" is the most recent.
+    let bal = regex::Regex::new(r"(?i)Closing\s+balance\s+\$([\d,]+\.\d{2})")
+        .ok()
+        .and_then(|re| {
+            re.captures_iter(text)
+                .last()
+                .and_then(|c| c[1].replace(',', "").parse::<f64>().ok())
+        });
+    // Holder is the first ALL-CAPS name line in the address block.
+    let holder = re_cap(r"(?m)^\s*([A-Z][A-Z ]{4,}[A-Z])\s*$", text);
+    AccountInfo {
+        institution: Some("Revolut".into()),
+        holder_name: holder,
+        clabe: re_cap(r"(?i)CLABE for SPEI\s*([\d ]{18,25})", text).and_then(|s| clean_clabe(&s)),
+        rfc: None,
+        suggested_name: Some(if text.contains("Account transactions from") {
+            "Revolut — Cuenta".into()
+        } else {
+            "Revolut — Instant Access Savings".into()
+        }),
+        suggested_balance: bal,
+        currency: Some(currency),
+        account_type: Some("Checking".into()),
+        period_end: revolut_period_end(text),
+        holdings: Vec::new(),
+    }
+}
+
+fn revolut_period_end(text: &str) -> Option<String> {
+    // Personal: "From April 1, 2026 to April 30, 2026"; savings:
+    // "Period: Jun 1, 2026 – Jun 15, 2026". Take the LAST end-date so a
+    // multi-month personal PDF reports its newest period.
+    let re = regex::Regex::new(r"(?i)(?:to|–|-)\s+([A-Z][a-z]{2})\s+(\d{1,2}),\s+(20\d{2})").ok()?;
+    let c = re.captures_iter(text).last()?;
+    let month = revolut::month_num(&c[1])?;
+    let day: u32 = c[2].parse().ok()?;
     let year: i32 = c[3].parse().ok()?;
     Some(format!("{year:04}-{month:02}-{day:02}"))
 }

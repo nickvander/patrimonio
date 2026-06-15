@@ -43,6 +43,24 @@ with a layered extraction + parse pipeline. Entry: `POST /api/imports/upload`
   positional columns, `SALDO FINAL DEL PERIODO ANTERIOR` opener skipped,
   abbreviation-legend furniture filtered. Routed by `SANTANDER`/RFC
   `BSM970519DU8`/`ESTADO DE CUENTA INTEGRAL`.
+- `revolut.rs` — Revolut Bank S.A. (Mexico), English born-digital PDFs,
+  MXN. Two layouts handled by one parser: (a) the **Instant Access Savings**
+  statement (`Instant Access Savings` + `Generated on`/`Period:`; one
+  account; a `Gross interest rate earned` column; `pdftotext` splits each
+  record across THREE lines — date renders `May 1,` … `2026`); and (b) the
+  **`<CCY> Statement`** personal statement (`MXN Statement` + `From…to…`;
+  bundles MULTIPLE months; two labelled sections per month — `Account
+  transactions` → the peso current account, `Instant Access Savings
+  transactions` → the savings pocket tagged with `account_label`; columns in
+  the OPPOSITE `Money out | Money in | Balance` order). Both always print a
+  running balance, so the signed amount is derived from the **balance delta**
+  (seeded by the parsed opening balance) — immune to the opposite column
+  order. Interest rows → `INCOME` / `INCOME_INTEREST_EARNED`; pocket moves +
+  SPEI → `TRANSFER_IN/OUT` by sign. Routed by the `REVOLUT` text marker
+  (before the Mexican-bank rungs, since transfer rows quote `NU MEXICO`/`STP`).
+  **Overlap caveat:** the personal statement's savings section repeats the
+  same interest rows as the savings-only statements — import EITHER, not both,
+  per savings account, or rely on the dedup signature within one account.
 - `layout_util.rs` — shared column-bucketing helpers (`amounts_with_pos`
   with char-column centres, `col_of`, `month_abbr`, `strip_amounts`) used
   by the BBVA + Santander layout parsers.
