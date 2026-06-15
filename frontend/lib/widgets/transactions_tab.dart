@@ -2759,29 +2759,60 @@ class _TransactionsTabState extends State<TransactionsTab> {
       barrierColor: Colors.black.withValues(alpha: 0.4),
       transitionDuration: const Duration(milliseconds: 220),
       pageBuilder: (ctx, anim, secAnim) {
-        return Align(
-          alignment:
-              isNarrow ? Alignment.bottomCenter : Alignment.centerRight,
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              width: isNarrow ? size.width : 480,
-              height: isNarrow ? size.height * 0.9 : size.height,
-              decoration: BoxDecoration(
-                color: Theme.of(ctx).colorScheme.surface,
-                borderRadius: isNarrow
-                    ? const BorderRadius.vertical(top: Radius.circular(20))
-                    : const BorderRadius.horizontal(left: Radius.circular(20)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.4),
-                    blurRadius: 24,
-                    offset: const Offset(-4, 0),
+        // Esc dismisses the panel. showGeneralDialog (unlike showDialog)
+        // doesn't bind it for free, and Esc-to-close is a desktop reflex;
+        // it's a harmless no-op on touch.
+        return CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.escape): () =>
+                Navigator.of(ctx).pop(),
+          },
+          child: Focus(
+            autofocus: true,
+            child: Builder(builder: (ctx) {
+              // Read size/insets fresh (inside a Builder so it rebuilds on
+              // keyboard show/hide): the narrow bottom sheet must lift above
+              // the soft keyboard when the notes/category field is focused,
+              // instead of hiding the pinned Save button behind it.
+              final mq = MediaQuery.of(ctx);
+              final insets = mq.viewInsets.bottom;
+              final screen = mq.size;
+              final sheetMax = screen.height - insets - 24;
+              final sheetWanted = screen.height * 0.9;
+              return Align(
+                alignment:
+                    isNarrow ? Alignment.bottomCenter : Alignment.centerRight,
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: isNarrow ? insets : 0),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Container(
+                      width: isNarrow ? screen.width : 480,
+                      height: isNarrow
+                          ? (sheetWanted < sheetMax ? sheetWanted : sheetMax)
+                          : screen.height,
+                      decoration: BoxDecoration(
+                        color: Theme.of(ctx).colorScheme.surface,
+                        borderRadius: isNarrow
+                            ? const BorderRadius.vertical(
+                                top: Radius.circular(20))
+                            : const BorderRadius.horizontal(
+                                left: Radius.circular(20)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.4),
+                            blurRadius: 24,
+                            offset: const Offset(-4, 0),
+                          ),
+                        ],
+                      ),
+                      child: _TransactionDetailPanel(
+                          state: this, tx: tx, isNarrow: isNarrow),
+                    ),
                   ),
-                ],
-              ),
-              child: _TransactionDetailPanel(state: this, tx: tx),
-            ),
+                ),
+              );
+            }),
           ),
         );
       },
@@ -3057,8 +3088,13 @@ class _TransactionsTabState extends State<TransactionsTab> {
 class _TransactionDetailPanel extends StatefulWidget {
   final _TransactionsTabState state;
   final dynamic tx;
+  // Narrow = bottom sheet (mobile); wide = right-docked side panel
+  // (desktop/web). Drives the dismiss affordance: drag handle + swipe on
+  // narrow, top-right X on wide.
+  final bool isNarrow;
 
-  const _TransactionDetailPanel({required this.state, required this.tx});
+  const _TransactionDetailPanel(
+      {required this.state, required this.tx, required this.isNarrow});
 
   @override
   State<_TransactionDetailPanel> createState() =>
@@ -3160,6 +3196,7 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final s = _state;
+    final isNarrow = widget.isNarrow;
 
     final date = DateTime.parse(tx['date'] as String);
     final sourceAmount = ((tx['amount'] as num?)?.toDouble() ?? 0.0);
@@ -3287,16 +3324,32 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // -- Header chrome: close (left) + overflow + rename (right) ----
+          // -- Header chrome ---------------------------------------------
+          // Mobile (bottom sheet): a top-center drag handle is the primary
+          // dismiss affordance (swipe down) — no X, which would sit in the
+          // hardest corner to thumb-reach. Desktop (right-docked panel): the
+          // X lives top-right, hugging the docked edge (appended below).
+          // Overflow + rename are shared by both.
+          if (isNarrow)
+            Center(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onVerticalDragEnd: (d) {
+                  if ((d.primaryVelocity ?? 0) > 250) _close();
+                },
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(top: 4, bottom: 12),
+                  decoration: BoxDecoration(
+                    color: context.hairline,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            ),
           Row(
             children: [
-              IconButton(
-                icon: const Icon(Icons.close, size: 20),
-                onPressed: _close,
-                tooltip: l.actionClose,
-                constraints:
-                    const BoxConstraints(minWidth: 48, minHeight: 48),
-              ),
               const Spacer(),
               if (hasOverflow)
                 PopupMenuButton<String>(
@@ -3372,6 +3425,14 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                     similarIds:
                         merchantMatches.map((m) => m['id'].toString()).toList(),
                   ),
+                  constraints:
+                      const BoxConstraints(minWidth: 48, minHeight: 48),
+                ),
+              if (!isNarrow)
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: _close,
+                  tooltip: l.actionClose,
                   constraints:
                       const BoxConstraints(minWidth: 48, minHeight: 48),
                 ),
@@ -3653,17 +3714,19 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
               ),
             ),
           ),
-          // -- Footer: Close (secondary) + Save (primary) ----------------
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Spacer(),
-              TextButton(
-                onPressed: _close,
-                child: Text(l.actionClose),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton(
+          // -- Footer: one unambiguous primary commit -------------------
+          // Dismissal is owned by the chrome — X / Esc / barrier (desktop),
+          // drag handle / swipe-down / barrier (mobile) — so the old
+          // secondary "Close" next to Save (which read as cancel-vs-save but
+          // never actually reverted) is gone. SafeArea keeps Save clear of
+          // the home indicator on mobile.
+          const SizedBox(height: 12),
+          SafeArea(
+            top: false,
+            bottom: isNarrow,
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
                 onPressed: () {
                   // Diff each field against its prefill: only what the
                   // user actually edited is sent (null = "leave alone").
@@ -3681,7 +3744,7 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                 },
                 child: Text(l.actionSave),
               ),
-            ],
+            ),
           ),
         ],
       ),
