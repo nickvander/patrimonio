@@ -134,7 +134,7 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
         "CASETA", "PEAJE", "IAVE", "TELEVIA", "PASE ", "METRO ", "METROBUS",
         "MOVILIDAD INTEGRAL",
         // More MX fuel / transit / mobility.
-        "REPSOL", "CHEVRON", "G500", "HIDROSINA", "REDCO", "ORSAN",
+        "REPSOL", "CHEVRON", "G500", "HIDROSINA", "REDCO", "ORSAN", "LOOP",
         "GASOLINERA", "CAPUFE", "TAG ", "ECOBICI", "MIBICI", "JETTY",
         "CUOTA", "AUTOPISTA", "PRIMERA PLUS", "SITIO ", "TAXI",
     ]) {
@@ -567,6 +567,7 @@ mod tests {
         assert_eq!(categorize("PAGO BAIT RECARGA", neg("100.00")).as_deref(), Some("RENT_AND_UTILITIES"));
         assert_eq!(categorize("CRUNCHYROLL", neg("129.00")).as_deref(), Some("ENTERTAINMENT"));
         assert_eq!(categorize("REPSOL GASOLINERA", neg("800.00")).as_deref(), Some("TRANSPORTATION"));
+        assert_eq!(categorize("LOOP COMBUSTIBLE", neg("750.00")).as_deref(), Some("TRANSPORTATION"));
         assert_eq!(categorize("CANVA PRO", neg("199.00")).as_deref(), Some("GENERAL_SERVICES"));
     }
 
