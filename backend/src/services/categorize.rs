@@ -49,12 +49,17 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
 
     // 2. Income: payroll + interest + dividends. These read as inflows but
     //    we key on the words so a "PAGO DE NOMINA" can't be mistaken for a
-    //    transfer.
-    if has(&["NOMINA", "NÓMINA", "SALARIO", "AGUINALDO", "PAGO DE PENSION"]) {
-        return cat("INCOME");
-    }
-    if has(&["INTERESES", "RENDIMIENTO", "DIVIDENDO"]) {
-        return cat("INCOME");
+    //    transfer. Gate on a positive amount: income is an inflow, so a
+    //    NEGATIVE "INTERESES …" row (an interest charge, a yield-liquidation
+    //    withdrawal, or a reversal) must NOT be filed as INCOME — that's how
+    //    a −18,994 MXN "INTERESES" debit ended up labeled income.
+    if amount > Decimal::ZERO {
+        if has(&["NOMINA", "NÓMINA", "SALARIO", "AGUINALDO", "PAGO DE PENSION"]) {
+            return cat("INCOME");
+        }
+        if has(&["INTERESES", "RENDIMIENTO", "DIVIDENDO"]) {
+            return cat("INCOME");
+        }
     }
 
     // 3. Taxes / government.
@@ -412,6 +417,16 @@ mod tests {
         assert_eq!(categorize("ABONO NOMINA QUINCENA 1", pos("12500.00")).as_deref(), Some("INCOME"));
         assert_eq!(categorize("INTERESES GANADOS", pos("18.42")).as_deref(), Some("INCOME"));
         assert_eq!(categorize("ABONO INTERESES", pos("12.95")).as_deref(), Some("INCOME"));
+    }
+
+    #[test]
+    fn negative_interest_is_not_income() {
+        // A NEGATIVE "INTERESES" row is a charge / yield-liquidation /
+        // reversal, never income — must not be filed as INCOME.
+        assert_ne!(categorize("INTERESES AL %", neg("309.56")).as_deref(), Some("INCOME"));
+        assert_ne!(categorize("INTERESES AL % 02-19", neg("18994.33")).as_deref(), Some("INCOME"));
+        // The positive counterpart is still income.
+        assert_eq!(categorize("INTERESES AL %", pos("309.56")).as_deref(), Some("INCOME"));
     }
 
     #[test]
