@@ -390,25 +390,25 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           _maybeCollapse(
             isPhone,
             l.taxUnrealizedTitle,
-            () => _buildUnrealizedSection(l, header: false),
+            (header) => _buildUnrealizedSection(l, header: header),
           ),
           SizedBox(height: gap),
           _maybeCollapse(
             isPhone,
             l.taxFbarTitle,
-            () => _buildFbarSection(l, header: false),
+            (header) => _buildFbarSection(l, header: header),
           ),
           SizedBox(height: gap),
           _maybeCollapse(
             isPhone,
             l.taxRetirementTitle,
-            () => _buildRetirementSection(l, header: false),
+            (header) => _buildRetirementSection(l, header: header),
           ),
           SizedBox(height: gap),
           _maybeCollapse(
             isPhone,
             l.taxIncomeSectionTitle,
-            () => _buildIncomeSection(l, header: false),
+            (header) => _buildIncomeSection(l, header: header),
           ),
           const SizedBox(height: 12),
           Text(
@@ -2030,8 +2030,11 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   /// collapsed-by-default header — reusing the styled `ExpansionTile` look from
   /// `_buildAssumptions`. On wide screens the section renders inline with its
   /// own title. `body` is lazy so a collapsed section isn't built until opened.
-  Widget _maybeCollapse(bool collapse, String title, Widget Function() body) {
-    if (!collapse) return body();
+  Widget _maybeCollapse(
+      bool collapse, String title, Widget Function(bool header) body) {
+    // Inline (wide): the section renders its own header. Collapsed (phone):
+    // the ExpansionTile shows the title, so the body omits its own header.
+    if (!collapse) return body(true);
     return Card(
       color: context.tileSurface,
       elevation: 0,
@@ -2052,7 +2055,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
               color: context.textPrimary,
             ),
           ),
-          children: [body()],
+          children: [body(false)],
         ),
       ),
     );

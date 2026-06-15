@@ -2907,8 +2907,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           buildNetWorthHeader(),
           const SizedBox(height: 12),
+          // The card stacks a tall header (value + delta + mode toggle) above
+          // an Expanded chart, so the box has to stay tall enough that the
+          // plot area doesn't get squished — this is the hero glance on
+          // mobile. (A shorter box collapsed the chart to a sliver.)
           SizedBox(
-            height: isNarrow ? 300 : 440,
+            height: isNarrow ? 380 : 440,
             child: NetWorthCard(
               netWorth:
                   ((_overview?['net_worth'] as num?)?.toDouble() ?? 0.0) *

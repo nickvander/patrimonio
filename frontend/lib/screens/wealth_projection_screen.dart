@@ -206,7 +206,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               _buildControls(scrollable: false),
               const SizedBox(height: 24),
               SizedBox(
-                  height: isPhone ? 240 : 320, child: _buildChartCard()),
+                  // Keep the box tall on phones too: the card stacks a
+                  // title row + legend above an Expanded chart, so a shorter
+                  // box squishes the plot to a sliver.
+                  height: isPhone ? 320 : 320, child: _buildChartCard()),
               const SizedBox(height: 16),
               _buildFireStatusStrip(),
               const SizedBox(height: 16),
