@@ -76,11 +76,24 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
     //    transfer/ATM rules, so e.g. a SPEI labelled "PAGO RENTA" is filed
     //    as rent rather than a bare outgoing transfer.
 
+    // Rent: only anchored phrases, never a bare "RENTA" substring (which
+    // over-matches "RENTABILIDAD", "ARRENTAMIENTO", merchant names, …).
+    // A leading "RENTA " is safe; everything else must carry rent context.
+    if u.starts_with("RENTA ")
+        || u.contains("PAGO RENTA")
+        || u.contains("RENTA DEPTO")
+        || u.contains("RENTA DEPARTAMENTO")
+        || u.contains("RENTA CASA")
+        || u.contains("RENTA MENSUAL")
+    {
+        return cat("RENT_AND_UTILITIES");
+    }
+
     // Utilities & telecom.
     if has(&[
         "CFE", "TELMEX", "TELCEL", "MOVISTAR", "AT&T", "ATT ", "IZZI",
         "TOTALPLAY", "MEGACABLE", "DISH", "SKY ", "NATURGY", "GAS NATURAL",
-        "AGUA ", "SACMEX", "SIAPA", "INTERNET", "RENTA",
+        "AGUA ", "SACMEX", "SIAPA", "INTERNET",
         // More MX telecom / utilities / water boards.
         "BAIT", "UNEFON", "VIRGIN MOBILE", "AXTEL", "VETV", "STARLINK",
         "CESPT", "JAPAC", "SAPAL", "INTERAPAS", "CEA ", "GAS LICUADO",
@@ -399,6 +412,18 @@ mod tests {
         assert_eq!(categorize("ABONO NOMINA QUINCENA 1", pos("12500.00")).as_deref(), Some("INCOME"));
         assert_eq!(categorize("INTERESES GANADOS", pos("18.42")).as_deref(), Some("INCOME"));
         assert_eq!(categorize("ABONO INTERESES", pos("12.95")).as_deref(), Some("INCOME"));
+    }
+
+    #[test]
+    fn rent_only_matches_anchored_phrases() {
+        // Real rent phrases → RENT_AND_UTILITIES.
+        assert_eq!(categorize("PAGO RENTA DEPTO", neg("9500.00")).as_deref(), Some("RENT_AND_UTILITIES"));
+        assert_eq!(categorize("RENTA MENSUAL CASA", neg("12000.00")).as_deref(), Some("RENT_AND_UTILITIES"));
+        assert_eq!(categorize("RENTA CASA AGOSTO", neg("8000.00")).as_deref(), Some("RENT_AND_UTILITIES"));
+        // Bare-substring false positives that the old unanchored "RENTA"
+        // rule wrongly caught — must NOT be rent now.
+        assert_ne!(categorize("TRANSFERENCIA SPEI RENTABILIDAD", pos("250.00")).as_deref(), Some("RENT_AND_UTILITIES"));
+        assert_ne!(categorize("ARRENTAMIENTO FINANCIERO", neg("500.00")).as_deref(), Some("RENT_AND_UTILITIES"));
     }
 
     // Helper: unwrap the (category, detail) shape into (&str, Option<&str>).

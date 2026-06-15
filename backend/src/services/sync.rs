@@ -734,6 +734,38 @@ fn plaid_error_status(payload: &serde_json::Value) -> Option<&'static str> {
     }
 }
 
+/// True when `description` has the shape of a SoFi vault move — i.e. the
+/// trimmed, case-insensitive text matches `^(FROM|TO)\s+.+\sVAULT$`
+/// ("From <name> Vault" / "To <name> Vault"). SoFi's "Vault" sub-accounts
+/// (Cards, Car, Rent, Mxn trade, Taxes, Emergency) are the user's own
+/// `cash management` accounts; moving money between them and SoFi Checking
+/// is an INTERNAL TRANSFER, but Plaid mislabels it as INCOME_CONTRACTOR.
+/// We anchor on the From/To prefix + Vault suffix so a normal merchant
+/// ("GOOGLE LLC", "Vault 21 Restaurant") cannot trip the override.
+fn is_vault_transfer(description: &str) -> bool {
+    let t = description.trim();
+    let upper = t.to_uppercase();
+    let rest = if let Some(r) = upper.strip_prefix("FROM ") {
+        r
+    } else if let Some(r) = upper.strip_prefix("TO ") {
+        r
+    } else {
+        return false;
+    };
+    // Require a "VAULT" suffix preceded by at least one whitespace-separated
+    // word (the `.+\s` between the prefix and VAULT in the regex). This
+    // rejects bare "From Vault" / "To Vault" with no name in the middle.
+    match rest.strip_suffix("VAULT") {
+        Some(middle) => {
+            let middle = middle.trim_start();
+            // Something must remain, and it must end at a word boundary
+            // (whitespace) right before VAULT.
+            !middle.is_empty() && middle.ends_with(char::is_whitespace)
+        }
+        None => false,
+    }
+}
+
 async fn upsert_plaid_transaction(
     db: &PgPool,
     tx: &serde_json::Value,
@@ -763,10 +795,23 @@ async fn upsert_plaid_transaction(
     // The detailed enum is *much* more useful in the UI, so we store
     // both. Legacy `category[0]` is kept as a fallback for older items
     // that pre-date the PFC taxonomy.
-    let category = tx["personal_finance_category"]["primary"]
+    let mut category = tx["personal_finance_category"]["primary"]
         .as_str()
         .or(legacy_category);
-    let category_detailed = tx["personal_finance_category"]["detailed"].as_str();
+    let mut category_detailed = tx["personal_finance_category"]["detailed"].as_str();
+    // SoFi vault moves arrive tagged INCOME / INCOME_CONTRACTOR even though
+    // they are internal transfers between the user's own accounts. Override
+    // the Plaid category by direction so they don't pollute income/spend.
+    // `name` ("From Cards Vault") is the descriptor we store as `description`.
+    if is_vault_transfer(name) {
+        if amount >= 0.0 {
+            category = Some("TRANSFER_IN");
+            category_detailed = Some("TRANSFER_IN_ACCOUNT_TRANSFER");
+        } else {
+            category = Some("TRANSFER_OUT");
+            category_detailed = Some("TRANSFER_OUT_ACCOUNT_TRANSFER");
+        }
+    }
     let payment_channel = tx["payment_channel"].as_str();
     // Plaid Production enrichment that prior schema ignored. `original_description`
     // is the raw bank line — keeps the specifics when Plaid's cleaned `name` is
@@ -913,6 +958,36 @@ fn best_counterparty(arr: &serde_json::Value) -> (Option<String>, Option<String>
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
     (name, logo)
+}
+
+#[cfg(test)]
+mod vault_transfer_tests {
+    use super::is_vault_transfer;
+
+    #[test]
+    fn matches_sofi_vault_descriptors() {
+        assert!(is_vault_transfer("From Cards Vault"));
+        assert!(is_vault_transfer("To Mxn trade Vault"));
+        // Case-insensitive.
+        assert!(is_vault_transfer("from cards vault"));
+        assert!(is_vault_transfer("TO EMERGENCY VAULT"));
+        // Leading/trailing whitespace tolerated.
+        assert!(is_vault_transfer("  From Rent Vault  "));
+    }
+
+    #[test]
+    fn rejects_non_vault_descriptors() {
+        assert!(!is_vault_transfer("GOOGLE LLC"));
+        // A merchant that merely contains "Vault" but isn't a From/To move.
+        assert!(!is_vault_transfer("Vault 21 Restaurant"));
+        // From/To with no name before VAULT.
+        assert!(!is_vault_transfer("From Vault"));
+        assert!(!is_vault_transfer("To Vault"));
+        // VAULT not at the end.
+        assert!(!is_vault_transfer("From Vault Cards"));
+        // No From/To prefix.
+        assert!(!is_vault_transfer("Cards Vault"));
+    }
 }
 
 #[cfg(test)]
