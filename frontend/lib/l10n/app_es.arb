@@ -52,6 +52,14 @@
   "lendingRepaid": "Reembolsado",
   "lendingNoLoans": "Aún no hay préstamos",
   "lendingEmptySubtitle": "¿Le prestaste a un amigo? Agrégalo aquí y luego selecciona las transacciones bancarias que lo fondearon y lo pagaron.",
+  "lendViewInstallments": "Ver {count} cuota{count, plural, =1{} other{s}}",
+  "@lendViewInstallments": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "txOverrideCleared": "Se quitó el nombre personalizado",
   "txRenamed": "Renombrado",
   "txRenameFailed": "No se pudo renombrar: {error}",

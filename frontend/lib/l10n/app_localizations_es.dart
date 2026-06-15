@@ -168,6 +168,17 @@ class AppLocalizationsEs extends AppLocalizations {
       '¿Le prestaste a un amigo? Agrégalo aquí y luego selecciona las transacciones bancarias que lo fondearon y lo pagaron.';
 
   @override
+  String lendViewInstallments(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
+    return 'Ver $count cuota$_temp0';
+  }
+
+  @override
   String get txOverrideCleared => 'Se quitó el nombre personalizado';
 
   @override

@@ -61,6 +61,14 @@
   "lendingRepaid": "Repaid",
   "lendingNoLoans": "No loans yet",
   "lendingEmptySubtitle": "Lent money to a friend? Add it here, then designate the bank transactions that funded it and paid it back.",
+  "lendViewInstallments": "View {count} installment{count, plural, =1{} other{s}}",
+  "@lendViewInstallments": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "txOverrideCleared": "Override cleared",
   "txRenamed": "Renamed",
   "txRenameFailed": "Rename failed: {error}",

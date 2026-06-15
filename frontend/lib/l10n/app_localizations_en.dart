@@ -168,6 +168,17 @@ class AppLocalizationsEn extends AppLocalizations {
       'Lent money to a friend? Add it here, then designate the bank transactions that funded it and paid it back.';
 
   @override
+  String lendViewInstallments(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
+    return 'View $count installment$_temp0';
+  }
+
+  @override
   String get txOverrideCleared => 'Override cleared';
 
   @override

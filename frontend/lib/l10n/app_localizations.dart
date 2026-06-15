@@ -410,6 +410,12 @@ abstract class AppLocalizations {
   /// **'Lent money to a friend? Add it here, then designate the bank transactions that funded it and paid it back.'**
   String get lendingEmptySubtitle;
 
+  /// No description provided for @lendViewInstallments.
+  ///
+  /// In en, this message translates to:
+  /// **'View {count} installment{count, plural, =1{} other{s}}'**
+  String lendViewInstallments(int count);
+
   /// No description provided for @txOverrideCleared.
   ///
   /// In en, this message translates to:

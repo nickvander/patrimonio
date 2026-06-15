@@ -162,6 +162,17 @@ class _LendingTabState extends State<LendingTab> {
     final interestEarned = sumLoansConverted(
         _loans, 'interest_earned', summaryCur, widget.usdMxnRate);
     final active = (_summary['active_count'] as num?)?.toInt() ?? 0;
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+    final phone = MediaQuery.sizeOf(context).width < 720;
+    final outstandingTile = _stat(AppLocalizations.of(context).lendingOutstanding,
+        _money(totalOut, summaryCur), context.warning);
+    final totalLentTile = _stat(AppLocalizations.of(context).lendingTotalLent,
+        _money(totalLent, summaryCur), context.textPrimary);
+    final activeTile = _stat(AppLocalizations.of(context).lendingActive,
+        '$active', context.tealAccent);
+    // Interest income — the headline of this feature.
+    final interestTile = _stat(AppLocalizations.of(context).lendingInterestEarned,
+        _money(interestEarned, summaryCur), context.positive);
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -169,7 +180,7 @@ class _LendingTabState extends State<LendingTab> {
         side: BorderSide(color: context.hairline),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(pad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -227,21 +238,42 @@ class _LendingTabState extends State<LendingTab> {
                   style: TextStyle(fontSize: 11, color: context.textSubtle),
                 ),
               ),
-            Wrap(
-              spacing: 24,
-              runSpacing: 12,
-              children: [
-                _stat(AppLocalizations.of(context).lendingOutstanding,
-                    _money(totalOut, summaryCur), context.warning),
-                _stat(AppLocalizations.of(context).lendingTotalLent,
-                    _money(totalLent, summaryCur), context.textPrimary),
-                _stat(AppLocalizations.of(context).lendingActive, '$active',
-                    context.tealAccent),
-                // Interest income — the headline of this feature.
-                _stat(AppLocalizations.of(context).lendingInterestEarned,
-                    _money(interestEarned, summaryCur), context.positive),
-              ],
-            ),
+            if (phone)
+              // On phones, lay the 4 stats out as a 2-up grid (two rows of
+              // two) like Home's mobile stat tiles, rather than a wide Wrap.
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: outstandingTile),
+                      const SizedBox(width: 16),
+                      Expanded(child: totalLentTile),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: activeTile),
+                      const SizedBox(width: 16),
+                      Expanded(child: interestTile),
+                    ],
+                  ),
+                ],
+              )
+            else
+              Wrap(
+                spacing: 24,
+                runSpacing: 12,
+                children: [
+                  outstandingTile,
+                  totalLentTile,
+                  activeTile,
+                  interestTile,
+                ],
+              ),
           ],
         ),
       ),
@@ -297,6 +329,7 @@ class _LendingTabState extends State<LendingTab> {
     final status = (loan['status'] ?? 'active').toString();
     final pct = principal > 0 ? (repaid / principal).clamp(0.0, 1.0) : 0.0;
     final linked = loan['disbursement_tx_id'] != null;
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 
     return Card(
       elevation: 0,
@@ -309,7 +342,7 @@ class _LendingTabState extends State<LendingTab> {
         borderRadius: BorderRadius.circular(14),
         onTap: () => _openLoanDetail(loan),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(pad),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1755,6 +1788,10 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
   List<dynamic> _disbSuggestions = [];
   List<dynamic> _repaySuggestions = [];
   bool _loading = true;
+  // Phones collapse the amortization table behind a tap so the schedule
+  // controls + due-date stay visible without a wall of rows. Short
+  // schedules (≤3 rows) are treated as expanded — see _buildScheduleSection.
+  bool _scheduleExpanded = false;
 
   String get _loanId => widget.loan['id'].toString();
   String get _currency => (widget.loan['currency'] ?? 'USD').toString();
@@ -1800,6 +1837,8 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+    final gap = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.7,
@@ -1810,7 +1849,7 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
           onPopInvokedWithResult: (didPop, _) {},
           child: ListView(
             controller: scroll,
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+            padding: EdgeInsets.fromLTRB(pad, 16, pad, 32),
             children: [
               Center(
                 child: Container(
@@ -1845,11 +1884,11 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
                 )
               else ...[
                 _buildDisbursementSection(),
-                const SizedBox(height: 24),
+                SizedBox(height: gap),
                 _buildScheduleSection(),
-                const SizedBox(height: 24),
+                SizedBox(height: gap),
                 _buildRepaymentsSection(),
-                const SizedBox(height: 24),
+                SizedBox(height: gap),
                 _buildStatusActions(),
                 const SizedBox(height: 8),
                 _buildDangerZone(),
@@ -2102,6 +2141,12 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
     }).toList();
     final hasTerms = widget.loan['term_months'] != null &&
         widget.loan['payment_frequency'] != null;
+    final phone = MediaQuery.sizeOf(context).width < 720;
+    // Auto-expand short plans so single-installment lump-sum / compound
+    // schedules don't hide their one row behind a tap. On wider screens the
+    // table is always shown.
+    final shortSchedule = scheduled.length <= 3;
+    final showTable = !phone || shortSchedule || _scheduleExpanded;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2153,8 +2198,46 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
                     'no fixed schedule — record repayments as they come in.',
             style: TextStyle(fontSize: 12, color: context.textSubtle),
           )
-        else
-          _buildScheduleTable(scheduled),
+        else ...[
+          // Phones with a longer schedule collapse the table behind a
+          // count-aware tap; short plans (≤3 rows) and wide screens show it.
+          if (phone && !shortSchedule)
+            InkWell(
+              onTap: () =>
+                  setState(() => _scheduleExpanded = !_scheduleExpanded),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.receipt_long,
+                        color: context.tealAccent, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        AppLocalizations.of(context)
+                            .lendViewInstallments(scheduled.length),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: context.textPrimary,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      _scheduleExpanded
+                          ? Icons.expand_less
+                          : Icons.expand_more,
+                      color: context.textMuted,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (showTable) ...[
+            if (phone && !shortSchedule) const SizedBox(height: 8),
+            _buildScheduleTable(scheduled),
+          ],
+        ],
         _buildDueDateRow(),
       ],
     );
@@ -2222,7 +2305,7 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
             child: Row(
               children: [
                 _schCell('${m['installment_number']}', flex: 1),
-                _schCell((m['due_date'] ?? '').toString(), flex: 3),
+                _schCell(_fmtDue(m['due_date']), flex: 3),
                 _schCell(_money((m['scheduled_principal'] as num?) ?? 0),
                     flex: 3, alignRight: true),
                 _schCell(_money((m['scheduled_interest'] as num?) ?? 0),
@@ -2244,6 +2327,15 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
         }),
       ],
     );
+  }
+
+  /// Short "MMM d" for the schedule's Due column — recovers width for the
+  /// money columns vs. the raw ISO date. Falls back to the raw string when
+  /// it doesn't parse.
+  String _fmtDue(dynamic raw) {
+    final s = (raw ?? '').toString();
+    final d = DateTime.tryParse(s);
+    return d == null ? s : DateFormat('MMM d').format(d);
   }
 
   Widget _schCell(String text,
