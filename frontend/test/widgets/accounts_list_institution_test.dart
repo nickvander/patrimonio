@@ -79,6 +79,17 @@ void main() {
     expect(find.text('1 account'), findsNothing);
   });
 
+  testWidgets('a single-account bank does not repeat the institution label '
+      'when the name already conveys it', (tester) async {
+    await tester.pumpWidget(_host([
+      _acc('Banamex', 'checking', 'Banamex', 4000.0, cur: 'MXN'),
+    ]));
+    await tester.pumpAndSettle();
+
+    // "Banamex" shows once (the name) — not stacked as name + institution.
+    expect(find.text('Banamex'), findsOneWidget);
+  });
+
   testWidgets('combined header total uses the native figure for a '
       'single-currency bank', (tester) async {
     await tester.pumpWidget(_host([

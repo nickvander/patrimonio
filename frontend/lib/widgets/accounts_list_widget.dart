@@ -1001,7 +1001,16 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
       ),
     );
 
-    Widget secondaryMeta = (inst.isEmpty || nested)
+    // Drop the institution sub-label when it's redundant: nested under a bank
+    // header, or the account name already conveys the bank — "Banamex" at
+    // institution "Banamex" was reading as a tense "Banamex / Banamex" stack.
+    final nameLc = name.toLowerCase();
+    final instLc = inst.toLowerCase();
+    final nameConveysInst = inst.isNotEmpty &&
+        (nameLc == instLc ||
+            (instLc.length >= 3 && nameLc.contains(instLc)) ||
+            (nameLc.length >= 3 && instLc.contains(nameLc)));
+    Widget secondaryMeta = (inst.isEmpty || nested || nameConveysInst)
         ? const SizedBox.shrink()
         : Padding(
             padding: const EdgeInsets.only(top: 2),
@@ -1185,7 +1194,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
           final isNarrow = constraints.maxWidth < 420;
           if (isNarrow) {
             return Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+              padding: const EdgeInsets.fromLTRB(16, 13, 8, 13),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1211,7 +1220,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
           }
 
           return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+            padding: const EdgeInsets.fromLTRB(16, 13, 8, 13),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
