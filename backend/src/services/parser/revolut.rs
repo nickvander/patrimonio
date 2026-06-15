@@ -297,7 +297,14 @@ fn parse_personal(text: &str) -> Result<Vec<ParsedTransaction>> {
         }
         if trimmed.starts_with("Account transactions from") {
             in_section = true;
-            label = None; // the primary Mexican Peso current account
+            // Label the peso section too (not None/"primary"): the personal
+            // statement bundles two real accounts, and leaving this unlabeled
+            // let the import UI silently fold the peso rows into whatever
+            // "primary" account the user picked (usually their savings). With
+            // BOTH sections labelled, the UI forces an explicit destination
+            // for each, keeping the peso current account and the savings
+            // pocket separate.
+            label = Some("Mexican Peso Account".into());
             prev_balance = pending_open_main.unwrap_or(Decimal::ZERO);
             continue;
         }

@@ -49,10 +49,12 @@ with a layered extraction + parse pipeline. Entry: `POST /api/imports/upload`
   account; a `Gross interest rate earned` column; `pdftotext` splits each
   record across THREE lines — date renders `May 1,` … `2026`); and (b) the
   **`<CCY> Statement`** personal statement (`MXN Statement` + `From…to…`;
-  bundles MULTIPLE months; two labelled sections per month — `Account
-  transactions` → the peso current account, `Instant Access Savings
-  transactions` → the savings pocket tagged with `account_label`; columns in
-  the OPPOSITE `Money out | Money in | Balance` order). Both always print a
+  bundles MULTIPLE months; two sections per month, EACH tagged with its own
+  `account_label` — `Account transactions` → "Mexican Peso Account",
+  `Instant Access Savings transactions` → "Instant Access Savings" — so the
+  import UI forces a separate destination per account instead of folding the
+  peso rows into the primary pick; columns in the OPPOSITE
+  `Money out | Money in | Balance` order). Both always print a
   running balance, so the signed amount is derived from the **balance delta**
   (seeded by the parsed opening balance) — immune to the opposite column
   order. Interest rows → `INCOME` / `INCOME_INTEREST_EARNED`; pocket moves +

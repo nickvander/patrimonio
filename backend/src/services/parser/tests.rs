@@ -469,17 +469,18 @@ Summary of balances and movements during the period
     let rows = revolut::parse_text(text).unwrap();
     assert_eq!(rows.len(), 4);
 
-    // Peso current account (label None): inflow then internal-move outflow.
+    // Peso current account (its own label so the import UI keeps it separate
+    // from the savings pocket): inflow then internal-move outflow.
     assert_eq!(rows[0].description, "SPEI Transfer received from STP");
     assert_eq!(rows[0].amount, Decimal::from_str("1000.00").unwrap());
     assert_eq!(rows[0].category.as_deref(), Some("TRANSFER_IN"));
-    assert_eq!(rows[0].account_label, None);
+    assert_eq!(rows[0].account_label.as_deref(), Some("Mexican Peso Account"));
     assert_eq!(rows[0].currency, "MXN");
 
     assert_eq!(rows[1].description, "To Instant Access Savings");
     assert_eq!(rows[1].amount, Decimal::from_str("-1000.00").unwrap()); // 0 - 1000
     assert_eq!(rows[1].category.as_deref(), Some("TRANSFER_OUT"));
-    assert_eq!(rows[1].account_label, None);
+    assert_eq!(rows[1].account_label.as_deref(), Some("Mexican Peso Account"));
 
     // Savings pocket (its own account_label), seeded from its $0.00 opening.
     assert_eq!(rows[2].amount, Decimal::from_str("1000.00").unwrap());
