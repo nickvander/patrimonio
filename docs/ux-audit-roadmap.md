@@ -24,7 +24,7 @@ What landed in this branch already so the next pass doesn't redo it:
 - **Richer categorization**: stores Plaid's `personal_finance_category.detailed` + `payment_channel`; `utils/category.dart` prettifies LOAN_PAYMENTS_CREDIT_CARD_PAYMENT → "Credit card payment" etc.
 - **Filter transactions** by flow / status / account / category with active-chip strip
 
-Repo: `/home/nickvander/patrimonio/.claude/worktrees/pensive-joliot-ee470d`
+Repo: `patrimonio`
 Stack: Flutter web frontend (`lib/`), Rust axum backend (`backend/`), Postgres, Plaid.
 Build: `docker compose -p patrimonio up -d --build frontend api`.
 
