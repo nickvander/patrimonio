@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
+import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 
 class CreditUtilizationCard extends StatefulWidget {
   final List<dynamic> creditData;
   final double conversionFactor;
+  /// USD<->MXN spot rate. Each card's balance/limit is in its own native
+  /// currency, so they must be normalised to USD before they can be summed
+  /// into a portfolio-wide utilization or formatted for display.
+  final double usdMxnRate;
   final NumberFormat currencyFormat;
 
   const CreditUtilizationCard({
     super.key,
     required this.creditData,
     required this.conversionFactor,
+    required this.usdMxnRate,
     required this.currencyFormat,
   });
 
@@ -36,8 +42,17 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
       return const SizedBox.shrink();
     }
 
-    double limitOf(dynamic i) => ((i['credit_limit'] ?? 0.0) as num).toDouble();
-    double balanceOf(dynamic i) => ((i['balance'] ?? 0.0) as num).toDouble();
+    // Convert to USD so cards in different currencies aggregate correctly — a
+    // MXN card's native balance/limit summed 1:1 with USD cards produced a
+    // meaningless headline %.
+    double toUsd(dynamic i, String key) => convertCurrency(
+          ((i[key] ?? 0.0) as num).toDouble(),
+          from: (i['currency'] ?? 'USD').toString(),
+          to: 'USD',
+          usdMxnRate: widget.usdMxnRate,
+        );
+    double limitOf(dynamic i) => toUsd(i, 'credit_limit');
+    double balanceOf(dynamic i) => toUsd(i, 'balance');
     // Utilization is only meaningful for cards whose issuer reports a limit
     // (Plaid's balances.limit is null for some). Aggregate over those only, so
     // a limitless card doesn't drag the headline % to a misleading value.
@@ -133,8 +148,17 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
 
     final rows = <Widget>[];
     for (final item in visible) {
-      final balance = ((item['balance'] ?? 0.0) as num).toDouble();
-      final limit = ((item['credit_limit'] ?? 0.0) as num).toDouble();
+      // USD-normalised so the display money (which is then scaled by
+      // conversionFactor) is right for non-USD cards. The util ratio is
+      // currency-internal so it's unaffected by the conversion.
+      double toUsd(String key) => convertCurrency(
+            ((item[key] ?? 0.0) as num).toDouble(),
+            from: (item['currency'] ?? 'USD').toString(),
+            to: 'USD',
+            usdMxnRate: widget.usdMxnRate,
+          );
+      final balance = toUsd('balance');
+      final limit = toUsd('credit_limit');
       final hasLimit = limit > 0;
       final util = hasLimit ? (balance / limit) * 100 : 0.0;
       final es = Localizations.localeOf(context).languageCode == 'es';

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:plaid_flutter/plaid_flutter.dart';
 import 'package:http/http.dart' as http;
+import 'dart:async';
 import 'dart:convert';
 
 import '../services/api_platform.dart';
@@ -19,10 +20,23 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
   bool _isLoading = false;
   Map<String, dynamic>? _setupStatus;
 
+  // PlaidLink broadcast-stream subscriptions. Re-running the link flow would
+  // otherwise stack a second set of handlers onto the same streams; track them
+  // so each run replaces the previous and dispose() cleans them up.
+  final List<StreamSubscription<dynamic>> _plaidSubs = [];
+
   @override
   void initState() {
     super.initState();
     _loadSetupStatus();
+  }
+
+  @override
+  void dispose() {
+    for (final s in _plaidSubs) {
+      s.cancel();
+    }
+    super.dispose();
   }
 
   Future<void> _loadSetupStatus() async {
@@ -52,9 +66,16 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
         final data = json.decode(response.body);
         final linkToken = data['link_token'];
 
-        PlaidLink.onSuccess.listen(_onSuccess);
-        PlaidLink.onEvent.listen(_onEvent);
-        PlaidLink.onExit.listen(_onExit);
+        // Replace any handlers from a previous run so a single Plaid event
+        // doesn't fire _onSuccess/_onExit N times after N taps.
+        for (final s in _plaidSubs) {
+          s.cancel();
+        }
+        _plaidSubs
+          ..clear()
+          ..add(PlaidLink.onSuccess.listen(_onSuccess))
+          ..add(PlaidLink.onEvent.listen(_onEvent))
+          ..add(PlaidLink.onExit.listen(_onExit));
         // Persist the token before opening so an OAuth bank that navigates the
         // tab away and back can resume the same session (see plaid_oauth.dart).
         // For non-OAuth banks this is a no-op beyond a localStorage write —

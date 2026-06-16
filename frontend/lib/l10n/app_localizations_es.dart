@@ -4266,6 +4266,16 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String lwNotifRepaymentDueTodayTitle(Object borrower) {
+    return 'Pago de $borrower vence hoy';
+  }
+
+  @override
+  String lwNotifRepaymentDueTodayDetail(Object amount, Object number) {
+    return 'Cuota #$number de $amount vence hoy.';
+  }
+
+  @override
   String lwNotifNeedsReconnectTitle(Object name) {
     return '$name requiere reconexión';
   }

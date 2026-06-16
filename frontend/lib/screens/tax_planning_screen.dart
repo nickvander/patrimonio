@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../utils/url_opener.dart';
 import '../services/api_service.dart';
 import '../theme/typography.dart';
 import '../utils/currency.dart';
@@ -218,38 +218,22 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     }
   }
 
-  void _exportCsv() async {
-    final String baseUrl = _apiService.baseUrl;
-    final url = Uri.parse(
-      '$baseUrl/tax/export?year=$_selectedYear&status=$_filingStatus',
-    );
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url);
-    } else {
-      if (mounted) {
-        final l = AppLocalizations.of(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l.taxCsvLaunchFailed)),
-        );
-      }
-    }
+  // Route exports through the same-origin openUrlSameTab seam (matching the
+  // transactions CSV export) rather than url_launcher. The backend replies with
+  // Content-Disposition: attachment, so the browser downloads the file without
+  // navigating away — and because it's a same-origin request the session cookie
+  // is sent, so the endpoint authenticates. url_launcher opened an external
+  // browser with no cookie, returning 401 on native builds.
+  void _exportCsv() {
+    final url =
+        '${_apiService.baseUrl}/tax/export?year=$_selectedYear&status=$_filingStatus';
+    openUrlSameTab(url);
   }
 
-  void _exportPdf() async {
-    final String baseUrl = _apiService.baseUrl;
-    final url = Uri.parse(
-      '$baseUrl/tax/export/pdf?year=$_selectedYear&status=$_filingStatus',
-    );
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url);
-    } else {
-      if (mounted) {
-        final l = AppLocalizations.of(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l.taxPdfLaunchFailed)),
-        );
-      }
-    }
+  void _exportPdf() {
+    final url =
+        '${_apiService.baseUrl}/tax/export/pdf?year=$_selectedYear&status=$_filingStatus';
+    openUrlSameTab(url);
   }
 
   // ---------------------------------------------------------------------------

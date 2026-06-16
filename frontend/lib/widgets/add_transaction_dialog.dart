@@ -190,12 +190,14 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                 segments: [
                   ButtonSegment(
                     value: true,
-                    icon: const Icon(Icons.arrow_upward, size: 14),
+                    // Expense = outflow = money leaving (down), matching the
+                    // OUTFLOW arrow on every transaction row and detail panel.
+                    icon: const Icon(Icons.arrow_downward, size: 14),
                     label: Text(l.dlgTxExpense),
                   ),
                   ButtonSegment(
                     value: false,
-                    icon: const Icon(Icons.arrow_downward, size: 14),
+                    icon: const Icon(Icons.arrow_upward, size: 14),
                     label: Text(l.dlgTxIncome),
                   ),
                 ],

@@ -888,6 +888,14 @@ _NetWorthDelta? _computeDelta(List<dynamic> history) {
     final ref = pick(days, 5);
     if (ref != null && ref.value != 0) {
       final amount = latest.value - ref.value;
+      if (ref.value < 0) {
+        // Negative net-worth baseline: a percentage is meaningless here
+        // (improving from -50k to -40k isn't "+20%"), but the dollar delta is
+        // real — debt-payoff/early-onboarding users deserve to see it. Show
+        // the amount, suppress only the %.
+        return _NetWorthDelta(
+            amount: amount, percentage: null, windowLabel: label);
+      }
       final pct = _plausiblePct(amount, ref.value, latest.value);
       // Implausible baseline (onboarding — net worth >3x'd as accounts were
       // added): hide the whole chip, not just the %. A "+$1.5M MoM" is as
@@ -934,6 +942,10 @@ _NetWorthDelta? _computeDelta(List<dynamic> history) {
     }
     if (best == null || best.value == 0) return null;
     final amount = latest.value - best.value;
+    if (best.value < 0) {
+      // Negative baseline: show the dollar delta, suppress the meaningless %.
+      return _NetWorthDelta(amount: amount, percentage: null, windowLabel: label);
+    }
     final pct = _plausiblePct(amount, best.value, latest.value);
     // Onboarding-inflated baseline → hide the chip entirely (no "+$1.5M MoM").
     if (pct == null) return null;

@@ -20,6 +20,12 @@ use crate::AppState;
 /// defaults that are still usable on a typo-fest.
 const FAILED_ATTEMPT_WINDOW_SECONDS: i64 = 60;
 const FAILED_ATTEMPT_THRESHOLD: i64 = 5;
+/// Hard cap on invalid TOTP codes per pending session window. A 6-digit code
+/// is 1-in-1,000,000 per guess, but jitter alone allowed thousands of probes
+/// across a 5-minute pending session. After this many failures we kill the
+/// pending session so the attacker must re-authenticate (password, itself
+/// rate-limited) to get a new one. Generous enough for a fat-fingering user.
+const TOTP_FAILED_ATTEMPT_THRESHOLD: i64 = 5;
 
 /// Endpoints reachable without a full session cookie. The login
 /// screen needs these to render before the user has authenticated.
@@ -940,6 +946,32 @@ async fn totp_verify(
         // TOTP codes (1 in 1M per attempt) at HTTP throughput.
         password::random_login_jitter().await;
         record_audit(&state.db, "totp_verify", None, Some(validated.user_id), ip.as_deref(), ua.as_deref(), false, Some("bad_code")).await;
+
+        // Hard cap: jitter alone let an attacker probe thousands of codes over
+        // a single pending session. Once the user has failed too many times in
+        // the window, revoke the pending session so they must sign in again —
+        // collapsing the brute-force surface to FAILED_ATTEMPT_THRESHOLD codes
+        // per (rate-limited) login.
+        let window = Utc::now() - chrono::Duration::seconds(FAILED_ATTEMPT_WINDOW_SECONDS);
+        let recent_failures: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*) FROM auth_audit
+            WHERE event = 'totp_verify' AND success = false
+              AND user_id = $1 AND occurred_at >= $2
+            "#,
+        )
+        .bind(validated.user_id)
+        .bind(window)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(0);
+        if recent_failures >= TOTP_FAILED_ATTEMPT_THRESHOLD {
+            let _ = sessions::revoke_by_token(&state.db, &token).await;
+            return Err(ApiError::new(
+                StatusCode::TOO_MANY_REQUESTS,
+                "Too many invalid codes. Please sign in again.",
+            ));
+        }
         return Err(ApiError::new(
             StatusCode::UNAUTHORIZED,
             "Invalid TOTP code.",

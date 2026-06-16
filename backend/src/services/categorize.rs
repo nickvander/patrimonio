@@ -107,6 +107,13 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
         return cat("RENT_AND_UTILITIES");
     }
 
+    // "OXXO GAS" is a fuel station, not the OXXO convenience store. The
+    // grocery block below matches the "OXXO" substring, so it would otherwise
+    // shadow the "OXXO GAS" fuel rule in the transportation block.
+    if has(&["OXXO GAS"]) {
+        return cat("TRANSPORTATION");
+    }
+
     // Groceries & convenience & food.
     if has(&[
         "OXXO", "7-ELEVEN", "7 ELEVEN", "SEVEN", "CIRCLE K", "SORIANA",

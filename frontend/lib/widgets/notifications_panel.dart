@@ -102,6 +102,19 @@ List<AppNotification> deriveNotifications({
         detail: l.lwNotifRepaymentDueDetail(n, money(amount, cur), dueStr),
         onTap: onJumpToLending,
       ));
+    } else {
+      // Due today: days_until and days_overdue are both 0 (the backend only
+      // returns reminders within the lead window, so both-zero means today).
+      // Without this branch a loan due today produced a reminder row but no
+      // notification at all — exactly on the day it matters most.
+      out.add(AppNotification(
+        id: 'loan_due_today:$borrower:$n',
+        icon: Icons.event_available,
+        accent: Colors.amber,
+        title: l.lwNotifRepaymentDueTodayTitle(borrower),
+        detail: l.lwNotifRepaymentDueTodayDetail(n, money(amount, cur)),
+        onTap: onJumpToLending,
+      ));
     }
   }
 

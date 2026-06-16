@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../services/preferences.dart';
 import '../utils/account_category.dart';
+import '../utils/currency.dart';
 import '../utils/debt_payoff.dart';
 import '../utils/theme_colors.dart';
 import '../l10n/app_localizations.dart';
@@ -16,6 +17,9 @@ class DebtPayoffCard extends StatefulWidget {
   final List<dynamic> accounts;
   final ApiService apiService;
   final double conversionFactor;
+  /// USD<->MXN spot rate, used to normalise native account balances to USD
+  /// before the payoff simulation (which assumes a single currency).
+  final double usdMxnRate;
   final NumberFormat currencyFormat;
 
   const DebtPayoffCard({
@@ -23,6 +27,7 @@ class DebtPayoffCard extends StatefulWidget {
     required this.accounts,
     required this.apiService,
     required this.conversionFactor,
+    required this.usdMxnRate,
     required this.currencyFormat,
   });
 
@@ -70,7 +75,15 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
       if (cat != AccountCategory.credit && cat != AccountCategory.loan) {
         continue;
       }
-      final bal = ((raw['current_balance'] as num?)?.toDouble() ?? 0).abs();
+      // Normalise to USD: balances are native, but the simulation and _money
+      // (which multiplies by conversionFactor) both assume USD. Without this a
+      // MXN 50,000 card was treated as $50,000 USD (~17x inflated).
+      final bal = convertCurrency(
+        ((raw['current_balance'] as num?)?.toDouble() ?? 0).abs(),
+        from: (raw['currency'] ?? 'USD').toString(),
+        to: 'USD',
+        usdMxnRate: widget.usdMxnRate,
+      );
       if (bal <= 0) continue;
       final id = raw['id'].toString();
       final defApr = cat == AccountCategory.credit ? 0.2299 : 0.0799;

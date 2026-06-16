@@ -1459,6 +1459,8 @@
   "lwNotifRepaymentOverdueDetail": "Installment #{number} of {amount} was due {dueDate} ({daysOverdue}d ago).",
   "lwNotifRepaymentDueTitle": "{borrower} repayment due in {days}d",
   "lwNotifRepaymentDueDetail": "Installment #{number} of {amount} due {dueDate}.",
+  "lwNotifRepaymentDueTodayTitle": "{borrower} repayment due today",
+  "lwNotifRepaymentDueTodayDetail": "Installment #{number} of {amount} is due today.",
   "lwNotifNeedsReconnectTitle": "{name} needs reconnect",
   "lwNotifNeedsReconnectDetail": "Plaid token expired — reconnect to resume sync.",
   "lwNotifSyncFailedTitle": "{name} sync failed",

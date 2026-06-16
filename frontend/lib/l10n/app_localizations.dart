@@ -6953,6 +6953,18 @@ abstract class AppLocalizations {
     Object number,
   );
 
+  /// No description provided for @lwNotifRepaymentDueTodayTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{borrower} repayment due today'**
+  String lwNotifRepaymentDueTodayTitle(Object borrower);
+
+  /// No description provided for @lwNotifRepaymentDueTodayDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Installment #{number} of {amount} is due today.'**
+  String lwNotifRepaymentDueTodayDetail(Object amount, Object number);
+
   /// No description provided for @lwNotifNeedsReconnectTitle.
   ///
   /// In en, this message translates to:

@@ -4228,6 +4228,16 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String lwNotifRepaymentDueTodayTitle(Object borrower) {
+    return '$borrower repayment due today';
+  }
+
+  @override
+  String lwNotifRepaymentDueTodayDetail(Object amount, Object number) {
+    return 'Installment #$number of $amount is due today.';
+  }
+
+  @override
   String lwNotifNeedsReconnectTitle(Object name) {
     return '$name needs reconnect';
   }

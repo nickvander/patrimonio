@@ -608,7 +608,7 @@ async fn credit_utilization(
 ) -> Json<Vec<CreditUtilization>> {
     let rows = sqlx::query(
         r#"
-        SELECT a.name, a.current_balance, a.credit_limit,
+        SELECT a.name, a.current_balance, a.credit_limit, a.currency,
                i.name as institution_name
         FROM accounts a
         JOIN institutions i ON a.institution_id = i.id
@@ -632,6 +632,7 @@ async fn credit_utilization(
                 CreditUtilization {
                     name: r.get("name"),
                     institution_name: r.get("institution_name"),
+                    currency: r.try_get("currency").unwrap_or_else(|_| "USD".to_string()),
                     balance,
                     credit_limit: limit,
                     utilization_pct: if limit > 0.0 { (balance / limit) * 100.0 } else { 0.0 },
@@ -2191,6 +2192,9 @@ struct HoldingLot {
 struct CreditUtilization {
     name: String,
     institution_name: String,
+    /// Native currency of the card. Balance/limit are in this currency, so the
+    /// client must convert before aggregating a portfolio-wide utilization.
+    currency: String,
     balance: f64,
     credit_limit: f64,
     utilization_pct: f64,

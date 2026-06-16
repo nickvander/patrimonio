@@ -244,15 +244,23 @@ class _PortfolioCardState extends State<PortfolioCard> {
   /// dual-currency panel.
   Widget _buildSummaryCard(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final totalValue =
-        ((widget.portfolioData['total_value'] as num?)?.toDouble() ?? 0.0) *
-        widget.conversionFactor;
-    final totalGainLoss =
-        ((widget.portfolioData['total_gain_loss'] as num?)?.toDouble() ?? 0.0) *
-        widget.conversionFactor;
-    final totalGainLossPct =
-        (widget.portfolioData['total_gain_loss_pct'] as num?)?.toDouble() ??
+    // Use the USD-normalised totals, not `total_value`/`total_gain_loss` which
+    // are raw native sums (USD equities + MXN bonds added 1:1 — the backend
+    // flags them as "meaningless when mixing USD + MXN"). conversionFactor then
+    // scales the USD figure into the display currency.
+    final totalValueUsd =
+        (widget.portfolioData['total_value_usd'] as num?)?.toDouble() ?? 0.0;
+    final totalGainLossUsd =
+        (widget.portfolioData['total_gain_loss_usd'] as num?)?.toDouble() ?? 0.0;
+    final totalCostBasisUsd =
+        (widget.portfolioData['total_cost_basis_usd'] as num?)?.toDouble() ??
         0.0;
+    final totalValue = totalValueUsd * widget.conversionFactor;
+    final totalGainLoss = totalGainLossUsd * widget.conversionFactor;
+    // Percentage is currency-agnostic, but must come from USD figures so the
+    // mixed-currency native sums don't skew it.
+    final totalGainLossPct =
+        totalCostBasisUsd > 0 ? (totalGainLossUsd / totalCostBasisUsd) * 100 : 0.0;
 
     final isPositive = totalGainLoss >= 0;
     final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
@@ -616,8 +624,11 @@ class _PortfolioCardState extends State<PortfolioCard> {
     Map<String, dynamic>? gainer;
     Map<String, dynamic>? loser;
     for (final h in _allHoldings) {
-      final v = (h['value'] as num?)?.toDouble() ?? 0.0;
-      if (top == null || v > ((top['value'] as num?)?.toDouble() ?? 0)) {
+      // Rank by USD value so a large MXN position isn't ranked above a larger
+      // USD one just because its native number is bigger.
+      final v = (h['value_usd'] as num?)?.toDouble() ?? 0.0;
+      if (top == null ||
+          v > ((top['value_usd'] as num?)?.toDouble() ?? 0)) {
         top = h;
       }
       // Null return % means the institution didn't report a cost
@@ -662,8 +673,10 @@ class _PortfolioCardState extends State<PortfolioCard> {
         _KpiTile(
           label: l.pfTopPosition,
           value: _displayTicker(top),
+          // USD-normalised: a native MXN value here read as "$300,000" for a
+          // ~$17k position. value_usd → display via the conversion factor.
           sub: widget.currencyFormat
-              .format(((top['value'] as num).toDouble()) * cf),
+              .format(((top['value_usd'] as num?)?.toDouble() ?? 0.0) * cf),
           accent: context.tealAccent,
         ),
     ];
@@ -698,10 +711,12 @@ class _PortfolioCardState extends State<PortfolioCard> {
     final loserPct = (loser?['gain_loss_pct'] as num?)?.toDouble() ?? 0.0;
 
     // Concentration is the single largest position's share of total value.
-    final totalValue =
-        (widget.portfolioData['total_value'] as num?)?.toDouble() ?? 0.0;
-    final topValue = (top?['value'] as num?)?.toDouble() ?? 0.0;
-    final topShare = totalValue > 0 ? topValue / totalValue : 0.0;
+    // Both sides must be USD-normalised — mixing a native MXN numerator with a
+    // mixed-currency denominator produced shares as high as 30x.
+    final totalValueUsd =
+        (widget.portfolioData['total_value_usd'] as num?)?.toDouble() ?? 0.0;
+    final topValue = (top?['value_usd'] as num?)?.toDouble() ?? 0.0;
+    final topShare = totalValueUsd > 0 ? topValue / totalValueUsd : 0.0;
     final concentrated = top != null && topShare >= 0.20;
 
     final chips = <Widget>[

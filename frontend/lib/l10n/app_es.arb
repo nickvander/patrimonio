@@ -1274,6 +1274,8 @@
   "lwNotifRepaymentOverdueDetail": "La cuota #{number} de {amount} venció el {dueDate} (hace {daysOverdue} d).",
   "lwNotifRepaymentDueTitle": "Pago de {borrower} vence en {days} d",
   "lwNotifRepaymentDueDetail": "Cuota #{number} de {amount} vence el {dueDate}.",
+  "lwNotifRepaymentDueTodayTitle": "Pago de {borrower} vence hoy",
+  "lwNotifRepaymentDueTodayDetail": "Cuota #{number} de {amount} vence hoy.",
   "lwNotifNeedsReconnectTitle": "{name} requiere reconexión",
   "lwNotifNeedsReconnectDetail": "El token de Plaid expiró: reconecta para reanudar la sincronización.",
   "lwNotifSyncFailedTitle": "Falló la sincronización de {name}",

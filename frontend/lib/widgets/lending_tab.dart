@@ -430,6 +430,7 @@ class _LendingTabState extends State<LendingTab> {
     final (label, color) = switch (status) {
       'paid_off' => ('Paid off', context.positive),
       'written_off' => ('Written off', context.negative),
+      'defaulted' => ('Defaulted', context.negative),
       'cancelled' => ('Cancelled', context.textFaint),
       _ => ('Active', context.tealAccent),
     };
@@ -1977,7 +1978,13 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
   }
 
   Widget _buildRepaymentsSection() {
-    final reconciled = _payments;
+    // `_payments` includes scheduled installments (paid_amount == null), which
+    // must NOT render here: they showed as "$0.00" rows whose Unlink button
+    // deleted the schedule row and silently gapped the amortization table.
+    // Only rows with an actual paid amount are real repayments.
+    final reconciled = _payments
+        .where((p) => (p as Map)['paid_amount'] != null)
+        .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

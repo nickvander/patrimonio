@@ -213,6 +213,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// events trigger a silent _loadAllData refresh.
   final RealtimeService _realtime = RealtimeService();
   StreamSubscription<RealtimeEvent>? _realtimeSub;
+  // PlaidLink exposes broadcast streams; each `.listen` adds a subscription
+  // that lives forever unless cancelled. Re-listening on every (re)connect
+  // leaked listeners — after N reconnects a single Plaid success fired N
+  // syncs. Track them so we can cancel before re-listening and on dispose.
+  final List<StreamSubscription<dynamic>> _plaidSubs = [];
   // Coalesces bursty data-change pushes into a single dashboard reload.
   Timer? _reloadDebounce;
 
@@ -283,8 +288,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _reloadDebounce?.cancel();
     _syncPollTimer?.cancel();
     _realtimeSub?.cancel();
+    _cancelPlaidSubs();
     _realtime.dispose();
     super.dispose();
+  }
+
+  /// Cancel any live PlaidLink subscriptions. Called before re-listening (so a
+  /// new connect/reconnect doesn't stack a second handler onto the broadcast
+  /// stream) and on dispose.
+  void _cancelPlaidSubs() {
+    for (final s in _plaidSubs) {
+      s.cancel();
+    }
+    _plaidSubs.clear();
+  }
+
+  /// Register PlaidLink success/exit handlers, replacing any previous ones.
+  void _listenPlaid(
+    void Function(LinkSuccess) onSuccess,
+    void Function(LinkExit) onExit,
+  ) {
+    _cancelPlaidSubs();
+    _plaidSubs.add(PlaidLink.onSuccess.listen(onSuccess));
+    _plaidSubs.add(PlaidLink.onExit.listen(onExit));
   }
 
   /// Canonical section catalog, in display order. Lending sits between
@@ -1644,7 +1670,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (pending == null) return;
     // Clear up front so refreshing the return URL can't replay a spent token.
     clearPlaidOAuth();
-    PlaidLink.onSuccess.listen((event) async {
+    _listenPlaid((event) async {
       try {
         if (pending.mode == 'reconnect') {
           await _apiService.syncInstitutions();
@@ -1674,8 +1700,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           );
         }
       }
-    });
-    PlaidLink.onExit.listen((_) {
+    }, (_) {
       if (mounted) _loadAllData(silent: true);
     });
     // Defer the open until after first frame so the overlay/context are ready.
@@ -1802,15 +1827,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     try {
       final data = await _apiService.getReconnectToken(institutionId);
       final linkToken = data['link_token'];
-      PlaidLink.onSuccess.listen((_) {
+      _listenPlaid((_) {
         debugPrint('Plaid reconnect success');
         // Defer to the global sync via the public API method so the
         // dashboard data refreshes once tokens roll forward.
         _apiService.syncInstitutions().then((_) {
           if (mounted) _loadAllData(silent: true);
         }).catchError((_) {});
-      });
-      PlaidLink.onExit.listen((_) {
+      }, (_) {
         if (mounted) _loadAllData(silent: true);
       });
       // mode:'reconnect' tags the persisted session so an OAuth redirect
@@ -2531,6 +2555,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             CreditUtilizationCard(
               creditData: _creditData ?? [],
               conversionFactor: conversionFactor,
+              usdMxnRate: fxRate,
               currencyFormat: currencyFormat,
             ),
           ],
@@ -2706,11 +2731,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final data = await _apiService.getReconnectToken(institutionId);
         final linkToken = data['link_token'];
 
-        PlaidLink.onSuccess.listen((event) {
+        _listenPlaid((event) {
           debugPrint("Plaid Reconnect Success");
           runSync();
-        });
-        PlaidLink.onExit.listen((event) {
+        }, (event) {
           debugPrint("Plaid Reconnect Exit");
           _loadAllData(silent: true);
         });
@@ -3433,6 +3457,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           BudgetsCard(
             transactions: _transactions ?? const [],
             conversionFactor: conversionFactor,
+            usdMxnRate: fxRate,
             currencyFormat: currencyFormat,
             apiService: _apiService,
           ),
@@ -3441,6 +3466,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             accounts: (_overview?['accounts'] as List?) ?? const [],
             apiService: _apiService,
             conversionFactor: conversionFactor,
+            usdMxnRate: fxRate,
             currencyFormat: currencyFormat,
           ),
         ],

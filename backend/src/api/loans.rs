@@ -1343,11 +1343,49 @@ async fn unreconcile_payment(
     Extension(ctx): Extension<AuthContext>,
     Path(payment_id): Path<uuid::Uuid>,
 ) -> impl IntoResponse {
-    let result = sqlx::query("DELETE FROM loan_payments WHERE id = $1 AND user_id = $2")
+    // A row that belongs to a generated amortization schedule
+    // (scheduled_principal > 0) must NOT be deleted — that would gap the
+    // schedule. Reverting it to 'scheduled' clears the actuals while keeping
+    // the installment. Only standalone payment rows (cash/off-bank or overflow
+    // inserts, scheduled_principal = 0) are deleted outright.
+    let row = sqlx::query(
+        "SELECT scheduled_principal FROM loan_payments WHERE id = $1 AND user_id = $2",
+    )
+    .bind(payment_id)
+    .bind(ctx.user_id)
+    .fetch_optional(&state.db)
+    .await;
+    let scheduled_principal = match row {
+        Ok(Some(r)) => dec_to_f64(r.try_get("scheduled_principal").ok()),
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(e) => {
+            error!("unreconcile_payment lookup failed: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+    let result = if scheduled_principal > 0.0 {
+        sqlx::query(
+            "UPDATE loan_payments
+                SET actual_tx_id = NULL,
+                    paid_amount = NULL,
+                    paid_date = NULL,
+                    principal_portion = NULL,
+                    interest_portion = NULL,
+                    balance_after = NULL,
+                    status = 'scheduled'
+              WHERE id = $1 AND user_id = $2",
+        )
         .bind(payment_id)
         .bind(ctx.user_id)
         .execute(&state.db)
-        .await;
+        .await
+    } else {
+        sqlx::query("DELETE FROM loan_payments WHERE id = $1 AND user_id = $2")
+            .bind(payment_id)
+            .bind(ctx.user_id)
+            .execute(&state.db)
+            .await
+    };
     match result {
         Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
         Ok(_) => {

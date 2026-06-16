@@ -165,8 +165,11 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     setState(() => _isLoading = true);
     try {
       final data = await _apiService.getWealthProjection(
-        startBalance:
-            widget.currentNetWorth / widget.conversionFactor, // USD to backend
+        // `currentNetWorth` is already USD (dashboard.rs net_worth is computed in
+        // USD); `conversionFactor` only scales USD->display. Dividing here
+        // double-converted it, so MXN-display users projected from ~1/fxRate of
+        // their real net worth. The backend wants USD, so pass it straight through.
+        startBalance: widget.currentNetWorth,
         monthlyContribution: _monthlyContribution,
         annualReturnRate: _annualReturnRate,
         annualExpenses: _annualExpenses,

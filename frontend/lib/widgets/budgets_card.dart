@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import '../services/preferences.dart';
 import '../utils/budget_suggestions.dart';
 import '../utils/category.dart';
+import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
 /// "How much have I spent this month per budgeted category?" card.
@@ -15,6 +16,11 @@ import '../utils/theme_colors.dart';
 class BudgetsCard extends StatefulWidget {
   final List<dynamic> transactions;
   final double conversionFactor;
+  /// USD<->MXN spot rate. Budgets are stored in USD, but transactions carry
+  /// their native currency, so spend must be normalised to USD before it can
+  /// be compared against a budget. `conversionFactor` can't do this (it's 1.0
+  /// for USD-display users even when their transactions are in MXN).
+  final double usdMxnRate;
   final NumberFormat currencyFormat;
   /// When provided, budgets sync with the backend `app_settings` row.
   /// Without it the card falls back to localStorage-only.
@@ -24,6 +30,7 @@ class BudgetsCard extends StatefulWidget {
     super.key,
     required this.transactions,
     required this.conversionFactor,
+    required this.usdMxnRate,
     required this.currencyFormat,
     this.apiService,
   });
@@ -240,27 +247,37 @@ class _BudgetsCardState extends State<BudgetsCard> {
   }
 
   /// Sum outflow transactions in the current month by prettified
-  /// category. Storage sign convention (backend sync.rs:659): negative =
-  /// outflow, positive = inflow — so spend is the negative rows, summed
-  /// as their absolute value. Skips income (positive amounts) and pending rows.
+  /// category, normalised to USD (the unit budgets are stored in). Storage
+  /// sign convention (backend sync.rs:659): negative = outflow, positive =
+  /// inflow — so spend is the negative rows, summed as their absolute value.
+  /// Skips income (positive amounts) and pending rows.
   Map<String, double> _monthlySpendByCategory() {
     final out = <String, double>{};
     final now = DateTime.now();
     final monthStart = DateTime(now.year, now.month);
     for (final raw in widget.transactions) {
       final m = raw as Map;
+      if (m['pending'] == true) continue;
       final ds = m['date']?.toString();
       if (ds == null) continue;
       final d = DateTime.tryParse(ds);
       if (d == null || d.isBefore(monthStart)) continue;
       final amount = (m['amount'] as num?)?.toDouble() ?? 0.0;
       if (amount >= 0) continue;
+      // Budgets are USD; convert each row from its native currency so a
+      // MXN grocery run isn't compared 1:1 against a USD budget.
+      final spentUsd = convertCurrency(
+        amount.abs(),
+        from: (m['currency'] ?? 'USD').toString(),
+        to: 'USD',
+        usdMxnRate: widget.usdMxnRate,
+      );
       final cat = prettyCategory(
         userCategory: m['user_category']?.toString(),
         detailed: m['category_detailed']?.toString(),
         primary: m['category']?.toString(),
       );
-      out[cat] = (out[cat] ?? 0.0) + amount.abs();
+      out[cat] = (out[cat] ?? 0.0) + spentUsd;
     }
     return out;
   }
