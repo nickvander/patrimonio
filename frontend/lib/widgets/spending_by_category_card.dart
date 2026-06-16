@@ -286,8 +286,15 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
 
   Widget _buildLegend(List<dynamic> cats, int monthCount) {
     final palette = _palette(context);
-    // Average over the months actually present in the response (never 0).
-    final divisor = monthCount > 0 ? monthCount : 1;
+    // The most recent month in the window is the current, still-incomplete
+    // month. Counting it as a whole month understates the per-month average
+    // (a half-elapsed month's spend would be divided across a full slot), so
+    // count it as the fraction of the month elapsed so far instead.
+    final now = DateTime.now();
+    final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
+    final currentMonthFraction = now.day / daysInMonth;
+    final divisor =
+        monthCount > 0 ? (monthCount - 1) + currentMonthFraction : 1.0;
     return Wrap(
       spacing: 16,
       runSpacing: 8,

@@ -327,7 +327,13 @@ class _LendingTabState extends State<LendingTab> {
     final principal = (loan['principal'] as num?)?.toDouble() ?? 0;
     final repaid = (loan['total_repaid'] as num?)?.toDouble() ?? 0;
     final status = (loan['status'] ?? 'active').toString();
-    final pct = principal > 0 ? (repaid / principal).clamp(0.0, 1.0) : 0.0;
+    // Progress = principal actually repaid / principal. Deriving it from
+    // `outstanding` keeps the bar consistent with the outstanding balance
+    // shown on the card. The old `total_repaid / principal` mixed interest
+    // into the numerator, so the bar read e.g. 80% while the balance didn't
+    // match.
+    final pct =
+        principal > 0 ? ((principal - outstanding) / principal).clamp(0.0, 1.0) : 0.0;
     final linked = loan['disbursement_tx_id'] != null;
     final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 

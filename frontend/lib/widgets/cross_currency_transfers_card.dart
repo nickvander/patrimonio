@@ -97,11 +97,11 @@ class CrossCurrencyTransfersCard extends StatelessWidget {
     final dstCur = (t['dest_currency'] ?? '').toString().toUpperCase();
     final implied = (t['implied_fx_rate'] as num?)?.toDouble() ?? 0;
     final spotRaw = (t['spot_fx_rate'] as num?)?.toDouble();
-    // Spot is denominated as USD→MXN in the backend. Invert when the
-    // transfer is the reverse direction so we compare apples-to-apples.
-    final spot = (spotRaw != null && spotRaw > 0)
-        ? (srcCur == 'MXN' && dstCur == 'USD' ? 1.0 / spotRaw : spotRaw)
-        : null;
+    // Both rates are already MXN-per-USD regardless of transfer direction
+    // (backend implied_rate normalises direction; see fx_transfer_link.rs),
+    // so they're directly comparable. The old reverse-direction inversion
+    // compared USD/MXN against MXN/USD and produced ~+29,000% deltas.
+    final spot = (spotRaw != null && spotRaw > 0) ? spotRaw : null;
     final delta = (spot != null && spot > 0)
         ? ((implied - spot) / spot) * 100.0
         : null;

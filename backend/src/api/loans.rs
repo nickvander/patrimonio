@@ -803,15 +803,17 @@ async fn list_people(
     Extension(ctx): Extension<AuthContext>,
 ) -> Json<Vec<PersonView>> {
     // Per-person aggregates so the UI can show "lent 3 times, $1,200
-    // outstanding". Outstanding is principal − repaid here (we keep the
-    // people summary simple — interest is shown at the loan level).
+    // outstanding". Outstanding is principal − principal repaid; the
+    // interest portion of each payment is income, not a reduction of the
+    // amount owed, so it must NOT count against principal here.
     let rows = sqlx::query(
         r#"
         SELECT pe.id, pe.name, pe.note,
                COUNT(l.id) AS loan_count,
                COALESCE(SUM(
                    GREATEST(l.principal - COALESCE((
-                       SELECT SUM(p.paid_amount) FROM loan_payments p
+                       SELECT SUM(COALESCE(p.principal_portion, p.paid_amount, 0))
+                       FROM loan_payments p
                        WHERE p.loan_id = l.id AND p.paid_amount IS NOT NULL), 0), 0)
                ), 0) AS total_outstanding
         FROM people pe
@@ -867,8 +869,31 @@ async fn link_disbursement(
     Path(id): Path<uuid::Uuid>,
     Json(payload): Json<LinkTxRequest>,
 ) -> impl IntoResponse {
-    if owned_tx(&state, ctx.user_id, payload.transaction_id).await.is_none() {
+    let Some((tx_currency, _tx_date, _tx_amount)) =
+        owned_tx(&state, ctx.user_id, payload.transaction_id).await
+    else {
         return StatusCode::NOT_FOUND.into_response();
+    };
+    // The funding tx must be in the loan's currency — lending out MXN
+    // principal is an MXN outflow. A mismatched currency would link a tx
+    // whose amount doesn't correspond to the principal.
+    let loan_currency: Option<String> =
+        sqlx::query_scalar("SELECT currency FROM loans WHERE id = $1 AND user_id = $2")
+            .bind(id)
+            .bind(ctx.user_id)
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten();
+    let Some(loan_currency) = loan_currency else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    if !loan_currency.is_empty() && !tx_currency.eq_ignore_ascii_case(&loan_currency) {
+        return (
+            StatusCode::BAD_REQUEST,
+            "transaction currency does not match the loan currency",
+        )
+            .into_response();
     }
     let result = sqlx::query(
         "UPDATE loans SET disbursement_tx_id = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3",
@@ -1004,25 +1029,38 @@ async fn record_payment(
     Path(id): Path<uuid::Uuid>,
     Json(payload): Json<RecordPaymentRequest>,
 ) -> impl IntoResponse {
-    let owns = sqlx::query("SELECT 1 FROM loans WHERE id = $1 AND user_id = $2")
+    let owns = sqlx::query("SELECT currency FROM loans WHERE id = $1 AND user_id = $2")
         .bind(id)
         .bind(ctx.user_id)
         .fetch_optional(&state.db)
         .await;
-    if !matches!(owns, Ok(Some(_))) {
+    let Ok(Some(loan_meta)) = owns else {
         return StatusCode::NOT_FOUND.into_response();
-    }
+    };
+    let loan_currency: String = loan_meta.try_get("currency").unwrap_or_default();
     let today = chrono::Utc::now().date_naive();
     // Two modes: link a real bank inflow, or record a cash/off-bank
     // payment (no tx). The amount defaults to the linked tx's magnitude;
     // a cash payment must state its amount.
     let (amount, paid_date) = match payload.transaction_id {
         Some(tx_id) => {
-            let Some((_currency, tx_date, tx_amount)) =
+            let Some((tx_currency, tx_date, tx_amount)) =
                 owned_tx(&state, ctx.user_id, tx_id).await
             else {
                 return StatusCode::NOT_FOUND.into_response();
             };
+            // A repayment must be in the loan's currency. Reconciling a
+            // foreign-currency inflow would silently record the wrong
+            // amount (e.g. a $500 USD inflow against an MXN loan).
+            if !loan_currency.is_empty()
+                && !tx_currency.eq_ignore_ascii_case(&loan_currency)
+            {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    "transaction currency does not match the loan currency",
+                )
+                    .into_response();
+            }
             (
                 payload.amount.unwrap_or(tx_amount.abs()),
                 payload.paid_date.unwrap_or(tx_date),
@@ -1302,15 +1340,19 @@ async fn record_payment(
 
     match result {
         Ok(_) => {
-            // Auto-mark the loan paid_off when the outstanding balance
-            // hits zero (best-effort, ignores interest for the trigger
-            // since MVP interest is approximate).
+            // Auto-mark the loan paid_off once the PRINCIPAL is fully repaid.
+            // Compare against summed principal_portion (return of capital), not
+            // paid_amount — otherwise interest payments push the total over
+            // principal and the loan is marked paid_off while capital is still
+            // outstanding.
             let _ = sqlx::query(
                 r#"
                 UPDATE loans SET status = 'paid_off', updated_at = NOW()
                 WHERE id = $1 AND user_id = $2 AND status = 'active'
-                  AND principal <= COALESCE((SELECT SUM(paid_amount) FROM loan_payments
-                                             WHERE loan_id = $1 AND paid_amount IS NOT NULL), 0)
+                  AND principal <= COALESCE((
+                      SELECT SUM(COALESCE(principal_portion, paid_amount, 0))
+                      FROM loan_payments
+                      WHERE loan_id = $1 AND paid_amount IS NOT NULL), 0)
                 "#,
             )
             .bind(id)
@@ -1484,13 +1526,17 @@ async fn suggest_repayment(
     let horizon_months = term_months.unwrap_or(18).max(1) as i64;
     let horizon = disbursement_date + chrono::Duration::days(horizon_months * 31 + 30);
 
-    // Expected installment: prefer the next unpaid installment's
-    // scheduled_amount from the generated schedule (exact). Fall back to
-    // principal/term when no schedule exists, and to None (no-schedule
+    // Expected installment: the REMAINING amount on the earliest not-fully-
+    // paid installment from the generated schedule. Using `scheduled_amount -
+    // paid_amount` (rather than skipping any reconciled row via
+    // `actual_tx_id IS NULL`) means a partially-paid installment still scores
+    // against what's left on IT, not the next installment's full amount. Falls
+    // back to principal/term when no schedule exists, and to None (no-schedule
     // matcher mode) when there's no term either.
     let next_scheduled: Option<rust_decimal::Decimal> = sqlx::query_scalar(
-        "SELECT scheduled_amount FROM loan_payments \
-         WHERE loan_id = $1 AND actual_tx_id IS NULL AND scheduled_amount > 0 \
+        "SELECT scheduled_amount - COALESCE(paid_amount, 0) FROM loan_payments \
+         WHERE loan_id = $1 AND scheduled_amount > 0 \
+         AND COALESCE(paid_amount, 0) < scheduled_amount \
          ORDER BY installment_number ASC LIMIT 1",
     )
     .bind(id)

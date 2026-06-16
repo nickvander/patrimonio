@@ -1698,7 +1698,9 @@ async fn emergency_fund(
                  ELSE current_balance END), 0) AS cash
         FROM accounts
         WHERE user_id = $1
-          AND account_type IN ('checking', 'savings', 'cash', 'cash management', 'cd', 'money market')
+          -- CDs are excluded: they carry an early-withdrawal penalty, so they
+          -- are not the immediately-accessible cash an emergency fund measures.
+          AND account_type IN ('checking', 'savings', 'cash', 'cash management', 'money market')
         "#,
     )
     .bind(ctx.user_id)

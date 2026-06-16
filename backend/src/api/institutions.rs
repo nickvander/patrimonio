@@ -241,7 +241,10 @@ fn attach_redirect_uri(payload: &mut serde_json::Value, redirect: &Option<String
 }
 
 /// Creates a Plaid Link token
-async fn create_link_token(State(state): State<AppState>) -> Response {
+async fn create_link_token(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Response {
     let (client_id, secret) = match (&state.config.plaid_client_id, &state.config.plaid_secret) {
         (Some(client_id), Some(secret)) => (client_id, secret),
         _ => {
@@ -263,7 +266,10 @@ async fn create_link_token(State(state): State<AppState>) -> Response {
         "country_codes": ["US"],
         "language": "en",
         "user": {
-            "client_user_id": "patrimonio-single-user"
+            // Per-user isolation: Plaid keys items/consent on client_user_id.
+            // A shared constant collided every user's items into one Plaid
+            // user, breaking multi-user deploys (and Plaid's ToS).
+            "client_user_id": ctx.user_id.to_string()
         },
         // `transactions` is the broad base product — banks, credit cards, and
         // most brokerages support it. `investments` is requested only when the
@@ -368,7 +374,8 @@ async fn create_reconnect_token(
         "language": "en",
         "access_token": access_token,
         "user": {
-            "client_user_id": "patrimonio-single-user"
+            // Same per-user isolation as the new-link flow above.
+            "client_user_id": ctx.user_id.to_string()
         }
     });
     attach_redirect_uri(&mut payload, &state.config.plaid_redirect_uri);
