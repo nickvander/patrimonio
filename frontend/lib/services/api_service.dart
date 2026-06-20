@@ -915,6 +915,29 @@ class ApiService {
     }
   }
 
+  /// Accounts the backend auto-archived because they were closed/removed
+  /// at the bank (e.g. a deleted SoFi vault). Surfaced in the
+  /// "Closed accounts" management section so the user can restore them.
+  /// Not cached — the list is small and we want it fresh on open.
+  Future<List<dynamic>> getArchivedAccounts() async {
+    final response = await _get(Uri.parse('$_baseUrl/accounts/archived'));
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception(_t('Failed to load closed accounts',
+        'No se pudieron cargar las cuentas cerradas'));
+  }
+
+  /// Restore an auto-archived account so it counts toward net worth again.
+  Future<void> restoreAccount(String accountId) async {
+    final response =
+        await _post(Uri.parse('$_baseUrl/accounts/$accountId/restore'));
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception(_t('Failed to restore account',
+          'No se pudo restaurar la cuenta'));
+    }
+  }
+
   Future<Map<String, dynamic>> getSetupStatus() async {
     // Setup status is a public endpoint — used by the login screen — so
     // we still send credentials but the server does not require them.

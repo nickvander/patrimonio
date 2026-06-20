@@ -5538,6 +5538,66 @@ abstract class AppLocalizations {
   /// **'Restore'**
   String get hiddenRestore;
 
+  /// No description provided for @hiddenClosedAccounts.
+  ///
+  /// In en, this message translates to:
+  /// **'Closed accounts'**
+  String get hiddenClosedAccounts;
+
+  /// No description provided for @hiddenClosedAccountsIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Accounts Patrimonio archived because they were closed or removed at the bank. They no longer count toward your net worth. Restore one to bring it back, or delete it permanently.'**
+  String get hiddenClosedAccountsIntro;
+
+  /// No description provided for @hiddenNoClosedAccounts.
+  ///
+  /// In en, this message translates to:
+  /// **'No closed accounts. When a bank reports an account as closed, it lands here instead of disappearing.'**
+  String get hiddenNoClosedAccounts;
+
+  /// No description provided for @accountRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get accountRestore;
+
+  /// No description provided for @accountRestored.
+  ///
+  /// In en, this message translates to:
+  /// **'Restored \"{name}\"'**
+  String accountRestored(String name);
+
+  /// No description provided for @accountDeletePermanently.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete permanently'**
+  String get accountDeletePermanently;
+
+  /// No description provided for @accountDeleteConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete account permanently?'**
+  String get accountDeleteConfirmTitle;
+
+  /// No description provided for @accountDeleteConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This permanently deletes \"{name}\" and all of its transactions. This can\'t be undone.'**
+  String accountDeleteConfirmBody(String name);
+
+  /// No description provided for @accountDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted \"{name}\"'**
+  String accountDeleted(String name);
+
+  /// No description provided for @accountClosedOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Closed {date}'**
+  String accountClosedOn(Object date);
+
   /// No description provided for @cbTitle.
   ///
   /// In en, this message translates to:

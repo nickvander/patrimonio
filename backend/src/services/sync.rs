@@ -253,8 +253,15 @@ async fn sync_one_inst(db: &PgPool, config: &AppConfig, client: &Client, inst: I
                 }
 
                 if let Some(accounts) = res["accounts"].as_array() {
+                    // Every external_id Plaid returned this sync — used after
+                    // the loop to archive the ones it has stopped returning
+                    // (closed/removed at the bank).
+                    let mut returned_ids: Vec<String> = Vec::with_capacity(accounts.len());
                     for acc in accounts {
                         let external_id = acc["account_id"].as_str().unwrap_or("");
+                        if !external_id.is_empty() {
+                            returned_ids.push(external_id.to_string());
+                        }
                         let subtype = acc["subtype"].as_str().unwrap_or("checking");
                         let mask = acc["mask"].as_str().unwrap_or("");
                         // Friendly display name. Prefer Plaid's official name;
@@ -332,14 +339,17 @@ async fn sync_one_inst(db: &PgPool, config: &AppConfig, client: &Client, inst: I
                             // later sync returns null (Plaid is sometimes
                             // inconsistent about populating it).
                             if refresh_name {
+                                // Plaid returned this account, so it's open
+                                // again: clear archived_at to un-archive a row
+                                // a prior sync had marked as removed.
                                 sqlx::query(
-                                    "UPDATE accounts SET name = $1, current_balance = $2, available_balance = $3, credit_limit = COALESCE($4, credit_limit), updated_at = NOW() WHERE external_id = $5 AND user_id = $6"
+                                    "UPDATE accounts SET name = $1, current_balance = $2, available_balance = $3, credit_limit = COALESCE($4, credit_limit), archived_at = NULL, updated_at = NOW() WHERE external_id = $5 AND user_id = $6"
                                 )
                                     .bind(&name).bind(current_bal).bind(available_bal).bind(credit_limit).bind(external_id).bind(inst_user_id)
                                     .execute(db).await?;
                             } else {
                                 sqlx::query(
-                                    "UPDATE accounts SET current_balance = $1, available_balance = $2, credit_limit = COALESCE($3, credit_limit), updated_at = NOW() WHERE external_id = $4 AND user_id = $5"
+                                    "UPDATE accounts SET current_balance = $1, available_balance = $2, credit_limit = COALESCE($3, credit_limit), archived_at = NULL, updated_at = NOW() WHERE external_id = $4 AND user_id = $5"
                                 )
                                     .bind(current_bal).bind(available_bal).bind(credit_limit).bind(external_id).bind(inst_user_id)
                                     .execute(db).await?;
@@ -372,6 +382,59 @@ async fn sync_one_inst(db: &PgPool, config: &AppConfig, client: &Client, inst: I
                             .bind(inst_user_id)
                             .execute(db)
                             .await;
+                        }
+                    }
+
+                    // Reconcile removals: Plaid's /accounts(/balance) returns
+                    // ONLY currently-open accounts, so any of OUR rows for this
+                    // institution+user with an external_id Plaid no longer
+                    // returned has been closed/removed at the bank (e.g. a
+                    // deleted SoFi vault). Reversibly archive them — keep the
+                    // row + transactions, exclude from net worth/lists, allow
+                    // restore — rather than hard-deleting.
+                    //
+                    // Guard: only when the returned set is NON-EMPTY. The
+                    // error path above already early-returns, but a transient
+                    // empty-yet-"successful" response must never wipe every
+                    // account by matching nothing in `<> ALL`.
+                    if !returned_ids.is_empty() {
+                        // Scope STRICTLY to this institution + user, and only
+                        // rows with external_id IS NOT NULL so manual/holdings/
+                        // imported accounts are never touched. Already-archived
+                        // rows are skipped (archived_at IS NULL) so updated_at
+                        // isn't churned on every sync.
+                        let archived = sqlx::query(
+                            r#"
+                            UPDATE accounts
+                            SET archived_at = NOW(), updated_at = NOW()
+                            WHERE institution_id = $1
+                              AND user_id = $2
+                              AND external_id IS NOT NULL
+                              AND archived_at IS NULL
+                              AND external_id <> ALL($3)
+                            "#,
+                        )
+                        .bind(inst_id)
+                        .bind(inst_user_id)
+                        .bind(&returned_ids)
+                        .execute(db)
+                        .await;
+                        match archived {
+                            Ok(r) if r.rows_affected() > 0 => {
+                                tracing::info!(
+                                    "Archived {} account(s) Plaid no longer returns for {}",
+                                    r.rows_affected(),
+                                    inst_name
+                                );
+                            }
+                            Ok(_) => {}
+                            Err(e) => {
+                                tracing::error!(
+                                    "Failed to archive removed accounts for {}: {}",
+                                    inst_name,
+                                    e
+                                );
+                            }
                         }
                     }
                 }

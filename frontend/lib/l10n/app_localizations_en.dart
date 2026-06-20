@@ -3318,6 +3318,46 @@ class AppLocalizationsEn extends AppLocalizations {
   String get hiddenRestore => 'Restore';
 
   @override
+  String get hiddenClosedAccounts => 'Closed accounts';
+
+  @override
+  String get hiddenClosedAccountsIntro =>
+      'Accounts Patrimonio archived because they were closed or removed at the bank. They no longer count toward your net worth. Restore one to bring it back, or delete it permanently.';
+
+  @override
+  String get hiddenNoClosedAccounts =>
+      'No closed accounts. When a bank reports an account as closed, it lands here instead of disappearing.';
+
+  @override
+  String get accountRestore => 'Restore';
+
+  @override
+  String accountRestored(String name) {
+    return 'Restored \"$name\"';
+  }
+
+  @override
+  String get accountDeletePermanently => 'Delete permanently';
+
+  @override
+  String get accountDeleteConfirmTitle => 'Delete account permanently?';
+
+  @override
+  String accountDeleteConfirmBody(String name) {
+    return 'This permanently deletes \"$name\" and all of its transactions. This can\'t be undone.';
+  }
+
+  @override
+  String accountDeleted(String name) {
+    return 'Deleted \"$name\"';
+  }
+
+  @override
+  String accountClosedOn(Object date) {
+    return 'Closed $date';
+  }
+
+  @override
   String get cbTitle => 'Connect bank';
 
   @override

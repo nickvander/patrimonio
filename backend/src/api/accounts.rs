@@ -17,6 +17,11 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_accounts).post(create_account))
         .route("/summary", get(accounts_summary))
+        // "Closed accounts" — accounts Plaid stopped returning (closed/removed
+        // at the bank) that the sync reversibly archived. Static path, declared
+        // before the dynamic `/{id}` routes so it isn't swallowed as an id.
+        .route("/archived", get(list_archived_accounts))
+        .route("/{id}/restore", post(restore_account))
         // Global "refresh all my stock prices" — re-prices every manual
         // holding from the live quote cache. Static path, declared before the
         // dynamic `/{id}` routes.
@@ -224,7 +229,7 @@ async fn list_accounts(
                i.name as institution_name, i.country, a.updated_at
         FROM accounts a
         JOIN institutions i ON a.institution_id = i.id
-        WHERE a.user_id = $1
+        WHERE a.user_id = $1 AND a.archived_at IS NULL
         ORDER BY i.name, a.name
         "#
     )
@@ -270,7 +275,7 @@ async fn accounts_summary(
                               THEN ABS(current_balance) ELSE 0 END), 0) as total_liabilities,
             COUNT(*) as account_count
         FROM accounts
-        WHERE user_id = $1
+        WHERE user_id = $1 AND archived_at IS NULL
         "#
     )
     .bind(ctx.user_id)
@@ -972,6 +977,110 @@ async fn delete_account(
         }
         Err(e) => {
             error!("Failed to delete account: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// One archived ("closed") account, surfaced to the "Closed accounts" UI so
+/// the user can review what the sync auto-archived and either restore it or
+/// permanently delete it.
+#[derive(Serialize)]
+struct ArchivedAccountResponse {
+    id: String,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    nickname: Option<String>,
+    institution_name: String,
+    account_type: String,
+    current_balance: Option<f64>,
+    currency: String,
+    archived_at: String,
+}
+
+/// List the caller's archived accounts — the ones the sync stopped seeing in
+/// Plaid's response and reversibly archived (closed/removed at the bank).
+/// Excluded from every net-worth / balance / list query; this endpoint is the
+/// only place they surface, so a "Closed accounts" screen can offer restore or
+/// permanent delete.
+async fn list_archived_accounts(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<Vec<ArchivedAccountResponse>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT a.id, a.name, a.nickname, a.account_type, a.currency,
+               a.current_balance, i.name as institution_name, a.archived_at
+        FROM accounts a
+        JOIN institutions i ON a.institution_id = i.id
+        WHERE a.user_id = $1 AND a.archived_at IS NOT NULL
+        ORDER BY a.archived_at DESC, i.name, a.name
+        "#,
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let accounts = rows
+        .iter()
+        .map(|row| ArchivedAccountResponse {
+            id: row.get::<uuid::Uuid, _>("id").to_string(),
+            name: row.get("name"),
+            nickname: row.try_get::<Option<String>, _>("nickname").ok().flatten(),
+            institution_name: row.get("institution_name"),
+            account_type: row.get("account_type"),
+            current_balance: row
+                .try_get::<rust_decimal::Decimal, _>("current_balance")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0)),
+            currency: row.get("currency"),
+            archived_at: row
+                .try_get::<chrono::DateTime<chrono::Utc>, _>("archived_at")
+                .ok()
+                .map(|d| d.to_rfc3339())
+                .unwrap_or_default(),
+        })
+        .collect();
+
+    Json(accounts)
+}
+
+/// Restore a previously-archived account (clear archived_at) so it counts
+/// toward net worth and reappears in lists again. Scoped to the caller. A
+/// missing / not-owned / not-archived id returns 404. Note that the next sync
+/// re-archives it if Plaid still isn't returning that external_id — restore is
+/// for the case where the account is genuinely back, or was archived in error.
+async fn restore_account(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path(id): Path<uuid::Uuid>,
+) -> impl IntoResponse {
+    info!("Restoring account {} for user {}", id, ctx.user_id);
+
+    let result = sqlx::query(
+        "UPDATE accounts SET archived_at = NULL, updated_at = NOW() \
+         WHERE id = $1 AND user_id = $2 AND archived_at IS NOT NULL",
+    )
+    .bind(id)
+    .bind(ctx.user_id)
+    .execute(&state.db)
+    .await;
+
+    match result {
+        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
+        Ok(_) => {
+            state
+                .realtime
+                .publish(
+                    ctx.user_id,
+                    crate::services::realtime::RealtimeEvent::AccountsChanged,
+                )
+                .await;
+            StatusCode::NO_CONTENT.into_response()
+        }
+        Err(e) => {
+            error!("Failed to restore account: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }

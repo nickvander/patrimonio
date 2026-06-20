@@ -1136,6 +1136,37 @@
   "hiddenNoFxPairs": "No FX pairs are currently dismissed. When you unlink a detected Wise / Remitly / Xoom transfer on the Transactions tab, it lands here so the detector won't re-propose it.",
   "hiddenDismissedAt": "Dismissed {date}",
   "hiddenRestore": "Restore",
+  "hiddenClosedAccounts": "Closed accounts",
+  "hiddenClosedAccountsIntro": "Accounts Patrimonio archived because they were closed or removed at the bank. They no longer count toward your net worth. Restore one to bring it back, or delete it permanently.",
+  "hiddenNoClosedAccounts": "No closed accounts. When a bank reports an account as closed, it lands here instead of disappearing.",
+  "accountRestore": "Restore",
+  "accountRestored": "Restored \"{name}\"",
+  "@accountRestored": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "accountDeletePermanently": "Delete permanently",
+  "accountDeleteConfirmTitle": "Delete account permanently?",
+  "accountDeleteConfirmBody": "This permanently deletes \"{name}\" and all of its transactions. This can't be undone.",
+  "@accountDeleteConfirmBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "accountDeleted": "Deleted \"{name}\"",
+  "@accountDeleted": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "accountClosedOn": "Closed {date}",
   "cbTitle": "Connect bank",
   "cbSetupIncompleteTitle": "Plaid setup is incomplete.",
   "cbSetupIncompleteBody": "Set Plaid credentials and ENCRYPTION_KEY before linking real bank accounts.",

@@ -82,7 +82,7 @@ async fn dashboard_overview(
                    COALESCE(SUM(CASE WHEN is_liability_account_type(account_type)
                                      THEN ABS(current_balance) ELSE 0 END), 0) as liabilities
             FROM accounts
-            WHERE user_id = $1
+            WHERE user_id = $1 AND archived_at IS NULL
             GROUP BY currency
             "#
         ).bind(ctx.user_id).fetch_all(&state.db),
@@ -96,7 +96,7 @@ async fn dashboard_overview(
                    a.clabe, a.holder_name
             FROM accounts a
             JOIN institutions i ON a.institution_id = i.id
-            WHERE a.user_id = $1
+            WHERE a.user_id = $1 AND a.archived_at IS NULL
             ORDER BY a.account_type, a.name
             "#
         ).bind(ctx.user_id).fetch_all(&state.db),
@@ -144,7 +144,7 @@ async fn dashboard_overview(
                        END
                    ), 0) as total_usd
             FROM accounts
-            WHERE user_id = $2
+            WHERE user_id = $2 AND archived_at IS NULL
             GROUP BY account_type
             "#
         )
@@ -164,7 +164,7 @@ async fn dashboard_overview(
                    ), 0) as total_usd
             FROM accounts a
             JOIN institutions i ON a.institution_id = i.id
-            WHERE a.user_id = $2
+            WHERE a.user_id = $2 AND a.archived_at IS NULL
             GROUP BY i.name, i.country
             ORDER BY total DESC
             "#
@@ -272,7 +272,7 @@ async fn net_worth_history(
             FROM balance_snapshots bs
             JOIN accounts a ON bs.account_id = a.id
             JOIN institutions i ON a.institution_id = i.id
-            WHERE bs.user_id = $1
+            WHERE bs.user_id = $1 AND a.archived_at IS NULL
             GROUP BY bs.as_of_date, COALESCE(NULLIF(i.name, ''), 'Unknown')
         )
         SELECT as_of_date,
@@ -352,7 +352,7 @@ async fn portfolio_value_history(
                COALESCE(SUM(bs.balance_usd), 0)::float8 AS value_usd
         FROM balance_snapshots bs
         JOIN accounts a ON bs.account_id = a.id
-        WHERE bs.user_id = $1
+        WHERE bs.user_id = $1 AND a.archived_at IS NULL
           AND EXISTS (SELECT 1 FROM holdings h WHERE h.account_id = a.id)
         GROUP BY bs.as_of_date
         ORDER BY bs.as_of_date ASC
@@ -413,7 +413,7 @@ async fn holdings(
         FROM holdings h
         JOIN accounts a ON h.account_id = a.id
         JOIN institutions i ON a.institution_id = i.id
-        WHERE h.user_id = $1
+        WHERE h.user_id = $1 AND a.archived_at IS NULL
         ORDER BY h.value DESC NULLS LAST
         "#
     )
@@ -613,6 +613,7 @@ async fn credit_utilization(
         FROM accounts a
         JOIN institutions i ON a.institution_id = i.id
         WHERE a.account_type IN ('credit', 'credit card') AND a.user_id = $1
+          AND a.archived_at IS NULL
         ORDER BY i.name, a.name
         "#
     )
@@ -712,6 +713,7 @@ async fn recent_transactions(
         JOIN accounts a ON t.account_id = a.id
         JOIN institutions i ON a.institution_id = i.id
         WHERE t.user_id = $1
+          AND a.archived_at IS NULL
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
         ORDER BY t.date DESC, t.created_at DESC
         LIMIT $2 OFFSET $3
@@ -859,6 +861,7 @@ async fn export_transactions_csv(
             JOIN accounts a ON t.account_id = a.id
             JOIN institutions i ON a.institution_id = i.id
             WHERE t.user_id = $1
+              AND a.archived_at IS NULL
               AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
             ORDER BY t.date DESC, t.created_at DESC
             "#,
@@ -1082,8 +1085,10 @@ async fn asset_allocation(
                        ELSE value
                    END as value_usd,
                    COALESCE(quantity, 0)::numeric as qty
-            FROM holdings
+            FROM holdings h
             WHERE user_id = $2
+              AND EXISTS (SELECT 1 FROM accounts a
+                          WHERE a.id = h.account_id AND a.archived_at IS NULL)
             UNION ALL
             SELECT 'Cash' as category,
                    name as sub_category,
@@ -1095,6 +1100,7 @@ async fn asset_allocation(
             FROM accounts
             WHERE account_type IN ('checking', 'savings', 'cash', 'cash management', 'cd', 'money market')
               AND user_id = $2
+              AND archived_at IS NULL
             UNION ALL
             SELECT 'Crypto' as category,
                    name as sub_category,
@@ -1106,6 +1112,7 @@ async fn asset_allocation(
             FROM accounts
             WHERE account_type IN ('crypto')
               AND user_id = $2
+              AND archived_at IS NULL
         ) sub
         GROUP BY category, sub_category
         ORDER BY value DESC
@@ -1190,6 +1197,7 @@ async fn cash_flow_trends(
         -- months they need while the default (12) is unchanged.
         WHERE t.date >= (DATE_TRUNC('month', CURRENT_DATE) - make_interval(months => ($2::int - 1)))
           AND t.user_id = $1
+          AND a.archived_at IS NULL
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
           -- Exclude internal-transfer noise from the cash-flow view:
           --
@@ -1310,6 +1318,7 @@ async fn spending_by_category(
         WHERE t.amount < 0
           AND t.date >= (DATE_TRUNC('month', CURRENT_DATE) - make_interval(months => ($2::int - 1)))
           AND t.user_id = $1
+          AND a.archived_at IS NULL
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
           AND COALESCE(t.category, '') NOT IN ('TRANSFER_IN', 'TRANSFER_OUT')
           AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
@@ -1519,6 +1528,7 @@ async fn spending_insights(
           AND t.date >= DATE_TRUNC('month', CURRENT_DATE) - make_interval(months => $2::int)
           AND t.date <  DATE_TRUNC('month', CURRENT_DATE)
           AND t.user_id = $1
+          AND a.archived_at IS NULL
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
           AND COALESCE(t.category, '') NOT IN ('TRANSFER_IN', 'TRANSFER_OUT')
           AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
@@ -1722,6 +1732,7 @@ async fn emergency_fund(
                  ELSE current_balance END), 0) AS cash
         FROM accounts
         WHERE user_id = $1
+          AND archived_at IS NULL
           -- CDs are excluded: they carry an early-withdrawal penalty, so they
           -- are not the immediately-accessible cash an emergency fund measures.
           AND account_type IN ('checking', 'savings', 'cash', 'cash management', 'money market')
@@ -1756,6 +1767,7 @@ async fn emergency_fund(
         WHERE t.amount < 0
           AND t.date >= CURRENT_DATE - INTERVAL '12 months'
           AND t.user_id = $1
+          AND a.archived_at IS NULL
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
           AND COALESCE(t.category, '') NOT IN ('TRANSFER_IN', 'TRANSFER_OUT')
           AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
@@ -2416,7 +2428,7 @@ async fn since_last_login(
         FROM after
         JOIN before ON before.account_id = after.account_id
         JOIN accounts a ON a.id = after.account_id
-        WHERE a.user_id = $1
+        WHERE a.user_id = $1 AND a.archived_at IS NULL
         "#,
     )
     .bind(ctx.user_id)
@@ -2569,6 +2581,7 @@ async fn detected_subscriptions(
         FROM transactions t
         JOIN accounts a ON a.id = t.account_id
         WHERE t.user_id = $1
+          AND a.archived_at IS NULL
           -- Outflows only. Sign convention: amount < 0 = expense,
           -- amount > 0 = income. Including income would surface
           -- "Interest earned" / "Dividend" / "Salary" as fake

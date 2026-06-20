@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../services/preferences.dart';
+import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 import '../l10n/app_localizations.dart';
 
@@ -33,6 +34,7 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
   String? _error;
   List<dynamic> _ignoredSubs = const [];
   List<dynamic> _dismissedFxPairs = const [];
+  List<dynamic> _archivedAccounts = const [];
   String? _sinceLastLoginAnchor;
 
   @override
@@ -52,11 +54,13 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
       final results = await Future.wait([
         _api.getIgnoredSubscriptions(),
         _api.getDismissedFxPairs(),
+        _api.getArchivedAccounts(),
       ]);
       if (!mounted) return;
       setState(() {
         _ignoredSubs = results[0];
         _dismissedFxPairs = results[1];
+        _archivedAccounts = results[2];
         _sinceLastLoginAnchor =
             Preferences.getSinceLastLoginDismissalAnchor();
       });
@@ -122,6 +126,73 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
         SnackBar(content: Text(l.hiddenRestoreFailed(e.toString()))),
       );
     }
+  }
+
+  Future<void> _restoreAccount(String id, String label) async {
+    try {
+      await _api.restoreAccount(id);
+      if (!mounted) return;
+      setState(() {
+        _archivedAccounts = _archivedAccounts
+            .where((row) => (row as Map)['id'].toString() != id)
+            .toList();
+      });
+      final l = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l.accountRestored(label))),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final l = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l.hiddenRestoreFailed(e.toString()))),
+      );
+    }
+  }
+
+  Future<void> _deleteAccountPermanently(String id, String label) async {
+    final l = AppLocalizations.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l.accountDeleteConfirmTitle),
+        content: Text(l.accountDeleteConfirmBody(label)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l.actionCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l.accountDeletePermanently),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _api.deleteAccount(id);
+      if (!mounted) return;
+      setState(() {
+        _archivedAccounts = _archivedAccounts
+            .where((row) => (row as Map)['id'].toString() != id)
+            .toList();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l.accountDeleted(label))),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l.hiddenRestoreFailed(e.toString()))),
+      );
+    }
+  }
+
+  String _formatClosedDate(String iso) {
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return '';
+    return DateFormat.yMMMd().format(dt.toLocal());
   }
 
   String _formatIgnoredAt(String iso) {
@@ -237,8 +308,99 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
                           ],
                         ),
                       ),
+                    const SizedBox(height: 24),
+                    _sectionHeader(
+                      icon: Icons.account_balance_outlined,
+                      title: l.hiddenClosedAccounts,
+                      count: _archivedAccounts.length,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, bottom: 8),
+                      child: Text(
+                        l.hiddenClosedAccountsIntro,
+                        style: TextStyle(
+                          color: context.textSubtle,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    if (_archivedAccounts.isEmpty)
+                      _emptyTile(
+                        l.hiddenNoClosedAccounts,
+                      )
+                    else
+                      Card(
+                        child: Column(
+                          children: [
+                            for (var i = 0;
+                                i < _archivedAccounts.length;
+                                i++) ...[
+                              if (i > 0)
+                                Divider(height: 1, color: context.hairline),
+                              _archivedAccountTile(
+                                _archivedAccounts[i] as Map<String, dynamic>,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                   ],
                 ),
+    );
+  }
+
+  Widget _archivedAccountTile(Map<String, dynamic> row) {
+    final l = AppLocalizations.of(context);
+    final id = (row['id'] ?? '').toString();
+    final institution = (row['institution_name'] ?? '').toString();
+    final nickname = (row['nickname'] ?? '').toString();
+    final name = (row['name'] ?? '').toString();
+    // Mirror COALESCE(nickname, name): a user-set nickname wins.
+    final displayName = nickname.isNotEmpty ? nickname : name;
+    final accountType = (row['account_type'] ?? '').toString();
+    final currency = (row['currency'] ?? 'USD').toString();
+    final balance = (row['current_balance'] as num?)?.toDouble() ?? 0.0;
+    final archivedAt = (row['archived_at'] ?? '').toString();
+
+    final title = institution.isEmpty
+        ? displayName
+        : '$institution · $displayName';
+    final metaParts = <String>[
+      if (accountType.isNotEmpty) accountType,
+      formatCurrencyWithCode(balance, currency),
+      if (archivedAt.isNotEmpty)
+        l.accountClosedOn(_formatClosedDate(archivedAt)),
+    ];
+
+    return ListTile(
+      dense: true,
+      leading: const Icon(Icons.account_balance_outlined, size: 18),
+      title: Text(title, style: const TextStyle(fontSize: 14)),
+      subtitle: metaParts.isEmpty
+          ? null
+          : Text(
+              metaParts.join(' · '),
+              style: TextStyle(color: context.textSubtle, fontSize: 11),
+            ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextButton.icon(
+            onPressed: () => _restoreAccount(id, displayName),
+            icon: const Icon(Icons.refresh, size: 16),
+            label: Text(l.accountRestore),
+          ),
+          IconButton(
+            tooltip: l.accountDeletePermanently,
+            onPressed: () => _deleteAccountPermanently(id, displayName),
+            icon: Icon(
+              Icons.delete_outline,
+              size: 18,
+              color: context.textMuted,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

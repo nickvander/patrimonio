@@ -1021,6 +1021,37 @@
   "hiddenNoFxPairs": "No hay pares de divisas descartados por ahora. Cuando desvinculas una transferencia detectada de Wise / Remitly / Xoom en la pestaña de Transacciones, llega aquí para que el detector no la vuelva a proponer.",
   "hiddenDismissedAt": "Descartado el {date}",
   "hiddenRestore": "Restaurar",
+  "hiddenClosedAccounts": "Cuentas cerradas",
+  "hiddenClosedAccountsIntro": "Cuentas que Patrimonio archivó porque se cerraron o se eliminaron en el banco. Ya no cuentan para tu patrimonio neto. Restaura una para recuperarla o elimínala de forma permanente.",
+  "hiddenNoClosedAccounts": "No hay cuentas cerradas. Cuando un banco reporta una cuenta como cerrada, aparece aquí en lugar de desaparecer.",
+  "accountRestore": "Restaurar",
+  "accountRestored": "Se restauró \"{name}\"",
+  "@accountRestored": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "accountDeletePermanently": "Eliminar permanentemente",
+  "accountDeleteConfirmTitle": "¿Eliminar la cuenta permanentemente?",
+  "accountDeleteConfirmBody": "Esto elimina permanentemente \"{name}\" y todas sus transacciones. No se puede deshacer.",
+  "@accountDeleteConfirmBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "accountDeleted": "Se eliminó \"{name}\"",
+  "@accountDeleted": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "accountClosedOn": "Cerrada el {date}",
   "cbTitle": "Conectar banco",
   "cbSetupIncompleteTitle": "La configuración de Plaid está incompleta.",
   "cbSetupIncompleteBody": "Configura las credenciales de Plaid y ENCRYPTION_KEY antes de vincular cuentas bancarias reales.",
