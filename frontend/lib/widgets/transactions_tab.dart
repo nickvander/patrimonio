@@ -678,7 +678,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
   /// Removable chip strip below the toolbar showing every active filter
   /// in a single horizontal scroll. Tapping the X on a chip clears just
   /// that one; the strip hides entirely when nothing's active.
-  Widget _activeFilterChips() {
+  Widget _activeFilterChips(bool isNarrow) {
     if (!_filters.isActive) return const SizedBox.shrink();
     final l = AppLocalizations.of(context);
     final chips = <Widget>[];
@@ -769,19 +769,30 @@ class _TransactionsTabState extends State<TransactionsTab> {
       ),
       child: Text(l.txClearAll),
     ));
+    // On a phone the horizontal scroll buried the right-most chips and
+    // "Clear all" off-screen with no cue, so narrow widths wrap onto
+    // multiple lines keeping every chip (and the clear) reachable. Wide
+    // screens keep the single-line scroll — chips rarely overflow there.
     return Padding(
       padding: const EdgeInsets.only(top: 8, bottom: 4),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            for (final c in chips) ...[
-              c,
-              const SizedBox(width: 6),
-            ],
-          ],
-        ),
-      ),
+      child: isNarrow
+          ? Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: chips,
+            )
+          : SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final c in chips) ...[
+                    c,
+                    const SizedBox(width: 6),
+                  ],
+                ],
+              ),
+            ),
     );
   }
 
@@ -928,7 +939,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildToolbar(isNarrow),
-              _activeFilterChips(),
+              _activeFilterChips(isNarrow),
               const SizedBox(height: 8),
               Text(
                 l.txShowingCount(filtered.length, widget.transactions.length),
@@ -1941,6 +1952,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
   }
 
   Widget _searchField() {
+    final l = AppLocalizations.of(context);
     return TextField(
       autofocus: _searchOpenOnNarrow,
       controller: _searchController,
@@ -1958,10 +1970,29 @@ class _TransactionsTabState extends State<TransactionsTab> {
         );
       },
       decoration: InputDecoration(
-        hintText: AppLocalizations.of(context).searchTransactionsHint,
+        hintText: l.searchTransactionsHint,
         hintStyle: TextStyle(color: context.textFaint, fontSize: 13),
         prefixIcon:
             Icon(Icons.search, size: 18, color: context.textFaint),
+        // Inline clear affordance — appears only when there's text so the
+        // user doesn't have to backspace the whole query. Mirrors the
+        // narrow close button: flush the pending debounce synchronously so
+        // no stray re-filter fires after the field is already empty.
+        suffixIcon: ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _searchController,
+          builder: (context, value, _) {
+            if (value.text.isEmpty) return const SizedBox.shrink();
+            return IconButton(
+              icon: Icon(Icons.close, size: 18, color: context.textFaint),
+              tooltip: l.txClear,
+              onPressed: () {
+                _searchDebounce?.cancel();
+                _searchController.clear();
+                setState(() => _searchQuery = '');
+              },
+            );
+          },
+        ),
         filled: true,
         fillColor: context.tint(0.05),
         contentPadding:
