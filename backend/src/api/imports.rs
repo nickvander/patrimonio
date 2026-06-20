@@ -74,6 +74,9 @@ pub fn router() -> Router<AppState> {
         // running balances across every imported statement and report likely
         // missing months. Complements the in-batch check done at confirm.
         .route("/continuity", get(continuity_handler))
+        // Per-account statement coverage: how far up the imported statements
+        // reach, so the user knows what to upload next ("Banamex through May").
+        .route("/coverage", get(coverage_handler))
         .route("/batches", get(list_batches_handler))
         .route("/batches/{id}", axum::routing::delete(undo_batch_handler))
         .route("/transactions/bulk-delete", post(bulk_delete_handler))
@@ -1036,6 +1039,63 @@ async fn list_batches_handler(
         })
         .collect();
     Json(serde_json::json!({ "batches": batches })).into_response()
+}
+
+/// GET /api/imports/coverage — per-account statement coverage. For every
+/// account that has any statement-imported rows (those carry an
+/// `import_batch_id`), report how far the imported statements reach
+/// (`last_covered_date` = the newest imported transaction date, a close
+/// proxy for the latest statement's period) plus the last file and when it
+/// was imported. The "Statement coverage" UI uses this so the user can see
+/// at a glance which banks are current and which are missing recent months
+/// ("Banamex through May, BBVA only through March"). Archived (closed)
+/// accounts are excluded — they won't get new statements.
+async fn coverage_handler(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Response {
+    let rows = sqlx::query(
+        r#"
+        SELECT t.account_id,
+               COALESCE(NULLIF(a.nickname, ''), a.name) AS account_name,
+               i.name AS institution_name,
+               a.currency,
+               MAX(t.date) AS last_covered_date,
+               MAX(t.created_at) AS last_imported_at,
+               COUNT(DISTINCT t.import_batch_id) AS batch_count,
+               (ARRAY_AGG(t.import_file ORDER BY t.date DESC, t.created_at DESC)
+                    FILTER (WHERE t.import_file IS NOT NULL))[1] AS last_import_file
+        FROM transactions t
+        JOIN accounts a ON a.id = t.account_id
+        JOIN institutions i ON i.id = a.institution_id
+        WHERE t.user_id = $1
+          AND t.import_batch_id IS NOT NULL
+          AND a.archived_at IS NULL
+        GROUP BY t.account_id, account_name, i.name, a.currency
+        ORDER BY MAX(t.date) DESC
+        "#,
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let coverage: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "account_id": r.try_get::<uuid::Uuid, _>("account_id").map(|u| u.to_string()).unwrap_or_default(),
+                "account_name": r.try_get::<String, _>("account_name").unwrap_or_default(),
+                "institution_name": r.try_get::<String, _>("institution_name").unwrap_or_default(),
+                "currency": r.try_get::<String, _>("currency").unwrap_or_default(),
+                "last_covered_date": r.try_get::<chrono::NaiveDate, _>("last_covered_date").map(|d| d.to_string()).unwrap_or_default(),
+                "last_imported_at": r.try_get::<chrono::DateTime<chrono::Utc>, _>("last_imported_at").map(|d| d.to_rfc3339()).unwrap_or_default(),
+                "batch_count": r.try_get::<i64, _>("batch_count").unwrap_or(0),
+                "last_import_file": r.try_get::<Option<String>, _>("last_import_file").ok().flatten().unwrap_or_default(),
+            })
+        })
+        .collect();
+    Json(serde_json::json!({ "coverage": coverage })).into_response()
 }
 
 /// DELETE /api/imports/batches/{id} — undo an import by deleting every row

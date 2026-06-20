@@ -1213,6 +1213,21 @@
   "@impSummaryFiles": {
     "placeholders": { "count": { "type": "int" } }
   },
+  "impCoverageTitle": "Cobertura de estados de cuenta",
+  "impCoverageThrough": "hasta {month}",
+  "@impCoverageThrough": {
+    "placeholders": { "month": { "type": "String" } }
+  },
+  "impCoverageLastFile": "{file}",
+  "@impCoverageLastFile": {
+    "placeholders": { "file": { "type": "String" } }
+  },
+  "impCoverageImports": "{count, plural, =1{1 importación} other{{count} importaciones}}",
+  "@impCoverageImports": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "impCoverageMaybeDue": "Puede haber un estado de cuenta más reciente",
+  "impCoverageEmpty": "Aún no se han importado estados de cuenta",
   "impContinuityGap": "Posible estado de cuenta faltante: ‘{fromFile}’ cierra en {fromBalance} ({fromDate}), pero ‘{toFile}’ abre en {toBalance} ({toDate}) — una diferencia sin explicar de {diff}. Puede faltar un estado de cuenta que cubra el periodo entre ellos.",
   "@impContinuityGap": {
     "placeholders": {

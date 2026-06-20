@@ -3961,6 +3961,37 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get impCoverageTitle => 'Cobertura de estados de cuenta';
+
+  @override
+  String impCoverageThrough(String month) {
+    return 'hasta $month';
+  }
+
+  @override
+  String impCoverageLastFile(String file) {
+    return '$file';
+  }
+
+  @override
+  String impCoverageImports(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count importaciones',
+      one: '1 importación',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get impCoverageMaybeDue =>
+      'Puede haber un estado de cuenta más reciente';
+
+  @override
+  String get impCoverageEmpty => 'Aún no se han importado estados de cuenta';
+
+  @override
   String impContinuityGap(
     Object fromFile,
     Object fromBalance,

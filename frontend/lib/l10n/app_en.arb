@@ -1377,6 +1377,21 @@
   "@impSummaryFiles": {
     "placeholders": { "count": { "type": "int" } }
   },
+  "impCoverageTitle": "Statement coverage",
+  "impCoverageThrough": "through {month}",
+  "@impCoverageThrough": {
+    "placeholders": { "month": { "type": "String" } }
+  },
+  "impCoverageLastFile": "{file}",
+  "@impCoverageLastFile": {
+    "placeholders": { "file": { "type": "String" } }
+  },
+  "impCoverageImports": "{count, plural, =1{1 import} other{{count} imports}}",
+  "@impCoverageImports": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "impCoverageMaybeDue": "A newer statement may be available",
+  "impCoverageEmpty": "No statements imported yet",
   "impContinuityGap": "Possible missing statement: ‘{fromFile}’ ends at {fromBalance} ({fromDate}), but ‘{toFile}’ opens at {toBalance} ({toDate}) — an unexplained difference of {diff}. A statement covering the period between them may be missing.",
   "@impContinuityGap": {
     "placeholders": {

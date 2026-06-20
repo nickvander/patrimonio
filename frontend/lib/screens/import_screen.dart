@@ -45,6 +45,11 @@ class _ImportScreenState extends State<ImportScreen> {
   Map<String, List<int>> _fileGroups = {};
   List<dynamic>? _accounts;
   String? _selectedAccountId;
+  /// Per-account statement coverage ("how far my imported statements reach"),
+  /// fetched best-effort in [initState] and rendered as the "Statement
+  /// coverage" card on the landing state. Null = still loading / never
+  /// fetched; empty list = fetched but nothing imported yet.
+  List<dynamic>? _coverage;
   // When one statement bundles more than one account (Banamex's primary
   // MiCuenta + a Pagaré/Ahorro section), the parser tags the secondary rows
   // with `account_label`. These are the distinct secondary labels seen in
@@ -118,6 +123,7 @@ class _ImportScreenState extends State<ImportScreen> {
   void initState() {
     super.initState();
     _fetchAccounts();
+    _fetchCoverage();
     if (kIsWeb) {
       _dropListener = GlobalFileDropListener(
         onFiles: _handleDroppedFiles,
@@ -214,6 +220,21 @@ class _ImportScreenState extends State<ImportScreen> {
       });
     } catch (e) {
       debugPrint('Failed to fetch accounts: $e');
+    }
+  }
+
+  /// Best-effort fetch of per-account statement coverage for the landing
+  /// card. A failure leaves `_coverage` as an empty list (the card simply
+  /// hides / shows its empty line) so it never breaks the import flow.
+  Future<void> _fetchCoverage() async {
+    try {
+      final coverage = await _apiService.getImportCoverage();
+      if (!mounted) return;
+      setState(() => _coverage = coverage);
+    } catch (e) {
+      debugPrint('Failed to fetch import coverage: $e');
+      if (!mounted) return;
+      setState(() => _coverage = const []);
     }
   }
 
@@ -819,6 +840,170 @@ class _ImportScreenState extends State<ImportScreen> {
       return '${m[a.month - 1]} – ${my(b)}';
     }
     return '${my(a)} – ${my(b)}';
+  }
+
+  /// Localized "Month YYYY" from the small month table (same reason as
+  /// [_formatDateRange]: the app never initializes intl locale data, so a
+  /// localized `DateFormat` would throw).
+  String _formatMonthYear(DateTime d, bool es) {
+    final m = es ? _monthsEs : _monthsEn;
+    return '${m[d.month - 1]} ${d.year}';
+  }
+
+  /// A coverage row is "stale" once its newest covered date is older than
+  /// ~35 days — roughly a missed monthly statement — which nudges the user
+  /// that a newer statement may be available.
+  static const int _coverageStaleAfterDays = 35;
+
+  /// "Statement coverage" card on the landing state: a per-account "here's
+  /// what I already have" reference (how far each bank's imported statements
+  /// reach) before uploading more. Hidden entirely until coverage has been
+  /// fetched; a calm one-liner when nothing's imported yet.
+  Widget _buildCoverageSection(AppLocalizations l) {
+    final coverage = _coverage;
+    // Still loading — keep the landing state clean rather than flashing a
+    // spinner for a best-effort, secondary card.
+    if (coverage == null) return const SizedBox.shrink();
+    final es = Localizations.localeOf(context).languageCode == 'es';
+    final now = DateTime.now();
+
+    final Widget inner;
+    if (coverage.isEmpty) {
+      inner = Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(
+          l.impCoverageEmpty,
+          style: TextStyle(fontSize: 13, color: context.textSubtle),
+        ),
+      );
+    } else {
+      final rows = <Widget>[];
+      for (var i = 0; i < coverage.length; i++) {
+        final c = coverage[i] as Map<String, dynamic>;
+        final inst = (c['institution_name'] ?? '').toString();
+        final name = (c['account_name'] ?? '').toString();
+        final title = inst.isNotEmpty ? '$inst · $name' : name;
+
+        final covered =
+            DateTime.tryParse((c['last_covered_date'] ?? '').toString());
+        final through = covered != null
+            ? l.impCoverageThrough(_formatMonthYear(covered, es))
+            : '';
+        final isStale = covered != null &&
+            now.difference(covered).inDays > _coverageStaleAfterDays;
+
+        final file = (c['last_import_file'] ?? '').toString();
+        final batchCount = (c['batch_count'] as num?)?.toInt() ?? 0;
+        final secondaryParts = <String>[
+          if (file.isNotEmpty) l.impCoverageLastFile(file),
+          if (batchCount > 0) l.impCoverageImports(batchCount),
+        ];
+
+        rows.add(Padding(
+          padding: EdgeInsets.only(top: i == 0 ? 0 : 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.event_available_outlined,
+                  size: 18,
+                  color: isStale ? context.warning : context.textSubtle),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: context.textPrimary,
+                      ),
+                    ),
+                    if (through.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        through,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: isStale ? context.warning : context.textSubtle,
+                        ),
+                      ),
+                    ],
+                    if (secondaryParts.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        secondaryParts.join('  ·  '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style:
+                            TextStyle(fontSize: 11, color: context.textFaint),
+                      ),
+                    ],
+                    if (isStale) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(Icons.update, size: 13, color: context.warning),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              l.impCoverageMaybeDue,
+                              style: TextStyle(
+                                  fontSize: 11.5, color: context.warning),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ));
+      }
+      inner = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: rows,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: context.hairline),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.fact_check_outlined,
+                      size: 18, color: context.textSubtle),
+                  const SizedBox(width: 8),
+                  Text(
+                    l.impCoverageTitle,
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              inner,
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// One compact stat tile for the import-summary strip — mirrors the
@@ -1527,6 +1712,10 @@ class _ImportScreenState extends State<ImportScreen> {
               style: const TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 32),
+            // "Statement coverage" — a quick per-account "here's what I
+            // already have" reference, shown on the landing state before the
+            // user uploads more (hidden during the review/preview flow).
+            if (_previewTransactions == null) _buildCoverageSection(l),
             if (_previewTransactions == null)
               Center(
                 child: AnimatedContainer(

@@ -1551,6 +1551,22 @@ class ApiService {
     return const [];
   }
 
+  /// Per-account statement coverage: how far each account's imported
+  /// statements reach. Each entry is {account_id, account_name,
+  /// institution_name, currency, last_covered_date (YYYY-MM-DD),
+  /// last_imported_at (ISO8601), batch_count, last_import_file}, ordered by
+  /// last_covered_date descending. Only accounts with statement-imported
+  /// transactions appear; archived accounts are excluded. Best-effort —
+  /// returns an empty list on any non-200 or if the key is missing.
+  Future<List<dynamic>> getImportCoverage() async {
+    final res = await _get(Uri.parse('$_baseUrl/imports/coverage'));
+    if (res.statusCode == 200) {
+      final body = json.decode(res.body) as Map<String, dynamic>;
+      return (body['coverage'] as List?) ?? const [];
+    }
+    return const [];
+  }
+
   /// Undo an import — delete every transaction it created. Returns the
   /// number removed.
   Future<int> undoImportBatch(String batchId) async {

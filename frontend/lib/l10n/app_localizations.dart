@@ -6510,6 +6510,42 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{1 file} other{{count} files}}'**
   String impSummaryFiles(int count);
 
+  /// No description provided for @impCoverageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Statement coverage'**
+  String get impCoverageTitle;
+
+  /// No description provided for @impCoverageThrough.
+  ///
+  /// In en, this message translates to:
+  /// **'through {month}'**
+  String impCoverageThrough(String month);
+
+  /// No description provided for @impCoverageLastFile.
+  ///
+  /// In en, this message translates to:
+  /// **'{file}'**
+  String impCoverageLastFile(String file);
+
+  /// No description provided for @impCoverageImports.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 import} other{{count} imports}}'**
+  String impCoverageImports(int count);
+
+  /// No description provided for @impCoverageMaybeDue.
+  ///
+  /// In en, this message translates to:
+  /// **'A newer statement may be available'**
+  String get impCoverageMaybeDue;
+
+  /// No description provided for @impCoverageEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No statements imported yet'**
+  String get impCoverageEmpty;
+
   /// No description provided for @impContinuityGap.
   ///
   /// In en, this message translates to:
