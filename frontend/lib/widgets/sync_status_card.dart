@@ -3,7 +3,7 @@ import '../utils/theme_colors.dart';
 import '../l10n/app_localizations.dart';
 import 'package:intl/intl.dart';
 
-class SyncStatusCard extends StatelessWidget {
+class SyncStatusCard extends StatefulWidget {
   final List<dynamic> syncData;
   final VoidCallback? onRetrySync;
   /// Optional targeted-retry hook. When provided, the "Retry N failed"
@@ -26,11 +26,22 @@ class SyncStatusCard extends StatelessWidget {
     this.onDelete,
   });
 
+  @override
+  State<SyncStatusCard> createState() => _SyncStatusCardState();
+}
+
+class _SyncStatusCardState extends State<SyncStatusCard> {
+  /// When true, the visible list is filtered down to institutions needing
+  /// attention (error / reconnect_required / stale). Local UI state only.
+  bool _problemsOnly = false;
+
+  List<dynamic> get _syncData => widget.syncData;
+
   /// Ids of institutions stuck in error / failed state. We exclude
   /// `reconnect_required` because retry won't help — those need the
   /// Plaid Link reconnect flow, which is handled separately.
   List<String> _failedIds() {
-    return syncData.where((raw) {
+    return _syncData.where((raw) {
       if (raw is! Map) return false;
       final s = raw['sync_status']?.toString();
       return s == 'error' || s == 'failed';
@@ -42,11 +53,55 @@ class SyncStatusCard extends StatelessWidget {
   /// place; `reconnect_required` ones need the Plaid Link flow but show
   /// up in the count so the user knows total attention required.
   int get _failedCount {
-    return syncData.where((raw) {
+    return _syncData.where((raw) {
       if (raw is! Map) return false;
       final s = raw['sync_status']?.toString();
       return s == 'error' || s == 'failed' || s == 'reconnect_required';
     }).length;
+  }
+
+  /// Count institutions whose [sync_status] matches any in [statuses].
+  int _statusCount(Set<String> statuses) {
+    return _syncData.where((raw) {
+      if (raw is! Map) return false;
+      return statuses.contains(raw['sync_status']?.toString());
+    }).length;
+  }
+
+  /// True when [inst]'s last successful sync is older than 24h. Mirrors the
+  /// staleness rule used per-row in [_statusDetail]. Institutions that have
+  /// never synced (no timestamp) are not counted here — they surface via
+  /// their own status (pending / setup_required).
+  bool _isStale(Map raw) {
+    final ts = raw['last_synced_at'];
+    if (ts == null) return false;
+    final dt = DateTime.tryParse(ts.toString());
+    if (dt == null) return false;
+    return DateTime.now().difference(dt).inHours > 24;
+  }
+
+  /// Count of stale-but-otherwise-fine institutions: a synced/success
+  /// institution whose data is more than 24h old. We exclude rows already
+  /// counted as error/reconnect so badges don't double-count.
+  int get _staleCount {
+    return _syncData.where((raw) {
+      if (raw is! Map) return false;
+      final s = raw['sync_status']?.toString();
+      if (s == 'error' || s == 'failed' || s == 'reconnect_required') {
+        return false;
+      }
+      return _isStale(raw);
+    }).length;
+  }
+
+  /// True when an institution should be shown while the problem filter is on:
+  /// error / failed / reconnect_required, or stale.
+  bool _isProblem(Map raw) {
+    final s = raw['sync_status']?.toString();
+    if (s == 'error' || s == 'failed' || s == 'reconnect_required') {
+      return true;
+    }
+    return _isStale(raw);
   }
 
   @override
@@ -54,6 +109,20 @@ class SyncStatusCard extends StatelessWidget {
     final l = AppLocalizations.of(context);
     final failed = _failedCount;
     final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+
+    final successCount = _statusCount({'success', 'synced'});
+    final syncingCount = _statusCount({'syncing'});
+    final errorCount = _statusCount({'error', 'failed'});
+    final reconnectCount = _statusCount({'reconnect_required'});
+    final staleCount = _staleCount;
+    final problemTotal = errorCount + reconnectCount + staleCount;
+
+    final visible = _problemsOnly
+        ? _syncData
+            .where((raw) => raw is Map && _isProblem(raw))
+            .toList()
+        : _syncData;
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -76,27 +145,27 @@ class SyncStatusCard extends StatelessWidget {
                   ),
                 ),
                 if (failed > 0 &&
-                    (onRetryBatch != null ||
-                        onRetrySingle != null ||
-                        onRetrySync != null))
+                    (widget.onRetryBatch != null ||
+                        widget.onRetrySingle != null ||
+                        widget.onRetrySync != null))
                   TextButton.icon(
                     onPressed: () async {
                       final ids = _failedIds();
                       // Preference: batched > per-institution loop >
                       // global fallback. The batched path is one HTTP
                       // round-trip server-side via ANY($1).
-                      if (onRetryBatch != null) {
+                      if (widget.onRetryBatch != null) {
                         try {
-                          await onRetryBatch!(ids);
+                          await widget.onRetryBatch!(ids);
                         } catch (_) {/* swallowed; UI re-renders */}
-                      } else if (onRetrySingle != null) {
+                      } else if (widget.onRetrySingle != null) {
                         for (final id in ids) {
                           try {
-                            await onRetrySingle!(id);
+                            await widget.onRetrySingle!(id);
                           } catch (_) {/* continue on individual errors */}
                         }
                       } else {
-                        onRetrySync?.call();
+                        widget.onRetrySync?.call();
                       }
                     },
                     icon: const Icon(Icons.refresh, size: 16),
@@ -107,8 +176,20 @@ class SyncStatusCard extends StatelessWidget {
                   ),
               ],
             ),
+            if (_syncData.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _buildSummaryRow(
+                context,
+                successCount: successCount,
+                syncingCount: syncingCount,
+                errorCount: errorCount,
+                reconnectCount: reconnectCount,
+                staleCount: staleCount,
+                problemTotal: problemTotal,
+              ),
+            ],
             const SizedBox(height: 24),
-            if (syncData.isEmpty)
+            if (_syncData.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Column(
@@ -138,10 +219,102 @@ class SyncStatusCard extends StatelessWidget {
                   ],
                 ),
               )
+            else if (visible.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Center(
+                  child: Text(
+                    l.lwSyncNoProblems,
+                    style: TextStyle(
+                      color: context.textMuted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              )
             else
-              ...syncData.map((inst) => _buildSyncRow(context, inst)),
+              ...visible.map((inst) => _buildSyncRow(context, inst)),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow(
+    BuildContext context, {
+    required int successCount,
+    required int syncingCount,
+    required int errorCount,
+    required int reconnectCount,
+    required int staleCount,
+    required int problemTotal,
+  }) {
+    final l = AppLocalizations.of(context);
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        if (successCount > 0)
+          _statusBadge(context, Icons.check_circle, context.positive,
+              '${l.lwSyncBadgeSuccess}: $successCount'),
+        if (syncingCount > 0)
+          _statusBadge(context, Icons.sync, context.info,
+              '${l.lwSyncBadgeSyncing}: $syncingCount'),
+        if (errorCount > 0)
+          _statusBadge(context, Icons.error, context.negative,
+              '${l.lwSyncBadgeError}: $errorCount'),
+        if (reconnectCount > 0)
+          _statusBadge(context, Icons.link_off, context.warning,
+              '${l.lwSyncBadgeReconnect}: $reconnectCount'),
+        if (staleCount > 0)
+          _statusBadge(context, Icons.schedule, context.warning,
+              '${l.lwSyncBadgeStale}: $staleCount'),
+        if (problemTotal > 0)
+          FilterChip(
+            selected: _problemsOnly,
+            onSelected: (v) => setState(() => _problemsOnly = v),
+            avatar: Icon(
+              Icons.filter_alt_outlined,
+              size: 16,
+              color: _problemsOnly ? context.warning : context.textMuted,
+            ),
+            label: Text(l.lwSyncFilterProblems),
+            labelStyle: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: _problemsOnly ? context.warning : context.textMuted,
+            ),
+            showCheckmark: false,
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+      ],
+    );
+  }
+
+  Widget _statusBadge(
+      BuildContext context, IconData icon, Color color, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -266,7 +439,7 @@ class SyncStatusCard extends StatelessWidget {
               if (status == 'reconnect_required')
                 isNarrow
                     ? IconButton(
-                        onPressed: () => onReconnect?.call(inst['id']),
+                        onPressed: () => widget.onReconnect?.call(inst['id']),
                         icon: Icon(Icons.link,
                             color: context.warning, size: 20),
                         tooltip: l.lwSyncReconnect,
@@ -274,7 +447,7 @@ class SyncStatusCard extends StatelessWidget {
                         constraints: const BoxConstraints(),
                       )
                     : TextButton.icon(
-                        onPressed: () => onReconnect?.call(inst['id']),
+                        onPressed: () => widget.onReconnect?.call(inst['id']),
                         icon: const Icon(Icons.link, size: 16),
                         label: Text(l.lwSyncReconnect),
                         style: TextButton.styleFrom(
@@ -289,7 +462,7 @@ class SyncStatusCard extends StatelessWidget {
               ].contains(status))
                 IconButton(
                   icon: Icon(Icons.refresh, color: context.info, size: 20),
-                  onPressed: onRetrySync,
+                  onPressed: widget.onRetrySync,
                   tooltip: l.lwSyncRetrySync,
                   padding: const EdgeInsets.all(6),
                   constraints: const BoxConstraints(),
@@ -297,7 +470,7 @@ class SyncStatusCard extends StatelessWidget {
               IconButton(
                 icon: Icon(Icons.delete_outline,
                     color: context.negative, size: 20),
-                onPressed: () => onDelete?.call(inst['id']),
+                onPressed: () => widget.onDelete?.call(inst['id']),
                 tooltip: l.lwSyncDeleteInstitution,
                 padding: const EdgeInsets.all(6),
                 constraints: const BoxConstraints(),
