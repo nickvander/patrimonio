@@ -53,3 +53,6 @@ redisdata/
 
 # Real bank statements — never commit (PII/financial)
 work/revolut-samples/
+
+# Local-only golden/screenshot test artifacts (generated PNGs + harness)
+frontend/test/screenshots/
