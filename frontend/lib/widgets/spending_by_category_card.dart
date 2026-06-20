@@ -269,12 +269,37 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
           touchTooltipData: BarTouchTooltipData(
             getTooltipColor: (_) => context.tooltipSurface,
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
+              final monthKey = months[group.x].toString();
+              final parsed = DateTime.tryParse('$monthKey-01');
+              final header = parsed == null
+                  ? monthKey
+                  : DateFormat.yMMM().format(parsed);
+              // One line per non-zero category, in legend (total-descending)
+              // order, colored to match its segment/legend swatch. Reuse the
+              // same `lookup` the bars are stacked from.
+              final children = <TextSpan>[];
+              for (var i = 0; i < cats.length; i++) {
+                final amt =
+                    (lookup[i]?[monthKey] ?? 0.0) * widget.conversionFactor;
+                if (amt <= 0) continue;
+                final name =
+                    prettyCategory(primary: cats[i]['category']?.toString());
+                children.add(TextSpan(
+                  text: '\n$name  ${widget.currencyFormat.format(amt)}',
+                  style: TextStyle(
+                    color: palette[i % palette.length],
+                    fontWeight: FontWeight.normal,
+                    fontSize: 12,
+                  ),
+                ));
+              }
               return BarTooltipItem(
-                widget.currencyFormat.format(rod.toY),
+                header,
                 TextStyle(
                   color: context.tooltipOnSurface,
                   fontWeight: FontWeight.bold,
                 ),
+                children: children,
               );
             },
           ),

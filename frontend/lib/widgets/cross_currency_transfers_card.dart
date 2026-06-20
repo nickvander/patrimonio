@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
+import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
 /// Lists every detected (or user-confirmed) cross-currency cash
@@ -111,72 +112,105 @@ class CrossCurrencyTransfersCard extends StatelessWidget {
     final dstLabel = (t['dest_label'] ?? '').toString();
     final srcDate = (t['source_date'] ?? '').toString();
 
-    final money = (double amount, String cur) =>
-        NumberFormat.currency(symbol: cur == 'MXN' ? 'MXN ' : r'$').format(amount);
+    // Leg labels + amounts/rate sub-line. The sub-line uses the shared
+    // ISO-prefixed formatter (utils/currency.dart) so each leg carries
+    // exactly one currency indicator and renders for any code, not just
+    // USD/MXN. maxLines + ellipsis keep it from overflowing when stacked
+    // full-width on a narrow screen.
+    final labelColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$srcLabel  →  $dstLabel',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: context.textPrimary,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '${formatCurrencyWithCode(srcAmount, srcCur)}  →  '
+          '${formatCurrencyWithCode(dstAmount, dstCur)} · $srcDate',
+          style: TextStyle(
+            fontSize: 11,
+            color: context.textSubtle,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+
+    // Implied vs spot rate + delta pill. Side-by-side with the label on
+    // wide rows; tucked underneath (left-aligned) when stacked.
+    Widget rateCluster({required bool stacked}) => Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Column(
+              crossAxisAlignment:
+                  stacked ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+              children: [
+                Text(
+                  NumberFormat('0.00').format(implied),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: context.textPrimary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                if (spot != null)
+                  Text(
+                    l.cfTransfersSpot(NumberFormat('0.00').format(spot)),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.textFaint,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+              ],
+            ),
+            if (delta != null) ...[
+              const SizedBox(width: 10),
+              _buildDeltaPill(context, delta),
+            ],
+          ],
+        );
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Column(
+          // Below ~520px the fixed 3-column row runs out of room and the
+          // amounts/rate sub-line overflows, so stack the rate cluster
+          // underneath the label instead of beside it.
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 520) {
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '$srcLabel  →  $dstLabel',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: context.textPrimary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${money(srcAmount, srcCur)} $srcCur  →  ${money(dstAmount, dstCur)} $dstCur · $srcDate',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: context.textSubtle,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
-                    ),
+                    labelColumn,
+                    const SizedBox(height: 6),
+                    rateCluster(stacked: true),
                   ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text(
-                    NumberFormat('0.00').format(implied),
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      color: context.textPrimary,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                  if (spot != null)
-                    Text(
-                      l.cfTransfersSpot(NumberFormat('0.00').format(spot)),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: context.textFaint,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
-                    ),
+                  Expanded(child: labelColumn),
+                  const SizedBox(width: 12),
+                  rateCluster(stacked: false),
                 ],
-              ),
-              if (delta != null) ...[
-                const SizedBox(width: 10),
-                _buildDeltaPill(context, delta),
-              ],
-            ],
+              );
+            },
           ),
           const SizedBox(height: 6),
           Row(
