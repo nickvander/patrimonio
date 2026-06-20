@@ -1112,6 +1112,10 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     final unverified = data['constants_verified'] == false;
     final stGain = (data['short_term_gain'] as num?)?.toDouble() ?? 0;
     final ltGain = (data['long_term_gain'] as num?)?.toDouble() ?? 0;
+    // Marginal rates behind every harvest savings estimate (fractions 0..1).
+    final ordinaryMarginalPct =
+        (data['ordinary_marginal_rate'] as num?)?.toDouble();
+    final ltcgMarginalPct = (data['ltcg_marginal_rate'] as num?)?.toDouble();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1139,7 +1143,13 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
             ),
           ],
           const SizedBox(height: 16),
-          _harvestCard(l, candidates, unverified),
+          _harvestCard(
+            l,
+            candidates,
+            unverified,
+            ordinaryMarginalRate: ordinaryMarginalPct,
+            ltcgMarginalRate: ltcgMarginalPct,
+          ),
         ],
       ],
     );
@@ -1292,8 +1302,12 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   Widget _harvestCard(
     AppLocalizations l,
     List<Map<String, dynamic>> candidates,
-    bool unverified,
-  ) {
+    bool unverified, {
+    double? ordinaryMarginalRate,
+    double? ltcgMarginalRate,
+  }) {
+    final hasMarginalRates =
+        ordinaryMarginalRate != null || ltcgMarginalRate != null;
     return Card(
       elevation: 0,
       color: context.tileSurface,
@@ -1327,6 +1341,22 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
               style: TextStyle(fontSize: 11, color: context.textFaint),
             ),
           ),
+          if (hasMarginalRates)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                '${l.taxHarvestMarginalRate}: '
+                '${[
+                  if (ordinaryMarginalRate != null)
+                    '${l.taxHarvestMarginalOrdinary} '
+                        '${(ordinaryMarginalRate * 100).toStringAsFixed(1)}%',
+                  if (ltcgMarginalRate != null)
+                    '${l.taxHarvestMarginalLtcg} '
+                        '${(ltcgMarginalRate * 100).toStringAsFixed(1)}%',
+                ].join(' · ')}',
+                style: TextStyle(fontSize: 11, color: context.textSubtle),
+              ),
+            ),
           if (candidates.isEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
