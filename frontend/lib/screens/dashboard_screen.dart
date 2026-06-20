@@ -43,6 +43,7 @@ import '../theme/palette.dart';
 import '../theme/typography.dart';
 import '../utils/account_category.dart';
 import '../utils/currency.dart';
+import '../utils/lending_summary.dart' show sumLoansConverted;
 import '../utils/sync_progress.dart';
 import '../utils/supported_banks.dart';
 import '../utils/theme_colors.dart';
@@ -171,6 +172,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _lendingEnabled = true; // on by default; user can opt out in Settings
   // Upcoming + overdue loan installments for the notifications bell.
   List<dynamic> _loanReminders = const [];
+  // Active + closed loans, for the Overview "Lending" glance card. Best-effort:
+  // empty when lending is off or the fetch fails — the glance card just hides.
+  List<dynamic> _loans = const [];
   // Per-account low-balance thresholds (account id -> native-currency amount),
   // for the notifications bell. Seeded from localStorage, hydrated from backend.
   Map<String, double> _accountAlerts = const {};
@@ -185,6 +189,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // sync-status, FX, modules) is expanded. Collapsed by default so the phone
   // Settings view leads with data sources; remembered across visits.
   bool _managementDetailsExpanded = false;
+  // Whether the Management-tab "Auto-archived accounts" section is expanded.
+  // Collapsed by default — it's a recovery affordance, not a daily-use list.
+  bool _archivedSectionExpanded = false;
   // Configurable reminder lead time (days before due). Server-stored
   // (app_settings 'lending_reminder_lead_days'), surfaced in the
   // Management-tab Modules card.
@@ -863,7 +870,102 @@ class _DashboardScreenState extends State<DashboardScreen> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
+          ?_buildNetWorthDeltaBadge(
+            currencyFormat: currencyFormat,
+            conversionFactor: conversionFactor,
+          ),
           ?composition,
+        ],
+      ),
+    );
+  }
+
+  /// Compact month-over-month change badge shown under the hero total:
+  /// an arrow, the signed change and the percent move since ~30 days ago.
+  /// Returns null (the badge is omitted) when there isn't enough history to
+  /// compute a trustworthy delta — fewer than 2 points, or no point old
+  /// enough to compare against — so a brand-new account never shows a
+  /// misleading "+0".
+  ///
+  /// History [net_worth] is stored in USD; [conversionFactor] reports it in
+  /// the active currency. The delta is computed in USD then converted, so the
+  /// percent (a ratio) is currency-agnostic.
+  Widget? _buildNetWorthDeltaBadge({
+    required NumberFormat currencyFormat,
+    required double conversionFactor,
+  }) {
+    final l = AppLocalizations.of(context);
+    final history = _netWorthHistory ?? const [];
+    if (history.length < 2) return null;
+
+    // Latest point is the canonical "now" — the same series the trend chart
+    // draws, so the badge agrees with the line's right edge.
+    final latest = history.last;
+    if (latest is! Map) return null;
+    final latestNet = (latest['net_worth'] as num?)?.toDouble();
+    final latestDateStr = (latest['date'] ?? '').toString();
+    final latestDate = DateTime.tryParse(latestDateStr);
+    if (latestNet == null || latestDate == null) return null;
+
+    // Find the point closest to ~30 days before the latest — the comparison
+    // anchor. Scanning backwards and keeping the nearest-to-target handles
+    // irregular snapshot spacing (gaps, multiple-per-day) gracefully.
+    final target = latestDate.subtract(const Duration(days: 30));
+    Map? anchor;
+    int? bestDistance;
+    for (var i = 0; i < history.length - 1; i++) {
+      final p = history[i];
+      if (p is! Map) continue;
+      final d = DateTime.tryParse((p['date'] ?? '').toString());
+      final n = (p['net_worth'] as num?)?.toDouble();
+      if (d == null || n == null) continue;
+      // Only points strictly older than the latest are valid comparisons.
+      if (!d.isBefore(latestDate)) continue;
+      final dist = (d.difference(target).inDays).abs();
+      if (bestDistance == null || dist < bestDistance) {
+        bestDistance = dist;
+        anchor = p;
+      }
+    }
+    if (anchor == null) return null;
+    final anchorNet = (anchor['net_worth'] as num?)?.toDouble();
+    if (anchorNet == null) return null;
+
+    final deltaUsd = latestNet - anchorNet;
+    final delta = deltaUsd * conversionFactor;
+    final up = deltaUsd >= 0;
+    final color = up ? context.positive : context.warning;
+    // Percent move relative to the anchor. Guard a zero/negative-magnitude
+    // base so we never divide by zero or print a nonsensical percent.
+    final pctLabel = anchorNet.abs() > 0
+        ? ' · ${up ? '+' : '−'}${(deltaUsd.abs() / anchorNet.abs() * 100).toStringAsFixed(1)}%'
+        : '';
+    final sign = up ? '+' : '−';
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            up ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+            size: 14,
+            color: color,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '$sign${currencyFormat.format(delta.abs())}$pctLabel',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: color,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            l.heroDeltaSince30d,
+            style: TextStyle(fontSize: 11, color: context.textFaint),
+          ),
         ],
       ),
     );
@@ -1136,6 +1238,379 @@ class _DashboardScreenState extends State<DashboardScreen> {
               .toList(),
         );
       },
+    );
+  }
+
+  /// Per-currency assets/liabilities sub-strip. Decomposes the headline
+  /// assets/liabilities tiles by native currency so a dual-currency user can
+  /// see "what's in pesos vs dollars" at a glance. Foreign currencies also
+  /// carry their reporting-currency equivalent ("≈ $X").
+  ///
+  /// Reads [overview]['currency_breakdown'] (assets/liabilities/net per
+  /// currency, in native units). Returns null when there's only one currency
+  /// — the split would just restate the main tiles — so the caller can omit
+  /// it entirely.
+  Widget? _buildCurrencySubStrip({
+    required NumberFormat currencyFormat,
+    required double usdMxnRate,
+  }) {
+    final l = AppLocalizations.of(context);
+    final targetUpper = _targetCurrency.toUpperCase();
+    final entries = ((_overview?['currency_breakdown'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((item) => (
+              cur: (item['currency'] ?? '').toString().toUpperCase(),
+              assets: ((item['assets'] ?? 0.0) as num).toDouble(),
+              liabilities: ((item['liabilities'] ?? 0.0) as num).toDouble(),
+            ))
+        .where((e) => e.cur.isNotEmpty)
+        .toList();
+    if (entries.length < 2) return null;
+
+    // Dominant currency (by reporting-currency net exposure) first, so the
+    // user's primary holdings lead the list.
+    entries.sort((a, b) {
+      final ca = convertCurrency(a.assets - a.liabilities,
+          from: a.cur, to: _targetCurrency, usdMxnRate: usdMxnRate);
+      final cb = convertCurrency(b.assets - b.liabilities,
+          from: b.cur, to: _targetCurrency, usdMxnRate: usdMxnRate);
+      return cb.abs().compareTo(ca.abs());
+    });
+
+    Widget leg(String label, double native, String cur, Color color) {
+      final isTarget = cur == targetUpper;
+      final converted = convertCurrency(native,
+          from: cur, to: _targetCurrency, usdMxnRate: usdMxnRate);
+      return Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 11, color: context.textMuted),
+            ),
+          ),
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: formatCurrencyWithCode(native, cur),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+                if (!isTarget)
+                  TextSpan(
+                    text: '  ≈ ${currencyFormat.format(converted)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w400,
+                      color: context.textFaint,
+                    ),
+                  ),
+              ],
+              style: const TextStyle(
+                fontSize: 11,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: context.tileSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l.ovByCurrency.toUpperCase(),
+            style: TextStyle(
+              fontSize: 9,
+              letterSpacing: 0.8,
+              fontWeight: FontWeight.w700,
+              color: context.textFaint,
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (var i = 0; i < entries.length; i++) ...[
+            if (i > 0) const SizedBox(height: 10),
+            Text(
+              entries[i].cur,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: context.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            leg(l.statAssets, entries[i].assets, entries[i].cur,
+                context.textPrimary),
+            const SizedBox(height: 2),
+            leg(l.statLiabilities, entries[i].liabilities, entries[i].cur,
+                context.negative),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Compact "Lending" glance card for the Overview: total outstanding (across
+  /// every active loan, currency-converted), the active-loan count and the
+  /// soonest-due / overdue installment. Tapping it jumps to the Lending
+  /// section.
+  ///
+  /// Returns null — so the caller omits it entirely — unless lending is enabled
+  /// AND at least one active loan exists. A red dot flags any overdue loan.
+  Widget? _buildLendingGlanceCard({
+    required NumberFormat currencyFormat,
+    required double usdMxnRate,
+  }) {
+    if (!_lendingEnabled) return null;
+    final l = AppLocalizations.of(context);
+    final activeLoans = _loans
+        .whereType<Map>()
+        .where((loan) => (loan['status'] ?? 'active').toString() == 'active')
+        .toList();
+    if (activeLoans.isEmpty) return null;
+
+    final totalOutstanding = sumLoansConverted(
+        activeLoans, 'outstanding', _targetCurrency, usdMxnRate);
+
+    // Soonest reminder is the head of the (due_date ASC) list; overdue means
+    // any reminder with days_overdue > 0.
+    final reminders = _loanReminders.whereType<Map>().toList();
+    final hasOverdue =
+        reminders.any((r) => ((r['days_overdue'] as num?)?.toInt() ?? 0) > 0);
+    String? soonestLabel;
+    if (reminders.isNotEmpty) {
+      final next = reminders.first;
+      final name = (next['borrower_name'] ?? '').toString();
+      final overdueDays = (next['days_overdue'] as num?)?.toInt() ?? 0;
+      final untilDays = (next['days_until'] as num?)?.toInt() ?? 0;
+      final when = overdueDays > 0
+          ? l.lendingGlanceOverdueBy(overdueDays)
+          : (untilDays == 0
+              ? l.lendingGlanceDueToday
+              : l.lendingGlanceDueIn(untilDays));
+      soonestLabel = name.isEmpty ? when : '$name · $when';
+    }
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => _goToNav(NavId.lending),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.volunteer_activism_outlined,
+                      color: context.tealAccent, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      l.lendingGlanceTitle,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  if (hasOverdue)
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: context.negative,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  Icon(Icons.chevron_right,
+                      color: context.textMuted, size: 20),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                currencyFormat.format(totalOutstanding),
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: context.textPrimary,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${l.lendingGlanceOutstanding} · ${l.lendingGlanceActiveCount(activeLoans.length)}',
+                style: TextStyle(fontSize: 12, color: context.textMuted),
+              ),
+              if (soonestLabel != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '${l.lendingGlanceNextDue}: $soonestLabel',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: hasOverdue ? context.warning : context.textSubtle,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Restore an auto-archived account from the Management tab, mirroring the
+  /// flow in HiddenItemsScreen: call the API, drop the row locally for instant
+  /// feedback, and refresh silently so net worth / accounts reflect it.
+  Future<void> _restoreArchivedAccount(String id, String label) async {
+    final l = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await _apiService.restoreAccount(id);
+      if (!mounted) return;
+      setState(() {
+        _archivedAccounts = (_archivedAccounts ?? const [])
+            .where((row) => (row as Map)['id'].toString() != id)
+            .toList();
+      });
+      messenger.showSnackBar(
+        SnackBar(content: Text(l.accountRestored(label))),
+      );
+      // Reflect the restored balance in net worth / the accounts list.
+      _loadAllData(silent: true);
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(l.hiddenRestoreFailed(e.toString()))),
+      );
+    }
+  }
+
+  /// Collapsible "Auto-archived accounts" section for the Management tab.
+  /// Lists each account the sync closed (name + institution + archive date)
+  /// with a one-click Restore, plus a link to the full Hidden Items screen.
+  ///
+  /// Returns null — so the caller omits it entirely — when nothing has been
+  /// auto-archived.
+  Widget? _buildArchivedAccountsSection() {
+    final archived = _archivedAccounts ?? const [];
+    if (archived.isEmpty) return null;
+    final l = AppLocalizations.of(context);
+
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => setState(
+                () => _archivedSectionExpanded = !_archivedSectionExpanded),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(Icons.inventory_2_outlined,
+                      size: 18, color: context.textMuted),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      l.mgmtArchivedTitle,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  Text(
+                    '(${archived.length})',
+                    style:
+                        TextStyle(fontSize: 12, color: context.textSubtle),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    _archivedSectionExpanded
+                        ? Icons.expand_less
+                        : Icons.expand_more,
+                    color: context.textMuted,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_archivedSectionExpanded) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                l.mgmtArchivedIntro,
+                style: TextStyle(color: context.textSubtle, fontSize: 12),
+              ),
+            ),
+            for (var i = 0; i < archived.length; i++) ...[
+              if (i > 0) Divider(height: 1, color: context.hairline),
+              _archivedAccountRow(archived[i] as Map<String, dynamic>),
+            ],
+            Divider(height: 1, color: context.hairline),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const HiddenItemsScreen()),
+                ).then((_) => _loadAllData(silent: true)),
+                icon: const Icon(Icons.open_in_new, size: 16),
+                label: Text(l.mgmtArchivedManageAll),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _archivedAccountRow(Map<String, dynamic> row) {
+    final l = AppLocalizations.of(context);
+    final id = (row['id'] ?? '').toString();
+    final institution = (row['institution_name'] ?? '').toString();
+    final nickname = (row['nickname'] ?? '').toString();
+    final name = (row['name'] ?? '').toString();
+    // Mirror COALESCE(nickname, name): a user-set nickname wins.
+    final displayName = nickname.isNotEmpty ? nickname : name;
+    final archivedAt = (row['archived_at'] ?? '').toString();
+    final title =
+        institution.isEmpty ? displayName : '$institution · $displayName';
+    final archivedDate = DateTime.tryParse(archivedAt);
+    final subtitle = archivedDate == null
+        ? null
+        : l.accountClosedOn(DateFormat.yMMMd().format(archivedDate.toLocal()));
+
+    return ListTile(
+      dense: true,
+      leading: const Icon(Icons.account_balance_outlined, size: 18),
+      title: Text(title, style: const TextStyle(fontSize: 14)),
+      subtitle: subtitle == null
+          ? null
+          : Text(
+              subtitle,
+              style: TextStyle(color: context.textSubtle, fontSize: 11),
+            ),
+      trailing: TextButton.icon(
+        onPressed: () => _restoreArchivedAccount(id, displayName),
+        icon: const Icon(Icons.refresh, size: 16),
+        label: Text(l.accountRestore),
+      ),
     );
   }
 
@@ -2138,6 +2613,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // bell. Best-effort — a failure just drops the archived-account rows,
         // never the dashboard.
         _apiService.getArchivedAccounts().catchError((_) => <dynamic>[]),
+        // Loans for the Overview "Lending" glance card. Best-effort — a
+        // failure (or lending being off) just hides the card.
+        _apiService.getLoans().catchError((_) => <dynamic>[]),
       ]);
 
       debugPrint("All data loaded successfully");
@@ -2223,6 +2701,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final insightsRaw = results[17];
         _spendingInsights = insightsRaw is Map<String, dynamic> ? insightsRaw : null;
         _archivedAccounts = results[18] as List<dynamic>;
+        _loans = results[19] as List<dynamic>;
         _isLoading = false;
       });
 
@@ -3135,6 +3614,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             conversionFactor: conversionFactor,
             usdMxnRate: fxRate,
           );
+          // Per-currency assets/liabilities split — only meaningful (and only
+          // rendered) when the user holds more than one currency.
+          final currencySubStrip = _buildCurrencySubStrip(
+            currencyFormat: currencyFormat,
+            usdMxnRate: fxRate,
+          );
 
           final body = isNarrow
               ? Column(
@@ -3166,11 +3651,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
             netWorthUsd: (_overview?['net_worth'] as num?)?.toDouble() ?? 0.0,
             conversionFactor: conversionFactor,
             currencyFormat: currencyFormat,
+            history: _netWorthHistory ?? const [],
           );
           final emergencyCard = EmergencyFundCard(
             apiService: _apiService,
             conversionFactor: conversionFactor,
             currencyFormat: currencyFormat,
+          );
+          // Lending glance — only present when lending is on and there's at
+          // least one active loan (else null, and omitted entirely).
+          final lendingGlance = _buildLendingGlanceCard(
+            currencyFormat: currencyFormat,
+            usdMxnRate: fxRate,
           );
 
           return Column(
@@ -3214,17 +3706,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 // expand-state is remembered across visits.
                 _buildOverviewDetails([
                   stats,
+                  if (currencySubStrip != null) ...[
+                    const SizedBox(height: 12),
+                    currencySubStrip,
+                  ],
                   const SizedBox(height: 20),
                   goalTile,
                   const SizedBox(height: 20),
                   emergencyCard,
+                  if (lendingGlance != null) ...[
+                    const SizedBox(height: 20),
+                    lendingGlance,
+                  ],
                 ]),
               ] else ...[
                 stats,
+                if (currencySubStrip != null) ...[
+                  const SizedBox(height: 12),
+                  currencySubStrip,
+                ],
                 const SizedBox(height: 20),
                 goalTile,
                 const SizedBox(height: 20),
                 emergencyCard,
+                if (lendingGlance != null) ...[
+                  const SizedBox(height: 20),
+                  lendingGlance,
+                ],
                 const SizedBox(height: 20),
                 body,
               ],
@@ -3985,6 +4493,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 24),
               ...secondaryControls,
             ];
+          }()),
+          // Auto-archived accounts — a recovery affordance for accounts the
+          // sync closed at the bank. Rendered only when something's been
+          // archived; collapsed by default.
+          ?(() {
+            final section = _buildArchivedAccountsSection();
+            return section == null
+                ? null
+                : Padding(
+                    padding: EdgeInsets.only(top: gap),
+                    child: section,
+                  );
           }()),
           SizedBox(height: gap),
           // Deployment diagnostics sit last — they collapse to a single
