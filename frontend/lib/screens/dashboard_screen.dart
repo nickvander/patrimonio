@@ -96,6 +96,14 @@ class _NavDest {
   );
 }
 
+/// Period the Cash Flow tab's headline cards summarize. Drives a
+/// calendar-month window passed to the trends endpoint:
+///   thisMonth   -> 1 month  (current)
+///   lastMonth   -> 2 months (so the prior month + a vs-comparison are present)
+///   threeMonths -> 3 months (aggregated)
+///   ytd         -> Jan..current of this year (aggregated)
+enum CashFlowPeriod { thisMonth, lastMonth, threeMonths, ytd }
+
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -135,6 +143,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<dynamic>? _transactions;
   List<AllocationData>? _allocationData;
   List<Map<String, dynamic>>? _trendData;
+  // Cash Flow tab period selector. [_cashFlowPeriod] is the user's choice;
+  // [_cashFlowTrends] is the period-specific series fetched on change. While
+  // null (the user hasn't touched the selector) the tab falls back to the
+  // shared 12-month [_trendData] and the card shows the latest month — i.e.
+  // the historical behavior is unchanged until the user opts into a window.
+  CashFlowPeriod _cashFlowPeriod = CashFlowPeriod.thisMonth;
+  List<Map<String, dynamic>>? _cashFlowTrends;
+  bool _cashFlowLoading = false;
   Map<String, dynamic>? _sinceLastLogin;
   List<dynamic>? _subscriptions;
   List<dynamic>? _ignoredSubscriptions;
@@ -1782,6 +1798,100 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  /// Trailing calendar-month window for a Cash Flow period. The backend
+  /// counts back from the current month: months=1 is the current month,
+  /// months=2 adds the prior month, etc.
+  ///   thisMonth   -> 1
+  ///   lastMonth   -> 2 (current + prior, so the card can headline the prior
+  ///                  month AND show a vs-current delta)
+  ///   threeMonths -> 3
+  ///   ytd         -> months elapsed this year, i.e. current month number
+  ///                  (Jan=1 .. so in June it's 6: Jan..Jun inclusive).
+  int _monthsForCashFlowPeriod(CashFlowPeriod p) {
+    switch (p) {
+      case CashFlowPeriod.thisMonth:
+        return 1;
+      case CashFlowPeriod.lastMonth:
+        return 2;
+      case CashFlowPeriod.threeMonths:
+        return 3;
+      case CashFlowPeriod.ytd:
+        // Current month number == count of months Jan..now inclusive. Clamp
+        // to 1..12 defensively; the backend re-clamps to 1..24 anyway.
+        return DateTime.now().month.clamp(1, 12);
+    }
+  }
+
+  /// Fetch the period-specific trend series for the Cash Flow tab and rebuild.
+  /// Leaves [_trendData] (the shared 12-month series) untouched so the rest of
+  /// the dashboard is unaffected. The api_service cache key folds in the
+  /// month window, so switching periods refetches rather than reusing a stale
+  /// series.
+  Future<void> _onCashFlowPeriodChanged(CashFlowPeriod period) async {
+    setState(() {
+      _cashFlowPeriod = period;
+      _cashFlowLoading = true;
+    });
+    final months = _monthsForCashFlowPeriod(period);
+    try {
+      final raw = await _apiService.getTrendData(months: months);
+      if (!mounted) return;
+      setState(() {
+        _cashFlowTrends =
+            raw.map((e) => e as Map<String, dynamic>).toList();
+        _cashFlowLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      // Keep whatever's on screen; just clear the spinner.
+      setState(() => _cashFlowLoading = false);
+      debugPrint('Cash-flow period fetch error: $e');
+    }
+  }
+
+  /// Compact period chooser pinned to the top of the Cash Flow tab. Mirrors
+  /// the SegmentedButton style used elsewhere (e.g. the portfolio Flat/By
+  /// account toggle) so it reads as native. Horizontally scrollable so the
+  /// four labels never overflow on a phone.
+  Widget _buildCashFlowPeriodSelector(AppLocalizations l) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SegmentedButton<CashFlowPeriod>(
+          segments: [
+            ButtonSegment(
+              value: CashFlowPeriod.thisMonth,
+              label: Text(l.cfPeriodThisMonth),
+            ),
+            ButtonSegment(
+              value: CashFlowPeriod.lastMonth,
+              label: Text(l.cfPeriodLastMonth),
+            ),
+            ButtonSegment(
+              value: CashFlowPeriod.threeMonths,
+              label: Text(l.cfPeriod3Months),
+            ),
+            ButtonSegment(
+              value: CashFlowPeriod.ytd,
+              label: Text(l.cfPeriodYtd),
+            ),
+          ],
+          selected: {_cashFlowPeriod},
+          showSelectedIcon: false,
+          onSelectionChanged: _cashFlowLoading
+              ? null
+              : (s) => _onCashFlowPeriodChanged(s.first),
+          style: ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            textStyle:
+                WidgetStateProperty.all(const TextStyle(fontSize: 12)),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Targeted refresh after hiding/unhiding a subscription merchant. Only
   /// the two subscription lists can change — re-pricing stocks and
   /// re-pulling the whole dashboard for that was pure waste.
@@ -3328,19 +3438,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // recent months, and per-category budgets. These used to crowd the
     // Overview; pulling them out keeps Overview focused on net worth.
     final gap = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+    // Effective cash-flow series: the period-specific fetch once the user
+    // touches the selector, else the shared 12-month series (current default).
+    final cashFlowSeries = _cashFlowTrends ?? _trendData;
+    // For single-month periods the card headlines a specific month; for
+    // multi-month windows it aggregates and shows a period label instead.
+    final bool cfAggregated = _cashFlowTrends != null &&
+        (_cashFlowPeriod == CashFlowPeriod.threeMonths ||
+            _cashFlowPeriod == CashFlowPeriod.ytd);
+    String? cfSelectedMonthIso;
+    String? cfPeriodLabel;
+    if (_cashFlowTrends != null) {
+      if (cfAggregated) {
+        cfPeriodLabel = _cashFlowPeriod == CashFlowPeriod.threeMonths
+            ? l.cfPeriod3Months
+            : l.cfPeriodYtd;
+      } else if (_cashFlowPeriod == CashFlowPeriod.lastMonth) {
+        // The window is [prior, current]; headline the prior month.
+        final series = _cashFlowTrends!;
+        if (series.length >= 2) {
+          cfSelectedMonthIso = series[series.length - 2]['month'] as String?;
+        }
+      }
+      // thisMonth: leave selectedMonthIso null -> card headlines the latest
+      // (only) month in the 1-month window.
+    }
     final cashFlowTab = buildTabContainer(
       Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          _buildCashFlowPeriodSelector(l),
+          SizedBox(height: gap),
           MonthlyCashFlowCard(
-            trends: _trendData ?? const [],
+            trends: cashFlowSeries ?? const [],
             conversionFactor: conversionFactor,
             currencyFormat: currencyFormat,
+            selectedMonthIso: cfSelectedMonthIso,
+            periodLabel: cfPeriodLabel,
           ),
           SizedBox(height: gap),
-          if (_trendData != null)
+          if (cashFlowSeries != null)
             CashFlowTrendsChart(
-              trends: _trendData!,
+              trends: cashFlowSeries,
               conversionFactor: conversionFactor,
               currencyFormat: currencyFormat,
               // Clicking a month group jumps to Transactions filtered

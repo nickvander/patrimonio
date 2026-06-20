@@ -563,9 +563,17 @@ class ApiService {
     }, forceRefresh: forceRefresh);
   }
 
-  Future<List<dynamic>> getTrendData({bool forceRefresh = false}) {
-    return _cachedGet('trends', () async {
-      final response = await _get(Uri.parse('$_baseUrl/dashboard/trends'));
+  /// Monthly income/spending trends. [months] sets the trailing
+  /// calendar-month window (clamped 1..=24 server-side); omit it for the
+  /// historical 12-month default. The cache key folds in [months] so the
+  /// Cash Flow tab's period selector refetches a tighter window instead of
+  /// returning the stale 12-month series.
+  Future<List<dynamic>> getTrendData({int? months, bool forceRefresh = false}) {
+    final query = months == null ? '' : '?months=$months';
+    final cacheKey = months == null ? 'trends' : 'trends-$months';
+    return _cachedGet(cacheKey, () async {
+      final response =
+          await _get(Uri.parse('$_baseUrl/dashboard/trends$query'));
       if (response.statusCode == 200) {
         return json.decode(response.body) as List<dynamic>;
       }

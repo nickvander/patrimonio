@@ -1138,11 +1138,23 @@ async fn asset_allocation(
     )
 }
 
+#[derive(Deserialize)]
+struct TrendsQuery {
+    /// Trailing window in months (default 12). Clamped to 1..=24 so the
+    /// Cash Flow tab's period selector can ask for a tighter window
+    /// (This/Last month, 3 months, YTD) without an unbounded scan. Absent
+    /// keeps the historical 12-month default so existing callers are
+    /// unchanged.
+    months: Option<i64>,
+}
+
 /// Monthly income and spending trends for this user.
 async fn cash_flow_trends(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
+    Query(q): Query<TrendsQuery>,
 ) -> Json<Vec<CashFlowPoint>> {
+    let months = q.months.unwrap_or(12).clamp(1, 24);
     let rows = sqlx::query(
         r#"
         WITH latest_fx AS (
@@ -1171,7 +1183,12 @@ async fn cash_flow_trends(
                    ELSE 0 END) as spending
         FROM transactions t
         JOIN accounts a ON a.id = t.account_id
-        WHERE t.date >= CURRENT_DATE - INTERVAL '12 months'
+        -- Calendar-month-aligned trailing window: months=1 yields the
+        -- current month only, months=2 adds the prior month, etc. (mirrors
+        -- spending_by_category). The Cash Flow tab's period selector binds
+        -- this so "Last month" / "Last 3 months" / "YTD" each pull just the
+        -- months they need while the default (12) is unchanged.
+        WHERE t.date >= (DATE_TRUNC('month', CURRENT_DATE) - make_interval(months => ($2::int - 1)))
           AND t.user_id = $1
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
           -- Exclude internal-transfer noise from the cash-flow view:
@@ -1211,6 +1228,7 @@ async fn cash_flow_trends(
         "#
     )
     .bind(ctx.user_id)
+    .bind(months as i32)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();

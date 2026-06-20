@@ -15,11 +15,24 @@ class MonthlyCashFlowCard extends StatelessWidget {
   final double conversionFactor;
   final NumberFormat currencyFormat;
 
+  /// Which month's figures to headline (YYYY-MM). When null the card shows
+  /// the latest month in [trends] — the historical behavior. The Cash Flow
+  /// tab's period selector passes the prior month's iso for "Last month" so
+  /// the inflow/outflow/net describe that month rather than the latest.
+  final String? selectedMonthIso;
+
+  /// Optional period name shown in the header (e.g. "Last 3 months") so the
+  /// figure isn't ambiguous when it doesn't cover a single calendar month.
+  /// When null the card names the displayed month itself.
+  final String? periodLabel;
+
   const MonthlyCashFlowCard({
     super.key,
     required this.trends,
     required this.conversionFactor,
     required this.currencyFormat,
+    this.selectedMonthIso,
+    this.periodLabel,
   });
 
   @override
@@ -29,32 +42,66 @@ class MonthlyCashFlowCard extends StatelessWidget {
       return _buildEmpty(context);
     }
 
-    // The API returns months in chronological order; the *last* element is
-    // the current month and the previous one is what we compare against.
-    final current = trends.last;
-    final prior = trends.length >= 2 ? trends[trends.length - 2] : null;
+    // The API returns months in chronological order. By default we headline
+    // the *last* element (current month) and compare against the previous
+    // one. When the period selector aggregates a multi-month window
+    // (periodLabel set) we sum the whole series instead, so the figure
+    // matches the named period.
+    final aggregate = periodLabel != null;
 
-    final income =
-        ((current['income'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
-    final spending =
-        ((current['spending'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
-    final net = income - spending;
-
-    double? priorNet;
-    if (prior != null) {
-      final pi = ((prior['income'] as num?)?.toDouble() ?? 0.0) *
-          conversionFactor;
-      final ps = ((prior['spending'] as num?)?.toDouble() ?? 0.0) *
-          conversionFactor;
-      priorNet = pi - ps;
+    // Index of the month to headline when not aggregating: the one matching
+    // selectedMonthIso, else the latest.
+    int currentIdx = trends.length - 1;
+    if (selectedMonthIso != null) {
+      final i = trends.indexWhere((m) => m['month'] == selectedMonthIso);
+      if (i >= 0) currentIdx = i;
     }
+
+    double income;
+    double spending;
+    double? priorNet;
+
+    if (aggregate) {
+      // Sum every month in the fetched window.
+      double inc = 0.0;
+      double spend = 0.0;
+      for (final m in trends) {
+        inc += (m['income'] as num?)?.toDouble() ?? 0.0;
+        spend += (m['spending'] as num?)?.toDouble() ?? 0.0;
+      }
+      income = inc * conversionFactor;
+      spending = spend * conversionFactor;
+      // No single "prior period" to compare an aggregate against — omit the
+      // vs-prior delta rather than show a misleading month-over-month number.
+      priorNet = null;
+    } else {
+      final current = trends[currentIdx];
+      final prior = currentIdx >= 1 ? trends[currentIdx - 1] : null;
+      income =
+          ((current['income'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
+      spending =
+          ((current['spending'] as num?)?.toDouble() ?? 0.0) *
+              conversionFactor;
+      if (prior != null) {
+        final pi =
+            ((prior['income'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
+        final ps =
+            ((prior['spending'] as num?)?.toDouble() ?? 0.0) *
+                conversionFactor;
+        priorNet = pi - ps;
+      }
+    }
+    final net = income - spending;
 
     // Slice up to the last 3 months for the sparkline. If we don't have
     // three months of history we use whatever's available.
     final sparkSource =
         trends.length >= 3 ? trends.sublist(trends.length - 3) : trends;
 
-    final monthLabel = _formatMonth(current['month'] as String?);
+    // Header subtitle: the named period when aggregating, else the headlined
+    // month. Keeps the figure unambiguous either way.
+    final monthLabel = periodLabel ??
+        _formatMonth(trends[currentIdx]['month'] as String?);
 
     final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 
