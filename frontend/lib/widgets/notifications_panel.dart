@@ -396,45 +396,33 @@ class NotificationsBell extends StatelessWidget {
     final l = AppLocalizations.of(context);
     final unseen =
         notifications.where((n) => !dismissedIds.contains(n.id)).toList();
+    final tooltip = unseen.isEmpty
+        ? l.lwNotifTooltipNone
+        : l.lwNotifTooltipCount(unseen.length);
+
+    // Phones open a full-width bottom sheet. A dropdown anchored to a
+    // top-corner bell was cramped on a narrow screen — clipped rows and an
+    // easy-to-miss popover meant the alerts were effectively invisible on
+    // mobile. Desktop keeps the quick anchored dropdown.
+    final isNarrow = MediaQuery.sizeOf(context).width < 600;
+    if (isNarrow) {
+      return IconButton(
+        tooltip: tooltip,
+        icon: _bellIcon(context, unseen.isNotEmpty),
+        onPressed: () => _openSheet(context, l, unseen),
+      );
+    }
+
     return PopupMenuButton<void>(
-      tooltip: unseen.isEmpty
-          ? l.lwNotifTooltipNone
-          : l.lwNotifTooltipCount(unseen.length),
-      icon: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          const Icon(Icons.notifications_none),
-          if (unseen.isNotEmpty)
-            Positioned(
-              right: -2,
-              top: -2,
-              child: Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: Colors.orangeAccent,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.surface,
-                    width: 1.5,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+      tooltip: tooltip,
+      icon: _bellIcon(context, unseen.isNotEmpty),
       itemBuilder: (menuContext) {
         if (notifications.isEmpty) {
           return [
             PopupMenuItem(
               enabled: false,
-              child: ListTile(
-                dense: true,
-                leading: Icon(Icons.check_circle_outline,
-                    color: context.positive),
-                title: Text(l.lwNotifAllClear),
-                subtitle: Text(l.lwNotifNoAlerts),
-              ),
+              padding: EdgeInsets.zero,
+              child: SizedBox(width: 380, child: _emptyState(context, l)),
             ),
           ];
         }
@@ -444,65 +432,215 @@ class NotificationsBell extends StatelessWidget {
           // pop animation clean before the parent rebuilds the badge.
           PopupMenuItem<void>(
             enabled: false,
+            padding: EdgeInsets.zero,
             child: SizedBox(
-              width: 360,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(l.lwNotifHeader,
-                      style: const TextStyle(fontWeight: FontWeight.bold)),
-                  if (unseen.isNotEmpty && onMarkAllRead != null)
-                    TextButton(
-                      onPressed: () {
-                        Navigator.of(menuContext).pop();
-                        onMarkAllRead!(
-                            notifications.map((n) => n.id).toSet());
-                      },
-                      child: Text(l.lwNotifMarkAllRead),
-                    ),
-                ],
-              ),
+              width: 380,
+              child: _header(context, l, unseen,
+                  onClose: () => Navigator.of(menuContext).pop()),
             ),
           ),
           ...notifications.map((n) {
             final isUnseen = !dismissedIds.contains(n.id);
             return PopupMenuItem<void>(
               onTap: n.onTap,
-              child: SizedBox(
-                width: 360,
-                child: ListTile(
-                  dense: true,
-                  leading: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: n.accent.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(n.icon, color: n.accent, size: 16),
-                  ),
-                  title: Text(n.title,
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text(n.detail,
-                      maxLines: 2, overflow: TextOverflow.ellipsis),
-                  // A small dot marks rows the user hasn't acknowledged yet;
-                  // already-read rows stay visible but unmarked.
-                  trailing: isUnseen
-                      ? Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Colors.orangeAccent,
-                            shape: BoxShape.circle,
-                          ),
-                        )
-                      : null,
-                ),
-              ),
+              padding: EdgeInsets.zero,
+              child: SizedBox(width: 380, child: _row(context, n, isUnseen)),
             );
           }),
         ];
       },
+    );
+  }
+
+  /// The bell glyph + unseen badge, shared by the mobile button and the
+  /// desktop dropdown trigger.
+  Widget _bellIcon(BuildContext context, bool hasUnseen) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        const Icon(Icons.notifications_none),
+        if (hasUnseen)
+          Positioned(
+            right: -2,
+            top: -2,
+            child: Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: Colors.orangeAccent,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.surface,
+                  width: 1.5,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _openSheet(
+    BuildContext context,
+    AppLocalizations l,
+    List<AppNotification> unseen,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(sheetCtx).height * 0.8,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _header(context, l, unseen,
+                    onClose: () => Navigator.of(sheetCtx).pop()),
+                Divider(height: 1, color: context.hairline),
+                if (notifications.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: _emptyState(context, l),
+                  )
+                else
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      padding: EdgeInsets.zero,
+                      itemCount: notifications.length,
+                      separatorBuilder: (_, _) =>
+                          Divider(height: 1, color: context.hairline),
+                      itemBuilder: (_, i) {
+                        final n = notifications[i];
+                        final isUnseen = !dismissedIds.contains(n.id);
+                        return InkWell(
+                          onTap: n.onTap == null
+                              ? null
+                              : () {
+                                  Navigator.of(sheetCtx).pop();
+                                  n.onTap!();
+                                },
+                          child: _row(context, n, isUnseen),
+                        );
+                      },
+                    ),
+                  ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Shared header: title + "Mark all read". [onClose] dismisses the host
+  /// surface (popup or sheet) before the parent rebuilds the badge.
+  Widget _header(
+    BuildContext context,
+    AppLocalizations l,
+    List<AppNotification> unseen, {
+    required VoidCallback onClose,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(l.lwNotifHeader,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: context.textPrimary,
+              )),
+          if (unseen.isNotEmpty && onMarkAllRead != null)
+            TextButton(
+              onPressed: () {
+                onClose();
+                onMarkAllRead!(notifications.map((n) => n.id).toSet());
+              },
+              child: Text(l.lwNotifMarkAllRead),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// One readable notification row — roomy tap target, two-line title and
+  /// up-to-three-line detail at a legible size (the old `dense` ListTile
+  /// truncated hard and read as fine print).
+  Widget _row(BuildContext context, AppNotification n, bool isUnseen) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: n.accent.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(n.icon, color: n.accent, size: 19),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  n.title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: context.textPrimary,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  n.detail,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.3,
+                    color: context.textSubtle,
+                  ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          // A small dot marks rows the user hasn't acknowledged yet;
+          // already-read rows stay visible but unmarked.
+          if (isUnseen) ...[
+            const SizedBox(width: 8),
+            Container(
+              margin: const EdgeInsets.only(top: 5),
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: Colors.orangeAccent,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _emptyState(BuildContext context, AppLocalizations l) {
+    return ListTile(
+      leading: Icon(Icons.check_circle_outline, color: context.positive),
+      title: Text(l.lwNotifAllClear),
+      subtitle: Text(l.lwNotifNoAlerts),
     );
   }
 }
