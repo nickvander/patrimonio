@@ -316,7 +316,16 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get txDeletedOne => 'Transaction deleted';
+
+  @override
+  String get txDeleteOneFailed => 'Couldn\'t delete the transaction';
+
+  @override
   String get txDeleteSomeFailed => 'Couldn\'t delete some transactions';
+
+  @override
+  String get txUndo => 'Undo';
 
   @override
   String get txMoveToAccount => 'Move to account';
@@ -425,6 +434,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Export CSV — exports all transactions (filters and search don\'t apply)';
 
   @override
+  String get txExportCsvFiltered =>
+      'Export CSV — exports the transactions matching your current filter';
+
+  @override
+  String get txExportNoRows =>
+      'Nothing to export — no transactions match the current filter.';
+
+  @override
   String get txExportAllTitle => 'Export all transactions?';
 
   @override
@@ -433,6 +450,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get txExportAllConfirm => 'Export all';
+
+  @override
+  String get txSortBy => 'Sort by';
+
+  @override
+  String get txSortDateNewest => 'Date (newest first)';
+
+  @override
+  String get txSortDateOldest => 'Date (oldest first)';
+
+  @override
+  String get txSortAmountHigh => 'Amount (largest first)';
+
+  @override
+  String get txSortAmountLow => 'Amount (smallest first)';
+
+  @override
+  String get txSortMerchant => 'Merchant (A–Z)';
 
   @override
   String get txScanTransfers =>
@@ -1256,6 +1291,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get cfNotEnoughHistory => 'Not enough history yet';
+
+  @override
+  String get cfPeriodLabel => 'Period';
+
+  @override
+  String get cfPeriodThisMonth => 'This month';
+
+  @override
+  String get cfPeriodLastMonth => 'Last month';
+
+  @override
+  String get cfPeriod3Months => 'Last 3 months';
+
+  @override
+  String get cfPeriodYtd => 'Year to date';
 
   @override
   String get cfSubscriptionsTitle => 'Recurring charges';

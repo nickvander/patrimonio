@@ -316,8 +316,17 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get txDeletedOne => 'Movimiento eliminado';
+
+  @override
+  String get txDeleteOneFailed => 'No se pudo eliminar el movimiento';
+
+  @override
   String get txDeleteSomeFailed =>
       'No se pudieron eliminar algunos movimientos';
+
+  @override
+  String get txUndo => 'Deshacer';
 
   @override
   String get txMoveToAccount => 'Mover a la cuenta';
@@ -426,6 +435,14 @@ class AppLocalizationsEs extends AppLocalizations {
       'Exportar CSV: exporta todos los movimientos (los filtros y la búsqueda no se aplican)';
 
   @override
+  String get txExportCsvFiltered =>
+      'Exportar CSV: exporta los movimientos que coinciden con tu filtro actual';
+
+  @override
+  String get txExportNoRows =>
+      'Nada para exportar: ningún movimiento coincide con el filtro actual.';
+
+  @override
   String get txExportAllTitle => '¿Exportar todos los movimientos?';
 
   @override
@@ -434,6 +451,24 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get txExportAllConfirm => 'Exportar todo';
+
+  @override
+  String get txSortBy => 'Ordenar por';
+
+  @override
+  String get txSortDateNewest => 'Fecha (más reciente primero)';
+
+  @override
+  String get txSortDateOldest => 'Fecha (más antigua primero)';
+
+  @override
+  String get txSortAmountHigh => 'Monto (mayor primero)';
+
+  @override
+  String get txSortAmountLow => 'Monto (menor primero)';
+
+  @override
+  String get txSortMerchant => 'Comercio (A–Z)';
 
   @override
   String get txScanTransfers =>
@@ -1274,6 +1309,21 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get cfNotEnoughHistory => 'Aún no hay suficiente historial';
+
+  @override
+  String get cfPeriodLabel => 'Periodo';
+
+  @override
+  String get cfPeriodThisMonth => 'Este mes';
+
+  @override
+  String get cfPeriodLastMonth => 'Mes pasado';
+
+  @override
+  String get cfPeriod3Months => 'Últimos 3 meses';
+
+  @override
+  String get cfPeriodYtd => 'En lo que va del año';
 
   @override
   String get cfSubscriptionsTitle => 'Cargos recurrentes';

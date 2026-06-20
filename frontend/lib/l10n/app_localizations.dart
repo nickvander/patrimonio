@@ -656,11 +656,29 @@ abstract class AppLocalizations {
   /// **'Deleted {count} transactions'**
   String txDeletedN(Object count);
 
+  /// No description provided for @txDeletedOne.
+  ///
+  /// In en, this message translates to:
+  /// **'Transaction deleted'**
+  String get txDeletedOne;
+
+  /// No description provided for @txDeleteOneFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t delete the transaction'**
+  String get txDeleteOneFailed;
+
   /// No description provided for @txDeleteSomeFailed.
   ///
   /// In en, this message translates to:
   /// **'Couldn\'t delete some transactions'**
   String get txDeleteSomeFailed;
+
+  /// No description provided for @txUndo.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get txUndo;
 
   /// No description provided for @txMoveToAccount.
   ///
@@ -824,6 +842,18 @@ abstract class AppLocalizations {
   /// **'Export CSV — exports all transactions (filters and search don\'t apply)'**
   String get txExportCsvAllNote;
 
+  /// No description provided for @txExportCsvFiltered.
+  ///
+  /// In en, this message translates to:
+  /// **'Export CSV — exports the transactions matching your current filter'**
+  String get txExportCsvFiltered;
+
+  /// No description provided for @txExportNoRows.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to export — no transactions match the current filter.'**
+  String get txExportNoRows;
+
   /// No description provided for @txExportAllTitle.
   ///
   /// In en, this message translates to:
@@ -841,6 +871,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Export all'**
   String get txExportAllConfirm;
+
+  /// No description provided for @txSortBy.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort by'**
+  String get txSortBy;
+
+  /// No description provided for @txSortDateNewest.
+  ///
+  /// In en, this message translates to:
+  /// **'Date (newest first)'**
+  String get txSortDateNewest;
+
+  /// No description provided for @txSortDateOldest.
+  ///
+  /// In en, this message translates to:
+  /// **'Date (oldest first)'**
+  String get txSortDateOldest;
+
+  /// No description provided for @txSortAmountHigh.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount (largest first)'**
+  String get txSortAmountHigh;
+
+  /// No description provided for @txSortAmountLow.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount (smallest first)'**
+  String get txSortAmountLow;
+
+  /// No description provided for @txSortMerchant.
+  ///
+  /// In en, this message translates to:
+  /// **'Merchant (A–Z)'**
+  String get txSortMerchant;
 
   /// No description provided for @txScanTransfers.
   ///
@@ -2209,6 +2275,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not enough history yet'**
   String get cfNotEnoughHistory;
+
+  /// No description provided for @cfPeriodLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Period'**
+  String get cfPeriodLabel;
+
+  /// No description provided for @cfPeriodThisMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'This month'**
+  String get cfPeriodThisMonth;
+
+  /// No description provided for @cfPeriodLastMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'Last month'**
+  String get cfPeriodLastMonth;
+
+  /// No description provided for @cfPeriod3Months.
+  ///
+  /// In en, this message translates to:
+  /// **'Last 3 months'**
+  String get cfPeriod3Months;
+
+  /// No description provided for @cfPeriodYtd.
+  ///
+  /// In en, this message translates to:
+  /// **'Year to date'**
+  String get cfPeriodYtd;
 
   /// No description provided for @cfSubscriptionsTitle.
   ///

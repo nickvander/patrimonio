@@ -294,6 +294,17 @@ class TransactionsTab extends StatefulWidget {
   State<TransactionsTab> createState() => _TransactionsTabState();
 }
 
+/// Row ordering for the sort menu. `dateNewest` is the default and the
+/// only mode that keeps the date-group headers (month landmarks + day
+/// headings); every other mode renders a flat list with no headers.
+enum _TxSort {
+  dateNewest,
+  dateOldest,
+  amountHigh,
+  amountLow,
+  merchant,
+}
+
 class _TransactionsTabState extends State<TransactionsTab> {
   String _searchQuery = '';
   bool _searchOpenOnNarrow = false;
@@ -308,12 +319,28 @@ class _TransactionsTabState extends State<TransactionsTab> {
   // re-categorise, move accounts, or clear selection in one stroke.
   bool _selectionMode = false;
   final Set<String> _selectedIds = {};
+  // Active row ordering (see the sort menu in _buildToolbar). Only
+  // _TxSort.dateNewest keeps the grouped (month/day header) view; every
+  // other mode renders a flat, header-less list (see _ensureItemPlan).
+  _TxSort _sortMode = _TxSort.dateNewest;
+  // Deferred-delete buffer for the Undo affordance. Ids in here are
+  // hidden from the displayed/filtered list immediately on delete, but
+  // the actual onDelete/onBulkDelete call is only committed when the
+  // Undo SnackBar times out (see _scheduleDeleteCommit). Undo just drops
+  // the ids back out of the set (the rows reappear) and cancels the
+  // pending commit timer. Survives across single + bulk deletes.
+  final Set<String> _pendingDeleteIds = {};
+  Timer? _pendingDeleteTimer;
   // Local spinner state while widget.onLoadMore is in-flight so the "Load
   // more" button itself shows feedback without a full-page reload.
   bool _loadingMore = false;
   // True while we're cascade-loading the remaining pages so a client-side
   // filter can see the user's whole history (see _loadAllForFilter).
   bool _autoLoading = false;
+  // True while a "Select all" is waiting on _loadAllForFilter to pull in
+  // the unloaded matches before selecting them (see _toggleSelectAll).
+  // Shows a spinner on the toggle so the count doesn't briefly mislead.
+  bool _selectAllLoading = false;
   // True inline rename: when set, the row with this tx id renders a
   // TextField in place of the label. Double-click on the label or R
   // while hovering opens the editor. Enter saves, Esc cancels (so
@@ -352,6 +379,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
   // always lowercased + non-empty). Forces a first-run rebuild.
   String _filteredCacheQuery = '__init__';
   TxFilters _filteredCacheFilters = TxFilters.empty;
+  // Cache invalidators for the two new filtered-list inputs: the chosen
+  // sort mode and the count of pending-delete ids (a count change is the
+  // only way the hidden set affects the result — a delete adds an id, an
+  // undo removes one). The sort sentinel forces a first-run rebuild.
+  _TxSort? _filteredCacheSort;
+  int _filteredCachePendingDeleteCount = 0;
   final Map<String, String> _haystackCache = {};
   int _haystackCacheIdentity = 0;
   // Cache for the single-account running balances. Computed over the
@@ -434,6 +467,16 @@ class _TransactionsTabState extends State<TransactionsTab> {
   @override
   void dispose() {
     _searchDebounce?.cancel();
+    _pendingDeleteTimer?.cancel();
+    // The widget is going away with an Undo window still open: honor the
+    // delete (the rows were already hidden — the user's intent was to
+    // delete) by firing the commit without touching the now-defunct UI.
+    final pendingCommit = _pendingDeleteCommit;
+    if (pendingCommit != null) {
+      _pendingDeleteCommit = null;
+      // Fire-and-forget: no setState/SnackBar — this State is dead.
+      pendingCommit();
+    }
     _searchController.dispose();
     _inlineEditController.dispose();
     _inlineEditFocus.dispose();
@@ -541,7 +584,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
     if (_filteredCache != null &&
         identity == _filteredCacheIdentity &&
         q == _filteredCacheQuery &&
-        _filters == _filteredCacheFilters) {
+        _filters == _filteredCacheFilters &&
+        _sortMode == _filteredCacheSort &&
+        _pendingDeleteIds.length == _filteredCachePendingDeleteCount) {
       return _filteredCache!;
     }
     // Clear the per-tx haystack cache when the underlying list
@@ -553,12 +598,20 @@ class _TransactionsTabState extends State<TransactionsTab> {
     }
     final hasSearch = q.isNotEmpty;
     final hasFilters = _filters.isActive;
+    final hasPendingDelete = _pendingDeleteIds.isNotEmpty;
     List<dynamic> result;
-    if (!hasSearch && !hasFilters) {
+    if (!hasSearch && !hasFilters && !hasPendingDelete) {
       result = txs;
     } else {
       result = <dynamic>[];
       for (final tx in txs) {
+        // Deferred-delete rows are hidden the moment the user deletes
+        // them, before the commit lands, so the Undo SnackBar can put
+        // them back without a re-fetch (see _scheduleDeleteCommit).
+        if (hasPendingDelete &&
+            _pendingDeleteIds.contains(tx['id']?.toString())) {
+          continue;
+        }
         if (hasSearch) {
           final hay = _haystackFor(tx);
           if (!hay.contains(q)) continue;
@@ -567,13 +620,58 @@ class _TransactionsTabState extends State<TransactionsTab> {
         result.add(tx);
       }
     }
+    // The source list is always newest-first (the default view), so the
+    // dateNewest sort is a no-op; every other mode re-orders a fresh copy
+    // (never mutate `txs` — it's the parent's list, also feeding the
+    // running-balance walk). The flat (header-less) rendering for the
+    // non-default modes is handled in _ensureItemPlan.
+    result = _applySort(result);
     _filteredCache = result;
     _filteredCacheIdentity = identity;
     _filteredCacheQuery = q;
     _filteredCacheFilters = _filters;
+    _filteredCacheSort = _sortMode;
+    _filteredCachePendingDeleteCount = _pendingDeleteIds.length;
     // (cascade-load trigger lives in build(), keyed off the same filter state)
     return result;
   }
+
+  /// Re-order [rows] per [_sortMode]. The source list is already
+  /// newest-first, so `dateNewest` returns it untouched (no copy);
+  /// every other mode sorts a defensive copy — `rows` may be the
+  /// parent's list (the no-filter fast path) and must never be mutated
+  /// in place. Amount sort is by ABSOLUTE magnitude (a spend/income
+  /// view cares about size, not sign — a −5,000 expense and a +5,000
+  /// paycheck are both "big"); ties keep newest-first as a stable
+  /// secondary key.
+  List<dynamic> _applySort(List<dynamic> rows) {
+    switch (_sortMode) {
+      case _TxSort.dateNewest:
+        return rows;
+      case _TxSort.dateOldest:
+        return rows.reversed.toList();
+      case _TxSort.amountHigh:
+        final out = List<dynamic>.from(rows);
+        out.sort((a, b) => _absAmount(b).compareTo(_absAmount(a)));
+        return out;
+      case _TxSort.amountLow:
+        final out = List<dynamic>.from(rows);
+        out.sort((a, b) => _absAmount(a).compareTo(_absAmount(b)));
+        return out;
+      case _TxSort.merchant:
+        final out = List<dynamic>.from(rows);
+        out.sort((a, b) => _merchantKey(a).compareTo(_merchantKey(b)));
+        return out;
+    }
+  }
+
+  double _absAmount(dynamic tx) => ((tx['amount'] as num?)?.toDouble() ?? 0).abs();
+
+  /// Lowercased label used to order the Merchant (A–Z) sort — the same
+  /// display label the row shows, so the alphabetisation matches what
+  /// the user reads.
+  String _merchantKey(dynamic tx) =>
+      displayLabel(Map<String, dynamic>.from(tx as Map)).toLowerCase();
 
   /// Cascade-load the remaining pages so a client-side filter/search (and
   /// the filter dialog's option lists) can see the user's whole history.
@@ -1039,19 +1137,20 @@ class _TransactionsTabState extends State<TransactionsTab> {
         final isNarrow = c.maxWidth < 560;
 
         final selectToggle = TextButton.icon(
-          onPressed: () => setState(() {
-            if (allSelected) {
-              _selectedIds.removeAll(filteredIds);
-            } else {
-              _selectedIds.addAll(filteredIds);
-            }
-          }),
-          icon: Icon(
-            allSelected
-                ? Icons.indeterminate_check_box_outlined
-                : Icons.select_all,
-            size: 18,
-          ),
+          onPressed:
+              _selectAllLoading ? null : () => _toggleSelectAll(allSelected),
+          icon: _selectAllLoading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(
+                  allSelected
+                      ? Icons.indeterminate_check_box_outlined
+                      : Icons.select_all,
+                  size: 18,
+                ),
           label: Text(allSelected ? l.txDeselectAll : l.txSelectAll),
         );
 
@@ -1134,6 +1233,38 @@ class _TransactionsTabState extends State<TransactionsTab> {
       }),
     );
   }
+
+  /// "Select all" / "Deselect all" handler. Deselect just drops the
+  /// currently-filtered ids. Select, when more pages match the active
+  /// filter than are loaded (hasMore), first cascades in the whole
+  /// filtered history via _loadAllForFilter so bulk actions cover every
+  /// match — not just the loaded window — and the count is truthful;
+  /// then it selects every filtered id. When nothing more is loadable it
+  /// behaves as before (select the loaded matches synchronously).
+  Future<void> _toggleSelectAll(bool allSelected) async {
+    if (allSelected) {
+      setState(() => _selectedIds.removeAll(_idsOf(_filteredTransactions)));
+      return;
+    }
+    if (widget.hasMore && widget.onLoadMore != null) {
+      setState(() => _selectAllLoading = true);
+      try {
+        await _loadAllForFilter();
+      } finally {
+        if (mounted) setState(() => _selectAllLoading = false);
+      }
+      if (!mounted) return;
+    }
+    // Re-read the (now fully loaded) filtered set so the selection
+    // reflects every match, not the pre-cascade window.
+    setState(() => _selectedIds.addAll(_idsOf(_filteredTransactions)));
+  }
+
+  /// String ids of the rows in [rows] (skipping any without an id).
+  List<String> _idsOf(List<dynamic> rows) => [
+        for (final t in rows)
+          if (t['id'] != null) t['id'].toString(),
+      ];
 
   Future<void> _bulkCategorize() async {
     final l = AppLocalizations.of(context);
@@ -1234,30 +1365,141 @@ class _TransactionsTabState extends State<TransactionsTab> {
         ],
       ),
     );
-    if (confirmed != true) return;
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      SnackBar(content: Text(l.txDeletingN(ids.length))),
-    );
-    var ok = true;
-    try {
-      await onBulkDelete(ids);
-    } catch (_) {
-      ok = false;
-    }
-    if (!mounted) return;
+    if (confirmed != true || !mounted) return;
+    // Optimistic hide + Undo: the rows vanish now (they're added to the
+    // pending set, which _filteredTransactions subtracts) but the actual
+    // onBulkDelete only fires when the Undo window lapses. Selection mode
+    // exits immediately so the action bar's count doesn't strand the
+    // already-hidden rows. The commit re-uses onBulkDelete for the whole
+    // batch in one call.
     setState(() {
       _selectedIds.clear();
       _selectionMode = false;
     });
+    _initiateDeferredDelete(
+      ids,
+      l.txDeletedN(ids.length),
+      () => onBulkDelete(ids),
+      l.txDeleteSomeFailed,
+    );
+  }
+
+  /// Single-row deferred delete (from the detail panel's overflow
+  /// Delete). Mirrors the bulk path: hide now, Undo SnackBar, commit
+  /// onDelete after the window. Public-ish so the panel can route its
+  /// delete through the tab's one Undo buffer.
+  void _deferredDeleteSingle(dynamic id, AppLocalizations l) {
+    final onDelete = widget.onDelete;
+    if (onDelete == null || id == null) return;
+    final idStr = id.toString();
+    _initiateDeferredDelete(
+      [idStr],
+      l.txDeletedOne,
+      () async {
+        await onDelete(id);
+      },
+      l.txDeleteOneFailed,
+    );
+  }
+
+  /// Hold-callback for the in-flight deferred delete: deletes the
+  /// [_pendingDeleteIds] when the Undo window lapses. Null when nothing
+  /// is pending.
+  Future<void> Function()? _pendingDeleteCommit;
+  String? _pendingDeleteFailMsg;
+
+  /// Begin a deferred (undoable) delete for [ids]: hide the rows now,
+  /// pop an Undo SnackBar, and arm a timer that commits [commit] after
+  /// the window unless the user taps Undo. [committedMsg] is shown once
+  /// the delete actually lands; [failMsg] if it throws.
+  ///
+  /// If a previous deferred delete is still pending, it's flushed
+  /// (committed immediately) first — Undo only ever applies to the most
+  /// recent action, and the older rows are already hidden, so silently
+  /// committing them keeps the displayed list honest.
+  void _initiateDeferredDelete(
+    List<String> ids,
+    String committedMsg,
+    Future<void> Function() commit,
+    String failMsg,
+  ) {
+    // Flush any prior pending batch so its hidden rows actually delete
+    // (no Undo can reach them anymore) before we overwrite the buffer.
+    _commitPendingDeletesNow();
+    final l = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _pendingDeleteIds.addAll(ids));
+    _pendingDeleteCommit = commit;
+    _pendingDeleteFailMsg = failMsg;
+    final pendingThisRound = ids.toSet();
+    _pendingDeleteTimer?.cancel();
+    _pendingDeleteTimer = Timer(const Duration(seconds: 6), () {
+      _commitPendingDeletesNow(committedMsg: committedMsg);
+    });
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
-        content: Text(ok
-            ? l.txDeletedN(ids.length)
-            : l.txDeleteSomeFailed),
+        duration: const Duration(seconds: 6),
+        content: Text(committedMsg),
+        action: SnackBarAction(
+          label: l.txUndo,
+          onPressed: () => _undoPendingDelete(pendingThisRound),
+        ),
       ),
     );
+  }
+
+  /// Undo the still-pending delete batch: drop [ids] back out of the
+  /// hidden set (the rows reappear) and cancel the commit timer so the
+  /// onDelete/onBulkDelete call never fires.
+  void _undoPendingDelete(Set<String> ids) {
+    _pendingDeleteTimer?.cancel();
+    _pendingDeleteTimer = null;
+    _pendingDeleteCommit = null;
+    _pendingDeleteFailMsg = null;
+    if (!mounted) {
+      _pendingDeleteIds.removeAll(ids);
+      return;
+    }
+    setState(() => _pendingDeleteIds.removeAll(ids));
+  }
+
+  /// Commit the pending delete now (the Undo window lapsed, or a new
+  /// delete is superseding this one). Fires the held commit callback,
+  /// clears the buffer, and — when [committedMsg] is given (the timer
+  /// path) — surfaces success/failure. A no-op when nothing is pending,
+  /// so it's safe to call defensively. Idempotent: the commit callback
+  /// is nulled before the await so a second call can't double-delete.
+  void _commitPendingDeletesNow({String? committedMsg}) {
+    final commit = _pendingDeleteCommit;
+    if (commit == null) return;
+    final failMsg = _pendingDeleteFailMsg;
+    final committedIds = _pendingDeleteIds.toSet();
+    _pendingDeleteTimer?.cancel();
+    _pendingDeleteTimer = null;
+    _pendingDeleteCommit = null;
+    _pendingDeleteFailMsg = null;
+    // Keep the rows hidden through the commit — they're gone for good
+    // either way; we only re-show them on Undo (which already nulled the
+    // commit, so we never reach here for an undone batch).
+    () async {
+      var ok = true;
+      try {
+        await commit();
+      } catch (_) {
+        ok = false;
+      }
+      if (!mounted) {
+        _pendingDeleteIds.removeAll(committedIds);
+        return;
+      }
+      setState(() => _pendingDeleteIds.removeAll(committedIds));
+      if (committedMsg != null && !ok && failMsg != null) {
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(SnackBar(content: Text(failMsg)));
+      }
+    }();
   }
 
   Future<void> _bulkMoveAccount() async {
@@ -1709,6 +1951,69 @@ class _TransactionsTabState extends State<TransactionsTab> {
     );
   }
 
+  /// Sort menu: picks the row ordering. A dot badge (mirroring the
+  /// filter button) marks any non-default order; a check marks the
+  /// active option. Selecting a mode just flips _sortMode — the
+  /// filtering pipeline re-sorts and the item plan switches between the
+  /// grouped (newest-first only) and flat (every other mode) layouts.
+  Widget _buildSortMenu(AppLocalizations l) {
+    return PopupMenuButton<_TxSort>(
+      tooltip: l.txSortBy,
+      icon: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          const Icon(Icons.sort, size: 22),
+          if (_sortMode != _TxSort.dateNewest)
+            Positioned(
+              right: -1,
+              top: -1,
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: context.positive,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+        ],
+      ),
+      onSelected: (mode) => setState(() => _sortMode = mode),
+      itemBuilder: (context) => [
+        for (final mode in _TxSort.values)
+          PopupMenuItem(
+            value: mode,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 24,
+                  child: _sortMode == mode
+                      ? Icon(Icons.check, size: 18, color: context.positive)
+                      : null,
+                ),
+                Text(_sortLabel(l, mode)),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  String _sortLabel(AppLocalizations l, _TxSort mode) {
+    switch (mode) {
+      case _TxSort.dateNewest:
+        return l.txSortDateNewest;
+      case _TxSort.dateOldest:
+        return l.txSortDateOldest;
+      case _TxSort.amountHigh:
+        return l.txSortAmountHigh;
+      case _TxSort.amountLow:
+        return l.txSortAmountLow;
+      case _TxSort.merchant:
+        return l.txSortMerchant;
+    }
+  }
+
   /// Header toolbar. On wide screens shows title + inline search. On narrow
   /// screens the search collapses to an icon button that expands into a
   /// full-width input, so the title doesn't fight a 280px search box for
@@ -1777,6 +2082,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
                   ),
               ],
             ),
+            // Sort control. A dot badge mirrors the filter button's idiom
+            // when the order isn't the default newest-first. Stays inline
+            // on every width (it's compact, and sort is a primary lever).
+            _buildSortMenu(l),
             // On narrow widths the secondary actions (select-multiple, CSV
             // export, FX-transfer scan) collapse into an overflow menu so
             // the "Recent transactions" title keeps enough room and no
@@ -1806,15 +2115,15 @@ class _TransactionsTabState extends State<TransactionsTab> {
               IconButton(
                 onPressed: () => _downloadCsv(),
                 icon: const Icon(Icons.file_download_outlined, size: 22),
-                // The backend export has no filter parameters, so when a
-                // filter/search is active — or the host's list is
-                // implicitly scoped (csvExportConfirmAlways) — the
-                // affordance says up front that the CSV covers everything
-                // (and _downloadCsv asks for confirmation too).
+                // When a filter/search is active — or the host's list is
+                // implicitly scoped (csvExportConfirmAlways) — the export
+                // is now generated client-side from the filtered rows, so
+                // the affordance says it covers the current view; only the
+                // unfiltered case hits the full server export.
                 tooltip: (widget.csvExportConfirmAlways ||
                         _searchQuery.isNotEmpty ||
                         _filters.isActive)
-                    ? l.txExportCsvAllNote
+                    ? l.txExportCsvFiltered
                     : l.txExportCsv,
               ),
             if (!isNarrow && widget.onDetectFxTransfers != null)
@@ -1875,7 +2184,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                           Text((widget.csvExportConfirmAlways ||
                                   _searchQuery.isNotEmpty ||
                                   _filters.isActive)
-                              ? l.txExportCsvAllNote
+                              ? l.txExportCsvFiltered
                               : l.txExportCsv),
                         ],
                       ),
@@ -1917,38 +2226,90 @@ class _TransactionsTabState extends State<TransactionsTab> {
 
   Future<void> _downloadCsv() async {
     if (widget.apiService == null) return;
-    // Export honesty: the backend endpoint exports EVERYTHING — it has
-    // no filter/search parameters. When the user is looking at a
-    // filtered list (explicit filters, or a host whose list is scoped to
-    // one account), confirm that's understood before handing off.
-    if (widget.csvExportConfirmAlways ||
+    // A filter/search — or a host whose list is implicitly scoped to one
+    // account (csvExportConfirmAlways) — means "everything" is the wrong
+    // answer. In that case build the CSV CLIENT-SIDE from the filtered
+    // rows so the export matches exactly what the user is looking at; no
+    // "covers everything" confirmation, because it no longer does.
+    final scoped = widget.csvExportConfirmAlways ||
         _searchQuery.isNotEmpty ||
-        _filters.isActive) {
-      final l = AppLocalizations.of(context);
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogCtx) => AlertDialog(
-          title: Text(l.txExportAllTitle),
-          content: Text(l.txExportAllBody),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx, false),
-              child: Text(l.actionCancel),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogCtx, true),
-              child: Text(l.txExportAllConfirm),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true || !mounted) return;
+        _filters.isActive;
+    if (scoped) {
+      await _exportFilteredCsv();
+      return;
     }
+    // Unfiltered, unscoped: keep the server-side full export untouched.
     // Hand off to the browser — the backend responds with
     // Content-Disposition: attachment so the browser downloads directly.
     // Routed through the url_opener seam (no-op on the test VM) so this
     // file stays free of a direct package:web import.
     openUrlSameTab(widget.apiService!.exportTransactionsCsvUrl());
+  }
+
+  /// Client-side CSV of the currently-filtered rows. First cascades in
+  /// the full filtered history (reusing the Feature-3 / filter cascade)
+  /// so the export isn't truncated to the loaded page window, then
+  /// serialises the rows and hands a `data:` URL to the browser via the
+  /// same url_opener seam (no backend changes, no package:web import
+  /// here). Columns mirror the server export.
+  Future<void> _exportFilteredCsv() async {
+    final l = AppLocalizations.of(context);
+    if (widget.hasMore && widget.onLoadMore != null) {
+      try {
+        await _loadAllForFilter();
+      } catch (_) {
+        // A partial load still exports what's loaded — better than
+        // nothing; the cascade swallows its own errors anyway.
+      }
+      if (!mounted) return;
+    }
+    final rows = _filteredTransactions;
+    if (rows.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l.txExportNoRows)),
+      );
+      return;
+    }
+    final csv = _buildCsv(rows);
+    // data: URL — utf-8, URL-encoded so commas/newlines/non-ASCII in the
+    // descriptions survive. The browser treats it as a download because
+    // there's no navigable document; on the test VM openUrlSameTab is a
+    // no-op (the seam), so this stays test-safe.
+    final dataUrl = 'data:text/csv;charset=utf-8,${Uri.encodeComponent(csv)}';
+    openUrlSameTab(dataUrl);
+  }
+
+  /// Serialise [rows] to a CSV string with the same column set as the
+  /// server export: date, account, description, merchant, category,
+  /// amount, currency, pending. Each field is RFC-4180 quoted.
+  String _buildCsv(List<dynamic> rows) {
+    final buf = StringBuffer();
+    buf.writeln('date,account,description,merchant,category,'
+        'amount,currency,pending');
+    for (final tx in rows) {
+      final cells = <String>[
+        (tx['date'] ?? '').toString(),
+        (tx['account_name'] ?? '').toString(),
+        displayLabel(Map<String, dynamic>.from(tx as Map)),
+        (tx['merchant_name'] ?? '').toString(),
+        (tx['category'] ?? '').toString(),
+        ((tx['amount'] as num?)?.toString()) ?? '',
+        (tx['currency'] ?? '').toString(),
+        (tx['pending'] == true) ? 'true' : 'false',
+      ];
+      buf.writeln(cells.map(_csvCell).join(','));
+    }
+    return buf.toString();
+  }
+
+  /// RFC-4180 cell: wrap in double quotes when the value contains a
+  /// comma, quote, or newline, doubling any embedded quotes.
+  String _csvCell(String v) {
+    if (v.contains(',') || v.contains('"') || v.contains('\n') ||
+        v.contains('\r')) {
+      return '"${v.replaceAll('"', '""')}"';
+    }
+    return v;
   }
 
   Widget _searchField() {
@@ -2113,13 +2474,32 @@ class _TransactionsTabState extends State<TransactionsTab> {
   List<_TxListItem>? _itemPlanCache;
   int _itemPlanCacheFilteredId = 0;
   bool _itemPlanCacheNarrow = false;
+  _TxSort? _itemPlanCacheSort;
 
   List<_TxListItem> _ensureItemPlan(List<dynamic> txs, bool isNarrow) {
     final identity = identityHashCode(txs);
     if (_itemPlanCache != null &&
         _itemPlanCacheFilteredId == identity &&
-        _itemPlanCacheNarrow == isNarrow) {
+        _itemPlanCacheNarrow == isNarrow &&
+        _itemPlanCacheSort == _sortMode) {
       return _itemPlanCache!;
+    }
+    // Any sort other than the default (newest-first) breaks the
+    // contiguous-by-date assumption the month/day headers rely on, so
+    // those modes render a FLAT list: just rows, hairline-separated, no
+    // headers. (A divider between every row keeps the row rhythm the
+    // grouped view has between same-day rows.)
+    if (_sortMode != _TxSort.dateNewest) {
+      final flat = <_TxListItem>[];
+      for (var i = 0; i < txs.length; i++) {
+        if (i > 0) flat.add(const _TxListItem.divider());
+        flat.add(_TxListItem.row(tx: txs[i]));
+      }
+      _itemPlanCache = flat;
+      _itemPlanCacheFilteredId = identity;
+      _itemPlanCacheNarrow = isNarrow;
+      _itemPlanCacheSort = _sortMode;
+      return flat;
     }
     final out = <_TxListItem>[];
     String? lastGroup;
@@ -2157,6 +2537,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
     _itemPlanCache = out;
     _itemPlanCacheFilteredId = identity;
     _itemPlanCacheNarrow = isNarrow;
+    _itemPlanCacheSort = _sortMode;
     return out;
   }
 
@@ -3854,14 +4235,12 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
     if (confirm != true) return;
     if (!mounted) return;
     _close();
-    try {
-      await _state.widget.onDelete!(tx['id']);
-    } catch (e) {
-      if (!_state.mounted) return;
-      ScaffoldMessenger.of(_state.context).showSnackBar(
-        SnackBar(content: Text(l.txDeleteFailed(e.toString()))),
-      );
-    }
+    // Hand the actual delete to the tab's deferred-delete buffer so the
+    // row hides immediately and an Undo SnackBar offers a 6s reversal,
+    // matching the bulk path. (The detail panel itself is gone by now —
+    // the SnackBar + Undo live on the tab's ScaffoldMessenger.)
+    if (!_state.mounted) return;
+    _state._deferredDeleteSingle(tx['id'], l);
   }
 
   /// Move-to-account via the overflow menu. Opens a small bottom sheet
