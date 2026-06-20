@@ -3751,11 +3751,11 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // -- Header chrome ---------------------------------------------
-          // Mobile (bottom sheet): a top-center drag handle is the primary
-          // dismiss affordance (swipe down) — no X, which would sit in the
-          // hardest corner to thumb-reach. Desktop (right-docked panel): the
-          // X lives top-right, hugging the docked edge (appended below).
-          // Overflow + rename are shared by both.
+          // Close (X) sits on the LEADING (left) edge of the header on both
+          // layouts — on its own, away from the overflow/rename actions on
+          // the right, so it unmistakably reads as "close" and sits right
+          // next to the scrim a user instinctively clicks. Mobile also keeps
+          // the top-center drag handle (swipe down); desktop also has Esc.
           if (isNarrow)
             Center(
               child: GestureDetector(
@@ -3776,6 +3776,14 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
             ),
           Row(
             children: [
+              // Primary dismiss — isolated on the leading edge.
+              IconButton(
+                icon: const Icon(Icons.close, size: 22),
+                onPressed: _close,
+                tooltip: l.actionClose,
+                constraints:
+                    const BoxConstraints(minWidth: 48, minHeight: 48),
+              ),
               const Spacer(),
               if (hasOverflow)
                 PopupMenuButton<String>(
@@ -3854,17 +3862,6 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                   constraints:
                       const BoxConstraints(minWidth: 48, minHeight: 48),
                 ),
-              // Explicit close on both layouts. The narrow sheet still has
-              // the swipe-down handle, but a visible X gives mouse users
-              // (and anyone who doesn't think to swipe) an obvious target
-              // instead of having to click the scrim to dismiss.
-              IconButton(
-                icon: const Icon(Icons.close, size: 20),
-                onPressed: _close,
-                tooltip: l.actionClose,
-                constraints:
-                    const BoxConstraints(minWidth: 48, minHeight: 48),
-              ),
             ],
           ),
           // -- Scrollable body -------------------------------------------
