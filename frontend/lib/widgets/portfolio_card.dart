@@ -648,6 +648,41 @@ class _PortfolioCardState extends State<PortfolioCard> {
     return (top: top, gainer: gainer, loser: loser);
   }
 
+  /// Top movers ranked by absolute USD profit / loss (dollar P&L), as
+  /// opposed to [_computeMovers] which ranks by return %. A small high-%
+  /// gainer on a tiny position can dominate the % race while moving the
+  /// portfolio almost nothing; this surfaces the positions that actually
+  /// shifted the dollar total. Holdings whose `gain_loss_usd` is null
+  /// (institution reported no basis) are skipped — consistent with the
+  /// null handling in [_computeMovers]. Returns the top [count] dollar
+  /// gainers (gain_loss_usd > 0) descending and the top [count] dollar
+  /// losers (gain_loss_usd < 0) ascending.
+  ({List<Map<String, dynamic>> gainers, List<Map<String, dynamic>> losers})
+      _computeDollarMovers({int count = 3}) {
+    final withGl = <Map<String, dynamic>>[];
+    for (final h in _allHoldings) {
+      final gl = (h['gain_loss_usd'] as num?)?.toDouble();
+      if (gl == null) continue;
+      withGl.add(h as Map<String, dynamic>);
+    }
+    final sorted = List<Map<String, dynamic>>.from(withGl)
+      ..sort((a, b) {
+        final ga = (a['gain_loss_usd'] as num).toDouble();
+        final gb = (b['gain_loss_usd'] as num).toDouble();
+        return gb.compareTo(ga); // descending: biggest dollar gain first
+      });
+    final gainers = sorted
+        .where((h) => (h['gain_loss_usd'] as num).toDouble() > 0)
+        .take(count)
+        .toList();
+    // Losers: most-negative first. Reverse-iterate the descending list.
+    final losers = sorted.reversed
+        .where((h) => (h['gain_loss_usd'] as num).toDouble() < 0)
+        .take(count)
+        .toList();
+    return (gainers: gainers, losers: losers);
+  }
+
   /// Headline facts for the overview card: holdings count and top position.
   /// The biggest gainer/loser moved to the dedicated signals strip (which
   /// sits between allocation and holdings in the research flow).
@@ -746,9 +781,17 @@ class _PortfolioCardState extends State<PortfolioCard> {
         ),
     ];
 
-    // Nothing worth flagging (no winners/losers, well diversified) — render
-    // nothing rather than an empty card.
-    if (chips.isEmpty) return const SizedBox.shrink();
+    // Top movers by absolute dollar P&L — the positions that actually
+    // shifted the portfolio total (vs. the % race above, which a tiny
+    // position can win). Built only when at least one holding reports a
+    // basis; otherwise the section stays hidden.
+    final dollarMovers = _computeDollarMovers();
+    final hasDollarMovers =
+        dollarMovers.gainers.isNotEmpty || dollarMovers.losers.isNotEmpty;
+
+    // Nothing worth flagging (no winners/losers, well diversified, no
+    // dollar movers) — render nothing rather than an empty card.
+    if (chips.isEmpty && !hasDollarMovers) return const SizedBox.shrink();
 
     return Card(
       elevation: 6,
@@ -767,32 +810,171 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 color: context.textSubtle,
               ),
             ),
-            const SizedBox(height: 10),
-            LayoutBuilder(builder: (ctx, c) {
-              // Side-by-side on wide screens, stacked on phone widths.
-              final perRow = c.maxWidth >= 560 ? chips.length : 1;
-              if (perRow == 1) {
-                return Column(
+            if (chips.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              LayoutBuilder(builder: (ctx, c) {
+                // Side-by-side on wide screens, stacked on phone widths.
+                final perRow = c.maxWidth >= 560 ? chips.length : 1;
+                if (perRow == 1) {
+                  return Column(
+                    children: [
+                      for (var i = 0; i < chips.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 8),
+                        chips[i],
+                      ],
+                    ],
+                  );
+                }
+                return Row(
                   children: [
                     for (var i = 0; i < chips.length; i++) ...[
-                      if (i > 0) const SizedBox(height: 8),
-                      chips[i],
+                      if (i > 0) const SizedBox(width: 12),
+                      Expanded(child: chips[i]),
                     ],
                   ],
                 );
-              }
-              return Row(
-                children: [
-                  for (var i = 0; i < chips.length; i++) ...[
-                    if (i > 0) const SizedBox(width: 12),
-                    Expanded(child: chips[i]),
-                  ],
-                ],
-              );
-            }),
+              }),
+            ],
+            if (hasDollarMovers) ...[
+              const SizedBox(height: 16),
+              _buildDollarMovers(dollarMovers.gainers, dollarMovers.losers),
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  /// "Top movers (by \$)" mini-section: each holding's signed dollar P&L,
+  /// scaled to the display currency via the conversion factor. Gainers
+  /// (green, descending) and losers (red, most-negative first) sit in two
+  /// stacked sub-lists. Empty sides are omitted.
+  Widget _buildDollarMovers(
+    List<Map<String, dynamic>> gainers,
+    List<Map<String, dynamic>> losers,
+  ) {
+    final l = AppLocalizations.of(context);
+    final cf = widget.conversionFactor;
+
+    Widget moverRow(Map<String, dynamic> h, bool positive) {
+      final glUsd = (h['gain_loss_usd'] as num).toDouble();
+      final disp = glUsd * cf;
+      final color = positive ? context.positive : context.negative;
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                _displayTicker(h),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: context.textPrimary,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '${positive ? '+' : ''}${widget.currencyFormat.format(disp)}',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: color,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget moverColumn(
+      String heading,
+      IconData icon,
+      Color color,
+      List<Map<String, dynamic>> rows,
+    ) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 13, color: color),
+              const SizedBox(width: 4),
+              Text(
+                heading,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.3,
+                  color: context.textSubtle,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          ...rows.map((h) => moverRow(h, color == context.positive)),
+        ],
+      );
+    }
+
+    final columns = <Widget>[
+      if (gainers.isNotEmpty)
+        moverColumn(
+          l.pfTopGainersByValue,
+          Icons.trending_up,
+          context.positive,
+          gainers,
+        ),
+      if (losers.isNotEmpty)
+        moverColumn(
+          l.pfTopLosersByValue,
+          Icons.trending_down,
+          context.negative,
+          losers,
+        ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          l.pfTopMoversByValue,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.4,
+            color: context.textSubtle,
+          ),
+        ),
+        const SizedBox(height: 10),
+        LayoutBuilder(builder: (ctx, c) {
+          // Two columns side-by-side on wide screens, stacked on phone.
+          if (c.maxWidth >= 560 && columns.length == 2) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: columns[0]),
+                const SizedBox(width: 12),
+                Expanded(child: columns[1]),
+              ],
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < columns.length; i++) ...[
+                if (i > 0) const SizedBox(height: 12),
+                columns[i],
+              ],
+            ],
+          );
+        }),
+      ],
     );
   }
 
@@ -1721,18 +1903,25 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
 
     final lots = (h['lots'] as List?) ?? const [];
     final hasLots = lots.isNotEmpty;
+    // Even without per-lot data, an investment holding that reports a flat
+    // cost basis can open the drill-down — it shows the flat basis plus a
+    // note that the institution didn't report acquisition dates. Cash-like
+    // rows (no lots, no basis) stay non-interactive.
+    final canDrillDown = hasLots || costBasisSource != null;
 
     return MouseRegion(
-      cursor: hasLots ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      cursor: canDrillDown ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: InkWell(
-        // Tap-to-expand: only fires when there's a lot breakdown to
-        // show. Securities synced before the lot tracker shipped, or
-        // non-investment holdings, show no clickable affordance.
-        // InkWell (over GestureDetector) makes the row keyboard-focusable
-        // and Enter/Space-activatable for screen-reader users.
-        onTap: hasLots ? () => showLotBreakdown(context, widget.holding) : null,
+        // Tap-to-expand: fires when there's a lot breakdown OR a flat cost
+        // basis to show. Non-investment holdings with neither show no
+        // clickable affordance. InkWell (over GestureDetector) makes the
+        // row keyboard-focusable and Enter/Space-activatable for
+        // screen-reader users.
+        onTap: canDrillDown
+            ? () => showLotBreakdown(context, widget.holding)
+            : null,
         child: Container(
           color:
               _hover ? context.tint(0.05) : Colors.transparent,
@@ -1767,6 +1956,21 @@ void showLotBreakdown(BuildContext context, dynamic h) {
 
     final dateFmt = DateFormat('MMM d, y');
     final usdFmt = NumberFormat.currency(locale: 'en_US', symbol: r'$');
+    // Current native price per unit, used to derive each lot's current
+    // value (qty × price). Holdings that pre-date the price refresh, or
+    // cash-like rows, may report 0 — in that case the current-value cell
+    // falls back to an em dash rather than a misleading "$0.00".
+    final currentPrice = (h['price'] as num?)?.toDouble() ?? 0.0;
+    // Long-term threshold: a lot held > 365 days qualifies for long-term
+    // capital-gains treatment. Compared against the lot's acquisition date.
+    final now = DateTime.now();
+
+    // No lots: institution (e.g. a Plaid investment account) reported a
+    // flat cost basis with no acquisition dates. Show that flat basis with
+    // a tooltip explaining why the per-lot grid is empty, instead of an
+    // empty modal.
+    final hasLots = lots.isNotEmpty;
+    final flatBasisUsd = (h['cost_basis_usd'] as num?)?.toDouble();
 
     showDialog<void>(
       context: context,
@@ -1816,7 +2020,35 @@ void showLotBreakdown(BuildContext context, dynamic h) {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  // Column header. Five columns, fixed grid so the body
+                  if (!hasLots)
+                    // No per-lot data — show the flat basis the institution
+                    // did report, with a tooltip explaining the gap.
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline,
+                              size: 16, color: context.textSubtle),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Tooltip(
+                              message: l.pfLotsUnavailableTooltip,
+                              child: Text(
+                                flatBasisUsd == null
+                                    ? l.pfLotsUnavailable
+                                    : '${l.pfFlatCostBasis}: ${usdFmt.format(flatBasisUsd)}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: context.textSubtle,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else ...[
+                  // Column header. Six columns, fixed grid so the body
                   // rows align on a quick scan.
                   Row(
                     children: [
@@ -1825,10 +2057,11 @@ void showLotBreakdown(BuildContext context, dynamic h) {
                           flex: 2, alignRight: true),
                       _lotHeader(context, l.pfLotCostPerUnit,
                           flex: 3, alignRight: true),
-                      _lotHeader(context, l.pfLotFxAtLot,
-                          flex: 2, alignRight: true),
+                      _lotHeader(context, l.pfLotCurrentValue,
+                          flex: 3, alignRight: true),
                       _lotHeader(context, l.pfLotUsdCost,
                           flex: 3, alignRight: true),
+                      _lotHeader(context, l.pfLotTerm, flex: 2, alignRight: true),
                     ],
                   ),
                   Divider(height: 12, color: context.hairline),
@@ -1848,8 +2081,15 @@ void showLotBreakdown(BuildContext context, dynamic h) {
                         final qty = (lot['qty'] as num?)?.toDouble() ?? 0.0;
                         final cpu = (lot['cost_per_unit'] as num?)?.toDouble() ?? 0.0;
                         final ccy = (lot['currency'] ?? 'USD').toString();
-                        final fx = (lot['usd_fx_rate'] as num?)?.toDouble() ?? 1.0;
                         final usdCost = (lot['usd_cost'] as num?)?.toDouble() ?? 0.0;
+                        // Current value of the lot = qty × current native
+                        // price. Falls back to an em dash when the price is
+                        // missing (0) so we don't render a fake "$0.00".
+                        final currentVal = qty * currentPrice;
+                        // Long-term = held > 365 days. Only computed when the
+                        // acquisition date parsed; unknown shows an em dash.
+                        final isLongTerm = date != null &&
+                            now.difference(date).inDays > 365;
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Row(
@@ -1873,10 +2113,12 @@ void showLotBreakdown(BuildContext context, dynamic h) {
                               ),
                               _lotCell(
                                 context,
-                                ccy == 'USD' ? '—' : fx.toStringAsFixed(4),
-                                flex: 2,
+                                currentPrice > 0
+                                    ? '${formatCurrencyAmount(currentVal, ccy)} $ccy'
+                                    : '—',
+                                flex: 3,
                                 alignRight: true,
-                                muted: ccy == 'USD',
+                                muted: currentPrice <= 0,
                               ),
                               _lotCell(
                                 context,
@@ -1885,12 +2127,28 @@ void showLotBreakdown(BuildContext context, dynamic h) {
                                 alignRight: true,
                                 bold: true,
                               ),
+                              Expanded(
+                                flex: 2,
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: date == null
+                                      ? Text(
+                                          '—',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: context.textFaint,
+                                          ),
+                                        )
+                                      : _lotTermBadge(context, isLongTerm),
+                                ),
+                              ),
                             ],
                           ),
                         );
                       },
                     ),
                   ),
+                  ],
                 ],
               ),
             ),
@@ -1941,6 +2199,30 @@ void showLotBreakdown(BuildContext context, dynamic h) {
         ),
       ),
     );
+}
+
+/// Small pill flagging whether a lot is long-term (held > 365 days, eligible
+/// for long-term capital-gains treatment) or short-term. Uses the positive
+/// token for long-term (the favourable tax case) and a muted neutral tone
+/// for short-term so the eye lands on the long-term lots.
+Widget _lotTermBadge(BuildContext context, bool isLongTerm) {
+  final l = AppLocalizations.of(context);
+  final color = isLongTerm ? context.positive : context.textSubtle;
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(4),
+    ),
+    child: Text(
+      isLongTerm ? l.pfLotLongTerm : l.pfLotShortTerm,
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: color,
+      ),
+    ),
+  );
 }
 
 /// Phone-width holding row: collapses to the three facts that matter at a
@@ -2014,6 +2296,9 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
 
     final lots = (h['lots'] as List?) ?? const [];
     final hasLots = lots.isNotEmpty;
+    // A flat-basis holding (no lots) can still open the drill-down to show
+    // its flat basis plus the no-acquisition-dates note.
+    final canDrillDown = hasLots || costBasisSource != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2137,13 +2422,13 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
                   tooltip:
                       gainConverted == null ? l.pfCostBasisUnavailable : null,
                 ),
-                if (hasLots)
+                if (canDrillDown)
                   Align(
                     alignment: Alignment.centerLeft,
                     child: TextButton.icon(
                       onPressed: () => showLotBreakdown(context, h),
                       icon: const Icon(Icons.receipt_long, size: 16),
-                      label: Text(l.pfViewLots),
+                      label: Text(hasLots ? l.pfViewLots : l.pfViewCostBasis),
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 4),
                         visualDensity: VisualDensity.compact,
