@@ -161,6 +161,39 @@ pub async fn sync_institutions(
 /// already stamped, we mark the institution `error`. The existing
 /// `continue`-style skips become early `return Ok(...)` from the inner
 /// block.
+/// Whether an account `name` is a bare, non-distinguishing label — the kind
+/// some banks hand back for every account (Chase returns "CREDIT CARD" for
+/// every card on the login; Capital One returns "depository Account 0916").
+/// Such names are safe to replace with a freshly-built "<Subtype> ••<mask>",
+/// which actually tells the cards apart. User-chosen labels live in
+/// `nickname`, never `name`, so overwriting `name` never clobbers them.
+fn account_name_looks_generic(name: &str) -> bool {
+    let l = name.trim().to_lowercase();
+    l.is_empty()
+        || l == "unknown"
+        || matches!(
+            l.as_str(),
+            "credit card"
+                | "credit"
+                | "checking"
+                | "savings"
+                | "debit card"
+                | "money market"
+                | "cd"
+                | "account"
+        )
+        || [
+            "depository",
+            "credit",
+            "investment",
+            "loan",
+            "brokerage",
+            "other",
+        ]
+        .iter()
+        .any(|b| l.starts_with(&format!("{b} account")))
+}
+
 async fn sync_one_inst(db: &PgPool, config: &AppConfig, client: &Client, inst: InstRow) {
     let inst_id = inst.id;
     let inst_user_id = inst.user_id;
@@ -251,20 +284,8 @@ async fn sync_one_inst(db: &PgPool, config: &AppConfig, client: &Client, inst: I
                             .as_str()
                             .map(str::trim)
                             .filter(|s| !s.is_empty());
-                        let is_generic = plaid_name.is_none_or(|n| {
-                            let l = n.to_lowercase();
-                            l == "unknown"
-                                || [
-                                    "depository",
-                                    "credit",
-                                    "investment",
-                                    "loan",
-                                    "brokerage",
-                                    "other",
-                                ]
-                                .iter()
-                                .any(|b| l.starts_with(&format!("{b} account")))
-                        });
+                        let is_generic =
+                            plaid_name.is_none_or(account_name_looks_generic);
                         let name: String = if let Some(o) = official {
                             o.to_string()
                         } else if is_generic {
@@ -289,21 +310,40 @@ async fn sync_one_inst(db: &PgPool, config: &AppConfig, client: &Client, inst: I
                         // collide across users, but the ownership predicate
                         // is cheap defence.
                         let existing = sqlx::query(
-                            "SELECT id FROM accounts WHERE external_id = $1 AND user_id = $2"
+                            "SELECT id, name FROM accounts WHERE external_id = $1 AND user_id = $2"
                         )
                             .bind(external_id)
                             .bind(inst_user_id)
                             .fetch_optional(db).await?;
 
-                        if existing.is_some() {
+                        if let Some(row) = existing {
+                            // Refresh a previously-generic name now that we can
+                            // build a better one — older syncs stored Chase's
+                            // bare "CREDIT CARD" for every card; the improved
+                            // naming yields a mask-suffixed, tell-them-apart
+                            // label. Only when the stored name still looks
+                            // generic, so a good official_name (or anything the
+                            // user is implicitly relying on) is never clobbered.
+                            let stored_name: String =
+                                row.try_get("name").unwrap_or_default();
+                            let refresh_name = name != stored_name
+                                && account_name_looks_generic(&stored_name);
                             // COALESCE keeps a previously-fetched limit when a
                             // later sync returns null (Plaid is sometimes
                             // inconsistent about populating it).
-                            sqlx::query(
-                                "UPDATE accounts SET current_balance = $1, available_balance = $2, credit_limit = COALESCE($3, credit_limit), updated_at = NOW() WHERE external_id = $4 AND user_id = $5"
-                            )
-                                .bind(current_bal).bind(available_bal).bind(credit_limit).bind(external_id).bind(inst_user_id)
-                                .execute(db).await?;
+                            if refresh_name {
+                                sqlx::query(
+                                    "UPDATE accounts SET name = $1, current_balance = $2, available_balance = $3, credit_limit = COALESCE($4, credit_limit), updated_at = NOW() WHERE external_id = $5 AND user_id = $6"
+                                )
+                                    .bind(&name).bind(current_bal).bind(available_bal).bind(credit_limit).bind(external_id).bind(inst_user_id)
+                                    .execute(db).await?;
+                            } else {
+                                sqlx::query(
+                                    "UPDATE accounts SET current_balance = $1, available_balance = $2, credit_limit = COALESCE($3, credit_limit), updated_at = NOW() WHERE external_id = $4 AND user_id = $5"
+                                )
+                                    .bind(current_bal).bind(available_bal).bind(credit_limit).bind(external_id).bind(inst_user_id)
+                                    .execute(db).await?;
+                            }
                         } else {
                             sqlx::query(
                                 r#"

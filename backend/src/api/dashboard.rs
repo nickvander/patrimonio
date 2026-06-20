@@ -700,6 +700,7 @@ async fn recent_transactions(
         r#"
         SELECT t.id, t.account_id,
                COALESCE(NULLIF(a.nickname, ''), a.name) as account_name,
+               i.name as institution_name,
                t.amount, t.currency,
                t.date, t.description, t.category, t.category_detailed,
                t.payment_channel, t.merchant_name,
@@ -709,6 +710,7 @@ async fn recent_transactions(
                t.pending
         FROM transactions t
         JOIN accounts a ON t.account_id = a.id
+        JOIN institutions i ON a.institution_id = i.id
         WHERE t.user_id = $1
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
         ORDER BY t.date DESC, t.created_at DESC
@@ -731,6 +733,10 @@ async fn recent_transactions(
                     id: r.get::<uuid::Uuid, _>("id").to_string(),
                     account_id: r.get::<uuid::Uuid, _>("account_id").to_string(),
                     account_name: r.get("account_name"),
+                    institution_name: r
+                        .try_get::<Option<String>, _>("institution_name")
+                        .ok()
+                        .flatten(),
                     amount,
                     currency: r.get("currency"),
                     date: r.get::<chrono::NaiveDate, _>("date").to_string(),
@@ -2218,6 +2224,12 @@ struct TransactionEntry {
     id: String,
     account_id: String,
     account_name: String,
+    /// Owning institution (e.g. "Capital One", "Chase"). Surfaced so the
+    /// activity list and detail panel can disambiguate generic account
+    /// labels like "Checking ••0916" — which on its own reads as an
+    /// unknown account.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    institution_name: Option<String>,
     amount: f64,
     currency: String,
     date: String,
