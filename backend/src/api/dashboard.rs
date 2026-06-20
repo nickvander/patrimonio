@@ -713,7 +713,6 @@ async fn recent_transactions(
         JOIN accounts a ON t.account_id = a.id
         JOIN institutions i ON a.institution_id = i.id
         WHERE t.user_id = $1
-          AND a.archived_at IS NULL
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
         ORDER BY t.date DESC, t.created_at DESC
         LIMIT $2 OFFSET $3
@@ -861,7 +860,6 @@ async fn export_transactions_csv(
             JOIN accounts a ON t.account_id = a.id
             JOIN institutions i ON a.institution_id = i.id
             WHERE t.user_id = $1
-              AND a.archived_at IS NULL
               AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
             ORDER BY t.date DESC, t.created_at DESC
             "#,
@@ -1197,7 +1195,6 @@ async fn cash_flow_trends(
         -- months they need while the default (12) is unchanged.
         WHERE t.date >= (DATE_TRUNC('month', CURRENT_DATE) - make_interval(months => ($2::int - 1)))
           AND t.user_id = $1
-          AND a.archived_at IS NULL
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
           -- Exclude internal-transfer noise from the cash-flow view:
           --
@@ -1318,7 +1315,6 @@ async fn spending_by_category(
         WHERE t.amount < 0
           AND t.date >= (DATE_TRUNC('month', CURRENT_DATE) - make_interval(months => ($2::int - 1)))
           AND t.user_id = $1
-          AND a.archived_at IS NULL
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
           AND COALESCE(t.category, '') NOT IN ('TRANSFER_IN', 'TRANSFER_OUT')
           AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
@@ -1528,7 +1524,6 @@ async fn spending_insights(
           AND t.date >= DATE_TRUNC('month', CURRENT_DATE) - make_interval(months => $2::int)
           AND t.date <  DATE_TRUNC('month', CURRENT_DATE)
           AND t.user_id = $1
-          AND a.archived_at IS NULL
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
           AND COALESCE(t.category, '') NOT IN ('TRANSFER_IN', 'TRANSFER_OUT')
           AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
@@ -1767,7 +1762,6 @@ async fn emergency_fund(
         WHERE t.amount < 0
           AND t.date >= CURRENT_DATE - INTERVAL '12 months'
           AND t.user_id = $1
-          AND a.archived_at IS NULL
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
           AND COALESCE(t.category, '') NOT IN ('TRANSFER_IN', 'TRANSFER_OUT')
           AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
@@ -2581,7 +2575,6 @@ async fn detected_subscriptions(
         FROM transactions t
         JOIN accounts a ON a.id = t.account_id
         WHERE t.user_id = $1
-          AND a.archived_at IS NULL
           -- Outflows only. Sign convention: amount < 0 = expense,
           -- amount > 0 = income. Including income would surface
           -- "Interest earned" / "Dividend" / "Salary" as fake
