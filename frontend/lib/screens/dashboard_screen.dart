@@ -154,6 +154,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic>? _sinceLastLogin;
   List<dynamic>? _subscriptions;
   List<dynamic>? _ignoredSubscriptions;
+  // Accounts the sync auto-archived (closed at the bank — Plaid stopped
+  // returning them). Surfaced as a notification so the user can restore or
+  // remove them. Best-effort: null when the fetch fails — the bell just omits
+  // the archived-account rows.
+  List<dynamic>? _archivedAccounts;
   // Per-category MoM-vs-trailing-average spend deltas (spending-insight
   // notifications). Best-effort: null when the fetch fails — the bell just
   // omits the spending-up rows.
@@ -2129,6 +2134,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _apiService
             .getSpendingInsights(forceRefresh: forceRefresh)
             .catchError((_) => <String, dynamic>{}),
+        // Auto-archived accounts (closed at the bank) for the notifications
+        // bell. Best-effort — a failure just drops the archived-account rows,
+        // never the dashboard.
+        _apiService.getArchivedAccounts().catchError((_) => <dynamic>[]),
       ]);
 
       debugPrint("All data loaded successfully");
@@ -2213,6 +2222,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
         final insightsRaw = results[17];
         _spendingInsights = insightsRaw is Map<String, dynamic> ? insightsRaw : null;
+        _archivedAccounts = results[18] as List<dynamic>;
         _isLoading = false;
       });
 
@@ -2349,6 +2359,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   spendingInsights: _spendingInsights,
                   subscriptions: _subscriptions ?? const [],
                   onJumpToSpending: () => _goToNav(NavId.cashFlow),
+                  archivedAccounts: _archivedAccounts ?? const [],
+                  onJumpToClosedAccounts: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                          builder: (_) => const HiddenItemsScreen())),
                   onJumpToAccount: (account) => showAccountTransactionsPanel(
                     context,
                     account: account,

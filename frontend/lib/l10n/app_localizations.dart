@@ -7157,17 +7157,23 @@ abstract class AppLocalizations {
   /// **'Trigger a sync to pull in transactions and balance updates.'**
   String get lwNotifStaleSyncDetail;
 
-  /// No description provided for @lwNotifNetWorthDropTitle.
+  /// No description provided for @lwNotifNetWorthUpTitle.
   ///
   /// In en, this message translates to:
-  /// **'Net worth dropped {pct} in 30 days'**
-  String lwNotifNetWorthDropTitle(Object pct);
+  /// **'Net worth up {amount} ({pct})'**
+  String lwNotifNetWorthUpTitle(String amount, String pct);
 
-  /// No description provided for @lwNotifNetWorthDropDetail.
+  /// No description provided for @lwNotifNetWorthDownTitle.
   ///
   /// In en, this message translates to:
-  /// **'Latest {latest} vs {reference}.'**
-  String lwNotifNetWorthDropDetail(Object latest, Object reference);
+  /// **'Net worth down {amount} ({pct})'**
+  String lwNotifNetWorthDownTitle(String amount, String pct);
+
+  /// No description provided for @lwNotifNetWorthSinceSyncDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Since your last sync · {date}'**
+  String lwNotifNetWorthSinceSyncDetail(String date);
 
   /// No description provided for @lwNotifSpendingUpTitle.
   ///
@@ -7192,6 +7198,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Now {newAmount}, was {oldAmount}'**
   String lwNotifSubPriceUpDetail(String newAmount, String oldAmount);
+
+  /// No description provided for @lwNotifAccountArchivedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Account closed: {institution}'**
+  String lwNotifAccountArchivedTitle(String institution);
+
+  /// No description provided for @lwNotifAccountArchivedDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'{account} is no longer at {institution} — it\'s been archived. Tap to restore or remove.'**
+  String lwNotifAccountArchivedDetail(String account, String institution);
 
   /// No description provided for @lwNotifTooltipNone.
   ///

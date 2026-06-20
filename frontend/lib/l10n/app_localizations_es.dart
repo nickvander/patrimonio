@@ -4393,13 +4393,18 @@ class AppLocalizationsEs extends AppLocalizations {
       'Inicia una sincronización para traer transacciones y actualizaciones de saldo.';
 
   @override
-  String lwNotifNetWorthDropTitle(Object pct) {
-    return 'El patrimonio bajó $pct en 30 días';
+  String lwNotifNetWorthUpTitle(String amount, String pct) {
+    return 'El patrimonio subió $amount ($pct)';
   }
 
   @override
-  String lwNotifNetWorthDropDetail(Object latest, Object reference) {
-    return 'Más reciente $latest vs $reference.';
+  String lwNotifNetWorthDownTitle(String amount, String pct) {
+    return 'El patrimonio bajó $amount ($pct)';
+  }
+
+  @override
+  String lwNotifNetWorthSinceSyncDetail(String date) {
+    return 'Desde tu última sincronización · $date';
   }
 
   @override
@@ -4420,6 +4425,16 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String lwNotifSubPriceUpDetail(String newAmount, String oldAmount) {
     return 'Ahora $newAmount, antes $oldAmount';
+  }
+
+  @override
+  String lwNotifAccountArchivedTitle(String institution) {
+    return 'Cuenta cerrada: $institution';
+  }
+
+  @override
+  String lwNotifAccountArchivedDetail(String account, String institution) {
+    return '$account ya no está en $institution — se archivó. Toca para restaurar o eliminar.';
   }
 
   @override

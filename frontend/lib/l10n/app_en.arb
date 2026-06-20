@@ -1514,8 +1514,26 @@
   "lwNotifUnknownSyncError": "Unknown sync error",
   "lwNotifStaleSyncTitle": "{name} last synced {days}d ago",
   "lwNotifStaleSyncDetail": "Trigger a sync to pull in transactions and balance updates.",
-  "lwNotifNetWorthDropTitle": "Net worth dropped {pct} in 30 days",
-  "lwNotifNetWorthDropDetail": "Latest {latest} vs {reference}.",
+  "lwNotifNetWorthUpTitle": "Net worth up {amount} ({pct})",
+  "@lwNotifNetWorthUpTitle": {
+    "placeholders": {
+      "amount": { "type": "String" },
+      "pct": { "type": "String" }
+    }
+  },
+  "lwNotifNetWorthDownTitle": "Net worth down {amount} ({pct})",
+  "@lwNotifNetWorthDownTitle": {
+    "placeholders": {
+      "amount": { "type": "String" },
+      "pct": { "type": "String" }
+    }
+  },
+  "lwNotifNetWorthSinceSyncDetail": "Since your last sync · {date}",
+  "@lwNotifNetWorthSinceSyncDetail": {
+    "placeholders": {
+      "date": { "type": "String" }
+    }
+  },
   "lwNotifSpendingUpTitle": "{category} up {pct}",
   "@lwNotifSpendingUpTitle": {
     "placeholders": {
@@ -1541,6 +1559,19 @@
     "placeholders": {
       "newAmount": { "type": "String" },
       "oldAmount": { "type": "String" }
+    }
+  },
+  "lwNotifAccountArchivedTitle": "Account closed: {institution}",
+  "@lwNotifAccountArchivedTitle": {
+    "placeholders": {
+      "institution": { "type": "String" }
+    }
+  },
+  "lwNotifAccountArchivedDetail": "{account} is no longer at {institution} — it's been archived. Tap to restore or remove.",
+  "@lwNotifAccountArchivedDetail": {
+    "placeholders": {
+      "account": { "type": "String" },
+      "institution": { "type": "String" }
     }
   },
   "lwNotifTooltipNone": "Notifications",

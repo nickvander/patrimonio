@@ -63,6 +63,14 @@ List<AppNotification> deriveNotifications({
   /// Jump to the Cash-flow tab when a spending-insight / subscription row is
   /// tapped.
   VoidCallback? onJumpToSpending,
+  /// Accounts the sync auto-archived because Plaid stopped returning them
+  /// (the account was closed at the bank). From GET /api/accounts/archived.
+  /// Each item: {id, name, nickname, institution_name, account_type,
+  /// current_balance, currency, archived_at}.
+  List<dynamic> archivedAccounts = const [],
+  /// Opens the Hidden/closed items screen when an archived-account row is
+  /// tapped (where the user can restore or remove it).
+  VoidCallback? onJumpToClosedAccounts,
 }) {
   final out = <AppNotification>[];
 
@@ -196,7 +204,11 @@ List<AppNotification> deriveNotifications({
     }
   }
 
-  // 2) Net-worth drop — 30-day delta below -5% gets surfaced.
+  // 2) Net worth since last sync — a bidirectional "your net worth moved
+  //    since the previous snapshot" row. We compare the latest snapshot to the
+  //    most recent EARLIER one with a different date (the prior sync), so the
+  //    alert tracks real activity rather than an arbitrary 30-day window.
+  //    netWorthHistory is USD-normalised, so amounts are formatted as USD.
   if (netWorthHistory.length >= 2) {
     final sorted = [...netWorthHistory];
     sorted.sort((a, b) {
@@ -208,34 +220,40 @@ List<AppNotification> deriveNotifications({
     });
     final latest = sorted.last;
     final latestNw = (latest['net_worth'] as num?)?.toDouble() ?? 0.0;
-    final latestDt =
-        DateTime.tryParse(latest['date']?.toString() ?? '') ?? DateTime.now();
-    final target = latestDt.subtract(const Duration(days: 30));
-    Map<String, dynamic>? ref;
+    final latestDateStr = latest['date']?.toString() ?? '';
+    final latestDt = DateTime.tryParse(latestDateStr) ?? DateTime.now();
+    // Walk back to the most recent snapshot on a DIFFERENT date — that's the
+    // prior sync. Skipping same-date rows keeps intra-day re-syncs from
+    // reading as a zero-delta against themselves.
+    Map<String, dynamic>? prior;
     for (final p in sorted.reversed) {
-      final d = DateTime.tryParse(p['date']?.toString() ?? '');
-      if (d == null) continue;
-      if (d.isBefore(target) || d.isAtSameMomentAs(target)) {
-        ref = p as Map<String, dynamic>;
-        break;
-      }
+      if (identical(p, latest)) continue;
+      if ((p['date']?.toString() ?? '') == latestDateStr) continue;
+      prior = p as Map<String, dynamic>;
+      break;
     }
-    if (ref != null) {
-      final refNw = (ref['net_worth'] as num?)?.toDouble() ?? 0.0;
-      if (refNw > 0) {
-        final pct = ((latestNw - refNw) / refNw) * 100;
-        if (pct <= -5) {
+    if (prior != null) {
+      final priorNw = (prior['net_worth'] as num?)?.toDouble() ?? 0.0;
+      if (priorNw > 0) {
+        final delta = latestNw - priorNw;
+        final pct = (delta / priorNw) * 100;
+        // Stay quiet on a flat day — a sub-0.25% wobble isn't worth a badge.
+        if (pct.abs() >= 0.25) {
+          final amount = money(delta.abs(), 'USD');
+          final pctStr = '${pct.abs().toStringAsFixed(1)}%';
+          final detail =
+              l.lwNotifNetWorthSinceSyncDetail(DateFormat('MMM d').format(latestDt));
+          final up = delta >= 0;
           out.add(AppNotification(
-            id: 'net_worth_drop:${DateFormat('yyyy-MM-dd').format(latestDt)}',
-            icon: Icons.trending_down,
-            accent: Colors.redAccent,
-            title: l.lwNotifNetWorthDropTitle('${pct.toStringAsFixed(1)}%'),
-            detail: l.lwNotifNetWorthDropDetail(
-              DateFormat('MMM d').format(latestDt),
-              DateFormat('MMM d').format(
-                  DateTime.tryParse(ref['date']?.toString() ?? '') ??
-                      latestDt),
-            ),
+            id: 'net_worth_since_sync:$latestDateStr',
+            icon: up ? Icons.trending_up : Icons.trending_down,
+            accent: up
+                ? Colors.teal
+                : (pct.abs() >= 5 ? Colors.redAccent : Colors.amber),
+            title: up
+                ? l.lwNotifNetWorthUpTitle(amount, pctStr)
+                : l.lwNotifNetWorthDownTitle(amount, pctStr),
+            detail: detail,
           ));
         }
       }
@@ -364,6 +382,34 @@ List<AppNotification> deriveNotifications({
         onTap: onJumpToSpending,
       ));
     }
+  }
+
+  // 5) Account auto-archived — the sync stopped seeing an account at the bank
+  //    (Plaid no longer returns it, i.e. it was closed) and archived it. Only
+  //    surface recent archivals (last 30 days) so an old close-out doesn't
+  //    linger in the bell forever. Rows with an unparseable archived_at are
+  //    skipped rather than guessed.
+  for (final raw in archivedAccounts) {
+    if (raw is! Map) continue;
+    final archivedAt =
+        DateTime.tryParse(raw['archived_at']?.toString() ?? '');
+    if (archivedAt == null) continue;
+    if (DateTime.now().difference(archivedAt).inDays > 30) continue;
+    final id = raw['id']?.toString();
+    if (id == null) continue;
+    final institution =
+        (raw['institution_name'] ?? l.lwNotifInstitutionFallback).toString();
+    final name = (raw['nickname']?.toString().trim().isNotEmpty ?? false)
+        ? raw['nickname'].toString()
+        : (raw['name'] ?? l.lwNotifAccountFallback).toString();
+    out.add(AppNotification(
+      id: 'account_archived:$id',
+      icon: Icons.link_off,
+      accent: Colors.blueGrey,
+      title: l.lwNotifAccountArchivedTitle(institution),
+      detail: l.lwNotifAccountArchivedDetail(name, institution),
+      onTap: onJumpToClosedAccounts,
+    ));
   }
 
   return out;
