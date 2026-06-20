@@ -82,6 +82,15 @@ class UpcomingBillsCard extends StatelessWidget {
                       style:
                           TextStyle(color: context.textFaint, fontSize: 11),
                     ),
+                    // The 12-month total reads alarmingly large on its own;
+                    // the monthly average reframes it as "a year of bills"
+                    // rather than a single scary number.
+                    Text(
+                      l.cfPerMonthApprox(currencyFormat
+                          .format(totalUsd / 12 * conversionFactor)),
+                      style:
+                          TextStyle(color: context.textFaint, fontSize: 11),
+                    ),
                   ],
                 ),
               ],
@@ -145,8 +154,12 @@ class UpcomingBillsCard extends StatelessWidget {
             ),
           ),
           bottomTitles: AxisTitles(
+            // Reserve room for the optional year line under January /
+            // the first bucket so a 12-month span that crosses into the
+            // next year is unambiguous.
             sideTitles: SideTitles(
               showTitles: true,
+              reservedSize: 30,
               getTitlesWidget: (value, meta) {
                 final idx = value.toInt();
                 if (idx < 0 ||
@@ -154,11 +167,28 @@ class UpcomingBillsCard extends StatelessWidget {
                     value != idx.toDouble()) {
                   return const SizedBox.shrink();
                 }
+                final month = forecast[idx].month;
+                // Anchor the year at the first bar and every January so the
+                // reader can tell which year each month belongs to without
+                // crowding a year under all twelve labels.
+                final showYear = idx == 0 || month.month == 1;
                 return Padding(
                   padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    DateFormat.MMM().format(forecast[idx].month),
-                    style: TextStyle(color: context.textSubtle, fontSize: 10),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        DateFormat.MMM().format(month),
+                        style: TextStyle(
+                            color: context.textSubtle, fontSize: 10),
+                      ),
+                      if (showYear)
+                        Text(
+                          DateFormat.y().format(month),
+                          style: TextStyle(
+                              color: context.textFaint, fontSize: 9),
+                        ),
+                    ],
                   ),
                 );
               },

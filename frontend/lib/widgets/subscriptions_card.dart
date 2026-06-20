@@ -325,6 +325,22 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
+                // Native amount, shown only when the charge isn't already
+                // in the reporting currency — otherwise the converted line
+                // above silently hides that this is really a MXN 199 charge.
+                if (currency.toUpperCase() !=
+                    widget.targetCurrency.toUpperCase()) ...[
+                  const SizedBox(height: 1),
+                  Text(
+                    formatCurrencyWithCode(lastAmount, currency),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.textSubtle,
+                      fontWeight: FontWeight.w600,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
                 Text(
                   cancelled
                       ? l.cfWasPerMonth(widget.currencyFormat
