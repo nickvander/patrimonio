@@ -2710,6 +2710,22 @@ class _TransactionsTabState extends State<TransactionsTab> {
     );
   }
 
+  /// Account label with its owning institution prefixed, so a generic
+  /// Plaid name like "Checking ••0916" reads as "Capital One · Checking
+  /// ••0916" instead of an unidentifiable account. The institution is
+  /// dropped when it's empty or already embedded in the account name
+  /// (e.g. "Chase Sapphire") to avoid "Chase · Chase Sapphire".
+  String _accountLabel(dynamic tx) {
+    final account = (tx['account_name'] ?? '').toString();
+    final inst = (tx['institution_name'] ?? '').toString();
+    if (account.isEmpty) return inst;
+    if (inst.isEmpty ||
+        account.toLowerCase().contains(inst.toLowerCase())) {
+      return account;
+    }
+    return '$inst · $account';
+  }
+
   /// Compact secondary line. The date is now in the group header above,
   /// so we drop it here and surface category instead — keeping the row
   /// to one line of meta even when there's a user note attached. The
@@ -2720,9 +2736,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
   /// header already names, so the account segment is dropped there (the
   /// row shows the running balance under the amount instead).
   String _metaLine(dynamic tx, String notes) {
-    final account = widget.singleAccountContext
-        ? ''
-        : (tx['account_name'] ?? '').toString();
+    final account = widget.singleAccountContext ? '' : _accountLabel(tx);
     final cat = prettyCategory(
       userCategory: tx['user_category']?.toString(),
       detailed: tx['category_detailed']?.toString(),
@@ -3289,7 +3303,7 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
       final rows = <Widget>[
         if ((tx['account_name'] ?? '').toString().isNotEmpty)
           _detailRow(Icons.account_balance, l.txAccount,
-              tx['account_name'].toString()),
+              s._accountLabel(tx)),
         if (autoCategoryLabel != null)
           _detailRow(
               Icons.label_outline, l.txAutoCategory, autoCategoryLabel),
@@ -3428,14 +3442,17 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                   constraints:
                       const BoxConstraints(minWidth: 48, minHeight: 48),
                 ),
-              if (!isNarrow)
-                IconButton(
-                  icon: const Icon(Icons.close, size: 20),
-                  onPressed: _close,
-                  tooltip: l.actionClose,
-                  constraints:
-                      const BoxConstraints(minWidth: 48, minHeight: 48),
-                ),
+              // Explicit close on both layouts. The narrow sheet still has
+              // the swipe-down handle, but a visible X gives mouse users
+              // (and anyone who doesn't think to swipe) an obvious target
+              // instead of having to click the scrim to dismiss.
+              IconButton(
+                icon: const Icon(Icons.close, size: 20),
+                onPressed: _close,
+                tooltip: l.actionClose,
+                constraints:
+                    const BoxConstraints(minWidth: 48, minHeight: 48),
+              ),
             ],
           ),
           // -- Scrollable body -------------------------------------------
