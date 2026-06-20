@@ -40,6 +40,7 @@ class _LendingTabState extends State<LendingTab> {
   List<dynamic> _loans = [];
   List<dynamic> _people = [];
   Map<String, dynamic> _summary = {};
+  List<dynamic> _reminders = [];
   bool _loading = true;
   String? _error;
 
@@ -59,12 +60,18 @@ class _LendingTabState extends State<LendingTab> {
         widget.apiService.getLoans(),
         widget.apiService.getLoanPeople(),
         widget.apiService.getLoansSummary(),
+        // Aging/due section. Non-fatal: a failure here just hides the
+        // section, it shouldn't blank out the whole tab.
+        widget.apiService
+            .getLoanReminders(forceRefresh: true)
+            .catchError((_) => <dynamic>[]),
       ]);
       if (!mounted) return;
       setState(() {
         _loans = results[0] as List<dynamic>;
         _people = results[1] as List<dynamic>;
         _summary = results[2] as Map<String, dynamic>;
+        _reminders = results[3] as List<dynamic>;
         _loading = false;
       });
     } catch (e) {
@@ -123,6 +130,10 @@ class _LendingTabState extends State<LendingTab> {
         padding: const EdgeInsets.only(bottom: 32),
         children: [
           _buildHeader(),
+          if (_buildAgingSection() case final w?) ...[
+            const SizedBox(height: 16),
+            w,
+          ],
           const SizedBox(height: 16),
           if (_loans.isEmpty)
             _buildEmptyState()
@@ -296,6 +307,162 @@ class _LendingTabState extends State<LendingTab> {
             )),
       ],
     );
+  }
+
+  /// Loan aging report: upcoming + overdue installments from
+  /// getLoanReminders, grouped into urgency bands (most-overdue first).
+  /// Returns null — hiding the whole section — when nothing is due.
+  Widget? _buildAgingSection() {
+    if (_reminders.isEmpty) return null;
+    final l10n = AppLocalizations.of(context);
+
+    // Band an item by how overdue / soon-due it is. Lower order sorts
+    // first (oldest-overdue at the top).
+    ({int order, String label, Color color}) bandOf(Map<String, dynamic> r) {
+      final overdue = (r['days_overdue'] as num?)?.toInt() ?? 0;
+      final until = (r['days_until'] as num?)?.toInt() ?? 0;
+      if (overdue >= 30) {
+        return (order: 0, label: l10n.lendingAgingOverdue30, color: context.negative);
+      }
+      if (overdue >= 7) {
+        return (order: 1, label: l10n.lendingAgingOverdue7, color: context.negative);
+      }
+      if (overdue >= 1) {
+        return (order: 2, label: l10n.lendingAgingOverdue1, color: context.warning);
+      }
+      if (until <= 0) {
+        return (order: 3, label: l10n.lendingAgingDueToday, color: context.warning);
+      }
+      return (order: 4, label: l10n.lendingAgingDueSoon, color: context.tealAccent);
+    }
+
+    // Sort: oldest-overdue first, then soonest-due. Within a band, the
+    // most-overdue / soonest-due item leads.
+    final items = _reminders
+        .whereType<Map>()
+        .map((m) => m.cast<String, dynamic>())
+        .toList()
+      ..sort((a, b) {
+        final ba = bandOf(a), bb = bandOf(b);
+        if (ba.order != bb.order) return ba.order.compareTo(bb.order);
+        final oa = (a['days_overdue'] as num?)?.toInt() ?? 0;
+        final ob = (b['days_overdue'] as num?)?.toInt() ?? 0;
+        if (oa != ob) return ob.compareTo(oa); // more overdue first
+        final ua = (a['days_until'] as num?)?.toInt() ?? 0;
+        final ub = (b['days_until'] as num?)?.toInt() ?? 0;
+        return ua.compareTo(ub); // sooner-due first
+      });
+    if (items.isEmpty) return null;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: context.hairline),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: Row(
+                children: [
+                  Icon(Icons.event_busy, size: 18, color: context.warning),
+                  const SizedBox(width: 8),
+                  Text(
+                    l10n.lendingAgingTitle,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: context.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ...items.map((r) {
+              final band = bandOf(r);
+              return _agingRow(r, band.label, band.color);
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _agingRow(Map<String, dynamic> r, String bandLabel, Color color) {
+    final l10n = AppLocalizations.of(context);
+    final name = (r['borrower_name'] ?? '').toString();
+    final currency = (r['currency'] ?? widget.targetCurrency).toString();
+    final amount = (r['amount'] as num?)?.toDouble() ?? 0;
+    final overdue = (r['days_overdue'] as num?)?.toInt() ?? 0;
+    final until = (r['days_until'] as num?)?.toInt() ?? 0;
+    final timing = overdue > 0
+        ? '${l10n.lendingAgingDaysOverdue(overdue)} · $bandLabel'
+        : until <= 0
+            ? bandLabel
+            : '${l10n.lendingAgingDaysUntil(until)} · $bandLabel';
+    return InkWell(
+      onTap: () => _openLoanForReminder(r),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.only(right: 12),
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: context.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    timing,
+                    style: TextStyle(fontSize: 11, color: color),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              _money(amount, currency),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: context.textPrimary,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Open the detail sheet for the loan behind an aging row. Looks the
+  /// loan up by id in the already-loaded list; no-ops if it's missing
+  /// (e.g. an archived loan that no longer appears in the tab).
+  void _openLoanForReminder(Map<String, dynamic> r) {
+    final loanId = r['loan_id']?.toString();
+    if (loanId == null) return;
+    final loan = _loans.whereType<Map>().firstWhere(
+          (l) => l['id']?.toString() == loanId,
+          orElse: () => const {},
+        );
+    if (loan.isEmpty) return;
+    _openLoanDetail(loan.cast<String, dynamic>());
   }
 
   Widget _buildEmptyState() {
@@ -1892,6 +2059,10 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
               else ...[
                 _buildDisbursementSection(),
                 SizedBox(height: gap),
+                if (_buildInterestSection() case final w?) ...[
+                  w,
+                  SizedBox(height: gap),
+                ],
                 _buildScheduleSection(),
                 SizedBox(height: gap),
                 _buildRepaymentsSection(),
@@ -1981,6 +2152,66 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
       await _load();
       widget.onMutated();
     }
+  }
+
+  /// Interest summary: realized (cash-basis) income plus the backend's
+  /// informational "accrued but not yet paid" figure. Returns null —
+  /// hiding the whole section — when there's nothing to show: no interest
+  /// at all, or a terminal-status loan where accrued is meaningless.
+  Widget? _buildInterestSection() {
+    final status = (widget.loan['status'] ?? 'active').toString();
+    final earned = (widget.loan['interest_earned'] as num?)?.toDouble() ?? 0;
+    // Display the backend's accrued figure verbatim; never recompute it.
+    // It's already zeroed server-side for terminal statuses, but gate here
+    // too so a paid_off loan never shows an "owed" amount.
+    final terminal =
+        status == 'paid_off' || status == 'cancelled' || status == 'written_off';
+    final accrued = terminal
+        ? 0.0
+        : (widget.loan['interest_accrued'] as num?)?.toDouble() ?? 0;
+    if (earned <= 0 && accrued <= 0) return null;
+
+    final l10n = AppLocalizations.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle(l10n.lendingInterest),
+        Row(
+          children: [
+            Icon(Icons.percent, size: 16, color: context.positive),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text.rich(
+                TextSpan(
+                  style: TextStyle(fontSize: 13, color: context.textMuted),
+                  children: [
+                    TextSpan(text: '${l10n.lendingInterestEarnedLabel}: '),
+                    TextSpan(
+                      text: _money(earned),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: context.positive,
+                      ),
+                    ),
+                    if (accrued > 0) ...[
+                      const TextSpan(text: ' · '),
+                      TextSpan(text: '${l10n.lendingAccruedNotYetPaid}: '),
+                      TextSpan(
+                        text: _money(accrued),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: context.warning,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
   Widget _buildRepaymentsSection() {
