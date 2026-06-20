@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../utils/theme_colors.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -60,6 +61,34 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   // Toggles the Monte Carlo uncertainty band (10–90th / 25–75th percentile
   // fan) around the expected line.
   bool _showBand = true;
+
+  // Display-only conversion. The backend math is always real (today's dollars);
+  // when this is on we multiply every displayed figure by the cumulative
+  // inflation path so the chart + KPIs read in future nominal dollars instead.
+  // It never changes what we send to the backend.
+  bool _showNominal = false;
+
+  // Cumulative inflation factor at `years` from today, e.g. (1+i)^t. Used to
+  // convert a real-dollar figure to nominal at a given horizon. Returns 1.0
+  // when the nominal toggle is off so callers can multiply unconditionally.
+  double _nominalFactor(double years) =>
+      _showNominal ? math.pow(1 + _annualInflation, years).toDouble() : 1.0;
+
+  // Live Fisher-relation hint under the return slider: states the real return
+  // implied by the current nominal-return and inflation inputs, so the user
+  // sees why a "7%" return doesn't compound at 7% in today's dollars.
+  // real = (1 + nominal) / (1 + inflation) - 1.
+  String _fisherHelp(AppLocalizations l) {
+    final real =
+        ((1 + _annualReturnRate) / (1 + _annualInflation) - 1) * 100;
+    final nom = _annualReturnRate * 100;
+    final inf = _annualInflation * 100;
+    return l.projFisherHelp(
+      nom.toStringAsFixed(1),
+      inf.toStringAsFixed(1),
+      real.toStringAsFixed(1),
+    );
+  }
 
   // Collapsible plain-language glossary at the top of the tab — the FIRE
   // jargon (Coast FIRE, Barista FI, withdrawal rate…) isn't obvious, so we
@@ -262,7 +291,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 12,
+          runSpacing: 8,
           children: [
             Text(
               l.projTitle,
@@ -272,9 +304,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 color: context.textPrimary,
               ),
             ),
-            const SizedBox(width: 12),
-            // Real-dollars badge: the whole model is in today's purchasing
-            // power, which is the honest way to read a 30-year chart.
+            // Dollar-basis badge: the model is computed in today's purchasing
+            // power; the toggle re-expresses the same figures in future nominal
+            // dollars (display-only — the underlying math stays real).
             Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -283,12 +315,27 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                l.projRealNote,
+                _showNominal ? l.projNominalNote : l.projRealNote,
                 style: TextStyle(
                     color: context.info,
                     fontSize: 12,
                     fontWeight: FontWeight.w600),
               ),
+            ),
+            // "Show nominal amounts" toggle.
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Switch(
+                  value: _showNominal,
+                  activeThumbColor: context.positive,
+                  onChanged: (v) => setState(() => _showNominal = v),
+                ),
+                Text(
+                  l.projShowNominal,
+                  style: TextStyle(color: context.textMuted, fontSize: 13),
+                ),
+              ],
             ),
           ],
         ),
@@ -411,7 +458,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         min: 0,
         max: 0.15,
         isPercent: true,
-        help: l.projHelpExpectedReturn,
+        help: '${l.projHelpExpectedReturn}\n${_fisherHelp(l)}',
         onChanged: (val) => setState(() => _annualReturnRate = val),
         onChangeEnd: (_) => _fetchProjection(),
       ),
@@ -949,7 +996,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   List<FlSpot> _percentileSpots(List<dynamic> pcts, String key) {
     return pcts.map((p) {
       final x = (p['year'] as num).toDouble();
-      final y = (p[key] as num).toDouble() * widget.conversionFactor;
+      final y = (p[key] as num).toDouble() *
+          widget.conversionFactor *
+          _nominalFactor(x);
       return FlSpot(x, y);
     }).toList();
   }
@@ -978,7 +1027,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     final spots = points.map((p) {
       final x = (p['year'] as num).toDouble() +
           (p['month'] as num).toDouble() / 12.0;
-      final y = (p['balance'] as num).toDouble() * widget.conversionFactor;
+      final y = (p['balance'] as num).toDouble() *
+          widget.conversionFactor *
+          _nominalFactor(x);
       return FlSpot(x, y);
     }).toList();
 
@@ -1019,6 +1070,24 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             ),
           ]
         : <BetweenBarsData>[];
+
+    // A horizontal real-dollar target (FI number, goal) reads as a flat line in
+    // real mode, but in nominal mode the *same* real target costs more future
+    // dollars each year, so it becomes a rising (1+i)^t curve. Sample it yearly
+    // so the curve is smooth and stays consistent with the inflated chart path.
+    List<FlSpot> targetSpots(double realUsd) {
+      final base = realUsd * widget.conversionFactor;
+      if (!_showNominal) {
+        return [
+          FlSpot(0, base),
+          FlSpot(_projectionYears.toDouble(), base),
+        ];
+      }
+      return List.generate(
+        _projectionYears + 1,
+        (t) => FlSpot(t.toDouble(), base * _nominalFactor(t.toDouble())),
+      );
+    }
 
     return LineChart(
       LineChartData(
@@ -1089,11 +1158,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           ),
           // Focused FIRE target line (Full / Coast / Barista)
           LineChartBarData(
-            spots: [
-              FlSpot(0, targetValue * widget.conversionFactor),
-              FlSpot(_projectionYears.toDouble(),
-                  targetValue * widget.conversionFactor),
-            ],
+            spots: targetSpots(targetValue),
             isCurved: false,
             color: targetColor.withValues(alpha: 0.7),
             barWidth: 2,
@@ -1103,11 +1168,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           // User-set goal line
           if (_goalAmountUsd != null)
             LineChartBarData(
-              spots: [
-                FlSpot(0, _goalAmountUsd! * widget.conversionFactor),
-                FlSpot(_projectionYears.toDouble(),
-                    _goalAmountUsd! * widget.conversionFactor),
-              ],
+              spots: targetSpots(_goalAmountUsd!),
               isCurved: false,
               color: context.yellowAccent.withValues(alpha: 0.75),
               barWidth: 2,
@@ -1176,8 +1237,13 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     final baristaNumber = (m['barista_fi_number'] as num?)?.toDouble() ?? 0.0;
     final yearsToFi = (m['estimated_years_to_fi'] as num?)?.toDouble();
 
-    String money(double usd) =>
-        widget.currencyFormat.format(usd * widget.conversionFactor);
+    // FIRE targets are spent *at retirement*, so in nominal mode they're shown
+    // in the retirement year's dollars (consistent with the chart's target
+    // line). Today's figures (current net worth) pass `atYears: 0`, which leaves
+    // them untouched since (1+i)^0 = 1.
+    String money(double usd, {double atYears = 0}) => widget.currencyFormat
+        .format(usd * widget.conversionFactor * _nominalFactor(atYears));
+    final retireYears = _yearsToRetirement.toDouble();
 
     // Per-focus headline content.
     final IconData icon;
@@ -1191,7 +1257,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         icon = Icons.flag_rounded;
         color = context.warning;
         title = l.projFocusFull;
-        number = money(fiNumber);
+        number = money(fiNumber, atYears: retireYears);
         def = l.projGlossaryFiNumberDef;
         take = yearsToFi == null
             ? l.projFullUnreachable
@@ -1204,7 +1270,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             : Icons.trending_up_rounded;
         color = coastAchieved ? context.positive : context.info;
         title = l.projTermCoast;
-        number = money(coastNumber);
+        number = money(coastNumber, atYears: retireYears);
         def = l.projGlossaryCoastDef;
         take = coastAchieved
             ? l.projCoastReachedSub
@@ -1213,7 +1279,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         icon = Icons.local_cafe_rounded;
         color = context.purpleAccent;
         title = l.projTermBarista;
-        number = baristaNumber > 0 ? money(baristaNumber) : '—';
+        number =
+            baristaNumber > 0 ? money(baristaNumber, atYears: retireYears) : '—';
         def = l.projGlossaryBaristaDef;
         take = baristaNumber > 0 ? l.projBaristaFiSub : l.projBaristaPrompt;
     }
@@ -1358,6 +1425,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     final mc = _projectionData!['monte_carlo'] as Map<String, dynamic>?;
     final successRate = (mc?['success_rate'] as num?)?.toDouble() ?? 0.0;
 
+    // FI number + FI income are at-retirement figures; show them in retirement-
+    // year dollars when nominal is on (factor is 1.0 when it's off).
+    final atRetire = _nominalFactor(_yearsToRetirement.toDouble());
+
     final cards = <Widget>[
       _buildMilestoneCard(
         title: l.projSuccessRate,
@@ -1369,7 +1440,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       _buildMilestoneCard(
         title: l.projFiNumber,
         value: widget.currencyFormat.format(
-          (metrics['fi_number'] as num).toDouble() * widget.conversionFactor,
+          (metrics['fi_number'] as num).toDouble() *
+              widget.conversionFactor *
+              atRetire,
         ),
         subtitle: l.projTargetNetWorth,
         icon: Icons.flag_rounded,
@@ -1388,7 +1461,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         title: l.projFiIncome,
         value: widget.currencyFormat.format(
           (metrics['monthly_income_at_retirement'] as num).toDouble() *
-              widget.conversionFactor,
+              widget.conversionFactor *
+              atRetire,
         ),
         subtitle: l.projMonthlyAtWithdrawalRate,
         icon: Icons.account_balance_wallet_rounded,
