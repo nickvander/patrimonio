@@ -4619,4 +4619,199 @@ class AppLocalizationsEn extends AppLocalizations {
   String lwPerfTwrCoverage(Object pct) {
     return 'Reflects $pct of your portfolio we can price daily';
   }
+
+  @override
+  String get heroDeltaSince30d => 'vs 30d ago';
+
+  @override
+  String get ovByCurrency => 'By currency';
+
+  @override
+  String get lendingGlanceTitle => 'Lending';
+
+  @override
+  String get lendingGlanceOutstanding => 'Outstanding';
+
+  @override
+  String lendingGlanceActiveCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count active loans',
+      one: '1 active loan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lendingGlanceNextDue => 'Next due';
+
+  @override
+  String lendingGlanceDueIn(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'due in $days days',
+      one: 'due in 1 day',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lendingGlanceDueToday => 'due today';
+
+  @override
+  String lendingGlanceOverdueBy(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'overdue by $days days',
+      one: 'overdue by 1 day',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get pfGoalPaceAhead => 'Ahead of pace';
+
+  @override
+  String get pfGoalPaceOnTrack => 'On track';
+
+  @override
+  String get pfGoalPaceBehind => 'Behind pace';
+
+  @override
+  String get mgmtArchivedTitle => 'Auto-archived accounts';
+
+  @override
+  String get mgmtArchivedIntro =>
+      'Accounts the sync closed at the bank. Restore one to bring it back into your net worth.';
+
+  @override
+  String get mgmtArchivedManageAll => 'Manage all hidden items';
+
+  @override
+  String get lendingInterest => 'Interest';
+
+  @override
+  String get lendingInterestEarnedLabel => 'Interest earned';
+
+  @override
+  String get lendingAccruedNotYetPaid => 'Accrued (not yet paid)';
+
+  @override
+  String get lendingAgingTitle => 'Due & overdue';
+
+  @override
+  String get lendingAgingOverdue30 => '30+ days overdue';
+
+  @override
+  String get lendingAgingOverdue7 => '7-29 days overdue';
+
+  @override
+  String get lendingAgingOverdue1 => '1-6 days overdue';
+
+  @override
+  String get lendingAgingDueToday => 'Due today';
+
+  @override
+  String get lendingAgingDueSoon => 'Due soon';
+
+  @override
+  String lendingAgingDaysOverdue(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count days overdue',
+      one: '1 day overdue',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lendingAgingDaysUntil(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'in $count days',
+      one: 'in 1 day',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get pfTopMoversByValue => 'Top movers (by \$)';
+
+  @override
+  String get pfTopGainersByValue => 'Top gainers';
+
+  @override
+  String get pfTopLosersByValue => 'Top losers';
+
+  @override
+  String get pfLotCurrentValue => 'Current value';
+
+  @override
+  String get pfLotTerm => 'Term';
+
+  @override
+  String get pfLotLongTerm => 'Long-term';
+
+  @override
+  String get pfLotShortTerm => 'Short-term';
+
+  @override
+  String get pfFlatCostBasis => 'Cost basis';
+
+  @override
+  String get pfLotsUnavailable => 'No cost-basis detail available';
+
+  @override
+  String get pfLotsUnavailableTooltip =>
+      'This institution did not report acquisition dates, so a per-lot breakdown isn\'t available.';
+
+  @override
+  String get pfViewCostBasis => 'View cost basis';
+
+  @override
+  String get taxHarvestMarginalRate =>
+      'Marginal rate used for harvest estimates';
+
+  @override
+  String get taxHarvestMarginalOrdinary => 'Ordinary (short-term)';
+
+  @override
+  String get taxHarvestMarginalLtcg => 'LTCG (long-term)';
+
+  @override
+  String get projShowNominal => 'Show nominal amounts';
+
+  @override
+  String get projNominalNote => 'Future (nominal) dollars';
+
+  @override
+  String projFisherHelp(String nominal, String inflation, String real) {
+    return '$nominal% nominal − $inflation% inflation ≈ $real% real (Fisher relation)';
+  }
+
+  @override
+  String get lwSyncBadgeSuccess => 'Synced';
+
+  @override
+  String get lwSyncBadgeSyncing => 'Syncing';
+
+  @override
+  String get lwSyncBadgeError => 'Errors';
+
+  @override
+  String get lwSyncBadgeReconnect => 'Reconnect';
+
+  @override
+  String get lwSyncBadgeStale => 'Stale';
+
+  @override
+  String get lwSyncFilterProblems => 'Needs attention';
+
+  @override
+  String get lwSyncNoProblems => 'Everything is up to date';
 }

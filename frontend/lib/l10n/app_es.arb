@@ -1402,5 +1402,103 @@
     "placeholders": {
       "pct": { "type": "Object" }
     }
-  }
+  },
+  "heroDeltaSince30d": "vs hace 30 d",
+  "ovByCurrency": "Por moneda",
+  "lendingGlanceTitle": "Préstamos",
+  "lendingGlanceOutstanding": "Pendiente",
+  "lendingGlanceActiveCount": "{count, plural, =1{1 préstamo activo} other{{count} préstamos activos}}",
+  "@lendingGlanceActiveCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lendingGlanceNextDue": "Próximo vencimiento",
+  "lendingGlanceDueIn": "{days, plural, =1{vence en 1 día} other{vence en {days} días}}",
+  "@lendingGlanceDueIn": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "lendingGlanceDueToday": "vence hoy",
+  "lendingGlanceOverdueBy": "{days, plural, =1{vencido hace 1 día} other{vencido hace {days} días}}",
+  "@lendingGlanceOverdueBy": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "pfGoalPaceAhead": "Por delante del ritmo",
+  "pfGoalPaceOnTrack": "En camino",
+  "pfGoalPaceBehind": "Por detrás del ritmo",
+  "mgmtArchivedTitle": "Cuentas archivadas automáticamente",
+  "mgmtArchivedIntro": "Cuentas que la sincronización cerró en el banco. Restaura una para devolverla a tu patrimonio.",
+  "mgmtArchivedManageAll": "Administrar todos los elementos ocultos",
+  "lendingInterest": "Intereses",
+  "lendingInterestEarnedLabel": "Intereses ganados",
+  "lendingAccruedNotYetPaid": "Devengado (aún sin pagar)",
+  "lendingAgingTitle": "Vencimientos y atrasos",
+  "lendingAgingOverdue30": "30+ días de atraso",
+  "lendingAgingOverdue7": "7-29 días de atraso",
+  "lendingAgingOverdue1": "1-6 días de atraso",
+  "lendingAgingDueToday": "Vence hoy",
+  "lendingAgingDueSoon": "Vence pronto",
+  "lendingAgingDaysOverdue": "{count, plural, =1{1 día de atraso} other{{count} días de atraso}}",
+  "@lendingAgingDaysOverdue": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lendingAgingDaysUntil": "{count, plural, =1{en 1 día} other{en {count} días}}",
+  "@lendingAgingDaysUntil": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pfTopMoversByValue": "Mayores movimientos (por $)",
+  "pfTopGainersByValue": "Mayores ganancias",
+  "pfTopLosersByValue": "Mayores pérdidas",
+  "pfLotCurrentValue": "Valor actual",
+  "pfLotTerm": "Plazo",
+  "pfLotLongTerm": "Largo plazo",
+  "pfLotShortTerm": "Corto plazo",
+  "pfFlatCostBasis": "Costo base",
+  "pfLotsUnavailable": "Sin detalle de costo base disponible",
+  "pfLotsUnavailableTooltip": "Esta institución no reportó fechas de adquisición, por lo que no hay desglose por lote.",
+  "pfViewCostBasis": "Ver costo base",
+  "taxHarvestMarginalRate": "Tasa marginal usada para las estimaciones de cosecha",
+  "taxHarvestMarginalOrdinary": "Ordinaria (corto plazo)",
+  "taxHarvestMarginalLtcg": "Ganancias de capital (largo plazo)",
+  "projShowNominal": "Mostrar montos nominales",
+  "projNominalNote": "Dólares futuros (nominales)",
+  "projFisherHelp": "{nominal}% nominal − {inflation}% inflación ≈ {real}% real (relación de Fisher)",
+  "@projFisherHelp": {
+    "placeholders": {
+      "nominal": {
+        "type": "String"
+      },
+      "inflation": {
+        "type": "String"
+      },
+      "real": {
+        "type": "String"
+      }
+    }
+  },
+  "lwSyncBadgeSuccess": "Sincronizadas",
+  "lwSyncBadgeSyncing": "Sincronizando",
+  "lwSyncBadgeError": "Errores",
+  "lwSyncBadgeReconnect": "Reconectar",
+  "lwSyncBadgeStale": "Desactualizadas",
+  "lwSyncFilterProblems": "Requiere atención",
+  "lwSyncNoProblems": "Todo está al día"
 }

@@ -4660,4 +4660,199 @@ class AppLocalizationsEs extends AppLocalizations {
   String lwPerfTwrCoverage(Object pct) {
     return 'Refleja el $pct de tu portafolio que podemos cotizar a diario';
   }
+
+  @override
+  String get heroDeltaSince30d => 'vs hace 30 d';
+
+  @override
+  String get ovByCurrency => 'Por moneda';
+
+  @override
+  String get lendingGlanceTitle => 'Préstamos';
+
+  @override
+  String get lendingGlanceOutstanding => 'Pendiente';
+
+  @override
+  String lendingGlanceActiveCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count préstamos activos',
+      one: '1 préstamo activo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lendingGlanceNextDue => 'Próximo vencimiento';
+
+  @override
+  String lendingGlanceDueIn(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'vence en $days días',
+      one: 'vence en 1 día',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lendingGlanceDueToday => 'vence hoy';
+
+  @override
+  String lendingGlanceOverdueBy(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'vencido hace $days días',
+      one: 'vencido hace 1 día',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get pfGoalPaceAhead => 'Por delante del ritmo';
+
+  @override
+  String get pfGoalPaceOnTrack => 'En camino';
+
+  @override
+  String get pfGoalPaceBehind => 'Por detrás del ritmo';
+
+  @override
+  String get mgmtArchivedTitle => 'Cuentas archivadas automáticamente';
+
+  @override
+  String get mgmtArchivedIntro =>
+      'Cuentas que la sincronización cerró en el banco. Restaura una para devolverla a tu patrimonio.';
+
+  @override
+  String get mgmtArchivedManageAll => 'Administrar todos los elementos ocultos';
+
+  @override
+  String get lendingInterest => 'Intereses';
+
+  @override
+  String get lendingInterestEarnedLabel => 'Intereses ganados';
+
+  @override
+  String get lendingAccruedNotYetPaid => 'Devengado (aún sin pagar)';
+
+  @override
+  String get lendingAgingTitle => 'Vencimientos y atrasos';
+
+  @override
+  String get lendingAgingOverdue30 => '30+ días de atraso';
+
+  @override
+  String get lendingAgingOverdue7 => '7-29 días de atraso';
+
+  @override
+  String get lendingAgingOverdue1 => '1-6 días de atraso';
+
+  @override
+  String get lendingAgingDueToday => 'Vence hoy';
+
+  @override
+  String get lendingAgingDueSoon => 'Vence pronto';
+
+  @override
+  String lendingAgingDaysOverdue(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count días de atraso',
+      one: '1 día de atraso',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lendingAgingDaysUntil(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'en $count días',
+      one: 'en 1 día',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get pfTopMoversByValue => 'Mayores movimientos (por \$)';
+
+  @override
+  String get pfTopGainersByValue => 'Mayores ganancias';
+
+  @override
+  String get pfTopLosersByValue => 'Mayores pérdidas';
+
+  @override
+  String get pfLotCurrentValue => 'Valor actual';
+
+  @override
+  String get pfLotTerm => 'Plazo';
+
+  @override
+  String get pfLotLongTerm => 'Largo plazo';
+
+  @override
+  String get pfLotShortTerm => 'Corto plazo';
+
+  @override
+  String get pfFlatCostBasis => 'Costo base';
+
+  @override
+  String get pfLotsUnavailable => 'Sin detalle de costo base disponible';
+
+  @override
+  String get pfLotsUnavailableTooltip =>
+      'Esta institución no reportó fechas de adquisición, por lo que no hay desglose por lote.';
+
+  @override
+  String get pfViewCostBasis => 'Ver costo base';
+
+  @override
+  String get taxHarvestMarginalRate =>
+      'Tasa marginal usada para las estimaciones de cosecha';
+
+  @override
+  String get taxHarvestMarginalOrdinary => 'Ordinaria (corto plazo)';
+
+  @override
+  String get taxHarvestMarginalLtcg => 'Ganancias de capital (largo plazo)';
+
+  @override
+  String get projShowNominal => 'Mostrar montos nominales';
+
+  @override
+  String get projNominalNote => 'Dólares futuros (nominales)';
+
+  @override
+  String projFisherHelp(String nominal, String inflation, String real) {
+    return '$nominal% nominal − $inflation% inflación ≈ $real% real (relación de Fisher)';
+  }
+
+  @override
+  String get lwSyncBadgeSuccess => 'Sincronizadas';
+
+  @override
+  String get lwSyncBadgeSyncing => 'Sincronizando';
+
+  @override
+  String get lwSyncBadgeError => 'Errores';
+
+  @override
+  String get lwSyncBadgeReconnect => 'Reconectar';
+
+  @override
+  String get lwSyncBadgeStale => 'Desactualizadas';
+
+  @override
+  String get lwSyncFilterProblems => 'Requiere atención';
+
+  @override
+  String get lwSyncNoProblems => 'Todo está al día';
 }

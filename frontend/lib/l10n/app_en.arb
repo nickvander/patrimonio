@@ -1692,5 +1692,103 @@
     "placeholders": {
       "pct": { "type": "Object" }
     }
-  }
+  },
+  "heroDeltaSince30d": "vs 30d ago",
+  "ovByCurrency": "By currency",
+  "lendingGlanceTitle": "Lending",
+  "lendingGlanceOutstanding": "Outstanding",
+  "lendingGlanceActiveCount": "{count, plural, =1{1 active loan} other{{count} active loans}}",
+  "@lendingGlanceActiveCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lendingGlanceNextDue": "Next due",
+  "lendingGlanceDueIn": "{days, plural, =1{due in 1 day} other{due in {days} days}}",
+  "@lendingGlanceDueIn": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "lendingGlanceDueToday": "due today",
+  "lendingGlanceOverdueBy": "{days, plural, =1{overdue by 1 day} other{overdue by {days} days}}",
+  "@lendingGlanceOverdueBy": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "pfGoalPaceAhead": "Ahead of pace",
+  "pfGoalPaceOnTrack": "On track",
+  "pfGoalPaceBehind": "Behind pace",
+  "mgmtArchivedTitle": "Auto-archived accounts",
+  "mgmtArchivedIntro": "Accounts the sync closed at the bank. Restore one to bring it back into your net worth.",
+  "mgmtArchivedManageAll": "Manage all hidden items",
+  "lendingInterest": "Interest",
+  "lendingInterestEarnedLabel": "Interest earned",
+  "lendingAccruedNotYetPaid": "Accrued (not yet paid)",
+  "lendingAgingTitle": "Due & overdue",
+  "lendingAgingOverdue30": "30+ days overdue",
+  "lendingAgingOverdue7": "7-29 days overdue",
+  "lendingAgingOverdue1": "1-6 days overdue",
+  "lendingAgingDueToday": "Due today",
+  "lendingAgingDueSoon": "Due soon",
+  "lendingAgingDaysOverdue": "{count, plural, =1{1 day overdue} other{{count} days overdue}}",
+  "@lendingAgingDaysOverdue": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lendingAgingDaysUntil": "{count, plural, =1{in 1 day} other{in {count} days}}",
+  "@lendingAgingDaysUntil": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pfTopMoversByValue": "Top movers (by $)",
+  "pfTopGainersByValue": "Top gainers",
+  "pfTopLosersByValue": "Top losers",
+  "pfLotCurrentValue": "Current value",
+  "pfLotTerm": "Term",
+  "pfLotLongTerm": "Long-term",
+  "pfLotShortTerm": "Short-term",
+  "pfFlatCostBasis": "Cost basis",
+  "pfLotsUnavailable": "No cost-basis detail available",
+  "pfLotsUnavailableTooltip": "This institution did not report acquisition dates, so a per-lot breakdown isn't available.",
+  "pfViewCostBasis": "View cost basis",
+  "taxHarvestMarginalRate": "Marginal rate used for harvest estimates",
+  "taxHarvestMarginalOrdinary": "Ordinary (short-term)",
+  "taxHarvestMarginalLtcg": "LTCG (long-term)",
+  "projShowNominal": "Show nominal amounts",
+  "projNominalNote": "Future (nominal) dollars",
+  "projFisherHelp": "{nominal}% nominal − {inflation}% inflation ≈ {real}% real (Fisher relation)",
+  "@projFisherHelp": {
+    "placeholders": {
+      "nominal": {
+        "type": "String"
+      },
+      "inflation": {
+        "type": "String"
+      },
+      "real": {
+        "type": "String"
+      }
+    }
+  },
+  "lwSyncBadgeSuccess": "Synced",
+  "lwSyncBadgeSyncing": "Syncing",
+  "lwSyncBadgeError": "Errors",
+  "lwSyncBadgeReconnect": "Reconnect",
+  "lwSyncBadgeStale": "Stale",
+  "lwSyncFilterProblems": "Needs attention",
+  "lwSyncNoProblems": "Everything is up to date"
 }

@@ -7521,6 +7521,306 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Reflects {pct} of your portfolio we can price daily'**
   String lwPerfTwrCoverage(Object pct);
+
+  /// No description provided for @heroDeltaSince30d.
+  ///
+  /// In en, this message translates to:
+  /// **'vs 30d ago'**
+  String get heroDeltaSince30d;
+
+  /// No description provided for @ovByCurrency.
+  ///
+  /// In en, this message translates to:
+  /// **'By currency'**
+  String get ovByCurrency;
+
+  /// No description provided for @lendingGlanceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Lending'**
+  String get lendingGlanceTitle;
+
+  /// No description provided for @lendingGlanceOutstanding.
+  ///
+  /// In en, this message translates to:
+  /// **'Outstanding'**
+  String get lendingGlanceOutstanding;
+
+  /// No description provided for @lendingGlanceActiveCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 active loan} other{{count} active loans}}'**
+  String lendingGlanceActiveCount(int count);
+
+  /// No description provided for @lendingGlanceNextDue.
+  ///
+  /// In en, this message translates to:
+  /// **'Next due'**
+  String get lendingGlanceNextDue;
+
+  /// No description provided for @lendingGlanceDueIn.
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =1{due in 1 day} other{due in {days} days}}'**
+  String lendingGlanceDueIn(int days);
+
+  /// No description provided for @lendingGlanceDueToday.
+  ///
+  /// In en, this message translates to:
+  /// **'due today'**
+  String get lendingGlanceDueToday;
+
+  /// No description provided for @lendingGlanceOverdueBy.
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =1{overdue by 1 day} other{overdue by {days} days}}'**
+  String lendingGlanceOverdueBy(int days);
+
+  /// No description provided for @pfGoalPaceAhead.
+  ///
+  /// In en, this message translates to:
+  /// **'Ahead of pace'**
+  String get pfGoalPaceAhead;
+
+  /// No description provided for @pfGoalPaceOnTrack.
+  ///
+  /// In en, this message translates to:
+  /// **'On track'**
+  String get pfGoalPaceOnTrack;
+
+  /// No description provided for @pfGoalPaceBehind.
+  ///
+  /// In en, this message translates to:
+  /// **'Behind pace'**
+  String get pfGoalPaceBehind;
+
+  /// No description provided for @mgmtArchivedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-archived accounts'**
+  String get mgmtArchivedTitle;
+
+  /// No description provided for @mgmtArchivedIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Accounts the sync closed at the bank. Restore one to bring it back into your net worth.'**
+  String get mgmtArchivedIntro;
+
+  /// No description provided for @mgmtArchivedManageAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage all hidden items'**
+  String get mgmtArchivedManageAll;
+
+  /// No description provided for @lendingInterest.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest'**
+  String get lendingInterest;
+
+  /// No description provided for @lendingInterestEarnedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest earned'**
+  String get lendingInterestEarnedLabel;
+
+  /// No description provided for @lendingAccruedNotYetPaid.
+  ///
+  /// In en, this message translates to:
+  /// **'Accrued (not yet paid)'**
+  String get lendingAccruedNotYetPaid;
+
+  /// No description provided for @lendingAgingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Due & overdue'**
+  String get lendingAgingTitle;
+
+  /// No description provided for @lendingAgingOverdue30.
+  ///
+  /// In en, this message translates to:
+  /// **'30+ days overdue'**
+  String get lendingAgingOverdue30;
+
+  /// No description provided for @lendingAgingOverdue7.
+  ///
+  /// In en, this message translates to:
+  /// **'7-29 days overdue'**
+  String get lendingAgingOverdue7;
+
+  /// No description provided for @lendingAgingOverdue1.
+  ///
+  /// In en, this message translates to:
+  /// **'1-6 days overdue'**
+  String get lendingAgingOverdue1;
+
+  /// No description provided for @lendingAgingDueToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Due today'**
+  String get lendingAgingDueToday;
+
+  /// No description provided for @lendingAgingDueSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Due soon'**
+  String get lendingAgingDueSoon;
+
+  /// No description provided for @lendingAgingDaysOverdue.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 day overdue} other{{count} days overdue}}'**
+  String lendingAgingDaysOverdue(int count);
+
+  /// No description provided for @lendingAgingDaysUntil.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{in 1 day} other{in {count} days}}'**
+  String lendingAgingDaysUntil(int count);
+
+  /// No description provided for @pfTopMoversByValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Top movers (by \$)'**
+  String get pfTopMoversByValue;
+
+  /// No description provided for @pfTopGainersByValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Top gainers'**
+  String get pfTopGainersByValue;
+
+  /// No description provided for @pfTopLosersByValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Top losers'**
+  String get pfTopLosersByValue;
+
+  /// No description provided for @pfLotCurrentValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Current value'**
+  String get pfLotCurrentValue;
+
+  /// No description provided for @pfLotTerm.
+  ///
+  /// In en, this message translates to:
+  /// **'Term'**
+  String get pfLotTerm;
+
+  /// No description provided for @pfLotLongTerm.
+  ///
+  /// In en, this message translates to:
+  /// **'Long-term'**
+  String get pfLotLongTerm;
+
+  /// No description provided for @pfLotShortTerm.
+  ///
+  /// In en, this message translates to:
+  /// **'Short-term'**
+  String get pfLotShortTerm;
+
+  /// No description provided for @pfFlatCostBasis.
+  ///
+  /// In en, this message translates to:
+  /// **'Cost basis'**
+  String get pfFlatCostBasis;
+
+  /// No description provided for @pfLotsUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No cost-basis detail available'**
+  String get pfLotsUnavailable;
+
+  /// No description provided for @pfLotsUnavailableTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'This institution did not report acquisition dates, so a per-lot breakdown isn\'t available.'**
+  String get pfLotsUnavailableTooltip;
+
+  /// No description provided for @pfViewCostBasis.
+  ///
+  /// In en, this message translates to:
+  /// **'View cost basis'**
+  String get pfViewCostBasis;
+
+  /// No description provided for @taxHarvestMarginalRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Marginal rate used for harvest estimates'**
+  String get taxHarvestMarginalRate;
+
+  /// No description provided for @taxHarvestMarginalOrdinary.
+  ///
+  /// In en, this message translates to:
+  /// **'Ordinary (short-term)'**
+  String get taxHarvestMarginalOrdinary;
+
+  /// No description provided for @taxHarvestMarginalLtcg.
+  ///
+  /// In en, this message translates to:
+  /// **'LTCG (long-term)'**
+  String get taxHarvestMarginalLtcg;
+
+  /// No description provided for @projShowNominal.
+  ///
+  /// In en, this message translates to:
+  /// **'Show nominal amounts'**
+  String get projShowNominal;
+
+  /// No description provided for @projNominalNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Future (nominal) dollars'**
+  String get projNominalNote;
+
+  /// No description provided for @projFisherHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'{nominal}% nominal − {inflation}% inflation ≈ {real}% real (Fisher relation)'**
+  String projFisherHelp(String nominal, String inflation, String real);
+
+  /// No description provided for @lwSyncBadgeSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Synced'**
+  String get lwSyncBadgeSuccess;
+
+  /// No description provided for @lwSyncBadgeSyncing.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing'**
+  String get lwSyncBadgeSyncing;
+
+  /// No description provided for @lwSyncBadgeError.
+  ///
+  /// In en, this message translates to:
+  /// **'Errors'**
+  String get lwSyncBadgeError;
+
+  /// No description provided for @lwSyncBadgeReconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnect'**
+  String get lwSyncBadgeReconnect;
+
+  /// No description provided for @lwSyncBadgeStale.
+  ///
+  /// In en, this message translates to:
+  /// **'Stale'**
+  String get lwSyncBadgeStale;
+
+  /// No description provided for @lwSyncFilterProblems.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs attention'**
+  String get lwSyncFilterProblems;
+
+  /// No description provided for @lwSyncNoProblems.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything is up to date'**
+  String get lwSyncNoProblems;
 }
 
 class _AppLocalizationsDelegate
