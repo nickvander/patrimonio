@@ -1509,7 +1509,15 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     final peakDate = data['peak_date']?.toString();
     final accounts = (data['foreign_accounts'] as List<dynamic>?) ?? const [];
 
-    final statusColor = exceeded ? context.warning : context.positive;
+    // No foreign-balance history at all: peak/peak_date are empty and there are
+    // no foreign accounts. A green "under threshold" all-clear here is
+    // misleading, so render a neutral no-data state instead.
+    final noData =
+        (peakDate == null || peakDate.isEmpty) && accounts.isEmpty;
+
+    final statusColor = noData
+        ? context.textMuted
+        : (exceeded ? context.warning : context.positive);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1549,16 +1557,20 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                 Row(
                   children: [
                     Icon(
-                      exceeded
-                          ? Icons.flag_outlined
-                          : Icons.check_circle_outline,
+                      noData
+                          ? Icons.info_outline
+                          : (exceeded
+                              ? Icons.flag_outlined
+                              : Icons.check_circle_outline),
                       size: 14,
                       color: statusColor,
                     ),
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
-                        exceeded ? l.taxFbarExceeded : l.taxFbarUnder,
+                        noData
+                            ? l.taxFbarNoData
+                            : (exceeded ? l.taxFbarExceeded : l.taxFbarUnder),
                         style: TextStyle(
                           color: statusColor,
                           fontSize: 12,
@@ -1602,11 +1614,13 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                   ),
                 ],
                 if (accounts.isEmpty) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    l.taxFbarNoForeignAccounts,
-                    style: TextStyle(color: context.textFaint, fontSize: 11),
-                  ),
+                  if (!noData) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      l.taxFbarNoForeignAccounts,
+                      style: TextStyle(color: context.textFaint, fontSize: 11),
+                    ),
+                  ],
                 ] else ...[
                   const SizedBox(height: 12),
                   Divider(height: 1, color: context.hairline),

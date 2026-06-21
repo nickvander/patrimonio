@@ -262,6 +262,28 @@ class _PortfolioCardState extends State<PortfolioCard> {
     final totalGainLossPct =
         totalCostBasisUsd > 0 ? (totalGainLossUsd / totalCostBasisUsd) * 100 : 0.0;
 
+    // The % above is a return on *cost basis*: its numerator/denominator only
+    // cover holdings the institution reports a basis for. The value hero above
+    // covers ALL holdings, so when some positions have a null basis (e.g. a
+    // large GOOG lot from a statement import) the % is NOT a whole-portfolio
+    // return. Sum the USD value over the basis-known rows — same predicate the
+    // % uses (a holding contributes to total_gain_loss_usd iff gain_loss_usd is
+    // non-null) — so the coverage we show reconciles with the % denominator.
+    var coveredValueUsd = 0.0;
+    var hasNullBasis = false;
+    for (final h in _allHoldings) {
+      final m = h as Map;
+      if ((m['gain_loss_usd'] as num?) != null) {
+        coveredValueUsd += (m['value_usd'] as num?)?.toDouble() ?? 0.0;
+      } else {
+        hasNullBasis = true;
+      }
+    }
+    final coveredValue = coveredValueUsd * widget.conversionFactor;
+    // Only worth qualifying the % when coverage is partial — when every holding
+    // has a basis the % already describes the whole hero value.
+    final showCoverage = hasNullBasis && _allHoldings.isNotEmpty;
+
     final isPositive = totalGainLoss >= 0;
     final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 
@@ -364,6 +386,22 @@ class _PortfolioCardState extends State<PortfolioCard> {
                       ],
                     ),
                   ),
+                  if (showCoverage) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      l.pfReturnCoverage(
+                        _compactMoney(coveredValue),
+                        _compactMoney(totalValue),
+                      ),
+                      style: TextStyle(
+                        color: context.textSubtle,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        height: 1.3,
+                      ),
+                      maxLines: 2,
+                    ),
+                  ],
                 ],
               );
               // The donut-by-holding chart was removed: it duplicated the
@@ -381,6 +419,28 @@ class _PortfolioCardState extends State<PortfolioCard> {
         ),
       ),
     );
+  }
+
+  /// Abbreviates a display-currency amount as `$1.53M` / `$160.7K` so the
+  /// return-coverage caption stays on one or two short lines. Reuses the
+  /// hero formatter's currency symbol (so `$` vs `MXN ` follows the target
+  /// currency) and falls back to the full formatter under $1K where an
+  /// abbreviation would lose precision without saving space.
+  String _compactMoney(double amount) {
+    final symbol = widget.currencyFormat.currencySymbol;
+    final abs = amount.abs();
+    final sign = amount < 0 ? '-' : '';
+    String body;
+    if (abs >= 1e9) {
+      body = '${(abs / 1e9).toStringAsFixed(2)}B';
+    } else if (abs >= 1e6) {
+      body = '${(abs / 1e6).toStringAsFixed(2)}M';
+    } else if (abs >= 1e3) {
+      body = '${(abs / 1e3).toStringAsFixed(1)}K';
+    } else {
+      return widget.currencyFormat.format(amount);
+    }
+    return '$sign$symbol$body';
   }
 
   /// Holdings slice: search/toolbar + the holdings table (flat or grouped).
@@ -2086,10 +2146,17 @@ void showLotBreakdown(BuildContext context, dynamic h) {
                         // price. Falls back to an em dash when the price is
                         // missing (0) so we don't render a fake "$0.00".
                         final currentVal = qty * currentPrice;
-                        // Long-term = held > 365 days. Only computed when the
+                        // Long-term = held at least one calendar year. Uses
+                        // the calendar rule (now on/after the same M/D one year
+                        // later) rather than a 365-day count so it matches the
+                        // tax module across leap years. Only computed when the
                         // acquisition date parsed; unknown shows an em dash.
                         final isLongTerm = date != null &&
-                            now.difference(date).inDays > 365;
+                            !now.isBefore(DateTime(
+                              date.year + 1,
+                              date.month,
+                              date.day,
+                            ));
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Row(

@@ -1252,12 +1252,21 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     final String number;
     final String def;
     final String take;
+    // In nominal mode the Full-FIRE headline is the real FI number inflated to
+    // *retirement* (years-to-retirement), while "years away" reflects
+    // years-to-FI — different horizons. Caption the figure so it isn't misread
+    // against the duration. Null leaves the layout untouched (real mode / other
+    // focuses).
+    String? horizonNote;
     switch (_fireFocus) {
       case _FireFocus.full:
         icon = Icons.flag_rounded;
         color = context.warning;
         title = l.projFocusFull;
         number = money(fiNumber, atYears: retireYears);
+        if (_showNominal) {
+          horizonNote = l.projNominalHorizonCaption(_yearsToRetirement);
+        }
         def = l.projGlossaryFiNumberDef;
         take = yearsToFi == null
             ? l.projFullUnreachable
@@ -1385,6 +1394,14 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                                 fontWeight: FontWeight.w800,
                                 fontSize: 15),
                           ),
+                          if (horizonNote != null) ...[
+                            const SizedBox(width: 6),
+                            Text(
+                              horizonNote,
+                              style: TextStyle(
+                                  color: context.textSubtle, fontSize: 11),
+                            ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 2),

@@ -781,14 +781,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 14),
-          Text(
-            (es ? 'En moneda nativa' : 'Held natively').toUpperCase(),
-            style: TextStyle(
-              fontSize: 9,
-              letterSpacing: 0.8,
-              fontWeight: FontWeight.w700,
-              color: context.textFaint,
-            ),
+          Row(
+            children: [
+              Text(
+                (es ? 'En moneda nativa' : 'Held natively').toUpperCase(),
+                style: TextStyle(
+                  fontSize: 9,
+                  letterSpacing: 0.8,
+                  fontWeight: FontWeight.w700,
+                  color: context.textFaint,
+                ),
+              ),
+              // Only foreign legs carry a reporting-currency "≈" — flag a
+              // stale FX rate right beside the heading so the user knows
+              // those conversions may be off.
+              if (entries.any((e) => e.cur != targetUpper))
+                ?(() {
+                  final badge = _buildFxStaleBadge();
+                  return badge == null
+                      ? null
+                      : Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: badge,
+                        );
+                })(),
+            ],
           ),
           const SizedBox(height: 6),
           Wrap(
@@ -1203,6 +1220,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         label: l.statInvestments,
         value: currencyFormat.format(investments),
         accent: context.tealAccent,
+        // This subtotal is the full balance of investment/brokerage
+        // accounts, including any uninvested cash sleeve — so it can sit
+        // above the Portfolio tab's total, which sums only security
+        // holdings.
+        tooltip: l.statInvestmentsCashSleeveNote,
       ),
       // Real assets tile shows up only when the user actually has any —
       // a typical brand-new account has none and an empty $0 tile would
@@ -1250,6 +1272,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// currency, in native units). Returns null when there's only one currency
   /// — the split would just restate the main tiles — so the caller can omit
   /// it entirely.
+  /// Small, unobtrusive "approx. — FX rate stale" indicator. Surfaced next
+  /// to native-currency figures that carry a reporting-currency equivalent
+  /// when the backend marks the latest exchange rate as missing / stale
+  /// (overview['fx_stale'] == true). Read null-safely so it renders nothing
+  /// when the field is absent or false — older payloads degrade gracefully.
+  Widget? _buildFxStaleBadge() {
+    if ((_overview?['fx_stale'] == true) != true) return null;
+    final l = AppLocalizations.of(context);
+    return Tooltip(
+      message: l.dashFxStaleTooltip,
+      triggerMode: TooltipTriggerMode.tap,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.schedule, size: 11, color: context.warning),
+          const SizedBox(width: 4),
+          Text(
+            l.dashFxStaleLabel,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
+              color: context.warning,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget? _buildCurrencySubStrip({
     required NumberFormat currencyFormat,
     required double usdMxnRate,
@@ -1329,14 +1381,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            l.ovByCurrency.toUpperCase(),
-            style: TextStyle(
-              fontSize: 9,
-              letterSpacing: 0.8,
-              fontWeight: FontWeight.w700,
-              color: context.textFaint,
-            ),
+          Row(
+            children: [
+              Text(
+                l.ovByCurrency.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 9,
+                  letterSpacing: 0.8,
+                  fontWeight: FontWeight.w700,
+                  color: context.textFaint,
+                ),
+              ),
+              ?(() {
+                final badge = _buildFxStaleBadge();
+                return badge == null
+                    ? null
+                    : Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: badge,
+                      );
+              })(),
+            ],
           ),
           const SizedBox(height: 8),
           for (var i = 0; i < entries.length; i++) ...[
@@ -4775,10 +4840,16 @@ class _StatTile extends StatelessWidget {
   final String value;
   final Color accent;
 
+  /// Optional explanatory note. When non-null a small info glyph sits after
+  /// the label and surfaces this text on hover / long-press, used e.g. to
+  /// explain why the Investments subtotal differs from the Portfolio total.
+  final String? tooltip;
+
   const _StatTile({
     required this.label,
     required this.value,
     required this.accent,
+    this.tooltip,
   });
 
   @override
@@ -4809,15 +4880,31 @@ class _StatTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
-              Text(
-                label.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 10,
-                  letterSpacing: 1.2,
-                  fontWeight: FontWeight.w700,
-                  color: context.textSubtle,
+              Flexible(
+                child: Text(
+                  label.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 10,
+                    letterSpacing: 1.2,
+                    fontWeight: FontWeight.w700,
+                    color: context.textSubtle,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (tooltip != null) ...[
+                const SizedBox(width: 4),
+                Tooltip(
+                  message: tooltip!,
+                  triggerMode: TooltipTriggerMode.tap,
+                  child: Icon(
+                    Icons.info_outline,
+                    size: 12,
+                    color: context.textFaint,
+                  ),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 6),
