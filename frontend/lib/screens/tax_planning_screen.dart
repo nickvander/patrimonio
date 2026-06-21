@@ -476,18 +476,24 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       children: [
         _labeledControl(
           l.taxFilingStatusLabel,
-          DropdownButton<String>(
-            value: _filingStatus,
-            items: _filingStatuses
-                .map((value) => DropdownMenuItem<String>(
+          // A one-tap segmented toggle (was a dropdown) so switching between
+          // Single and Married — which re-runs the bracket math — is obvious.
+          SegmentedButton<String>(
+            segments: _filingStatuses
+                .map((value) => ButtonSegment<String>(
                       value: value,
-                      child: Text(_filingStatusLabel(l, value)),
+                      label: Text(_filingStatusLabel(l, value)),
                     ))
                 .toList(),
-            onChanged: (v) {
-              if (v != null) _onFilingStatusChanged(v);
+            selected: {_filingStatus},
+            showSelectedIcon: false,
+            onSelectionChanged: (sel) {
+              if (sel.isNotEmpty) _onFilingStatusChanged(sel.first);
             },
-            underline: const SizedBox(),
+            style: const ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
           ),
         ),
         _labeledControl(
@@ -1759,22 +1765,47 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     );
   }
 
+  Widget _taxBadge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
   Widget _contributionRow(
       AppLocalizations l, dynamic raw, bool unverified) {
     if (raw is! Map) return const SizedBox.shrink();
     final groupKey = raw['group']?.toString() ?? '';
     final ytd = (raw['ytd_contributions_usd'] as num?)?.toDouble() ?? 0;
     final baseLimit = (raw['limit_base_usd'] as num?)?.toDouble() ?? 0;
+    // Binding cap: §415(c) total for the 401k, family limit for the HSA, =base
+    // for the IRA. Fall back to base when an older backend omits the field.
+    final overallLimit =
+        (raw['overall_limit_usd'] as num?)?.toDouble() ?? baseLimit;
+    final remainingOverall = (raw['remaining_overall_usd'] as num?)?.toDouble();
     final catchUp = (raw['catch_up_usd'] as num?)?.toDouble() ?? 0;
-    final remainingApi = (raw['remaining_room_usd'] as num?)?.toDouble();
+    final megaBackdoor = raw['mega_backdoor'] == true;
+    final backdoor = raw['backdoor'] == true;
+    final employer = (raw['employer_usd'] as num?)?.toDouble() ?? 0;
     final deadline = raw['deadline']?.toString();
     final priorYearWindow = raw['prior_year_window'] == true;
     final matchCaveat = raw['match_rollover_caveat'] == true;
 
     final progress = contributionProgress(
       ytd: ytd,
-      baseLimit: baseLimit,
-      remainingRoomFromApi: remainingApi,
+      baseLimit: overallLimit,
+      remainingRoomFromApi: remainingOverall,
     );
     final barColor = progress.over ? context.warning : context.positive;
 
@@ -1795,9 +1826,12 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              if (backdoor) ...[
+                _taxBadge(l.taxBackdoorRothBadge, context.info),
+                const SizedBox(width: 8),
+              ],
               Text(
-                l.taxContributedOfLimit(_money(ytd), _money(baseLimit)),
+                l.taxContributedOfLimit(_money(ytd), _money(overallLimit)),
                 style: TextStyle(
                   color: context.textMuted,
                   fontSize: 12,
@@ -1845,6 +1879,23 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                 ),
             ],
           ),
+          if (megaBackdoor) ...[
+            const SizedBox(height: 6),
+            Text(
+              l.taxMegaBackdoorNote(
+                  _money(baseLimit), _money(progress.remainingRoom)),
+              style: TextStyle(color: context.textSubtle, fontSize: 11),
+            ),
+          ],
+          if (groupKey == 'hsa') ...[
+            const SizedBox(height: 6),
+            Text(
+              employer > 0
+                  ? '${l.taxHsaFamilyCoverage} · ${l.taxHsaEmployerNote(_money(employer))}'
+                  : l.taxHsaFamilyCoverage,
+              style: TextStyle(color: context.textSubtle, fontSize: 11),
+            ),
+          ],
           if (deadline != null && deadline.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
