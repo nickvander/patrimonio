@@ -42,16 +42,33 @@ pub struct TestLockGuard {
 }
 
 impl TestLockGuard {
-    /// Block until this caller holds the global test lock. Returns
-    /// `None` when the connect itself fails — the test should treat
-    /// that the same as "no test DB available" and skip.
+    /// Block until this caller holds the global test lock.
+    ///
+    /// IMPORTANT: this is only reached once a `PATRIMONIO_TEST_DATABASE_URL`
+    /// has been resolved, so a connection failure here means "a DB was
+    /// configured but we couldn't reach/authenticate it" — NOT "no DB
+    /// available". We therefore PANIC rather than returning `None`. Returning
+    /// `None` (the old behaviour) made a wrong password — e.g. after the
+    /// Postgres password rotation, with `scripts/test.sh` defaulting to the
+    /// pre-rotation `patrimonio` — look identical to "no test DB", so every
+    /// integration test silently skipped and the suite vacuously passed,
+    /// shipping real SQL bugs (the FBAR + statement-continuity 500s) undetected.
+    /// Skipping is decided earlier (when the env var is unset); once a URL is
+    /// set, a bad connection must fail loudly.
     pub async fn acquire(database_url: &str) -> Option<Self> {
-        let mut conn = PgConnection::connect(database_url).await.ok()?;
+        let mut conn = PgConnection::connect(database_url).await.unwrap_or_else(|e| {
+            panic!(
+                "PATRIMONIO_TEST_DATABASE_URL is set but connecting to the test DB \
+                 failed ({e}). Integration tests must NOT silently skip when a DB is \
+                 configured — fix the URL/credentials (e.g. export the rotated \
+                 POSTGRES_PASSWORD from .env; scripts/test.sh now does this)."
+            )
+        });
         // 0x70617472696D6F = "patrimo" — see struct docs.
         sqlx::query("SELECT pg_advisory_lock(0x70617472696D6F)")
             .execute(&mut conn)
             .await
-            .ok()?;
+            .expect("acquire the patrimonio_test advisory lock");
         Some(Self { _conn: conn })
     }
 }

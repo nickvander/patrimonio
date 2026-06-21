@@ -4816,3 +4816,68 @@ async fn loan_overpay_beyond_schedule_appends_surplus_row() {
     assert!((l["total_repaid"].as_f64().unwrap() - 1300.0).abs() < 0.01,
         "total_repaid should be 1300, got {}", l["total_repaid"]);
 }
+
+// =====================================================================
+// /api/imports/continuity — statement-continuity report
+// =====================================================================
+
+/// Insert a statement-imported transaction: `balance_after` + `import_file`
+/// set, so it qualifies for the continuity report's balance-chaining scan.
+async fn seed_imported_tx(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    date: &str,
+    amount: &str,
+    balance_after: &str,
+    import_file: &str,
+) {
+    sqlx::query(
+        "INSERT INTO transactions \
+         (account_id, date, description, amount, currency, source, user_id, balance_after, import_file) \
+         VALUES ($1, $2::date, 'Imported tx', $3, 'USD', 'import', $4, $5, $6)",
+    )
+    .bind(account_id)
+    .bind(date)
+    .bind(Decimal::from_str(amount).unwrap())
+    .bind(user_id)
+    .bind(Decimal::from_str(balance_after).unwrap())
+    .bind(import_file)
+    .execute(pool)
+    .await
+    .expect("seed imported tx");
+}
+
+/// Regression guard for the FBAR-class bug in `continuity_handler`: it
+/// selected a nonexistent `a.institution_name`, so the query errored and
+/// `.unwrap_or_default()` silently returned an EMPTY report (200, no rows) —
+/// statement-continuity warnings never surfaced. Asserts the report is
+/// POPULATED with the JOINED institution name for imported data, which the
+/// broken (institutions-less) query could never satisfy.
+#[tokio::test]
+#[serial_test::serial]
+async fn continuity_report_lists_imported_accounts_with_institution() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, account) = seed_account(&pool, user_id).await;
+    seed_imported_tx(&pool, user_id, account, "2026-01-31", "100.00", "1100.00", "2026-01.pdf").await;
+    seed_imported_tx(&pool, user_id, account, "2026-02-28", "50.00", "1150.00", "2026-02.pdf").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/imports/continuity", None, Some(&token)))
+        .await
+        .unwrap();
+    let status = res.status();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(status, StatusCode::OK, "continuity body: {body}");
+
+    let accounts = body["accounts"].as_array().expect("accounts array");
+    // Broken query -> errored -> unwrap_or_default -> []. A populated row whose
+    // institution_name came from the JOIN is the regression signal.
+    assert_eq!(accounts.len(), 1, "expected the one imported account, got: {body}");
+    assert_eq!(accounts[0]["institution_name"], serde_json::json!("Test Bank"), "{body}");
+    assert_eq!(accounts[0]["statement_count"], serde_json::json!(2), "{body}");
+}

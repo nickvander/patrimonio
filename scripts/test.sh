@@ -36,6 +36,18 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-patrimonio-postgres-1}"
 POSTGRES_USER="${POSTGRES_USER:-patrimonio}"
+
+# The Postgres password was rotated off the default. If POSTGRES_PASSWORD isn't
+# already in the environment, read it from the repo .env (gitignored) so the
+# test DB connection actually authenticates. Without this the integration tests
+# connect with the stale 'patrimonio' default, fail auth, and — via the harness
+# — SILENTLY SKIP, so the whole suite vacuously "passes" and real SQL bugs ship
+# undetected (exactly how the FBAR + statement-continuity 500s slipped through).
+# The harness now panics on a configured-but-unreachable DB, so a wrong password
+# fails loudly instead of skipping.
+if [ -z "${POSTGRES_PASSWORD:-}" ] && [ -f "$REPO_ROOT/.env" ]; then
+    POSTGRES_PASSWORD="$(grep -E '^POSTGRES_PASSWORD=' "$REPO_ROOT/.env" | head -1 | cut -d= -f2- | tr -d '\r')"
+fi
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-patrimonio}"
 POSTGRES_HOST_PORT="${POSTGRES_HOST_PORT:-5433}"
 TEST_DB="${TEST_DB:-patrimonio_test}"
