@@ -178,12 +178,17 @@ async fn continuity_handler(
     Extension(ctx): Extension<AuthContext>,
 ) -> Response {
     let rows = sqlx::query(
+        // institution name lives on institutions.name (accounts has no
+        // institution_name column); join it in rather than reading a
+        // nonexistent a.institution_name, which errored the whole query and —
+        // via the unwrap_or_default below — silently emptied this report.
         "SELECT a.id AS account_id, a.name AS account_name, \
-                a.institution_name AS institution_name, \
+                i.name AS institution_name, \
                 t.import_file AS import_file, t.date AS date, \
                 t.amount AS amount, t.balance_after AS balance_after \
          FROM transactions t \
          JOIN accounts a ON a.id = t.account_id \
+         JOIN institutions i ON i.id = a.institution_id \
          WHERE t.user_id = $1 AND t.balance_after IS NOT NULL \
                AND t.import_file IS NOT NULL \
          ORDER BY a.id, t.date",
