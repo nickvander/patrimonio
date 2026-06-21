@@ -62,6 +62,111 @@ pub fn router() -> Router<AppState> {
         )
 }
 
+/// Latest USD->MXN exchange rate plus a staleness flag.
+///
+/// The numeric fallback (`FX_FALLBACK_USD_MXN`) is only ever returned when no
+/// rate row exists at all; in every other case `rate` is the real recorded
+/// rate and `stale` says whether that row is older than 7 days. Callers that
+/// surface MXN-converted figures should propagate `stale` so the UI can badge
+/// them as approximate instead of silently trusting a possibly-drifted number.
+pub(crate) struct FxRateInfo {
+    pub rate: f64,
+    /// True when the rate is MISSING (fallback used) or older than 7 days.
+    pub stale: bool,
+}
+
+/// Hard fallback used only when the `exchange_rates` table has no USD/MXN row.
+/// Deliberately flagged `stale` so it can never pass for a live rate.
+pub(crate) const FX_FALLBACK_USD_MXN: f64 = 20.0;
+
+/// Fetch the freshest USD->MXN rate and decide whether it's trustworthy.
+///
+/// One query, used by every endpoint that converts MXN→USD, so the
+/// missing/stale policy lives in exactly one place.
+pub(crate) async fn latest_usd_mxn_rate(db: &sqlx::PgPool) -> FxRateInfo {
+    let row = sqlx::query(
+        "SELECT rate, recorded_at FROM exchange_rates \
+         WHERE base_currency = 'USD' AND target_currency = 'MXN' \
+         ORDER BY recorded_at DESC LIMIT 1",
+    )
+    .fetch_optional(db)
+    .await
+    .ok()
+    .flatten();
+
+    match row {
+        Some(r) => {
+            let rate = r
+                .try_get::<rust_decimal::Decimal, _>("rate")
+                .ok()
+                .and_then(|d| d.to_string().parse::<f64>().ok())
+                .filter(|v| *v > 0.0)
+                .unwrap_or(FX_FALLBACK_USD_MXN);
+            let recorded_at = r.try_get::<chrono::DateTime<chrono::Utc>, _>("recorded_at");
+            let stale = match recorded_at {
+                Ok(ts) => {
+                    let age = chrono::Utc::now().signed_duration_since(ts);
+                    age > chrono::Duration::days(7)
+                }
+                // Couldn't read the timestamp — treat as stale rather than
+                // silently trusting it.
+                Err(_) => true,
+            };
+            if stale {
+                tracing::warn!(
+                    fx_rate = rate,
+                    "USD/MXN exchange rate is stale (older than 7 days); MXN figures flagged approximate"
+                );
+            }
+            FxRateInfo { rate, stale }
+        }
+        None => {
+            tracing::warn!(
+                fx_rate = FX_FALLBACK_USD_MXN,
+                "no USD/MXN exchange rate found; falling back to {FX_FALLBACK_USD_MXN} and flagging stale"
+            );
+            FxRateInfo {
+                rate: FX_FALLBACK_USD_MXN,
+                stale: true,
+            }
+        }
+    }
+}
+
+/// Shared WHERE-clause fragment for the trailing-12-month "genuine external
+/// cash flow" aggregations. Both the emergency-fund spend (this module) and
+/// `projections::projection_defaults` filter the identical set: split parents,
+/// internal TRANSFER_* legs, credit-card payments, lending disbursement /
+/// repayment legs, AND confirmed/high-confidence cash↔FX transfer pairs.
+///
+/// ⚠ Keep this in lockstep with the consumers. If the exclusion set ever needs
+/// to change, change it HERE so the emergency-fund "months of runway" and the
+/// projection "monthly contribution" can never silently disagree. Cross-ref:
+///   - `dashboard::emergency_fund` (spend side)
+///   - `crate::api::projections::projection_defaults` (income + spend side)
+///
+/// The fragment assumes the query aliases `transactions` as `t`, joins
+/// `accounts a`, and binds `user_id` as `$1`. It does NOT include the
+/// `t.amount < 0` sign filter — callers add that themselves so the same
+/// fragment serves the spend-only and income+spend queries.
+pub(crate) const TRAILING_CASHFLOW_EXCLUSIONS_SQL: &str = r#"
+          AND t.date >= CURRENT_DATE - INTERVAL '12 months'
+          AND t.user_id = $1
+          AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
+          AND COALESCE(t.category, '') NOT IN ('TRANSFER_IN', 'TRANSFER_OUT')
+          AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
+          AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
+          AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
+          -- Internal cross-currency transfers move money between the user's
+          -- own accounts — neither income nor spend. Anti-join the confirmed
+          -- detected pairs so a mis-filed transfer leg can't distort the trend.
+          AND NOT EXISTS (
+              SELECT 1 FROM cash_fx_transfers f
+              WHERE (f.source_tx_id = t.id OR f.dest_tx_id = t.id)
+                AND (f.user_confirmed OR f.detection_confidence >= 70)
+          )
+"#;
+
 /// Dashboard overview: net worth, account breakdown, recent changes —
 /// scoped to the authenticated user. Every aggregate filters on
 /// `user_id` so a brand-new account from another tenant can never
@@ -73,7 +178,7 @@ async fn dashboard_overview(
     // Phase 1: three independent queries — currency totals, FX rate,
     // and per-account detail — go in parallel. The FX rate is the
     // only global query (exchange rates aren't per-user).
-    let (currency_rows, fx_row, accounts_rows) = tokio::join!(
+    let (currency_rows, fx_info, accounts_rows) = tokio::join!(
         sqlx::query(
             r#"
             SELECT currency,
@@ -86,9 +191,9 @@ async fn dashboard_overview(
             GROUP BY currency
             "#
         ).bind(ctx.user_id).fetch_all(&state.db),
-        sqlx::query(
-            "SELECT rate FROM exchange_rates WHERE base_currency = 'USD' AND target_currency = 'MXN' ORDER BY recorded_at DESC LIMIT 1"
-        ).fetch_optional(&state.db),
+        // FX rate + staleness flag (missing or >7 days old). Replaces the old
+        // silent 20.0 fallback so MXN-converted figures can be badged.
+        latest_usd_mxn_rate(&state.db),
         sqlx::query(
             r#"
             SELECT a.id, a.name, a.nickname, a.account_type, a.current_balance, a.currency,
@@ -121,12 +226,8 @@ async fn dashboard_overview(
 
     // FX rate is needed by both per-type and per-institution queries
     // below; pin its numeric value before phase 2.
-    let fx_rate = fx_row
-        .ok()
-        .flatten()
-        .map(|r| r.get::<rust_decimal::Decimal, _>("rate"))
-        .and_then(|d| d.to_string().parse::<f64>().ok())
-        .unwrap_or(20.0);
+    let fx_rate = fx_info.rate;
+    let fx_stale = fx_info.stale;
 
     // Phase 2: the two remaining aggregates depend on fx_rate but not
     // on each other — run them concurrently as well. Both filtered to
@@ -238,6 +339,8 @@ async fn dashboard_overview(
         type_breakdown,
         institution_breakdown,
         accounts,
+        fx_rate_used: fx_rate,
+        fx_stale,
     })
 }
 
@@ -392,17 +495,11 @@ async fn holdings(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Json<HoldingsResponse> {
-    let fx_row = sqlx::query(
-        "SELECT rate FROM exchange_rates WHERE base_currency = 'USD' AND target_currency = 'MXN' ORDER BY recorded_at DESC LIMIT 1"
-    )
-    .fetch_optional(&state.db)
-    .await
-    .ok()
-    .flatten();
-    let fx_usd_to_mxn: f64 = fx_row
-        .map(|r| r.get::<rust_decimal::Decimal, _>("rate"))
-        .and_then(|d| d.to_string().parse::<f64>().ok())
-        .unwrap_or(20.0);
+    // FX rate + staleness flag (missing or >7 days old). Replaces the old
+    // silent 20.0 fallback so MXN-converted portfolio figures can be badged.
+    let fx_info = latest_usd_mxn_rate(&state.db).await;
+    let fx_usd_to_mxn: f64 = fx_info.rate;
+    let fx_stale = fx_info.stale;
 
     let rows = sqlx::query(
         r#"
@@ -597,6 +694,8 @@ async fn holdings(
         total_gain_loss_usd: known_value_usd - total_cost_usd,
         total_gain_loss_mxn: known_value_mxn - total_cost_mxn,
         holdings_without_basis,
+        fx_rate_used: fx_usd_to_mxn,
+        fx_stale,
         holdings: holdings_list,
     })
 }
@@ -1707,18 +1806,11 @@ async fn emergency_fund(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Json<EmergencyFundResponse> {
-    let fx = sqlx::query(
-        "SELECT rate FROM exchange_rates WHERE base_currency = 'USD' AND target_currency = 'MXN' \
-         ORDER BY recorded_at DESC LIMIT 1",
-    )
-    .fetch_optional(&state.db)
-    .await
-    .ok()
-    .flatten()
-    .and_then(|r| r.try_get::<rust_decimal::Decimal, _>("rate").ok())
-    .and_then(|d| d.to_string().parse::<f64>().ok())
-    .filter(|r| *r > 0.0)
-    .unwrap_or(20.0);
+    // Shared FX policy: real rate when present, hard fallback flagged stale
+    // (and warn-logged) when missing/old. The numeric value matches the old
+    // inline query whenever a fresh rate exists, so the runway figure is
+    // unchanged on live data.
+    let fx = latest_usd_mxn_rate(&state.db).await.rate;
 
     let cash_row = sqlx::query(
         r#"
@@ -1744,44 +1836,34 @@ async fn emergency_fund(
         .map(|d| d.to_string().parse().unwrap_or(0.0))
         .unwrap_or(0.0);
 
-    // Trailing spend + month count, mirroring projection_defaults / cash-flow.
-    let spend_row = sqlx::query(
+    // Trailing spend + month count. The exclusion set is the SHARED fragment
+    // (TRAILING_CASHFLOW_EXCLUSIONS_SQL) used verbatim by
+    // `projections::projection_defaults`, so the two trailing-12-mo
+    // aggregations can never silently drift. The MXN→USD divisor is the
+    // already-resolved `fx` ($2) — identical to the old in-SQL latest rate
+    // whenever a fresh rate exists, so the live monthly-spend figure is
+    // unchanged.
+    let spend_sql = format!(
         r#"
-        WITH latest_fx AS (
-            SELECT rate FROM exchange_rates
-            WHERE base_currency = 'USD' AND target_currency = 'MXN'
-            ORDER BY recorded_at DESC LIMIT 1
-        )
         SELECT
             COALESCE(SUM(CASE WHEN a.currency = 'MXN'
-                     THEN ABS(t.amount) / COALESCE((SELECT rate FROM latest_fx), 20.0)
+                     THEN ABS(t.amount) / $2::numeric
                      ELSE ABS(t.amount) END), 0) AS spending,
             COUNT(DISTINCT TO_CHAR(t.date, 'YYYY-MM')) AS months
         FROM transactions t
         JOIN accounts a ON a.id = t.account_id
         WHERE t.amount < 0
-          AND t.date >= CURRENT_DATE - INTERVAL '12 months'
-          AND t.user_id = $1
-          AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
-          AND COALESCE(t.category, '') NOT IN ('TRANSFER_IN', 'TRANSFER_OUT')
-          AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
-          AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
-          AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
-          -- Internal cross-currency transfers move money between the user's
-          -- own accounts — neither income nor spend. Anti-join the confirmed
-          -- detected pairs so a mis-filed transfer leg can't distort the trend.
-          AND NOT EXISTS (
-              SELECT 1 FROM cash_fx_transfers f
-              WHERE (f.source_tx_id = t.id OR f.dest_tx_id = t.id)
-                AND (f.user_confirmed OR f.detection_confidence >= 70)
-          )
+        {exclusions}
         "#,
-    )
-    .bind(ctx.user_id)
-    .fetch_optional(&state.db)
-    .await
-    .ok()
-    .flatten();
+        exclusions = TRAILING_CASHFLOW_EXCLUSIONS_SQL,
+    );
+    let spend_row = sqlx::query(&spend_sql)
+        .bind(ctx.user_id)
+        .bind(fx)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten();
 
     let (spending, months) = match spend_row {
         Some(r) => {
@@ -1920,9 +2002,10 @@ struct RealizedGainsResponse {
 /// Realized capital gains/losses from `lot_disposals` — the per-sell P&L the
 /// FIFO engine crystallizes but the holdings view never surfaces. Each row is
 /// one (sell event, depleted lot) pair; `realized_pnl_usd` is pre-computed at
-/// sync time. We add USD proceeds/cost for display and a long-term flag (held
-/// > 365 days) for tax context, joining the source lot for the acquisition
-/// date when it still exists.
+/// sync time. We add USD proceeds/cost for display and a long-term flag
+/// (sold > acquired + 12 calendar months, matching the tax module's
+/// `is_long_term`) for tax context, joining the source lot for the
+/// acquisition date when it still exists.
 async fn realized_gains(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
@@ -1938,6 +2021,8 @@ async fn realized_gains(
     let rows = sqlx::query(
         r#"
         SELECT TO_CHAR(d.sell_date, 'YYYY-MM-DD') AS sell_date,
+               d.sell_date AS sell_date_raw,
+               l.acquired_at AS acquired_date,
                d.qty_sold, d.sell_price_per_unit, d.sell_fx_rate,
                d.cost_per_unit, d.cost_fx_rate, d.realized_pnl_usd,
                h.symbol, h.name,
@@ -1978,6 +2063,23 @@ async fn realized_gains(
                 qty * cost_px
             };
             let holding_days: Option<i32> = r.try_get("holding_days").ok();
+            // Long-term flag uses the SAME calendar rule as the tax module
+            // (TaxCalculator::is_long_term): sold > acquired + 12 calendar
+            // months, with checked_add_months clamping Feb-29 → Feb-28. This
+            // replaces the old `holding_days > 365` count so the flag agrees
+            // across leap years and with the tax-filing buckets. When the
+            // source lot is gone (LEFT JOIN → NULL acquired_at) we can't apply
+            // the calendar rule, so the flag stays None.
+            let acquired_date: Option<chrono::NaiveDate> =
+                r.try_get("acquired_date").ok();
+            let sell_date_raw: Option<chrono::NaiveDate> =
+                r.try_get("sell_date_raw").ok();
+            let long_term = match (acquired_date, sell_date_raw) {
+                (Some(acq), Some(sold)) => acq
+                    .checked_add_months(chrono::Months::new(12))
+                    .map(|anniversary| sold > anniversary),
+                _ => None,
+            };
             RealizedDisposal {
                 symbol: r.get("symbol"),
                 name: r.get("name"),
@@ -1987,7 +2089,7 @@ async fn realized_gains(
                 cost_usd,
                 realized_pnl_usd: dec(r, "realized_pnl_usd"),
                 holding_days,
-                long_term: holding_days.map(|d| d > 365),
+                long_term,
             }
         })
         .collect();
@@ -2054,6 +2156,14 @@ struct DashboardOverview {
     type_breakdown: Vec<TypeBreakdown>,
     institution_breakdown: Vec<InstitutionBreakdown>,
     accounts: Vec<AccountDetail>,
+    /// USD->MXN rate actually used to convert MXN balances in this response.
+    /// When `fx_stale` is true this is the last-known (possibly drifted) or
+    /// hard-fallback rate; the UI should badge MXN-derived figures accordingly.
+    fx_rate_used: f64,
+    /// True when the FX rate is missing or older than 7 days — the converted
+    /// MXN→USD figures (net worth, per-type/per-institution USD totals) are
+    /// approximate and should be flagged in the UI.
+    fx_stale: bool,
 }
 
 #[derive(Serialize)]
@@ -2146,6 +2256,11 @@ struct HoldingsResponse {
     /// Number of holdings excluded from the gain/loss totals because
     /// no cost basis is available (lets the UI caveat the totals).
     holdings_without_basis: usize,
+    /// USD->MXN rate used for the dual-currency (USD↔MXN) conversions above.
+    fx_rate_used: f64,
+    /// True when that FX rate is missing or older than 7 days — the MXN-side
+    /// totals are approximate and should be flagged in the UI.
+    fx_stale: bool,
     holdings: Vec<HoldingDetail>,
 }
 

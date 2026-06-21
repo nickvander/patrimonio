@@ -6,6 +6,7 @@ use axum::{
 use serde::Serialize;
 use sqlx::Row;
 
+use crate::api::dashboard::{latest_usd_mxn_rate, TRAILING_CASHFLOW_EXCLUSIONS_SQL};
 use crate::api::session::AuthContext;
 use crate::services::projections::{self, ProjectionRequest, ProjectionResponse};
 use crate::AppState;
@@ -50,40 +51,45 @@ async fn projection_defaults(
     // Mirror cash_flow_trends: convert every amount to USD, exclude internal
     // transfers / CC payments / lending legs / split parents so the income and
     // spending totals reflect genuine external cash flow.
-    let row = sqlx::query(
+    //
+    // The exclusion set is the SHARED fragment
+    // (dashboard::TRAILING_CASHFLOW_EXCLUSIONS_SQL) used verbatim by
+    // `dashboard::emergency_fund`, so the projection's trailing-12-mo spend and
+    // the emergency-fund runway can never silently disagree — both now apply
+    // the cash_fx_transfers anti-join that this query previously lacked.
+    //
+    // FX uses the shared policy (real rate when present, flagged fallback when
+    // missing/stale). The resolved rate is bound as $2 and used as the MXN→USD
+    // divisor — numerically identical to the old in-SQL latest rate whenever a
+    // fresh rate exists.
+    let fx = latest_usd_mxn_rate(&state.db).await.rate;
+    let sql = format!(
         r#"
-        WITH latest_fx AS (
-            SELECT rate FROM exchange_rates
-            WHERE base_currency = 'USD' AND target_currency = 'MXN'
-            ORDER BY recorded_at DESC LIMIT 1
-        )
         SELECT
             COALESCE(SUM(CASE WHEN t.amount > 0 THEN
                 CASE WHEN a.currency = 'MXN'
-                     THEN t.amount / COALESCE((SELECT rate FROM latest_fx), 20.0)
+                     THEN t.amount / $2::numeric
                      ELSE t.amount END
                 ELSE 0 END), 0) AS income,
             COALESCE(SUM(CASE WHEN t.amount < 0 THEN
                 CASE WHEN a.currency = 'MXN'
-                     THEN ABS(t.amount) / COALESCE((SELECT rate FROM latest_fx), 20.0)
+                     THEN ABS(t.amount) / $2::numeric
                      ELSE ABS(t.amount) END
                 ELSE 0 END), 0) AS spending,
             COUNT(DISTINCT TO_CHAR(t.date, 'YYYY-MM')) AS months
         FROM transactions t
         JOIN accounts a ON a.id = t.account_id
-        WHERE t.date >= CURRENT_DATE - INTERVAL '12 months'
-          AND t.user_id = $1
-          AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
-          AND COALESCE(t.category, '') NOT IN ('TRANSFER_IN', 'TRANSFER_OUT')
-          AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
-          AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
-          AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
+        WHERE TRUE
+        {exclusions}
         "#,
-    )
-    .bind(ctx.user_id)
-    .fetch_one(&state.db)
-    .await
-    .ok();
+        exclusions = TRAILING_CASHFLOW_EXCLUSIONS_SQL,
+    );
+    let row = sqlx::query(&sql)
+        .bind(ctx.user_id)
+        .bind(fx)
+        .fetch_one(&state.db)
+        .await
+        .ok();
 
     let (income, spending, months) = match row {
         Some(r) => {

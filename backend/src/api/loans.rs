@@ -2054,8 +2054,44 @@ async fn interest_income(
             interest_received: dec_to_f64(r.try_get("interest_received").ok()),
         })
         .collect();
+    // Legacy flat totals: a NAÏVE sum across all loans regardless of currency.
+    // Kept for backward compatibility (the frontend reads these), but they only
+    // mean something when every loan shares one currency. The per-currency
+    // breakdown below is the correct figure to display when currencies mix —
+    // MXN interest and USD interest must never be added unlabeled.
     let total_interest: f64 = loans.iter().map(|l| l.interest_received).sum();
     let total_principal: f64 = loans.iter().map(|l| l.principal_received).sum();
+
+    // Per-currency totals so mixed-currency portfolios aren't summed across an
+    // FX boundary. Additive field — does not change the legacy totals.
+    let mut by_currency: std::collections::BTreeMap<String, (f64, f64, i64)> =
+        std::collections::BTreeMap::new();
+    for l in &loans {
+        let e = by_currency.entry(l.currency.clone()).or_insert((0.0, 0.0, 0));
+        e.0 += l.interest_received;
+        e.1 += l.principal_received;
+        e.2 += l.payments_count;
+    }
+    let totals_by_currency: Vec<serde_json::Value> = by_currency
+        .into_iter()
+        .map(|(currency, (interest, principal, payments))| {
+            serde_json::json!({
+                "currency": currency,
+                "total_interest": interest,
+                "total_principal": principal,
+                "payments_count": payments,
+            })
+        })
+        .collect();
+    // The single currency when the report is unambiguous (every loan shares
+    // one), else null — lets the UI label the flat totals safely.
+    let totals_currency: Option<String> = match totals_by_currency.len() {
+        1 => totals_by_currency[0]
+            .get("currency")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+        _ => None,
+    };
 
     // Informational (NOT tax advice): IRS §7872 can impute interest on
     // a below-market (0% / very-low-rate) loan, but only once aggregate
@@ -2088,8 +2124,16 @@ async fn interest_income(
 
     Json(serde_json::json!({
         "year": q.year,
+        // Legacy naive cross-currency sums (backward compat). Prefer
+        // `totals_by_currency` when `totals_currency` is null (mixed currencies).
         "total_interest": total_interest,
         "total_principal": total_principal,
+        // Currency label for the flat totals: the shared currency when all
+        // loans agree, else null (meaning the flat totals mix currencies and
+        // `totals_by_currency` should be used instead).
+        "totals_currency": totals_currency,
+        // Correct per-currency totals so MXN and USD are never added unlabeled.
+        "totals_by_currency": totals_by_currency,
         "by_loan": loans,
         "by_month": months,
         "below_market_loans": below_market,
