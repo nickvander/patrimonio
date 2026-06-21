@@ -314,12 +314,20 @@ pub const FBAR_THRESHOLD_USD: Decimal = dec!(10000);
 #[derive(Debug, Clone, Copy)]
 pub struct ContributionLimit {
     /// The base elective/personal contribution limit (under the catch-up age).
+    /// 401k = the §402(g) elective-deferral limit (employee only); HSA = the
+    /// SELF-ONLY coverage limit; IRA = the shared traditional+Roth limit.
     pub base: Decimal,
     /// The additional catch-up amount allowed at/after the catch-up age
     /// (50 for 401k/IRA, 55 for HSA). The app does not know the user's age,
     /// so the response reports base, catch-up, and base+catch-up separately
     /// and lets the UI/user pick — it never silently assumes eligibility.
     pub catch_up: Decimal,
+    /// The BINDING overall cap (the figure remaining-room is measured against):
+    /// - 401k: the §415(c) total annual-additions limit (elective + employer +
+    ///   AFTER-TAX). The gap above `base` is the mega-backdoor Roth headroom.
+    /// - HSA: the FAMILY coverage limit (≥ self-only `base`).
+    /// - IRA: equal to `base` (no separate overall cap).
+    pub overall: Decimal,
 }
 
 /// The retirement account-type groups the contribution tracker reports on.
@@ -385,16 +393,16 @@ fn contribution_limit(group: RetirementGroup, year: i32) -> (i32, ContributionLi
         .min_by_key(|y| ((y - year).abs(), std::cmp::Reverse(*y)))
         .expect("SUPPORTED_BRACKET_YEARS is non-empty");
     let limit = match (group, nearest) {
-        // 2025: 401k elective $23,500 + $7,500 catch-up; IRA $7,000 + $1,000;
-        // HSA self-only $4,300 + $1,000 (55+).
-        (RetirementGroup::Plan401k, 2025) => ContributionLimit { base: dec!(23500), catch_up: dec!(7500) },
-        (RetirementGroup::Ira, 2025) => ContributionLimit { base: dec!(7000), catch_up: dec!(1000) },
-        (RetirementGroup::Hsa, 2025) => ContributionLimit { base: dec!(4300), catch_up: dec!(1000) },
-        // 2026: 401k elective $24,500 + $8,000 catch-up; IRA $7,500 + $1,100;
-        // HSA self-only $4,400 + $1,000 (55+).
-        (RetirementGroup::Plan401k, _) => ContributionLimit { base: dec!(24500), catch_up: dec!(8000) },
-        (RetirementGroup::Ira, _) => ContributionLimit { base: dec!(7500), catch_up: dec!(1100) },
-        (RetirementGroup::Hsa, _) => ContributionLimit { base: dec!(4400), catch_up: dec!(1000) },
+        // 2025: 401k elective $23,500 + $7,500 catch-up, §415(c) overall $70,000;
+        // IRA $7,000 + $1,000; HSA self-only $4,300 / family $8,550 + $1,000 (55+).
+        (RetirementGroup::Plan401k, 2025) => ContributionLimit { base: dec!(23500), catch_up: dec!(7500), overall: dec!(70000) },
+        (RetirementGroup::Ira, 2025) => ContributionLimit { base: dec!(7000), catch_up: dec!(1000), overall: dec!(7000) },
+        (RetirementGroup::Hsa, 2025) => ContributionLimit { base: dec!(4300), catch_up: dec!(1000), overall: dec!(8550) },
+        // 2026: 401k elective $24,500 + $8,000 catch-up, §415(c) overall $72,000;
+        // IRA $7,500 + $1,100; HSA self-only $4,400 / family $8,750 + $1,000 (55+).
+        (RetirementGroup::Plan401k, _) => ContributionLimit { base: dec!(24500), catch_up: dec!(8000), overall: dec!(72000) },
+        (RetirementGroup::Ira, _) => ContributionLimit { base: dec!(7500), catch_up: dec!(1100), overall: dec!(7500) },
+        (RetirementGroup::Hsa, _) => ContributionLimit { base: dec!(4400), catch_up: dec!(1000), overall: dec!(8750) },
     };
     (nearest, limit)
 }
@@ -1632,43 +1640,104 @@ impl TaxService {
         let mut limit_year_used = year;
         for group in RetirementGroup::all() {
             let types: Vec<String> = group.account_types().iter().map(|s| s.to_string()).collect();
-            // YTD contribution inflows = positive lot buys into this group's
-            // accounts in the year, valued in USD at the lot's own FX. Lot
-            // acquisition date is the contribution date.
-            let row = sqlx::query(
-                r#"
-                SELECT COALESCE(SUM(
-                    l.qty * l.cost_per_unit
-                    / (CASE WHEN UPPER(l.currency) = 'MXN' AND l.usd_fx_rate > 0
-                            THEN l.usd_fx_rate ELSE 1 END)
-                ), 0) AS ytd_usd,
-                COUNT(*) AS n
-                FROM holding_lots l
-                JOIN accounts a ON a.id = l.account_id
-                WHERE l.user_id = $1
-                  AND l.qty > 0
-                  AND l.acquired_at >= $2 AND l.acquired_at <= $3
-                  AND LOWER(COALESCE(a.account_type, '')) = ANY($4)
-                "#,
-            )
-            .bind(user_id)
-            .bind(start_date)
-            .bind(end_date)
-            .bind(&types)
-            .fetch_one(db)
-            .await?;
-
-            let ytd_contributions_usd: Decimal = row.try_get("ytd_usd").unwrap_or_default();
-            let lot_count: i64 = row.try_get("n").unwrap_or(0);
             let (ly, limit) = contribution_limit(group, year);
             limit_year_used = ly;
+
+            // Detect EXTERNAL contributions (exclude reinvested income, internal
+            // moves, conversions) — the previous "sum all lot buys" double-counted
+            // reinvested dividends and missed cash-only accounts entirely.
+            let (ytd_contributions_usd, employer_usd, backdoor, match_rollover_caveat) =
+                match group {
+                    // HSA: contributions are labeled cash transactions, not tax-lots
+                    // (HealthEquity carries no lots). "Employee/Employer Contribution".
+                    // Employer + employee both count toward the same coverage limit.
+                    RetirementGroup::Hsa => {
+                        let r = sqlx::query(
+                            r#"
+                            SELECT
+                              COALESCE(SUM(CASE WHEN t.amount > 0
+                                   AND t.description ILIKE '%contribution%'
+                                   THEN t.amount ELSE 0 END), 0) AS total,
+                              COALESCE(SUM(CASE WHEN t.amount > 0
+                                   AND t.description ILIKE '%employer%contribution%'
+                                   THEN t.amount ELSE 0 END), 0) AS employer
+                            FROM transactions t
+                            JOIN accounts a ON a.id = t.account_id
+                            WHERE t.user_id = $1
+                              AND t.date >= $2 AND t.date <= $3
+                              AND LOWER(COALESCE(a.account_type, '')) = ANY($4)
+                            "#,
+                        )
+                        .bind(user_id).bind(start_date).bind(end_date).bind(&types)
+                        .fetch_one(db).await?;
+                        let total: Decimal = r.try_get("total").unwrap_or_default();
+                        let employer: Decimal = r.try_get("employer").unwrap_or_default();
+                        (total, employer, false, false)
+                    }
+                    // Brokerage 401k/IRA: contributions = lot buys NET of reinvested
+                    // dividends/interest (which buy lots but are not new money).
+                    RetirementGroup::Plan401k | RetirementGroup::Ira => {
+                        let r = sqlx::query(
+                            r#"
+                            WITH buys AS (
+                              SELECT COALESCE(SUM(l.qty * l.cost_per_unit
+                                   / (CASE WHEN UPPER(l.currency) = 'MXN' AND l.usd_fx_rate > 0
+                                           THEN l.usd_fx_rate ELSE 1 END)), 0) AS v
+                              FROM holding_lots l JOIN accounts a ON a.id = l.account_id
+                              WHERE l.user_id = $1 AND l.qty > 0
+                                AND l.acquired_at >= $2 AND l.acquired_at <= $3
+                                AND LOWER(COALESCE(a.account_type, '')) = ANY($4)
+                            ),
+                            income AS (
+                              SELECT COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END), 0) AS v
+                              FROM transactions t JOIN accounts a ON a.id = t.account_id
+                              WHERE t.user_id = $1 AND t.date >= $2 AND t.date <= $3
+                                AND LOWER(COALESCE(a.account_type, '')) = ANY($4)
+                                AND UPPER(COALESCE(t.category_detailed, ''))
+                                    IN ('INCOME_DIVIDENDS', 'INCOME_INTEREST_EARNED')
+                            )
+                            SELECT buys.v AS buys, income.v AS income FROM buys, income
+                            "#,
+                        )
+                        .bind(user_id).bind(start_date).bind(end_date).bind(&types)
+                        .fetch_one(db).await?;
+                        let buys: Decimal = r.try_get("buys").unwrap_or_default();
+                        let income: Decimal = r.try_get("income").unwrap_or_default();
+                        let net = (buys - income).max(dec!(0));
+                        // Backdoor Roth heuristic: a funded contribution while the
+                        // Traditional IRA itself received ~nothing → it was made
+                        // non-deductible and converted to Roth.
+                        let backdoor = if group == RetirementGroup::Ira && net > dec!(0) {
+                            let trad: Decimal = sqlx::query_scalar(
+                                r#"SELECT COALESCE(SUM(l.qty * l.cost_per_unit
+                                     / (CASE WHEN UPPER(l.currency) = 'MXN' AND l.usd_fx_rate > 0
+                                             THEN l.usd_fx_rate ELSE 1 END)), 0)
+                                   FROM holding_lots l JOIN accounts a ON a.id = l.account_id
+                                   WHERE l.user_id = $1 AND l.qty > 0
+                                     AND l.acquired_at >= $2 AND l.acquired_at <= $3
+                                     AND LOWER(COALESCE(a.account_type, '')) = 'ira'"#,
+                            )
+                            .bind(user_id).bind(start_date).bind(end_date)
+                            .fetch_one(db).await.unwrap_or(dec!(0));
+                            trad < dec!(100)
+                        } else {
+                            false
+                        };
+                        // 401k total bundles elective + employer + after-tax (no
+                        // transaction-level split available), so flag it as such.
+                        let caveat = group == RetirementGroup::Plan401k;
+                        (net, dec!(0), backdoor, caveat)
+                    }
+                };
+
             let remaining_room_usd = (limit.base - ytd_contributions_usd).max(dec!(0));
+            let remaining_overall_usd = (limit.overall - ytd_contributions_usd).max(dec!(0));
+            let mega_backdoor =
+                group == RetirementGroup::Plan401k && limit.overall > limit.base;
             // IRA & HSA: prior-year window — tax day (~Apr 15) of year+1.
             // 401k-family: calendar-year end (Dec 31 of the contribution year).
             let (deadline, prior_year_window) = match group {
-                RetirementGroup::Plan401k => {
-                    (format!("{}-12-31", year), false)
-                }
+                RetirementGroup::Plan401k => (format!("{}-12-31", year), false),
                 RetirementGroup::Ira | RetirementGroup::Hsa => {
                     (format!("{}-04-15", year + 1), true)
                 }
@@ -1681,11 +1750,15 @@ impl TaxService {
                 limit_base_usd: limit.base,
                 catch_up_usd: limit.catch_up,
                 limit_with_catch_up_usd: limit.base + limit.catch_up,
+                overall_limit_usd: limit.overall,
                 remaining_room_usd,
+                remaining_overall_usd,
+                mega_backdoor,
+                backdoor,
+                employer_usd,
                 deadline,
                 prior_year_window,
-                // Any contribution at all → can't rule out match/rollover.
-                match_rollover_caveat: lot_count > 0,
+                match_rollover_caveat,
             });
         }
 
@@ -1904,14 +1977,36 @@ pub struct ContributionGroup {
     pub group: String,
     /// The `accounts.account_type` values aggregated into this group.
     pub account_types: Vec<String>,
-    /// YTD contribution inflows (positive lot buys) into this group's
-    /// accounts, USD. ⚠ May include employer match / rollovers — see
-    /// `match_rollover_caveat`.
+    /// YTD external contributions into this group's accounts, USD. Detected as
+    /// labeled cash contributions (HSA) or as lot buys NET of reinvested
+    /// dividends/interest (brokerage 401k/IRA), so reinvested income is no
+    /// longer miscounted as a contribution.
     #[serde(with = "rust_decimal::serde::float")]
     pub ytd_contributions_usd: Decimal,
-    /// The base annual limit, USD (UNVERIFIED).
+    /// The base annual limit, USD (UNVERIFIED). 401k = §402(g) elective-deferral
+    /// limit; HSA = self-only coverage; IRA = shared limit.
     #[serde(with = "rust_decimal::serde::float")]
     pub limit_base_usd: Decimal,
+    /// The BINDING overall cap, USD (UNVERIFIED): 401k §415(c) total
+    /// (elective+employer+after-tax) — the gap above `limit_base_usd` is the
+    /// mega-backdoor headroom; HSA family-coverage limit; IRA = `limit_base_usd`.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub overall_limit_usd: Decimal,
+    /// `max(0, overall_limit_usd − ytd_contributions_usd)`, USD — room against
+    /// the binding cap (e.g. remaining mega-backdoor capacity for the 401k).
+    #[serde(with = "rust_decimal::serde::float")]
+    pub remaining_overall_usd: Decimal,
+    /// True for the 401k group when `overall_limit_usd > limit_base_usd`, i.e.
+    /// after-tax mega-backdoor Roth contributions are possible.
+    pub mega_backdoor: bool,
+    /// True for the IRA group when the contribution looks like a backdoor Roth
+    /// (a funded Roth alongside a zeroed Traditional IRA → non-deductible
+    /// Traditional contribution converted to Roth). Informational.
+    pub backdoor: bool,
+    /// HSA only: the employer portion of YTD contributions, USD (counts toward
+    /// the same family/self limit as employee contributions). 0 elsewhere.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub employer_usd: Decimal,
     /// The additional catch-up amount (age 50/55+), USD (UNVERIFIED). Reported
     /// separately because the app does not know the user's age.
     #[serde(with = "rust_decimal::serde::float")]

@@ -2388,3 +2388,53 @@ async fn retirement_contributions_sum_per_group_with_room_and_deadline() {
     assert_eq!(h["match_rollover_caveat"], serde_json::json!(false), "{h}");
     assert_eq!(h["prior_year_window"], serde_json::json!(true), "{h}");
 }
+
+/// Detection rewrite: HSA contributions come from labeled CASH transactions
+/// (HealthEquity has no tax-lots), reinvested dividends are NETTED out of
+/// brokerage 401k/IRA contributions, and the response carries the new
+/// §415(c)-overall / mega-backdoor / backdoor-Roth fields.
+#[tokio::test]
+#[serial_test::serial]
+async fn retirement_detects_hsa_cash_nets_dividends_and_flags_backdoor_megabackdoor() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+
+    // HSA: contributions are cash transactions, employer + employee both count.
+    let hsa = seed_typed_account(&pool, user_id, "hsa").await;
+    seed_categorized_tx_in(&pool, user_id, hsa, "2026-01-02", "Employee Contribution for 2026", "1000", "USD", None, None, None).await;
+    seed_categorized_tx_in(&pool, user_id, hsa, "2026-01-02", "Employer Contribution for 2026", "500", "USD", None, None, None).await;
+    // Noise that must NOT count as a contribution:
+    seed_categorized_tx_in(&pool, user_id, hsa, "2026-01-31", "Interest for 1/1-1/31", "5", "USD", Some("INCOME"), Some("INCOME_INTEREST_EARNED"), None).await;
+    seed_categorized_tx_in(&pool, user_id, hsa, "2026-01-02", "Investment: VFIFX", "-800", "USD", None, None, None).await;
+
+    // Roth IRA: a $2,000 contribution lot + a $50 reinvested dividend to net out.
+    // No Traditional IRA lots → looks like a backdoor Roth.
+    let roth = seed_typed_account(&pool, user_id, "roth").await;
+    seed_lot_buy(&pool, user_id, roth, "VXUS", "2026-03-01", "20", "100").await;
+    seed_categorized_tx_in(&pool, user_id, roth, "2026-03-15", "Dividend", "50", "USD", Some("INCOME"), Some("INCOME_DIVIDENDS"), None).await;
+
+    let res = app.clone().oneshot(req(Method::GET, "/api/tax/contributions?year=2026", None, Some(&token))).await.unwrap();
+    let status = res.status();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(status, StatusCode::OK, "contributions body: {body}");
+    let groups = body["groups"].as_array().expect("groups");
+    let by_key = |k: &str| groups.iter().find(|g| g["group"] == k).expect("group");
+
+    // HSA: $1,000 + $500 from cash; interest + the internal investment move excluded.
+    let h = by_key("hsa");
+    assert!((h["ytd_contributions_usd"].as_f64().unwrap() - 1500.0).abs() < 0.01, "hsa from cash: {h}");
+    assert!((h["employer_usd"].as_f64().unwrap() - 500.0).abs() < 0.01, "hsa employer split: {h}");
+    assert!(h["overall_limit_usd"].as_f64().unwrap() > h["limit_base_usd"].as_f64().unwrap(), "hsa family>self: {h}");
+
+    // IRA: $2,000 lot minus the $50 reinvested dividend = $1,950; flagged backdoor.
+    let i = by_key("ira");
+    assert!((i["ytd_contributions_usd"].as_f64().unwrap() - 1950.0).abs() < 0.01, "ira nets reinvested dividend: {i}");
+    assert_eq!(i["backdoor"], serde_json::json!(true), "backdoor (roth funded, traditional empty): {i}");
+
+    // 401k: §415(c) overall ($72k 2026) exceeds the elective base → mega-backdoor.
+    let k = by_key("401k");
+    assert!((k["overall_limit_usd"].as_f64().unwrap() - 72000.0).abs() < 0.01, "401k §415c overall: {k}");
+    assert_eq!(k["mega_backdoor"], serde_json::json!(true), "mega-backdoor flag: {k}");
+}
