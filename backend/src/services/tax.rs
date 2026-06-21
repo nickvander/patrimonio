@@ -1550,7 +1550,12 @@ impl TaxService {
               AND b.as_of_date >= $2 AND b.as_of_date <= $3
               AND (UPPER(COALESCE(i.country, '')) NOT IN ('US', '')
                    OR UPPER(COALESCE(a.currency, '')) = 'MXN')
-            GROUP BY a.id, account_name, i.name, country, currency
+            -- Group by the qualified source expressions, NOT the output aliases:
+            -- both balance_snapshots.currency and accounts.currency exist, so an
+            -- unqualified `currency` (or `country`) in GROUP BY is ambiguous and
+            -- makes Postgres reject the query (which 500'd the whole endpoint).
+            GROUP BY a.id, COALESCE(NULLIF(a.nickname, ''), a.name), i.name,
+                     UPPER(COALESCE(i.country, '')), UPPER(COALESCE(a.currency, ''))
             ORDER BY ytd_max_usd DESC
             "#,
         )
