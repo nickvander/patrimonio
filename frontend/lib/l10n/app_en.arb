@@ -1074,6 +1074,21 @@
       "limit": { "type": "String" }
     }
   },
+  "taxBackdoorRothBadge": "Backdoor Roth",
+  "taxMegaBackdoorNote": "§415(c) total (elective + employer + after-tax); elective limit {elective}. {room} mega-backdoor Roth room left.",
+  "@taxMegaBackdoorNote": {
+    "placeholders": {
+      "elective": { "type": "String" },
+      "room": { "type": "String" }
+    }
+  },
+  "taxHsaFamilyCoverage": "Family coverage",
+  "taxHsaEmployerNote": "includes {amount} employer",
+  "@taxHsaEmployerNote": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
   "taxRemainingRoom": "Room left: {amount}",
   "@taxRemainingRoom": {
     "placeholders": {

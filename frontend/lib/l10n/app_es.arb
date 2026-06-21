@@ -959,6 +959,21 @@
       "limit": { "type": "String" }
     }
   },
+  "taxBackdoorRothBadge": "Roth puerta trasera",
+  "taxMegaBackdoorNote": "Total §415(c) (electivo + empleador + después de impuestos); límite electivo {elective}. Queda {room} de espacio mega-backdoor Roth.",
+  "@taxMegaBackdoorNote": {
+    "placeholders": {
+      "elective": { "type": "String" },
+      "room": { "type": "String" }
+    }
+  },
+  "taxHsaFamilyCoverage": "Cobertura familiar",
+  "taxHsaEmployerNote": "incluye {amount} del empleador",
+  "@taxHsaEmployerNote": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
   "taxRemainingRoom": "Espacio restante: {amount}",
   "@taxRemainingRoom": {
     "placeholders": {

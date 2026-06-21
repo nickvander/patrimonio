@@ -5256,6 +5256,30 @@ abstract class AppLocalizations {
   /// **'{ytd} of {limit}'**
   String taxContributedOfLimit(String ytd, String limit);
 
+  /// No description provided for @taxBackdoorRothBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Backdoor Roth'**
+  String get taxBackdoorRothBadge;
+
+  /// No description provided for @taxMegaBackdoorNote.
+  ///
+  /// In en, this message translates to:
+  /// **'§415(c) total (elective + employer + after-tax); elective limit {elective}. {room} mega-backdoor Roth room left.'**
+  String taxMegaBackdoorNote(String elective, String room);
+
+  /// No description provided for @taxHsaFamilyCoverage.
+  ///
+  /// In en, this message translates to:
+  /// **'Family coverage'**
+  String get taxHsaFamilyCoverage;
+
+  /// No description provided for @taxHsaEmployerNote.
+  ///
+  /// In en, this message translates to:
+  /// **'includes {amount} employer'**
+  String taxHsaEmployerNote(String amount);
+
   /// No description provided for @taxRemainingRoom.
   ///
   /// In en, this message translates to:

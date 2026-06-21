@@ -3175,6 +3175,22 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get taxBackdoorRothBadge => 'Roth puerta trasera';
+
+  @override
+  String taxMegaBackdoorNote(String elective, String room) {
+    return 'Total §415(c) (electivo + empleador + después de impuestos); límite electivo $elective. Queda $room de espacio mega-backdoor Roth.';
+  }
+
+  @override
+  String get taxHsaFamilyCoverage => 'Cobertura familiar';
+
+  @override
+  String taxHsaEmployerNote(String amount) {
+    return 'incluye $amount del empleador';
+  }
+
+  @override
   String taxRemainingRoom(String amount) {
     return 'Espacio restante: $amount';
   }
