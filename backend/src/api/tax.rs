@@ -272,7 +272,9 @@ async fn export_tax_csv(
     // Records vary in width (section headers vs data rows), so the writer must
     // run in flexible mode — the default errors on inconsistent field counts.
     let mut wtr = WriterBuilder::new().flexible(true).from_writer(vec![]);
-    let money = |d: rust_decimal::Decimal| d.round_dp(2).to_string();
+    // Always 2 decimals: `round_dp(2).to_string()` left zero/whole values as
+    // "0" while non-zero showed "0.00", giving an inconsistent CSV column.
+    let money = |d: rust_decimal::Decimal| format!("{:.2}", d);
 
     let _ = wtr.write_record(["Patrimonio tax export", &year.to_string()]);
     let _ = wtr.write_record(["Filing status", &status]);

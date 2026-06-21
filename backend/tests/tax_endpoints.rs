@@ -744,8 +744,10 @@ async fn tax_csv_separates_tax_advantaged_section_from_8949() {
     // Summary block: taxable LT only + the labeled excluded figure.
     assert!(csv.contains("Long-term gains (USD),3000.00"), "csv:\n{csv}");
     assert!(csv.contains("Total capital gains (USD),3000.00"), "csv:\n{csv}");
+    // The label contains a comma, so the CSV writer (correctly, per RFC 4180)
+    // quotes the field.
     assert!(
-        csv.contains("Tax-advantaged gains, excluded (USD),7000.00"),
+        csv.contains("\"Tax-advantaged gains, excluded (USD)\",7000.00"),
         "csv:\n{csv}"
     );
     assert!(csv.contains("Precise lot disposals"), "basis note kept");
@@ -2058,8 +2060,9 @@ async fn tax_wash_sale_excludes_disallowed_loss_from_liability() {
     let csv = String::from_utf8(bytes.to_vec()).unwrap();
     assert!(csv.contains("Wash sale"), "wash-sale column header: \n{csv}");
     assert!(csv.contains("Safe to rebuy after"), "safe-after column header: \n{csv}");
+    // Comma in the label → the CSV writer quotes the field (RFC 4180).
     assert!(
-        csv.contains("Wash-sale disallowed loss (USD, excluded from liability),-4000.00"),
+        csv.contains("\"Wash-sale disallowed loss (USD, excluded from liability)\",-4000.00"),
         "summary wash line: \n{csv}"
     );
 }
