@@ -4814,4 +4814,29 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lwSyncNoProblems => 'Everything is up to date';
+
+  @override
+  String pfReturnCoverage(String covered, String total) {
+    return 'on $covered of $total with known cost basis';
+  }
+
+  @override
+  String get taxFbarNoData =>
+      'No foreign-account balance history found for this year.';
+
+  @override
+  String projNominalHorizonCaption(int years) {
+    return 'in $years-yr dollars';
+  }
+
+  @override
+  String get statInvestmentsCashSleeveNote =>
+      'Includes uninvested cash inside brokerage accounts, so this differs from the Portfolio total (sum of holdings).';
+
+  @override
+  String get dashFxStaleLabel => 'approx.';
+
+  @override
+  String get dashFxStaleTooltip =>
+      'Approximate — the exchange rate is stale (missing or over 7 days old), so this conversion may be off.';
 }

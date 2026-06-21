@@ -4855,4 +4855,29 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get lwSyncNoProblems => 'Todo está al día';
+
+  @override
+  String pfReturnCoverage(String covered, String total) {
+    return 'sobre $covered de $total con costo base conocido';
+  }
+
+  @override
+  String get taxFbarNoData =>
+      'No se encontró historial de saldos de cuentas en el extranjero para este año.';
+
+  @override
+  String projNominalHorizonCaption(int years) {
+    return 'en dólares de $years años';
+  }
+
+  @override
+  String get statInvestmentsCashSleeveNote =>
+      'Incluye el efectivo no invertido dentro de las cuentas de corretaje, por lo que difiere del total del Portafolio (suma de las posiciones).';
+
+  @override
+  String get dashFxStaleLabel => 'aprox.';
+
+  @override
+  String get dashFxStaleTooltip =>
+      'Aproximado — el tipo de cambio está desactualizado (ausente o con más de 7 días), por lo que esta conversión puede no ser exacta.';
 }

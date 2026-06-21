@@ -1790,5 +1790,27 @@
   "lwSyncBadgeReconnect": "Reconnect",
   "lwSyncBadgeStale": "Stale",
   "lwSyncFilterProblems": "Needs attention",
-  "lwSyncNoProblems": "Everything is up to date"
+  "lwSyncNoProblems": "Everything is up to date",
+  "pfReturnCoverage": "on {covered} of {total} with known cost basis",
+  "@pfReturnCoverage": {
+    "description": "Coverage caption shown beside the portfolio hero return %, clarifying that the % is a return on cost basis and only covers the subset of holdings that report a basis. {covered} is the compact display-currency value of basis-known holdings (e.g. $160.7K), {total} is the compact full portfolio value (e.g. $1.53M).",
+    "placeholders": {
+      "covered": { "type": "String", "example": "$160.7K" },
+      "total": { "type": "String", "example": "$1.53M" }
+    }
+  },
+  "taxFbarNoData": "No foreign-account balance history found for this year.",
+  "projNominalHorizonCaption": "in {years}-yr dollars",
+  "@projNominalHorizonCaption": {
+    "description": "Subtle caption next to the nominal-mode Full-FIRE target figure, clarifying it is expressed in the retirement-year (years-to-retirement) dollars rather than the 'years away' (years-to-FI) horizon.",
+    "placeholders": {
+      "years": {
+        "type": "int",
+        "example": "20"
+      }
+    }
+  },
+  "statInvestmentsCashSleeveNote": "Includes uninvested cash inside brokerage accounts, so this differs from the Portfolio total (sum of holdings).",
+  "dashFxStaleLabel": "approx.",
+  "dashFxStaleTooltip": "Approximate — the exchange rate is stale (missing or over 7 days old), so this conversion may be off."
 }

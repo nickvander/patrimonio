@@ -7821,6 +7821,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Everything is up to date'**
   String get lwSyncNoProblems;
+
+  /// Coverage caption shown beside the portfolio hero return %, clarifying that the % is a return on cost basis and only covers the subset of holdings that report a basis. {covered} is the compact display-currency value of basis-known holdings (e.g. $160.7K), {total} is the compact full portfolio value (e.g. $1.53M).
+  ///
+  /// In en, this message translates to:
+  /// **'on {covered} of {total} with known cost basis'**
+  String pfReturnCoverage(String covered, String total);
+
+  /// No description provided for @taxFbarNoData.
+  ///
+  /// In en, this message translates to:
+  /// **'No foreign-account balance history found for this year.'**
+  String get taxFbarNoData;
+
+  /// Subtle caption next to the nominal-mode Full-FIRE target figure, clarifying it is expressed in the retirement-year (years-to-retirement) dollars rather than the 'years away' (years-to-FI) horizon.
+  ///
+  /// In en, this message translates to:
+  /// **'in {years}-yr dollars'**
+  String projNominalHorizonCaption(int years);
+
+  /// No description provided for @statInvestmentsCashSleeveNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Includes uninvested cash inside brokerage accounts, so this differs from the Portfolio total (sum of holdings).'**
+  String get statInvestmentsCashSleeveNote;
+
+  /// No description provided for @dashFxStaleLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'approx.'**
+  String get dashFxStaleLabel;
+
+  /// No description provided for @dashFxStaleTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Approximate — the exchange rate is stale (missing or over 7 days old), so this conversion may be off.'**
+  String get dashFxStaleTooltip;
 }
 
 class _AppLocalizationsDelegate
