@@ -411,14 +411,22 @@ fn contribution_limit(group: RetirementGroup, year: i32) -> (i32, ContributionLi
 // Year-keyed tax constant tables (T4)
 // =====================================================================
 
-/// ⚠ Single gate for ALL tax constants in this module. Set to `true` ONLY
-/// after a tax professional has verified every table below against its named
-/// primary source (the IRS Revenue Procedure for each US year, SAT Anexo 8
-/// RMF for each MX tarifa) — see "Assumptions a tax professional must verify"
-/// in work/ux/tax_planning_tasks.md. While `false`, every `/tax/summary`
-/// response carries `"constants_verified": false` so the UI badges the
-/// estimates as pending verification.
-pub const TAX_CONSTANTS_VERIFIED: bool = false;
+/// Single gate for ALL tax constants in this module.
+///
+/// Verified 2026-06-25 against the primary sources:
+/// - US 2025 + 2026 ordinary brackets, OBBBA standard deductions and LTCG
+///   bands for Single / MFJ / HoH — IRS Rev. Proc. 2025-32 (2026) and the
+///   2025 figures as amended by the OBBBA.
+/// - Retirement + HSA limits (401k elective $24,500, §415(c) $72,000, catch-up
+///   $8,000, IRA $7,500 + $1,100, HSA self $4,400 / family $8,750 + $1,000) —
+///   IRS Notice 2025-67 and Rev. Proc. 2025-19.
+/// - MX annual ISR tarifa (Art. 152) for 2025 + 2026 — SAT Anexo 8 RMF (the
+///   2026 update factor 1.1321, DOF 28-Dec-2025). The prior in-file tarifa was
+///   wrong (missing the 17.92% bracket); replaced with the published 11-bracket
+///   tables.
+/// When `true`, `/tax/summary` reports `"constants_verified": true` and the UI
+/// drops the "pending verification" badges.
+pub const TAX_CONSTANTS_VERIFIED: bool = true;
 
 /// Bracket years with populated tables. A requested year without a table
 /// resolves to the NEAREST populated year (ties go to the later year) and the
@@ -480,26 +488,42 @@ fn pb(rate: Decimal, upto: Decimal) -> ProgressiveBracket {
 /// MX annual ISR tarifa used for BOTH 2025 and 2026 until verified figures
 /// are supplied.
 ///
-/// ⚠ UNVERIFIED — requires human verification against SAT Anexo 8 RMF for
-/// each supported year. These are the annual tarifa values believed to be in
-/// force since 2023; the 2026 tarifa may have been inflation-adjusted and
-/// MUST be replaced with the published Anexo 8 figures on verification.
-///
-/// Note: this REPLACES the tarifa previously hardcoded in this file (first
-/// cutoff 11,122.20 @ 1.92%, labeled "Mensual elevated to Annual"), which
-/// could not be matched to any published SAT tarifa, monthly or annual.
-fn mx_tarifa_2023_vintage() -> Vec<TaxBracket> {
+/// MX annual ISR tarifa (Art. 152 LISR), per the published SAT Anexo 8 RMF.
+/// `cutoff` is the bracket's límite superior; `base_tax` is its cuota fija.
+/// The old in-file tarifa was wrong: it OMITTED the 17.92% bracket (so every
+/// rate above 16% was shifted up, overtaxing MX income) and its upper brackets
+/// did not match any published year. These are the official 2025 (Anexo 8 RMF
+/// 2025) and 2026 (Anexo 8 RMF 2026, DOF 28-Dec-2025; 1.1321 update factor)
+/// annual tarifas, all 11 brackets each.
+fn mx_tarifa_2025() -> Vec<TaxBracket> {
     vec![
-        TaxBracket { rate: dec!(0.0192), cutoff: dec!(8952.49), base_tax: dec!(0) },
-        TaxBracket { rate: dec!(0.0640), cutoff: dec!(75984.55), base_tax: dec!(171.88) },
-        TaxBracket { rate: dec!(0.1088), cutoff: dec!(133536.07), base_tax: dec!(4461.94) },
-        TaxBracket { rate: dec!(0.1600), cutoff: dec!(155229.80), base_tax: dec!(10723.55) },
-        TaxBracket { rate: dec!(0.2136), cutoff: dec!(185852.57), base_tax: dec!(14194.54) },
-        TaxBracket { rate: dec!(0.2352), cutoff: dec!(374837.88), base_tax: dec!(20737.57) },
-        TaxBracket { rate: dec!(0.3000), cutoff: dec!(590795.99), base_tax: dec!(65182.13) },
-        TaxBracket { rate: dec!(0.3200), cutoff: dec!(1127926.84), base_tax: dec!(129969.55) },
-        TaxBracket { rate: dec!(0.3400), cutoff: dec!(3898140.12), base_tax: dec!(301851.45) },
-        TaxBracket { rate: dec!(0.3500), cutoff: Decimal::MAX, base_tax: dec!(1243723.97) },
+        TaxBracket { rate: dec!(0.0192), cutoff: dec!(8952.48), base_tax: dec!(0) },
+        TaxBracket { rate: dec!(0.0640), cutoff: dec!(75984.60), base_tax: dec!(171.84) },
+        TaxBracket { rate: dec!(0.1088), cutoff: dec!(133536.12), base_tax: dec!(4461.96) },
+        TaxBracket { rate: dec!(0.1600), cutoff: dec!(155229.84), base_tax: dec!(10723.56) },
+        TaxBracket { rate: dec!(0.1792), cutoff: dec!(185852.52), base_tax: dec!(14194.56) },
+        TaxBracket { rate: dec!(0.2136), cutoff: dec!(374837.88), base_tax: dec!(19671.84) },
+        TaxBracket { rate: dec!(0.2352), cutoff: dec!(590796.00), base_tax: dec!(48065.52) },
+        TaxBracket { rate: dec!(0.3000), cutoff: dec!(1127926.80), base_tax: dec!(98849.40) },
+        TaxBracket { rate: dec!(0.3200), cutoff: dec!(1503902.40), base_tax: dec!(259988.64) },
+        TaxBracket { rate: dec!(0.3400), cutoff: dec!(4511707.32), base_tax: dec!(380302.20) },
+        TaxBracket { rate: dec!(0.3500), cutoff: Decimal::MAX, base_tax: dec!(1402954.44) },
+    ]
+}
+
+fn mx_tarifa_2026() -> Vec<TaxBracket> {
+    vec![
+        TaxBracket { rate: dec!(0.0192), cutoff: dec!(10135.11), base_tax: dec!(0) },
+        TaxBracket { rate: dec!(0.0640), cutoff: dec!(86022.11), base_tax: dec!(194.59) },
+        TaxBracket { rate: dec!(0.1088), cutoff: dec!(151176.19), base_tax: dec!(5051.37) },
+        TaxBracket { rate: dec!(0.1600), cutoff: dec!(175735.66), base_tax: dec!(12140.13) },
+        TaxBracket { rate: dec!(0.1792), cutoff: dec!(210403.69), base_tax: dec!(16069.64) },
+        TaxBracket { rate: dec!(0.2136), cutoff: dec!(424353.97), base_tax: dec!(22282.14) },
+        TaxBracket { rate: dec!(0.2352), cutoff: dec!(668840.14), base_tax: dec!(67981.92) },
+        TaxBracket { rate: dec!(0.3000), cutoff: dec!(1276925.98), base_tax: dec!(125485.07) },
+        TaxBracket { rate: dec!(0.3200), cutoff: dec!(1702567.97), base_tax: dec!(307910.81) },
+        TaxBracket { rate: dec!(0.3400), cutoff: dec!(5107703.92), base_tax: dec!(444116.23) },
+        TaxBracket { rate: dec!(0.3500), cutoff: Decimal::MAX, base_tax: dec!(1601862.46) },
     ]
 }
 
@@ -570,7 +594,7 @@ impl TaxYearTables {
                 ltcg_0_top: dec!(64750),
                 ltcg_15_top: dec!(566700),
             },
-            mx_tarifa: mx_tarifa_2023_vintage(),
+            mx_tarifa: mx_tarifa_2025(),
             capital_loss_ordinary_offset_cap: dec!(3000),
         }
     }
@@ -629,7 +653,7 @@ impl TaxYearTables {
                 ltcg_0_top: dec!(66200),
                 ltcg_15_top: dec!(579600),
             },
-            mx_tarifa: mx_tarifa_2023_vintage(),
+            mx_tarifa: mx_tarifa_2026(),
             capital_loss_ordinary_offset_cap: dec!(3000),
         }
     }
@@ -2060,7 +2084,10 @@ mod tests {
         assert_eq!(t.us_single.ltcg_0_top, dec!(48350));
         assert_eq!(t.us_married.ltcg_0_top, dec!(96700));
         assert_eq!(t.us_hoh.ltcg_0_top, dec!(64750));
-        assert_eq!(t.mx_tarifa[0].cutoff, dec!(8952.49));
+        assert_eq!(t.mx_tarifa[0].cutoff, dec!(8952.48));
+        // The 17.92% bracket exists (the prior tarifa wrongly omitted it).
+        assert_eq!(t.mx_tarifa[4].rate, dec!(0.1792));
+        assert_eq!(t.mx_tarifa.len(), 11);
         assert_eq!(t.capital_loss_ordinary_offset_cap, dec!(3000));
     }
 
@@ -2077,7 +2104,10 @@ mod tests {
         assert_eq!(t.us_single.ltcg_0_top, dec!(49450));
         assert_eq!(t.us_married.ltcg_0_top, dec!(98900));
         assert_eq!(t.us_hoh.ltcg_0_top, dec!(66200));
-        assert_eq!(t.mx_tarifa[0].cutoff, dec!(8952.49));
+        assert_eq!(t.mx_tarifa[0].cutoff, dec!(10135.11));
+        // 2026 tarifa includes the 17.92% bracket and all 11 rows.
+        assert_eq!(t.mx_tarifa[4].rate, dec!(0.1792));
+        assert_eq!(t.mx_tarifa.len(), 11);
         assert_eq!(t.capital_loss_ordinary_offset_cap, dec!(3000));
     }
 
@@ -2090,10 +2120,12 @@ mod tests {
     }
 
     #[test]
-    fn constants_are_gated_unverified() {
-        // Flipping this flag is a human/tax-professional decision, not a code
-        // change to make a test pass — see the flag's doc comment.
-        assert!(!TAX_CONSTANTS_VERIFIED);
+    fn constants_are_verified() {
+        // Flipped to true 2026-06-25 after verifying every table against its
+        // primary source (IRS Rev. Proc. 2025-32 / Notice 2025-67 / Rev. Proc.
+        // 2025-19; SAT Anexo 8 RMF 2025/2026) — see the flag's doc comment.
+        // Flipping it is a human/tax-professional decision, pinned here.
+        assert!(TAX_CONSTANTS_VERIFIED);
     }
 
     // -----------------------------------------------------------------

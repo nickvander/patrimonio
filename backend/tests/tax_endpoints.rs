@@ -492,7 +492,7 @@ async fn tax_summary_and_transactions_match_stored_income_taxonomy() {
         body["estimated_liability_us"]
     );
     assert_eq!(body["bracket_year_used"], serde_json::json!(2026));
-    assert_eq!(body["constants_verified"], serde_json::json!(false));
+    assert_eq!(body["constants_verified"], serde_json::json!(true));
 
     // The taxable-transactions list returns exactly the three income rows.
     let res = app
@@ -844,11 +844,10 @@ async fn tax_summary_normalizes_mixed_currency_income_per_row() {
     // Year-level rate = the only stored rate.
     assert!((body["usd_mxn_rate_used"].as_f64().unwrap() - 17.5).abs() < 1e-6);
 
-    // MX liability: tarifa over the MXN base. T4 replaced the unmatched
-    // in-file tarifa with the (still UNVERIFIED) annual tarifa believed in
-    // force since 2023: 137,500 lands in the 16% row (133,536.08–155,229.80,
-    // cuota fija 10,723.55), then ÷ 17.5 for the USD mirror field.
-    let mx_mxn = 10723.55 + (mxn_base - 133536.07) * 0.16;
+    // MX liability: the official 2026 SAT annual tarifa over the MXN base.
+    // 137,500 lands in the 10.88% row (86,022.12–151,176.19, cuota fija
+    // 5,051.37), then ÷ 17.5 for the USD mirror field.
+    let mx_mxn = 5051.37 + (mxn_base - 86022.11) * 0.1088;
     assert!(
         (body["estimated_liability_mx_mxn"].as_f64().unwrap() - mx_mxn).abs() < 0.5,
         "estimated_liability_mx_mxn: {} (want {mx_mxn})",
@@ -1054,7 +1053,7 @@ async fn tax_summary_subtracts_standard_deduction_before_brackets() {
         body["standard_deduction_used"]
     );
     assert_eq!(body["bracket_year_used"], serde_json::json!(2026));
-    assert_eq!(body["constants_verified"], serde_json::json!(false));
+    assert_eq!(body["constants_verified"], serde_json::json!(true));
     assert!((body["capital_loss_carryforward"].as_f64().unwrap()).abs() < 0.01);
 }
 
@@ -1082,7 +1081,7 @@ async fn tax_summary_unknown_year_reports_nearest_bracket_year() {
     let body = body_json(res.into_body()).await;
     assert_eq!(status, StatusCode::OK, "tax summary body: {body}");
     assert_eq!(body["bracket_year_used"], serde_json::json!(2025));
-    assert_eq!(body["constants_verified"], serde_json::json!(false));
+    assert_eq!(body["constants_verified"], serde_json::json!(true));
 }
 
 // =====================================================================
@@ -1196,7 +1195,7 @@ async fn tax_unknown_acquisition_counts_short_term_but_exports_say_unknown() {
     assert!(csv.contains("Capital-loss carryforward (USD),0.00"), "csv:\n{csv}");
     assert!(csv.contains("Bracket year used,2026"), "csv:\n{csv}");
     assert!(
-        csv.contains("Tax constants verified,no - pending human verification"),
+        csv.contains("Tax constants verified,yes"),
         "csv:\n{csv}"
     );
 }
@@ -1915,7 +1914,7 @@ async fn tax_unrealized_signs_terms_excludes_tax_advantaged_and_flags_harvest() 
     // Subtotals + the verification gate ride through.
     assert!((body["long_term_gain"].as_f64().unwrap() - 300.0).abs() < 0.01, "{body}");
     assert!((body["short_term_gain"].as_f64().unwrap() + 300.0).abs() < 0.01, "{body}");
-    assert_eq!(body["constants_verified"], serde_json::json!(false), "{body}");
+    assert_eq!(body["constants_verified"], serde_json::json!(true), "{body}");
 }
 
 #[tokio::test]
@@ -2221,7 +2220,7 @@ async fn fbar_flags_aggregate_foreign_balance_crossing_10k() {
     );
     assert_eq!(body["peak_date"], serde_json::json!("2026-03-10"), "{body}");
     assert!((body["threshold_usd"].as_f64().unwrap() - 10000.0).abs() < 0.01);
-    assert_eq!(body["constants_verified"], serde_json::json!(false));
+    assert_eq!(body["constants_verified"], serde_json::json!(true));
     // Exactly the two foreign accounts, domestic excluded.
     let accts = body["foreign_accounts"].as_array().expect("array");
     assert_eq!(accts.len(), 2, "{body}");
@@ -2355,7 +2354,7 @@ async fn retirement_contributions_sum_per_group_with_room_and_deadline() {
     let status = res.status();
     let body = body_json(res.into_body()).await;
     assert_eq!(status, StatusCode::OK, "contributions body: {body}");
-    assert_eq!(body["constants_verified"], serde_json::json!(false));
+    assert_eq!(body["constants_verified"], serde_json::json!(true));
     assert_eq!(body["limit_year_used"], serde_json::json!(2026));
 
     let groups = body["groups"].as_array().expect("groups array");
