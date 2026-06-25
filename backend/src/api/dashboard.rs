@@ -1381,6 +1381,9 @@ struct SpendingByCategoryResponse {
     /// Chronological YYYY-MM buckets in the window (only months with data).
     months: Vec<String>,
     categories: Vec<CategorySpending>,
+    /// True when the latest USD/MXN rate is missing or stale (>7d), so the
+    /// MXN amounts here were normalized at an approximate fallback rate.
+    fx_stale: bool,
 }
 
 /// Per-category spending over the trailing N months — the "where's my money
@@ -1521,6 +1524,7 @@ async fn spending_by_category(
     Json(SpendingByCategoryResponse {
         months: months_vec,
         categories,
+        fx_stale: latest_usd_mxn_rate(&state.db).await.stale,
     })
 }
 
@@ -1561,6 +1565,9 @@ struct SpendingInsightsResponse {
     recent_month: String,
     lookback: i64,
     categories: Vec<CategoryInsight>,
+    /// True when the latest USD/MXN rate is missing or stale (>7d) — MXN spend
+    /// was normalized at an approximate fallback rate.
+    fx_stale: bool,
 }
 
 /// Per-category month-over-month-vs-trailing-average spend deltas. Powers the
@@ -1712,6 +1719,7 @@ async fn spending_insights(
         recent_month,
         lookback,
         categories,
+        fx_stale: latest_usd_mxn_rate(&state.db).await.stale,
     })
 }
 
