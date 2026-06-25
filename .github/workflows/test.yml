@@ -1,0 +1,77 @@
+name: Tests
+
+# Runs the backend integration suite (against a real Postgres) and the Flutter
+# analyze/test on every push to main and every PR. This exists because the
+# integration suite was silently SKIPPING for a long time — scripts/test.sh
+# defaulted to the pre-rotation Postgres password, the harness returned None on
+# the failed connection, and every DB-backed test counted as a vacuous pass,
+# shipping real SQL bugs (the FBAR + statement-continuity 500s) undetected.
+# CI gives the suite a Postgres it can actually reach, and tests/common/mod.rs
+# now PANICS on a configured-but-unreachable DB, so a broken setup fails loudly
+# here instead of skipping.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend (cargo test + integration suite)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: patrimonio
+          POSTGRES_PASSWORD: patrimonio
+          POSTGRES_DB: patrimonio_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U patrimonio"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # The integration harness reads this; an unreachable/misconfigured DB now
+      # panics (it no longer silently skips), so a green run means the suite
+      # genuinely ran.
+      PATRIMONIO_TEST_DATABASE_URL: postgres://patrimonio:patrimonio@localhost:5432/patrimonio_test
+      SQLX_OFFLINE: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+      - name: Install system deps
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq pkg-config libssl-dev
+      - name: cargo test (unit + integration; serial via the shared test DB)
+        working-directory: backend
+        run: cargo test -- --test-threads=1
+
+  frontend:
+    name: Frontend (analyze + test)
+    runs-on: ubuntu-latest
+    container: ghcr.io/cirruslabs/flutter:stable
+    steps:
+      - uses: actions/checkout@v4
+      - name: flutter pub get
+        working-directory: frontend
+        run: flutter pub get
+      - name: flutter analyze (errors + warnings fatal; infos are not)
+        working-directory: frontend
+        run: flutter analyze --no-fatal-infos
+      - name: flutter test
+        working-directory: frontend
+        run: flutter test
