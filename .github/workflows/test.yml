@@ -72,6 +72,6 @@ jobs:
       - name: flutter analyze (errors + warnings fatal; infos are not)
         working-directory: frontend
         run: flutter analyze --no-fatal-infos
-      - name: flutter test
+      - name: flutter test (excluding local-only golden screenshots)
         working-directory: frontend
-        run: flutter test
+        run: flutter test --exclude-tags golden
