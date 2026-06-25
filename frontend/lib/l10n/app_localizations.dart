@@ -5280,6 +5280,30 @@ abstract class AppLocalizations {
   /// **'includes {amount} employer'**
   String taxHsaEmployerNote(String amount);
 
+  /// No description provided for @tax401kElectiveSet.
+  ///
+  /// In en, this message translates to:
+  /// **'+ Set your elective deferral to split this'**
+  String get tax401kElectiveSet;
+
+  /// No description provided for @tax401kElectiveSplit.
+  ///
+  /// In en, this message translates to:
+  /// **'Elective {elective} of {limit} · employer + after-tax {rest}'**
+  String tax401kElectiveSplit(String elective, String limit, String rest);
+
+  /// No description provided for @tax401kElectiveDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Annual 401k elective deferral'**
+  String get tax401kElectiveDialogTitle;
+
+  /// No description provided for @tax401kElectiveDialogHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Your employee contribution (pre-tax + Roth); limit {limit}'**
+  String tax401kElectiveDialogHint(String limit);
+
   /// No description provided for @taxRemainingRoom.
   ///
   /// In en, this message translates to:

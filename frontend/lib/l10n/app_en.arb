@@ -1089,6 +1089,22 @@
       "amount": { "type": "String" }
     }
   },
+  "tax401kElectiveSet": "+ Set your elective deferral to split this",
+  "tax401kElectiveSplit": "Elective {elective} of {limit} · employer + after-tax {rest}",
+  "@tax401kElectiveSplit": {
+    "placeholders": {
+      "elective": { "type": "String" },
+      "limit": { "type": "String" },
+      "rest": { "type": "String" }
+    }
+  },
+  "tax401kElectiveDialogTitle": "Annual 401k elective deferral",
+  "tax401kElectiveDialogHint": "Your employee contribution (pre-tax + Roth); limit {limit}",
+  "@tax401kElectiveDialogHint": {
+    "placeholders": {
+      "limit": { "type": "String" }
+    }
+  },
   "taxRemainingRoom": "Room left: {amount}",
   "@taxRemainingRoom": {
     "placeholders": {

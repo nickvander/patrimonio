@@ -3160,6 +3160,22 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get tax401kElectiveSet => '+ Set your elective deferral to split this';
+
+  @override
+  String tax401kElectiveSplit(String elective, String limit, String rest) {
+    return 'Elective $elective of $limit · employer + after-tax $rest';
+  }
+
+  @override
+  String get tax401kElectiveDialogTitle => 'Annual 401k elective deferral';
+
+  @override
+  String tax401kElectiveDialogHint(String limit) {
+    return 'Your employee contribution (pre-tax + Roth); limit $limit';
+  }
+
+  @override
   String taxRemainingRoom(String amount) {
     return 'Room left: $amount';
   }

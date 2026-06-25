@@ -974,6 +974,22 @@
       "amount": { "type": "String" }
     }
   },
+  "tax401kElectiveSet": "+ Indica tu aportación electiva para desglosarlo",
+  "tax401kElectiveSplit": "Electiva {elective} de {limit} · empleador + después de impuestos {rest}",
+  "@tax401kElectiveSplit": {
+    "placeholders": {
+      "elective": { "type": "String" },
+      "limit": { "type": "String" },
+      "rest": { "type": "String" }
+    }
+  },
+  "tax401kElectiveDialogTitle": "Aportación electiva anual al 401k",
+  "tax401kElectiveDialogHint": "Tu aportación como empleado (pre-impuestos + Roth); límite {limit}",
+  "@tax401kElectiveDialogHint": {
+    "placeholders": {
+      "limit": { "type": "String" }
+    }
+  },
   "taxRemainingRoom": "Espacio restante: {amount}",
   "@taxRemainingRoom": {
     "placeholders": {

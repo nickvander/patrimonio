@@ -3191,6 +3191,23 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get tax401kElectiveSet =>
+      '+ Indica tu aportación electiva para desglosarlo';
+
+  @override
+  String tax401kElectiveSplit(String elective, String limit, String rest) {
+    return 'Electiva $elective de $limit · empleador + después de impuestos $rest';
+  }
+
+  @override
+  String get tax401kElectiveDialogTitle => 'Aportación electiva anual al 401k';
+
+  @override
+  String tax401kElectiveDialogHint(String limit) {
+    return 'Tu aportación como empleado (pre-impuestos + Roth); límite $limit';
+  }
+
+  @override
   String taxRemainingRoom(String amount) {
     return 'Espacio restante: $amount';
   }
