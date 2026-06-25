@@ -3217,8 +3217,13 @@ class _TransactionsTabState extends State<TransactionsTab> {
                       height: isNarrow
                           ? (sheetWanted < sheetMax ? sheetWanted : sheetMax)
                           : screen.height,
+                      // The surface color lives on a Material (not the
+                      // BoxDecoration) so the category-editor autocomplete's
+                      // ListTiles paint their background/ink on a Material
+                      // ancestor; newer Flutter asserts when a colored
+                      // DecoratedBox sits between a ListTile and its Material.
+                      clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
-                        color: Theme.of(ctx).colorScheme.surface,
                         borderRadius: isNarrow
                             ? const BorderRadius.vertical(
                                 top: Radius.circular(20))
@@ -3232,8 +3237,11 @@ class _TransactionsTabState extends State<TransactionsTab> {
                           ),
                         ],
                       ),
-                      child: _TransactionDetailPanel(
-                          state: this, tx: tx, isNarrow: isNarrow),
+                      child: Material(
+                        color: Theme.of(ctx).colorScheme.surface,
+                        child: _TransactionDetailPanel(
+                            state: this, tx: tx, isNarrow: isNarrow),
+                      ),
                     ),
                   ),
                 ),
