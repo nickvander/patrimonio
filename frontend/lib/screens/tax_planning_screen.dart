@@ -29,6 +29,13 @@ typedef TaxContributionsFetcher = Future<Map<String, dynamic>> Function(int year
 /// CSV/PDF export links). Must match the backend's `tax_filing_status`.
 const String kFilingStatusSettingKey = 'tax_filing_status';
 
+/// User's annual 401k ELECTIVE deferral (employee, pre-tax + Roth), in USD.
+/// The 401k account syncs holdings only — no transaction-level elective /
+/// employer / after-tax split — so the user supplies their elective figure and
+/// the UI shows it against the §402(g) limit while the rest of the §415(c)
+/// total is employer match + after-tax (mega-backdoor).
+const String k401kElectiveSettingKey = 'tax_401k_elective_usd';
+
 class TaxPlanningScreen extends StatefulWidget {
   final double conversionFactor;
   final NumberFormat currencyFormat;
@@ -90,6 +97,8 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     'Head of Household',
   ];
   String _filingStatus = 'Single';
+  /// User-entered annual 401k elective deferral (USD); null = not provided.
+  double? _elective401kUsd;
 
   TaxSummaryFetcher get _fetchSummary =>
       widget.summaryFetcher ??
@@ -130,6 +139,13 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       }
     } catch (_) {
       // A missing/failed setting just leaves the default — non-fatal.
+    }
+    try {
+      final stored = await _readSetting(k401kElectiveSettingKey);
+      final n = (stored is num) ? stored.toDouble() : double.tryParse('$stored');
+      if (n != null && n > 0) _elective401kUsd = n;
+    } catch (_) {
+      // Missing/failed setting → no elective split shown; non-fatal.
     }
     await _loadTaxData(firstLoad: true);
   }
@@ -203,6 +219,48 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   void _onYearChanged(int value) {
     setState(() => _selectedYear = value);
     _loadTaxData();
+  }
+
+  /// Prompt for the user's annual 401k elective deferral and persist it, so the
+  /// mega-backdoor view can split elective vs employer/after-tax. An empty value
+  /// clears it.
+  Future<void> _editElective401k(AppLocalizations l, double limit) async {
+    final controller = TextEditingController(
+      text: _elective401kUsd != null ? _elective401kUsd!.toStringAsFixed(0) : '',
+    );
+    final result = await showDialog<double?>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l.tax401kElectiveDialogTitle),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            prefixText: '\$ ',
+            helperText: l.tax401kElectiveDialogHint(_money(limit)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(l.actionCancel),
+          ),
+          TextButton(
+            onPressed: () {
+              final v =
+                  double.tryParse(controller.text.replaceAll(',', '').trim());
+              Navigator.of(ctx).pop(v ?? 0.0);
+            },
+            child: Text(l.actionSave),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return; // dismissed / cancelled → no change
+    setState(() => _elective401kUsd = result > 0 ? result : null);
+    _writeSetting(k401kElectiveSettingKey, result > 0 ? result : 0)
+        .catchError((_) {});
   }
 
   String _filingStatusLabel(AppLocalizations l, String value) {
@@ -1885,6 +1943,27 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
               l.taxMegaBackdoorNote(
                   _money(baseLimit), _money(progress.remainingRoom)),
               style: TextStyle(color: context.textSubtle, fontSize: 11),
+            ),
+            const SizedBox(height: 4),
+            // The 401k syncs holdings only (no elective/after-tax split), so the
+            // user supplies their elective deferral; the rest of the total is
+            // employer match + after-tax (mega-backdoor).
+            InkWell(
+              onTap: () => _editElective401k(l, baseLimit),
+              child: Text(
+                _elective401kUsd != null
+                    ? l.tax401kElectiveSplit(
+                        _money(_elective401kUsd!),
+                        _money(baseLimit),
+                        _money((ytd - _elective401kUsd!)
+                            .clamp(0, double.infinity)))
+                    : l.tax401kElectiveSet,
+                style: TextStyle(
+                  color: context.info,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ],
           if (groupKey == 'hsa') ...[
