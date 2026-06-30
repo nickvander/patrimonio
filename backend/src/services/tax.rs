@@ -158,6 +158,83 @@ pub struct TaxEstimation {
     /// `isr_withheld_usd`; informational, never auto-applied to a liability.
     #[serde(with = "rust_decimal::serde::float")]
     pub isr_withheld_mxn: Decimal,
+    /// How much taxable room remains before the next ordinary bracket and
+    /// before the LTCG 0%->15% and 15%->20% steps, all in **USD**, derived from
+    /// the same verified bracket tables that drive the liability. See
+    /// [`BracketHeadroom`].
+    pub bracket_headroom: BracketHeadroom,
+    /// The ST/LT capital-netting result this year's liability was built on:
+    /// how the realized losses flow against the year's net gains, against
+    /// ordinary income (capped), and into the carryforward. Echoes the engine's
+    /// [`TaxService::net_capital_buckets`] so the harvest UI can show the
+    /// gains-offset / $3k-ordinary / carryforward split without re-deriving any
+    /// bracket math in the client. See [`NetCapitalBuckets`].
+    pub net_capital_buckets: NetCapitalBuckets,
+}
+
+/// Serializable view of the year's ST/LT capital netting — the same figures
+/// [`TaxService::net_capital_buckets`] produces, plus the cap that bounded the
+/// ordinary-income offset. Every money field is in **USD** and non-negative.
+/// Surfaced so the harvest summary can echo how realized losses are absorbed
+/// (gains first, then capped ordinary offset, then carryforward) instead of
+/// re-deriving it in Dart.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NetCapitalBuckets {
+    /// Net short-term gain surviving the netting (>= 0).
+    #[serde(with = "rust_decimal::serde::float")]
+    pub st_taxable_gain: Decimal,
+    /// Net long-term gain surviving the netting (>= 0).
+    #[serde(with = "rust_decimal::serde::float")]
+    pub lt_taxable_gain: Decimal,
+    /// Net capital loss applied against ordinary income this year (>= 0,
+    /// capped at `ordinary_offset_cap`).
+    #[serde(with = "rust_decimal::serde::float")]
+    pub ordinary_loss_offset: Decimal,
+    /// Net capital loss left over after the capped offset (>= 0) — the implied
+    /// carryforward. Same value as `capital_loss_carryforward`.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub carryforward: Decimal,
+    /// The per-year §1211(b) cap on the ordinary-income offset (the year
+    /// table's `capital_loss_ordinary_offset_cap`, e.g. $3,000), so the client
+    /// can label the room without hardcoding the constant.
+    #[serde(with = "rust_decimal::serde::float")]
+    pub ordinary_offset_cap: Decimal,
+}
+
+/// Room-before-the-next-rate figures for the US side, computed from the same
+/// verified bracket tables that drive the liability. Every money field is in
+/// **USD** on the taxable-income axis. A `None` upper edge means the user is
+/// already in the top band (no higher rate to step into), so the consumer
+/// should hide that line rather than render an unbounded number.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BracketHeadroom {
+    /// Dollars of taxable ordinary income that fit before the current ordinary
+    /// bracket's top edge — i.e. before the next-higher ordinary rate kicks in.
+    /// `None` when taxable ordinary income already sits in the top bracket.
+    #[serde(default, with = "rust_decimal::serde::float_option")]
+    pub ordinary_room: Option<Decimal>,
+    /// The ordinary rate the very next taxable dollar above the current bracket
+    /// would be taxed at (the next-dollar rate after `ordinary_room` is used
+    /// up). `None` at the top bracket.
+    #[serde(default, with = "rust_decimal::serde::float_option")]
+    pub ordinary_next_rate: Option<Decimal>,
+    /// Dollars of long-term gain that can still stack at 0% before crossing the
+    /// 0%->15% LTCG step (measured from the LT stacking point —
+    /// `taxable_ordinary` plus any surviving net LT gain). `None` (and a
+    /// `0.15` next rate) when the stacking point is already at/above
+    /// `ltcg_0_top`.
+    #[serde(default, with = "rust_decimal::serde::float_option")]
+    pub ltcg_0_room: Option<Decimal>,
+    /// Dollars of long-term gain that can still stack at 15% before crossing
+    /// the 15%->20% LTCG step. `None` once the stacking point is at/above
+    /// `ltcg_15_top`.
+    #[serde(default, with = "rust_decimal::serde::float_option")]
+    pub ltcg_15_room: Option<Decimal>,
+    /// The LTCG rate the next dollar stacked above the current LTCG band would
+    /// be taxed at: `0.15` while in the 0% band, `0.20` while in the 15% band,
+    /// `None` once already in the 20% band (no higher step).
+    #[serde(default, with = "rust_decimal::serde::float_option")]
+    pub ltcg_next_rate: Option<Decimal>,
 }
 
 /// Account subtypes whose internal trades are not taxable events — the
@@ -869,6 +946,64 @@ impl TaxService {
         }
     }
 
+    /// How much taxable room is left before the next ordinary bracket and
+    /// before each LTCG step, off the SAME bracket tables that drive the
+    /// liability. `taxable_ordinary` is the post-deduction ordinary base; the
+    /// LTCG rooms are measured from `ltcg_stacking_point` — the income axis the
+    /// next harvested LT dollar would stack at (`taxable_ordinary` plus any
+    /// surviving net LT gain already in play), matching
+    /// [`Self::marginal_ltcg_rate`]. Each room is `None` at the top of its
+    /// band (the top ordinary bracket has an open `Decimal::MAX` edge, and the
+    /// LTCG 20% band has no ceiling), so the consumer hides those lines.
+    pub fn compute_bracket_headroom(
+        taxable_ordinary: Decimal,
+        ltcg_stacking_point: Decimal,
+        t: &UsStatusTables,
+    ) -> BracketHeadroom {
+        // Ordinary: the first bracket whose top edge is strictly above the
+        // current taxable ordinary income is the bracket we sit in; the room is
+        // the distance to that edge, and the next-dollar rate is the FOLLOWING
+        // bracket's rate. An open (Decimal::MAX) edge means the top bracket —
+        // no higher rate to step into.
+        let x = taxable_ordinary.max(dec!(0));
+        let mut ordinary_room = None;
+        let mut ordinary_next_rate = None;
+        for (i, b) in t.ordinary.iter().enumerate() {
+            if x < b.upto {
+                if b.upto < Decimal::MAX {
+                    ordinary_room = Some(b.upto - x);
+                    ordinary_next_rate = t.ordinary.get(i + 1).map(|nb| nb.rate);
+                }
+                break;
+            }
+        }
+
+        // LTCG: rooms measured from the stacking point to each band edge. In
+        // the 0% band there is 0% room and the next step is 15%; in the 15%
+        // band there is 15% room and the next step is 20%; in the 20% band
+        // there is no further step.
+        let start = ltcg_stacking_point.max(dec!(0));
+        let (ltcg_0_room, ltcg_15_room, ltcg_next_rate) = if start < t.ltcg_0_top {
+            (
+                Some(t.ltcg_0_top - start),
+                Some(t.ltcg_15_top - t.ltcg_0_top),
+                Some(dec!(0.15)),
+            )
+        } else if start < t.ltcg_15_top {
+            (None, Some(t.ltcg_15_top - start), Some(dec!(0.20)))
+        } else {
+            (None, None, None)
+        };
+
+        BracketHeadroom {
+            ordinary_room,
+            ordinary_next_rate,
+            ltcg_0_room,
+            ltcg_15_room,
+            ltcg_next_rate,
+        }
+    }
+
     /// Long-term iff `sold > acquired + 1 calendar year` (chrono month
     /// arithmetic, NOT a 365-day count — "more than one year" is a calendar
     /// test, so e.g. a 366-day hold across a leap day that lands exactly on
@@ -1058,6 +1193,23 @@ impl TaxService {
         );
         let estimated_liability_us = us.liability;
 
+        // Bracket/LTCG headroom from the SAME tables: the ordinary room is off
+        // `us.taxable_ordinary`; the LTCG rooms are measured from the stacking
+        // point — taxable ordinary plus the surviving net LT gain already in
+        // play (the same axis `marginal_ltcg_rate` is evaluated at in the
+        // unrealized endpoint).
+        let headroom_status = tables.us_status(status);
+        let netting = Self::net_capital_buckets(
+            short_term_gains,
+            long_term_gains,
+            tables.capital_loss_ordinary_offset_cap,
+        );
+        let bracket_headroom = Self::compute_bracket_headroom(
+            us.taxable_ordinary,
+            us.taxable_ordinary + netting.lt_taxable_gain.max(dec!(0)),
+            headroom_status,
+        );
+
         // MX: no preferential split here — everything flows through the ISR
         // brackets (a deliberate simplification). The tarifa is applied to an
         // MXN base: per-row-converted income plus the USD capital gains
@@ -1105,6 +1257,14 @@ impl TaxService {
             wash_sale_disallowed_loss,
             isr_withheld_usd,
             isr_withheld_mxn,
+            bracket_headroom,
+            net_capital_buckets: NetCapitalBuckets {
+                st_taxable_gain: netting.st_taxable_gain,
+                lt_taxable_gain: netting.lt_taxable_gain,
+                ordinary_loss_offset: netting.ordinary_loss_offset,
+                carryforward: netting.carryforward,
+                ordinary_offset_cap: tables.capital_loss_ordinary_offset_cap,
+            },
         })
     }
 
@@ -2329,6 +2489,37 @@ mod tests {
         assert_eq!(TaxService::marginal_ltcg_rate(dec!(49_450), s), dec!(0.15));
         assert_eq!(TaxService::marginal_ltcg_rate(dec!(100_000), s), dec!(0.15));
         assert_eq!(TaxService::marginal_ltcg_rate(dec!(545_500), s), dec!(0.20));
+    }
+
+    #[test]
+    fn bracket_headroom_reports_room_to_next_ordinary_and_ltcg_steps() {
+        let t = TaxYearTables::for_year(2026);
+        let s = &t.us_single; // ordinary 0..12400(10%)..50400(12%)..; ltcg 0 top 49,450, 15 top 545,500
+
+        // Mid-band, low income: room to the 10% bracket top with 12% next,
+        // 0% LTCG room to ltcg_0_top, 15% room is the full 0->15 span.
+        let h = TaxService::compute_bracket_headroom(dec!(10000), dec!(10000), s);
+        assert_eq!(h.ordinary_room, Some(dec!(2400))); // 12400 - 10000
+        assert_eq!(h.ordinary_next_rate, Some(dec!(0.12)));
+        assert_eq!(h.ltcg_0_room, Some(dec!(39450))); // 49450 - 10000
+        assert_eq!(h.ltcg_15_room, Some(dec!(496050))); // 545500 - 49450
+        assert_eq!(h.ltcg_next_rate, Some(dec!(0.15)));
+
+        // Stacking point past the 0% band but inside 15%: no 0% room, 15% room
+        // measured from the stacking point, next step is 20%.
+        let h = TaxService::compute_bracket_headroom(dec!(60000), dec!(60000), s);
+        assert_eq!(h.ltcg_0_room, None);
+        assert_eq!(h.ltcg_15_room, Some(dec!(485500))); // 545500 - 60000
+        assert_eq!(h.ltcg_next_rate, Some(dec!(0.20)));
+
+        // Top of both bands: open ordinary edge and the LTCG 20% band → all
+        // upper-edge fields None (consumer hides those lines).
+        let h = TaxService::compute_bracket_headroom(dec!(2_000_000), dec!(2_000_000), s);
+        assert_eq!(h.ordinary_room, None);
+        assert_eq!(h.ordinary_next_rate, None);
+        assert_eq!(h.ltcg_0_room, None);
+        assert_eq!(h.ltcg_15_room, None);
+        assert_eq!(h.ltcg_next_rate, None);
     }
 
     #[test]
