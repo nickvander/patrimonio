@@ -126,7 +126,7 @@ struct QtyEvent {
     qty: f64,
 }
 
-pub async fn portfolio_twr(db: &PgPool, user_id: Uuid) -> TwrResult {
+pub async fn portfolio_twr(db: &PgPool, user_id: Uuid, benchmark: Option<&str>) -> TwrResult {
     // 1. Holdings → current qty per candidate symbol + total portfolio value
     //    in USD. v1 only prices USD securities historically, so non-USD
     //    holdings count toward the total (denominator) via the current FX
@@ -281,7 +281,13 @@ pub async fn portfolio_twr(db: &PgPool, user_id: Uuid) -> TwrResult {
         return e;
     }
 
-    let sp = benchmark::series(db, benchmark::SP500, epoch).await;
+    // Resolve the requested benchmark (defaults to S&P 500) and freshen its
+    // series before reading. A bad/illiquid symbol yields an empty series, so
+    // `sp_first` is 0.0 and the comparison index flat-lines at 1.0 — the card
+    // still renders the portfolio line, just without a benchmark overlay.
+    let (bench_key, bench_yahoo) = benchmark::resolve_benchmark(benchmark);
+    let _ = benchmark::ensure_symbol_fresh(db, bench_yahoo, bench_key).await;
+    let sp = benchmark::series(db, bench_key, epoch).await;
     let sp_first = close_on(&sp, start);
 
     // 6. Daily-valuation TWR. Iterate calendar days; quotes forward-fill over

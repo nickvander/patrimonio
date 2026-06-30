@@ -15,6 +15,32 @@ use std::str::FromStr;
 
 pub const SP500: &str = "SP500";
 
+/// The picker's small, curated set of "most common" benchmarks. Each entry maps
+/// a stable `store_as` key (also the API value and `benchmark_prices.symbol`) to
+/// the Yahoo chart-API symbol with reliable daily history. URL-encode the caret
+/// (`%5E`) for Yahoo index tickers; plain ETF tickers need no encoding.
+/// Anything not in this table resolves to the S&P 500 default, so an unknown or
+/// illiquid `?benchmark=` fails soft to the existing behavior rather than 500ing.
+const BENCHMARKS: &[(&str, &str)] = &[
+    (SP500, "%5EGSPC"),  // S&P 500 (^GSPC)
+    ("NDX", "%5ENDX"),   // Nasdaq-100 (^NDX)
+    ("ACWI", "ACWI"),    // MSCI ACWI / Total World ETF
+    ("AGG", "AGG"),      // US Aggregate Bonds ETF
+    ("MXX", "%5EMXX"),   // IPC Mexico (^MXX)
+];
+
+/// Resolve a requested benchmark key to its `(store_as, yahoo_symbol)`. Unknown
+/// or empty keys fall back to the S&P 500 so the comparison still renders. The
+/// returned `store_as` is what to pass to [`series`]/[`ensure_symbol_fresh`].
+pub fn resolve_benchmark(requested: Option<&str>) -> (&'static str, &'static str) {
+    let want = requested.unwrap_or(SP500);
+    BENCHMARKS
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case(want))
+        .copied()
+        .unwrap_or((SP500, "%5EGSPC"))
+}
+
 /// Newest stored trading day for `symbol`, if any.
 pub async fn latest_date(db: &PgPool, symbol: &str) -> Option<NaiveDate> {
     sqlx::query("SELECT MAX(price_date) AS d FROM benchmark_prices WHERE symbol = $1")
@@ -150,6 +176,7 @@ pub struct ContributionComparison {
 pub async fn contribution_comparison(
     db: &PgPool,
     user_id: uuid::Uuid,
+    benchmark: Option<&str>,
 ) -> ContributionComparison {
     let zero = ContributionComparison {
         invested_usd: 0.0,
@@ -158,8 +185,15 @@ pub async fn contribution_comparison(
         lot_count: 0,
     };
 
-    // Full S&P series, ascending, for date lookups.
-    let sp = series(db, SP500, NaiveDate::from_ymd_opt(2000, 1, 1).unwrap()).await;
+    // Resolve the requested benchmark (defaults to S&P 500) and make sure its
+    // series is reasonably fresh before reading. A bad/illiquid symbol that
+    // can't be fetched simply yields an empty series → we return `zero`
+    // (no benchmark numbers), never a 500.
+    let (store_as, yahoo_symbol) = resolve_benchmark(benchmark);
+    let _ = ensure_symbol_fresh(db, yahoo_symbol, store_as).await;
+
+    // Full benchmark series, ascending, for date lookups.
+    let sp = series(db, store_as, NaiveDate::from_ymd_opt(2000, 1, 1).unwrap()).await;
     let Some(&(_, latest_close)) = sp.last() else {
         return zero;
     };

@@ -19,6 +19,7 @@ pub fn router() -> Router<AppState> {
         .route("/net-worth-history", get(net_worth_history))
         .route("/portfolio-value-history", get(portfolio_value_history))
         .route("/holdings", get(holdings))
+        .route("/holdings/dividends", get(portfolio_dividends))
         .route("/allocation", get(asset_allocation))
         .route("/trends", get(cash_flow_trends))
         .route("/spending-by-category", get(spending_by_category))
@@ -84,10 +85,13 @@ pub(crate) const FX_FALLBACK_USD_MXN: f64 = 20.0;
 /// One query, used by every endpoint that converts MXN→USD, so the
 /// missing/stale policy lives in exactly one place.
 pub(crate) async fn latest_usd_mxn_rate(db: &sqlx::PgPool) -> FxRateInfo {
+    // A user-entered 'manual' override outranks the automated 'api' rows so a
+    // corrected rate wins over a stale/bad upstream fetch (which would otherwise
+    // collapse to FX_FALLBACK_USD_MXN). Within each source, freshest first.
     let row = sqlx::query(
         "SELECT rate, recorded_at FROM exchange_rates \
          WHERE base_currency = 'USD' AND target_currency = 'MXN' \
-         ORDER BY recorded_at DESC LIMIT 1",
+         ORDER BY (source = 'manual') DESC, recorded_at DESC LIMIT 1",
     )
     .fetch_optional(db)
     .await
@@ -1775,13 +1779,29 @@ async fn benchmark_series(
     })
 }
 
-/// Dollar-weighted "you vs the S&P 500" over the user's tracked holding lots.
+/// Optional `?benchmark=` selector shared by the TWR + contribution-comparison
+/// endpoints. Defaults (when absent) to the S&P 500, preserving prior behavior;
+/// an unrecognized/illiquid symbol fails soft in the service layer.
+#[derive(Deserialize)]
+struct BenchmarkSelectQuery {
+    benchmark: Option<String>,
+}
+
+/// Dollar-weighted "you vs the selected benchmark" over the user's tracked
+/// holding lots. `?benchmark=` defaults to the S&P 500 when omitted.
 async fn benchmark_comparison(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
+    Query(q): Query<BenchmarkSelectQuery>,
 ) -> Json<crate::services::benchmark::ContributionComparison> {
-    let _ = crate::services::benchmark::ensure_fresh(&state.db).await;
-    Json(crate::services::benchmark::contribution_comparison(&state.db, ctx.user_id).await)
+    Json(
+        crate::services::benchmark::contribution_comparison(
+            &state.db,
+            ctx.user_id,
+            q.benchmark.as_deref(),
+        )
+        .await,
+    )
 }
 
 /// True time-weighted return: a daily growth index of the investment
@@ -1790,8 +1810,11 @@ async fn benchmark_comparison(
 async fn portfolio_twr(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
+    Query(q): Query<BenchmarkSelectQuery>,
 ) -> Json<crate::services::twr::TwrResult> {
-    Json(crate::services::twr::portfolio_twr(&state.db, ctx.user_id).await)
+    Json(
+        crate::services::twr::portfolio_twr(&state.db, ctx.user_id, q.benchmark.as_deref()).await,
+    )
 }
 
 #[derive(Serialize)]
@@ -3515,4 +3538,249 @@ async fn unignore_subscription(
             StatusCode::INTERNAL_SERVER_ERROR
         }
     }
+}
+
+/// Cap on concurrent live Yahoo dividend fetches. The per-account endpoint
+/// hits these serially; the portfolio view fans out across every distinct
+/// symbol the user holds, so we bound the in-flight requests to stay polite
+/// to the free feed while still beating an N-serial loop.
+const DIVIDEND_FETCH_CONCURRENCY: usize = 8;
+
+/// One symbol's contribution to portfolio dividend income.
+#[derive(Serialize)]
+struct DividendSymbolContribution {
+    symbol: String,
+    /// Shares held across all of the user's accounts (combined).
+    quantity: f64,
+    /// Trailing-12-month dividend per share, native currency.
+    annual_rate: f64,
+    /// Projected annual income for the held quantity, converted to USD.
+    annual_income_usd: f64,
+    /// Yield on current value (annual_income / value), percent. Null when we
+    /// have no price to value the position.
+    yield_pct: Option<f64>,
+    last_ex_date: Option<String>,
+    est_next_ex_date: Option<String>,
+    per_year: i32,
+}
+
+/// An upcoming estimated ex-dividend date for a held symbol.
+#[derive(Serialize)]
+struct UpcomingExDate {
+    symbol: String,
+    est_next_ex_date: String,
+    /// Per-symbol projected income (USD) landing around that date.
+    annual_income_usd: f64,
+}
+
+#[derive(Serialize)]
+struct PortfolioDividendsResponse {
+    /// Sum of per-symbol projected annual income, in USD.
+    projected_annual_income_usd: f64,
+    /// Blended yield-on-value: total projected income / total valued holdings,
+    /// percent. Null when no priced, dividend-paying position exists.
+    blended_yield_pct: Option<f64>,
+    /// Per-symbol contributions, dividend payers first, by income descending.
+    contributions: Vec<DividendSymbolContribution>,
+    /// Soonest estimated ex-dates among held payers (up to 5).
+    upcoming_ex_dates: Vec<UpcomingExDate>,
+    /// True when an MXN position was converted with a missing/stale FX rate.
+    fx_stale: bool,
+}
+
+/// Portfolio-wide dividend income: aggregates the per-symbol dividend engine
+/// across every active account the user holds, so the Portfolio tab can show
+/// projected annual income, a blended yield-on-value, the top payers, and the
+/// next estimated ex-dates. Reuses `dividends::fetch_dividends` verbatim (via
+/// `benchmark_dividends`) and fans the live Yahoo lookups out with bounded
+/// concurrency; a single symbol's fetch failure degrades only that symbol's
+/// income to zero, never the whole response.
+async fn portfolio_dividends(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<PortfolioDividendsResponse> {
+    let fx_info = latest_usd_mxn_rate(&state.db).await;
+    let fx_usd_to_mxn = fx_info.rate;
+    let mut fx_stale_used = false;
+
+    // Combine quantity (and the latest seen price/currency) per symbol across
+    // every active, non-cash holding. Cash-sleeve rows are fixed at 1.00 and
+    // never pay a dividend, so they're filtered out before the fan-out.
+    let rows = sqlx::query(
+        r#"
+        SELECT h.symbol,
+               COALESCE(SUM(h.quantity), 0) AS quantity,
+               MAX(h.price) AS price,
+               MAX(h.currency) AS currency
+        FROM holdings h
+        JOIN accounts a ON h.account_id = a.id
+        WHERE h.user_id = $1
+          AND a.archived_at IS NULL
+          AND COALESCE(h.holding_type, '') <> 'cash'
+          AND h.symbol IS NOT NULL AND h.symbol <> ''
+        GROUP BY h.symbol
+        "#,
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    struct Pos {
+        symbol: String,
+        quantity: f64,
+        price: Option<f64>,
+        currency: String,
+    }
+    let positions: Vec<Pos> = rows
+        .iter()
+        .map(|r| {
+            let quantity = r
+                .try_get::<rust_decimal::Decimal, _>("quantity")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0);
+            let price = r
+                .try_get::<Option<rust_decimal::Decimal>, _>("price")
+                .ok()
+                .flatten()
+                .map(|d| d.to_string().parse().unwrap_or(0.0));
+            Pos {
+                symbol: r.get("symbol"),
+                quantity,
+                price,
+                currency: r.try_get("currency").unwrap_or_else(|_| "USD".to_string()),
+            }
+        })
+        .collect();
+
+    // Fan out the live dividend lookups with BOUNDED concurrency (mirrors the
+    // sync batch's buffer_unordered pattern) instead of awaiting them one at a
+    // time. Each future returns its symbol + the dividend tuple (or None on a
+    // fetch error) so a single failure degrades only that symbol.
+    use futures_util::StreamExt;
+    let symbols: Vec<String> = positions.iter().map(|p| p.symbol.clone()).collect();
+    let fetched: HashMap<String, (f64, Option<String>, Option<String>, i32)> =
+        futures_util::stream::iter(symbols.into_iter().map(|symbol| {
+            async move {
+                // Same engine the per-account endpoint uses. Map a fetch error
+                // to None so it degrades to zero income for this symbol only.
+                let info = match crate::services::dividends::fetch_dividends(&symbol).await {
+                    Ok(i) => Some((
+                        i.annual_rate,
+                        i.last_ex_date,
+                        i.est_next_ex_date,
+                        i.per_year,
+                    )),
+                    Err(_) => None,
+                };
+                (symbol, info)
+            }
+        }))
+        .buffer_unordered(DIVIDEND_FETCH_CONCURRENCY)
+        .collect::<Vec<_>>()
+        .await
+        .into_iter()
+        .filter_map(|(sym, info)| info.map(|i| (sym, i)))
+        .collect();
+
+    let to_usd = |amount: f64, ccy: &str| -> f64 {
+        match ccy {
+            "USD" => amount,
+            "MXN" => {
+                if fx_usd_to_mxn > 0.0 {
+                    amount / fx_usd_to_mxn
+                } else {
+                    amount
+                }
+            }
+            _ => amount,
+        }
+    };
+
+    let mut contributions: Vec<DividendSymbolContribution> = Vec::new();
+    let mut total_income_usd = 0.0_f64;
+    let mut total_valued_usd = 0.0_f64;
+
+    for p in &positions {
+        // Missing tuple = fetch failed for this symbol: degrade to zero income
+        // for it alone, but still surface the row so the position isn't hidden.
+        let (annual_rate, last_ex_date, est_next_ex_date, per_year) =
+            fetched.get(&p.symbol).cloned().unwrap_or((0.0, None, None, 0));
+
+        let annual_income_native = annual_rate * p.quantity;
+        let annual_income_usd =
+            (to_usd(annual_income_native, &p.currency) * 100.0).round() / 100.0;
+        if p.currency == "MXN" && annual_income_native != 0.0 && fx_info.stale {
+            fx_stale_used = true;
+        }
+
+        let yield_pct = p
+            .price
+            .filter(|px| *px > 0.0)
+            .map(|px| ((annual_rate / px * 100.0) * 100.0).round() / 100.0);
+
+        // Only priced positions feed the blended yield-on-value denominator.
+        if let Some(px) = p.price.filter(|px| *px > 0.0) {
+            total_valued_usd += to_usd(px * p.quantity, &p.currency);
+        }
+        total_income_usd += annual_income_usd;
+
+        contributions.push(DividendSymbolContribution {
+            symbol: p.symbol.clone(),
+            quantity: p.quantity,
+            annual_rate,
+            annual_income_usd,
+            yield_pct,
+            last_ex_date,
+            est_next_ex_date,
+            per_year,
+        });
+    }
+
+    // Payers first, then by income descending; non-payers (zero income) sink
+    // to the bottom while still being available to the frontend if it wants
+    // the full list.
+    contributions.sort_by(|a, b| {
+        b.annual_income_usd
+            .partial_cmp(&a.annual_income_usd)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // Soonest UPCOMING estimated ex-dates among held payers. ISO date strings
+    // sort lexicographically, so a plain string sort/compare is chronological;
+    // drop estimates already in the past (a payer whose last dividend is older
+    // than one pay-interval estimates a date that has already passed).
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let mut upcoming: Vec<UpcomingExDate> = contributions
+        .iter()
+        .filter(|c| c.annual_income_usd > 0.0)
+        .filter_map(|c| {
+            c.est_next_ex_date
+                .as_ref()
+                .filter(|d| d.as_str() >= today.as_str())
+                .map(|d| UpcomingExDate {
+                    symbol: c.symbol.clone(),
+                    est_next_ex_date: d.clone(),
+                    annual_income_usd: c.annual_income_usd,
+                })
+        })
+        .collect();
+    upcoming.sort_by(|a, b| a.est_next_ex_date.cmp(&b.est_next_ex_date));
+    upcoming.truncate(5);
+
+    let total_income_usd = (total_income_usd * 100.0).round() / 100.0;
+    let blended_yield_pct = if total_valued_usd > 0.0 && total_income_usd > 0.0 {
+        Some(((total_income_usd / total_valued_usd * 100.0) * 100.0).round() / 100.0)
+    } else {
+        None
+    };
+
+    Json(PortfolioDividendsResponse {
+        projected_annual_income_usd: total_income_usd,
+        blended_yield_pct,
+        contributions,
+        upcoming_ex_dates: upcoming,
+        fx_stale: fx_stale_used,
+    })
 }
