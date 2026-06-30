@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../utils/theme_colors.dart';
 import '../l10n/app_localizations.dart';
+import '../services/api_service.dart';
 import 'package:intl/intl.dart';
 
 class FxWidget extends StatefulWidget {
@@ -17,7 +19,9 @@ class FxWidget extends StatefulWidget {
 }
 
 class _FxWidgetState extends State<FxWidget> {
+  final _apiService = ApiService();
   bool _refreshing = false;
+  bool _savingManual = false;
 
   @override
   Widget build(BuildContext context) {
@@ -49,34 +53,57 @@ class _FxWidgetState extends State<FxWidget> {
                   style: const TextStyle(
                       fontSize: 16, fontWeight: FontWeight.w700),
                 ),
-                if (widget.onRefresh != null)
-                  IconButton(
-                    onPressed: _refreshing
-                        ? null
-                        : () async {
-                            setState(() => _refreshing = true);
-                            try {
-                              await widget.onRefresh!();
-                            } finally {
-                              if (mounted) {
-                                setState(() => _refreshing = false);
-                              }
-                            }
-                          },
-                    icon: _refreshing
-                        ? SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation(context.positive),
-                            ),
-                          )
-                        : const Icon(Icons.refresh, size: 20),
-                    tooltip: l.lwFxRefreshNow,
-                    color: context.textMuted,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      onPressed: (_savingManual || _refreshing)
+                          ? null
+                          : () => _enterRateManually(base, target, rate),
+                      icon: _savingManual
+                          ? SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor:
+                                    AlwaysStoppedAnimation(context.positive),
+                              ),
+                            )
+                          : const Icon(Icons.edit_outlined, size: 20),
+                      tooltip: l.lwFxEnterManually,
+                      color: context.textMuted,
+                    ),
+                    if (widget.onRefresh != null)
+                      IconButton(
+                        onPressed: (_refreshing || _savingManual)
+                            ? null
+                            : () async {
+                                setState(() => _refreshing = true);
+                                try {
+                                  await widget.onRefresh!();
+                                } finally {
+                                  if (mounted) {
+                                    setState(() => _refreshing = false);
+                                  }
+                                }
+                              },
+                        icon: _refreshing
+                            ? SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor:
+                                      AlwaysStoppedAnimation(context.positive),
+                                ),
+                              )
+                            : const Icon(Icons.refresh, size: 20),
+                        tooltip: l.lwFxRefreshNow,
+                        color: context.textMuted,
+                      ),
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -145,6 +172,101 @@ class _FxWidgetState extends State<FxWidget> {
         ),
       ),
     );
+  }
+
+  /// Prompt for a user-entered FX override, pre-filled with the current rate,
+  /// POST it (source='manual'), then trigger the dashboard refresh so the new
+  /// value flows through every MXN-converted figure.
+  Future<void> _enterRateManually(
+    String base,
+    String target,
+    dynamic currentRate,
+  ) async {
+    final l = AppLocalizations.of(context);
+    final controller = TextEditingController(
+      text: (currentRate is num && currentRate > 0)
+          ? currentRate.toStringAsFixed(4)
+          : '',
+    );
+
+    final entered = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(l.lwFxManualDialogTitle),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l.lwFxManualDialogHint(base, target),
+                  style: TextStyle(color: context.textMuted, fontSize: 13),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: '$base / $target',
+                    hintText: '0.0000',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(l.actionCancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, controller.text),
+              child: Text(l.actionSave),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (entered == null) return;
+    final parsed = double.tryParse(entered.trim());
+    if (parsed == null || parsed <= 0) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l.lwFxManualInvalid)),
+      );
+      return;
+    }
+
+    setState(() => _savingManual = true);
+    try {
+      await _apiService.postManualExchangeRate(
+        base: base,
+        target: target,
+        rate: parsed,
+      );
+      if (widget.onRefresh != null) {
+        await widget.onRefresh!();
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l.lwFxManualSaved)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l.lwFxManualFailed(e.toString()))),
+      );
+    } finally {
+      if (mounted) setState(() => _savingManual = false);
+    }
   }
 
   Widget _buildTimestampBlock(BuildContext context, dynamic recordedAt) {

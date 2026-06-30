@@ -199,6 +199,41 @@ List<Map<String, dynamic>> harvestCandidates(List<dynamic>? lots) {
   return out;
 }
 
+/// Totals across the harvest candidates for the summary footer, in USD.
+///
+/// `totalLossUsd` sums the candidates' (negative) `unrealized_gain_usd` so it
+/// is <= 0, matching the per-row sign convention (loss renders red); `count` is
+/// how many lots feed the footer; `totalSavingsUsd` sums the per-lot
+/// `estimated_tax_savings_usd` (>= 0). These are pure roll-ups of the rows the
+/// footer already shows — they do NOT re-derive any bracket math; how the loss
+/// flows against gains / the §1211(b) ordinary cap / carryforward comes from
+/// the server's `net_capital_buckets`, not from here.
+class HarvestTotals {
+  const HarvestTotals({
+    required this.totalLossUsd,
+    required this.totalSavingsUsd,
+    required this.count,
+  });
+
+  final double totalLossUsd;
+  final double totalSavingsUsd;
+  final int count;
+}
+
+HarvestTotals harvestTotals(List<Map<String, dynamic>> candidates) {
+  var loss = 0.0;
+  var savings = 0.0;
+  for (final c in candidates) {
+    loss += (c['unrealized_gain_usd'] as num?)?.toDouble() ?? 0;
+    savings += (c['estimated_tax_savings_usd'] as num?)?.toDouble() ?? 0;
+  }
+  return HarvestTotals(
+    totalLossUsd: loss,
+    totalSavingsUsd: savings,
+    count: candidates.length,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // T15 — retirement contribution-room helpers
 // ---------------------------------------------------------------------------

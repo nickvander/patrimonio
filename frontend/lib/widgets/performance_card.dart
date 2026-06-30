@@ -38,12 +38,33 @@ class PerformanceCard extends StatefulWidget {
   State<PerformanceCard> createState() => _PerformanceCardState();
 }
 
+/// The picker's curated set of benchmarks. `key` is the API value (matches the
+/// backend `BENCHMARKS` table / `benchmark_prices.symbol`); `shortLabel`
+/// resolves the localized pill/bar caption for the chosen index.
+class _BenchmarkOption {
+  final String key;
+  final String Function(AppLocalizations) shortLabel;
+  const _BenchmarkOption(this.key, this.shortLabel);
+}
+
+final List<_BenchmarkOption> _benchmarkOptions = [
+  _BenchmarkOption('SP500', (l) => l.lwPerfBenchSp500),
+  _BenchmarkOption('NDX', (l) => l.lwPerfBenchNdx),
+  _BenchmarkOption('ACWI', (l) => l.lwPerfBenchAcwi),
+  _BenchmarkOption('AGG', (l) => l.lwPerfBenchAgg),
+  _BenchmarkOption('MXX', (l) => l.lwPerfBenchMxx),
+];
+
 class _PerformanceCardState extends State<PerformanceCard> {
   bool _loading = true;
   List<dynamic> _history = const [];
   Map<String, dynamic>? _comparison;
   Map<String, dynamic>? _twr;
   DateRange _range = DateRange.all;
+  // Selected benchmark for both the TWR overlay and the contribution
+  // comparison; persisted across rebuilds like _range. Defaults to the S&P 500,
+  // which keeps the endpoints' default behavior when nothing is chosen.
+  String _benchmark = 'SP500';
   // Phone-only: the money-weighted benchmark block sits behind a tap-to-expand
   // disclosure (collapsed by default). In-memory only — not persisted.
   bool _benchmarkExpanded = false;
@@ -61,7 +82,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
           .getPortfolioValueHistory()
           .catchError((_) => <dynamic>[]),
       widget.apiService
-          .getBenchmarkComparison()
+          .getBenchmarkComparison(benchmark: _benchmark)
           .catchError((_) => <String, dynamic>{}),
     ]);
     if (!mounted) return;
@@ -76,12 +97,49 @@ class _PerformanceCardState extends State<PerformanceCard> {
     // Yahoo fetch and can take many seconds, so we paint the card immediately
     // (dollar line) and upgrade to the time-weighted view when it resolves.
     final t = await widget.apiService
-        .getPortfolioTwr()
+        .getPortfolioTwr(benchmark: _benchmark)
         .catchError((_) => <String, dynamic>{});
     if (!mounted) return;
     setState(() {
       _twr = (t == null || t.isEmpty) ? null : t;
     });
+  }
+
+  /// Switch the benchmark and refetch the two benchmark-dependent series (the
+  /// TWR overlay + the contribution comparison). The portfolio value history is
+  /// benchmark-independent, so it's left untouched. The TWR is cleared first so
+  /// the card falls back to the dollar line while the new index is fetched
+  /// (a cold cache triggers a per-symbol Yahoo pull).
+  Future<void> _onBenchmarkChanged(String key) async {
+    if (key == _benchmark) return;
+    setState(() {
+      _benchmark = key;
+      _twr = null;
+    });
+    final results = await Future.wait([
+      widget.apiService
+          .getBenchmarkComparison(benchmark: _benchmark)
+          .catchError((_) => <String, dynamic>{}),
+      widget.apiService
+          .getPortfolioTwr(benchmark: _benchmark)
+          .catchError((_) => <String, dynamic>{}),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      final c = results[0] ?? const {};
+      _comparison = c.isEmpty ? null : c;
+      final t = results[1];
+      _twr = (t == null || t.isEmpty) ? null : t;
+    });
+  }
+
+  /// Localized short label for the currently selected benchmark (e.g. the pill
+  /// caption). Falls back to the S&P 500 label for an unknown key.
+  String _benchmarkLabel(AppLocalizations l) {
+    return _benchmarkOptions
+        .firstWhere((o) => o.key == _benchmark,
+            orElse: () => _benchmarkOptions.first)
+        .shortLabel(l);
   }
 
   /// TWR points are available + cover at least a sliver of the portfolio.
@@ -365,11 +423,65 @@ class _PerformanceCardState extends State<PerformanceCard> {
   }
 
   Widget _rangeSelector() {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: DateRangeSelector(
-        selectedRange: _range,
-        onRangeChanged: (r) => setState(() => _range = r),
+    return Row(
+      children: [
+        _benchmarkPicker(),
+        const Spacer(),
+        DateRangeSelector(
+          selectedRange: _range,
+          onRangeChanged: (r) => setState(() => _range = r),
+        ),
+      ],
+    );
+  }
+
+  /// Compact benchmark selector for the range row. Mirrors the segmented
+  /// range-pill chrome but collapses to a single tappable chip + popup (five
+  /// indices won't fit inline next to the date selector). The selection drives
+  /// both the TWR overlay and the contribution comparison.
+  Widget _benchmarkPicker() {
+    final l = AppLocalizations.of(context);
+    return PopupMenuButton<String>(
+      tooltip: l.lwPerfBenchPickerTooltip,
+      onSelected: _onBenchmarkChanged,
+      itemBuilder: (context) => [
+        for (final o in _benchmarkOptions)
+          PopupMenuItem(
+            value: o.key,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 24,
+                  child: _benchmark == o.key
+                      ? Icon(Icons.check, size: 18, color: context.positive)
+                      : null,
+                ),
+                Text(o.shortLabel(l)),
+              ],
+            ),
+          ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.black12,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _benchmarkLabel(l),
+              style: TextStyle(
+                color: context.textMuted,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.expand_more, size: 16, color: context.textMuted),
+          ],
+        ),
       ),
     );
   }
@@ -409,7 +521,8 @@ class _PerformanceCardState extends State<PerformanceCard> {
                 child: _twrPill(context, l.lwPerfTwrYou, yourPct, yourColor)),
             const SizedBox(width: 12),
             Expanded(
-                child: _twrPill(context, l.lwPerfTwrSp, spPct, context.info)),
+                child:
+                    _twrPill(context, _benchmarkLabel(l), spPct, context.info)),
           ],
         ),
         const SizedBox(height: 14),
@@ -537,6 +650,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
     final ahead = deltaPts >= 0;
     final maxVal =
         (yourVal > benchVal ? yourVal : benchVal).clamp(1, double.infinity);
+    final benchLabel = _benchmarkLabel(l);
     String pct(double p) => '${p >= 0 ? '+' : ''}${p.toStringAsFixed(1)}%';
 
     return Column(
@@ -572,14 +686,14 @@ class _PerformanceCardState extends State<PerformanceCard> {
                     _money(yourVal), context.positive)),
             const SizedBox(width: 12),
             Expanded(
-                child: _returnTile(context, l.bmContribIndex, pct(benchPct),
+                child: _returnTile(context, benchLabel, pct(benchPct),
                     _money(benchVal), context.info)),
           ],
         ),
         const SizedBox(height: 16),
         _bar(context, l.bmContribYou, yourVal, maxVal.toDouble(), context.positive),
         const SizedBox(height: 8),
-        _bar(context, l.bmContribIndex, benchVal, maxVal.toDouble(), context.info),
+        _bar(context, benchLabel, benchVal, maxVal.toDouble(), context.info),
         const SizedBox(height: 14),
         Text(
           ahead

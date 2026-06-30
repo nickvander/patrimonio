@@ -390,6 +390,28 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     final liabMx = usd('estimated_liability_mx');
     final isrWithheld = usd('isr_withheld_usd');
 
+    // Bracket/LTCG headroom: room figures are USD (scale by conversionFactor);
+    // rates are fractions surfaced as percentages. Any leg may be null at the
+    // top of its band, in which case the matching line is hidden.
+    final headroom =
+        (summary['bracket_headroom'] as Map?)?.cast<String, dynamic>() ??
+            const {};
+    double? headroomUsd(String key) {
+      final v = headroom[key] as num?;
+      return v == null ? null : v.toDouble() * widget.conversionFactor;
+    }
+
+    double? headroomRate(String key) {
+      final v = headroom[key] as num?;
+      return v == null ? null : v.toDouble() * 100;
+    }
+
+    final ordinaryRoom = headroomUsd('ordinary_room');
+    final ordinaryNextRate = headroomRate('ordinary_next_rate');
+    final ltcg0Room = headroomUsd('ltcg_0_room');
+    final ltcg15Room = headroomUsd('ltcg_15_room');
+    final ltcgNextRate = headroomRate('ltcg_next_rate');
+
     final gainsFromLots = summary['gains_from_lots'] == true;
     final rateUs = ((summary['effective_rate_us'] as num?)?.toDouble() ?? 0) * 100;
     final rateMx = ((summary['effective_rate_mx'] as num?)?.toDouble() ?? 0) * 100;
@@ -426,6 +448,17 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
             rateMx: rateMx,
             gainsFromLots: gainsFromLots,
           ),
+          if (ordinaryRoom != null || ltcg0Room != null || ltcg15Room != null) ...[
+            const SizedBox(height: 16),
+            _buildHeadroomCard(
+              l,
+              ordinaryRoom: ordinaryRoom,
+              ordinaryNextRate: ordinaryNextRate,
+              ltcg0Room: ltcg0Room,
+              ltcg15Room: ltcg15Room,
+              ltcgNextRate: ltcgNextRate,
+            ),
+          ],
           const SizedBox(height: 12),
           _buildScenariosNote(l),
           if (constantsUnverified) ...[
@@ -830,6 +863,72 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     );
   }
 
+  /// Room-before-the-next-rate card for the US scenario: how much more taxable
+  /// ordinary income fits in the current bracket, and how much long-term gain
+  /// can still stack at 0% / 15% before the next LTCG step. Each line is hidden
+  /// when its room is null (top of that band).
+  Widget _buildHeadroomCard(
+    AppLocalizations l, {
+    double? ordinaryRoom,
+    double? ordinaryNextRate,
+    double? ltcg0Room,
+    double? ltcg15Room,
+    double? ltcgNextRate,
+  }) {
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+    final lines = <Widget>[];
+    void addLine(String text) {
+      if (lines.isNotEmpty) lines.add(const SizedBox(height: 6));
+      lines.add(Text(
+        text,
+        style: TextStyle(fontSize: 12, color: context.textSubtle),
+      ));
+    }
+
+    if (ordinaryRoom != null) {
+      addLine(ordinaryNextRate != null
+          ? l.taxHeadroomOrdinaryRoom(
+              widget.currencyFormat.format(ordinaryRoom),
+              ordinaryNextRate.toStringAsFixed(0),
+            )
+          : l.taxHeadroomOrdinaryRoomTop(
+              widget.currencyFormat.format(ordinaryRoom)));
+    }
+    // 0% room only shows while still in the 0% band; once past it the 15% room
+    // (with its 20% next step) is what's left to show.
+    if (ltcg0Room != null) {
+      addLine(l.taxHeadroomLtcg0Room(widget.currencyFormat.format(ltcg0Room)));
+    }
+    if (ltcg15Room != null) {
+      // The step above the 15% band is always 20% (this line is hidden once the
+      // user is already past it), so the next-rate label is a fixed 20 — not the
+      // band-relative ltcgNextRate, which is 15 while still in the 0% band.
+      addLine(l.taxHeadroomLtcg15Room(
+        widget.currencyFormat.format(ltcg15Room),
+        '20',
+      ));
+    }
+
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(pad),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l.taxHeadroomTitle, style: TextStyle(color: context.textMuted)),
+            const SizedBox(height: 8),
+            Text(
+              l.taxHeadroomSubtitle,
+              style: TextStyle(fontSize: 11, color: context.textFaint),
+            ),
+            const SizedBox(height: 10),
+            ...lines,
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _roughEstimateBadge(AppLocalizations l) {
     return Tooltip(
       message: l.taxRoughEstimateTooltip,
@@ -1180,6 +1279,11 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     final ordinaryMarginalPct =
         (data['ordinary_marginal_rate'] as num?)?.toDouble();
     final ltcgMarginalPct = (data['ltcg_marginal_rate'] as num?)?.toDouble();
+    // How the year's realized losses flow against gains / the capped ordinary
+    // offset / carryforward — echoed from the summary engine's netting, never
+    // re-derived in Dart.
+    final netBuckets =
+        (_taxSummary?['net_capital_buckets'] as Map?)?.cast<String, dynamic>();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1213,6 +1317,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
             unverified,
             ordinaryMarginalRate: ordinaryMarginalPct,
             ltcgMarginalRate: ltcgMarginalPct,
+            netBuckets: netBuckets,
           ),
         ],
       ],
@@ -1369,6 +1474,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     bool unverified, {
     double? ordinaryMarginalRate,
     double? ltcgMarginalRate,
+    Map<String, dynamic>? netBuckets,
   }) {
     final hasMarginalRates =
         ordinaryMarginalRate != null || ltcgMarginalRate != null;
@@ -1429,12 +1535,106 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                 style: TextStyle(color: context.textSubtle, fontSize: 12),
               ),
             )
-          else
+          else ...[
             for (var i = 0; i < candidates.length; i++) ...[
               if (i > 0)
                 Divider(height: 1, color: context.tint(0.04), indent: 16),
               _harvestRow(l, candidates[i], unverified),
             ],
+            _harvestFooter(l, candidates, netBuckets),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Summary footer under the harvest rows: totals the candidates' losses +
+  /// estimated savings, then shows how that realized loss would flow — against
+  /// this year's net gains, then the §1211(b) ordinary-offset room, then the
+  /// carryforward — echoing the server's `net_capital_buckets` rather than
+  /// re-deriving any bracket math here.
+  Widget _harvestFooter(
+    AppLocalizations l,
+    List<Map<String, dynamic>> candidates,
+    Map<String, dynamic>? netBuckets,
+  ) {
+    final totals = harvestTotals(candidates);
+
+    // Server-side netting figures (USD, already non-negative). Absent when the
+    // summary hasn't loaded; we still show the candidate totals in that case.
+    double? netUsd(String key) =>
+        (netBuckets?[key] as num?)?.toDouble();
+    // st/lt_taxable_gain are the gains that REMAIN taxable after netting (not
+    // the amount of loss absorbed by gains, which the server doesn't expose).
+    final taxableGainsRemaining =
+        (netUsd('st_taxable_gain') ?? 0) + (netUsd('lt_taxable_gain') ?? 0);
+    final ordinaryOffset = netUsd('ordinary_loss_offset') ?? 0;
+    final ordinaryCap = netUsd('ordinary_offset_cap');
+    final carryforward = netUsd('carryforward') ?? 0;
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: context.tint(0.06))),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Candidate totals: total harvestable loss + total estimated savings.
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  l.taxHarvestFooterTotal(totals.count.toString()),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: context.textPrimary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                // Loss total is negative → renders red via _pnlColor.
+                _signedMoney(totals.totalLossUsd),
+                style: TextStyle(
+                  color: _pnlColor(totals.totalLossUsd),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            l.taxHarvestFooterSavings(_money(totals.totalSavingsUsd)),
+            style: TextStyle(
+              color: context.positive,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (netBuckets != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              l.taxHarvestFooterFlow(
+                _money(taxableGainsRemaining),
+                ordinaryCap == null
+                    ? _money(ordinaryOffset)
+                    : '${_money(ordinaryOffset)} / ${_money(ordinaryCap)}',
+                _money(carryforward),
+              ),
+              style: TextStyle(fontSize: 11, color: context.textSubtle),
+            ),
+            if (carryforward > 0) ...[
+              const SizedBox(height: 4),
+              Text(
+                l.taxHarvestFooterCarryforward(_money(carryforward)),
+                style: TextStyle(fontSize: 11, color: context.textFaint),
+              ),
+            ],
+          ],
         ],
       ),
     );

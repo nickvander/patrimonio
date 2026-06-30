@@ -5,6 +5,7 @@ import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../utils/lending_summary.dart';
 import '../utils/theme_colors.dart';
+import 'interest_income_sheet.dart';
 
 /// Personal lending tab — only mounted when the user enables the
 /// module (app_settings 'lending_enabled'). Lists money the user has
@@ -208,6 +209,17 @@ class _LendingTabState extends State<LendingTab> {
                   ),
                 ),
                 const Spacer(),
+                // Drill into the full cash-basis interest-income report
+                // (per-month series, per-loan + per-currency totals,
+                // §7872 below-market flag). Only meaningful once interest
+                // has actually been received.
+                if (interestEarned > 0)
+                  TextButton.icon(
+                    onPressed: _openInterestIncome,
+                    icon: const Icon(Icons.insights_outlined, size: 18),
+                    label: Text(
+                        AppLocalizations.of(context).lendingInterestIncomeTitle),
+                  ),
                 // Export the loan-interest CSV (cash-basis interest
                 // income — hand to an accountant at tax time).
                 if (interestEarned > 0)
@@ -531,6 +543,10 @@ class _LendingTabState extends State<LendingTab> {
                       ),
                     ),
                   ),
+                  if (_dueStatusPill(loan) case final p?) ...[
+                    p,
+                    const SizedBox(width: 6),
+                  ],
                   _statusPill(status),
                 ],
               ),
@@ -580,21 +596,62 @@ class _LendingTabState extends State<LendingTab> {
                       )),
                 ],
               ),
-              // Interest income realized on this loan, when any.
-              if (((loan['interest_earned'] as num?)?.toDouble() ?? 0) > 0) ...[
+              // Interest on this loan: realized income (cash basis) and,
+              // beside it, the informational "owed so far" accrual that
+              // hasn't been paid yet. Accrued is already zeroed server-side
+              // for terminal statuses, but gate here too so a paid_off loan
+              // never shows an "owed" amount.
+              if (_interestLine(loan, currency, status) case final w?) ...[
                 const SizedBox(height: 4),
-                Text(
-                  '${AppLocalizations.of(context).lendingInterestEarned} ${_money((loan['interest_earned'] as num).toDouble(), currency)}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: context.positive,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
+                w,
               ],
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// The card's interest line: realized interest_earned (positive/income)
+  /// and, when there's unpaid simple interest accrued to date, an
+  /// "interest owed so far" figure beside it (warning-toned, like the
+  /// detail sheet). Returns null when neither figure is meaningful.
+  Widget? _interestLine(
+      Map<String, dynamic> loan, String currency, String status) {
+    final earned = (loan['interest_earned'] as num?)?.toDouble() ?? 0;
+    // Mirror the detail sheet: never surface an "owed" amount on a
+    // terminal loan, even if a stale accrual slipped through.
+    final terminal =
+        status == 'paid_off' || status == 'cancelled' || status == 'written_off';
+    final accrued =
+        terminal ? 0.0 : (loan['interest_accrued'] as num?)?.toDouble() ?? 0;
+    if (earned <= 0 && accrued <= 0) return null;
+
+    final l10n = AppLocalizations.of(context);
+    return Text.rich(
+      TextSpan(
+        style: TextStyle(
+          fontSize: 11,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+        children: [
+          if (earned > 0)
+            TextSpan(
+              text:
+                  '${l10n.lendingInterestEarned} ${_money(earned, currency)}',
+              style: TextStyle(color: context.positive),
+            ),
+          if (earned > 0 && accrued > 0)
+            TextSpan(
+                text: ' · ',
+                style: TextStyle(color: context.textFaint)),
+          if (accrued > 0)
+            TextSpan(
+              text:
+                  '${l10n.lendingInterestOwedSoFar} ${_money(accrued, currency)}',
+              style: TextStyle(color: context.warning),
+            ),
+        ],
       ),
     );
   }
@@ -607,6 +664,38 @@ class _LendingTabState extends State<LendingTab> {
       'cancelled' => ('Cancelled', context.textFaint),
       _ => ('Active', context.tealAccent),
     };
+    return _pill(label, color);
+  }
+
+  /// Due-status pill for an active loan, derived from the same
+  /// overdue / next_due / paid_ahead fields the aging section uses:
+  /// overdue (any past-due installment) → "Overdue"; otherwise the
+  /// earliest unpaid due date → "Due {date}"; otherwise, when the
+  /// borrower is running ahead of the bill → "Paid ahead". Returns null
+  /// when there's nothing schedule-related to show (e.g. a terminal loan
+  /// or an open-ended loan with no schedule and no due date).
+  Widget? _dueStatusPill(Map<String, dynamic> loan) {
+    final status = (loan['status'] ?? 'active').toString();
+    if (status != 'active') return null;
+    final l10n = AppLocalizations.of(context);
+    final overdue = loan['overdue'] == true;
+    final paidAhead = loan['paid_ahead'] == true;
+    final nextDue = loan['next_due']?.toString();
+    if (overdue) {
+      return _pill(l10n.lendingDueOverdue, context.negative);
+    }
+    if (nextDue != null && nextDue.isNotEmpty) {
+      return _pill(l10n.lendingDueOn(_shortDate(nextDue)), context.warning);
+    }
+    if (paidAhead) {
+      return _pill(l10n.lendingDuePaidAhead, context.positive);
+    }
+    return null;
+  }
+
+  /// Compact pill/badge — same chrome as the status pill so the
+  /// due-status badge sits beside it without restyling.
+  Widget _pill(String label, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
@@ -617,6 +706,13 @@ class _LendingTabState extends State<LendingTab> {
           style: TextStyle(
               fontSize: 11, fontWeight: FontWeight.w700, color: color)),
     );
+  }
+
+  /// "Jun 29" from a YYYY-MM-DD due date; falls back to the raw string if
+  /// it doesn't parse, so a malformed value never blanks the pill.
+  String _shortDate(String ymd) {
+    final d = DateTime.tryParse(ymd);
+    return d == null ? ymd : DateFormat('MMM d').format(d);
   }
 
   // ---------- add loan ----------
@@ -634,6 +730,24 @@ class _LendingTabState extends State<LendingTab> {
       await _load();
       widget.onChanged?.call();
     }
+  }
+
+  // ---------- interest income ----------
+
+  /// Open the full interest-income drill-down (cash basis): per-month
+  /// series, per-loan table, per-currency totals, and the §7872
+  /// below-market callout. Read-only, so no refresh on close.
+  Future<void> _openInterestIncome() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) =>
+          InterestIncomeSheet(apiService: widget.apiService),
+    );
   }
 
   // ---------- loan detail ----------

@@ -125,7 +125,7 @@ class NetWorthGoalTile extends StatelessWidget {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      pace.label(l),
+                      pace.label(l, currencyFormat, conversionFactor),
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -188,12 +188,21 @@ class NetWorthGoalTile extends StatelessWidget {
 
     final monthlyDelta = (latestNet - anchorNet) / monthsSpan;
 
+    // The catch-up contribution that would still land the goal in [goalYear]:
+    // spread the remaining gap over the months left until the target year-end.
+    // Surfaced when behind so the tile says *how much more* per month it takes.
+    final monthsRemaining = _monthsUntilGoalYearEnd(goalYear);
+    final requiredMonthly = (monthsRemaining > 0 && latestNet < goalUsd)
+        ? (goalUsd - latestNet) / monthsRemaining
+        : null;
+
     // A flat-or-shrinking trajectory can never reach a goal above today's
-    // net worth — flag it as behind with a warning, no bogus projection.
+    // net worth — flag it as behind with a warning, no bogus projection date,
+    // but still surface the catch-up contribution it would take.
     if (monthlyDelta <= 0) {
       return latestNet >= goalUsd
           ? const _PaceVerdict.ahead()
-          : const _PaceVerdict.behind(warning: true);
+          : _PaceVerdict.behind(warning: true, requiredMonthlyUsd: requiredMonthly);
     }
 
     if (latestNet >= goalUsd) return const _PaceVerdict.ahead();
@@ -205,26 +214,62 @@ class NetWorthGoalTile extends StatelessWidget {
     );
     final projectedYear = projected.year;
 
-    if (projectedYear < goalYear) return const _PaceVerdict.ahead();
-    if (projectedYear > goalYear) return const _PaceVerdict.behind();
-    return const _PaceVerdict.onTrack();
+    if (projectedYear < goalYear) {
+      return _PaceVerdict.ahead(
+          projected: projected, monthlyDeltaUsd: monthlyDelta);
+    }
+    if (projectedYear > goalYear) {
+      return _PaceVerdict.behind(requiredMonthlyUsd: requiredMonthly);
+    }
+    return _PaceVerdict.onTrack(
+        projected: projected, monthlyDeltaUsd: monthlyDelta);
+  }
+
+  /// Whole months from now until the end of [goalYear] (December). Zero once
+  /// the goal year is already in the past, so callers skip the catch-up math.
+  int _monthsUntilGoalYearEnd(int goalYear) {
+    final now = DateTime.now();
+    final months = (goalYear - now.year) * 12 + (12 - now.month);
+    return months < 0 ? 0 : months;
   }
 }
 
 /// A goal-pace verdict: whether the current net-worth velocity puts the
 /// goal ahead of, on, or behind its target year. [warning] flags the
 /// special "net worth is flat/shrinking" case so the tile can colour it.
+///
+/// When velocity is positive, [projected]/[monthlyDeltaUsd] carry the
+/// projected completion date and the monthly pace so the label can read
+/// "on pace for ~<month year> at +$X/mo". When behind, [requiredMonthlyUsd]
+/// carries the catch-up contribution needed to still hit the goal year. All
+/// USD amounts are storage units — the label multiplies through the
+/// display conversion factor.
 class _PaceVerdict {
   final int _kind; // 0 = ahead, 1 = onTrack, 2 = behind
   final bool warning;
 
-  const _PaceVerdict.ahead()
+  /// Projected completion date (positive velocity only); null otherwise.
+  final DateTime? projected;
+
+  /// Monthly net-worth velocity in USD (positive velocity only).
+  final double? monthlyDeltaUsd;
+
+  /// Catch-up contribution per month in USD to still land the goal year
+  /// (behind only); null when it can't be computed (goal year past, etc.).
+  final double? requiredMonthlyUsd;
+
+  const _PaceVerdict.ahead({this.projected, this.monthlyDeltaUsd})
       : _kind = 0,
-        warning = false;
-  const _PaceVerdict.onTrack()
+        warning = false,
+        requiredMonthlyUsd = null;
+  const _PaceVerdict.onTrack({this.projected, this.monthlyDeltaUsd})
       : _kind = 1,
-        warning = false;
-  const _PaceVerdict.behind({this.warning = false}) : _kind = 2;
+        warning = false,
+        requiredMonthlyUsd = null;
+  const _PaceVerdict.behind({this.warning = false, this.requiredMonthlyUsd})
+      : _kind = 2,
+        projected = null,
+        monthlyDeltaUsd = null;
 
   IconData get icon => _kind == 0
       ? Icons.trending_up_rounded
@@ -241,9 +286,36 @@ class _PaceVerdict {
             : context.warning;
   }
 
-  String label(AppLocalizations l) => _kind == 0
-      ? l.pfGoalPaceAhead
-      : _kind == 1
-          ? l.pfGoalPaceOnTrack
-          : l.pfGoalPaceBehind;
+  String label(
+    AppLocalizations l,
+    NumberFormat currencyFormat,
+    double conversionFactor,
+  ) {
+    final base = _kind == 0
+        ? l.pfGoalPaceAhead
+        : _kind == 1
+            ? l.pfGoalPaceOnTrack
+            : l.pfGoalPaceBehind;
+
+    // On-pace projection: "<verdict> · on pace for ~<month year> at +$X/mo".
+    if (projected != null &&
+        monthlyDeltaUsd != null &&
+        monthlyDeltaUsd! > 0) {
+      // yMMM follows the locale ("Jun 2028" / "jun 2028").
+      final when = DateFormat.yMMM().format(projected!);
+      final rate =
+          currencyFormat.format(monthlyDeltaUsd! * conversionFactor);
+      // gen-l10n orders positional args alphabetically: (rate, when).
+      return '$base · ${l.pfGoalOnPaceFor(rate, when)}';
+    }
+
+    // Behind: surface the catch-up contribution to still hit the goal year.
+    if (_kind == 2 && requiredMonthlyUsd != null && requiredMonthlyUsd! > 0) {
+      final need =
+          currencyFormat.format(requiredMonthlyUsd! * conversionFactor);
+      return '$base · ${l.pfGoalNeedPerMonth(need)}';
+    }
+
+    return base;
+  }
 }

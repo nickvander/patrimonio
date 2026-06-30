@@ -18,11 +18,18 @@ class SpendingByCategoryCard extends StatefulWidget {
   final double conversionFactor;
   final NumberFormat currencyFormat;
 
+  /// When set (item #11), the chart window is driven by the Cash Flow period
+  /// selector instead of the card's own 3/6/12 chips, and those chips are
+  /// hidden. Absent → unchanged behavior: the card owns its window via the
+  /// built-in range selector (default 6 months).
+  final int? months;
+
   const SpendingByCategoryCard({
     super.key,
     required this.apiService,
     required this.conversionFactor,
     required this.currencyFormat,
+    this.months,
   });
 
   @override
@@ -34,17 +41,30 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
   bool _loading = true;
   Map<String, dynamic>? _data;
 
+  // The effective window: the externally driven period (item #11) wins over
+  // the card's own range selector when provided.
+  int get _effectiveMonths => widget.months ?? _months;
+
   @override
   void initState() {
     super.initState();
     _load();
   }
 
+  @override
+  void didUpdateWidget(SpendingByCategoryCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Refetch when the cash-flow period selector changes the driven window.
+    if (widget.months != oldWidget.months && widget.months != null) {
+      _load();
+    }
+  }
+
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final data =
-          await widget.apiService.getSpendingByCategory(months: _months, top: 6);
+      final data = await widget.apiService
+          .getSpendingByCategory(months: _effectiveMonths, top: 6);
       if (mounted) setState(() => _data = data);
     } catch (_) {
       // Leave _data as-is; the empty state renders below.
@@ -97,7 +117,10 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
                     ),
                   ),
                 ),
-                _rangeSelector(),
+                // Hidden when the window is driven by the Cash Flow period
+                // selector (item #11) — the two selectors would otherwise
+                // disagree on screen.
+                if (widget.months == null) _rangeSelector(),
               ],
             ),
             const SizedBox(height: 16),

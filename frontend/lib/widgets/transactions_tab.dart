@@ -1043,6 +1043,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 l.txShowingCount(filtered.length, widget.transactions.length),
                 style: TextStyle(color: context.textSubtle, fontSize: 12),
               ),
+              // With any filter/search active, summarise the FULL filtered
+              // (cascade-loaded) set — net + outflow + inflow in the
+              // reporting currency — so the user doesn't have to do CSV math.
+              if ((_searchQuery.isNotEmpty || _filters.isActive) &&
+                  filtered.isNotEmpty)
+                _buildFilteredSummary(filtered),
               const SizedBox(height: 8),
               if (_selectionMode) _buildBulkActionBar(filtered),
               // Flat list of rows with inline date-group headers
@@ -2600,6 +2606,98 @@ class _TransactionsTabState extends State<TransactionsTab> {
     _monthNetsRate = widget.usdMxnRate;
     _monthNetsOldestKey = oldest;
     return next;
+  }
+
+  /// Summary line under "Showing X of Y", shown only while a filter/search
+  /// is active. Reports net + outflow + inflow over the full filtered set
+  /// (cascade-loaded, not just the rendered page) in the reporting currency.
+  /// Net is colored via the positive/negative tokens (income-positive); the
+  /// outflow/inflow breakdown is muted so the net stays the headline.
+  Widget _buildFilteredSummary(List<dynamic> filtered) {
+    final l = AppLocalizations.of(context);
+    final totals = _filteredTotals(filtered);
+    final signedNet =
+        '${totals.net < 0 ? '−' : '+'}${widget.currencyFormat.format(totals.net.abs())}';
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 2,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: '${l.txFilteredNet} ',
+                  style: TextStyle(
+                    color: context.textSubtle,
+                    fontSize: 12,
+                  ),
+                ),
+                TextSpan(
+                  text: signedNet,
+                  style: TextStyle(
+                    color: totals.net < 0 ? context.negative : context.positive,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            l.txFilteredOutflow(widget.currencyFormat.format(totals.outflow)),
+            style: TextStyle(
+              color: context.textSubtle,
+              fontSize: 12,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          Text(
+            l.txFilteredInflow(widget.currencyFormat.format(totals.inflow)),
+            style: TextStyle(
+              color: context.textSubtle,
+              fontSize: 12,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Net / outflow / inflow over an arbitrary set of rows in the reporting
+  /// currency. Same rules as _ensureMonthNets: per-row currency conversion
+  /// and FX-transfer-leg exclusion (money moving between the user's own
+  /// pockets is neither income nor spending), and the storage sign
+  /// convention (negative = outflow, positive = inflow). Used for the
+  /// filtered-set summary under "Showing X of Y" — outflow is reported as a
+  /// positive magnitude, net is income-positive.
+  ({double net, double outflow, double inflow}) _filteredTotals(
+    List<dynamic> txs,
+  ) {
+    final fxIndex = _ensureFxLinkIndex();
+    var outflow = 0.0;
+    var inflow = 0.0;
+    for (final tx in txs) {
+      final id = tx['id']?.toString();
+      if (id != null && fxIndex.containsKey(id)) continue; // transfer leg
+      final amount = (tx['amount'] as num?)?.toDouble() ?? 0.0;
+      final converted = convertCurrency(
+        amount,
+        from: (tx['currency'] ?? widget.targetCurrency).toString(),
+        to: widget.targetCurrency,
+        usdMxnRate: widget.usdMxnRate,
+      );
+      if (converted < 0) {
+        outflow += -converted;
+      } else {
+        inflow += converted;
+      }
+    }
+    return (net: inflow - outflow, outflow: outflow, inflow: inflow);
   }
 
   /// Stable key for grouping. "today" / "yesterday" / yyyy-mm-dd otherwise.

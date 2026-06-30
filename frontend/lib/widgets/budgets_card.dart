@@ -26,6 +26,13 @@ class BudgetsCard extends StatefulWidget {
   /// Without it the card falls back to localStorage-only.
   final ApiService? apiService;
 
+  /// The single month to price budgets against (item #11). Budgets are MONTHLY
+  /// targets, so a multi-month cash-flow window (3mo/YTD) is compared to its
+  /// MOST RECENT single month — never a sum/average across months. Any day in
+  /// the target month works; only year+month are read. Defaults to the current
+  /// month (today) when absent, preserving the pre-#11 behavior.
+  final DateTime? periodMonth;
+
   const BudgetsCard({
     super.key,
     required this.transactions,
@@ -33,6 +40,7 @@ class BudgetsCard extends StatefulWidget {
     required this.usdMxnRate,
     required this.currencyFormat,
     this.apiService,
+    this.periodMonth,
   });
 
   @override
@@ -43,6 +51,14 @@ class BudgetsCard extends StatefulWidget {
 const _kSuggestPreselect = 6;
 // Budget rows shown before the list collapses behind a "show all" toggle.
 const _kBudgetCollapseLimit = 6;
+// Spend must exceed this multiple of the prorated expected-to-date budget to
+// count as "on track to exceed" — tolerates normal early-month lumpiness.
+const _kPaceTolerance = 1.15;
+
+// Per-category budget tier, worst-first in severity. `pacing` ("on track to
+// exceed") sits between `near` and `ok`: under the full-month budget, but
+// running ahead of the prorated expected-to-date threshold.
+enum _BudgetState { over, near, pacing, ok }
 
 class _BudgetsCardState extends State<BudgetsCard> {
   // Seed from localStorage so first paint is instant. The backend value
@@ -246,22 +262,47 @@ class _BudgetsCardState extends State<BudgetsCard> {
     );
   }
 
-  /// Sum outflow transactions in the current month by prettified
-  /// category, normalised to USD (the unit budgets are stored in). Storage
-  /// sign convention (backend sync.rs:659): negative = outflow, positive =
-  /// inflow — so spend is the negative rows, summed as their absolute value.
-  /// Skips income (positive amounts) and pending rows.
+  /// The single month budgets are priced against. Item #11 threads the
+  /// most-recent month of the selected cash-flow window in via
+  /// [BudgetsCard.periodMonth]; absent it (and pre-#11) this is the current
+  /// month. Normalised to a first-of-month DateTime — only year+month matter.
+  DateTime get _targetMonthStart {
+    final m = widget.periodMonth ?? DateTime.now();
+    return DateTime(m.year, m.month);
+  }
+
+  /// True only when the priced month IS the current calendar month. Day-of-
+  /// month pacing (#10) is meaningless for a fully-elapsed past month, so it's
+  /// gated to this (item #11): a closed month is judged on full-month spend.
+  bool get _isCurrentMonth {
+    final now = DateTime.now();
+    final t = _targetMonthStart;
+    return t.year == now.year && t.month == now.month;
+  }
+
+  /// Sum outflow transactions in the priced month ([_targetMonthStart]) by
+  /// prettified category, normalised to USD (the unit budgets are stored in).
+  /// Storage sign convention (backend sync.rs:659): negative = outflow,
+  /// positive = inflow — so spend is the negative rows, summed as their
+  /// absolute value. Skips income (positive amounts) and pending rows.
+  ///
+  /// Budgets are MONTHLY targets, so even for a multi-month cash-flow window
+  /// this scopes to a SINGLE month (the window's most recent) — never summing
+  /// or averaging a monthly target across months.
   Map<String, double> _monthlySpendByCategory() {
     final out = <String, double>{};
-    final now = DateTime.now();
-    final monthStart = DateTime(now.year, now.month);
+    final monthStart = _targetMonthStart;
+    // Exclusive upper bound: first day of the month after the priced month.
+    final monthEnd = DateTime(monthStart.year, monthStart.month + 1);
     for (final raw in widget.transactions) {
       final m = raw as Map;
       if (m['pending'] == true) continue;
       final ds = m['date']?.toString();
       if (ds == null) continue;
       final d = DateTime.tryParse(ds);
-      if (d == null || d.isBefore(monthStart)) continue;
+      if (d == null || d.isBefore(monthStart) || !d.isBefore(monthEnd)) {
+        continue;
+      }
       final amount = (m['amount'] as num?)?.toDouble() ?? 0.0;
       if (amount >= 0) continue;
       // Budgets are USD; convert each row from its native currency so a
@@ -282,24 +323,87 @@ class _BudgetsCardState extends State<BudgetsCard> {
     return out;
   }
 
+  // How far through the priced month we are, as a fraction in (0, 1].
+  // Drives the prorated expected-to-date budget threshold. Item #11: pacing
+  // only makes sense for the in-progress current month — a closed past month
+  // (3mo/YTD windows price against a fully-elapsed month) returns 1.0 so the
+  // expected-to-date equals the full-month budget and the pacing tier can't
+  // fire. The pace marker is also hidden for non-current months below.
+  double _monthPaceFraction() {
+    if (!_isCurrentMonth) return 1.0;
+    final now = DateTime.now();
+    final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
+    return (now.day / daysInMonth).clamp(0.0, 1.0);
+  }
+
+  // Spend-vs-budget state for a single category. `_BudgetState.pacing` is the
+  // new "on track to exceed" tier: not yet over the full-month budget, but
+  // running materially ahead of the prorated expected-to-date threshold.
+  _BudgetState _budgetStateFor(double spentUsd, double budgetUsd, double pace) {
+    if (budgetUsd <= 0) return _BudgetState.ok;
+    if (spentUsd > budgetUsd) return _BudgetState.over;
+    if (spentUsd / budgetUsd > 0.85) return _BudgetState.near;
+    final expectedToDate = budgetUsd * pace;
+    // 115% of the prorated expectation: tolerate normal lumpiness, flag a
+    // genuine run-rate problem (e.g. 60% spent on the 5th). Guarded by an
+    // early-month floor — at least ~20% through the month AND at least 25% of
+    // the budget already spent — so a single early purchase (pace≈0.03 on day 1)
+    // can't trip the "on track to exceed" tier.
+    const kPaceMinElapsed = 0.2;
+    const kPaceMinSpentFraction = 0.25;
+    if (pace >= kPaceMinElapsed &&
+        spentUsd > budgetUsd * kPaceMinSpentFraction &&
+        expectedToDate > 0 &&
+        spentUsd > expectedToDate * _kPaceTolerance) {
+      return _BudgetState.pacing;
+    }
+    return _BudgetState.ok;
+  }
+
+  Color _budgetStateColor(BuildContext context, _BudgetState state) {
+    switch (state) {
+      case _BudgetState.over:
+        return context.pinkAccent;
+      case _BudgetState.near:
+        return context.warning;
+      case _BudgetState.pacing:
+        return context.warning;
+      case _BudgetState.ok:
+        return context.positive;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final spend = _monthlySpendByCategory();
     final hasBudgets = _budgets.isNotEmpty;
+    final pace = _monthPaceFraction();
+    // Pacing (the expected-to-date marker + "on track to exceed" tier) only
+    // applies to the in-progress current month (item #11). For a closed month
+    // priced by a 3mo/YTD window, hide the marker — it would pin to the far
+    // right and read as a full-month threshold, which is misleading.
+    final showPaceMarker = _isCurrentMonth;
 
     // Budget-vs-actual alert state: how many categories are over budget (and
-    // by how much in total) vs merely approaching it (>85%).
+    // by how much in total), merely approaching it (>85%), or on track to
+    // exceed by month-end (ahead of the prorated expected-to-date threshold).
     var overCount = 0;
     var overTotalUsd = 0.0;
     var nearCount = 0;
+    var pacingCount = 0;
     for (final e in _budgets.entries) {
       final spent = spend[e.key] ?? 0.0;
-      if (spent > e.value) {
-        overCount++;
-        overTotalUsd += spent - e.value;
-      } else if (e.value > 0 && spent / e.value > 0.85) {
-        nearCount++;
+      switch (_budgetStateFor(spent, e.value, pace)) {
+        case _BudgetState.over:
+          overCount++;
+          overTotalUsd += spent - e.value;
+        case _BudgetState.near:
+          nearCount++;
+        case _BudgetState.pacing:
+          pacingCount++;
+        case _BudgetState.ok:
+          break;
       }
     }
 
@@ -351,8 +455,10 @@ class _BudgetsCardState extends State<BudgetsCard> {
               ],
             ),
             const SizedBox(height: 12),
-            if (hasBudgets && (overCount > 0 || nearCount > 0)) ...[
-              _alertBanner(context, l, overCount, overTotalUsd, nearCount),
+            if (hasBudgets &&
+                (overCount > 0 || nearCount > 0 || pacingCount > 0)) ...[
+              _alertBanner(
+                  context, l, overCount, overTotalUsd, nearCount, pacingCount),
               const SizedBox(height: 12),
             ],
             if (!hasBudgets)
@@ -370,12 +476,9 @@ class _BudgetsCardState extends State<BudgetsCard> {
                 final spentUsd = spend[cat] ?? 0.0;
                 final pct =
                     budgetUsd <= 0 ? 0.0 : (spentUsd / budgetUsd).clamp(0.0, 1.5);
-                final over = spentUsd > budgetUsd;
-                final color = over
-                    ? context.pinkAccent
-                    : pct > 0.85
-                        ? context.warning
-                        : context.positive;
+                final state = _budgetStateFor(spentUsd, budgetUsd, pace);
+                final over = state == _BudgetState.over;
+                final color = _budgetStateColor(context, state);
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Column(
@@ -418,13 +521,38 @@ class _BudgetsCardState extends State<BudgetsCard> {
                         ],
                       ),
                       const SizedBox(height: 6),
+                      // Bar with a thin "expected-to-date" pace marker: where
+                      // a category should be if spend were even across the
+                      // month. Spend bar pushing past the marker is the
+                      // "on track to exceed" signal the colour/label echo.
                       ClipRRect(
                         borderRadius: BorderRadius.circular(6),
-                        child: LinearProgressIndicator(
-                          value: pct > 1.0 ? 1.0 : pct,
-                          backgroundColor: context.tileSurface,
-                          color: color,
-                          minHeight: 8,
+                        child: Stack(
+                          children: [
+                            LinearProgressIndicator(
+                              value: pct > 1.0 ? 1.0 : pct,
+                              backgroundColor: context.tileSurface,
+                              color: color,
+                              minHeight: 8,
+                            ),
+                            if (showPaceMarker)
+                              Positioned.fill(
+                                child: LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    return Align(
+                                      alignment:
+                                          Alignment(pace * 2 - 1, 0),
+                                      child: Container(
+                                        width: 2,
+                                        height: 8,
+                                        color: context.textMuted
+                                            .withValues(alpha: 0.55),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 3),
@@ -433,12 +561,19 @@ class _BudgetsCardState extends State<BudgetsCard> {
                             ? l.cfBudgetsOverBy(widget.currencyFormat.format(
                                 (spentUsd - budgetUsd) *
                                     widget.conversionFactor))
-                            : l.cfBudgetsLeft(widget.currencyFormat.format(
-                                (budgetUsd - spentUsd).clamp(0, double.infinity) *
-                                    widget.conversionFactor)),
+                            : state == _BudgetState.pacing
+                                ? l.cfBudgetsPacingToExceed
+                                : l.cfBudgetsLeft(widget.currencyFormat.format(
+                                    (budgetUsd - spentUsd)
+                                            .clamp(0, double.infinity) *
+                                        widget.conversionFactor)),
                         style: TextStyle(
                           fontSize: 10,
-                          color: over ? context.pinkAccent : context.textFaint,
+                          color: over
+                              ? context.pinkAccent
+                              : state == _BudgetState.pacing
+                                  ? context.warning
+                                  : context.textFaint,
                         ),
                       ),
                     ],
@@ -467,23 +602,29 @@ class _BudgetsCardState extends State<BudgetsCard> {
   }
 
   // Prominent budget-vs-actual alert. Red when any category is over budget
-  // (with the total overage), amber when categories are merely approaching it.
+  // (with the total overage), amber when categories are merely approaching it
+  // or are on track to exceed by month-end (the prorated pace tier).
   Widget _alertBanner(
     BuildContext context,
     AppLocalizations l,
     int overCount,
     double overTotalUsd,
     int nearCount,
+    int pacingCount,
   ) {
     final isOver = overCount > 0;
     final color = isOver ? context.pinkAccent : context.warning;
-    final text = isOver
-        ? l.cfBudgetsOverAlert(
-            overCount,
-            widget.currencyFormat
-                .format(overTotalUsd * widget.conversionFactor),
-          )
-        : l.cfBudgetsNearAlert(nearCount);
+    final String text;
+    if (isOver) {
+      text = l.cfBudgetsOverAlert(
+        overCount,
+        widget.currencyFormat.format(overTotalUsd * widget.conversionFactor),
+      );
+    } else if (nearCount > 0) {
+      text = l.cfBudgetsNearAlert(nearCount);
+    } else {
+      text = l.cfBudgetsPacingAlert(pacingCount);
+    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(

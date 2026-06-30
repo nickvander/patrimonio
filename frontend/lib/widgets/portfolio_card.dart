@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
+import '../services/api_service.dart';
 import '../services/preferences.dart';
 import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
@@ -2621,6 +2622,293 @@ class _KpiTile extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Portfolio-wide dividend income, from `/dashboard/holdings/dividends`.
+///
+/// Aggregates the per-symbol dividend engine across every active account into
+/// a projected annual income, a blended yield-on-value, the top payers, and
+/// the next estimated ex-dates. Self-fetching (like [RealizedGainsCard]) and
+/// renders nothing when the user holds no dividend payers, so it stays out of
+/// the way for cash-only / non-paying portfolios.
+class DividendIncomeCard extends StatefulWidget {
+  final ApiService apiService;
+  final double conversionFactor;
+  final NumberFormat currencyFormat;
+
+  const DividendIncomeCard({
+    super.key,
+    required this.apiService,
+    required this.conversionFactor,
+    required this.currencyFormat,
+  });
+
+  @override
+  State<DividendIncomeCard> createState() => _DividendIncomeCardState();
+}
+
+class _DividendIncomeCardState extends State<DividendIncomeCard> {
+  bool _loading = true;
+  Map<String, dynamic>? _data;
+  // Top payers + upcoming ex-dates are both capped — this is a glanceable
+  // income summary, not the full holdings table.
+  static const _maxPayers = 5;
+  static const _maxExDates = 4;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final data = await widget.apiService.getPortfolioDividends();
+      if (mounted) setState(() => _data = data);
+    } catch (_) {
+      // Swallow — the empty/collapsed render handles the failure case.
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// USD figure scaled into the display currency, same pattern as the
+  /// realized-gains and holdings cards.
+  String _money(double usd) =>
+      widget.currencyFormat.format(usd * widget.conversionFactor);
+
+  @override
+  Widget build(BuildContext context) {
+    // Stay invisible until loaded, then hide entirely when the portfolio
+    // earns no dividends (no payers / all fetches degraded to zero).
+    if (_loading) return const SizedBox.shrink();
+    final data = _data;
+    if (data == null) return const SizedBox.shrink();
+
+    final income =
+        (data['projected_annual_income_usd'] as num?)?.toDouble() ?? 0.0;
+    if (income <= 0) return const SizedBox.shrink();
+
+    final l = AppLocalizations.of(context);
+    final blendedYield = (data['blended_yield_pct'] as num?)?.toDouble();
+    final fxStale = data['fx_stale'] == true;
+
+    // Payers come back income-descending already; keep only the ones that
+    // actually pay and cap the list for the glanceable summary.
+    final payers = ((data['contributions'] as List<dynamic>?) ?? const [])
+        .where((c) =>
+            ((c as Map)['annual_income_usd'] as num?)?.toDouble() != null &&
+            ((c['annual_income_usd'] as num).toDouble()) > 0)
+        .toList();
+    final upcoming =
+        (data['upcoming_ex_dates'] as List<dynamic>?) ?? const [];
+
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: EdgeInsets.all(pad),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.payments_outlined,
+                    color: context.tealAccent, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  l.divCardTitle,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: context.textPrimary,
+                  ),
+                ),
+                if (fxStale) ...[
+                  const SizedBox(width: 8),
+                  Tooltip(
+                    message: l.divFxStaleHint,
+                    child: Icon(Icons.error_outline,
+                        size: 15, color: context.warning),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _summaryTile(
+                    l.divProjectedAnnual,
+                    _money(income),
+                    context.positive,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _summaryTile(
+                    l.divBlendedYield,
+                    blendedYield == null
+                        ? '—'
+                        : '${blendedYield.toStringAsFixed(2)}%',
+                    context.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            if (payers.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Divider(height: 24, color: context.hairline),
+              Text(
+                l.divTopPayers,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
+                  color: context.textSubtle,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...payers
+                  .take(_maxPayers)
+                  .map((c) => _payerRow(c as Map<String, dynamic>)),
+            ],
+            if (upcoming.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Divider(height: 24, color: context.hairline),
+              Text(
+                l.divUpcomingExDates,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
+                  color: context.textSubtle,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...upcoming
+                  .take(_maxExDates)
+                  .map((e) => _exDateRow(e as Map<String, dynamic>)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _summaryTile(String label, String value, Color valueColor) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.tint(0.04),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: TextStyle(color: context.textMuted, fontSize: 12)),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: valueColor,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _payerRow(Map<String, dynamic> c) {
+    final l = AppLocalizations.of(context);
+    final symbol = c['symbol']?.toString() ?? '';
+    final incomeUsd = (c['annual_income_usd'] as num?)?.toDouble() ?? 0.0;
+    final yieldPct = (c['yield_pct'] as num?)?.toDouble();
+    final perYear = (c['per_year'] as num?)?.toInt() ?? 0;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  symbol.isNotEmpty ? symbol : '—',
+                  style: TextStyle(
+                    color: context.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  yieldPct == null
+                      ? l.divPaymentsPerYear(perYear)
+                      : '${yieldPct.toStringAsFixed(2)}% · ${l.divPaymentsPerYear(perYear)}',
+                  style: TextStyle(color: context.textFaint, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            _money(incomeUsd),
+            style: TextStyle(
+              color: context.textPrimary,
+              fontWeight: FontWeight.bold,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _exDateRow(Map<String, dynamic> e) {
+    final symbol = e['symbol']?.toString() ?? '';
+    final dateStr = e['est_next_ex_date']?.toString() ?? '';
+    final parsed = DateTime.tryParse(dateStr);
+    final dateLabel =
+        parsed == null ? dateStr : DateFormat.yMMMd().format(parsed);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              symbol.isNotEmpty ? symbol : '—',
+              style: TextStyle(
+                color: context.textPrimary,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            dateLabel,
+            style: TextStyle(
+              color: context.textMuted,
+              fontSize: 12,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
         ],
       ),
     );

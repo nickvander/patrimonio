@@ -60,6 +60,10 @@ class MonthlyCashFlowCard extends StatelessWidget {
     double income;
     double spending;
     double? priorNet;
+    // Prior month's income, kept alongside priorNet so the savings-rate
+    // delta can be computed (prior rate = priorNet / priorIncome). Null
+    // whenever priorNet is null (aggregate window or no prior month).
+    double? priorIncome;
 
     if (aggregate) {
       // Sum every month in the fetched window.
@@ -74,6 +78,7 @@ class MonthlyCashFlowCard extends StatelessWidget {
       // No single "prior period" to compare an aggregate against — omit the
       // vs-prior delta rather than show a misleading month-over-month number.
       priorNet = null;
+      priorIncome = null;
     } else {
       final current = trends[currentIdx];
       final prior = currentIdx >= 1 ? trends[currentIdx - 1] : null;
@@ -89,6 +94,7 @@ class MonthlyCashFlowCard extends StatelessWidget {
             ((prior['spending'] as num?)?.toDouble() ?? 0.0) *
                 conversionFactor;
         priorNet = pi - ps;
+        priorIncome = pi;
       }
     }
     final net = income - spending;
@@ -158,6 +164,8 @@ class MonthlyCashFlowCard extends StatelessWidget {
             final netLine = _NetLine(
               net: net,
               priorNet: priorNet,
+              income: income,
+              priorIncome: priorIncome,
               currencyFormat: currencyFormat,
             );
 
@@ -271,11 +279,15 @@ class MonthlyCashFlowCard extends StatelessWidget {
 class _NetLine extends StatelessWidget {
   final double net;
   final double? priorNet;
+  final double income;
+  final double? priorIncome;
   final NumberFormat currencyFormat;
 
   const _NetLine({
     required this.net,
     required this.priorNet,
+    required this.income,
+    required this.priorIncome,
     required this.currencyFormat,
   });
 
@@ -286,36 +298,110 @@ class _NetLine extends StatelessWidget {
     final color = positive ? context.positive : context.pinkAccent;
     final delta = priorNet == null ? null : net - priorNet!;
 
+    // Savings rate = net / income, only meaningful when income is positive.
+    // (A month with no income can't have a savings *rate* — dividing by zero
+    // or a negative would print nonsense, so we omit the chip entirely.)
+    final double? rate = income > 0 ? net / income : null;
+    // Prior month's rate, used for the vs-prior delta in basis-point terms.
+    // Only available on single-month windows where priorIncome > 0.
+    final double? priorRate = (priorIncome != null && priorIncome! > 0)
+        ? priorNet! / priorIncome!
+        : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              (positive ? '+' : '−') + currencyFormat.format(net.abs()),
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                color: color,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(width: 8),
+            if (delta != null) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  l.cfVsLastMonth(
+                      '${delta >= 0 ? '↑' : '↓'} ${currencyFormat.format(delta.abs())}'),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: delta >= 0 ? context.positive : context.pinkAccent,
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ],
+        ),
+        if (rate != null) ...[
+          const SizedBox(height: 4),
+          _SavingsRateLine(rate: rate, priorRate: priorRate),
+        ],
+      ],
+    );
+  }
+}
+
+/// Savings rate (net / income) shown under the headline net figure, with an
+/// optional vs-prior-month delta in percentage points. Color follows the
+/// settled positive/negative convention — a positive rate (the user kept
+/// money) reads green, a negative rate (they outspent income) reads pink.
+class _SavingsRateLine extends StatelessWidget {
+  final double rate;
+  final double? priorRate;
+
+  const _SavingsRateLine({required this.rate, this.priorRate});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final positive = rate >= 0;
+    final color = positive ? context.positive : context.pinkAccent;
+    final pctLabel = '${(rate * 100).toStringAsFixed(1)}%';
+
+    // Delta in percentage points vs the prior month. Omitted on aggregate
+    // windows / when there's no comparable prior month (priorRate null).
+    final deltaPts =
+        priorRate == null ? null : (rate - priorRate!) * 100;
+
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Text(
-          (positive ? '+' : '−') + currencyFormat.format(net.abs()),
+          l.cfSavingsRate(pctLabel),
           style: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.w800,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
             color: color,
             fontFeatures: const [FontFeature.tabularFigures()],
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        const SizedBox(width: 8),
-        if (delta != null) ...[
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text(
-              l.cfVsLastMonth(
-                  '${delta >= 0 ? '↑' : '↓'} ${currencyFormat.format(delta.abs())}'),
-              style: TextStyle(
-                fontSize: 11,
-                color: delta >= 0 ? context.positive : context.pinkAccent,
-                fontWeight: FontWeight.w600,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+        if (deltaPts != null) ...[
+          const SizedBox(width: 6),
+          Text(
+            '${deltaPts >= 0 ? '↑' : '↓'} ${deltaPts.abs().toStringAsFixed(1)} ${l.cfPtsAbbrev}',
+            style: TextStyle(
+              fontSize: 11,
+              color: deltaPts >= 0 ? context.positive : context.pinkAccent,
+              fontWeight: FontWeight.w600,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ],

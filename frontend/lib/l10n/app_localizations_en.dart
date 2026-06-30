@@ -4871,4 +4871,251 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get dashFxStaleTooltip =>
       'Approximate — the exchange rate is stale (missing or over 7 days old), so this conversion may be off.';
+
+  @override
+  String get lwFxEnterManually => 'Enter rate manually';
+
+  @override
+  String get lwFxManualDialogTitle => 'Enter exchange rate';
+
+  @override
+  String lwFxManualDialogHint(Object base, Object target) {
+    return 'Set a manual $base/$target rate. This overrides the automatic rate until the next refresh.';
+  }
+
+  @override
+  String get lwFxManualInvalid => 'Enter a valid rate greater than zero';
+
+  @override
+  String get lwFxManualSaved => 'Manual exchange rate saved';
+
+  @override
+  String lwFxManualFailed(Object error) {
+    return 'Could not save rate: $error';
+  }
+
+  @override
+  String get taxHeadroomTitle => 'Headroom';
+
+  @override
+  String get taxHeadroomSubtitle => 'Room before the next US tax step';
+
+  @override
+  String taxHeadroomOrdinaryRoom(Object amount, Object rate) {
+    return 'Room in current bracket: $amount before $rate%';
+  }
+
+  @override
+  String taxHeadroomOrdinaryRoomTop(Object amount) {
+    return 'Room in current bracket: $amount';
+  }
+
+  @override
+  String taxHeadroomLtcg0Room(Object amount) {
+    return 'LTCG 0% room: $amount tax-free';
+  }
+
+  @override
+  String taxHeadroomLtcg15Room(Object amount, Object rate) {
+    return 'LTCG 15% room: $amount before $rate%';
+  }
+
+  @override
+  String get txFilteredNet => 'Net';
+
+  @override
+  String txFilteredOutflow(Object amount) {
+    return 'Out $amount';
+  }
+
+  @override
+  String txFilteredInflow(Object amount) {
+    return 'In $amount';
+  }
+
+  @override
+  String statDrilldownApprox(Object amount) {
+    return '≈ $amount';
+  }
+
+  @override
+  String get cfBudgetsPacingToExceed => 'On track to exceed';
+
+  @override
+  String cfBudgetsPacingAlert(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count categories are on track to exceed their budgets',
+      one: '1 category is on track to exceed its budget',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String pfGoalOnPaceFor(Object rate, Object when) {
+    return 'on pace for ~$when at +$rate/mo';
+  }
+
+  @override
+  String pfGoalNeedPerMonth(Object amount) {
+    return 'need $amount/mo to hit goal year';
+  }
+
+  @override
+  String get lendingInterestIncomeTitle => 'Interest income';
+
+  @override
+  String get lendingInterestIncomeLoadError =>
+      'Couldn\'t load interest income. Try again.';
+
+  @override
+  String get lendingInterestIncomeRetry => 'Retry';
+
+  @override
+  String get lendingInterestIncomeAllTime => 'All time';
+
+  @override
+  String get lendingInterestIncomeEmpty =>
+      'No interest received in this period yet.';
+
+  @override
+  String get lendingInterestIncomeTotalsByCurrency => 'Totals by currency';
+
+  @override
+  String get lendingInterestIncomeInterestReceived => 'Interest received';
+
+  @override
+  String get lendingInterestIncomePrincipalReceived => 'Principal received';
+
+  @override
+  String get lendingInterestIncomePaymentsCount => 'Payments';
+
+  @override
+  String get lendingInterestIncomeByMonth => 'Interest by month';
+
+  @override
+  String get lendingInterestIncomeByLoan => 'By loan';
+
+  @override
+  String get lendingInterestIncomeBorrower => 'Borrower';
+
+  @override
+  String get lendingInterestIncomeBelowMarketTitle =>
+      '§7872 below-market loans';
+
+  @override
+  String get lendingInterestIncomeBelowMarketBody =>
+      'These active 0%-rate loans exceed the \$10,000 gift-loan threshold, so the IRS may impute interest under §7872. Informational only — confirm with an accountant.';
+
+  @override
+  String cfSavingsRate(Object rate) {
+    return '$rate saved';
+  }
+
+  @override
+  String get cfPtsAbbrev => 'pts';
+
+  @override
+  String taxHarvestFooterTotal(Object count) {
+    return 'Total harvestable loss ($count lots)';
+  }
+
+  @override
+  String taxHarvestFooterSavings(Object amount) {
+    return 'Est. total savings $amount';
+  }
+
+  @override
+  String taxHarvestFooterFlow(
+    Object carryforward,
+    Object gains,
+    Object ordinary,
+  ) {
+    return '$gains taxable gains remain, $ordinary offset against income, $carryforward carried forward';
+  }
+
+  @override
+  String taxHarvestFooterCarryforward(Object amount) {
+    return '$amount loss carries forward to next year';
+  }
+
+  @override
+  String get lwPerfBenchSp500 => 'S&P 500';
+
+  @override
+  String get lwPerfBenchNdx => 'Nasdaq-100';
+
+  @override
+  String get lwPerfBenchAcwi => 'World (ACWI)';
+
+  @override
+  String get lwPerfBenchAgg => 'US Bonds';
+
+  @override
+  String get lwPerfBenchMxx => 'IPC Mexico';
+
+  @override
+  String get lwPerfBenchPickerTooltip => 'Benchmark';
+
+  @override
+  String get lendingDueOverdue => 'Overdue';
+
+  @override
+  String lendingDueOn(Object date) {
+    return 'Due $date';
+  }
+
+  @override
+  String get lendingDuePaidAhead => 'Paid ahead';
+
+  @override
+  String get lendingInterestOwedSoFar => 'Interest owed so far';
+
+  @override
+  String get dashDataExportTitle => 'Data export';
+
+  @override
+  String get dashDataExportSubtitle =>
+      'Download your transactions and tax reports. Files download directly in your browser.';
+
+  @override
+  String get dashExportTransactionsCsv => 'All transactions (CSV)';
+
+  @override
+  String get dashExportTaxCsv => 'Tax report (CSV)';
+
+  @override
+  String get dashExportTaxPdf => 'Tax report (PDF)';
+
+  @override
+  String get dashImportedBatchesTitle => 'Imported batches';
+
+  @override
+  String get dashImportedBatchesSubtitle =>
+      'Review or undo past statement imports';
+
+  @override
+  String get divCardTitle => 'Dividend income';
+
+  @override
+  String get divProjectedAnnual => 'Projected annual';
+
+  @override
+  String get divBlendedYield => 'Blended yield';
+
+  @override
+  String get divTopPayers => 'Top payers';
+
+  @override
+  String get divUpcomingExDates => 'Upcoming ex-dates';
+
+  @override
+  String divPaymentsPerYear(Object count) {
+    return '$count×/yr';
+  }
+
+  @override
+  String get divFxStaleHint =>
+      'Some income converted with a stale FX rate — figures are approximate.';
 }

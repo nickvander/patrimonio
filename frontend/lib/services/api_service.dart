@@ -652,12 +652,15 @@ class ApiService {
     return null;
   }
 
-  /// Contribution-weighted "you vs S&P 500" over tracked holding lots.
+  /// Contribution-weighted "you vs the chosen benchmark" over tracked holding
+  /// lots. [benchmark] is the index key (e.g. 'SP500', 'NDX'); omitted →
+  /// defaults to the S&P 500 server-side.
   /// Returns {invested_usd, your_value_usd, benchmark_value_usd, lot_count}.
-  Future<Map<String, dynamic>?> getBenchmarkComparison() async {
+  Future<Map<String, dynamic>?> getBenchmarkComparison({String? benchmark}) async {
     try {
+      final q = benchmark != null ? '?benchmark=$benchmark' : '';
       final r = await _get(
-          Uri.parse('$_baseUrl/dashboard/benchmark-comparison'));
+          Uri.parse('$_baseUrl/dashboard/benchmark-comparison$q'));
       if (r.statusCode == 200) {
         final decoded = json.decode(r.body);
         return decoded is Map<String, dynamic> ? decoded : null;
@@ -667,13 +670,16 @@ class ApiService {
   }
 
   /// True time-weighted return: daily growth index of the portfolio (cashflows
-  /// divided out) + the S&P 500 over the same dates, plus `coverage_pct`.
+  /// divided out) + the chosen benchmark over the same dates, plus
+  /// `coverage_pct`. [benchmark] is the index key (e.g. 'SP500', 'NDX');
+  /// omitted → defaults to the S&P 500 server-side.
   /// Returns the `{start_date, end_date, coverage_pct, your_twr, sp_twr,
   /// points:[{date, twr, sp}], ...}` shape; null on any error so the card
   /// falls back to the dollar-value line.
-  Future<Map<String, dynamic>?> getPortfolioTwr() async {
+  Future<Map<String, dynamic>?> getPortfolioTwr({String? benchmark}) async {
     try {
-      final r = await _get(Uri.parse('$_baseUrl/dashboard/portfolio-twr'));
+      final q = benchmark != null ? '?benchmark=$benchmark' : '';
+      final r = await _get(Uri.parse('$_baseUrl/dashboard/portfolio-twr$q'));
       if (r.statusCode == 200) {
         final decoded = json.decode(r.body);
         return decoded is Map<String, dynamic> ? decoded : null;
@@ -963,6 +969,29 @@ class ApiService {
     }
     throw Exception(_t('Failed to load exchange rate',
         'No se pudo cargar el tipo de cambio'));
+  }
+
+  /// Record a user-entered FX override (source='manual'), which the backend
+  /// prefers over the automated open.er-api.com rows. Returns the stored rate.
+  Future<Map<String, dynamic>> postManualExchangeRate({
+    required String base,
+    required String target,
+    required double rate,
+  }) async {
+    final response = await _post(
+      Uri.parse('$_baseUrl/fx/manual'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'base': base,
+        'target': target,
+        'rate': rate,
+      }),
+    );
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception(_t('Failed to save exchange rate',
+        'No se pudo guardar el tipo de cambio'));
   }
 
   Future<List<dynamic>> getTransactions({int limit = 50, int offset = 0}) async {
@@ -1978,6 +2007,22 @@ class ApiService {
     if (res.statusCode != 200) return const [];
     final body = json.decode(res.body);
     return body is List ? body : const [];
+  }
+
+  /// Portfolio-wide dividend income aggregated across every active account:
+  /// projected annual income (USD), blended yield-on-value, per-symbol
+  /// contributions, and the soonest estimated ex-dates. Best-effort — null on
+  /// failure so the card can simply hide.
+  Future<Map<String, dynamic>?> getPortfolioDividends() async {
+    try {
+      final res =
+          await _get(Uri.parse('$_baseUrl/dashboard/holdings/dividends'));
+      if (res.statusCode == 200) {
+        final decoded = json.decode(res.body);
+        return decoded is Map<String, dynamic> ? decoded : null;
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<Map<String, dynamic>> getWealthProjection({

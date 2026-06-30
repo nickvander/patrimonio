@@ -7905,6 +7905,394 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Approximate — the exchange rate is stale (missing or over 7 days old), so this conversion may be off.'**
   String get dashFxStaleTooltip;
+
+  /// No description provided for @lwFxEnterManually.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter rate manually'**
+  String get lwFxEnterManually;
+
+  /// No description provided for @lwFxManualDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter exchange rate'**
+  String get lwFxManualDialogTitle;
+
+  /// No description provided for @lwFxManualDialogHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Set a manual {base}/{target} rate. This overrides the automatic rate until the next refresh.'**
+  String lwFxManualDialogHint(Object base, Object target);
+
+  /// No description provided for @lwFxManualInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid rate greater than zero'**
+  String get lwFxManualInvalid;
+
+  /// No description provided for @lwFxManualSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual exchange rate saved'**
+  String get lwFxManualSaved;
+
+  /// No description provided for @lwFxManualFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save rate: {error}'**
+  String lwFxManualFailed(Object error);
+
+  /// No description provided for @taxHeadroomTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Headroom'**
+  String get taxHeadroomTitle;
+
+  /// No description provided for @taxHeadroomSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Room before the next US tax step'**
+  String get taxHeadroomSubtitle;
+
+  /// No description provided for @taxHeadroomOrdinaryRoom.
+  ///
+  /// In en, this message translates to:
+  /// **'Room in current bracket: {amount} before {rate}%'**
+  String taxHeadroomOrdinaryRoom(Object amount, Object rate);
+
+  /// No description provided for @taxHeadroomOrdinaryRoomTop.
+  ///
+  /// In en, this message translates to:
+  /// **'Room in current bracket: {amount}'**
+  String taxHeadroomOrdinaryRoomTop(Object amount);
+
+  /// No description provided for @taxHeadroomLtcg0Room.
+  ///
+  /// In en, this message translates to:
+  /// **'LTCG 0% room: {amount} tax-free'**
+  String taxHeadroomLtcg0Room(Object amount);
+
+  /// No description provided for @taxHeadroomLtcg15Room.
+  ///
+  /// In en, this message translates to:
+  /// **'LTCG 15% room: {amount} before {rate}%'**
+  String taxHeadroomLtcg15Room(Object amount, Object rate);
+
+  /// No description provided for @txFilteredNet.
+  ///
+  /// In en, this message translates to:
+  /// **'Net'**
+  String get txFilteredNet;
+
+  /// No description provided for @txFilteredOutflow.
+  ///
+  /// In en, this message translates to:
+  /// **'Out {amount}'**
+  String txFilteredOutflow(Object amount);
+
+  /// No description provided for @txFilteredInflow.
+  ///
+  /// In en, this message translates to:
+  /// **'In {amount}'**
+  String txFilteredInflow(Object amount);
+
+  /// No description provided for @statDrilldownApprox.
+  ///
+  /// In en, this message translates to:
+  /// **'≈ {amount}'**
+  String statDrilldownApprox(Object amount);
+
+  /// No description provided for @cfBudgetsPacingToExceed.
+  ///
+  /// In en, this message translates to:
+  /// **'On track to exceed'**
+  String get cfBudgetsPacingToExceed;
+
+  /// No description provided for @cfBudgetsPacingAlert.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 category is on track to exceed its budget} other{{count} categories are on track to exceed their budgets}}'**
+  String cfBudgetsPacingAlert(num count);
+
+  /// No description provided for @pfGoalOnPaceFor.
+  ///
+  /// In en, this message translates to:
+  /// **'on pace for ~{when} at +{rate}/mo'**
+  String pfGoalOnPaceFor(Object rate, Object when);
+
+  /// No description provided for @pfGoalNeedPerMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'need {amount}/mo to hit goal year'**
+  String pfGoalNeedPerMonth(Object amount);
+
+  /// No description provided for @lendingInterestIncomeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest income'**
+  String get lendingInterestIncomeTitle;
+
+  /// No description provided for @lendingInterestIncomeLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load interest income. Try again.'**
+  String get lendingInterestIncomeLoadError;
+
+  /// No description provided for @lendingInterestIncomeRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get lendingInterestIncomeRetry;
+
+  /// No description provided for @lendingInterestIncomeAllTime.
+  ///
+  /// In en, this message translates to:
+  /// **'All time'**
+  String get lendingInterestIncomeAllTime;
+
+  /// No description provided for @lendingInterestIncomeEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No interest received in this period yet.'**
+  String get lendingInterestIncomeEmpty;
+
+  /// No description provided for @lendingInterestIncomeTotalsByCurrency.
+  ///
+  /// In en, this message translates to:
+  /// **'Totals by currency'**
+  String get lendingInterestIncomeTotalsByCurrency;
+
+  /// No description provided for @lendingInterestIncomeInterestReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest received'**
+  String get lendingInterestIncomeInterestReceived;
+
+  /// No description provided for @lendingInterestIncomePrincipalReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'Principal received'**
+  String get lendingInterestIncomePrincipalReceived;
+
+  /// No description provided for @lendingInterestIncomePaymentsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Payments'**
+  String get lendingInterestIncomePaymentsCount;
+
+  /// No description provided for @lendingInterestIncomeByMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest by month'**
+  String get lendingInterestIncomeByMonth;
+
+  /// No description provided for @lendingInterestIncomeByLoan.
+  ///
+  /// In en, this message translates to:
+  /// **'By loan'**
+  String get lendingInterestIncomeByLoan;
+
+  /// No description provided for @lendingInterestIncomeBorrower.
+  ///
+  /// In en, this message translates to:
+  /// **'Borrower'**
+  String get lendingInterestIncomeBorrower;
+
+  /// No description provided for @lendingInterestIncomeBelowMarketTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'§7872 below-market loans'**
+  String get lendingInterestIncomeBelowMarketTitle;
+
+  /// No description provided for @lendingInterestIncomeBelowMarketBody.
+  ///
+  /// In en, this message translates to:
+  /// **'These active 0%-rate loans exceed the \$10,000 gift-loan threshold, so the IRS may impute interest under §7872. Informational only — confirm with an accountant.'**
+  String get lendingInterestIncomeBelowMarketBody;
+
+  /// No description provided for @cfSavingsRate.
+  ///
+  /// In en, this message translates to:
+  /// **'{rate} saved'**
+  String cfSavingsRate(Object rate);
+
+  /// No description provided for @cfPtsAbbrev.
+  ///
+  /// In en, this message translates to:
+  /// **'pts'**
+  String get cfPtsAbbrev;
+
+  /// No description provided for @taxHarvestFooterTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'Total harvestable loss ({count} lots)'**
+  String taxHarvestFooterTotal(Object count);
+
+  /// No description provided for @taxHarvestFooterSavings.
+  ///
+  /// In en, this message translates to:
+  /// **'Est. total savings {amount}'**
+  String taxHarvestFooterSavings(Object amount);
+
+  /// No description provided for @taxHarvestFooterFlow.
+  ///
+  /// In en, this message translates to:
+  /// **'{gains} taxable gains remain, {ordinary} offset against income, {carryforward} carried forward'**
+  String taxHarvestFooterFlow(
+    Object carryforward,
+    Object gains,
+    Object ordinary,
+  );
+
+  /// No description provided for @taxHarvestFooterCarryforward.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} loss carries forward to next year'**
+  String taxHarvestFooterCarryforward(Object amount);
+
+  /// No description provided for @lwPerfBenchSp500.
+  ///
+  /// In en, this message translates to:
+  /// **'S&P 500'**
+  String get lwPerfBenchSp500;
+
+  /// No description provided for @lwPerfBenchNdx.
+  ///
+  /// In en, this message translates to:
+  /// **'Nasdaq-100'**
+  String get lwPerfBenchNdx;
+
+  /// No description provided for @lwPerfBenchAcwi.
+  ///
+  /// In en, this message translates to:
+  /// **'World (ACWI)'**
+  String get lwPerfBenchAcwi;
+
+  /// No description provided for @lwPerfBenchAgg.
+  ///
+  /// In en, this message translates to:
+  /// **'US Bonds'**
+  String get lwPerfBenchAgg;
+
+  /// No description provided for @lwPerfBenchMxx.
+  ///
+  /// In en, this message translates to:
+  /// **'IPC Mexico'**
+  String get lwPerfBenchMxx;
+
+  /// No description provided for @lwPerfBenchPickerTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Benchmark'**
+  String get lwPerfBenchPickerTooltip;
+
+  /// No description provided for @lendingDueOverdue.
+  ///
+  /// In en, this message translates to:
+  /// **'Overdue'**
+  String get lendingDueOverdue;
+
+  /// No description provided for @lendingDueOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Due {date}'**
+  String lendingDueOn(Object date);
+
+  /// No description provided for @lendingDuePaidAhead.
+  ///
+  /// In en, this message translates to:
+  /// **'Paid ahead'**
+  String get lendingDuePaidAhead;
+
+  /// No description provided for @lendingInterestOwedSoFar.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest owed so far'**
+  String get lendingInterestOwedSoFar;
+
+  /// No description provided for @dashDataExportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Data export'**
+  String get dashDataExportTitle;
+
+  /// No description provided for @dashDataExportSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Download your transactions and tax reports. Files download directly in your browser.'**
+  String get dashDataExportSubtitle;
+
+  /// No description provided for @dashExportTransactionsCsv.
+  ///
+  /// In en, this message translates to:
+  /// **'All transactions (CSV)'**
+  String get dashExportTransactionsCsv;
+
+  /// No description provided for @dashExportTaxCsv.
+  ///
+  /// In en, this message translates to:
+  /// **'Tax report (CSV)'**
+  String get dashExportTaxCsv;
+
+  /// No description provided for @dashExportTaxPdf.
+  ///
+  /// In en, this message translates to:
+  /// **'Tax report (PDF)'**
+  String get dashExportTaxPdf;
+
+  /// No description provided for @dashImportedBatchesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported batches'**
+  String get dashImportedBatchesTitle;
+
+  /// No description provided for @dashImportedBatchesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Review or undo past statement imports'**
+  String get dashImportedBatchesSubtitle;
+
+  /// No description provided for @divCardTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Dividend income'**
+  String get divCardTitle;
+
+  /// No description provided for @divProjectedAnnual.
+  ///
+  /// In en, this message translates to:
+  /// **'Projected annual'**
+  String get divProjectedAnnual;
+
+  /// No description provided for @divBlendedYield.
+  ///
+  /// In en, this message translates to:
+  /// **'Blended yield'**
+  String get divBlendedYield;
+
+  /// No description provided for @divTopPayers.
+  ///
+  /// In en, this message translates to:
+  /// **'Top payers'**
+  String get divTopPayers;
+
+  /// No description provided for @divUpcomingExDates.
+  ///
+  /// In en, this message translates to:
+  /// **'Upcoming ex-dates'**
+  String get divUpcomingExDates;
+
+  /// No description provided for @divPaymentsPerYear.
+  ///
+  /// In en, this message translates to:
+  /// **'{count}×/yr'**
+  String divPaymentsPerYear(Object count);
+
+  /// No description provided for @divFxStaleHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Some income converted with a stale FX rate — figures are approximate.'**
+  String get divFxStaleHint;
 }
 
 class _AppLocalizationsDelegate

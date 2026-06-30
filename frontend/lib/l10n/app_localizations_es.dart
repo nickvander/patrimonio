@@ -4913,4 +4913,253 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get dashFxStaleTooltip =>
       'Aproximado — el tipo de cambio está desactualizado (ausente o con más de 7 días), por lo que esta conversión puede no ser exacta.';
+
+  @override
+  String get lwFxEnterManually => 'Ingresar tipo de cambio manualmente';
+
+  @override
+  String get lwFxManualDialogTitle => 'Ingresar tipo de cambio';
+
+  @override
+  String lwFxManualDialogHint(Object base, Object target) {
+    return 'Define un tipo de cambio manual $base/$target. Reemplaza el tipo automático hasta la próxima actualización.';
+  }
+
+  @override
+  String get lwFxManualInvalid =>
+      'Ingresa un tipo de cambio válido mayor que cero';
+
+  @override
+  String get lwFxManualSaved => 'Tipo de cambio manual guardado';
+
+  @override
+  String lwFxManualFailed(Object error) {
+    return 'No se pudo guardar el tipo de cambio: $error';
+  }
+
+  @override
+  String get taxHeadroomTitle => 'Margen disponible';
+
+  @override
+  String get taxHeadroomSubtitle =>
+      'Espacio antes del siguiente escalón fiscal de EE. UU.';
+
+  @override
+  String taxHeadroomOrdinaryRoom(Object amount, Object rate) {
+    return 'Espacio en el tramo actual: $amount antes del $rate%';
+  }
+
+  @override
+  String taxHeadroomOrdinaryRoomTop(Object amount) {
+    return 'Espacio en el tramo actual: $amount';
+  }
+
+  @override
+  String taxHeadroomLtcg0Room(Object amount) {
+    return 'Margen de plusvalías al 0%: $amount libre de impuesto';
+  }
+
+  @override
+  String taxHeadroomLtcg15Room(Object amount, Object rate) {
+    return 'Margen de plusvalías al 15%: $amount antes del $rate%';
+  }
+
+  @override
+  String get txFilteredNet => 'Neto';
+
+  @override
+  String txFilteredOutflow(Object amount) {
+    return 'Salida $amount';
+  }
+
+  @override
+  String txFilteredInflow(Object amount) {
+    return 'Entrada $amount';
+  }
+
+  @override
+  String statDrilldownApprox(Object amount) {
+    return '≈ $amount';
+  }
+
+  @override
+  String get cfBudgetsPacingToExceed => 'En camino a excederse';
+
+  @override
+  String cfBudgetsPacingAlert(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count categorías van en camino a exceder su presupuesto',
+      one: '1 categoría va en camino a exceder su presupuesto',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String pfGoalOnPaceFor(Object rate, Object when) {
+    return 'en camino para ~$when a +$rate/mes';
+  }
+
+  @override
+  String pfGoalNeedPerMonth(Object amount) {
+    return 'necesitas $amount/mes para alcanzar el año meta';
+  }
+
+  @override
+  String get lendingInterestIncomeTitle => 'Ingresos por intereses';
+
+  @override
+  String get lendingInterestIncomeLoadError =>
+      'No se pudieron cargar los ingresos por intereses. Inténtalo de nuevo.';
+
+  @override
+  String get lendingInterestIncomeRetry => 'Reintentar';
+
+  @override
+  String get lendingInterestIncomeAllTime => 'Todo el tiempo';
+
+  @override
+  String get lendingInterestIncomeEmpty =>
+      'Aún no se han recibido intereses en este periodo.';
+
+  @override
+  String get lendingInterestIncomeTotalsByCurrency => 'Totales por moneda';
+
+  @override
+  String get lendingInterestIncomeInterestReceived => 'Intereses recibidos';
+
+  @override
+  String get lendingInterestIncomePrincipalReceived => 'Capital recibido';
+
+  @override
+  String get lendingInterestIncomePaymentsCount => 'Pagos';
+
+  @override
+  String get lendingInterestIncomeByMonth => 'Intereses por mes';
+
+  @override
+  String get lendingInterestIncomeByLoan => 'Por préstamo';
+
+  @override
+  String get lendingInterestIncomeBorrower => 'Prestatario';
+
+  @override
+  String get lendingInterestIncomeBelowMarketTitle =>
+      'Préstamos por debajo del mercado (§7872)';
+
+  @override
+  String get lendingInterestIncomeBelowMarketBody =>
+      'Estos préstamos activos con tasa del 0% superan el umbral de \$10,000 para préstamos-regalo, por lo que el IRS podría imputar intereses según la §7872. Solo informativo: confírmalo con un contador.';
+
+  @override
+  String cfSavingsRate(Object rate) {
+    return '$rate ahorrado';
+  }
+
+  @override
+  String get cfPtsAbbrev => 'pts';
+
+  @override
+  String taxHarvestFooterTotal(Object count) {
+    return 'Pérdida cosechable total ($count lotes)';
+  }
+
+  @override
+  String taxHarvestFooterSavings(Object amount) {
+    return 'Ahorro total est. $amount';
+  }
+
+  @override
+  String taxHarvestFooterFlow(
+    Object carryforward,
+    Object gains,
+    Object ordinary,
+  ) {
+    return '$gains de ganancias gravables restantes, $ordinary contra ingresos, $carryforward trasladado a futuro';
+  }
+
+  @override
+  String taxHarvestFooterCarryforward(Object amount) {
+    return '$amount de pérdida se traslada al año siguiente';
+  }
+
+  @override
+  String get lwPerfBenchSp500 => 'S&P 500';
+
+  @override
+  String get lwPerfBenchNdx => 'Nasdaq-100';
+
+  @override
+  String get lwPerfBenchAcwi => 'Mundo (ACWI)';
+
+  @override
+  String get lwPerfBenchAgg => 'Bonos EE.UU.';
+
+  @override
+  String get lwPerfBenchMxx => 'IPC México';
+
+  @override
+  String get lwPerfBenchPickerTooltip => 'Índice de referencia';
+
+  @override
+  String get lendingDueOverdue => 'Vencido';
+
+  @override
+  String lendingDueOn(Object date) {
+    return 'Vence $date';
+  }
+
+  @override
+  String get lendingDuePaidAhead => 'Pago adelantado';
+
+  @override
+  String get lendingInterestOwedSoFar => 'Interés adeudado hasta ahora';
+
+  @override
+  String get dashDataExportTitle => 'Exportar datos';
+
+  @override
+  String get dashDataExportSubtitle =>
+      'Descarga tus transacciones y reportes de impuestos. Los archivos se descargan directamente en tu navegador.';
+
+  @override
+  String get dashExportTransactionsCsv => 'Todas las transacciones (CSV)';
+
+  @override
+  String get dashExportTaxCsv => 'Reporte de impuestos (CSV)';
+
+  @override
+  String get dashExportTaxPdf => 'Reporte de impuestos (PDF)';
+
+  @override
+  String get dashImportedBatchesTitle => 'Lotes importados';
+
+  @override
+  String get dashImportedBatchesSubtitle =>
+      'Revisa o deshaz importaciones de estados de cuenta anteriores';
+
+  @override
+  String get divCardTitle => 'Ingresos por dividendos';
+
+  @override
+  String get divProjectedAnnual => 'Anual proyectado';
+
+  @override
+  String get divBlendedYield => 'Rendimiento combinado';
+
+  @override
+  String get divTopPayers => 'Principales pagadores';
+
+  @override
+  String get divUpcomingExDates => 'Próximas fechas ex-dividendo';
+
+  @override
+  String divPaymentsPerYear(Object count) {
+    return '$count×/año';
+  }
+
+  @override
+  String get divFxStaleHint =>
+      'Parte de los ingresos se convirtió con un tipo de cambio desactualizado; las cifras son aproximadas.';
 }

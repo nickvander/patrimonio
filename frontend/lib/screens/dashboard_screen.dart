@@ -48,9 +48,11 @@ import '../utils/sync_progress.dart';
 import '../utils/supported_banks.dart';
 import '../utils/theme_colors.dart';
 import '../utils/transaction_display.dart';
+import '../utils/url_opener.dart';
 import 'account_transactions_screen.dart';
 import 'connect_bank_screen.dart';
 import 'import_screen.dart';
+import 'import_cleanup_screen.dart';
 import 'wealth_projection_screen.dart';
 import '../components/date_range_selector.dart';
 import '../components/allocation_heatmap.dart';
@@ -1135,6 +1137,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     double cash = 0;
     double investments = 0;
     double realAssets = 0;
+    // Same categorizeAccount grouping kept as account lists so a tile tap can
+    // open a sheet of exactly the accounts that fed its subtotal. Each row
+    // carries the raw account map (for the deep-link) plus its native and
+    // reporting-currency balances. The Assets tile is the union of every
+    // asset-side category, mirroring `assets = netWorth + liabilities`.
+    final liabilityAccounts = <_StatDrilldownRow>[];
+    final cashAccounts = <_StatDrilldownRow>[];
+    final investmentAccounts = <_StatDrilldownRow>[];
+    final realAssetAccounts = <_StatDrilldownRow>[];
+    final assetAccounts = <_StatDrilldownRow>[];
     for (final raw in accounts) {
       final acc = raw as Map<String, dynamic>;
       // current_balance is in the account's NATIVE currency — convert it to the
@@ -1149,21 +1161,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
         to: _targetCurrency,
         usdMxnRate: usdMxnRate,
       );
+      final row = _StatDrilldownRow(
+        account: acc,
+        nativeBalance: native,
+        nativeCurrency: cur,
+        reportedBalance: reported,
+      );
       switch (categorizeAccount(acc['account_type']?.toString())) {
         case AccountCategory.credit:
         case AccountCategory.loan:
           liabilities += reported;
+          liabilityAccounts.add(row);
         case AccountCategory.cash:
           cash += reported;
+          cashAccounts.add(row);
+          assetAccounts.add(row);
         case AccountCategory.investment:
         case AccountCategory.crypto:
           investments += reported;
+          investmentAccounts.add(row);
+          assetAccounts.add(row);
         case AccountCategory.realAsset:
           realAssets += reported;
+          realAssetAccounts.add(row);
+          assetAccounts.add(row);
         case AccountCategory.other:
           // Don't double-count unknowns into cash/investments; they're
           // still in net_worth (computed server-side) so the totals
-          // remain consistent.
+          // remain consistent. Still an asset, so it joins the Assets sheet.
+          assetAccounts.add(row);
           break;
       }
     }
@@ -1205,16 +1231,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // stats so the row reads as a coherent set with a meaningful
         // category cue rather than competing colours.
         accent: context.neutralAccent,
+        onTap: assetAccounts.isEmpty
+            ? null
+            : () => _showStatDrilldown(
+                  label: l.statAssets,
+                  total: assets,
+                  accent: context.neutralAccent,
+                  rows: assetAccounts,
+                  currencyFormat: currencyFormat,
+                  conversionFactor: conversionFactor,
+                  usdMxnRate: usdMxnRate,
+                ),
       ),
       _StatTile(
         label: l.statLiabilities,
         value: currencyFormat.format(liabilities),
         accent: context.negative,
+        onTap: liabilityAccounts.isEmpty
+            ? null
+            : () => _showStatDrilldown(
+                  label: l.statLiabilities,
+                  total: liabilities,
+                  accent: context.negative,
+                  rows: liabilityAccounts,
+                  currencyFormat: currencyFormat,
+                  conversionFactor: conversionFactor,
+                  usdMxnRate: usdMxnRate,
+                ),
       ),
       _StatTile(
         label: l.statCash,
         value: currencyFormat.format(cash),
         accent: context.info,
+        onTap: cashAccounts.isEmpty
+            ? null
+            : () => _showStatDrilldown(
+                  label: l.statCash,
+                  total: cash,
+                  accent: context.info,
+                  rows: cashAccounts,
+                  currencyFormat: currencyFormat,
+                  conversionFactor: conversionFactor,
+                  usdMxnRate: usdMxnRate,
+                ),
       ),
       _StatTile(
         label: l.statInvestments,
@@ -1225,6 +1284,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // above the Portfolio tab's total, which sums only security
         // holdings.
         tooltip: l.statInvestmentsCashSleeveNote,
+        onTap: investmentAccounts.isEmpty
+            ? null
+            : () => _showStatDrilldown(
+                  label: l.statInvestments,
+                  total: investments,
+                  accent: context.tealAccent,
+                  rows: investmentAccounts,
+                  currencyFormat: currencyFormat,
+                  conversionFactor: conversionFactor,
+                  usdMxnRate: usdMxnRate,
+                ),
       ),
       // Real assets tile shows up only when the user actually has any —
       // a typical brand-new account has none and an empty $0 tile would
@@ -1234,6 +1304,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
           label: 'Real assets',
           value: currencyFormat.format(realAssets),
           accent: context.yellowAccent,
+          onTap: realAssetAccounts.isEmpty
+              ? null
+              : () => _showStatDrilldown(
+                    label: 'Real assets',
+                    total: realAssets,
+                    accent: context.yellowAccent,
+                    rows: realAssetAccounts,
+                    currencyFormat: currencyFormat,
+                    conversionFactor: conversionFactor,
+                    usdMxnRate: usdMxnRate,
+                  ),
         ),
     ];
 
@@ -1258,6 +1339,171 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: t,
                   ))
               .toList(),
+        );
+      },
+    );
+  }
+
+  /// Bottom-sheet drilldown for an Overview stat tile. Lists the accounts
+  /// that fed the tapped tile's subtotal — the exact same categorizeAccount
+  /// grouping computed in [_buildStatStrip] — with each account's native
+  /// balance and its reporting-currency equivalent. The sheet subtotal is the
+  /// passed [total] so it always matches the tile face. Each row deep-links
+  /// into [showAccountTransactionsPanel], mirroring the Cmd-K palette wiring.
+  void _showStatDrilldown({
+    required String label,
+    required double total,
+    required Color accent,
+    required List<_StatDrilldownRow> rows,
+    required NumberFormat currencyFormat,
+    required double conversionFactor,
+    required double usdMxnRate,
+  }) {
+    final l = AppLocalizations.of(context);
+    final allAccounts = (_overview?['accounts'] as List?) ?? const [];
+
+    // Largest holdings first so the sheet reads top-down by reporting-currency
+    // weight, matching how a user scans "what's biggest".
+    final sorted = [...rows]
+      ..sort((a, b) => b.reportedBalance.compareTo(a.reportedBalance));
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetCtx) {
+        final maxHeight = MediaQuery.sizeOf(sheetCtx).height * 0.8;
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: accent,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          label.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 11,
+                            letterSpacing: 1.2,
+                            fontWeight: FontWeight.w700,
+                            color: context.textSubtle,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        currencyFormat.format(total),
+                        style: brandDisplayStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: context.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(height: 1, color: context.hairline),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    itemCount: sorted.length,
+                    itemBuilder: (ctx, i) {
+                      final row = sorted[i];
+                      final acc = row.account;
+                      final institution =
+                          (acc['institution_name'] ?? '').toString();
+                      final nickname = (acc['nickname'] ?? '').toString();
+                      final name = (acc['name'] ?? '').toString();
+                      // Mirror COALESCE(nickname, name): a user-set nickname wins.
+                      final displayName = nickname.isNotEmpty ? nickname : name;
+                      final title = institution.isEmpty
+                          ? displayName
+                          : '$institution · $displayName';
+                      // Native figure always carries its ISO code so a
+                      // dual-currency list is self-labelling; the reporting
+                      // equivalent sits beneath only when it actually differs.
+                      final nativeStr = formatCurrencyWithCode(
+                          row.nativeBalance, row.nativeCurrency);
+                      final reportedStr =
+                          currencyFormat.format(row.reportedBalance);
+                      final showReported = row.nativeCurrency.toUpperCase() !=
+                          _targetCurrency.toUpperCase();
+                      return ListTile(
+                        leading: Icon(Icons.account_balance_wallet_outlined,
+                            size: 20, color: context.textSubtle),
+                        title: Text(
+                          title,
+                          style: TextStyle(
+                              fontSize: 14, color: context.textPrimary),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              nativeStr,
+                              style: brandDisplayStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: context.textPrimary,
+                              ),
+                            ),
+                            if (showReported)
+                              Text(
+                                l.statDrilldownApprox(reportedStr),
+                                style: TextStyle(
+                                    fontSize: 11, color: context.textSubtle),
+                              ),
+                          ],
+                        ),
+                        onTap: () {
+                          Navigator.of(sheetCtx).pop();
+                          showAccountTransactionsPanel(
+                            context,
+                            account: acc,
+                            allAccounts: allAccounts,
+                            conversionFactor: conversionFactor,
+                            currencyFormat: currencyFormat,
+                            targetCurrency: _targetCurrency,
+                            usdMxnRate: usdMxnRate,
+                            onBalanceUpdate: (id, bal) async {
+                              try {
+                                await _apiService.updateAccountBalance(id, bal);
+                                _loadAllData(silent: true);
+                              } catch (_) {}
+                            },
+                            onRenameAccount: (id, nickname) async {
+                              try {
+                                await _apiService.renameAccount(id, nickname);
+                                _loadAllData(silent: true);
+                              } catch (_) {}
+                            },
+                            onAlertsChanged: _reloadAccountAlerts,
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
@@ -2364,6 +2610,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // Current month number == count of months Jan..now inclusive. Clamp
         // to 1..12 defensively; the backend re-clamps to 1..24 anyway.
         return DateTime.now().month.clamp(1, 12);
+    }
+  }
+
+  /// The single month BudgetsCard prices a monthly target against for a given
+  /// Cash Flow period (item #11). Budgets are MONTHLY targets, so a multi-month
+  /// window (3mo/YTD) is judged on its MOST RECENT month — never a sum/average.
+  ///   thisMonth / threeMonths / ytd -> current month (window's most recent)
+  ///   lastMonth                      -> the prior month (the month that
+  ///                                     period headlines)
+  /// Returned as a first-of-month DateTime; BudgetsCard reads only year+month.
+  DateTime _budgetMonthForCashFlowPeriod(CashFlowPeriod p) {
+    final now = DateTime.now();
+    switch (p) {
+      case CashFlowPeriod.lastMonth:
+        // DateTime normalises month 0 → December of the prior year.
+        return DateTime(now.year, now.month - 1);
+      case CashFlowPeriod.thisMonth:
+      case CashFlowPeriod.threeMonths:
+      case CashFlowPeriod.ytd:
+        return DateTime(now.year, now.month);
     }
   }
 
@@ -3885,6 +4151,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
             searchOverride: _portfolioSearchOverride,
           ),
           const SizedBox(height: 24),
+          // 6 · Income — projected dividend income, blended yield, top payers,
+          // upcoming ex-dates. Self-fetching; hides for non-paying portfolios.
+          DividendIncomeCard(
+            apiService: _apiService,
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
+          ),
+          const SizedBox(height: 24),
           RealizedGainsCard(
             apiService: _apiService,
             conversionFactor: conversionFactor,
@@ -4178,6 +4452,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             apiService: _apiService,
             conversionFactor: conversionFactor,
             currencyFormat: currencyFormat,
+            // Item #11: track the Cash Flow period selector so the category
+            // chart's window matches the rest of the tab instead of its own
+            // fixed default.
+            months: _monthsForCashFlowPeriod(_cashFlowPeriod),
           ),
           SizedBox(height: gap),
           BudgetsCard(
@@ -4186,6 +4464,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             usdMxnRate: fxRate,
             currencyFormat: currencyFormat,
             apiService: _apiService,
+            // Item #11: a monthly target priced against the selected period's
+            // most-recent month. 'This month' resolves to the current month,
+            // leaving the pre-#11 behavior (incl. #10 pacing) unchanged.
+            periodMonth: _budgetMonthForCashFlowPeriod(_cashFlowPeriod),
           ),
           SizedBox(height: gap),
           DebtPayoffCard(
@@ -4394,6 +4676,84 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     );
                   }),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(height: gap),
+          // Data export + import management. Mirrors the add-accounts card so
+          // "get data out" reads as a sibling section. CSV/PDF downloads go
+          // through the same-origin openUrlSameTab seam (Content-Disposition:
+          // attachment, session cookie sent) used by the per-account screen
+          // and tax-planning exports — so they work under the nginx /api proxy.
+          Card(
+            child: Padding(
+              padding: EdgeInsets.all(pad),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.download,
+                          size: 18, color: context.tealAccent),
+                      const SizedBox(width: 8),
+                      Text(
+                        l.dashDataExportTitle,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    l.dashDataExportSubtitle,
+                    style: TextStyle(
+                        fontSize: 12, color: context.textSubtle),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.table_chart_outlined),
+                        label: Text(l.dashExportTransactionsCsv),
+                        onPressed: () => openUrlSameTab(
+                            _apiService.exportTransactionsCsvUrl()),
+                      ),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.receipt_long_outlined),
+                        label: Text(l.dashExportTaxCsv),
+                        onPressed: () => openUrlSameTab(
+                            '${_apiService.baseUrl}/tax/export'),
+                      ),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.picture_as_pdf_outlined),
+                        label: Text(l.dashExportTaxPdf),
+                        onPressed: () => openUrlSameTab(
+                            '${_apiService.baseUrl}/tax/export/pdf'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Divider(color: context.hairline, height: 1),
+                  const SizedBox(height: 8),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.inventory_2_outlined,
+                        color: context.tealAccent),
+                    title: Text(l.dashImportedBatchesTitle),
+                    subtitle: Text(l.dashImportedBatchesSubtitle),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ImportCleanupScreen(),
+                        ),
+                      ).then((_) => _loadAllData(silent: true));
+                    },
+                  ),
                 ],
               ),
             ),
@@ -4845,11 +5205,18 @@ class _StatTile extends StatelessWidget {
   /// explain why the Investments subtotal differs from the Portfolio total.
   final String? tooltip;
 
+  /// Optional drilldown callback. When non-null the tile becomes tappable
+  /// (with a chevron affordance) and opens a sheet listing the accounts that
+  /// fed the subtotal. Null keeps the tile a plain display-only Container —
+  /// today's behaviour for any tile with no accounts behind it.
+  final VoidCallback? onTap;
+
   const _StatTile({
     required this.label,
     required this.value,
     required this.accent,
     this.tooltip,
+    this.onTap,
   });
 
   @override
@@ -4859,7 +5226,7 @@ class _StatTile extends StatelessWidget {
     // cue without painting the whole label in a loud neon. (The net-worth
     // hero treatment now lives in _buildNetWorthHero, above the row, so
     // these tiles are uniformly secondary.)
-    return Container(
+    final tile = Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
         color: context.tileSurface,
@@ -4905,6 +5272,16 @@ class _StatTile extends StatelessWidget {
                   ),
                 ),
               ],
+              // Drilldown affordance: a faint chevron only when the tile is
+              // tappable, signalling "tap to see the accounts behind this".
+              if (onTap != null) ...[
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.chevron_right,
+                  size: 14,
+                  color: context.textFaint,
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 6),
@@ -4924,7 +5301,41 @@ class _StatTile extends StatelessWidget {
         ],
       ),
     );
+
+    // Display-only when there's nothing to drill into — identical to the
+    // tile's historical behaviour. Otherwise make the whole tile a tap
+    // target with a matching ink ripple (the AppBar currency-swap toggle is
+    // a separate widget, so this never swallows that gesture).
+    if (onTap == null) return tile;
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: tile,
+      ),
+    );
   }
+}
+
+/// One account row inside an Overview stat-tile drilldown sheet. Carries the
+/// raw account map (so a tap can deep-link into the transactions panel) plus
+/// its native and reporting-currency balances, computed once in
+/// [_DashboardScreenState._buildStatStrip] using the same convertCurrency
+/// math that produced the tile subtotal.
+class _StatDrilldownRow {
+  final Map<String, dynamic> account;
+  final double nativeBalance;
+  final String nativeCurrency;
+  final double reportedBalance;
+
+  const _StatDrilldownRow({
+    required this.account,
+    required this.nativeBalance,
+    required this.nativeCurrency,
+    required this.reportedBalance,
+  });
 }
 
 /// Intent fired by Cmd-K / Ctrl-K to open the global command palette.
