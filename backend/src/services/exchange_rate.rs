@@ -29,10 +29,10 @@ pub async fn fetch_and_store_rate(
     let rate_decimal = Decimal::from_str(&rate.to_string()).unwrap_or_default();
     sqlx::query(
         r#"
-        INSERT INTO exchange_rates (base_currency, target_currency, rate, recorded_at)
-        VALUES ($1, $2, $3, NOW())
+        INSERT INTO exchange_rates (base_currency, target_currency, rate, recorded_at, source)
+        VALUES ($1, $2, $3, NOW(), 'api')
         ON CONFLICT (base_currency, target_currency, recorded_at) DO UPDATE
-        SET rate = EXCLUDED.rate
+        SET rate = EXCLUDED.rate, source = EXCLUDED.source
         "#
     )
     .bind(base.to_uppercase())

@@ -10,4 +10,8 @@ pub struct ExchangeRate {
     pub target_currency: String,
     pub rate: Decimal,
     pub recorded_at: DateTime<Utc>,
+    /// Provenance of the row: 'api' (open.er-api.com fetch) or 'manual' (a
+    /// user-entered override). Manual rows outrank API rows in
+    /// `latest_usd_mxn_rate`.
+    pub source: String,
 }
