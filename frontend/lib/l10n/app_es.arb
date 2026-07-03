@@ -641,8 +641,12 @@
   "dashSyncingProgress": "Actualizando… ({done} de {total})",
   "@dashSyncingProgress": {
     "placeholders": {
-      "done": { "type": "int" },
-      "total": { "type": "int" }
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "dashSyncComplete": "Sincronización completa",
@@ -807,7 +811,9 @@
   "taxDisclaimer": "Aviso: las estimaciones fiscales son aproximaciones basadas en los tramos del IRS/SAT {bracketYear}. Consulta a un profesional fiscal calificado para tu declaración.",
   "@taxDisclaimer": {
     "placeholders": {
-      "bracketYear": { "type": "String" }
+      "bracketYear": {
+        "type": "String"
+      }
     }
   },
   "taxConstantsUnverified": "Estimaciones — constantes fiscales pendientes de verificación",
@@ -824,8 +830,12 @@
   "taxAcquiredToSold": "{acquired} → {sold}",
   "@taxAcquiredToSold": {
     "placeholders": {
-      "acquired": { "type": "String" },
-      "sold": { "type": "String" }
+      "acquired": {
+        "type": "String"
+      },
+      "sold": {
+        "type": "String"
+      }
     }
   },
   "taxTaxAdvantagedBadge": "Con beneficio fiscal",
@@ -834,19 +844,25 @@
   "taxGainsSubtotal": "Ganancia realizada neta: {amount}",
   "@taxGainsSubtotal": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "taxIncomeSubtotal": "Ingreso total: {amount}",
   "@taxIncomeSubtotal": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "taxSubtotalReconcileNote": "Coincide con la tarjeta {kpi} de arriba.",
   "@taxSubtotalReconcileNote": {
     "placeholders": {
-      "kpi": { "type": "String" }
+      "kpi": {
+        "type": "String"
+      }
     }
   },
   "taxNoDisposals": "No hay disposiciones realizadas para este año.",
@@ -861,21 +877,27 @@
   "taxAssumptionBracketYear": "Año de tramos: {year}",
   "@taxAssumptionBracketYear": {
     "placeholders": {
-      "year": { "type": "String" }
+      "year": {
+        "type": "String"
+      }
     }
   },
   "taxAssumptionFx": "Tipo de cambio: cada fila convertida al tipo USD/MXN guardado de su propia fecha.",
   "taxAssumptionFilingStatus": "Estado civil fiscal: {status}",
   "@taxAssumptionFilingStatus": {
     "placeholders": {
-      "status": { "type": "String" }
+      "status": {
+        "type": "String"
+      }
     }
   },
   "taxAssumptionExclusions": "Excluye cuentas con beneficio fiscal (401(k)/IRA/HSA).",
   "taxAssumptionHoldingsNoBasis": "{count, plural, =1{1 posición sin costo base registrado} other{{count} posiciones sin costo base registrado}}",
   "@taxAssumptionHoldingsNoBasis": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "taxAssumptionProReview": "La redacción y las constantes están pendientes de revisión por un profesional fiscal — tómalo como orientación, no como asesoría.",
@@ -886,14 +908,20 @@
   "taxUnrealizedSubtotal": "No realizada: {amount}",
   "@taxUnrealizedSubtotal": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "taxFlipsToLongIn": "Largo plazo en {days} d — {date}",
   "@taxFlipsToLongIn": {
     "placeholders": {
-      "days": { "type": "String" },
-      "date": { "type": "String" }
+      "days": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
     }
   },
   "taxColBasis": "Costo base",
@@ -902,7 +930,9 @@
   "taxHarvestEstimate": "Ahorro fiscal est. {amount}",
   "@taxHarvestEstimate": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "taxHarvestEstimateBadge": "Estimado",
@@ -913,7 +943,9 @@
   "taxWashSaleSafeAfter": "Se puede recomprar después del {date}",
   "@taxWashSaleSafeAfter": {
     "placeholders": {
-      "date": { "type": "String" }
+      "date": {
+        "type": "String"
+      }
     }
   },
   "taxWashSaleTooltip": "Una recompra del mismo valor cerca de esta fecha puede anular la pérdida. Recomprar después de la fecha segura evita la regla de venta ficticia (wash sale).",
@@ -922,7 +954,9 @@
   "taxFbarThreshold": "Umbral de reporte FBAR: {amount}",
   "@taxFbarThreshold": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "taxFbarExceeded": "El agregado superó el umbral este año",
@@ -930,7 +964,9 @@
   "taxFbarPeakDate": "Máximo el {date}",
   "@taxFbarPeakDate": {
     "placeholders": {
-      "date": { "type": "String" }
+      "date": {
+        "type": "String"
+      }
     }
   },
   "taxFbarInformational": "Solo informativo — esto no determina una obligación de presentar el FBAR. Consulta a un profesional fiscal.",
@@ -939,13 +975,17 @@
   "taxFbarAccountPeak": "En la fecha máxima: {amount}",
   "@taxFbarAccountPeak": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "taxFbarAccountYtdMax": "Máximo propio del año: {amount}",
   "@taxFbarAccountYtdMax": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "taxRetirementTitle": "Aportaciones para el retiro",
@@ -955,51 +995,73 @@
   "taxContributedOfLimit": "{ytd} de {limit}",
   "@taxContributedOfLimit": {
     "placeholders": {
-      "ytd": { "type": "String" },
-      "limit": { "type": "String" }
+      "ytd": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
     }
   },
   "taxBackdoorRothBadge": "Roth puerta trasera",
   "taxMegaBackdoorNote": "Total §415(c) (electivo + empleador + después de impuestos); límite electivo {elective}. Queda {room} de espacio mega-backdoor Roth.",
   "@taxMegaBackdoorNote": {
     "placeholders": {
-      "elective": { "type": "String" },
-      "room": { "type": "String" }
+      "elective": {
+        "type": "String"
+      },
+      "room": {
+        "type": "String"
+      }
     }
   },
   "taxHsaFamilyCoverage": "Cobertura familiar",
   "taxHsaEmployerNote": "incluye {amount} del empleador",
   "@taxHsaEmployerNote": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "tax401kElectiveSet": "+ Indica tu aportación electiva para desglosarlo",
   "tax401kElectiveSplit": "Electiva {elective} de {limit} · empleador + después de impuestos {rest}",
   "@tax401kElectiveSplit": {
     "placeholders": {
-      "elective": { "type": "String" },
-      "limit": { "type": "String" },
-      "rest": { "type": "String" }
+      "elective": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      },
+      "rest": {
+        "type": "String"
+      }
     }
   },
   "tax401kElectiveDialogTitle": "Aportación electiva anual al 401k",
   "tax401kElectiveDialogHint": "Tu aportación como empleado (pre-impuestos + Roth); límite {limit}",
   "@tax401kElectiveDialogHint": {
     "placeholders": {
-      "limit": { "type": "String" }
+      "limit": {
+        "type": "String"
+      }
     }
   },
   "taxRemainingRoom": "Espacio restante: {amount}",
   "@taxRemainingRoom": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "taxContributionDeadline": "Fecha límite: {date}",
   "@taxContributionDeadline": {
     "placeholders": {
-      "date": { "type": "String" }
+      "date": {
+        "type": "String"
+      }
     }
   },
   "taxPriorYearWindowNote": "Se permiten aportaciones del año anterior hasta esta fecha límite.",
@@ -1008,7 +1070,9 @@
   "taxCatchUpNote": "+{amount} de recuperación si cumples la edad",
   "@taxCatchUpNote": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "taxNoRetirementAccounts": "No hay cuentas de retiro con aportaciones este año.",
@@ -1230,45 +1294,83 @@
   "acctTypeOtherLiability": "Otro pasivo",
   "impAccountMatched": "Coincide con {account} del estado de cuenta",
   "@impAccountMatched": {
-    "placeholders": { "account": { "type": "Object" } }
+    "placeholders": {
+      "account": {
+        "type": "Object"
+      }
+    }
   },
   "impNoAccountMatch": "Ninguna cuenta existente coincide con este estado de cuenta — crea una abajo.",
   "impAccountCreatedCue": "Cuenta {account} creada — se importará aquí",
   "@impAccountCreatedCue": {
-    "placeholders": { "account": { "type": "Object" } }
+    "placeholders": {
+      "account": {
+        "type": "Object"
+      }
+    }
   },
   "impSummaryFound": "Encontradas",
   "impSummaryInflow": "Ingresos",
   "impSummaryOutflow": "Egresos",
   "impSummaryFiles": "{count, plural, =1{1 archivo} other{{count} archivos}}",
   "@impSummaryFiles": {
-    "placeholders": { "count": { "type": "int" } }
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "impCoverageTitle": "Cobertura de estados de cuenta",
   "impCoverageThrough": "hasta {month}",
   "@impCoverageThrough": {
-    "placeholders": { "month": { "type": "String" } }
+    "placeholders": {
+      "month": {
+        "type": "String"
+      }
+    }
   },
   "impCoverageLastFile": "{file}",
   "@impCoverageLastFile": {
-    "placeholders": { "file": { "type": "String" } }
+    "placeholders": {
+      "file": {
+        "type": "String"
+      }
+    }
   },
   "impCoverageImports": "{count, plural, =1{1 importación} other{{count} importaciones}}",
   "@impCoverageImports": {
-    "placeholders": { "count": { "type": "int" } }
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "impCoverageMaybeDue": "Puede haber un estado de cuenta más reciente",
   "impCoverageEmpty": "Aún no se han importado estados de cuenta",
   "impContinuityGap": "Posible estado de cuenta faltante: ‘{fromFile}’ cierra en {fromBalance} ({fromDate}), pero ‘{toFile}’ abre en {toBalance} ({toDate}) — una diferencia sin explicar de {diff}. Puede faltar un estado de cuenta que cubra el periodo entre ellos.",
   "@impContinuityGap": {
     "placeholders": {
-      "fromFile": { "type": "Object" },
-      "fromBalance": { "type": "Object" },
-      "fromDate": { "type": "Object" },
-      "toFile": { "type": "Object" },
-      "toBalance": { "type": "Object" },
-      "toDate": { "type": "Object" },
-      "diff": { "type": "Object" }
+      "fromFile": {
+        "type": "Object"
+      },
+      "fromBalance": {
+        "type": "Object"
+      },
+      "fromDate": {
+        "type": "Object"
+      },
+      "toFile": {
+        "type": "Object"
+      },
+      "toBalance": {
+        "type": "Object"
+      },
+      "toDate": {
+        "type": "Object"
+      },
+      "diff": {
+        "type": "Object"
+      }
     }
   },
   "dlgAccountCurrency": "Moneda",
@@ -1431,7 +1533,9 @@
   "lwPerfTwrCoverage": "Refleja el {pct} de tu portafolio que podemos cotizar a diario",
   "@lwPerfTwrCoverage": {
     "placeholders": {
-      "pct": { "type": "Object" }
+      "pct": {
+        "type": "Object"
+      }
     }
   },
   "heroDeltaSince30d": "vs hace 30 d",
@@ -1535,8 +1639,14 @@
   "pfReturnCoverage": "sobre {covered} de {total} con costo base conocido",
   "@pfReturnCoverage": {
     "placeholders": {
-      "covered": { "type": "String", "example": "$160.7K" },
-      "total": { "type": "String", "example": "$1.53M" }
+      "covered": {
+        "type": "String",
+        "example": "$160.7K"
+      },
+      "total": {
+        "type": "String",
+        "example": "$1.53M"
+      }
     }
   },
   "taxFbarNoData": "No se encontró historial de saldos de cuentas en el extranjero para este año.",
@@ -1615,5 +1725,111 @@
   "divTopPayers": "Principales pagadores",
   "divUpcomingExDates": "Próximas fechas ex-dividendo",
   "divPaymentsPerYear": "{count}×/año",
-  "divFxStaleHint": "Parte de los ingresos se convirtió con un tipo de cambio desactualizado; las cifras son aproximadas."
+  "divFxStaleHint": "Parte de los ingresos se convirtió con un tipo de cambio desactualizado; las cifras son aproximadas.",
+  "lendCustomStyleLabel": "Calendario personalizado",
+  "lendCustomStyleDesc": "Tú defines cada pago a mano: montos y fechas irregulares que suman lo prestado.",
+  "lendCustomPasteTitle": "Pegar desde una hoja de cálculo",
+  "lendCustomPasteHint": "Pega dos columnas de Google Sheets / Excel: fecha y luego monto, un pago por línea.",
+  "lendCustomPasteButton": "Procesar filas pegadas",
+  "lendCustomPastedN": "Se cargaron {count} pago{count, plural, =1{} other{s}} desde lo pegado.",
+  "@lendCustomPastedN": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lendCustomPasteEmpty": "Nada que procesar: primero pega filas de fecha y monto.",
+  "lendCustomRowsTitle": "Pagos",
+  "lendCustomAddRow": "Agregar pago",
+  "lendCustomRemoveRow": "Quitar pago",
+  "lendCustomRowDate": "Fecha",
+  "lendCustomRowAmount": "Monto",
+  "lendCustomNoRows": "Aún no hay pagos: pega desde una hoja de cálculo o agrégalos abajo.",
+  "lendCustomGeneratorTitle": "Llenado rápido",
+  "lendCustomGenFirstN": "Primeros pagos",
+  "lendCustomGenFirstAmount": "Primer monto",
+  "lendCustomGenThenAmount": "Luego cada uno",
+  "lendCustomGenDayOfMonth": "Día del mes",
+  "lendCustomGenStart": "Inicio",
+  "lendCustomGenEnd": "Fin",
+  "lendCustomGenApply": "Llenar pagos",
+  "lendCustomPreviewCount": "{count, plural, =1{1 pago} other{{count} pagos}}",
+  "@lendCustomPreviewCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lendCustomPreviewSum": "Suma de los pagos",
+  "lendCustomClosesToZero": "Cierra en 0: los pagos suman lo prestado.",
+  "lendCustomDoesNotAddUp": "Los pagos suman {sum}, pero lo prestado es {principal}.",
+  "@lendCustomDoesNotAddUp": {
+    "placeholders": {
+      "sum": {
+        "type": "String"
+      },
+      "principal": {
+        "type": "String"
+      }
+    }
+  },
+  "lendCustomNeedRows": "Agrega al menos un pago antes de guardar.",
+  "lendCustomScheduleFailed": "No se pudo guardar el calendario: {error}",
+  "@lendCustomScheduleFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "lendDisbursementConflict": "Esa transacción ya financia otro préstamo: no se creó el préstamo.",
+  "lendCopyForSheets": "Copiar para Google Sheets",
+  "lendCopiedForSheets": "Copiado: pega en la hoja con Ctrl/Cmd+V.",
+  "lendSchedulePaidProgress": "Pagados {paid} de {total} pagos",
+  "@lendSchedulePaidProgress": {
+    "placeholders": {
+      "paid": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "lendScheduleRemaining": "{amount} restante",
+  "@lendScheduleRemaining": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "lendScheduleColPayment": "Pago",
+  "lendScheduleColBalance": "Saldo restante",
+  "lendScheduleColStatus": "Estado",
+  "lendScheduleNextDue": "Próximo",
+  "lendScheduleTotals": "Total",
+  "txCreateLoanFromTx": "Crear préstamo desde esta transacción",
+  "lendDisbursementNotLinkedOptional": "sin desembolso vinculado (opcional)",
+  "@lendDisbursementNotLinkedOptional": {
+    "description": "Shown in a loan's detail line when no funding transaction is attached. Clarifies a disbursement is optional (a loan can just represent money owed) so the loan doesn't look misconfigured."
+  },
+  "lendLinkBankTx": "Vincular transacción bancaria",
+  "@lendLinkBankTx": {
+    "description": "Action on an off-bank (cash-recorded) repayment to attach the real bank inflow once the statement is imported."
+  },
+  "lendLinkBankTxTitle": "Vincular una transacción bancaria",
+  "@lendLinkBankTxTitle": {
+    "description": "Title of the picker sheet listing candidate bank inflows to attach to an off-bank repayment."
+  },
+  "lendLinkBankTxNone": "Aún no se encontraron transacciones bancarias coincidentes — primero sube tu estado de cuenta.",
+  "@lendLinkBankTxNone": {
+    "description": "Shown in the link-bank-transaction picker when no candidate inflow was found to attach to the off-bank repayment."
+  },
+  "lendLinkBankTxError": "No se pudo vincular esa transacción bancaria",
+  "@lendLinkBankTxError": {
+    "description": "Toast shown when attaching a bank transaction to an off-bank repayment fails."
+  }
 }

@@ -5162,4 +5162,166 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get divFxStaleHint =>
       'Parte de los ingresos se convirtió con un tipo de cambio desactualizado; las cifras son aproximadas.';
+
+  @override
+  String get lendCustomStyleLabel => 'Calendario personalizado';
+
+  @override
+  String get lendCustomStyleDesc =>
+      'Tú defines cada pago a mano: montos y fechas irregulares que suman lo prestado.';
+
+  @override
+  String get lendCustomPasteTitle => 'Pegar desde una hoja de cálculo';
+
+  @override
+  String get lendCustomPasteHint =>
+      'Pega dos columnas de Google Sheets / Excel: fecha y luego monto, un pago por línea.';
+
+  @override
+  String get lendCustomPasteButton => 'Procesar filas pegadas';
+
+  @override
+  String lendCustomPastedN(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
+    return 'Se cargaron $count pago$_temp0 desde lo pegado.';
+  }
+
+  @override
+  String get lendCustomPasteEmpty =>
+      'Nada que procesar: primero pega filas de fecha y monto.';
+
+  @override
+  String get lendCustomRowsTitle => 'Pagos';
+
+  @override
+  String get lendCustomAddRow => 'Agregar pago';
+
+  @override
+  String get lendCustomRemoveRow => 'Quitar pago';
+
+  @override
+  String get lendCustomRowDate => 'Fecha';
+
+  @override
+  String get lendCustomRowAmount => 'Monto';
+
+  @override
+  String get lendCustomNoRows =>
+      'Aún no hay pagos: pega desde una hoja de cálculo o agrégalos abajo.';
+
+  @override
+  String get lendCustomGeneratorTitle => 'Llenado rápido';
+
+  @override
+  String get lendCustomGenFirstN => 'Primeros pagos';
+
+  @override
+  String get lendCustomGenFirstAmount => 'Primer monto';
+
+  @override
+  String get lendCustomGenThenAmount => 'Luego cada uno';
+
+  @override
+  String get lendCustomGenDayOfMonth => 'Día del mes';
+
+  @override
+  String get lendCustomGenStart => 'Inicio';
+
+  @override
+  String get lendCustomGenEnd => 'Fin';
+
+  @override
+  String get lendCustomGenApply => 'Llenar pagos';
+
+  @override
+  String lendCustomPreviewCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pagos',
+      one: '1 pago',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lendCustomPreviewSum => 'Suma de los pagos';
+
+  @override
+  String get lendCustomClosesToZero =>
+      'Cierra en 0: los pagos suman lo prestado.';
+
+  @override
+  String lendCustomDoesNotAddUp(String sum, String principal) {
+    return 'Los pagos suman $sum, pero lo prestado es $principal.';
+  }
+
+  @override
+  String get lendCustomNeedRows => 'Agrega al menos un pago antes de guardar.';
+
+  @override
+  String lendCustomScheduleFailed(String error) {
+    return 'No se pudo guardar el calendario: $error';
+  }
+
+  @override
+  String get lendDisbursementConflict =>
+      'Esa transacción ya financia otro préstamo: no se creó el préstamo.';
+
+  @override
+  String get lendCopyForSheets => 'Copiar para Google Sheets';
+
+  @override
+  String get lendCopiedForSheets => 'Copiado: pega en la hoja con Ctrl/Cmd+V.';
+
+  @override
+  String lendSchedulePaidProgress(int paid, int total) {
+    return 'Pagados $paid de $total pagos';
+  }
+
+  @override
+  String lendScheduleRemaining(String amount) {
+    return '$amount restante';
+  }
+
+  @override
+  String get lendScheduleColPayment => 'Pago';
+
+  @override
+  String get lendScheduleColBalance => 'Saldo restante';
+
+  @override
+  String get lendScheduleColStatus => 'Estado';
+
+  @override
+  String get lendScheduleNextDue => 'Próximo';
+
+  @override
+  String get lendScheduleTotals => 'Total';
+
+  @override
+  String get txCreateLoanFromTx => 'Crear préstamo desde esta transacción';
+
+  @override
+  String get lendDisbursementNotLinkedOptional =>
+      'sin desembolso vinculado (opcional)';
+
+  @override
+  String get lendLinkBankTx => 'Vincular transacción bancaria';
+
+  @override
+  String get lendLinkBankTxTitle => 'Vincular una transacción bancaria';
+
+  @override
+  String get lendLinkBankTxNone =>
+      'Aún no se encontraron transacciones bancarias coincidentes — primero sube tu estado de cuenta.';
+
+  @override
+  String get lendLinkBankTxError =>
+      'No se pudo vincular esa transacción bancaria';
 }

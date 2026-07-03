@@ -49,7 +49,13 @@ pub fn router() -> Router<AppState> {
             post(link_disbursement).delete(unlink_disbursement),
         )
         .route("/{id}/payments", get(list_payments).post(record_payment))
+        // Attach a real bank tx to an installment already paid OFF-BANK.
+        .route(
+            "/{id}/payments/{payment_id}/attach-tx",
+            post(attach_payment_tx),
+        )
         .route("/{id}/schedule", post(generate_schedule))
+        .route("/{id}/schedule/custom", post(set_custom_schedule))
         .route("/{id}/payoff", post(payoff_loan))
         .route("/{id}/suggestions/disbursement", get(suggest_disbursement))
         .route("/{id}/suggestions/repayment", get(suggest_repayment))
@@ -184,7 +190,44 @@ fn default_rate_period() -> String {
 }
 
 fn valid_interest_type(t: &str) -> bool {
-    matches!(t, "none" | "simple" | "amortized" | "interest_only" | "compound")
+    matches!(
+        t,
+        "none" | "simple" | "amortized" | "interest_only" | "compound" | "custom"
+    )
+}
+
+/// One explicit installment for a CUSTOM schedule upload.
+#[derive(Deserialize)]
+struct CustomRow {
+    due_date: chrono::NaiveDate,
+    amount: f64,
+}
+
+/// The "first N at first_amount, then amount monthly on day-of-month
+/// from start_date through end_date (inclusive)" shorthand for a CUSTOM
+/// schedule — expanded server-side into explicit rows.
+#[derive(Deserialize)]
+struct CustomPattern {
+    start_date: chrono::NaiveDate,
+    end_date: chrono::NaiveDate,
+    /// Day-of-month for the monthly installments; defaults to
+    /// start_date's day when omitted.
+    #[serde(default)]
+    day_of_month: Option<u32>,
+    /// How many leading installments use `first_amount`.
+    first_count: usize,
+    first_amount: f64,
+    amount: f64,
+}
+
+/// POST /{id}/schedule/custom body: EITHER explicit `rows` OR a
+/// `pattern`. Exactly one must be present (validated in the handler).
+#[derive(Deserialize)]
+struct CustomScheduleRequest {
+    #[serde(default)]
+    rows: Option<Vec<CustomRow>>,
+    #[serde(default)]
+    pattern: Option<CustomPattern>,
 }
 
 #[derive(Deserialize)]
@@ -299,12 +342,14 @@ const LOAN_AGGREGATES: &str = r#"
               WHERE p.loan_id = l.id AND p.paid_amount IS NOT NULL), 0) AS total_repaid,
     COALESCE((SELECT SUM(p.scheduled_amount) FROM loan_payments p
               WHERE p.loan_id = l.id), 0) AS total_scheduled,
-    -- A GENERATED amortization schedule sets scheduled_principal > 0.
-    -- Manually-recorded repayments (the MVP path) leave it 0, so they
+    -- A GENERATED schedule sets scheduled_principal > 0 (or, for an
+    -- interest-only / custom 0-principal row, scheduled_interest > 0).
+    -- Manually-recorded repayments (the MVP path) leave BOTH 0, so they
     -- don't count as a schedule — outstanding for those loans uses the
     -- principal − repaid path instead.
     EXISTS(SELECT 1 FROM loan_payments p
-           WHERE p.loan_id = l.id AND p.scheduled_principal > 0) AS has_schedule,
+           WHERE p.loan_id = l.id
+             AND (p.scheduled_principal > 0 OR p.scheduled_interest > 0)) AS has_schedule,
     -- Σ principal_portion of every PAID payment → the running principal
     -- balance is principal − this (= balance_after of the last payment).
     -- Falls back to the full paid_amount for legacy rows recorded before
@@ -316,21 +361,25 @@ const LOAN_AGGREGATES: &str = r#"
               FROM loan_payments p
               WHERE p.loan_id = l.id AND p.paid_amount IS NOT NULL), 0) AS principal_paid,
     -- Earliest unpaid scheduled installment, OR — for a schedule-less but
-    -- still-active loan — its explicit expected_repayment_date.
+    -- still-active loan — its explicit expected_repayment_date. "Unpaid" is
+    -- keyed on paid_amount, NOT actual_tx_id: a cash/off-bank repayment fills
+    -- paid_amount with no linked transaction, and such a fully-paid
+    -- installment must NOT keep showing as due/overdue.
     COALESCE(
       (SELECT MIN(p.due_date) FROM loan_payments p
        WHERE p.loan_id = l.id
-         AND (p.actual_tx_id IS NULL OR p.paid_amount < p.scheduled_amount)),
+         AND (p.paid_amount IS NULL OR p.paid_amount < p.scheduled_amount)),
       CASE WHEN l.status = 'active' THEN l.expected_repayment_date END
     ) AS next_due,
     (EXISTS(SELECT 1 FROM loan_payments p
             WHERE p.loan_id = l.id AND p.due_date < CURRENT_DATE
-              AND (p.actual_tx_id IS NULL OR p.paid_amount < p.scheduled_amount))
+              AND (p.paid_amount IS NULL OR p.paid_amount < p.scheduled_amount))
      OR (l.status = 'active'
          AND l.expected_repayment_date IS NOT NULL
          AND l.expected_repayment_date < CURRENT_DATE
          AND NOT EXISTS(SELECT 1 FROM loan_payments p
-                        WHERE p.loan_id = l.id AND p.scheduled_principal > 0))
+                        WHERE p.loan_id = l.id
+                          AND (p.scheduled_principal > 0 OR p.scheduled_interest > 0)))
     ) AS overdue,
     -- Σ scheduled_amount billed on or before today (for paid-ahead).
     COALESCE((SELECT SUM(p.scheduled_amount) FROM loan_payments p
@@ -643,6 +692,21 @@ async fn update_loan(
         .as_deref()
         .is_some_and(|t| t != cur_type);
     let schedule_affecting = principal_changed || rate_changed || type_changed;
+    // CUSTOM loans own an explicitly-uploaded schedule that no formula
+    // reproduces. Changing principal / rate / interest_type would desync
+    // the loans row from those rows (or, if we regenerated, silently
+    // destroy them). Refuse the term edit — the user re-uploads the custom
+    // schedule to change terms. Status / notes / expected_repayment_date
+    // stay editable. (Mirrors the reconciled-loan 409 guard just below.)
+    let is_custom = cur_type == "custom"
+        || payload.interest_type.as_deref() == Some("custom");
+    if is_custom && schedule_affecting {
+        return (
+            StatusCode::CONFLICT,
+            "custom-schedule loan: re-upload the custom schedule to change terms",
+        )
+            .into_response();
+    }
     if schedule_affecting {
         let reconciled: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM loan_payments \
@@ -713,8 +777,12 @@ async fn update_loan(
                     // it open-ended / invalid — shouldn't happen via this
                     // path (term/frequency aren't editable here), so log
                     // and report a server error rather than corrupt state.
+                    // Custom loans are guarded out above (is_custom &&
+                    // schedule_affecting → 409), so this is unreachable;
+                    // fold it into the defensive server-error arm.
                     RegenOutcome::OpenEnded
                     | RegenOutcome::BadFrequency
+                    | RegenOutcome::Custom
                     | RegenOutcome::DbError => {
                         error!("update_loan schedule regen failed for loan {id}");
                         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
@@ -1160,7 +1228,7 @@ async fn record_payment(
                 COALESCE(interest_portion, 0) AS interest_so_far, \
                 actual_tx_id \
          FROM loan_payments \
-         WHERE loan_id = $1 AND scheduled_principal > 0 \
+         WHERE loan_id = $1 AND (scheduled_principal > 0 OR scheduled_interest > 0) \
            AND (paid_amount IS NULL OR paid_amount < scheduled_amount) \
            AND status <> 'skipped' \
          ORDER BY installment_number ASC",
@@ -1380,32 +1448,163 @@ async fn record_payment(
     }
 }
 
+/// POST /{id}/payments/{payment_id}/attach-tx — "upgrade" an off-bank
+/// installment to a bank-linked one.
+///
+/// When a repayment is marked paid before the bank statement lands, the
+/// installment carries `paid_amount` (the recorded cash) but `actual_tx_id
+/// IS NULL`. `record_payment` deliberately skips fully-paid rows, so a
+/// later attempt to reconcile the real inflow would SPILL onto the next
+/// installment and double-count. This endpoint instead attaches the now-
+/// imported tx to the SAME row: it keeps the recorded `paid_amount` and
+/// principal/interest split untouched (no recompute) and only sets
+/// `actual_tx_id` + `paid_date`. Linking matters beyond bookkeeping —
+/// loan-linked transactions are excluded from cash-flow/income, so
+/// attaching the real deposit stops it from inflating income.
+async fn attach_payment_tx(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path((id, payment_id)): Path<(uuid::Uuid, uuid::Uuid)>,
+    Json(payload): Json<LinkTxRequest>,
+) -> impl IntoResponse {
+    // 1. Loan must belong to the caller; keep its currency for the guard.
+    let loan_currency: Option<String> =
+        sqlx::query_scalar("SELECT currency FROM loans WHERE id = $1 AND user_id = $2")
+            .bind(id)
+            .bind(ctx.user_id)
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten();
+    let Some(loan_currency) = loan_currency else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+
+    // 2. Load the target installment (scoped to this loan + user).
+    let payment = sqlx::query(
+        "SELECT paid_amount, actual_tx_id FROM loan_payments \
+         WHERE id = $1 AND loan_id = $2 AND user_id = $3",
+    )
+    .bind(payment_id)
+    .bind(id)
+    .bind(ctx.user_id)
+    .fetch_optional(&state.db)
+    .await;
+    let Ok(Some(payment)) = payment else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+
+    // 3. Only an OFF-BANK recorded payment can be upgraded: it must have a
+    //    recorded amount and no tx yet. Distinguish the two failure modes.
+    let paid_amount: Option<rust_decimal::Decimal> = payment
+        .try_get::<Option<rust_decimal::Decimal>, _>("paid_amount")
+        .ok()
+        .flatten();
+    let already_linked: Option<uuid::Uuid> = payment
+        .try_get::<Option<uuid::Uuid>, _>("actual_tx_id")
+        .ok()
+        .flatten();
+    if paid_amount.is_none() {
+        return (
+            StatusCode::CONFLICT,
+            "payment has no recorded amount",
+        )
+            .into_response();
+    }
+    if already_linked.is_some() {
+        return (
+            StatusCode::CONFLICT,
+            "payment already linked to a transaction",
+        )
+            .into_response();
+    }
+
+    // 4. The incoming tx must belong to the caller.
+    let Some((tx_currency, tx_date, _tx_amount)) =
+        owned_tx(&state, ctx.user_id, payload.transaction_id).await
+    else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+
+    // 5. Currency guard (mirrors record_payment): a foreign-currency inflow
+    //    would misrepresent the loan's recorded repayment.
+    if !loan_currency.is_empty() && !tx_currency.eq_ignore_ascii_case(&loan_currency) {
+        return (
+            StatusCode::BAD_REQUEST,
+            "transaction currency does not match the loan currency",
+        )
+            .into_response();
+    }
+
+    // 6. Attach the tx + adopt its date. Keep paid_amount and the split as
+    //    recorded. The partial unique index idx_loan_payments_actual_tx
+    //    rejects a tx already linked elsewhere → 409.
+    let result = sqlx::query(
+        "UPDATE loan_payments SET actual_tx_id = $1, paid_date = $2 \
+         WHERE id = $3 AND user_id = $4",
+    )
+    .bind(payload.transaction_id)
+    .bind(tx_date)
+    .bind(payment_id)
+    .bind(ctx.user_id)
+    .execute(&state.db)
+    .await;
+    match result {
+        Ok(r) if r.rows_affected() == 0 => StatusCode::NOT_FOUND.into_response(),
+        Ok(_) => {
+            // Re-exclude the newly-linked deposit from cash flow.
+            state
+                .realtime
+                .publish(
+                    ctx.user_id,
+                    crate::services::realtime::RealtimeEvent::TransactionsChanged,
+                )
+                .await;
+            StatusCode::OK.into_response()
+        }
+        Err(sqlx::Error::Database(e)) if e.is_unique_violation() => (
+            StatusCode::CONFLICT,
+            "transaction already linked to another loan payment",
+        )
+            .into_response(),
+        Err(e) => {
+            error!("attach_payment_tx failed: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 async fn unreconcile_payment(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path(payment_id): Path<uuid::Uuid>,
 ) -> impl IntoResponse {
-    // A row that belongs to a generated amortization schedule
-    // (scheduled_principal > 0) must NOT be deleted — that would gap the
-    // schedule. Reverting it to 'scheduled' clears the actuals while keeping
-    // the installment. Only standalone payment rows (cash/off-bank or overflow
-    // inserts, scheduled_principal = 0) are deleted outright.
+    // A row that belongs to a generated schedule (scheduled_principal > 0,
+    // OR scheduled_interest > 0 for an interest-only / custom 0-principal
+    // row) must NOT be deleted — that would gap the schedule. Reverting it
+    // to 'scheduled' clears the actuals while keeping the installment. Only
+    // standalone payment rows (cash/off-bank or overflow inserts, both
+    // scheduled columns 0) are deleted outright.
     let row = sqlx::query(
-        "SELECT scheduled_principal FROM loan_payments WHERE id = $1 AND user_id = $2",
+        "SELECT scheduled_principal, scheduled_interest \
+         FROM loan_payments WHERE id = $1 AND user_id = $2",
     )
     .bind(payment_id)
     .bind(ctx.user_id)
     .fetch_optional(&state.db)
     .await;
-    let scheduled_principal = match row {
-        Ok(Some(r)) => dec_to_f64(r.try_get("scheduled_principal").ok()),
+    let is_schedule_row = match row {
+        Ok(Some(r)) => {
+            dec_to_f64(r.try_get("scheduled_principal").ok()) > 0.0
+                || dec_to_f64(r.try_get("scheduled_interest").ok()) > 0.0
+        }
         Ok(None) => return StatusCode::NOT_FOUND.into_response(),
         Err(e) => {
             error!("unreconcile_payment lookup failed: {e}");
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
-    let result = if scheduled_principal > 0.0 {
+    let result = if is_schedule_row {
         sqlx::query(
             "UPDATE loan_payments
                 SET actual_tx_id = NULL,
@@ -1586,6 +1785,10 @@ enum RegenOutcome {
     OpenEnded,
     /// payment_frequency is set but invalid.
     BadFrequency,
+    /// The loan is a CUSTOM (explicit-row) schedule — the formula
+    /// (re)builder refuses to touch it so it can't clobber the uploaded
+    /// rows. Callers route to POST /schedule/custom instead.
+    Custom,
     /// The loan doesn't exist (or isn't this user's) — maps to 404, not
     /// 500, so POST /schedule on a bad id behaves like the other handlers.
     NotFound,
@@ -1632,7 +1835,7 @@ async fn regenerate_schedule(
     if require_existing {
         let has_schedule: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM loan_payments \
-             WHERE loan_id = $1 AND scheduled_principal > 0)",
+             WHERE loan_id = $1 AND (scheduled_principal > 0 OR scheduled_interest > 0))",
         )
         .bind(loan_id)
         .fetch_one(db)
@@ -1659,6 +1862,12 @@ async fn regenerate_schedule(
     let rate: rust_decimal::Decimal = l.try_get("interest_rate").unwrap_or_default();
     let interest_type: String =
         l.try_get("interest_type").unwrap_or_else(|_| "none".to_string());
+    // CUSTOM schedules are uploaded explicitly, never derived from terms.
+    // The formula builder must never touch them (that would replace the
+    // uploaded rows with an equal-principal 'none' schedule).
+    if interest_type == "custom" {
+        return RegenOutcome::Custom;
+    }
     let rate_period: String =
         l.try_get("rate_period").unwrap_or_else(|_| "annual".to_string());
     let origination: chrono::NaiveDate = match l.try_get("origination_date") {
@@ -1696,28 +1905,54 @@ async fn regenerate_schedule(
             return RegenOutcome::DbError;
         }
     };
-    if let Err(e) = sqlx::query(
-        "DELETE FROM loan_payments WHERE loan_id = $1 AND actual_tx_id IS NULL",
-    )
-    .bind(loan_id)
-    .execute(&mut *tx)
-    .await
-    {
-        error!("regenerate_schedule clear failed: {e}");
+    match persist_schedule_rows(&mut tx, loan_id, user_id, &rows, principal).await {
+        Ok(_) => {}
+        Err(e) => {
+            error!("regenerate_schedule persist failed: {e}");
+            return RegenOutcome::DbError;
+        }
+    }
+    if let Err(e) = tx.commit().await {
+        error!("regenerate_schedule commit failed: {e}");
         return RegenOutcome::DbError;
     }
-    for row in &rows {
-        let res = sqlx::query(
+    RegenOutcome::Regenerated(rows.len())
+}
+
+/// Clear the loan's unpaid installments (reconciled rows are left alone)
+/// and upsert `rows` as the schedule, in the caller's transaction. Shared
+/// by `regenerate_schedule` (formula schedules) and `set_custom_schedule`
+/// (explicit CUSTOM rows) so both write identical SQL. `balance_after` is
+/// the running principal balance after each row (principal − cumulative
+/// principal); by the tail-absorbs-residual invariant it closes to
+/// exactly 0 on the final row. Returns the number of rows written.
+async fn persist_schedule_rows(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    loan_id: uuid::Uuid,
+    user_id: uuid::Uuid,
+    rows: &[crate::services::loan_schedule::ScheduleRow],
+    principal: rust_decimal::Decimal,
+) -> Result<usize, sqlx::Error> {
+    sqlx::query("DELETE FROM loan_payments WHERE loan_id = $1 AND actual_tx_id IS NULL")
+        .bind(loan_id)
+        .execute(&mut **tx)
+        .await?;
+    let mut balance = principal;
+    for row in rows {
+        balance -= row.principal;
+        sqlx::query(
             r#"
             INSERT INTO loan_payments
                 (user_id, loan_id, installment_number, due_date,
-                 scheduled_amount, scheduled_principal, scheduled_interest, status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, 'scheduled')
+                 scheduled_amount, scheduled_principal, scheduled_interest,
+                 balance_after, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'scheduled')
             ON CONFLICT (loan_id, installment_number) DO UPDATE SET
                 due_date = EXCLUDED.due_date,
                 scheduled_amount = EXCLUDED.scheduled_amount,
                 scheduled_principal = EXCLUDED.scheduled_principal,
                 scheduled_interest = EXCLUDED.scheduled_interest,
+                balance_after = EXCLUDED.balance_after,
                 status = 'scheduled'
             "#,
         )
@@ -1728,18 +1963,11 @@ async fn regenerate_schedule(
         .bind(row.amount)
         .bind(row.principal)
         .bind(row.interest)
-        .execute(&mut *tx)
-        .await;
-        if let Err(e) = res {
-            error!("regenerate_schedule insert failed: {e}");
-            return RegenOutcome::DbError;
-        }
+        .bind(balance)
+        .execute(&mut **tx)
+        .await?;
     }
-    if let Err(e) = tx.commit().await {
-        error!("regenerate_schedule commit failed: {e}");
-        return RegenOutcome::DbError;
-    }
-    RegenOutcome::Regenerated(rows.len())
+    Ok(rows.len())
 }
 
 /// (Re)generate the amortization schedule for a loan. Refuses (409) if
@@ -1774,9 +2002,151 @@ async fn generate_schedule(
         RegenOutcome::BadFrequency => {
             (StatusCode::UNPROCESSABLE_ENTITY, "invalid payment frequency").into_response()
         }
+        RegenOutcome::Custom => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "custom-schedule loan: use POST /schedule/custom",
+        )
+            .into_response(),
         RegenOutcome::NotFound => StatusCode::NOT_FOUND.into_response(),
         RegenOutcome::DbError => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
+}
+
+/// Upload a CUSTOM, explicit-row payment schedule: arbitrary
+/// {due_date, amount} installments that no interest formula produces
+/// (e.g. a 0% loan whose N payments sum to principal, with a one-off
+/// bump). Body carries EITHER explicit `rows` OR a `pattern` shorthand —
+/// exactly one. Flips the loan to interest_type='custom' and clears
+/// term_months / payment_frequency (they no longer describe the plan),
+/// then persists the rows via the shared `persist_schedule_rows`.
+///
+/// 404 unknown loan, 400 if neither/both of rows|pattern, 409 if any
+/// installment is already reconciled (as generate_schedule), 422 on an
+/// empty schedule or Σamount < principal (would imply negative interest).
+/// Returns 201 {"installments": n}.
+async fn set_custom_schedule(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path(id): Path<uuid::Uuid>,
+    Json(payload): Json<CustomScheduleRequest>,
+) -> impl IntoResponse {
+    use rust_decimal::Decimal;
+
+    // Exactly one of rows / pattern.
+    if payload.rows.is_some() == payload.pattern.is_some() {
+        return (
+            StatusCode::BAD_REQUEST,
+            "provide exactly one of `rows` or `pattern`",
+        )
+            .into_response();
+    }
+
+    // Verify ownership + load principal (needed for interest inference).
+    let loan = sqlx::query("SELECT principal FROM loans WHERE id = $1 AND user_id = $2")
+        .bind(id)
+        .bind(ctx.user_id)
+        .fetch_optional(&state.db)
+        .await;
+    let principal: Decimal = match loan {
+        Ok(Some(r)) => r.try_get("principal").unwrap_or_default(),
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(e) => {
+            error!("set_custom_schedule loan load failed: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+
+    // Refuse if any payment is already reconciled (same guard as regen).
+    let reconciled: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM loan_payments WHERE loan_id = $1 AND actual_tx_id IS NOT NULL",
+    )
+    .bind(id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(0);
+    if reconciled > 0 {
+        return (
+            StatusCode::CONFLICT,
+            "cannot set custom schedule: payments already reconciled — unreconcile them first",
+        )
+            .into_response();
+    }
+
+    // Expand to ScheduleRows (from explicit rows or the pattern shorthand).
+    let f = |x: f64| Decimal::from_f64_retain(x).unwrap_or_default();
+    let rows = if let Some(rs) = &payload.rows {
+        let pairs: Vec<(chrono::NaiveDate, Decimal)> =
+            rs.iter().map(|r| (r.due_date, f(r.amount))).collect();
+        crate::services::loan_schedule::expand_rows(&pairs, principal)
+    } else {
+        let p = payload.pattern.as_ref().unwrap();
+        crate::services::loan_schedule::expand_pattern(
+            principal,
+            p.start_date,
+            p.end_date,
+            p.day_of_month,
+            p.first_count,
+            f(p.first_amount),
+            f(p.amount),
+        )
+    };
+
+    // Validate: non-empty, and Σamount ≥ principal (else the inferred
+    // interest would be negative).
+    if rows.is_empty() {
+        return (StatusCode::UNPROCESSABLE_ENTITY, "schedule has no installments").into_response();
+    }
+    let total: Decimal = rows.iter().map(|r| r.amount).sum();
+    if total < principal {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "payments sum to less than the principal",
+        )
+            .into_response();
+    }
+
+    // One transaction: flip the loan to custom, clear formula terms, then
+    // replace the unpaid schedule rows.
+    let mut tx = match state.db.begin().await {
+        Ok(t) => t,
+        Err(e) => {
+            error!("set_custom_schedule begin failed: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+    if let Err(e) = sqlx::query(
+        "UPDATE loans SET interest_type = 'custom', term_months = NULL, \
+                payment_frequency = NULL, updated_at = NOW() \
+         WHERE id = $1 AND user_id = $2",
+    )
+    .bind(id)
+    .bind(ctx.user_id)
+    .execute(&mut *tx)
+    .await
+    {
+        error!("set_custom_schedule loan update failed: {e}");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+    let n = match persist_schedule_rows(&mut tx, id, ctx.user_id, &rows, principal).await {
+        Ok(n) => n,
+        Err(e) => {
+            error!("set_custom_schedule persist failed: {e}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+    if let Err(e) = tx.commit().await {
+        error!("set_custom_schedule commit failed: {e}");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    state
+        .realtime
+        .publish(
+            ctx.user_id,
+            crate::services::realtime::RealtimeEvent::TransactionsChanged,
+        )
+        .await;
+    (StatusCode::CREATED, Json(serde_json::json!({"installments": n}))).into_response()
 }
 
 /// Administrative early/full payoff: close an active loan and void any
@@ -1830,7 +2200,8 @@ async fn payoff_loan(
             let _ = sqlx::query(
                 "UPDATE loan_payments SET status = 'skipped' \
                  WHERE loan_id = $1 AND user_id = $2 \
-                   AND actual_tx_id IS NULL AND scheduled_principal > 0 \
+                   AND actual_tx_id IS NULL \
+                   AND (scheduled_principal > 0 OR scheduled_interest > 0) \
                    AND status NOT IN ('paid', 'skipped')",
             )
             .bind(id)
@@ -1924,7 +2295,8 @@ async fn list_reminders(
           AND l.expected_repayment_date IS NOT NULL
           AND l.expected_repayment_date <= CURRENT_DATE + ($2)::int
           AND NOT EXISTS(SELECT 1 FROM loan_payments p
-                         WHERE p.loan_id = l.id AND p.scheduled_principal > 0)
+                         WHERE p.loan_id = l.id
+                           AND (p.scheduled_principal > 0 OR p.scheduled_interest > 0))
         ORDER BY due_date ASC
         "#,
     )
@@ -2308,7 +2680,8 @@ async fn loan_agreement(
     let payments = sqlx::query(
         "SELECT installment_number, due_date, scheduled_amount, scheduled_principal, \
                 scheduled_interest, status \
-         FROM loan_payments WHERE loan_id = $1 AND scheduled_principal > 0 \
+         FROM loan_payments \
+         WHERE loan_id = $1 AND (scheduled_principal > 0 OR scheduled_interest > 0) \
          ORDER BY installment_number ASC",
     )
     .bind(id)
@@ -2644,21 +3017,40 @@ async fn export_schedule_csv(
     fn esc(s: &str) -> String {
         format!("\"{}\"", s.replace('"', "\"\""))
     }
-    let mut csv = String::from(
-        "installment,due_date,amount,principal,interest,balance_remaining,status\n",
-    );
+    // A 0% / custom-with-no-markup schedule carries no interest, so drop
+    // the Principal + Interest columns — they'd just be a redundant copy of
+    // Payment and a wall of 0.00. Show them only when interest is real.
+    let has_interest = rows
+        .iter()
+        .any(|p| p.interest > rust_decimal::Decimal::ZERO);
+    let mut csv = if has_interest {
+        String::from("#,Due date,Payment,Principal,Interest,Balance remaining,Status\n")
+    } else {
+        String::from("#,Due date,Payment,Balance remaining,Status\n")
+    };
     for p in &rows {
         let due = p.due_date.map(|d| d.to_string()).unwrap_or_default();
-        csv.push_str(&format!(
-            "{},{},{:.2},{:.2},{:.2},{:.2},{}\n",
-            p.installment_number,
-            due,
-            dec_to_f64(Some(p.amount)),
-            dec_to_f64(Some(p.principal)),
-            dec_to_f64(Some(p.interest)),
-            dec_to_f64(Some(p.balance_remaining)),
-            esc(&p.status),
-        ));
+        if has_interest {
+            csv.push_str(&format!(
+                "{},{},{:.2},{:.2},{:.2},{:.2},{}\n",
+                p.installment_number,
+                due,
+                dec_to_f64(Some(p.amount)),
+                dec_to_f64(Some(p.principal)),
+                dec_to_f64(Some(p.interest)),
+                dec_to_f64(Some(p.balance_remaining)),
+                esc(&p.status),
+            ));
+        } else {
+            csv.push_str(&format!(
+                "{},{},{:.2},{:.2},{}\n",
+                p.installment_number,
+                due,
+                dec_to_f64(Some(p.amount)),
+                dec_to_f64(Some(p.balance_remaining)),
+                esc(&p.status),
+            ));
+        }
     }
 
     // Sanitise the borrower for a Content-Disposition filename.
@@ -2872,5 +3264,42 @@ mod tests {
                 assert!(w[1] <= w[0], "{itype}: balance should never grow");
             }
         }
+    }
+
+    /// A CUSTOM explicit-row schedule also closes to exactly 0, via the
+    /// same running_balances the plan/CSV exports use.
+    #[test]
+    fn custom_schedule_running_balance_closes_to_zero() {
+        let rows = crate::services::loan_schedule::expand_rows(
+            &[
+                (chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap(), d("3500")),
+                (chrono::NaiveDate::from_ymd_opt(2026, 7, 15).unwrap(), d("4000")),
+                (chrono::NaiveDate::from_ymd_opt(2026, 8, 15).unwrap(), d("2500")),
+            ],
+            d("10000"),
+        );
+        let principals: Vec<Decimal> = rows.iter().map(|r| r.principal).collect();
+        let balances = running_balances(d("10000"), &principals);
+        assert_eq!(balances.len(), 3);
+        assert_eq!(*balances.last().unwrap(), Decimal::ZERO);
+    }
+
+    /// The `has_schedule` predicate widened from `scheduled_principal > 0`
+    /// to `(scheduled_principal > 0 OR scheduled_interest > 0)`. This mirrors
+    /// that SQL boolean in Rust to lock the intent: a MANUALLY-recorded
+    /// repayment row (both scheduled columns 0 — the MVP path) must NOT be
+    /// counted as a schedule, while a generated row (either column > 0) is.
+    #[test]
+    fn has_schedule_predicate_excludes_manual_repayments() {
+        // (scheduled_principal, scheduled_interest) → is_schedule_row
+        let is_schedule = |sp: f64, si: f64| sp > 0.0 || si > 0.0;
+        // Manual repayment appended by record_payment: neither column set.
+        assert!(!is_schedule(0.0, 0.0), "manual repayment is not a schedule");
+        // Formula/custom principal row.
+        assert!(is_schedule(100.0, 0.0));
+        // Interest-only / custom 0-principal installment (interest only).
+        assert!(is_schedule(0.0, 25.0));
+        // A normal amortized row with both.
+        assert!(is_schedule(90.0, 10.0));
     }
 }

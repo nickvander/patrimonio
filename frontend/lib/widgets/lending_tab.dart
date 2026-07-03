@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
@@ -16,6 +17,38 @@ import 'interest_income_sheet.dart';
 /// dashboard doesn't have to thread loan state through. Calls
 /// onChanged after any mutation so the dashboard can silently refresh
 /// the cash-flow view (loan-linked transactions are excluded there).
+/// Open the Add-loan dialog pre-filled from a transaction (the
+/// "Create loan from this transaction" flow in the transactions tab).
+/// [disbursementTxId] links the loan to that funding transaction after
+/// creation; a 409 conflict rolls the loan back. Returns true when a loan
+/// was created so the caller can refresh. Kept as a small public
+/// entrypoint so cross-widget callers don't need the private dialog class.
+Future<bool?> showCreateLoanFromTransactionDialog(
+  BuildContext context, {
+  required ApiService apiService,
+  required List<dynamic> people,
+  required String defaultCurrency,
+  required double principal,
+  required String currency,
+  required DateTime originationDate,
+  required String borrowerName,
+  required String disbursementTxId,
+}) {
+  return showDialog<bool>(
+    context: context,
+    builder: (_) => _AddLoanDialog(
+      apiService: apiService,
+      people: people,
+      defaultCurrency: defaultCurrency,
+      initialPrincipal: principal,
+      initialCurrency: currency,
+      initialOriginationDate: originationDate,
+      initialBorrowerName: borrowerName,
+      disbursementTxId: disbursementTxId,
+    ),
+  );
+}
+
 class LendingTab extends StatefulWidget {
   final ApiService apiService;
   final String targetCurrency;
@@ -554,7 +587,7 @@ class _LendingTabState extends State<LendingTab> {
               Text(
                 'Lent ${_money(principal, currency)} · '
                 '${(loan['origination_date'] ?? '').toString()}'
-                '${linked ? '' : ' · disbursement not linked'}',
+                '${linked ? '' : ' · ${AppLocalizations.of(context).lendDisbursementNotLinkedOptional}'}',
                 style: TextStyle(fontSize: 12, color: context.textSubtle),
               ),
               // When the loan is in a different currency than the display
@@ -785,15 +818,49 @@ class _LendingTabState extends State<LendingTab> {
 // Add-loan dialog
 // =====================================================================
 
+/// One editable installment row in the custom-schedule editor. Each row
+/// owns its own controllers so an inline edit doesn't rebuild the whole
+/// list (and keeps cursor position stable).
+class _CustomRow {
+  final TextEditingController dateCtrl;
+  final TextEditingController amountCtrl;
+
+  _CustomRow(this.dateCtrl, this.amountCtrl);
+
+  factory _CustomRow.of(String date, String amount) => _CustomRow(
+        TextEditingController(text: date),
+        TextEditingController(text: amount),
+      );
+
+  void dispose() {
+    dateCtrl.dispose();
+    amountCtrl.dispose();
+  }
+}
+
 class _AddLoanDialog extends StatefulWidget {
   final ApiService apiService;
   final List<dynamic> people;
   final String defaultCurrency;
 
+  // Optional prefill — used by "Create loan from this transaction". When
+  // [disbursementTxId] is set, the loan is linked to that transaction as
+  // its disbursement after creation (and rolled back on a 409 conflict).
+  final double? initialPrincipal;
+  final String? initialCurrency;
+  final DateTime? initialOriginationDate;
+  final String? initialBorrowerName;
+  final String? disbursementTxId;
+
   const _AddLoanDialog({
     required this.apiService,
     required this.people,
     required this.defaultCurrency,
+    this.initialPrincipal,
+    this.initialCurrency,
+    this.initialOriginationDate,
+    this.initialBorrowerName,
+    this.disbursementTxId,
   });
 
   @override
@@ -831,6 +898,22 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   // default view isn't a wall of dropdowns.
   bool _showAdvanced = false;
 
+  // ----- Custom-schedule mode (_interestType == 'custom') -----
+  // The explicit installment rows the user pastes / edits. Each carries its
+  // own controllers so an inline edit doesn't rebuild the whole list.
+  final List<_CustomRow> _customRows = [];
+  final _pasteCtrl = TextEditingController();
+  bool _showCustomGenerator = false;
+  // Quick-fill generator inputs.
+  final _genFirstNCtrl = TextEditingController();
+  final _genFirstAmtCtrl = TextEditingController();
+  final _genThenAmtCtrl = TextEditingController();
+  final _genDayCtrl = TextEditingController();
+  DateTime? _genStart;
+  DateTime? _genEnd;
+
+  bool get _isCustom => _interestType == 'custom';
+
   /// Native-currency symbol for the loan being entered (never the
   /// converted display currency — the preview always speaks the loan's
   /// own money).
@@ -864,8 +947,22 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   @override
   void initState() {
     super.initState();
-    _currency = widget.defaultCurrency == 'MXN' ? 'MXN' : 'USD';
+    final cur = widget.initialCurrency ?? widget.defaultCurrency;
+    _currency = cur == 'MXN' ? 'MXN' : 'USD';
+    if (widget.initialPrincipal != null && widget.initialPrincipal! > 0) {
+      _principalCtrl.text = _trimZeros(widget.initialPrincipal!);
+    }
+    if (widget.initialOriginationDate != null) {
+      _originationDate = widget.initialOriginationDate!;
+    }
+    if (widget.initialBorrowerName != null) {
+      _borrowerText = widget.initialBorrowerName!;
+    }
   }
+
+  /// Amount without trailing ".00" so a prefilled principal shows cleanly.
+  String _trimZeros(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
 
   @override
   void dispose() {
@@ -874,6 +971,14 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     _termCtrl.dispose();
     _paymentCtrl.dispose();
     _notesCtrl.dispose();
+    _pasteCtrl.dispose();
+    _genFirstNCtrl.dispose();
+    _genFirstAmtCtrl.dispose();
+    _genThenAmtCtrl.dispose();
+    _genDayCtrl.dispose();
+    for (final r in _customRows) {
+      r.dispose();
+    }
     super.dispose();
   }
 
@@ -945,6 +1050,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
               children: [
                 _section('Borrower & amount', [
                   Autocomplete<String>(
+                    initialValue:
+                        TextEditingValue(text: widget.initialBorrowerName ?? ''),
                     optionsBuilder: (value) {
                       if (value.text.isEmpty) return peopleNames;
                       return peopleNames.where((n) =>
@@ -1003,23 +1110,29 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                   // Plain-language loan styles replace the cryptic
                   // interest-type dropdown — each says how its plan works.
                   _loanStyleChooser(),
-                  if (_interestType != 'none') ...[
+                  if (_isCustom) ...[
                     const SizedBox(height: 14),
-                    TextField(
-                      controller: _rateCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
-                      onChanged: (_) => setState(() {}),
-                      decoration: _decoration('Interest rate',
-                          hint: 'e.g. 5',
-                          icon: Icons.percent,
-                          suffixText:
-                              _ratePeriod == 'monthly' ? '% / month' : '% / year'),
-                    ),
+                    _customScheduleEditor(narrow),
+                  ] else ...[
+                    if (_interestType != 'none') ...[
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: _rateCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        onChanged: (_) => setState(() {}),
+                        decoration: _decoration('Interest rate',
+                            hint: 'e.g. 5',
+                            icon: Icons.percent,
+                            suffixText: _ratePeriod == 'monthly'
+                                ? '% / month'
+                                : '% / year'),
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    _termOrPaymentControls(narrow),
+                    _advancedPanel(narrow),
                   ],
-                  const SizedBox(height: 14),
-                  _termOrPaymentControls(narrow),
-                  _advancedPanel(narrow),
                 ]),
                 const SizedBox(height: 16),
                 _section('Expected repayment', [
@@ -1165,6 +1278,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   ];
 
   Widget _loanStyleChooser() {
+    final l10n = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1176,6 +1290,14 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
             desc: _loanStyles[i].$3,
           ),
         ],
+        const SizedBox(height: 8),
+        // Custom, explicit-row schedule — the only style whose label /
+        // description come from i18n (added alongside this feature).
+        _loanStyleTile(
+          value: 'custom',
+          label: l10n.lendCustomStyleLabel,
+          desc: l10n.lendCustomStyleDesc,
+        ),
       ],
     );
   }
@@ -1353,9 +1475,11 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   /// repay. Native currency only (never the converted display value).
   Widget _buildPreviewCard() {
     final accent = context.tealAccent;
-    final rows = (_setByPayment && _supportsSolve)
-        ? _solvePreviewRows(accent)
-        : _termPreviewRows(accent);
+    final rows = _isCustom
+        ? _customPreviewRows(accent)
+        : (_setByPayment && _supportsSolve)
+            ? _solvePreviewRows(accent)
+            : _termPreviewRows(accent);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1508,6 +1632,417 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     );
   }
 
+  // ===================================================================
+  // Custom-schedule editor
+  // ===================================================================
+
+  /// The paste box + editable row list + quick-fill generator. The rows
+  /// are the source of truth for the schedule that's saved on confirm.
+  Widget _customScheduleEditor(bool narrow) {
+    final l10n = AppLocalizations.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(l10n.lendCustomPasteTitle,
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: context.textSubtle)),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _pasteCtrl,
+          maxLines: 4,
+          minLines: 3,
+          style: const TextStyle(
+              fontFeatures: [FontFeature.tabularFigures()], fontSize: 13),
+          decoration: _decoration(l10n.lendCustomPasteTitle,
+              hint: l10n.lendCustomPasteHint),
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: _parsePaste,
+            icon: const Icon(Icons.content_paste_go, size: 16),
+            label: Text(l10n.lendCustomPasteButton,
+                style: const TextStyle(fontSize: 12)),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Editable rows.
+        Row(
+          children: [
+            Expanded(
+              child: Text(l10n.lendCustomRowsTitle,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: context.textSubtle)),
+            ),
+            TextButton.icon(
+              onPressed: _addCustomRow,
+              icon: const Icon(Icons.add, size: 16),
+              label: Text(l10n.lendCustomAddRow,
+                  style: const TextStyle(fontSize: 12)),
+            ),
+          ],
+        ),
+        if (_customRows.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(l10n.lendCustomNoRows,
+                style: TextStyle(fontSize: 12, color: context.textSubtle)),
+          )
+        else
+          for (var i = 0; i < _customRows.length; i++) _customRowTile(i),
+        const SizedBox(height: 8),
+        _customGeneratorPanel(narrow),
+      ],
+    );
+  }
+
+  Widget _customRowTile(int index) {
+    final l10n = AppLocalizations.of(context);
+    final row = _customRows[index];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 22,
+            child: Text('${index + 1}',
+                style: TextStyle(fontSize: 12, color: context.textFaint)),
+          ),
+          Expanded(
+            flex: 4,
+            child: TextField(
+              controller: row.dateCtrl,
+              onChanged: (_) => setState(() {}),
+              style: const TextStyle(fontSize: 13),
+              decoration: _decoration(l10n.lendCustomRowDate,
+                  hint: 'YYYY-MM-DD'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 3,
+            child: TextField(
+              controller: row.amountCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              onChanged: (_) => setState(() {}),
+              style: const TextStyle(fontSize: 13),
+              decoration:
+                  _decoration(l10n.lendCustomRowAmount, prefixText: '$_sym '),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 16),
+            tooltip: l10n.lendCustomRemoveRow,
+            onPressed: () => _removeCustomRow(index),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _customGeneratorPanel(bool narrow) {
+    final l10n = AppLocalizations.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () =>
+              setState(() => _showCustomGenerator = !_showCustomGenerator),
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Icon(_showCustomGenerator ? Icons.expand_less : Icons.expand_more,
+                    size: 18, color: context.textMuted),
+                const SizedBox(width: 6),
+                Text(l10n.lendCustomGeneratorTitle,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: context.textMuted)),
+              ],
+            ),
+          ),
+        ),
+        if (_showCustomGenerator) ...[
+          _twoUp(
+            narrow,
+            TextField(
+              controller: _genFirstNCtrl,
+              keyboardType: TextInputType.number,
+              decoration: _decoration(l10n.lendCustomGenFirstN, hint: '1'),
+            ),
+            TextField(
+              controller: _genFirstAmtCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: _decoration(l10n.lendCustomGenFirstAmount,
+                  prefixText: '$_sym '),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _twoUp(
+            narrow,
+            TextField(
+              controller: _genThenAmtCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: _decoration(l10n.lendCustomGenThenAmount,
+                  prefixText: '$_sym '),
+            ),
+            TextField(
+              controller: _genDayCtrl,
+              keyboardType: TextInputType.number,
+              decoration: _decoration(l10n.lendCustomGenDayOfMonth, hint: '15'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _twoUp(
+            narrow,
+            InkWell(
+              onTap: () => _pickGenDate(true),
+              borderRadius: BorderRadius.circular(10),
+              child: InputDecorator(
+                decoration: _decoration(l10n.lendCustomGenStart,
+                    icon: Icons.event_outlined),
+                child: Text(
+                  _genStart == null
+                      ? '—'
+                      : DateFormat('MMM d, y').format(_genStart!),
+                  style: TextStyle(color: context.textPrimary, fontSize: 13),
+                ),
+              ),
+            ),
+            InkWell(
+              onTap: () => _pickGenDate(false),
+              borderRadius: BorderRadius.circular(10),
+              child: InputDecorator(
+                decoration: _decoration(l10n.lendCustomGenEnd,
+                    icon: Icons.event_outlined),
+                child: Text(
+                  _genEnd == null
+                      ? '—'
+                      : DateFormat('MMM d, y').format(_genEnd!),
+                  style: TextStyle(color: context.textPrimary, fontSize: 13),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.tonalIcon(
+              onPressed: _applyGenerator,
+              icon: const Icon(Icons.auto_fix_high, size: 16),
+              label: Text(l10n.lendCustomGenApply,
+                  style: const TextStyle(fontSize: 12)),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _pickGenDate(bool isStart) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: (isStart ? _genStart : _genEnd) ?? _originationDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) {
+      setState(() {
+        if (isStart) {
+          _genStart = picked;
+        } else {
+          _genEnd = picked;
+        }
+      });
+    }
+  }
+
+  /// Parse the pasted spreadsheet text into rows. Each non-empty line is
+  /// split on a tab or a run of whitespace into a date + amount. Accepts
+  /// M/D/YYYY, MM/DD/YYYY and YYYY-MM-DD; strips currency symbols/commas.
+  void _parsePaste() {
+    final text = _pasteCtrl.text;
+    if (text.trim().isEmpty) {
+      _toast(AppLocalizations.of(context).lendCustomPasteEmpty);
+      return;
+    }
+    final parsed = <_CustomRow>[];
+    for (final rawLine in text.split('\n')) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
+      // Prefer a tab split (spreadsheet paste); fall back to whitespace.
+      List<String> parts =
+          line.contains('\t') ? line.split('\t') : line.split(RegExp(r'\s{2,}|\s+'));
+      parts = parts.where((p) => p.trim().isNotEmpty).toList();
+      if (parts.length < 2) continue;
+      final iso = _normalizeDate(parts[0].trim());
+      final amt = _parseAmount(parts.sublist(1).join(' '));
+      if (iso == null || amt == null) continue;
+      parsed.add(_CustomRow.of(iso, _trimZeros(amt)));
+    }
+    if (parsed.isEmpty) {
+      _toast(AppLocalizations.of(context).lendCustomPasteEmpty);
+      return;
+    }
+    setState(() {
+      for (final r in _customRows) {
+        r.dispose();
+      }
+      _customRows
+        ..clear()
+        ..addAll(parsed);
+    });
+    _toast(AppLocalizations.of(context).lendCustomPastedN(parsed.length));
+  }
+
+  /// Normalize a date token to YYYY-MM-DD, or null if unrecognized.
+  String? _normalizeDate(String s) {
+    final t = s.trim();
+    // Already ISO (YYYY-MM-DD).
+    final isoMatch = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})$').firstMatch(t);
+    if (isoMatch != null) {
+      return _iso(int.parse(isoMatch.group(1)!), int.parse(isoMatch.group(2)!),
+          int.parse(isoMatch.group(3)!));
+    }
+    // M/D/YYYY or MM/DD/YYYY (US order — matches Google Sheets exports).
+    final slash = RegExp(r'^(\d{1,2})/(\d{1,2})/(\d{2,4})$').firstMatch(t);
+    if (slash != null) {
+      var year = int.parse(slash.group(3)!);
+      if (year < 100) year += 2000;
+      return _iso(year, int.parse(slash.group(1)!), int.parse(slash.group(2)!));
+    }
+    return null;
+  }
+
+  String _iso(int y, int m, int d) =>
+      '${y.toString().padLeft(4, '0')}-${m.toString().padLeft(2, '0')}-${d.toString().padLeft(2, '0')}';
+
+  /// Strip currency symbols / thousands separators and parse the amount.
+  double? _parseAmount(String s) {
+    final cleaned = s.replaceAll(RegExp(r'[^\d.\-]'), '');
+    if (cleaned.isEmpty) return null;
+    return double.tryParse(cleaned);
+  }
+
+  void _addCustomRow() {
+    setState(() => _customRows.add(_CustomRow.of('', '')));
+  }
+
+  void _removeCustomRow(int index) {
+    setState(() {
+      _customRows.removeAt(index).dispose();
+    });
+  }
+
+  /// Quick-fill: first N payments of X, then Y every month on day D from
+  /// START to END. Replaces the current rows. A convenience only — the
+  /// user can still fine-tune afterwards.
+  void _applyGenerator() {
+    final firstN = int.tryParse(_genFirstNCtrl.text.trim()) ?? 0;
+    final firstAmt = _parseAmount(_genFirstAmtCtrl.text.trim());
+    final thenAmt = _parseAmount(_genThenAmtCtrl.text.trim());
+    final day = int.tryParse(_genDayCtrl.text.trim());
+    final start = _genStart;
+    final end = _genEnd;
+    if (thenAmt == null || day == null || start == null || end == null) {
+      _toast(AppLocalizations.of(context).lendCustomNeedRows);
+      return;
+    }
+    final rows = <_CustomRow>[];
+    // Walk month-by-month on the given day-of-month, from the start month
+    // through (inclusive) the end month. The first [firstN] payments use
+    // [firstAmt] (when given), the rest use [thenAmt]. Guard the loop at
+    // 600 iterations so a bad end date can't spin forever.
+    final endMonth = DateTime(end.year, end.month);
+    var y = start.year;
+    var m = start.month;
+    var iter = 0;
+    while (iter < 600 && !DateTime(y, m).isAfter(endMonth)) {
+      final dim = DateUtils.getDaysInMonth(y, m);
+      final d = day > dim ? dim : day;
+      final amt =
+          (rows.length < firstN && firstAmt != null) ? firstAmt : thenAmt;
+      rows.add(_CustomRow.of(_iso(y, m, d), _trimZeros(amt)));
+      iter++;
+      m++;
+      if (m > 12) {
+        m = 1;
+        y++;
+      }
+    }
+    if (rows.isEmpty) {
+      _toast(AppLocalizations.of(context).lendCustomNeedRows);
+      return;
+    }
+    setState(() {
+      for (final r in _customRows) {
+        r.dispose();
+      }
+      _customRows
+        ..clear()
+        ..addAll(rows);
+    });
+  }
+
+  /// Sum of the current custom rows' amounts (parsed; unparseable = 0).
+  double _customSum() {
+    var sum = 0.0;
+    for (final r in _customRows) {
+      sum += _parseAmount(r.amountCtrl.text.trim()) ?? 0;
+    }
+    return sum;
+  }
+
+  /// The preview for custom mode: count, sum, and whether it closes to 0.
+  List<Widget> _customPreviewRows(Color accent) {
+    final l10n = AppLocalizations.of(context);
+    final principal = double.tryParse(_principalCtrl.text.trim());
+    final sum = _customSum();
+    final n = _customRows.length;
+    final closes =
+        principal != null && (sum - principal).abs() < 0.005 && n > 0;
+    return [
+      _previewRow(l10n.lendCustomPreviewCount(n), _fmtMoney(sum), bold: true),
+      const SizedBox(height: 6),
+      _previewRow(l10n.lendCustomPreviewSum, _fmtMoney(sum)),
+      const SizedBox(height: 8),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(closes ? Icons.check_circle : Icons.warning_amber_rounded,
+              size: 16, color: closes ? context.positive : context.warning),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              closes
+                  ? l10n.lendCustomClosesToZero
+                  : l10n.lendCustomDoesNotAddUp(
+                      _fmtMoney(sum),
+                      principal == null ? _fmtMoney(0) : _fmtMoney(principal)),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: closes ? context.positive : context.warning,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ];
+  }
+
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -1565,6 +2100,10 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   }
 
   Future<void> _submit() async {
+    if (_isCustom) {
+      await _submitCustom();
+      return;
+    }
     final borrower = _borrowerText.trim();
     final principal = double.tryParse(_principalCtrl.text.trim());
     if (borrower.isEmpty) {
@@ -1605,7 +2144,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
         term = int.tryParse(_termCtrl.text.trim());
       }
 
-      await widget.apiService.createLoan(
+      final loan = await widget.apiService.createLoan(
         borrowerName: borrower,
         principal: principal,
         currency: _currency,
@@ -1620,6 +2159,12 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
         notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
         expectedRepaymentDate: _expectedRepaymentDate,
       );
+      // Prefill flow: also link the funding transaction. Roll the loan back
+      // on a 409 so we never leave an orphan loan whose disbursement failed.
+      if (widget.disbursementTxId != null) {
+        final ok = await _linkDisbursementOrRollback(loan['id'].toString());
+        if (!ok) return;
+      }
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {
@@ -1627,6 +2172,92 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
       setState(() => _submitting = false);
       _toast('Failed to add loan');
     }
+  }
+
+  /// Custom-schedule confirm: create the loan (interest_type 'custom'),
+  /// push the explicit rows, then optionally link the disbursement. On any
+  /// failure after the loan is created, delete it so no empty loan is left.
+  Future<void> _submitCustom() async {
+    final l10n = AppLocalizations.of(context);
+    final borrower = _borrowerText.trim();
+    final principal = double.tryParse(_principalCtrl.text.trim());
+    if (borrower.isEmpty) {
+      _toast('Enter a borrower name');
+      return;
+    }
+    if (principal == null || principal <= 0) {
+      _toast('Enter a valid amount');
+      return;
+    }
+    final rows = _customScheduleRows();
+    if (rows.isEmpty) {
+      _toast(l10n.lendCustomNeedRows);
+      return;
+    }
+    setState(() => _submitting = true);
+    String? loanId;
+    try {
+      final loan = await widget.apiService.createLoan(
+        borrowerName: borrower,
+        principal: principal,
+        currency: _currency,
+        originationDate: _originationDate,
+        interestRate: 0,
+        interestType: 'custom',
+        notes: _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+        expectedRepaymentDate: _expectedRepaymentDate,
+      );
+      loanId = loan['id'].toString();
+      await widget.apiService.setCustomSchedule(loanId, rows);
+      if (widget.disbursementTxId != null) {
+        final ok = await _linkDisbursementOrRollback(loanId);
+        if (!ok) return;
+      }
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      // Roll back the just-created loan so a failed schedule doesn't leave
+      // an empty loan behind.
+      if (loanId != null) {
+        try {
+          await widget.apiService.deleteLoan(loanId);
+        } catch (_) {}
+      }
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      _toast(l10n.lendCustomScheduleFailed(e.toString()));
+    }
+  }
+
+  /// Link [loanId]'s disbursement to the prefilled transaction. Returns true
+  /// on success; on a 409 conflict (tx already funds another loan) it deletes
+  /// the loan, shows a message and returns false. Any other failure rethrows.
+  Future<bool> _linkDisbursementOrRollback(String loanId) async {
+    try {
+      await widget.apiService.linkDisbursement(loanId, widget.disbursementTxId!);
+      return true;
+    } on DisbursementConflictException {
+      try {
+        await widget.apiService.deleteLoan(loanId);
+      } catch (_) {}
+      if (!mounted) return false;
+      setState(() => _submitting = false);
+      _toast(AppLocalizations.of(context).lendDisbursementConflict);
+      return false;
+    }
+  }
+
+  /// The custom rows as the API payload: `{due_date, amount}`, dropping any
+  /// row whose date or amount doesn't parse.
+  List<Map<String, dynamic>> _customScheduleRows() {
+    final rows = <Map<String, dynamic>>[];
+    for (final r in _customRows) {
+      final iso = _normalizeDate(r.dateCtrl.text.trim());
+      final amt = _parseAmount(r.amountCtrl.text.trim());
+      if (iso == null || amt == null) continue;
+      rows.add({'due_date': iso, 'amount': amt});
+    }
+    return rows;
   }
 
   void _toast(String msg) {
@@ -2346,6 +2977,11 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
         else
           ...reconciled.map((p) {
             final m = p as Map<String, dynamic>;
+            // OFF-BANK: recorded amount but no real bank tx attached yet.
+            // Offer to attach the imported inflow so it's excluded from
+            // cash flow (and not double-counted by a fresh record).
+            final isOffBank =
+                m['actual_tx_id'] == null && m['paid_amount'] != null;
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(
@@ -2359,6 +2995,13 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
                           TextStyle(fontSize: 13, color: context.textMuted),
                     ),
                   ),
+                  if (isOffBank)
+                    IconButton(
+                      icon: const Icon(Icons.add_link, size: 16),
+                      tooltip:
+                          AppLocalizations.of(context).lendLinkBankTx,
+                      onPressed: () => _openLinkBankTx(m['id'].toString()),
+                    ),
                   IconButton(
                     icon: const Icon(Icons.link_off, size: 16),
                     tooltip: 'Unlink',
@@ -2491,18 +3134,28 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
     // interest-only plan to a single row. Compound / lump_sum schedules
     // are genuinely a single row and stay that way (their one row has
     // both splits > 0).
+    // Scheduled installments: any row carrying a planned amount (principal,
+    // interest, OR a total scheduled_amount — a 0%/custom loan's rows have
+    // scheduled_interest == 0 but a non-zero scheduled_amount).
     final scheduled = _payments.where((p) {
       final m = p as Map;
       final sp = (m['scheduled_principal'] as num?)?.toDouble() ?? 0;
       final si = (m['scheduled_interest'] as num?)?.toDouble() ?? 0;
-      return sp > 0 || si > 0;
+      final sa = (m['scheduled_amount'] as num?)?.toDouble() ?? 0;
+      return sp > 0 || si > 0 || sa > 0;
     }).toList();
+    final l10n = AppLocalizations.of(context);
+    // Whether interest is ever charged — drives whether to keep the
+    // interest columns. 0%/custom loans hide them entirely.
+    final hasInterest = scheduled.any((p) =>
+        ((p as Map)['scheduled_interest'] as num?)?.toDouble() != null &&
+        ((p['scheduled_interest'] as num?)?.toDouble() ?? 0) > 0.005);
     final hasTerms = widget.loan['term_months'] != null &&
         widget.loan['payment_frequency'] != null;
+    // Custom loans carry an explicit schedule but no term/frequency; still
+    // offer export + copy whenever there's actually a schedule to export.
+    final canExport = hasTerms || scheduled.isNotEmpty;
     final phone = MediaQuery.sizeOf(context).width < 720;
-    // Auto-expand short plans so single-installment lump-sum / compound
-    // schedules don't hide their one row behind a tap. On wider screens the
-    // table is always shown.
     final shortSchedule = scheduled.length <= 3;
     final showTable = !phone || shortSchedule || _scheduleExpanded;
 
@@ -2512,28 +3165,35 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
         Row(
           children: [
             Expanded(child: _sectionTitle('Payment schedule')),
-            // Hand the borrower their plan: a printable one-pager or a
-            // CSV that opens in Google Sheets / Excel. Available whenever
-            // the loan has a fixed schedule (the backend computes one on
-            // the fly even before "Generate" is clicked).
-            if (hasTerms)
+            // Hand the borrower their plan: a printable one-pager, a CSV
+            // that opens in Google Sheets / Excel, or a one-click "copy the
+            // rows and open a fresh sheet".
+            if (canExport)
               PopupMenuButton<String>(
                 tooltip: 'Export payment plan',
                 icon: const Icon(Icons.ios_share, size: 18),
                 onSelected: (which) {
+                  if (which == 'copySheets') {
+                    _copyScheduleForSheets(scheduled);
+                    return;
+                  }
                   final url = which == 'csv'
                       ? widget.apiService.loanScheduleCsvUrl(_loanId)
                       : widget.apiService.loanPaymentPlanUrl(_loanId);
                   launchUrl(Uri.parse(url), webOnlyWindowName: '_blank');
                 },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
                     value: 'plan',
                     child: Text('Printable plan (PDF)'),
                   ),
-                  PopupMenuItem(
+                  const PopupMenuItem(
                     value: 'csv',
                     child: Text('Download CSV (Google Sheets / Excel)'),
+                  ),
+                  PopupMenuItem(
+                    value: 'copySheets',
+                    child: Text(l10n.lendCopyForSheets),
                   ),
                 ],
               ),
@@ -2557,6 +3217,8 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
             style: TextStyle(fontSize: 12, color: context.textSubtle),
           )
         else ...[
+          _buildScheduleProgress(scheduled),
+          const SizedBox(height: 12),
           // Phones with a longer schedule collapse the table behind a
           // count-aware tap; short plans (≤3 rows) and wide screens show it.
           if (phone && !shortSchedule)
@@ -2573,8 +3235,7 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        AppLocalizations.of(context)
-                            .lendViewInstallments(scheduled.length),
+                        l10n.lendViewInstallments(scheduled.length),
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
                           color: context.textPrimary,
@@ -2593,12 +3254,108 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
             ),
           if (showTable) ...[
             if (phone && !shortSchedule) const SizedBox(height: 8),
-            _buildScheduleTable(scheduled),
+            _buildScheduleTable(scheduled, showInterest: hasInterest),
           ],
         ],
         _buildDueDateRow(),
       ],
     );
+  }
+
+  /// True when [m] is a paid installment (its status is 'paid').
+  bool _rowPaid(Map m) => m['status'] == 'paid';
+
+  /// Index of the earliest UNPAID installment in [rows] — the "next due"
+  /// row to highlight. -1 when every row is paid.
+  int _nextDueIndex(List<dynamic> rows) {
+    for (var i = 0; i < rows.length; i++) {
+      if (!_rowPaid(rows[i] as Map)) return i;
+    }
+    return -1;
+  }
+
+  /// Running principal balance remaining after installment [i]: principal
+  /// minus the cumulative scheduled PRINCIPAL through that row. (The payments
+  /// endpoint doesn't carry a per-row balance, so it's derived here.) Using
+  /// scheduled_principal — not scheduled_amount — keeps this correct for
+  /// interest-bearing schedules (amortized/simple), where the payment also
+  /// covers interest; for a 0%/custom loan the two are identical.
+  double _balanceAfter(List<dynamic> rows, int i) {
+    final principal = (widget.loan['principal'] as num?)?.toDouble() ?? 0;
+    var cumulative = 0.0;
+    for (var j = 0; j <= i; j++) {
+      cumulative +=
+          ((rows[j] as Map)['scheduled_principal'] as num?)?.toDouble() ?? 0;
+    }
+    final bal = principal - cumulative;
+    return bal.abs() < 0.005 ? 0 : bal;
+  }
+
+  /// "Paid X of N payments" + a progress bar of principal repaid and the
+  /// amount remaining.
+  Widget _buildScheduleProgress(List<dynamic> rows) {
+    final l10n = AppLocalizations.of(context);
+    final total = rows.length;
+    final paid = rows.where((p) => _rowPaid(p as Map)).length;
+    final principal = (widget.loan['principal'] as num?)?.toDouble() ?? 0;
+    final outstanding =
+        (widget.loan['outstanding'] as num?)?.toDouble() ?? principal;
+    final repaid = (principal - outstanding).clamp(0, principal);
+    final frac = principal <= 0 ? 0.0 : (repaid / principal).clamp(0.0, 1.0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                l10n.lendSchedulePaidProgress(paid, total),
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: context.textPrimary),
+              ),
+            ),
+            Text(
+              l10n.lendScheduleRemaining(_money(outstanding)),
+              style: TextStyle(fontSize: 12, color: context.textMuted),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: frac.toDouble(),
+            minHeight: 6,
+            backgroundColor: context.tint(0.06),
+            valueColor: AlwaysStoppedAnimation(context.positive),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Build the schedule as TSV, copy to the clipboard, open a fresh Google
+  /// Sheet, and confirm — so the user can paste straight in with Ctrl/Cmd+V.
+  Future<void> _copyScheduleForSheets(List<dynamic> rows) async {
+    final l10n = AppLocalizations.of(context);
+    final buf = StringBuffer();
+    buf.writeln('#\tDue date\tPayment\tBalance remaining\tStatus');
+    for (var i = 0; i < rows.length; i++) {
+      final m = rows[i] as Map<String, dynamic>;
+      final amt = (m['scheduled_amount'] as num?)?.toDouble() ?? 0;
+      final bal = _balanceAfter(rows, i);
+      buf.writeln('${m['installment_number']}\t${m['due_date'] ?? ''}\t'
+          '${amt.toStringAsFixed(2)}\t${bal.toStringAsFixed(2)}\t'
+          '${(m['status'] ?? '').toString()}');
+    }
+    await Clipboard.setData(ClipboardData(text: buf.toString()));
+    await launchUrl(Uri.parse('https://sheets.new'),
+        webOnlyWindowName: '_blank');
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(l10n.lendCopiedForSheets)));
   }
 
   // "Pay back by <date> · in N days / overdue" — the schedule-less due date.
@@ -2638,52 +3395,97 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
     );
   }
 
-  Widget _buildScheduleTable(List<dynamic> rows) {
+  Widget _buildScheduleTable(List<dynamic> rows, {bool showInterest = true}) {
+    final l10n = AppLocalizations.of(context);
+    final nextDue = _nextDueIndex(rows);
+    // Totals footer.
+    var totalPayment = 0.0;
+    for (final p in rows) {
+      totalPayment += ((p as Map)['scheduled_amount'] as num?)?.toDouble() ?? 0;
+    }
     return Column(
       children: [
-        // Header.
+        // Header. For a 0%/custom loan the interest column is dropped and
+        // we show the running Balance remaining instead of principal split.
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(
             children: [
               _schCell('#', flex: 1),
               _schCell('Due', flex: 3),
-              _schCell('Principal', flex: 3, alignRight: true),
-              _schCell('Interest', flex: 3, alignRight: true),
+              _schCell(l10n.lendScheduleColPayment, flex: 3, alignRight: true),
+              if (showInterest)
+                _schCell('Interest', flex: 3, alignRight: true),
+              _schCell(l10n.lendScheduleColBalance, flex: 3, alignRight: true),
               _schCell('', flex: 2, alignRight: true),
             ],
           ),
         ),
         Divider(height: 1, color: context.hairline),
-        ...rows.map((p) {
-          final m = p as Map<String, dynamic>;
-          final paid = (m['status'] == 'paid');
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(
-              children: [
-                _schCell('${m['installment_number']}', flex: 1),
-                _schCell(_fmtDue(m['due_date']), flex: 3),
-                _schCell(_money((m['scheduled_principal'] as num?) ?? 0),
-                    flex: 3, alignRight: true),
-                _schCell(_money((m['scheduled_interest'] as num?) ?? 0),
-                    flex: 3, alignRight: true),
-                Expanded(
-                  flex: 2,
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: Icon(
-                      paid ? Icons.check_circle : Icons.circle_outlined,
-                      size: 15,
-                      color: paid ? context.positive : context.textFaint,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }),
+        for (var i = 0; i < rows.length; i++) _scheduleRow(rows, i,
+            showInterest: showInterest, isNextDue: i == nextDue),
+        Divider(height: 1, color: context.hairline),
+        // Totals footer.
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 4,
+                child: Text(l10n.lendScheduleTotals,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: context.textPrimary)),
+              ),
+              _schCell(_money(totalPayment),
+                  flex: 3, alignRight: true, bold: true),
+              if (showInterest) _schCell('', flex: 3, alignRight: true),
+              _schCell('', flex: 3, alignRight: true),
+              _schCell('', flex: 2, alignRight: true),
+            ],
+          ),
+        ),
       ],
+    );
+  }
+
+  Widget _scheduleRow(List<dynamic> rows, int i,
+      {required bool showInterest, required bool isNextDue}) {
+    final m = rows[i] as Map<String, dynamic>;
+    final paid = _rowPaid(m);
+    final payment = (m['scheduled_amount'] as num?)?.toDouble() ?? 0;
+    return Container(
+      decoration: isNextDue
+          ? BoxDecoration(
+              color: context.accentSoft(context.tealAccent),
+              borderRadius: BorderRadius.circular(8),
+            )
+          : null,
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+      margin: const EdgeInsets.symmetric(vertical: 1),
+      child: Row(
+        children: [
+          _schCell('${m['installment_number']}', flex: 1),
+          _schCell(_fmtDue(m['due_date']), flex: 3),
+          _schCell(_money(payment), flex: 3, alignRight: true),
+          if (showInterest)
+            _schCell(_money((m['scheduled_interest'] as num?) ?? 0),
+                flex: 3, alignRight: true),
+          _schCell(_money(_balanceAfter(rows, i)), flex: 3, alignRight: true),
+          Expanded(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Icon(
+                paid ? Icons.check_circle : Icons.circle_outlined,
+                size: 15,
+                color: paid ? context.positive : context.textFaint,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2697,7 +3499,7 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
   }
 
   Widget _schCell(String text,
-      {int flex = 1, bool alignRight = false}) {
+      {int flex = 1, bool alignRight = false, bool bold = false}) {
     return Expanded(
       flex: flex,
       child: Align(
@@ -2705,7 +3507,8 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
         child: Text(text,
             style: TextStyle(
               fontSize: 12,
-              color: context.textMuted,
+              fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
+              color: bold ? context.textPrimary : context.textMuted,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
             maxLines: 1,
@@ -2894,6 +3697,67 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
       widget.onMutated();
     } catch (e) {
       _toast('Couldn\'t unlink');
+    }
+  }
+
+  /// Attach a real bank inflow to an OFF-BANK repayment (paid in cash /
+  /// recorded before the statement landed). Presents the loan's repayment
+  /// suggestions as candidates; picking one upgrades the existing
+  /// installment in place (keeps its amount/split, sets the tx) so the
+  /// deposit is excluded from cash flow without double-counting.
+  Future<void> _openLinkBankTx(String paymentId) async {
+    final l10n = AppLocalizations.of(context);
+    final chosen = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 20,
+          bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              l10n.lendLinkBankTxTitle,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: context.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (_repaySuggestions.isEmpty)
+              Text(l10n.lendLinkBankTxNone,
+                  style: TextStyle(fontSize: 13, color: context.textSubtle))
+            else
+              ..._repaySuggestions.map((s) => _suggestionTile(
+                    s as Map<String, dynamic>,
+                    onConfirm: () =>
+                        Navigator.of(sheetContext).pop(s),
+                  )),
+          ],
+        ),
+      ),
+    );
+    if (chosen == null) return;
+    try {
+      await widget.apiService.attachTransactionToPayment(
+        _loanId,
+        paymentId,
+        chosen['transaction_id'].toString(),
+      );
+      await _load();
+      widget.onMutated();
+    } catch (e) {
+      _toast(l10n.lendLinkBankTxError);
     }
   }
 

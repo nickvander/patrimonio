@@ -8293,6 +8293,264 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Some income converted with a stale FX rate — figures are approximate.'**
   String get divFxStaleHint;
+
+  /// No description provided for @lendCustomStyleLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom schedule'**
+  String get lendCustomStyleLabel;
+
+  /// No description provided for @lendCustomStyleDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'You set every payment by hand — irregular amounts and dates that add up to the amount lent.'**
+  String get lendCustomStyleDesc;
+
+  /// No description provided for @lendCustomPasteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste from a spreadsheet'**
+  String get lendCustomPasteTitle;
+
+  /// No description provided for @lendCustomPasteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste two columns from Google Sheets / Excel: date then amount, one payment per line.'**
+  String get lendCustomPasteHint;
+
+  /// No description provided for @lendCustomPasteButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Parse pasted rows'**
+  String get lendCustomPasteButton;
+
+  /// No description provided for @lendCustomPastedN.
+  ///
+  /// In en, this message translates to:
+  /// **'Loaded {count} payment{count, plural, =1{} other{s}} from the paste.'**
+  String lendCustomPastedN(int count);
+
+  /// No description provided for @lendCustomPasteEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to parse — paste some date + amount rows first.'**
+  String get lendCustomPasteEmpty;
+
+  /// No description provided for @lendCustomRowsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Payments'**
+  String get lendCustomRowsTitle;
+
+  /// No description provided for @lendCustomAddRow.
+  ///
+  /// In en, this message translates to:
+  /// **'Add payment'**
+  String get lendCustomAddRow;
+
+  /// No description provided for @lendCustomRemoveRow.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove payment'**
+  String get lendCustomRemoveRow;
+
+  /// No description provided for @lendCustomRowDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Date'**
+  String get lendCustomRowDate;
+
+  /// No description provided for @lendCustomRowAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount'**
+  String get lendCustomRowAmount;
+
+  /// No description provided for @lendCustomNoRows.
+  ///
+  /// In en, this message translates to:
+  /// **'No payments yet — paste from a spreadsheet or add them below.'**
+  String get lendCustomNoRows;
+
+  /// No description provided for @lendCustomGeneratorTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick fill'**
+  String get lendCustomGeneratorTitle;
+
+  /// No description provided for @lendCustomGenFirstN.
+  ///
+  /// In en, this message translates to:
+  /// **'First payments'**
+  String get lendCustomGenFirstN;
+
+  /// No description provided for @lendCustomGenFirstAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'First amount'**
+  String get lendCustomGenFirstAmount;
+
+  /// No description provided for @lendCustomGenThenAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Then each'**
+  String get lendCustomGenThenAmount;
+
+  /// No description provided for @lendCustomGenDayOfMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'Day of month'**
+  String get lendCustomGenDayOfMonth;
+
+  /// No description provided for @lendCustomGenStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start'**
+  String get lendCustomGenStart;
+
+  /// No description provided for @lendCustomGenEnd.
+  ///
+  /// In en, this message translates to:
+  /// **'End'**
+  String get lendCustomGenEnd;
+
+  /// No description provided for @lendCustomGenApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Fill payments'**
+  String get lendCustomGenApply;
+
+  /// No description provided for @lendCustomPreviewCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 payment} other{{count} payments}}'**
+  String lendCustomPreviewCount(int count);
+
+  /// No description provided for @lendCustomPreviewSum.
+  ///
+  /// In en, this message translates to:
+  /// **'Sum of payments'**
+  String get lendCustomPreviewSum;
+
+  /// No description provided for @lendCustomClosesToZero.
+  ///
+  /// In en, this message translates to:
+  /// **'Closes to 0 — the payments add up to the amount lent.'**
+  String get lendCustomClosesToZero;
+
+  /// No description provided for @lendCustomDoesNotAddUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Payments total {sum}, but the amount lent is {principal}.'**
+  String lendCustomDoesNotAddUp(String sum, String principal);
+
+  /// No description provided for @lendCustomNeedRows.
+  ///
+  /// In en, this message translates to:
+  /// **'Add at least one payment before saving.'**
+  String get lendCustomNeedRows;
+
+  /// No description provided for @lendCustomScheduleFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save the schedule: {error}'**
+  String lendCustomScheduleFailed(String error);
+
+  /// No description provided for @lendDisbursementConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'That transaction already funds another loan — the loan wasn\'t created.'**
+  String get lendDisbursementConflict;
+
+  /// No description provided for @lendCopyForSheets.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy for Google Sheets'**
+  String get lendCopyForSheets;
+
+  /// No description provided for @lendCopiedForSheets.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied — paste into the sheet with Ctrl/Cmd+V.'**
+  String get lendCopiedForSheets;
+
+  /// No description provided for @lendSchedulePaidProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Paid {paid} of {total} payments'**
+  String lendSchedulePaidProgress(int paid, int total);
+
+  /// No description provided for @lendScheduleRemaining.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} remaining'**
+  String lendScheduleRemaining(String amount);
+
+  /// No description provided for @lendScheduleColPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment'**
+  String get lendScheduleColPayment;
+
+  /// No description provided for @lendScheduleColBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'Balance remaining'**
+  String get lendScheduleColBalance;
+
+  /// No description provided for @lendScheduleColStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get lendScheduleColStatus;
+
+  /// No description provided for @lendScheduleNextDue.
+  ///
+  /// In en, this message translates to:
+  /// **'Next due'**
+  String get lendScheduleNextDue;
+
+  /// No description provided for @lendScheduleTotals.
+  ///
+  /// In en, this message translates to:
+  /// **'Total'**
+  String get lendScheduleTotals;
+
+  /// No description provided for @txCreateLoanFromTx.
+  ///
+  /// In en, this message translates to:
+  /// **'Create loan from this transaction'**
+  String get txCreateLoanFromTx;
+
+  /// Shown in a loan's detail line when no funding transaction is attached. Clarifies a disbursement is optional (a loan can just represent money owed) so the loan doesn't look misconfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'no disbursement linked (optional)'**
+  String get lendDisbursementNotLinkedOptional;
+
+  /// Action on an off-bank (cash-recorded) repayment to attach the real bank inflow once the statement is imported.
+  ///
+  /// In en, this message translates to:
+  /// **'Link bank transaction'**
+  String get lendLinkBankTx;
+
+  /// Title of the picker sheet listing candidate bank inflows to attach to an off-bank repayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Link a bank transaction'**
+  String get lendLinkBankTxTitle;
+
+  /// Shown in the link-bank-transaction picker when no candidate inflow was found to attach to the off-bank repayment.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching bank transactions found yet — upload your bank statement first.'**
+  String get lendLinkBankTxNone;
+
+  /// Toast shown when attaching a bank transaction to an off-bank repayment fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t link that bank transaction'**
+  String get lendLinkBankTxError;
 }
 
 class _AppLocalizationsDelegate

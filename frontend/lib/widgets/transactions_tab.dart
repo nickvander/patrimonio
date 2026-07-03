@@ -255,6 +255,11 @@ class TransactionsTab extends StatefulWidget {
   /// balances for rows without a persisted `balance_after`. Null
   /// disables estimation (persisted values still render).
   final double? runningBalanceAnchor;
+  /// "Create loan from this transaction" — shown in the detail panel for
+  /// an outflow. The dashboard implements this by opening the prefilled
+  /// Add-loan dialog (principal = |amount|, currency, date, borrower from
+  /// the tx, disbursement linked to this tx). Null hides the action.
+  final void Function(dynamic tx)? onCreateLoanFromTx;
 
   const TransactionsTab({
     super.key,
@@ -288,6 +293,7 @@ class TransactionsTab extends StatefulWidget {
     this.onReplaceSplits,
     this.singleAccountContext = false,
     this.runningBalanceAnchor,
+    this.onCreateLoanFromTx,
   });
 
   @override
@@ -3812,8 +3818,15 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
         s.widget.onUnsplitTransaction != null;
     final canUnsplit = isChild && s.widget.onUnsplitTransaction != null;
     final canDelete = s.widget.onDelete != null;
-    final hasOverflow =
-        canMove || canSplit || canEditSplit || canUnsplit || canDelete;
+    // Only an outflow can fund a loan (money left the account).
+    final canCreateLoan =
+        s.widget.onCreateLoanFromTx != null && sourceAmount < 0;
+    final hasOverflow = canMove ||
+        canSplit ||
+        canEditSplit ||
+        canUnsplit ||
+        canCreateLoan ||
+        canDelete;
 
     Widget detailRows() {
       // Date is folded into the hero block, so it is intentionally
@@ -3916,6 +3929,10 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                       case 'move':
                         _showMoveSheet(l);
                         break;
+                      case 'createLoan':
+                        _close();
+                        s.widget.onCreateLoanFromTx?.call(tx);
+                        break;
                       case 'delete':
                         _confirmDelete(l);
                         break;
@@ -3944,6 +3961,12 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                         value: 'move',
                         child: _menuRow(Icons.drive_file_move_outlined,
                             l.txMoveToDifferentAccount),
+                      ),
+                    if (canCreateLoan)
+                      PopupMenuItem(
+                        value: 'createLoan',
+                        child: _menuRow(
+                            Icons.monetization_on_outlined, l.txCreateLoanFromTx),
                       ),
                     if (canDelete)
                       PopupMenuItem(

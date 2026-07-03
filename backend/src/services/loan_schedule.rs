@@ -12,7 +12,7 @@
 //! exactly 0. This is the bank/GnuCash convention — concentrate the
 //! tail, never smear it.
 
-use chrono::{Duration, Months, NaiveDate};
+use chrono::{Datelike, Duration, Months, NaiveDate};
 use rust_decimal::prelude::*;
 use rust_decimal::Decimal;
 
@@ -240,6 +240,109 @@ fn compound(principal: Decimal, i: Decimal, n: i32) -> Vec<ScheduleRow> {
         principal,
         interest,
     }]
+}
+
+/// Expand an explicit CUSTOM schedule — arbitrary {due_date, amount}
+/// installments — into ScheduleRows. No periodic rate exists, so the
+/// total interest is inferred as `Σamount − principal` (the caller
+/// validates it's ≥ 0; a negative excess is treated as 0 here so we
+/// never emit negative interest). Interest is spread flat as
+/// `money(total_interest / n)` on each non-final row, capped
+/// interest-first at the row's own amount and at the remaining total
+/// interest; the final row absorbs BOTH residuals so `Σprincipal ==
+/// principal` to the cent and the running balance closes to exactly 0.
+/// For the 0% case (total_interest == 0) every row is all-principal.
+pub fn expand_rows(rows: &[(NaiveDate, Decimal)], principal: Decimal) -> Vec<ScheduleRow> {
+    let n = rows.len() as i32;
+    if n == 0 {
+        return Vec::new();
+    }
+    let sum: Decimal = rows.iter().map(|(_, a)| *a).sum();
+    // Precondition: Σamount ≥ principal. Guard defensively → no negative.
+    let total_interest = (sum - principal).max(Decimal::ZERO);
+    let per_interest = money(total_interest / Decimal::from(n));
+
+    let mut out = Vec::with_capacity(rows.len());
+    let mut balance = principal;
+    let mut interest_acc = Decimal::ZERO;
+    for (k, (due, amount)) in rows.iter().enumerate() {
+        let amount = money(*amount);
+        let (principal_k, interest_k) = if k as i32 == n - 1 {
+            // Tail: principal = exact remaining balance, interest = the
+            // remaining total interest. Closes both columns to the cent.
+            (balance, money(total_interest) - interest_acc)
+        } else {
+            // Interest-first, capped at this row's amount AND at what's
+            // left of the total interest — so principal never goes
+            // negative and interest never overshoots.
+            let interest_k = per_interest
+                .min(amount)
+                .min(money(total_interest) - interest_acc);
+            (amount - interest_k, interest_k)
+        };
+        balance -= principal_k;
+        interest_acc += interest_k;
+        out.push(ScheduleRow {
+            installment_number: k as i32 + 1,
+            due_date: *due,
+            amount,
+            principal: principal_k,
+            interest: interest_k,
+        });
+    }
+    out
+}
+
+/// Convenience: expand a "first `first_count` installments at
+/// `first_amount`, then `amount` on `day` of every month from
+/// `start_date` through `end_date` (inclusive)" pattern into explicit
+/// rows, then hand them to `expand_rows`. Month stepping uses
+/// `Months::new(1)`, which clamps the day like `due_date_for` (Jan-31
+/// → Feb-28). `day` overrides the day-of-month of every generated row;
+/// when None the day of `start_date` is used.
+pub fn expand_pattern(
+    principal: Decimal,
+    start_date: NaiveDate,
+    end_date: NaiveDate,
+    day: Option<u32>,
+    first_count: usize,
+    first_amount: Decimal,
+    amount: Decimal,
+) -> Vec<ScheduleRow> {
+    // Anchor the day-of-month. Months::new stepping clamps overflow, so
+    // we anchor from a first-of-month date and re-apply the day each step
+    // to avoid a short month permanently shrinking later dates.
+    let anchor_day = day.unwrap_or_else(|| start_date.day());
+    let first_month = NaiveDate::from_ymd_opt(start_date.year(), start_date.month(), 1).unwrap();
+
+    let mut rows: Vec<(NaiveDate, Decimal)> = Vec::new();
+    let mut month = first_month;
+    let mut idx = 0usize;
+    loop {
+        // Clamp the anchor day into this month (Months stepping already
+        // clamps; clamp explicitly for the day override too).
+        let due = clamp_day(month, anchor_day);
+        if due > end_date {
+            break;
+        }
+        let amt = if idx < first_count { first_amount } else { amount };
+        rows.push((due, amt));
+        idx += 1;
+        month = month + Months::new(1);
+    }
+    expand_rows(&rows, principal)
+}
+
+/// Build a date on `day` of `month`'s year/month, clamped to the last
+/// valid day of that month (day 31 in a 30-day month → the 30th).
+fn clamp_day(month: NaiveDate, day: u32) -> NaiveDate {
+    let mut d = day;
+    loop {
+        if let Some(date) = NaiveDate::from_ymd_opt(month.year(), month.month(), d) {
+            return date;
+        }
+        d -= 1;
+    }
 }
 
 /// No interest: equal principal slices, final row absorbs the residual.
@@ -475,6 +578,100 @@ mod tests {
         assert_eq!(rows[0].due_date, NaiveDate::from_ymd_opt(2028, 1, 15).unwrap());
         // Compound > simple over the same terms (10%·2 = $200 simple).
         assert!(rows[0].interest > d("200.00"));
+    }
+
+    #[test]
+    fn custom_luis_0pct_37_rows() {
+        // The motivating case: a 0% loan, principal 130,000, 37 payments
+        // that sum to exactly the principal. Payment 1 = 3500 (2026-06-15),
+        // payment 2 = 4000 (2026-07-15, a one-off bump), then 3500 on the
+        // 15th of every month from 2026-08-15 through 2029-06-15.
+        let mut rows: Vec<(NaiveDate, Decimal)> = vec![
+            (NaiveDate::from_ymd_opt(2026, 6, 15).unwrap(), d("3500")),
+            (NaiveDate::from_ymd_opt(2026, 7, 15).unwrap(), d("4000")),
+        ];
+        let mut month = NaiveDate::from_ymd_opt(2026, 8, 15).unwrap();
+        let end = NaiveDate::from_ymd_opt(2029, 6, 15).unwrap();
+        while month <= end {
+            rows.push((month, d("3500")));
+            month = month + Months::new(1);
+        }
+        // 2 explicit + 35 monthly (2026-08 .. 2029-06 inclusive) = 37.
+        assert_eq!(rows.len(), 37);
+        let total: Decimal = rows.iter().map(|(_, a)| *a).sum();
+        assert_eq!(total, d("130000"), "payments must sum to principal");
+
+        let out = expand_rows(&rows, d("130000"));
+        assert_eq!(out.len(), 37);
+        assert_eq!(sum_principal(&out), d("130000.00"));
+        assert_eq!(sum_interest(&out), d("0.00"));
+        // Each row: 0% → all principal, amount == principal.
+        for r in &out {
+            assert_eq!(r.interest, Decimal::ZERO);
+            assert_eq!(r.amount, r.principal);
+        }
+        // Running balance closes to exactly 0 on the last row.
+        let paid: Decimal = out.iter().map(|r| r.principal).sum();
+        assert_eq!(d("130000") - paid, Decimal::ZERO);
+        // Dates + numbering are the input's, 1-based.
+        assert_eq!(out[0].installment_number, 1);
+        assert_eq!(out[0].due_date, NaiveDate::from_ymd_opt(2026, 6, 15).unwrap());
+        assert_eq!(out[1].amount, d("4000.00"));
+        assert_eq!(out[36].due_date, end);
+    }
+
+    #[test]
+    fn custom_with_interest_closes_and_no_negatives() {
+        // Σamount = 1100 on principal 1000 → total interest 100. Four rows
+        // of 275 (sum 1100). Interest spreads flat (25/row); tail absorbs
+        // residuals. Nothing negative; both columns close.
+        let rows: Vec<(NaiveDate, Decimal)> = (0..4)
+            .map(|k| {
+                (
+                    NaiveDate::from_ymd_opt(2026, 1 + k, 15).unwrap(),
+                    d("275"),
+                )
+            })
+            .collect();
+        let out = expand_rows(&rows, d("1000"));
+        assert_eq!(out.len(), 4);
+        assert_eq!(sum_principal(&out), d("1000.00"));
+        assert_eq!(sum_interest(&out), d("100.00"));
+        for r in &out {
+            assert!(r.principal >= Decimal::ZERO, "no negative principal");
+            assert!(r.interest >= Decimal::ZERO, "no negative interest");
+            assert_eq!(r.amount, r.principal + r.interest, "row consistent");
+        }
+        // Running principal balance closes to exactly 0.
+        let paid: Decimal = out.iter().map(|r| r.principal).sum();
+        assert_eq!(d("1000") - paid, Decimal::ZERO);
+    }
+
+    #[test]
+    fn custom_expand_pattern_matches_manual() {
+        // Pattern: first 1 at 4000, then 3500 monthly on the 15th from
+        // 2026-06-15 through 2026-09-15 → 4 rows: 4000, 3500, 3500, 3500.
+        let rows = expand_pattern(
+            d("14500"),
+            NaiveDate::from_ymd_opt(2026, 6, 15).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 9, 15).unwrap(),
+            Some(15),
+            1,
+            d("4000"),
+            d("3500"),
+        );
+        assert_eq!(rows.len(), 4);
+        assert_eq!(rows[0].amount, d("4000.00"));
+        assert_eq!(rows[1].amount, d("3500.00"));
+        assert_eq!(rows[3].due_date, NaiveDate::from_ymd_opt(2026, 9, 15).unwrap());
+        // 4000 + 3*3500 = 14500 == principal → 0 interest.
+        assert_eq!(sum_principal(&rows), d("14500.00"));
+        assert_eq!(sum_interest(&rows), d("0.00"));
+    }
+
+    #[test]
+    fn custom_empty_rows_is_empty() {
+        assert!(expand_rows(&[], d("1000")).is_empty());
     }
 
     #[test]

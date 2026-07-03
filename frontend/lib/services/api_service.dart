@@ -36,6 +36,16 @@ class LoanTermsLockedException implements Exception {
   String toString() => message;
 }
 
+/// Thrown by [ApiService.linkDisbursement] on a 409 — the transaction the
+/// caller tried to designate as a loan's disbursement already funds another
+/// loan. Carries the server's human-readable reason.
+class DisbursementConflictException implements Exception {
+  final String message;
+  DisbursementConflictException(this.message);
+  @override
+  String toString() => message;
+}
+
 /// Per-file progress tick from the streaming upload handler.
 /// One file's live status within a multi-PDF import, for the per-file
 /// checklist. [status] is one of:
@@ -2451,12 +2461,36 @@ class ApiService {
         'No se pudieron cargar los pagos del préstamo'));
   }
 
+  /// Replace a loan's payment schedule with an explicit, irregular set of
+  /// installments (used by the "Custom schedule" loan style). Each row is
+  /// `{"due_date": "YYYY-MM-DD", "amount": <double>}`. The backend recomputes
+  /// the running balance; the sum of amounts should equal the principal for
+  /// the balance to close to 0. Surfaces the server's message on non-2xx.
+  Future<void> setCustomSchedule(
+      String loanId, List<Map<String, dynamic>> rows) async {
+    final response = await _post(
+      Uri.parse('$_baseUrl/loans/$loanId/schedule/custom'),
+      headers: _withCsrf({'Content-Type': 'application/json'}),
+      body: json.encode({'rows': rows}),
+    );
+    if (response.statusCode != 201 && response.statusCode != 200) {
+      throw Exception(response.body.isNotEmpty
+          ? response.body
+          : _t('Failed to save custom schedule (${response.statusCode})',
+              'No se pudo guardar el calendario personalizado (${response.statusCode})'));
+    }
+  }
+
   Future<void> linkDisbursement(String loanId, String transactionId) async {
     final response = await _post(
       Uri.parse('$_baseUrl/loans/$loanId/disbursement'),
       headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({'transaction_id': transactionId}),
     );
+    if (response.statusCode == 409) {
+      // The tx already funds another loan — let the caller roll back.
+      throw DisbursementConflictException(_loanErrorText(response));
+    }
     if (response.statusCode != 200) {
       throw Exception(_t(
           'Failed to link disbursement (${response.statusCode})',
@@ -2488,6 +2522,30 @@ class ApiService {
           ? response.body
           : _t('Failed to record repayment (${response.statusCode})',
               'No se pudo registrar el pago (${response.statusCode})'));
+    }
+  }
+
+  /// Attach a real bank inflow to an installment already paid OFF-BANK
+  /// (recorded amount, no linked tx). Upgrades that same row in place —
+  /// keeps its recorded amount/split and only sets actual_tx_id + date, so
+  /// the deposit is excluded from cash flow without double-counting.
+  /// Surfaces the server's message on 409 (e.g. the tx already links to
+  /// another payment).
+  Future<void> attachTransactionToPayment(
+    String loanId,
+    String paymentId,
+    String transactionId,
+  ) async {
+    final response = await _post(
+      Uri.parse('$_baseUrl/loans/$loanId/payments/$paymentId/attach-tx'),
+      headers: _withCsrf({'Content-Type': 'application/json'}),
+      body: json.encode({'transaction_id': transactionId}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(response.body.isNotEmpty
+          ? response.body
+          : _t('Failed to link bank transaction (${response.statusCode})',
+              'No se pudo vincular la transacción bancaria (${response.statusCode})'));
     }
   }
 

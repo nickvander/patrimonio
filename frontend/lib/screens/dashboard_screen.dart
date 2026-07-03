@@ -525,6 +525,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  /// Open the Add-loan dialog pre-filled from an outflow transaction,
+  /// linking that transaction as the loan's disbursement. Refreshes the
+  /// dashboard on success so the funded transaction drops out of cash flow.
+  Future<void> _openCreateLoanFromTx(dynamic tx) async {
+    final m = tx as Map;
+    final amount = (m['amount'] as num?)?.toDouble() ?? 0;
+    final currency = (m['currency'] ?? _targetCurrency).toString();
+    final date = DateTime.tryParse((m['date'] ?? '').toString()) ??
+        DateTime.now();
+    // Best borrower guess: counterparty, then merchant, then description.
+    final borrower = [
+      (m['counterparty_name'] ?? '').toString(),
+      (m['merchant_name'] ?? '').toString(),
+      (m['description'] ?? '').toString(),
+    ].firstWhere((s) => s.trim().isNotEmpty, orElse: () => '');
+    final created = await showCreateLoanFromTransactionDialog(
+      context,
+      apiService: _apiService,
+      people: const [],
+      defaultCurrency: _targetCurrency,
+      principal: amount.abs(),
+      currency: currency == 'MXN' ? 'MXN' : 'USD',
+      originationDate: date,
+      borrowerName: borrower,
+      disbursementTxId: m['id'].toString(),
+    );
+    if (created == true) {
+      await _refreshAfterTransactionMutation();
+    }
+  }
+
   /// Onboarding tile: enable the lending module and jump to it. Lending
   /// needs no linked bank account, so enabling it also exits the
   /// account-gated first-run hero (see [_isFirstRun]).
@@ -4292,6 +4323,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             SnackBar(content: Text(l.dashTransactionDeleted)),
           );
         },
+        // Create a loan pre-filled from an outflow, linking it as the
+        // disbursement. LendingTab owns loan people; the borrower here is
+        // prefilled from the tx, so an empty people list is fine.
+        onCreateLoanFromTx: (tx) => _openCreateLoanFromTx(tx),
       ),
     );
 

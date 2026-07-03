@@ -5118,4 +5118,166 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get divFxStaleHint =>
       'Some income converted with a stale FX rate — figures are approximate.';
+
+  @override
+  String get lendCustomStyleLabel => 'Custom schedule';
+
+  @override
+  String get lendCustomStyleDesc =>
+      'You set every payment by hand — irregular amounts and dates that add up to the amount lent.';
+
+  @override
+  String get lendCustomPasteTitle => 'Paste from a spreadsheet';
+
+  @override
+  String get lendCustomPasteHint =>
+      'Paste two columns from Google Sheets / Excel: date then amount, one payment per line.';
+
+  @override
+  String get lendCustomPasteButton => 'Parse pasted rows';
+
+  @override
+  String lendCustomPastedN(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
+    return 'Loaded $count payment$_temp0 from the paste.';
+  }
+
+  @override
+  String get lendCustomPasteEmpty =>
+      'Nothing to parse — paste some date + amount rows first.';
+
+  @override
+  String get lendCustomRowsTitle => 'Payments';
+
+  @override
+  String get lendCustomAddRow => 'Add payment';
+
+  @override
+  String get lendCustomRemoveRow => 'Remove payment';
+
+  @override
+  String get lendCustomRowDate => 'Date';
+
+  @override
+  String get lendCustomRowAmount => 'Amount';
+
+  @override
+  String get lendCustomNoRows =>
+      'No payments yet — paste from a spreadsheet or add them below.';
+
+  @override
+  String get lendCustomGeneratorTitle => 'Quick fill';
+
+  @override
+  String get lendCustomGenFirstN => 'First payments';
+
+  @override
+  String get lendCustomGenFirstAmount => 'First amount';
+
+  @override
+  String get lendCustomGenThenAmount => 'Then each';
+
+  @override
+  String get lendCustomGenDayOfMonth => 'Day of month';
+
+  @override
+  String get lendCustomGenStart => 'Start';
+
+  @override
+  String get lendCustomGenEnd => 'End';
+
+  @override
+  String get lendCustomGenApply => 'Fill payments';
+
+  @override
+  String lendCustomPreviewCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count payments',
+      one: '1 payment',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lendCustomPreviewSum => 'Sum of payments';
+
+  @override
+  String get lendCustomClosesToZero =>
+      'Closes to 0 — the payments add up to the amount lent.';
+
+  @override
+  String lendCustomDoesNotAddUp(String sum, String principal) {
+    return 'Payments total $sum, but the amount lent is $principal.';
+  }
+
+  @override
+  String get lendCustomNeedRows => 'Add at least one payment before saving.';
+
+  @override
+  String lendCustomScheduleFailed(String error) {
+    return 'Couldn\'t save the schedule: $error';
+  }
+
+  @override
+  String get lendDisbursementConflict =>
+      'That transaction already funds another loan — the loan wasn\'t created.';
+
+  @override
+  String get lendCopyForSheets => 'Copy for Google Sheets';
+
+  @override
+  String get lendCopiedForSheets =>
+      'Copied — paste into the sheet with Ctrl/Cmd+V.';
+
+  @override
+  String lendSchedulePaidProgress(int paid, int total) {
+    return 'Paid $paid of $total payments';
+  }
+
+  @override
+  String lendScheduleRemaining(String amount) {
+    return '$amount remaining';
+  }
+
+  @override
+  String get lendScheduleColPayment => 'Payment';
+
+  @override
+  String get lendScheduleColBalance => 'Balance remaining';
+
+  @override
+  String get lendScheduleColStatus => 'Status';
+
+  @override
+  String get lendScheduleNextDue => 'Next due';
+
+  @override
+  String get lendScheduleTotals => 'Total';
+
+  @override
+  String get txCreateLoanFromTx => 'Create loan from this transaction';
+
+  @override
+  String get lendDisbursementNotLinkedOptional =>
+      'no disbursement linked (optional)';
+
+  @override
+  String get lendLinkBankTx => 'Link bank transaction';
+
+  @override
+  String get lendLinkBankTxTitle => 'Link a bank transaction';
+
+  @override
+  String get lendLinkBankTxNone =>
+      'No matching bank transactions found yet — upload your bank statement first.';
+
+  @override
+  String get lendLinkBankTxError => 'Couldn\'t link that bank transaction';
 }

@@ -512,8 +512,12 @@
   "cfBudgetsOverAlert": "Over budget in {count} — {amount} over total",
   "@cfBudgetsOverAlert": {
     "placeholders": {
-      "count": { "type": "int" },
-      "amount": { "type": "String" }
+      "count": {
+        "type": "int"
+      },
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "cfBudgetsNearAlert": "Approaching budget in {count}",
@@ -524,7 +528,9 @@
   "cfBudgetsSuggestedSnack": "{count, plural, one{Added a budget for {count} category} other{Added budgets for {count} categories}}",
   "@cfBudgetsSuggestedSnack": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "cfBudgetsSuggestNone": "No new suggestions — these are already budgeted, or there isn't enough recent spending to suggest from.",
@@ -532,13 +538,17 @@
   "cfBudgetsSuggestDialogSubtitle": "Based on your last {months} months of spending. Pick the ones to add.",
   "@cfBudgetsSuggestDialogSubtitle": {
     "placeholders": {
-      "months": { "type": "int" }
+      "months": {
+        "type": "int"
+      }
     }
   },
   "cfBudgetsSuggestAvg": "Averages {amount}/mo",
   "@cfBudgetsSuggestAvg": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "cfBudgetsSuggestSelectAll": "Select all",
@@ -546,13 +556,17 @@
   "cfBudgetsSuggestApply": "{count, plural, =0{Add} other{Add {count}}}",
   "@cfBudgetsSuggestApply": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "cfBudgetsShowAll": "Show {count} more",
   "@cfBudgetsShowAll": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "cfBudgetsShowFewer": "Show fewer",
@@ -737,8 +751,12 @@
   "dashSyncingProgress": "Updating… ({done} of {total})",
   "@dashSyncingProgress": {
     "placeholders": {
-      "done": { "type": "int" },
-      "total": { "type": "int" }
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "dashSyncComplete": "Sync complete",
@@ -894,23 +912,37 @@
   "taxStLtBreakdown": "Short-term {st} · Long-term {lt}",
   "@taxStLtBreakdown": {
     "placeholders": {
-      "st": { "type": "String" },
-      "lt": { "type": "String" }
+      "st": {
+        "type": "String"
+      },
+      "lt": {
+        "type": "String"
+      }
     }
   },
   "taxIncomeDecomposition": "Wages {wages} · Dividends {dividends} · Interest {interest}",
   "@taxIncomeDecomposition": {
     "placeholders": {
-      "wages": { "type": "String" },
-      "dividends": { "type": "String" },
-      "interest": { "type": "String" }
+      "wages": {
+        "type": "String"
+      },
+      "dividends": {
+        "type": "String"
+      },
+      "interest": {
+        "type": "String"
+      }
     }
   },
   "taxMxWithheld": "ISR already withheld {withheld} · est. remaining {net}",
   "@taxMxWithheld": {
     "placeholders": {
-      "withheld": { "type": "String" },
-      "net": { "type": "String" }
+      "withheld": {
+        "type": "String"
+      },
+      "net": {
+        "type": "String"
+      }
     }
   },
   "taxUsEstimatedLiability": "US estimated liability (IRS)",
@@ -922,7 +954,9 @@
   "taxDisclaimer": "Disclaimer: Tax estimates are approximations using {bracketYear} IRS/SAT brackets. Consult a qualified tax professional for filing.",
   "@taxDisclaimer": {
     "placeholders": {
-      "bracketYear": { "type": "String" }
+      "bracketYear": {
+        "type": "String"
+      }
     }
   },
   "taxConstantsUnverified": "Estimates — tax constants pending verification",
@@ -939,8 +973,12 @@
   "taxAcquiredToSold": "{acquired} → {sold}",
   "@taxAcquiredToSold": {
     "placeholders": {
-      "acquired": { "type": "String" },
-      "sold": { "type": "String" }
+      "acquired": {
+        "type": "String"
+      },
+      "sold": {
+        "type": "String"
+      }
     }
   },
   "taxTaxAdvantagedBadge": "Tax-advantaged",
@@ -949,19 +987,25 @@
   "taxGainsSubtotal": "Net realized gain: {amount}",
   "@taxGainsSubtotal": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "taxIncomeSubtotal": "Total income: {amount}",
   "@taxIncomeSubtotal": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "taxSubtotalReconcileNote": "Matches the {kpi} card above.",
   "@taxSubtotalReconcileNote": {
     "placeholders": {
-      "kpi": { "type": "String" }
+      "kpi": {
+        "type": "String"
+      }
     }
   },
   "taxNoDisposals": "No realized disposals for this year.",
@@ -976,21 +1020,27 @@
   "taxAssumptionBracketYear": "Bracket year: {year}",
   "@taxAssumptionBracketYear": {
     "placeholders": {
-      "year": { "type": "String" }
+      "year": {
+        "type": "String"
+      }
     }
   },
   "taxAssumptionFx": "FX: each row converted at its own date's stored USD/MXN rate.",
   "taxAssumptionFilingStatus": "Filing status: {status}",
   "@taxAssumptionFilingStatus": {
     "placeholders": {
-      "status": { "type": "String" }
+      "status": {
+        "type": "String"
+      }
     }
   },
   "taxAssumptionExclusions": "Excludes tax-advantaged accounts (401(k)/IRA/HSA).",
   "taxAssumptionHoldingsNoBasis": "{count, plural, =1{1 holding has no cost basis on record} other{{count} holdings have no cost basis on record}}",
   "@taxAssumptionHoldingsNoBasis": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "taxAssumptionProReview": "Wording and constants are pending review by a tax professional — treat as guidance, not advice.",
@@ -1001,14 +1051,20 @@
   "taxUnrealizedSubtotal": "Unrealized: {amount}",
   "@taxUnrealizedSubtotal": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "taxFlipsToLongIn": "Long-term in {days}d — {date}",
   "@taxFlipsToLongIn": {
     "placeholders": {
-      "days": { "type": "String" },
-      "date": { "type": "String" }
+      "days": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
     }
   },
   "taxColBasis": "Basis",
@@ -1017,7 +1073,9 @@
   "taxHarvestEstimate": "Est. tax saving {amount}",
   "@taxHarvestEstimate": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "taxHarvestEstimateBadge": "Estimate",
@@ -1028,7 +1086,9 @@
   "taxWashSaleSafeAfter": "Safe to re-buy after {date}",
   "@taxWashSaleSafeAfter": {
     "placeholders": {
-      "date": { "type": "String" }
+      "date": {
+        "type": "String"
+      }
     }
   },
   "taxWashSaleTooltip": "A same-security buy near this date can disallow the loss. Re-buying after the safe date avoids the wash-sale rule.",
@@ -1037,7 +1097,9 @@
   "taxFbarThreshold": "FBAR reporting threshold: {amount}",
   "@taxFbarThreshold": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "taxFbarExceeded": "Aggregate exceeded the threshold this year",
@@ -1045,7 +1107,9 @@
   "taxFbarPeakDate": "Peak on {date}",
   "@taxFbarPeakDate": {
     "placeholders": {
-      "date": { "type": "String" }
+      "date": {
+        "type": "String"
+      }
     }
   },
   "taxFbarInformational": "Informational only — this does not decide an FBAR filing obligation. Consult a tax professional.",
@@ -1054,13 +1118,17 @@
   "taxFbarAccountPeak": "On peak date: {amount}",
   "@taxFbarAccountPeak": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "taxFbarAccountYtdMax": "Own YTD max: {amount}",
   "@taxFbarAccountYtdMax": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "taxRetirementTitle": "Retirement contributions",
@@ -1070,51 +1138,73 @@
   "taxContributedOfLimit": "{ytd} of {limit}",
   "@taxContributedOfLimit": {
     "placeholders": {
-      "ytd": { "type": "String" },
-      "limit": { "type": "String" }
+      "ytd": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
     }
   },
   "taxBackdoorRothBadge": "Backdoor Roth",
   "taxMegaBackdoorNote": "§415(c) total (elective + employer + after-tax); elective limit {elective}. {room} mega-backdoor Roth room left.",
   "@taxMegaBackdoorNote": {
     "placeholders": {
-      "elective": { "type": "String" },
-      "room": { "type": "String" }
+      "elective": {
+        "type": "String"
+      },
+      "room": {
+        "type": "String"
+      }
     }
   },
   "taxHsaFamilyCoverage": "Family coverage",
   "taxHsaEmployerNote": "includes {amount} employer",
   "@taxHsaEmployerNote": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "tax401kElectiveSet": "+ Set your elective deferral to split this",
   "tax401kElectiveSplit": "Elective {elective} of {limit} · employer + after-tax {rest}",
   "@tax401kElectiveSplit": {
     "placeholders": {
-      "elective": { "type": "String" },
-      "limit": { "type": "String" },
-      "rest": { "type": "String" }
+      "elective": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      },
+      "rest": {
+        "type": "String"
+      }
     }
   },
   "tax401kElectiveDialogTitle": "Annual 401k elective deferral",
   "tax401kElectiveDialogHint": "Your employee contribution (pre-tax + Roth); limit {limit}",
   "@tax401kElectiveDialogHint": {
     "placeholders": {
-      "limit": { "type": "String" }
+      "limit": {
+        "type": "String"
+      }
     }
   },
   "taxRemainingRoom": "Room left: {amount}",
   "@taxRemainingRoom": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "taxContributionDeadline": "Deadline: {date}",
   "@taxContributionDeadline": {
     "placeholders": {
-      "date": { "type": "String" }
+      "date": {
+        "type": "String"
+      }
     }
   },
   "taxPriorYearWindowNote": "Prior-year contributions allowed until this deadline.",
@@ -1123,7 +1213,9 @@
   "taxCatchUpNote": "+{amount} catch-up if age-eligible",
   "@taxCatchUpNote": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "taxNoRetirementAccounts": "No retirement accounts with contributions this year.",
@@ -1345,7 +1437,9 @@
   "pfHoldingsShowAll": "Show all {count} holdings",
   "@pfHoldingsShowAll": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "pfHoldingsShowFewer": "Show fewer",
@@ -1394,45 +1488,83 @@
   "acctTypeOtherLiability": "Other liability",
   "impAccountMatched": "Matched to {account} from the statement",
   "@impAccountMatched": {
-    "placeholders": { "account": { "type": "Object" } }
+    "placeholders": {
+      "account": {
+        "type": "Object"
+      }
+    }
   },
   "impNoAccountMatch": "No existing account matches this statement — create one below.",
   "impAccountCreatedCue": "Created {account} — importing here",
   "@impAccountCreatedCue": {
-    "placeholders": { "account": { "type": "Object" } }
+    "placeholders": {
+      "account": {
+        "type": "Object"
+      }
+    }
   },
   "impSummaryFound": "Found",
   "impSummaryInflow": "Inflow",
   "impSummaryOutflow": "Outflow",
   "impSummaryFiles": "{count, plural, =1{1 file} other{{count} files}}",
   "@impSummaryFiles": {
-    "placeholders": { "count": { "type": "int" } }
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "impCoverageTitle": "Statement coverage",
   "impCoverageThrough": "through {month}",
   "@impCoverageThrough": {
-    "placeholders": { "month": { "type": "String" } }
+    "placeholders": {
+      "month": {
+        "type": "String"
+      }
+    }
   },
   "impCoverageLastFile": "{file}",
   "@impCoverageLastFile": {
-    "placeholders": { "file": { "type": "String" } }
+    "placeholders": {
+      "file": {
+        "type": "String"
+      }
+    }
   },
   "impCoverageImports": "{count, plural, =1{1 import} other{{count} imports}}",
   "@impCoverageImports": {
-    "placeholders": { "count": { "type": "int" } }
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "impCoverageMaybeDue": "A newer statement may be available",
   "impCoverageEmpty": "No statements imported yet",
   "impContinuityGap": "Possible missing statement: ‘{fromFile}’ ends at {fromBalance} ({fromDate}), but ‘{toFile}’ opens at {toBalance} ({toDate}) — an unexplained difference of {diff}. A statement covering the period between them may be missing.",
   "@impContinuityGap": {
     "placeholders": {
-      "fromFile": { "type": "Object" },
-      "fromBalance": { "type": "Object" },
-      "fromDate": { "type": "Object" },
-      "toFile": { "type": "Object" },
-      "toBalance": { "type": "Object" },
-      "toDate": { "type": "Object" },
-      "diff": { "type": "Object" }
+      "fromFile": {
+        "type": "Object"
+      },
+      "fromBalance": {
+        "type": "Object"
+      },
+      "fromDate": {
+        "type": "Object"
+      },
+      "toFile": {
+        "type": "Object"
+      },
+      "toBalance": {
+        "type": "Object"
+      },
+      "toDate": {
+        "type": "Object"
+      },
+      "diff": {
+        "type": "Object"
+      }
     }
   },
   "dlgAccountCurrency": "Currency",
@@ -1563,61 +1695,91 @@
   "lwNotifNetWorthUpTitle": "Net worth up {amount} ({pct})",
   "@lwNotifNetWorthUpTitle": {
     "placeholders": {
-      "amount": { "type": "String" },
-      "pct": { "type": "String" }
+      "amount": {
+        "type": "String"
+      },
+      "pct": {
+        "type": "String"
+      }
     }
   },
   "lwNotifNetWorthDownTitle": "Net worth down {amount} ({pct})",
   "@lwNotifNetWorthDownTitle": {
     "placeholders": {
-      "amount": { "type": "String" },
-      "pct": { "type": "String" }
+      "amount": {
+        "type": "String"
+      },
+      "pct": {
+        "type": "String"
+      }
     }
   },
   "lwNotifNetWorthSinceSyncDetail": "Since your last sync · {date}",
   "@lwNotifNetWorthSinceSyncDetail": {
     "placeholders": {
-      "date": { "type": "String" }
+      "date": {
+        "type": "String"
+      }
     }
   },
   "lwNotifSpendingUpTitle": "{category} up {pct}",
   "@lwNotifSpendingUpTitle": {
     "placeholders": {
-      "category": { "type": "String" },
-      "pct": { "type": "String" }
+      "category": {
+        "type": "String"
+      },
+      "pct": {
+        "type": "String"
+      }
     }
   },
   "lwNotifSpendingUpDetail": "vs your {months}-month average of {avg}",
   "@lwNotifSpendingUpDetail": {
     "placeholders": {
-      "months": { "type": "int" },
-      "avg": { "type": "String" }
+      "months": {
+        "type": "int"
+      },
+      "avg": {
+        "type": "String"
+      }
     }
   },
   "lwNotifSubPriceUpTitle": "{merchant} price increased",
   "@lwNotifSubPriceUpTitle": {
     "placeholders": {
-      "merchant": { "type": "String" }
+      "merchant": {
+        "type": "String"
+      }
     }
   },
   "lwNotifSubPriceUpDetail": "Now {newAmount}, was {oldAmount}",
   "@lwNotifSubPriceUpDetail": {
     "placeholders": {
-      "newAmount": { "type": "String" },
-      "oldAmount": { "type": "String" }
+      "newAmount": {
+        "type": "String"
+      },
+      "oldAmount": {
+        "type": "String"
+      }
     }
   },
   "lwNotifAccountArchivedTitle": "Account closed: {institution}",
   "@lwNotifAccountArchivedTitle": {
     "placeholders": {
-      "institution": { "type": "String" }
+      "institution": {
+        "type": "String"
+      }
     }
   },
   "lwNotifAccountArchivedDetail": "{account} is no longer at {institution} — it's been archived. Tap to restore or remove.",
   "@lwNotifAccountArchivedDetail": {
     "placeholders": {
-      "account": { "type": "String" },
-      "institution": { "type": "String" }
+      "account": {
+        "type": "String"
+      },
+      "institution": {
+        "type": "String"
+      }
     }
   },
   "lwNotifTooltipNone": "Notifications",
@@ -1677,7 +1839,9 @@
   "lwAllocShowMore": "Show {count} more",
   "@lwAllocShowMore": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "lwAllocShowFewer": "Show fewer",
@@ -1687,8 +1851,12 @@
   "lwAllocConcentration": "{holding} is {pct} of your portfolio — a concentrated position.",
   "@lwAllocConcentration": {
     "placeholders": {
-      "holding": { "type": "String" },
-      "pct": { "type": "String" }
+      "holding": {
+        "type": "String"
+      },
+      "pct": {
+        "type": "String"
+      }
     }
   },
   "lwAllocFilteringHint": "Filtering holdings to this category — tap again to clear",
@@ -1721,7 +1889,9 @@
   "lwPerfTwrCoverage": "Reflects {pct} of your portfolio we can price daily",
   "@lwPerfTwrCoverage": {
     "placeholders": {
-      "pct": { "type": "Object" }
+      "pct": {
+        "type": "Object"
+      }
     }
   },
   "heroDeltaSince30d": "vs 30d ago",
@@ -1826,8 +1996,14 @@
   "@pfReturnCoverage": {
     "description": "Coverage caption shown beside the portfolio hero return %, clarifying that the % is a return on cost basis and only covers the subset of holdings that report a basis. {covered} is the compact display-currency value of basis-known holdings (e.g. $160.7K), {total} is the compact full portfolio value (e.g. $1.53M).",
     "placeholders": {
-      "covered": { "type": "String", "example": "$160.7K" },
-      "total": { "type": "String", "example": "$1.53M" }
+      "covered": {
+        "type": "String",
+        "example": "$160.7K"
+      },
+      "total": {
+        "type": "String",
+        "example": "$1.53M"
+      }
     }
   },
   "taxFbarNoData": "No foreign-account balance history found for this year.",
@@ -1907,5 +2083,111 @@
   "divTopPayers": "Top payers",
   "divUpcomingExDates": "Upcoming ex-dates",
   "divPaymentsPerYear": "{count}×/yr",
-  "divFxStaleHint": "Some income converted with a stale FX rate — figures are approximate."
+  "divFxStaleHint": "Some income converted with a stale FX rate — figures are approximate.",
+  "lendCustomStyleLabel": "Custom schedule",
+  "lendCustomStyleDesc": "You set every payment by hand — irregular amounts and dates that add up to the amount lent.",
+  "lendCustomPasteTitle": "Paste from a spreadsheet",
+  "lendCustomPasteHint": "Paste two columns from Google Sheets / Excel: date then amount, one payment per line.",
+  "lendCustomPasteButton": "Parse pasted rows",
+  "lendCustomPastedN": "Loaded {count} payment{count, plural, =1{} other{s}} from the paste.",
+  "@lendCustomPastedN": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lendCustomPasteEmpty": "Nothing to parse — paste some date + amount rows first.",
+  "lendCustomRowsTitle": "Payments",
+  "lendCustomAddRow": "Add payment",
+  "lendCustomRemoveRow": "Remove payment",
+  "lendCustomRowDate": "Date",
+  "lendCustomRowAmount": "Amount",
+  "lendCustomNoRows": "No payments yet — paste from a spreadsheet or add them below.",
+  "lendCustomGeneratorTitle": "Quick fill",
+  "lendCustomGenFirstN": "First payments",
+  "lendCustomGenFirstAmount": "First amount",
+  "lendCustomGenThenAmount": "Then each",
+  "lendCustomGenDayOfMonth": "Day of month",
+  "lendCustomGenStart": "Start",
+  "lendCustomGenEnd": "End",
+  "lendCustomGenApply": "Fill payments",
+  "lendCustomPreviewCount": "{count, plural, =1{1 payment} other{{count} payments}}",
+  "@lendCustomPreviewCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lendCustomPreviewSum": "Sum of payments",
+  "lendCustomClosesToZero": "Closes to 0 — the payments add up to the amount lent.",
+  "lendCustomDoesNotAddUp": "Payments total {sum}, but the amount lent is {principal}.",
+  "@lendCustomDoesNotAddUp": {
+    "placeholders": {
+      "sum": {
+        "type": "String"
+      },
+      "principal": {
+        "type": "String"
+      }
+    }
+  },
+  "lendCustomNeedRows": "Add at least one payment before saving.",
+  "lendCustomScheduleFailed": "Couldn't save the schedule: {error}",
+  "@lendCustomScheduleFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "lendDisbursementConflict": "That transaction already funds another loan — the loan wasn't created.",
+  "lendCopyForSheets": "Copy for Google Sheets",
+  "lendCopiedForSheets": "Copied — paste into the sheet with Ctrl/Cmd+V.",
+  "lendSchedulePaidProgress": "Paid {paid} of {total} payments",
+  "@lendSchedulePaidProgress": {
+    "placeholders": {
+      "paid": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "lendScheduleRemaining": "{amount} remaining",
+  "@lendScheduleRemaining": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "lendScheduleColPayment": "Payment",
+  "lendScheduleColBalance": "Balance remaining",
+  "lendScheduleColStatus": "Status",
+  "lendScheduleNextDue": "Next due",
+  "lendScheduleTotals": "Total",
+  "txCreateLoanFromTx": "Create loan from this transaction",
+  "lendDisbursementNotLinkedOptional": "no disbursement linked (optional)",
+  "@lendDisbursementNotLinkedOptional": {
+    "description": "Shown in a loan's detail line when no funding transaction is attached. Clarifies a disbursement is optional (a loan can just represent money owed) so the loan doesn't look misconfigured."
+  },
+  "lendLinkBankTx": "Link bank transaction",
+  "@lendLinkBankTx": {
+    "description": "Action on an off-bank (cash-recorded) repayment to attach the real bank inflow once the statement is imported."
+  },
+  "lendLinkBankTxTitle": "Link a bank transaction",
+  "@lendLinkBankTxTitle": {
+    "description": "Title of the picker sheet listing candidate bank inflows to attach to an off-bank repayment."
+  },
+  "lendLinkBankTxNone": "No matching bank transactions found yet — upload your bank statement first.",
+  "@lendLinkBankTxNone": {
+    "description": "Shown in the link-bank-transaction picker when no candidate inflow was found to attach to the off-bank repayment."
+  },
+  "lendLinkBankTxError": "Couldn't link that bank transaction",
+  "@lendLinkBankTxError": {
+    "description": "Toast shown when attaching a bank transaction to an off-bank repayment fails."
+  }
 }
