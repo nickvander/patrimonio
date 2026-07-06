@@ -1816,6 +1816,50 @@
   "@lendDisbursementNotLinkedOptional": {
     "description": "Shown in a loan's detail line when no funding transaction is attached. Clarifies a disbursement is optional (a loan can just represent money owed) so the loan doesn't look misconfigured."
   },
+  "lendLoadError": "No se pudieron cargar los préstamos. Desliza para reintentar.",
+  "lendRetry": "Reintentar",
+  "lendExportInterestTooltip": "Exportar ingresos por intereses",
+  "lendExportPaymentsCsv": "Pagos de intereses (CSV)",
+  "lendExportYearEndCsv": "Resumen anual por prestatario (CSV)",
+  "lendTotalsConvertedNote": "Totales convertidos a {currency} al tipo de cambio actual",
+  "@lendTotalsConvertedNote": {
+    "placeholders": {
+      "currency": {
+        "type": "String"
+      }
+    }
+  },
+  "lendUnknownBorrower": "Desconocido",
+  "lendLentMeta": "Prestado {amount} · {date}",
+  "@lendLentMeta": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "lendLentOutstandingMeta": "Prestado {principal} · pendiente {outstanding}",
+  "@lendLentOutstandingMeta": {
+    "placeholders": {
+      "principal": {
+        "type": "String"
+      },
+      "outstanding": {
+        "type": "String"
+      }
+    }
+  },
+  "lendRatePeriodYear": "Año",
+  "lendRatePeriodMonth": "Mes",
+  "lendFreqLumpSum": "Pago único",
+  "lendInterestTypeNone": "Sin interés",
+  "lendInterestTypeSimple": "Interés simple",
+  "lendInterestTypeAmortized": "Amortizado",
+  "lendInterestTypeInterestOnly": "Solo interés",
+  "lendInterestTypeCompound": "Compuesto",
   "lendLinkBankTx": "Vincular transacción bancaria",
   "@lendLinkBankTx": {
     "description": "Action on an off-bank (cash-recorded) repayment to attach the real bank inflow once the statement is imported."

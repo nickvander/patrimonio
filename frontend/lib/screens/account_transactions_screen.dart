@@ -817,7 +817,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                 TextButton.icon(
                   onPressed: _addHolding,
                   icon: const Icon(Icons.add, size: 16),
-                  label: Text(es ? 'Agregar' : 'Add'),
+                  label: Text(AppLocalizations.of(context).actionAdd),
                 ),
             ],
           ),

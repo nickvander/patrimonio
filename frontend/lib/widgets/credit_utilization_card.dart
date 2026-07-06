@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/currency.dart';
+import '../utils/mask_aware_name.dart';
 import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 
@@ -173,11 +174,12 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        item['name'] ?? l.cfCreditAccountFallback,
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      // Mask-aware so "Ultimate Rewards® ••1413" keeps its
+                      // distinguishing ••last4 when the name truncates.
+                      maskAwareNameText(
+                        (item['name'] ?? l.cfCreditAccountFallback)
+                            .toString(),
+                        const TextStyle(fontWeight: FontWeight.w500),
                       ),
                       Text(
                         item['institution_name'] ?? '',

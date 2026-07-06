@@ -5312,6 +5312,64 @@ class AppLocalizationsEs extends AppLocalizations {
       'sin desembolso vinculado (opcional)';
 
   @override
+  String get lendLoadError =>
+      'No se pudieron cargar los préstamos. Desliza para reintentar.';
+
+  @override
+  String get lendRetry => 'Reintentar';
+
+  @override
+  String get lendExportInterestTooltip => 'Exportar ingresos por intereses';
+
+  @override
+  String get lendExportPaymentsCsv => 'Pagos de intereses (CSV)';
+
+  @override
+  String get lendExportYearEndCsv => 'Resumen anual por prestatario (CSV)';
+
+  @override
+  String lendTotalsConvertedNote(String currency) {
+    return 'Totales convertidos a $currency al tipo de cambio actual';
+  }
+
+  @override
+  String get lendUnknownBorrower => 'Desconocido';
+
+  @override
+  String lendLentMeta(String amount, String date) {
+    return 'Prestado $amount · $date';
+  }
+
+  @override
+  String lendLentOutstandingMeta(String principal, String outstanding) {
+    return 'Prestado $principal · pendiente $outstanding';
+  }
+
+  @override
+  String get lendRatePeriodYear => 'Año';
+
+  @override
+  String get lendRatePeriodMonth => 'Mes';
+
+  @override
+  String get lendFreqLumpSum => 'Pago único';
+
+  @override
+  String get lendInterestTypeNone => 'Sin interés';
+
+  @override
+  String get lendInterestTypeSimple => 'Interés simple';
+
+  @override
+  String get lendInterestTypeAmortized => 'Amortizado';
+
+  @override
+  String get lendInterestTypeInterestOnly => 'Solo interés';
+
+  @override
+  String get lendInterestTypeCompound => 'Compuesto';
+
+  @override
   String get lendLinkBankTx => 'Vincular transacción bancaria';
 
   @override

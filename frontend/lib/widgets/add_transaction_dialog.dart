@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../utils/mask_aware_name.dart';
 
 /// Dialog for manually entering a transaction — for cash spend, gifts,
 /// reimbursements, anything Plaid never sees. Default sign convention
@@ -180,7 +181,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                   final label = nick.isNotEmpty ? nick : name;
                   return DropdownMenuItem(
                     value: id,
-                    child: Text(label, overflow: TextOverflow.ellipsis),
+                    child: maskAwareNameText(label, const TextStyle()),
                   );
                 }).toList(),
                 onChanged: (v) => setState(() => _accountId = v),

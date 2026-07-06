@@ -4,6 +4,7 @@ import '../utils/supported_banks.dart';
 import '../utils/theme_colors.dart';
 import '../utils/currency.dart';
 import '../utils/category.dart';
+import '../utils/mask_aware_name.dart';
 import '../widgets/add_account_dialog.dart';
 import 'import_cleanup_screen.dart';
 import 'package:file_picker/file_picker.dart';
@@ -596,13 +597,9 @@ class _ImportScreenState extends State<ImportScreen> {
                     ),
                   ),
                   items: accounts.map<DropdownMenuItem<String>>((acc) {
-                    final cur = (acc['currency'] as String? ?? '').toUpperCase();
-                    final lbl = cur.isNotEmpty
-                        ? '${acc['institution_name']} - ${acc['name']} ($cur)'
-                        : '${acc['institution_name']} - ${acc['name']}';
                     return DropdownMenuItem<String>(
                       value: acc['id'],
-                      child: Text(lbl),
+                      child: _accountItemLabel(acc),
                     );
                   }).toList(),
                   onChanged: (val) =>
@@ -621,6 +618,22 @@ class _ImportScreenState extends State<ImportScreen> {
         ),
       ),
     ];
+  }
+
+  /// Dropdown label "Institution - Name (CUR)". The name part is rendered
+  /// mask-aware so a trailing "••1234" survives truncation instead of the
+  /// distinguishing digits; the currency suffix stays outside the
+  /// shrinking region.
+  Widget _accountItemLabel(dynamic acc) {
+    final cur = (acc['currency'] as String? ?? '').toUpperCase();
+    final base = '${acc['institution_name']} - ${acc['name']}';
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(child: maskAwareNameText(base, const TextStyle())),
+        if (cur.isNotEmpty) Text(' ($cur)'),
+      ],
+    );
   }
 
   /// Flag (and auto-deselect) preview rows already imported in the chosen
@@ -1884,14 +1897,9 @@ class _ImportScreenState extends State<ImportScreen> {
                                 ),
                               ),
                               items: _accounts!.map((acc) {
-                                final cur = (acc['currency'] as String? ?? '')
-                                    .toUpperCase();
-                                final label = cur.isNotEmpty
-                                    ? '${acc['institution_name']} - ${acc['name']} ($cur)'
-                                    : '${acc['institution_name']} - ${acc['name']}';
                                 return DropdownMenuItem<String>(
                                   value: acc['id'],
-                                  child: Text(label),
+                                  child: _accountItemLabel(acc),
                                 );
                               }).toList(),
                               onChanged: (val) {

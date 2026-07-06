@@ -5,6 +5,7 @@ import '../utils/url_opener.dart';
 import '../services/api_service.dart';
 import '../theme/typography.dart';
 import '../utils/currency.dart';
+import '../utils/mask_aware_name.dart';
 import '../widgets/skeleton.dart';
 import '../l10n/app_localizations.dart';
 import 'tax_planning_logic.dart';
@@ -1403,10 +1404,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                 ),
                 if (accountName.isNotEmpty) ...[
                   const SizedBox(height: 2),
-                  Text(
+                  maskAwareNameText(
                     accountName,
-                    style: TextStyle(color: context.textFaint, fontSize: 11),
-                    overflow: TextOverflow.ellipsis,
+                    TextStyle(color: context.textFaint, fontSize: 11),
                   ),
                 ],
                 const SizedBox(height: 2),

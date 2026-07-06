@@ -8528,6 +8528,108 @@ abstract class AppLocalizations {
   /// **'no disbursement linked (optional)'**
   String get lendDisbursementNotLinkedOptional;
 
+  /// No description provided for @lendLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load loans. Pull to retry.'**
+  String get lendLoadError;
+
+  /// No description provided for @lendRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get lendRetry;
+
+  /// No description provided for @lendExportInterestTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Export interest income'**
+  String get lendExportInterestTooltip;
+
+  /// No description provided for @lendExportPaymentsCsv.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest payments (CSV)'**
+  String get lendExportPaymentsCsv;
+
+  /// No description provided for @lendExportYearEndCsv.
+  ///
+  /// In en, this message translates to:
+  /// **'Year-end summary by borrower (CSV)'**
+  String get lendExportYearEndCsv;
+
+  /// No description provided for @lendTotalsConvertedNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Totals converted to {currency} at the current spot rate'**
+  String lendTotalsConvertedNote(String currency);
+
+  /// No description provided for @lendUnknownBorrower.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get lendUnknownBorrower;
+
+  /// No description provided for @lendLentMeta.
+  ///
+  /// In en, this message translates to:
+  /// **'Lent {amount} · {date}'**
+  String lendLentMeta(String amount, String date);
+
+  /// No description provided for @lendLentOutstandingMeta.
+  ///
+  /// In en, this message translates to:
+  /// **'Lent {principal} · outstanding {outstanding}'**
+  String lendLentOutstandingMeta(String principal, String outstanding);
+
+  /// No description provided for @lendRatePeriodYear.
+  ///
+  /// In en, this message translates to:
+  /// **'Year'**
+  String get lendRatePeriodYear;
+
+  /// No description provided for @lendRatePeriodMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'Month'**
+  String get lendRatePeriodMonth;
+
+  /// No description provided for @lendFreqLumpSum.
+  ///
+  /// In en, this message translates to:
+  /// **'Lump sum'**
+  String get lendFreqLumpSum;
+
+  /// No description provided for @lendInterestTypeNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No interest'**
+  String get lendInterestTypeNone;
+
+  /// No description provided for @lendInterestTypeSimple.
+  ///
+  /// In en, this message translates to:
+  /// **'Simple interest'**
+  String get lendInterestTypeSimple;
+
+  /// No description provided for @lendInterestTypeAmortized.
+  ///
+  /// In en, this message translates to:
+  /// **'Amortized'**
+  String get lendInterestTypeAmortized;
+
+  /// No description provided for @lendInterestTypeInterestOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest-only'**
+  String get lendInterestTypeInterestOnly;
+
+  /// No description provided for @lendInterestTypeCompound.
+  ///
+  /// In en, this message translates to:
+  /// **'Compound'**
+  String get lendInterestTypeCompound;
+
   /// Action on an off-bank (cash-recorded) repayment to attach the real bank inflow once the statement is imported.
   ///
   /// In en, this message translates to:

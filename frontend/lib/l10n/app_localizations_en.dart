@@ -5269,6 +5269,63 @@ class AppLocalizationsEn extends AppLocalizations {
       'no disbursement linked (optional)';
 
   @override
+  String get lendLoadError => 'Couldn\'t load loans. Pull to retry.';
+
+  @override
+  String get lendRetry => 'Retry';
+
+  @override
+  String get lendExportInterestTooltip => 'Export interest income';
+
+  @override
+  String get lendExportPaymentsCsv => 'Interest payments (CSV)';
+
+  @override
+  String get lendExportYearEndCsv => 'Year-end summary by borrower (CSV)';
+
+  @override
+  String lendTotalsConvertedNote(String currency) {
+    return 'Totals converted to $currency at the current spot rate';
+  }
+
+  @override
+  String get lendUnknownBorrower => 'Unknown';
+
+  @override
+  String lendLentMeta(String amount, String date) {
+    return 'Lent $amount · $date';
+  }
+
+  @override
+  String lendLentOutstandingMeta(String principal, String outstanding) {
+    return 'Lent $principal · outstanding $outstanding';
+  }
+
+  @override
+  String get lendRatePeriodYear => 'Year';
+
+  @override
+  String get lendRatePeriodMonth => 'Month';
+
+  @override
+  String get lendFreqLumpSum => 'Lump sum';
+
+  @override
+  String get lendInterestTypeNone => 'No interest';
+
+  @override
+  String get lendInterestTypeSimple => 'Simple interest';
+
+  @override
+  String get lendInterestTypeAmortized => 'Amortized';
+
+  @override
+  String get lendInterestTypeInterestOnly => 'Interest-only';
+
+  @override
+  String get lendInterestTypeCompound => 'Compound';
+
+  @override
   String get lendLinkBankTx => 'Link bank transaction';
 
   @override

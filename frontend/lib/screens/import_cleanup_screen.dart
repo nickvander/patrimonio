@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../utils/theme_colors.dart';
 import '../utils/currency.dart';
+import '../utils/mask_aware_name.dart';
 import '../l10n/app_localizations.dart';
 
 /// Manage / undo imports. Two paths:
@@ -354,9 +355,22 @@ class _ImportCleanupScreenState extends State<ImportCleanupScreen> {
               labelText: l.impAssignToAccount, border: const OutlineInputBorder()),
           items: _accounts.map((a) {
             final cur = (a['currency'] as String? ?? '').toUpperCase();
+            // Name rendered mask-aware so a trailing "••1234" survives
+            // truncation; the (CUR) suffix stays outside the shrinking region.
             return DropdownMenuItem<String>(
               value: a['id']?.toString(),
-              child: Text('${a['institution_name']} - ${a['name']} ($cur)'),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: maskAwareNameText(
+                      '${a['institution_name']} - ${a['name']}',
+                      const TextStyle(),
+                    ),
+                  ),
+                  Text(' ($cur)'),
+                ],
+              ),
             );
           }).toList(),
           onChanged: (v) => setState(() {

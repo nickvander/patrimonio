@@ -2174,6 +2174,50 @@
   "@lendDisbursementNotLinkedOptional": {
     "description": "Shown in a loan's detail line when no funding transaction is attached. Clarifies a disbursement is optional (a loan can just represent money owed) so the loan doesn't look misconfigured."
   },
+  "lendLoadError": "Couldn't load loans. Pull to retry.",
+  "lendRetry": "Retry",
+  "lendExportInterestTooltip": "Export interest income",
+  "lendExportPaymentsCsv": "Interest payments (CSV)",
+  "lendExportYearEndCsv": "Year-end summary by borrower (CSV)",
+  "lendTotalsConvertedNote": "Totals converted to {currency} at the current spot rate",
+  "@lendTotalsConvertedNote": {
+    "placeholders": {
+      "currency": {
+        "type": "String"
+      }
+    }
+  },
+  "lendUnknownBorrower": "Unknown",
+  "lendLentMeta": "Lent {amount} · {date}",
+  "@lendLentMeta": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "lendLentOutstandingMeta": "Lent {principal} · outstanding {outstanding}",
+  "@lendLentOutstandingMeta": {
+    "placeholders": {
+      "principal": {
+        "type": "String"
+      },
+      "outstanding": {
+        "type": "String"
+      }
+    }
+  },
+  "lendRatePeriodYear": "Year",
+  "lendRatePeriodMonth": "Month",
+  "lendFreqLumpSum": "Lump sum",
+  "lendInterestTypeNone": "No interest",
+  "lendInterestTypeSimple": "Simple interest",
+  "lendInterestTypeAmortized": "Amortized",
+  "lendInterestTypeInterestOnly": "Interest-only",
+  "lendInterestTypeCompound": "Compound",
   "lendLinkBankTx": "Link bank transaction",
   "@lendLinkBankTx": {
     "description": "Action on an off-bank (cash-recorded) repayment to attach the real bank inflow once the statement is imported."

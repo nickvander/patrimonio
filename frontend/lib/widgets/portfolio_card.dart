@@ -4,6 +4,7 @@ import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/preferences.dart';
 import '../utils/currency.dart';
+import '../utils/mask_aware_name.dart';
 import '../utils/theme_colors.dart';
 
 /// Which slice of the portfolio surface a [PortfolioCard] instance renders.
@@ -1168,15 +1169,13 @@ class _PortfolioCardState extends State<PortfolioCard> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
+                            maskAwareNameText(
                               acct,
-                              style: TextStyle(
+                              TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
                                 color: context.textPrimary,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
                             if (inst.isNotEmpty)
                               Text(

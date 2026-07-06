@@ -5,6 +5,7 @@ import '../services/preferences.dart';
 import '../utils/account_category.dart';
 import '../utils/currency.dart';
 import '../utils/debt_payoff.dart';
+import '../utils/mask_aware_name.dart';
 import '../utils/theme_colors.dart';
 import '../l10n/app_localizations.dart';
 
@@ -309,11 +310,9 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
       child: Row(
         children: [
           Expanded(
-            child: Text(
+            child: maskAwareNameText(
               d.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
+              TextStyle(
                   color: context.textPrimary, fontWeight: FontWeight.w600),
             ),
           ),

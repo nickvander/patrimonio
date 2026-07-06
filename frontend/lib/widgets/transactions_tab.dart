@@ -11,6 +11,7 @@ import '../theme/typography.dart';
 import '../utils/category.dart';
 import '../utils/category_style.dart';
 import '../utils/currency.dart';
+import '../utils/mask_aware_name.dart';
 import '../utils/transaction_display.dart';
 import '../utils/url_opener.dart';
 import 'add_transaction_dialog.dart';
@@ -3699,7 +3700,12 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
   /// and the value carries the weight, so the group scans as a small
   /// table instead of a pill soup.
   Widget _detailRow(IconData icon, String label, String value,
-      {Color? valueColor}) {
+      {Color? valueColor, bool maskAware = false}) {
+    final valueStyle = TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w600,
+      color: valueColor ?? context.textPrimary,
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
@@ -3713,17 +3719,21 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: valueColor ?? context.textPrimary,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
+            // maskAware: single-line, keeps a trailing "••1234" account mask
+            // visible under truncation; Align preserves the right-edge fit
+            // since maskAwareNameText's Row doesn't stretch.
+            child: maskAware
+                ? Align(
+                    alignment: Alignment.centerRight,
+                    child: maskAwareNameText(value, valueStyle),
+                  )
+                : Text(
+                    value,
+                    textAlign: TextAlign.end,
+                    style: valueStyle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
           ),
         ],
       ),
@@ -3834,7 +3844,8 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
       final rows = <Widget>[
         if ((tx['account_name'] ?? '').toString().isNotEmpty)
           _detailRow(Icons.account_balance, l.txAccount,
-              s._accountLabel(tx)),
+              s._accountLabel(tx),
+              maskAware: true),
         if (autoCategoryLabel != null)
           _detailRow(
               Icons.label_outline, l.txAutoCategory, autoCategoryLabel),
@@ -4481,10 +4492,9 @@ class _AccountMoverState extends State<_AccountMover> {
               final inst = (a['institution_name'] ?? '').toString();
               return DropdownMenuItem<String>(
                 value: id,
-                child: Text(
+                child: maskAwareNameText(
                   inst.isEmpty ? name : '$inst · $name',
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
+                  const TextStyle(),
                 ),
               );
             }).toList(),

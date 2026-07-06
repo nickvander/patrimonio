@@ -4,6 +4,7 @@ import '../l10n/app_localizations.dart';
 import '../screens/account_transactions_screen.dart';
 import '../utils/account_category.dart';
 import '../utils/currency.dart';
+import '../utils/mask_aware_name.dart';
 import '../utils/theme_colors.dart';
 
 /// Width of the trailing slot at the right edge of every account-style row:
@@ -923,36 +924,6 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
   /// institution label (it's implied from the parent above), no chevron; a
   /// dash marker in the left gutter is the only nesting affordance so the
   /// name and balance stay in the shared row columns.
-  /// Renders [name] on one line, splitting a trailing "••1234"-style mask
-  /// into its own non-shrinking token so a long base name ellipsizes in the
-  /// middle ("Ultimate Rew… ••1234") instead of truncating the only part
-  /// that tells same-named cards apart. Plain ellipsizing Text otherwise.
-  Widget _maskAwareName(String name, TextStyle style) {
-    final m = RegExp(r'^(.*\S)\s+(••\S{1,6})$').firstMatch(name);
-    if (m == null) {
-      return Text(
-        name,
-        style: style,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      );
-    }
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Flexible(
-          child: Text(
-            m.group(1)!,
-            style: style,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        Text(' ${m.group(2)!}', style: style, maxLines: 1),
-      ],
-    );
-  }
-
   Widget _buildVaultRow(BuildContext context, dynamic acc) {
     final balance =
         ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
@@ -990,7 +961,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
               color: context.hairline,
             ),
             Expanded(
-              child: _maskAwareName(
+              child: maskAwareNameText(
                 name,
                 TextStyle(
                   fontSize: 13,
@@ -1067,11 +1038,11 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
 
     // One line keeps every row the same height so the name and balance
     // columns stay aligned; the Tooltip reveals the full name, and a
-    // trailing ••mask survives truncation via _maskAwareName.
+    // trailing ••mask survives truncation via maskAwareNameText.
     Widget primaryName = Tooltip(
       message: name,
       waitDuration: const Duration(milliseconds: 600),
-      child: _maskAwareName(
+      child: maskAwareNameText(
         name,
         TextStyle(
           fontSize: 14,

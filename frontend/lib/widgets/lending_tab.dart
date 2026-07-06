@@ -76,7 +76,9 @@ class _LendingTabState extends State<LendingTab> {
   Map<String, dynamic> _summary = {};
   List<dynamic> _reminders = [];
   bool _loading = true;
-  String? _error;
+  // Localized at build time (a State may not have a usable context in the
+  // load catch), so only the *fact* of the failure is stored here.
+  bool _loadFailed = false;
 
   @override
   void initState() {
@@ -87,7 +89,7 @@ class _LendingTabState extends State<LendingTab> {
   Future<void> _load() async {
     setState(() {
       _loading = true;
-      _error = null;
+      _loadFailed = false;
     });
     try {
       final results = await Future.wait([
@@ -111,7 +113,7 @@ class _LendingTabState extends State<LendingTab> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Couldn\'t load loans. Pull to retry.';
+        _loadFailed = true;
         _loading = false;
       });
     }
@@ -145,14 +147,17 @@ class _LendingTabState extends State<LendingTab> {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_error != null) {
+    if (_loadFailed) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!, style: TextStyle(color: context.textMuted)),
+            Text(AppLocalizations.of(context).lendLoadError,
+                style: TextStyle(color: context.textMuted)),
             const SizedBox(height: 12),
-            FilledButton(onPressed: _load, child: const Text('Retry')),
+            FilledButton(
+                onPressed: _load,
+                child: Text(AppLocalizations.of(context).lendRetry)),
           ],
         ),
       );
@@ -257,7 +262,8 @@ class _LendingTabState extends State<LendingTab> {
                 // income — hand to an accountant at tax time).
                 if (interestEarned > 0)
                   PopupMenuButton<String>(
-                    tooltip: 'Export interest income',
+                    tooltip: AppLocalizations.of(context)
+                        .lendExportInterestTooltip,
                     icon: const Icon(Icons.download_outlined),
                     onSelected: (which) {
                       final url = which == 'summary'
@@ -266,14 +272,16 @@ class _LendingTabState extends State<LendingTab> {
                       launchUrl(Uri.parse(url),
                           webOnlyWindowName: '_self');
                     },
-                    itemBuilder: (_) => const [
+                    itemBuilder: (_) => [
                       PopupMenuItem(
                         value: 'detail',
-                        child: Text('Interest payments (CSV)'),
+                        child: Text(AppLocalizations.of(context)
+                            .lendExportPaymentsCsv),
                       ),
                       PopupMenuItem(
                         value: 'summary',
-                        child: Text('Year-end summary by borrower (CSV)'),
+                        child: Text(AppLocalizations.of(context)
+                            .lendExportYearEndCsv),
                       ),
                     ],
                   ),
@@ -290,7 +298,8 @@ class _LendingTabState extends State<LendingTab> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Text(
-                  'Totals converted to $summaryCur at the current spot rate',
+                  AppLocalizations.of(context)
+                      .lendTotalsConvertedNote(summaryCur),
                   style: TextStyle(fontSize: 11, color: context.textSubtle),
                 ),
               ),
@@ -568,7 +577,11 @@ class _LendingTabState extends State<LendingTab> {
                 children: [
                   Expanded(
                     child: Text(
-                      (loan['borrower_name'] ?? 'Unknown').toString(),
+                      (loan['borrower_name'] ??
+                              AppLocalizations.of(context).lendUnknownBorrower)
+                          .toString(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
@@ -585,8 +598,7 @@ class _LendingTabState extends State<LendingTab> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Lent ${_money(principal, currency)} · '
-                '${(loan['origination_date'] ?? '').toString()}'
+                '${AppLocalizations.of(context).lendLentMeta(_money(principal, currency), (loan['origination_date'] ?? '').toString())}'
                 '${linked ? '' : ' · ${AppLocalizations.of(context).lendDisbursementNotLinkedOptional}'}',
                 style: TextStyle(fontSize: 12, color: context.textSubtle),
               ),
@@ -1158,7 +1170,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
       actions: [
         TextButton(
           onPressed: _submitting ? null : () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
+          child: Text(AppLocalizations.of(context).actionCancel),
         ),
         FilledButton.icon(
           onPressed: _submitting ? null : _submit,
@@ -1168,7 +1180,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.add, size: 18),
-          label: const Text('Add loan'),
+          label: Text(AppLocalizations.of(context).lendingAddLoan),
         ),
       ],
     );
@@ -1416,9 +1428,13 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
           initialValue: _ratePeriod,
           isExpanded: true,
           decoration: _decoration('Rate is per'),
-          items: const [
-            DropdownMenuItem(value: 'annual', child: Text('Year')),
-            DropdownMenuItem(value: 'monthly', child: Text('Month')),
+          items: [
+            DropdownMenuItem(
+                value: 'annual',
+                child: Text(AppLocalizations.of(context).lendRatePeriodYear)),
+            DropdownMenuItem(
+                value: 'monthly',
+                child: Text(AppLocalizations.of(context).lendRatePeriodMonth)),
           ],
           onChanged: (v) => setState(() => _ratePeriod = v ?? 'annual'),
         ),
@@ -1426,10 +1442,16 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
         initialValue: _paymentFrequency,
         isExpanded: true,
         decoration: _decoration('Payment frequency'),
-        items: const [
-          DropdownMenuItem(value: 'monthly', child: Text('Monthly')),
-          DropdownMenuItem(value: 'weekly', child: Text('Weekly')),
-          DropdownMenuItem(value: 'lump_sum', child: Text('Lump sum')),
+        items: [
+          DropdownMenuItem(
+              value: 'monthly',
+              child: Text(AppLocalizations.of(context).cfCadenceMonthly)),
+          DropdownMenuItem(
+              value: 'weekly',
+              child: Text(AppLocalizations.of(context).cfCadenceWeekly)),
+          DropdownMenuItem(
+              value: 'lump_sum',
+              child: Text(AppLocalizations.of(context).lendFreqLumpSum)),
         ],
         onChanged: (v) => setState(() {
           _paymentFrequency = v ?? 'monthly';
@@ -2463,18 +2485,27 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
                     initialValue: _interestType,
                     isExpanded: true,
                     decoration: _decoration('Interest type'),
-                    items: const [
+                    items: [
                       DropdownMenuItem(
-                          value: 'none', child: Text('No interest')),
+                          value: 'none',
+                          child: Text(AppLocalizations.of(context)
+                              .lendInterestTypeNone)),
                       DropdownMenuItem(
-                          value: 'simple', child: Text('Simple interest')),
+                          value: 'simple',
+                          child: Text(AppLocalizations.of(context)
+                              .lendInterestTypeSimple)),
                       DropdownMenuItem(
-                          value: 'amortized', child: Text('Amortized')),
+                          value: 'amortized',
+                          child: Text(AppLocalizations.of(context)
+                              .lendInterestTypeAmortized)),
                       DropdownMenuItem(
                           value: 'interest_only',
-                          child: Text('Interest-only')),
+                          child: Text(AppLocalizations.of(context)
+                              .lendInterestTypeInterestOnly)),
                       DropdownMenuItem(
-                          value: 'compound', child: Text('Compound')),
+                          value: 'compound',
+                          child: Text(AppLocalizations.of(context)
+                              .lendInterestTypeCompound)),
                     ],
                     onChanged: (v) =>
                         setState(() => _interestType = v ?? 'none'),
@@ -2791,8 +2822,9 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Lent ${_money((widget.loan['principal'] as num?) ?? 0)} · '
-                'outstanding ${_money((widget.loan['outstanding'] as num?) ?? 0)}',
+                AppLocalizations.of(context).lendLentOutstandingMeta(
+                    _money((widget.loan['principal'] as num?) ?? 0),
+                    _money((widget.loan['outstanding'] as num?) ?? 0)),
                 style: TextStyle(fontSize: 13, color: context.textSubtle),
               ),
               const SizedBox(height: 20),
