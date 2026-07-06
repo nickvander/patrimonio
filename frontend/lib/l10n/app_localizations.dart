@@ -8570,6 +8570,36 @@ abstract class AppLocalizations {
   /// **'Unknown'**
   String get lendUnknownBorrower;
 
+  /// No description provided for @lendStatusActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get lendStatusActive;
+
+  /// No description provided for @lendStatusPaidOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Paid off'**
+  String get lendStatusPaidOff;
+
+  /// No description provided for @lendStatusWrittenOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Written off'**
+  String get lendStatusWrittenOff;
+
+  /// No description provided for @lendStatusDefaulted.
+  ///
+  /// In en, this message translates to:
+  /// **'Defaulted'**
+  String get lendStatusDefaulted;
+
+  /// No description provided for @lendStatusCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelled'**
+  String get lendStatusCancelled;
+
   /// No description provided for @lendLentMeta.
   ///
   /// In en, this message translates to:

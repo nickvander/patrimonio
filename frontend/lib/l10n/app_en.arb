@@ -2188,6 +2188,11 @@
     }
   },
   "lendUnknownBorrower": "Unknown",
+  "lendStatusActive": "Active",
+  "lendStatusPaidOff": "Paid off",
+  "lendStatusWrittenOff": "Written off",
+  "lendStatusDefaulted": "Defaulted",
+  "lendStatusCancelled": "Cancelled",
   "lendLentMeta": "Lent {amount} · {date}",
   "@lendLentMeta": {
     "placeholders": {

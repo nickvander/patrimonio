@@ -702,12 +702,13 @@ class _LendingTabState extends State<LendingTab> {
   }
 
   Widget _statusPill(String status) {
+    final l10n = AppLocalizations.of(context);
     final (label, color) = switch (status) {
-      'paid_off' => ('Paid off', context.positive),
-      'written_off' => ('Written off', context.negative),
-      'defaulted' => ('Defaulted', context.negative),
-      'cancelled' => ('Cancelled', context.textFaint),
-      _ => ('Active', context.tealAccent),
+      'paid_off' => (l10n.lendStatusPaidOff, context.positive),
+      'written_off' => (l10n.lendStatusWrittenOff, context.negative),
+      'defaulted' => (l10n.lendStatusDefaulted, context.negative),
+      'cancelled' => (l10n.lendStatusCancelled, context.textFaint),
+      _ => (l10n.lendStatusActive, context.tealAccent),
     };
     return _pill(label, color);
   }

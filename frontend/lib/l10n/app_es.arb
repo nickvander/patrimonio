@@ -1830,6 +1830,11 @@
     }
   },
   "lendUnknownBorrower": "Desconocido",
+  "lendStatusActive": "Activo",
+  "lendStatusPaidOff": "Pagado",
+  "lendStatusWrittenOff": "Cancelado en libros",
+  "lendStatusDefaulted": "En mora",
+  "lendStatusCancelled": "Cancelado",
   "lendLentMeta": "Prestado {amount} · {date}",
   "@lendLentMeta": {
     "placeholders": {

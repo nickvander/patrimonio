@@ -5336,6 +5336,21 @@ class AppLocalizationsEs extends AppLocalizations {
   String get lendUnknownBorrower => 'Desconocido';
 
   @override
+  String get lendStatusActive => 'Activo';
+
+  @override
+  String get lendStatusPaidOff => 'Pagado';
+
+  @override
+  String get lendStatusWrittenOff => 'Cancelado en libros';
+
+  @override
+  String get lendStatusDefaulted => 'En mora';
+
+  @override
+  String get lendStatusCancelled => 'Cancelado';
+
+  @override
   String lendLentMeta(String amount, String date) {
     return 'Prestado $amount · $date';
   }
