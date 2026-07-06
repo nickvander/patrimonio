@@ -2223,6 +2223,193 @@
   "lendInterestTypeAmortized": "Amortized",
   "lendInterestTypeInterestOnly": "Interest-only",
   "lendInterestTypeCompound": "Compound",
+  "lendAddLoanSubtitle": "Record money you lent and track repayment",
+  "lendEditLoanTitle": "Edit loan",
+  "lendEditLoanSubtitle": "Correct the borrower, amount, or interest terms",
+  "lendFieldBorrowerName": "Borrower name",
+  "lendFieldAmountLent": "Amount lent",
+  "lendFieldCurrency": "Currency",
+  "lendFieldLentOn": "Lent on",
+  "lendFieldInterestRate": "Interest rate",
+  "lendFieldOptional": "Optional",
+  "lendFieldTermMonths": "Term (months)",
+  "lendFieldMostTheyCanPay": "Most they can pay",
+  "lendFieldRateIsPer": "Rate is per",
+  "lendFieldPaymentFrequency": "Payment frequency",
+  "lendFieldPayBackBy": "Pay back by",
+  "lendFieldInterestType": "Interest type",
+  "lendFieldAmountReceived": "Amount received",
+  "lendFieldReceivedOn": "Received on",
+  "lendSegSetTheTerm": "Set the term",
+  "lendSegSetThePayment": "Set the payment",
+  "lendSegBankTransaction": "Bank transaction",
+  "lendSegCash": "Cash",
+  "lendAdvancedOptions": "Advanced options",
+  "lendPreviewTitle": "Loan preview",
+  "lendPreviewEstimate": "estimate",
+  "lendPreviewEnterAmount": "Enter an amount to see the projection",
+  "lendPreviewTotalToRepay": "Total to repay",
+  "lendPreviewProjectedInterest": "Projected interest",
+  "lendPreviewNoInterest": "No interest on this loan",
+  "lendPreviewOpenEnded": "Open-ended — repay anytime, no fixed schedule",
+  "lendPreviewMinimumPayment": "Minimum payment",
+  "lendPreviewPaidOffIn": "Paid off in",
+  "lendPreviewPaidOffValue": "{count, plural, =1{1 payment} other{{count} payments}}  ·  {term}",
+  "@lendPreviewPaidOffValue": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "term": {
+        "type": "String"
+      }
+    }
+  },
+  "lendTermMonths": "{count, plural, =1{1 month} other{{count} months}}",
+  "@lendTermMonths": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lendTermYearsAbbrev": "~{years} yr",
+  "@lendTermYearsAbbrev": {
+    "placeholders": {
+      "years": {
+        "type": "String"
+      }
+    }
+  },
+  "lendSaveChanges": "Save changes",
+  "lendDisbursementLinked": "Linked to a bank transaction",
+  "lendWhichTxFunded": "Which transaction funded this loan?",
+  "lendLinkATransaction": "Link a transaction",
+  "lendNoneRecordedYet": "None recorded yet.",
+  "lendSuggestedRepayments": "Suggested repayments",
+  "lendRecordAPayment": "Record a payment",
+  "lendConfirm": "Confirm",
+  "lendExportPrintablePlan": "Printable plan (PDF)",
+  "lendExportDownloadCsv": "Download CSV (Google Sheets / Excel)",
+  "lendActionEdit": "Edit",
+  "lendActionAgreement": "Agreement",
+  "lendActionPayOffInFull": "Pay off in full",
+  "lendActionMarkDefaulted": "Mark defaulted",
+  "lendActionWriteOff": "Write off",
+  "lendActionReactivate": "Reactivate",
+  "lendPayoffConfirmTitle": "Pay off in full?",
+  "lendPayoffConfirmButton": "Pay off",
+  "lendDeleteLoan": "Delete loan",
+  "lendDeleteLoanTitle": "Delete loan?",
+  "lendTooltipClearDate": "Clear date",
+  "lendTooltipUnlink": "Unlink",
+  "lendTooltipExportPaymentPlan": "Export payment plan",
+  "lendToastEnterBorrowerName": "Enter a borrower name",
+  "lendToastEnterValidAmount": "Enter a valid amount",
+  "lendToastFailedToAddLoan": "Failed to add loan",
+  "lendToastCouldntSaveChanges": "Couldn't save changes",
+  "lendToastScheduleGenerated": "Schedule generated",
+  "lendToastLoanUpdated": "Loan updated",
+  "lendToastCouldntUpdateStatus": "Couldn't update status",
+  "lendToastLoanPaidOff": "Loan paid off",
+  "lendToastCouldntLinkTx": "Couldn't link that transaction",
+  "lendToastCouldntRecordRepayment": "Couldn't record that repayment",
+  "lendToastCouldntUnlink": "Couldn't unlink",
+  "lendToastCouldntDeleteLoan": "Couldn't delete loan",
+  "lendToastRecordCashPayment": "Record cash payment",
+  "lendToastCouldntRecordCashPayment": "Couldn't record cash payment",
+  "lendSectionBorrowerAmount": "Borrower & amount",
+  "lendSectionHowLoanWorks": "How the loan works",
+  "lendSectionExpectedRepayment": "Expected repayment",
+  "lendSectionNotes": "Notes",
+  "lendSectionInterestTerms": "Interest terms",
+  "lendSectionDisbursement": "Disbursement",
+  "lendSectionRepayments": "Repayments",
+  "lendSectionPaymentSchedule": "Payment schedule",
+  "lendStyleNoInterestDesc": "They pay back exactly what they borrowed.",
+  "lendStyleStandardLabel": "Standard loan",
+  "lendStyleStandardDesc": "Equal payments over time; each covers interest plus a bit of principal.",
+  "lendStyleFlatLabel": "Flat interest",
+  "lendStyleFlatDesc": "Interest figured once on the full amount, split evenly across payments.",
+  "lendStyleInterestOnlyLabel": "Interest-only + balloon",
+  "lendStyleInterestOnlyDesc": "They pay just interest each period, then the whole amount at the end.",
+  "lendStylePayAtEndLabel": "Pay all at the end",
+  "lendStylePayAtEndDesc": "Nothing's due until the end; interest builds up until then.",
+  "lendPreviewSinglePayment": "Single payment",
+  "lendPreviewPayment": "Payment",
+  "lendPreviewPerPaymentInterest": "{amount}{cadence} interest  ·  {count, plural, =1{1 payment} other{{count} payments}}",
+  "@lendPreviewPerPaymentInterest": {
+    "placeholders": {
+      "amount": { "type": "String" },
+      "cadence": { "type": "String" },
+      "count": { "type": "int" }
+    }
+  },
+  "lendPreviewPerPaymentCount": "{amount}{cadence}  ·  {count, plural, =1{1 payment} other{{count} payments}}",
+  "@lendPreviewPerPaymentCount": {
+    "placeholders": {
+      "amount": { "type": "String" },
+      "cadence": { "type": "String" },
+      "count": { "type": "int" }
+    }
+  },
+  "lendPreviewPrincipalAtMaturity": "Principal at maturity",
+  "lendPreviewDueWithFinalPayment": "{amount}  ·  due with final payment",
+  "@lendPreviewDueWithFinalPayment": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "lendPreviewEnterPaymentSolve": "Enter a payment to see how long it takes",
+  "lendToastEnterPaymentCompute": "Enter a payment to compute the term",
+  "lendEditRatePerPeriod": "{period, select, monthly{Rate % per month} other{Rate % per year}}",
+  "@lendEditRatePerPeriod": {
+    "placeholders": {
+      "period": { "type": "String" }
+    }
+  },
+  "lendTermsSummaryTermMonths": "{count, plural, =1{1-month term} other{{count}-month term}}",
+  "@lendTermsSummaryTermMonths": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "lendTermsSummaryMonthlyPayments": "monthly payments",
+  "lendTermsSummaryWeeklyPayments": "weekly payments",
+  "lendTermsSummaryLumpSumPayment": "single lump-sum payment",
+  "lendTermsSummaryFixed": "Term & schedule ({parts}) are fixed — delete and re-add to change them.",
+  "@lendTermsSummaryFixed": {
+    "placeholders": {
+      "parts": { "type": "String" }
+    }
+  },
+  "lendNoMatchingOutflow": "No matching outflow found near the loan date — pick one manually below.",
+  "lendScheduleGenerate": "Generate",
+  "lendScheduleRegenerate": "Regenerate",
+  "lendScheduleEmptyHasTerms": "No schedule yet. Generate one to see the amortization plan (principal + interest per installment).",
+  "lendScheduleEmptyNoTerms": "This loan has no term / payment frequency, so there's no fixed schedule — record repayments as they come in.",
+  "lendPayBackByWhen": "Pay back by {date} · {when}",
+  "@lendPayBackByWhen": {
+    "placeholders": {
+      "date": { "type": "String" },
+      "when": { "type": "String" }
+    }
+  },
+  "lendToastUnreconcileFirst": "Unreconcile payments first to regenerate",
+  "lendToastCouldntGenerateSchedule": "Couldn't generate schedule",
+  "lendPayoffConfirmBody": "Marks the loan as paid off and clears any remaining scheduled installments. This does not create a repayment — link the actual final transaction from the Repayments list so interest income stays accurate.",
+  "lendToastLoanNoLongerActive": "Loan is no longer active",
+  "lendToastCouldntPayOff": "Couldn't pay off loan",
+  "lendDeleteLoanBody": "This removes the loan and its repayment records. The bank transactions themselves are not deleted.",
+  "lendSheetRecordPayment": "Record a payment",
+  "lendSheetLinkDisbursement": "Link the disbursement",
+  "lendSearchInflows": "Search inflows (money received)",
+  "lendSearchOutflows": "Search outflows (money sent)",
+  "lendNoIncomingTx": "No incoming transactions found. Try the Cash tab to record an off-bank repayment.",
+  "lendNoOutgoingTx": "No outgoing transactions found.",
+  "lendCashFormHint": "Record a repayment that didn't come through a linked bank account (e.g. cash). It reduces the outstanding balance but isn't tied to a transaction.",
+  "lendToastTxAlreadyLinked": "That transaction is already linked",
+  "lendToastCouldntRecordThat": "Couldn't record that",
   "lendLinkBankTx": "Link bank transaction",
   "@lendLinkBankTx": {
     "description": "Action on an off-bank (cash-recorded) repayment to attach the real bank inflow once the statement is imported."

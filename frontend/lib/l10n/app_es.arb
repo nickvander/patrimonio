@@ -1865,6 +1865,193 @@
   "lendInterestTypeAmortized": "Amortizado",
   "lendInterestTypeInterestOnly": "Solo interés",
   "lendInterestTypeCompound": "Compuesto",
+  "lendAddLoanSubtitle": "Registra el dinero que prestaste y da seguimiento al pago",
+  "lendEditLoanTitle": "Editar préstamo",
+  "lendEditLoanSubtitle": "Corrige el prestatario, el monto o las condiciones de interés",
+  "lendFieldBorrowerName": "Nombre del prestatario",
+  "lendFieldAmountLent": "Monto prestado",
+  "lendFieldCurrency": "Moneda",
+  "lendFieldLentOn": "Prestado el",
+  "lendFieldInterestRate": "Tasa de interés",
+  "lendFieldOptional": "Opcional",
+  "lendFieldTermMonths": "Plazo (meses)",
+  "lendFieldMostTheyCanPay": "Máximo que pueden pagar",
+  "lendFieldRateIsPer": "La tasa es por",
+  "lendFieldPaymentFrequency": "Frecuencia de pago",
+  "lendFieldPayBackBy": "Pagar antes del",
+  "lendFieldInterestType": "Tipo de interés",
+  "lendFieldAmountReceived": "Monto recibido",
+  "lendFieldReceivedOn": "Recibido el",
+  "lendSegSetTheTerm": "Definir el plazo",
+  "lendSegSetThePayment": "Definir el pago",
+  "lendSegBankTransaction": "Transacción bancaria",
+  "lendSegCash": "Efectivo",
+  "lendAdvancedOptions": "Opciones avanzadas",
+  "lendPreviewTitle": "Vista previa del préstamo",
+  "lendPreviewEstimate": "estimado",
+  "lendPreviewEnterAmount": "Ingresa un monto para ver la proyección",
+  "lendPreviewTotalToRepay": "Total a pagar",
+  "lendPreviewProjectedInterest": "Interés proyectado",
+  "lendPreviewNoInterest": "Este préstamo no genera interés",
+  "lendPreviewOpenEnded": "Abierto — paga cuando quieras, sin calendario fijo",
+  "lendPreviewMinimumPayment": "Pago mínimo",
+  "lendPreviewPaidOffIn": "Liquidado en",
+  "lendPreviewPaidOffValue": "{count, plural, =1{1 pago} other{{count} pagos}}  ·  {term}",
+  "@lendPreviewPaidOffValue": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "term": {
+        "type": "String"
+      }
+    }
+  },
+  "lendTermMonths": "{count, plural, =1{1 mes} other{{count} meses}}",
+  "@lendTermMonths": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "lendTermYearsAbbrev": "~{years} a",
+  "@lendTermYearsAbbrev": {
+    "placeholders": {
+      "years": {
+        "type": "String"
+      }
+    }
+  },
+  "lendSaveChanges": "Guardar cambios",
+  "lendDisbursementLinked": "Vinculado a una transacción bancaria",
+  "lendWhichTxFunded": "¿Qué transacción financió este préstamo?",
+  "lendLinkATransaction": "Vincular una transacción",
+  "lendNoneRecordedYet": "Aún no hay registros.",
+  "lendSuggestedRepayments": "Pagos sugeridos",
+  "lendRecordAPayment": "Registrar un pago",
+  "lendConfirm": "Confirmar",
+  "lendExportPrintablePlan": "Plan imprimible (PDF)",
+  "lendExportDownloadCsv": "Descargar CSV (Google Sheets / Excel)",
+  "lendActionEdit": "Editar",
+  "lendActionAgreement": "Contrato",
+  "lendActionPayOffInFull": "Liquidar por completo",
+  "lendActionMarkDefaulted": "Marcar en mora",
+  "lendActionWriteOff": "Dar de baja",
+  "lendActionReactivate": "Reactivar",
+  "lendPayoffConfirmTitle": "¿Liquidar por completo?",
+  "lendPayoffConfirmButton": "Liquidar",
+  "lendDeleteLoan": "Eliminar préstamo",
+  "lendDeleteLoanTitle": "¿Eliminar préstamo?",
+  "lendTooltipClearDate": "Borrar fecha",
+  "lendTooltipUnlink": "Desvincular",
+  "lendTooltipExportPaymentPlan": "Exportar plan de pagos",
+  "lendToastEnterBorrowerName": "Ingresa el nombre del prestatario",
+  "lendToastEnterValidAmount": "Ingresa un monto válido",
+  "lendToastFailedToAddLoan": "No se pudo agregar el préstamo",
+  "lendToastCouldntSaveChanges": "No se pudieron guardar los cambios",
+  "lendToastScheduleGenerated": "Calendario generado",
+  "lendToastLoanUpdated": "Préstamo actualizado",
+  "lendToastCouldntUpdateStatus": "No se pudo actualizar el estado",
+  "lendToastLoanPaidOff": "Préstamo liquidado",
+  "lendToastCouldntLinkTx": "No se pudo vincular esa transacción",
+  "lendToastCouldntRecordRepayment": "No se pudo registrar ese pago",
+  "lendToastCouldntUnlink": "No se pudo desvincular",
+  "lendToastCouldntDeleteLoan": "No se pudo eliminar el préstamo",
+  "lendToastRecordCashPayment": "Registrar pago en efectivo",
+  "lendToastCouldntRecordCashPayment": "No se pudo registrar el pago en efectivo",
+  "lendSectionBorrowerAmount": "Prestatario y monto",
+  "lendSectionHowLoanWorks": "Cómo funciona el préstamo",
+  "lendSectionExpectedRepayment": "Pago esperado",
+  "lendSectionNotes": "Notas",
+  "lendSectionInterestTerms": "Condiciones de interés",
+  "lendSectionDisbursement": "Desembolso",
+  "lendSectionRepayments": "Pagos",
+  "lendSectionPaymentSchedule": "Calendario de pagos",
+  "lendStyleNoInterestDesc": "Pagan exactamente lo que pidieron prestado.",
+  "lendStyleStandardLabel": "Préstamo estándar",
+  "lendStyleStandardDesc": "Pagos iguales a lo largo del tiempo; cada uno cubre interés más un poco de capital.",
+  "lendStyleFlatLabel": "Interés fijo",
+  "lendStyleFlatDesc": "El interés se calcula una vez sobre el monto total y se reparte por igual entre los pagos.",
+  "lendStyleInterestOnlyLabel": "Solo interés + pago final",
+  "lendStyleInterestOnlyDesc": "Pagan solo el interés cada período y luego el monto completo al final.",
+  "lendStylePayAtEndLabel": "Pagar todo al final",
+  "lendStylePayAtEndDesc": "No se debe nada hasta el final; el interés se acumula hasta entonces.",
+  "lendPreviewSinglePayment": "Pago único",
+  "lendPreviewPayment": "Pago",
+  "lendPreviewPerPaymentInterest": "{amount}{cadence} de interés  ·  {count, plural, =1{1 pago} other{{count} pagos}}",
+  "@lendPreviewPerPaymentInterest": {
+    "placeholders": {
+      "amount": { "type": "String" },
+      "cadence": { "type": "String" },
+      "count": { "type": "int" }
+    }
+  },
+  "lendPreviewPerPaymentCount": "{amount}{cadence}  ·  {count, plural, =1{1 pago} other{{count} pagos}}",
+  "@lendPreviewPerPaymentCount": {
+    "placeholders": {
+      "amount": { "type": "String" },
+      "cadence": { "type": "String" },
+      "count": { "type": "int" }
+    }
+  },
+  "lendPreviewPrincipalAtMaturity": "Capital al vencimiento",
+  "lendPreviewDueWithFinalPayment": "{amount}  ·  con el pago final",
+  "@lendPreviewDueWithFinalPayment": {
+    "placeholders": {
+      "amount": { "type": "String" }
+    }
+  },
+  "lendPreviewEnterPaymentSolve": "Ingresa un pago para ver cuánto tarda",
+  "lendToastEnterPaymentCompute": "Ingresa un pago para calcular el plazo",
+  "lendEditRatePerPeriod": "{period, select, monthly{Tasa % por mes} other{Tasa % por año}}",
+  "@lendEditRatePerPeriod": {
+    "placeholders": {
+      "period": { "type": "String" }
+    }
+  },
+  "lendTermsSummaryTermMonths": "{count, plural, =1{plazo de 1 mes} other{plazo de {count} meses}}",
+  "@lendTermsSummaryTermMonths": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "lendTermsSummaryMonthlyPayments": "pagos mensuales",
+  "lendTermsSummaryWeeklyPayments": "pagos semanales",
+  "lendTermsSummaryLumpSumPayment": "pago único",
+  "lendTermsSummaryFixed": "El plazo y el calendario ({parts}) son fijos — elimina y vuelve a agregar para cambiarlos.",
+  "@lendTermsSummaryFixed": {
+    "placeholders": {
+      "parts": { "type": "String" }
+    }
+  },
+  "lendNoMatchingOutflow": "No se encontró ninguna salida cercana a la fecha del préstamo — elige una manualmente abajo.",
+  "lendScheduleGenerate": "Generar",
+  "lendScheduleRegenerate": "Regenerar",
+  "lendScheduleEmptyHasTerms": "Aún no hay calendario. Genera uno para ver el plan de amortización (capital + interés por cuota).",
+  "lendScheduleEmptyNoTerms": "Este préstamo no tiene plazo ni frecuencia de pago, así que no hay calendario fijo — registra los pagos a medida que lleguen.",
+  "lendPayBackByWhen": "Pagar antes del {date} · {when}",
+  "@lendPayBackByWhen": {
+    "placeholders": {
+      "date": { "type": "String" },
+      "when": { "type": "String" }
+    }
+  },
+  "lendToastUnreconcileFirst": "Primero anula la conciliación de los pagos para regenerar",
+  "lendToastCouldntGenerateSchedule": "No se pudo generar el calendario",
+  "lendPayoffConfirmBody": "Marca el préstamo como liquidado y borra cualquier cuota programada pendiente. Esto no crea un pago — vincula la transacción final real desde la lista de Pagos para que los ingresos por intereses sigan siendo exactos.",
+  "lendToastLoanNoLongerActive": "El préstamo ya no está activo",
+  "lendToastCouldntPayOff": "No se pudo liquidar el préstamo",
+  "lendDeleteLoanBody": "Esto elimina el préstamo y sus registros de pago. Las transacciones bancarias en sí no se eliminan.",
+  "lendSheetRecordPayment": "Registrar un pago",
+  "lendSheetLinkDisbursement": "Vincular el desembolso",
+  "lendSearchInflows": "Buscar entradas (dinero recibido)",
+  "lendSearchOutflows": "Buscar salidas (dinero enviado)",
+  "lendNoIncomingTx": "No se encontraron transacciones entrantes. Prueba la pestaña de Efectivo para registrar un pago fuera del banco.",
+  "lendNoOutgoingTx": "No se encontraron transacciones salientes.",
+  "lendCashFormHint": "Registra un pago que no pasó por una cuenta bancaria vinculada (p. ej. efectivo). Reduce el saldo pendiente pero no está ligado a una transacción.",
+  "lendToastTxAlreadyLinked": "Esa transacción ya está vinculada",
+  "lendToastCouldntRecordThat": "No se pudo registrar eso",
   "lendLinkBankTx": "Vincular transacción bancaria",
   "@lendLinkBankTx": {
     "description": "Action on an off-bank (cash-recorded) repayment to attach the real bank inflow once the statement is imported."

@@ -1037,12 +1037,12 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Add loan',
+                Text(AppLocalizations.of(context).lendingAddLoan,
                     style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                         color: context.textPrimary)),
-                Text('Record money you lent and track repayment',
+                Text(AppLocalizations.of(context).lendAddLoanSubtitle,
                     style: TextStyle(fontSize: 12, color: context.textMuted)),
               ],
             ),
@@ -1061,7 +1061,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _section('Borrower & amount', [
+                _section(
+                    AppLocalizations.of(context).lendSectionBorrowerAmount, [
                   Autocomplete<String>(
                     initialValue:
                         TextEditingValue(text: widget.initialBorrowerName ?? ''),
@@ -1075,7 +1076,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                       controller: ctrl,
                       focusNode: focus,
                       onChanged: (v) => _borrowerText = v,
-                      decoration: _decoration('Borrower name',
+                      decoration: _decoration(
+                          AppLocalizations.of(context).lendFieldBorrowerName,
                           hint: 'e.g. Jose Ramirez',
                           icon: Icons.person_outline),
                     ),
@@ -1086,7 +1088,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     onChanged: (_) => setState(() {}),
-                    decoration: _decoration('Amount lent',
+                    decoration: _decoration(
+                        AppLocalizations.of(context).lendFieldAmountLent,
                         prefixText: '$_sym ',
                         icon: Icons.payments_outlined),
                   ),
@@ -1096,7 +1099,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                     DropdownButtonFormField<String>(
                       initialValue: _currency,
                       isExpanded: true,
-                      decoration: _decoration('Currency'),
+                      decoration: _decoration(
+                          AppLocalizations.of(context).lendFieldCurrency),
                       items: const [
                         DropdownMenuItem(value: 'USD', child: Text('USD')),
                         DropdownMenuItem(value: 'MXN', child: Text('MXN')),
@@ -1108,7 +1112,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                       onTap: _pickDate,
                       borderRadius: BorderRadius.circular(10),
                       child: InputDecorator(
-                        decoration: _decoration('Lent on',
+                        decoration: _decoration(
+                            AppLocalizations.of(context).lendFieldLentOn,
                             icon: Icons.event_outlined),
                         child: Text(
                           DateFormat('MMM d, y').format(_originationDate),
@@ -1119,7 +1124,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                   ),
                 ]),
                 const SizedBox(height: 16),
-                _section('How the loan works', [
+                _section(
+                    AppLocalizations.of(context).lendSectionHowLoanWorks, [
                   // Plain-language loan styles replace the cryptic
                   // interest-type dropdown — each says how its plan works.
                   _loanStyleChooser(),
@@ -1134,7 +1140,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
                         onChanged: (_) => setState(() {}),
-                        decoration: _decoration('Interest rate',
+                        decoration: _decoration(
+                            AppLocalizations.of(context).lendFieldInterestRate,
                             hint: 'e.g. 5',
                             icon: Icons.percent,
                             suffixText: _ratePeriod == 'monthly'
@@ -1148,15 +1155,18 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                   ],
                 ]),
                 const SizedBox(height: 16),
-                _section('Expected repayment', [
+                _section(
+                    AppLocalizations.of(context).lendSectionExpectedRepayment,
+                    [
                   _expectedDateField(),
                 ]),
                 const SizedBox(height: 16),
-                _section('Notes', [
+                _section(AppLocalizations.of(context).lendSectionNotes, [
                   TextField(
                     controller: _notesCtrl,
                     maxLines: 2,
-                    decoration: _decoration('Optional',
+                    decoration: _decoration(
+                        AppLocalizations.of(context).lendFieldOptional,
                         hint: 'e.g. for the car deposit',
                         icon: Icons.notes_outlined),
                   ),
@@ -1265,42 +1275,32 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   }
 
   /// Plain-language loan styles, each explaining how its plan works —
-  /// replaces the cryptic interest-type dropdown.
-  static const List<(String, String, String)> _loanStyles = [
-    ('none', 'No interest', 'They pay back exactly what they borrowed.'),
-    (
-      'amortized',
-      'Standard loan',
-      'Equal payments over time; each covers interest plus a bit of principal.'
-    ),
-    (
-      'simple',
-      'Flat interest',
-      'Interest figured once on the full amount, split evenly across payments.'
-    ),
-    (
-      'interest_only',
-      'Interest-only + balloon',
-      'They pay just interest each period, then the whole amount at the end.'
-    ),
-    (
-      'compound',
-      'Pay all at the end',
-      "Nothing's due until the end; interest builds up until then."
-    ),
-  ];
+  /// replaces the cryptic interest-type dropdown. Built from l10n so the
+  /// labels/descriptions localize.
+  List<(String, String, String)> _loanStyles(AppLocalizations l10n) => [
+        ('none', l10n.lendInterestTypeNone, l10n.lendStyleNoInterestDesc),
+        ('amortized', l10n.lendStyleStandardLabel, l10n.lendStyleStandardDesc),
+        ('simple', l10n.lendStyleFlatLabel, l10n.lendStyleFlatDesc),
+        (
+          'interest_only',
+          l10n.lendStyleInterestOnlyLabel,
+          l10n.lendStyleInterestOnlyDesc
+        ),
+        ('compound', l10n.lendStylePayAtEndLabel, l10n.lendStylePayAtEndDesc),
+      ];
 
   Widget _loanStyleChooser() {
     final l10n = AppLocalizations.of(context);
+    final styles = _loanStyles(l10n);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (var i = 0; i < _loanStyles.length; i++) ...[
+        for (var i = 0; i < styles.length; i++) ...[
           if (i > 0) const SizedBox(height: 8),
           _loanStyleTile(
-            value: _loanStyles[i].$1,
-            label: _loanStyles[i].$2,
-            desc: _loanStyles[i].$3,
+            value: styles[i].$1,
+            label: styles[i].$2,
+            desc: styles[i].$3,
           ),
         ],
         const SizedBox(height: 8),
@@ -1378,7 +1378,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
       controller: _termCtrl,
       keyboardType: TextInputType.number,
       onChanged: (_) => setState(() {}),
-      decoration: _decoration('Term (months)',
+      decoration: _decoration(
+          AppLocalizations.of(context).lendFieldTermMonths,
           hint: 'e.g. 12', icon: Icons.schedule_outlined),
     );
     if (!_supportsSolve) return termField;
@@ -1388,9 +1389,15 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SegmentedButton<bool>(
-          segments: const [
-            ButtonSegment(value: false, label: Text('Set the term')),
-            ButtonSegment(value: true, label: Text('Set the payment')),
+          segments: [
+            ButtonSegment(
+                value: false,
+                label:
+                    Text(AppLocalizations.of(context).lendSegSetTheTerm)),
+            ButtonSegment(
+                value: true,
+                label:
+                    Text(AppLocalizations.of(context).lendSegSetThePayment)),
           ],
           selected: {_setByPayment},
           showSelectedIcon: false,
@@ -1408,7 +1415,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
             keyboardType:
                 const TextInputType.numberWithOptions(decimal: true),
             onChanged: (_) => setState(() {}),
-            decoration: _decoration('Most they can pay',
+            decoration: _decoration(
+                AppLocalizations.of(context).lendFieldMostTheyCanPay,
                 prefixText: '$_sym ',
                 suffixText: '/ $cadence',
                 icon: Icons.payments_outlined),
@@ -1428,7 +1436,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
         DropdownButtonFormField<String>(
           initialValue: _ratePeriod,
           isExpanded: true,
-          decoration: _decoration('Rate is per'),
+          decoration:
+              _decoration(AppLocalizations.of(context).lendFieldRateIsPer),
           items: [
             DropdownMenuItem(
                 value: 'annual',
@@ -1442,7 +1451,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
       DropdownButtonFormField<String>(
         initialValue: _paymentFrequency,
         isExpanded: true,
-        decoration: _decoration('Payment frequency'),
+        decoration: _decoration(
+            AppLocalizations.of(context).lendFieldPaymentFrequency),
         items: [
           DropdownMenuItem(
               value: 'monthly',
@@ -1475,7 +1485,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                 Icon(_showAdvanced ? Icons.expand_less : Icons.expand_more,
                     size: 18, color: context.textMuted),
                 const SizedBox(width: 6),
-                Text('Advanced options',
+                Text(AppLocalizations.of(context).lendAdvancedOptions,
                     style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -1518,13 +1528,13 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
             children: [
               Icon(Icons.insights_outlined, size: 16, color: accent),
               const SizedBox(width: 6),
-              Text('Loan preview',
+              Text(AppLocalizations.of(context).lendPreviewTitle,
                   style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                       color: accent)),
               const Spacer(),
-              Text('estimate',
+              Text(AppLocalizations.of(context).lendPreviewEstimate,
                   style: TextStyle(fontSize: 10, color: context.textSubtle)),
             ],
           ),
@@ -1540,50 +1550,67 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     final proj = _projection();
     if (proj == null) {
       return [
-        Text('Enter an amount to see the projection',
+        Text(AppLocalizations.of(context).lendPreviewEnterAmount,
             style: TextStyle(fontSize: 13, color: context.textSubtle)),
       ];
     }
+    final l10n = AppLocalizations.of(context);
     final cadenceLabel = switch (proj.cadence) {
       'monthly' => '/mo',
       'weekly' => '/wk',
       _ => '',
     };
+    // Recurring-payment value: base "amount/cadence", optionally labelled as
+    // interest (interest-only loans) and suffixed with the payment count.
+    String perPaymentValue() {
+      final base = '${_fmtMoney(proj.perPayment!)}$cadenceLabel';
+      if (proj.periods == null) return base;
+      return proj.balloonPayment != null
+          ? l10n.lendPreviewPerPaymentInterest(
+              _fmtMoney(proj.perPayment!), cadenceLabel, proj.periods!)
+          : l10n.lendPreviewPerPaymentCount(
+              _fmtMoney(proj.perPayment!), cadenceLabel, proj.periods!);
+    }
+
     return [
-        _previewRow('Total to repay', _fmtMoney(proj.totalRepayment),
+        _previewRow(l10n.lendPreviewTotalToRepay,
+            _fmtMoney(proj.totalRepayment),
             bold: true),
         const SizedBox(height: 6),
         if (proj.totalInterest > 0.005)
-          _previewRow('Projected interest', _fmtMoney(proj.totalInterest),
+          _previewRow(
+              l10n.lendPreviewProjectedInterest,
+              _fmtMoney(proj.totalInterest),
               color: accent)
         else
-          Text('No interest on this loan',
+          Text(l10n.lendPreviewNoInterest,
               style: TextStyle(fontSize: 12, color: context.textMuted)),
         if (proj.perPayment != null) ...[
           const SizedBox(height: 6),
           _previewRow(
-            proj.cadence == 'balloon' ? 'Single payment' : 'Payment',
+            proj.cadence == 'balloon'
+                ? l10n.lendPreviewSinglePayment
+                : l10n.lendPreviewPayment,
             proj.cadence == 'balloon'
                 ? _fmtMoney(proj.perPayment!)
                 // Interest-only loans pay interest periodically, so label the
                 // recurring figure as such — otherwise "$125/mo · 12 payments"
                 // reads as the whole obligation when it's just the interest.
-                : '${_fmtMoney(proj.perPayment!)}$cadenceLabel'
-                    '${proj.balloonPayment != null ? ' interest' : ''}'
-                    '${proj.periods != null ? '  ·  ${proj.periods} payments' : ''}',
+                : perPaymentValue(),
           ),
           // Interest-only: the principal balloons on the final installment,
           // so the borrower's last payment is the interest PLUS this amount.
           if (proj.balloonPayment != null && proj.balloonPayment! > 0.005) ...[
             const SizedBox(height: 6),
             _previewRow(
-              'Principal at maturity',
-              '${_fmtMoney(proj.balloonPayment!)}  ·  due with final payment',
+              l10n.lendPreviewPrincipalAtMaturity,
+              l10n.lendPreviewDueWithFinalPayment(
+                  _fmtMoney(proj.balloonPayment!)),
             ),
           ],
         ] else ...[
           const SizedBox(height: 6),
-          Text('Open-ended — repay anytime, no fixed schedule',
+          Text(l10n.lendPreviewOpenEnded,
               style: TextStyle(fontSize: 12, color: context.textSubtle)),
         ],
     ];
@@ -1603,33 +1630,40 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     final cadence = _paymentFrequency == 'weekly' ? 'wk' : 'mo';
     if (!res.ok) {
       return [
-        Text(res.reason ?? 'Enter a payment to see how long it takes',
+        Text(
+            res.reason ??
+                AppLocalizations.of(context).lendPreviewEnterPaymentSolve,
             style: TextStyle(fontSize: 13, color: context.textSubtle)),
         if (res.minimumPayment != null) ...[
           const SizedBox(height: 6),
-          _previewRow('Minimum payment',
+          _previewRow(AppLocalizations.of(context).lendPreviewMinimumPayment,
               '${_fmtMoney(res.minimumPayment!)}/$cadence',
               color: accent),
         ],
       ];
     }
+    final l10n = AppLocalizations.of(context);
     final months = res.termMonths!;
     final years = months / 12.0;
     final termLabel = months < 12
-        ? '$months ${months == 1 ? 'month' : 'months'}'
-        : '~${years.toStringAsFixed(months % 12 == 0 ? 0 : 1)} yr';
+        ? l10n.lendTermMonths(months)
+        : l10n.lendTermYearsAbbrev(
+            years.toStringAsFixed(months % 12 == 0 ? 0 : 1));
     return [
-      _previewRow('Paid off in', '${res.periods} payments  ·  $termLabel',
+      _previewRow(l10n.lendPreviewPaidOffIn,
+          l10n.lendPreviewPaidOffValue(res.periods!, termLabel),
           bold: true),
       const SizedBox(height: 6),
       if (res.totalInterest! > 0.005)
-        _previewRow('Projected interest', _fmtMoney(res.totalInterest!),
+        _previewRow(l10n.lendPreviewProjectedInterest,
+            _fmtMoney(res.totalInterest!),
             color: accent)
       else
-        Text('No interest on this loan',
+        Text(l10n.lendPreviewNoInterest,
             style: TextStyle(fontSize: 12, color: context.textMuted)),
       const SizedBox(height: 6),
-      _previewRow('Total to repay', _fmtMoney(res.totalRepayment!)),
+      _previewRow(
+          l10n.lendPreviewTotalToRepay, _fmtMoney(res.totalRepayment!)),
     ];
   }
 
@@ -2097,7 +2131,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
             onTap: _pickExpectedDate,
             borderRadius: BorderRadius.circular(10),
             child: InputDecorator(
-              decoration: _decoration('Pay back by',
+              decoration: _decoration(
+                  AppLocalizations.of(context).lendFieldPayBackBy,
                   icon: Icons.event_available_outlined),
               child: Text(
                 _expectedRepaymentDate == null
@@ -2115,7 +2150,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
         if (_expectedRepaymentDate != null)
           IconButton(
             icon: const Icon(Icons.clear, size: 18),
-            tooltip: 'Clear date',
+            tooltip: AppLocalizations.of(context).lendTooltipClearDate,
             onPressed: () => setState(() => _expectedRepaymentDate = null),
           ),
       ],
@@ -2130,11 +2165,11 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     final borrower = _borrowerText.trim();
     final principal = double.tryParse(_principalCtrl.text.trim());
     if (borrower.isEmpty) {
-      _toast('Enter a borrower name');
+      _toast(AppLocalizations.of(context).lendToastEnterBorrowerName);
       return;
     }
     if (principal == null || principal <= 0) {
-      _toast('Enter a valid amount');
+      _toast(AppLocalizations.of(context).lendToastEnterValidAmount);
       return;
     }
     setState(() => _submitting = true);
@@ -2159,7 +2194,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
         );
         if (!res.ok) {
           setState(() => _submitting = false);
-          _toast(res.reason ?? 'Enter a payment to compute the term');
+          _toast(res.reason ??
+              AppLocalizations.of(context).lendToastEnterPaymentCompute);
           return;
         }
         term = res.termMonths;
@@ -2193,7 +2229,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _submitting = false);
-      _toast('Failed to add loan');
+      _toast(AppLocalizations.of(context).lendToastFailedToAddLoan);
     }
   }
 
@@ -2205,11 +2241,11 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     final borrower = _borrowerText.trim();
     final principal = double.tryParse(_principalCtrl.text.trim());
     if (borrower.isEmpty) {
-      _toast('Enter a borrower name');
+      _toast(AppLocalizations.of(context).lendToastEnterBorrowerName);
       return;
     }
     if (principal == null || principal <= 0) {
-      _toast('Enter a valid amount');
+      _toast(AppLocalizations.of(context).lendToastEnterValidAmount);
       return;
     }
     final rows = _customScheduleRows();
@@ -2367,7 +2403,8 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
             onTap: _pickExpectedDate,
             borderRadius: BorderRadius.circular(10),
             child: InputDecorator(
-              decoration: _decoration('Pay back by',
+              decoration: _decoration(
+                  AppLocalizations.of(context).lendFieldPayBackBy,
                   icon: Icons.event_available_outlined),
               child: Text(
                 _expectedRepaymentDate == null
@@ -2385,7 +2422,7 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
         if (_expectedRepaymentDate != null)
           IconButton(
             icon: const Icon(Icons.clear, size: 18),
-            tooltip: 'Clear date',
+            tooltip: AppLocalizations.of(context).lendTooltipClearDate,
             onPressed: () => setState(() => _expectedRepaymentDate = null),
           ),
       ],
@@ -2440,12 +2477,12 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Edit loan',
+                Text(AppLocalizations.of(context).lendEditLoanTitle,
                     style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                         color: context.textPrimary)),
-                Text('Correct the borrower, amount, or interest terms',
+                Text(AppLocalizations.of(context).lendEditLoanSubtitle,
                     style: TextStyle(fontSize: 12, color: context.textMuted)),
               ],
             ),
@@ -2464,10 +2501,12 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _section('Borrower & amount', [
+                _section(
+                    AppLocalizations.of(context).lendSectionBorrowerAmount, [
                   TextField(
                     controller: _borrowerCtrl,
-                    decoration: _decoration('Borrower name',
+                    decoration: _decoration(
+                        AppLocalizations.of(context).lendFieldBorrowerName,
                         icon: Icons.person_outline),
                   ),
                   const SizedBox(height: 12),
@@ -2475,17 +2514,20 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
                     controller: _principalCtrl,
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
-                    decoration: _decoration('Amount lent',
+                    decoration: _decoration(
+                        AppLocalizations.of(context).lendFieldAmountLent,
                         prefixText: '$_sym ',
                         icon: Icons.payments_outlined),
                   ),
                 ]),
                 const SizedBox(height: 16),
-                _section('Interest terms', [
+                _section(
+                    AppLocalizations.of(context).lendSectionInterestTerms, [
                   DropdownButtonFormField<String>(
                     initialValue: _interestType,
                     isExpanded: true,
-                    decoration: _decoration('Interest type'),
+                    decoration: _decoration(
+                        AppLocalizations.of(context).lendFieldInterestType),
                     items: [
                       DropdownMenuItem(
                           value: 'none',
@@ -2518,7 +2560,8 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
                       keyboardType: const TextInputType.numberWithOptions(
                           decimal: true),
                       decoration: _decoration(
-                          'Rate % per ${_ratePeriod == 'monthly' ? 'month' : 'year'}',
+                          AppLocalizations.of(context)
+                              .lendEditRatePerPeriod(_ratePeriod),
                           hint: 'e.g. 5',
                           icon: Icons.percent),
                     ),
@@ -2533,15 +2576,18 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
                   ],
                 ]),
                 const SizedBox(height: 16),
-                _section('Expected repayment', [
+                _section(
+                    AppLocalizations.of(context).lendSectionExpectedRepayment,
+                    [
                   _expectedDateField(),
                 ]),
                 const SizedBox(height: 16),
-                _section('Notes', [
+                _section(AppLocalizations.of(context).lendSectionNotes, [
                   TextField(
                     controller: _notesCtrl,
                     maxLines: 2,
-                    decoration: _decoration('Optional',
+                    decoration: _decoration(
+                        AppLocalizations.of(context).lendFieldOptional,
                         hint: 'e.g. for the car deposit',
                         icon: Icons.notes_outlined),
                   ),
@@ -2554,7 +2600,7 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
       actions: [
         TextButton(
           onPressed: _submitting ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(AppLocalizations.of(context).actionCancel),
         ),
         FilledButton.icon(
           onPressed: _submitting ? null : _submit,
@@ -2564,7 +2610,7 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.check, size: 18),
-          label: const Text('Save changes'),
+          label: Text(AppLocalizations.of(context).lendSaveChanges),
         ),
       ],
     );
@@ -2577,18 +2623,18 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
     final term = (widget.loan['term_months'] as num?)?.toInt();
     final freq = widget.loan['payment_frequency']?.toString();
     if (term == null && (freq == null || freq.isEmpty)) return null;
+    final l10n = AppLocalizations.of(context);
     final parts = <String>[];
-    if (term != null) parts.add('$term-month term');
+    if (term != null) parts.add(l10n.lendTermsSummaryTermMonths(term));
     if (freq != null && freq.isNotEmpty) {
       parts.add(switch (freq) {
-        'monthly' => 'monthly payments',
-        'weekly' => 'weekly payments',
-        'lump_sum' => 'single lump-sum payment',
+        'monthly' => l10n.lendTermsSummaryMonthlyPayments,
+        'weekly' => l10n.lendTermsSummaryWeeklyPayments,
+        'lump_sum' => l10n.lendTermsSummaryLumpSumPayment,
         _ => '$freq payments',
       });
     }
-    return 'Term & schedule (${parts.join(' · ')}) are fixed — '
-        'delete and re-add to change them.';
+    return l10n.lendTermsSummaryFixed(parts.join(' · '));
   }
 
   /// A titled group of fields in a soft card (mirrors _AddLoanDialog).
@@ -2654,11 +2700,11 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
     final borrower = _borrowerCtrl.text.trim();
     final principal = double.tryParse(_principalCtrl.text.trim());
     if (borrower.isEmpty) {
-      _toast('Enter a borrower name');
+      _toast(AppLocalizations.of(context).lendToastEnterBorrowerName);
       return;
     }
     if (principal == null || principal <= 0) {
-      _toast('Enter a valid amount');
+      _toast(AppLocalizations.of(context).lendToastEnterValidAmount);
       return;
     }
     final interestBearing = _interestType != 'none';
@@ -2703,7 +2749,7 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _submitting = false);
-      _toast('Couldn\'t save changes');
+      _toast(AppLocalizations.of(context).lendToastCouldntSaveChanges);
     }
   }
 
@@ -2869,25 +2915,24 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('Disbursement'),
+        _sectionTitle(AppLocalizations.of(context).lendSectionDisbursement),
         if (_hasDisbursement)
           Row(
             children: [
               Icon(Icons.check_circle, size: 18, color: context.positive),
               const SizedBox(width: 8),
-              Text('Linked to a bank transaction',
+              Text(AppLocalizations.of(context).lendDisbursementLinked,
                   style: TextStyle(fontSize: 13, color: context.textMuted)),
             ],
           )
         else ...[
           if (_disbSuggestions.isEmpty)
             Text(
-              'No matching outflow found near the loan date — pick one '
-              'manually below.',
+              AppLocalizations.of(context).lendNoMatchingOutflow,
               style: TextStyle(fontSize: 12, color: context.textSubtle),
             )
           else ...[
-            Text('Which transaction funded this loan?',
+            Text(AppLocalizations.of(context).lendWhichTxFunded,
                 style: TextStyle(fontSize: 12, color: context.textSubtle)),
             const SizedBox(height: 8),
             ..._disbSuggestions.map((s) => _suggestionTile(
@@ -2901,8 +2946,8 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
             child: OutlinedButton.icon(
               onPressed: _openLinkDisbursement,
               icon: const Icon(Icons.link, size: 16),
-              label: const Text('Link a transaction',
-                  style: TextStyle(fontSize: 12)),
+              label: Text(AppLocalizations.of(context).lendLinkATransaction,
+                  style: const TextStyle(fontSize: 12)),
             ),
           ),
         ],
@@ -3003,9 +3048,9 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('Repayments'),
+        _sectionTitle(AppLocalizations.of(context).lendSectionRepayments),
         if (reconciled.isEmpty)
-          Text('None recorded yet.',
+          Text(AppLocalizations.of(context).lendNoneRecordedYet,
               style: TextStyle(fontSize: 12, color: context.textSubtle))
         else
           ...reconciled.map((p) {
@@ -3037,7 +3082,7 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
                     ),
                   IconButton(
                     icon: const Icon(Icons.link_off, size: 16),
-                    tooltip: 'Unlink',
+                    tooltip: AppLocalizations.of(context).lendTooltipUnlink,
                     onPressed: () => _unreconcile(m['id'].toString()),
                   ),
                 ],
@@ -3046,7 +3091,7 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
           }),
         const SizedBox(height: 12),
         if (_repaySuggestions.isNotEmpty) ...[
-          Text('Suggested repayments',
+          Text(AppLocalizations.of(context).lendSuggestedRepayments,
               style: TextStyle(fontSize: 12, color: context.textSubtle)),
           const SizedBox(height: 8),
           ..._repaySuggestions.map((s) => _suggestionTile(
@@ -3063,8 +3108,8 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
           child: OutlinedButton.icon(
             onPressed: _openRecordPayment,
             icon: const Icon(Icons.add, size: 16),
-            label: const Text('Record a payment',
-                style: TextStyle(fontSize: 12)),
+            label: Text(AppLocalizations.of(context).lendRecordAPayment,
+                style: const TextStyle(fontSize: 12)),
           ),
         ),
       ],
@@ -3148,7 +3193,9 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
               ],
             ),
           ),
-          TextButton(onPressed: onConfirm, child: const Text('Confirm')),
+          TextButton(
+              onPressed: onConfirm,
+              child: Text(AppLocalizations.of(context).lendConfirm)),
         ],
       ),
     );
@@ -3197,13 +3244,16 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
       children: [
         Row(
           children: [
-            Expanded(child: _sectionTitle('Payment schedule')),
+            Expanded(
+                child: _sectionTitle(
+                    AppLocalizations.of(context).lendSectionPaymentSchedule)),
             // Hand the borrower their plan: a printable one-pager, a CSV
             // that opens in Google Sheets / Excel, or a one-click "copy the
             // rows and open a fresh sheet".
             if (canExport)
               PopupMenuButton<String>(
-                tooltip: 'Export payment plan',
+                tooltip:
+                    AppLocalizations.of(context).lendTooltipExportPaymentPlan,
                 icon: const Icon(Icons.ios_share, size: 18),
                 onSelected: (which) {
                   if (which == 'copySheets') {
@@ -3216,13 +3266,13 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
                   launchUrl(Uri.parse(url), webOnlyWindowName: '_blank');
                 },
                 itemBuilder: (_) => [
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'plan',
-                    child: Text('Printable plan (PDF)'),
+                    child: Text(l10n.lendExportPrintablePlan),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'csv',
-                    child: Text('Download CSV (Google Sheets / Excel)'),
+                    child: Text(l10n.lendExportDownloadCsv),
                   ),
                   PopupMenuItem(
                     value: 'copySheets',
@@ -3235,7 +3285,10 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
                 onPressed: _generateSchedule,
                 icon: Icon(scheduled.isEmpty ? Icons.add_chart : Icons.refresh,
                     size: 16),
-                label: Text(scheduled.isEmpty ? 'Generate' : 'Regenerate',
+                label: Text(
+                    scheduled.isEmpty
+                        ? l10n.lendScheduleGenerate
+                        : l10n.lendScheduleRegenerate,
                     style: const TextStyle(fontSize: 12)),
               ),
           ],
@@ -3243,10 +3296,8 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
         if (scheduled.isEmpty)
           Text(
             hasTerms
-                ? 'No schedule yet. Generate one to see the amortization '
-                    'plan (principal + interest per installment).'
-                : 'This loan has no term / payment frequency, so there\'s '
-                    'no fixed schedule — record repayments as they come in.',
+                ? l10n.lendScheduleEmptyHasTerms
+                : l10n.lendScheduleEmptyNoTerms,
             style: TextStyle(fontSize: 12, color: context.textSubtle),
           )
         else ...[
@@ -3407,9 +3458,12 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
     final color = overdue
         ? context.negative
         : (days <= 7 ? context.warning : context.positive);
+    final l10n = AppLocalizations.of(context);
     final when = overdue
-        ? 'overdue by ${-days} day${days == -1 ? '' : 's'}'
-        : (days == 0 ? 'due today' : 'in $days day${days == 1 ? '' : 's'}');
+        ? l10n.lendingGlanceOverdueBy(-days)
+        : (days == 0
+            ? l10n.lendingGlanceDueToday
+            : l10n.lendingAgingDaysUntil(days));
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Row(
@@ -3418,7 +3472,8 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Pay back by ${DateFormat('MMM d, y').format(date)} · $when',
+              l10n.lendPayBackByWhen(
+                  DateFormat('MMM d, y').format(date), when),
               style: TextStyle(
                   fontSize: 12.5, color: color, fontWeight: FontWeight.w600),
             ),
@@ -3561,7 +3616,8 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
         OutlinedButton.icon(
           onPressed: _openEditLoan,
           icon: const Icon(Icons.edit_outlined, size: 16),
-          label: const Text('Edit', style: TextStyle(fontSize: 12)),
+          label: Text(AppLocalizations.of(context).lendActionEdit,
+              style: const TextStyle(fontSize: 12)),
         ),
         // Printable promissory-note / agreement (HTML → browser PDF).
         OutlinedButton.icon(
@@ -3569,7 +3625,8 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
               Uri.parse(widget.apiService.loanAgreementUrl(_loanId)),
               webOnlyWindowName: '_blank'),
           icon: const Icon(Icons.description_outlined, size: 16),
-          label: const Text('Agreement', style: TextStyle(fontSize: 12)),
+          label: Text(AppLocalizations.of(context).lendActionAgreement,
+              style: const TextStyle(fontSize: 12)),
         ),
         // Early/full payoff: close the loan + void remaining installments.
         // Only meaningful while the loan is still active.
@@ -3577,48 +3634,53 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
           OutlinedButton.icon(
             onPressed: _confirmPayoff,
             icon: Icon(Icons.task_alt, size: 16, color: context.positive),
-            label: Text('Pay off in full',
+            label: Text(AppLocalizations.of(context).lendActionPayOffInFull,
                 style: TextStyle(fontSize: 12, color: context.positive)),
           ),
         if (status != 'defaulted')
           OutlinedButton.icon(
             onPressed: () => _setStatus('defaulted'),
             icon: const Icon(Icons.warning_amber_outlined, size: 16),
-            label: const Text('Mark defaulted', style: TextStyle(fontSize: 12)),
+            label: Text(AppLocalizations.of(context).lendActionMarkDefaulted,
+                style: const TextStyle(fontSize: 12)),
           ),
         if (status != 'written_off')
           OutlinedButton.icon(
             onPressed: () => _setStatus('written_off'),
             icon: const Icon(Icons.money_off, size: 16),
-            label: const Text('Write off', style: TextStyle(fontSize: 12)),
+            label: Text(AppLocalizations.of(context).lendActionWriteOff,
+                style: const TextStyle(fontSize: 12)),
           ),
         if (status != 'active')
           OutlinedButton.icon(
             onPressed: () => _setStatus('active'),
             icon: const Icon(Icons.restart_alt, size: 16),
-            label: const Text('Reactivate', style: TextStyle(fontSize: 12)),
+            label: Text(AppLocalizations.of(context).lendActionReactivate,
+                style: const TextStyle(fontSize: 12)),
           ),
       ],
     );
   }
 
   Future<void> _generateSchedule() async {
+    final l10n = AppLocalizations.of(context);
     try {
       await widget.apiService.generateLoanSchedule(_loanId);
       await _load();
       widget.onMutated();
-      _toast('Schedule generated');
+      _toast(l10n.lendToastScheduleGenerated);
     } catch (e) {
       // Server messages (409 reconciled / 422 open-ended) come through
       // the exception body.
       final msg = e.toString();
       _toast(msg.contains('reconciled')
-          ? 'Unreconcile payments first to regenerate'
-          : 'Couldn\'t generate schedule');
+          ? l10n.lendToastUnreconcileFirst
+          : l10n.lendToastCouldntGenerateSchedule);
     }
   }
 
   Future<void> _openEditLoan() async {
+    final l10n = AppLocalizations.of(context);
     final saved = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (_) => _EditLoanDialog(
@@ -3634,10 +3696,11 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
     await _load();
     widget.onMutated();
     if (mounted) setState(() {});
-    _toast('Loan updated');
+    _toast(l10n.lendToastLoanUpdated);
   }
 
   Future<void> _setStatus(String status) async {
+    final l10n = AppLocalizations.of(context);
     try {
       await widget.apiService.updateLoan(_loanId, {'status': status});
       widget.loan['status'] = status;
@@ -3645,27 +3708,24 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
       widget.onMutated();
       if (mounted) setState(() {});
     } catch (e) {
-      _toast('Couldn\'t update status');
+      _toast(l10n.lendToastCouldntUpdateStatus);
     }
   }
 
   Future<void> _confirmPayoff() async {
+    final l10n = AppLocalizations.of(context);
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Pay off in full?'),
-        content: const Text(
-            'Marks the loan as paid off and clears any remaining scheduled '
-            'installments. This does not create a repayment — link the actual '
-            'final transaction from the Repayments list so interest income '
-            'stays accurate.'),
+        title: Text(l10n.lendPayoffConfirmTitle),
+        content: Text(l10n.lendPayoffConfirmBody),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
+              child: Text(AppLocalizations.of(context).actionCancel)),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Pay off'),
+            child: Text(AppLocalizations.of(context).lendPayoffConfirmButton),
           ),
         ],
       ),
@@ -3677,12 +3737,12 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
       await _load();
       widget.onMutated();
       if (mounted) setState(() {});
-      _toast('Loan paid off');
+      _toast(l10n.lendToastLoanPaidOff);
     } catch (e) {
       // 409 if the loan isn't active anymore (e.g. raced with another tab).
       _toast(e.toString().contains('not active')
-          ? 'Loan is no longer active'
-          : 'Couldn\'t pay off loan');
+          ? l10n.lendToastLoanNoLongerActive
+          : l10n.lendToastCouldntPayOff);
     }
   }
 
@@ -3692,13 +3752,14 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
       child: TextButton.icon(
         onPressed: _confirmDelete,
         icon: Icon(Icons.delete_outline, size: 18, color: context.negative),
-        label: Text('Delete loan',
+        label: Text(AppLocalizations.of(context).lendDeleteLoan,
             style: TextStyle(color: context.negative)),
       ),
     );
   }
 
   Future<void> _confirmDisbursement(Map<String, dynamic> s) async {
+    final l10n = AppLocalizations.of(context);
     try {
       await widget.apiService
           .linkDisbursement(_loanId, s['transaction_id'].toString());
@@ -3707,29 +3768,31 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
       await _load();
       widget.onMutated();
     } catch (e) {
-      _toast('Couldn\'t link that transaction');
+      _toast(l10n.lendToastCouldntLinkTx);
     }
   }
 
   Future<void> _confirmRepayment(Map<String, dynamic> s) async {
+    final l10n = AppLocalizations.of(context);
     try {
       await widget.apiService.recordRepayment(_loanId,
           transactionId: s['transaction_id'].toString());
       await _load();
       widget.onMutated();
     } catch (e) {
-      _toast('Couldn\'t record that repayment');
+      _toast(l10n.lendToastCouldntRecordRepayment);
     }
   }
 
   Future<void> _unreconcile(String paymentId) async {
+    final l10n = AppLocalizations.of(context);
     // unreconcile endpoint deletes the loan_payments row.
     try {
       await widget.apiService.deleteLoanPayment(paymentId);
       await _load();
       widget.onMutated();
     } catch (e) {
-      _toast('Couldn\'t unlink');
+      _toast(l10n.lendToastCouldntUnlink);
     }
   }
 
@@ -3795,21 +3858,20 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
   }
 
   Future<void> _confirmDelete() async {
+    final l10n = AppLocalizations.of(context);
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Delete loan?'),
-        content: const Text(
-            'This removes the loan and its repayment records. The bank '
-            'transactions themselves are not deleted.'),
+        title: Text(l10n.lendDeleteLoanTitle),
+        content: Text(l10n.lendDeleteLoanBody),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
+              child: Text(AppLocalizations.of(context).actionCancel)),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: context.negative),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+            child: Text(AppLocalizations.of(context).actionDelete),
           ),
         ],
       ),
@@ -3820,7 +3882,7 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {
-      _toast('Couldn\'t delete loan');
+      _toast(l10n.lendToastCouldntDeleteLoan);
     }
   }
 
@@ -3924,7 +3986,10 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final title = _isRepayment ? 'Record a payment' : 'Link the disbursement';
+    final l10n = AppLocalizations.of(context);
+    final title = _isRepayment
+        ? l10n.lendSheetRecordPayment
+        : l10n.lendSheetLinkDisbursement;
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.7,
@@ -3958,9 +4023,14 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: SegmentedButton<int>(
-                  segments: const [
-                    ButtonSegment(value: 0, label: Text('Bank transaction')),
-                    ButtonSegment(value: 1, label: Text('Cash')),
+                  segments: [
+                    ButtonSegment(
+                        value: 0,
+                        label: Text(
+                            AppLocalizations.of(context).lendSegBankTransaction)),
+                    ButtonSegment(
+                        value: 1,
+                        label: Text(AppLocalizations.of(context).lendSegCash)),
                   ],
                   selected: {_tab},
                   onSelectionChanged: (s) => setState(() => _tab = s.first),
@@ -3993,8 +4063,8 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
             decoration: InputDecoration(
               isDense: true,
               hintText: _isRepayment
-                  ? 'Search inflows (money received)'
-                  : 'Search outflows (money sent)',
+                  ? AppLocalizations.of(context).lendSearchInflows
+                  : AppLocalizations.of(context).lendSearchOutflows,
               prefixIcon: const Icon(Icons.search, size: 18),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
@@ -4009,9 +4079,8 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
                 padding: const EdgeInsets.all(24),
                 child: Text(
                   _isRepayment
-                      ? 'No incoming transactions found. Try the Cash tab '
-                          'to record an off-bank repayment.'
-                      : 'No outgoing transactions found.',
+                      ? AppLocalizations.of(context).lendNoIncomingTx
+                      : AppLocalizations.of(context).lendNoOutgoingTx,
                   textAlign: TextAlign.center,
                   style: TextStyle(color: context.textSubtle),
                 ),
@@ -4055,9 +4124,7 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
         Text(
-          'Record a repayment that didn\'t come through a linked bank '
-          'account (e.g. cash). It reduces the outstanding balance but '
-          'isn\'t tied to a transaction.',
+          AppLocalizations.of(context).lendCashFormHint,
           style: TextStyle(fontSize: 12, color: context.textSubtle),
         ),
         const SizedBox(height: 16),
@@ -4065,7 +4132,7 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
           controller: _cashAmountCtrl,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: InputDecoration(
-            labelText: 'Amount received',
+            labelText: AppLocalizations.of(context).lendFieldAmountReceived,
             prefixText: widget.currency == 'MXN' ? 'MXN ' : r'$ ',
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
           ),
@@ -4076,7 +4143,7 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
           borderRadius: BorderRadius.circular(10),
           child: InputDecorator(
             decoration: InputDecoration(
-              labelText: 'Received on',
+              labelText: AppLocalizations.of(context).lendFieldReceivedOn,
               border:
                   OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             ),
@@ -4092,7 +4159,7 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Record cash payment'),
+              : Text(AppLocalizations.of(context).lendToastRecordCashPayment),
         ),
       ],
     );
@@ -4109,6 +4176,7 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
   }
 
   Future<void> _submitTx(String txId) async {
+    final l10n = AppLocalizations.of(context);
     setState(() => _submitting = true);
     try {
       if (_isRepayment) {
@@ -4124,16 +4192,17 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
       setState(() => _submitting = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(e.toString().contains('already')
-              ? 'That transaction is already linked'
-              : 'Couldn\'t record that')));
+              ? l10n.lendToastTxAlreadyLinked
+              : l10n.lendToastCouldntRecordThat)));
     }
   }
 
   Future<void> _submitCash() async {
     final amount = double.tryParse(_cashAmountCtrl.text.trim());
     if (amount == null || amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Enter a valid amount')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              AppLocalizations.of(context).lendToastEnterValidAmount)));
       return;
     }
     setState(() => _submitting = true);
@@ -4146,8 +4215,9 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _submitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Couldn\'t record cash payment')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              AppLocalizations.of(context).lendToastCouldntRecordCashPayment)));
     }
   }
 }

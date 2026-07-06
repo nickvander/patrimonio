@@ -5385,6 +5385,455 @@ class AppLocalizationsEs extends AppLocalizations {
   String get lendInterestTypeCompound => 'Compuesto';
 
   @override
+  String get lendAddLoanSubtitle =>
+      'Registra el dinero que prestaste y da seguimiento al pago';
+
+  @override
+  String get lendEditLoanTitle => 'Editar préstamo';
+
+  @override
+  String get lendEditLoanSubtitle =>
+      'Corrige el prestatario, el monto o las condiciones de interés';
+
+  @override
+  String get lendFieldBorrowerName => 'Nombre del prestatario';
+
+  @override
+  String get lendFieldAmountLent => 'Monto prestado';
+
+  @override
+  String get lendFieldCurrency => 'Moneda';
+
+  @override
+  String get lendFieldLentOn => 'Prestado el';
+
+  @override
+  String get lendFieldInterestRate => 'Tasa de interés';
+
+  @override
+  String get lendFieldOptional => 'Opcional';
+
+  @override
+  String get lendFieldTermMonths => 'Plazo (meses)';
+
+  @override
+  String get lendFieldMostTheyCanPay => 'Máximo que pueden pagar';
+
+  @override
+  String get lendFieldRateIsPer => 'La tasa es por';
+
+  @override
+  String get lendFieldPaymentFrequency => 'Frecuencia de pago';
+
+  @override
+  String get lendFieldPayBackBy => 'Pagar antes del';
+
+  @override
+  String get lendFieldInterestType => 'Tipo de interés';
+
+  @override
+  String get lendFieldAmountReceived => 'Monto recibido';
+
+  @override
+  String get lendFieldReceivedOn => 'Recibido el';
+
+  @override
+  String get lendSegSetTheTerm => 'Definir el plazo';
+
+  @override
+  String get lendSegSetThePayment => 'Definir el pago';
+
+  @override
+  String get lendSegBankTransaction => 'Transacción bancaria';
+
+  @override
+  String get lendSegCash => 'Efectivo';
+
+  @override
+  String get lendAdvancedOptions => 'Opciones avanzadas';
+
+  @override
+  String get lendPreviewTitle => 'Vista previa del préstamo';
+
+  @override
+  String get lendPreviewEstimate => 'estimado';
+
+  @override
+  String get lendPreviewEnterAmount =>
+      'Ingresa un monto para ver la proyección';
+
+  @override
+  String get lendPreviewTotalToRepay => 'Total a pagar';
+
+  @override
+  String get lendPreviewProjectedInterest => 'Interés proyectado';
+
+  @override
+  String get lendPreviewNoInterest => 'Este préstamo no genera interés';
+
+  @override
+  String get lendPreviewOpenEnded =>
+      'Abierto — paga cuando quieras, sin calendario fijo';
+
+  @override
+  String get lendPreviewMinimumPayment => 'Pago mínimo';
+
+  @override
+  String get lendPreviewPaidOffIn => 'Liquidado en';
+
+  @override
+  String lendPreviewPaidOffValue(int count, String term) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pagos',
+      one: '1 pago',
+    );
+    return '$_temp0  ·  $term';
+  }
+
+  @override
+  String lendTermMonths(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count meses',
+      one: '1 mes',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lendTermYearsAbbrev(String years) {
+    return '~$years a';
+  }
+
+  @override
+  String get lendSaveChanges => 'Guardar cambios';
+
+  @override
+  String get lendDisbursementLinked => 'Vinculado a una transacción bancaria';
+
+  @override
+  String get lendWhichTxFunded => '¿Qué transacción financió este préstamo?';
+
+  @override
+  String get lendLinkATransaction => 'Vincular una transacción';
+
+  @override
+  String get lendNoneRecordedYet => 'Aún no hay registros.';
+
+  @override
+  String get lendSuggestedRepayments => 'Pagos sugeridos';
+
+  @override
+  String get lendRecordAPayment => 'Registrar un pago';
+
+  @override
+  String get lendConfirm => 'Confirmar';
+
+  @override
+  String get lendExportPrintablePlan => 'Plan imprimible (PDF)';
+
+  @override
+  String get lendExportDownloadCsv => 'Descargar CSV (Google Sheets / Excel)';
+
+  @override
+  String get lendActionEdit => 'Editar';
+
+  @override
+  String get lendActionAgreement => 'Contrato';
+
+  @override
+  String get lendActionPayOffInFull => 'Liquidar por completo';
+
+  @override
+  String get lendActionMarkDefaulted => 'Marcar en mora';
+
+  @override
+  String get lendActionWriteOff => 'Dar de baja';
+
+  @override
+  String get lendActionReactivate => 'Reactivar';
+
+  @override
+  String get lendPayoffConfirmTitle => '¿Liquidar por completo?';
+
+  @override
+  String get lendPayoffConfirmButton => 'Liquidar';
+
+  @override
+  String get lendDeleteLoan => 'Eliminar préstamo';
+
+  @override
+  String get lendDeleteLoanTitle => '¿Eliminar préstamo?';
+
+  @override
+  String get lendTooltipClearDate => 'Borrar fecha';
+
+  @override
+  String get lendTooltipUnlink => 'Desvincular';
+
+  @override
+  String get lendTooltipExportPaymentPlan => 'Exportar plan de pagos';
+
+  @override
+  String get lendToastEnterBorrowerName => 'Ingresa el nombre del prestatario';
+
+  @override
+  String get lendToastEnterValidAmount => 'Ingresa un monto válido';
+
+  @override
+  String get lendToastFailedToAddLoan => 'No se pudo agregar el préstamo';
+
+  @override
+  String get lendToastCouldntSaveChanges =>
+      'No se pudieron guardar los cambios';
+
+  @override
+  String get lendToastScheduleGenerated => 'Calendario generado';
+
+  @override
+  String get lendToastLoanUpdated => 'Préstamo actualizado';
+
+  @override
+  String get lendToastCouldntUpdateStatus => 'No se pudo actualizar el estado';
+
+  @override
+  String get lendToastLoanPaidOff => 'Préstamo liquidado';
+
+  @override
+  String get lendToastCouldntLinkTx => 'No se pudo vincular esa transacción';
+
+  @override
+  String get lendToastCouldntRecordRepayment => 'No se pudo registrar ese pago';
+
+  @override
+  String get lendToastCouldntUnlink => 'No se pudo desvincular';
+
+  @override
+  String get lendToastCouldntDeleteLoan => 'No se pudo eliminar el préstamo';
+
+  @override
+  String get lendToastRecordCashPayment => 'Registrar pago en efectivo';
+
+  @override
+  String get lendToastCouldntRecordCashPayment =>
+      'No se pudo registrar el pago en efectivo';
+
+  @override
+  String get lendSectionBorrowerAmount => 'Prestatario y monto';
+
+  @override
+  String get lendSectionHowLoanWorks => 'Cómo funciona el préstamo';
+
+  @override
+  String get lendSectionExpectedRepayment => 'Pago esperado';
+
+  @override
+  String get lendSectionNotes => 'Notas';
+
+  @override
+  String get lendSectionInterestTerms => 'Condiciones de interés';
+
+  @override
+  String get lendSectionDisbursement => 'Desembolso';
+
+  @override
+  String get lendSectionRepayments => 'Pagos';
+
+  @override
+  String get lendSectionPaymentSchedule => 'Calendario de pagos';
+
+  @override
+  String get lendStyleNoInterestDesc =>
+      'Pagan exactamente lo que pidieron prestado.';
+
+  @override
+  String get lendStyleStandardLabel => 'Préstamo estándar';
+
+  @override
+  String get lendStyleStandardDesc =>
+      'Pagos iguales a lo largo del tiempo; cada uno cubre interés más un poco de capital.';
+
+  @override
+  String get lendStyleFlatLabel => 'Interés fijo';
+
+  @override
+  String get lendStyleFlatDesc =>
+      'El interés se calcula una vez sobre el monto total y se reparte por igual entre los pagos.';
+
+  @override
+  String get lendStyleInterestOnlyLabel => 'Solo interés + pago final';
+
+  @override
+  String get lendStyleInterestOnlyDesc =>
+      'Pagan solo el interés cada período y luego el monto completo al final.';
+
+  @override
+  String get lendStylePayAtEndLabel => 'Pagar todo al final';
+
+  @override
+  String get lendStylePayAtEndDesc =>
+      'No se debe nada hasta el final; el interés se acumula hasta entonces.';
+
+  @override
+  String get lendPreviewSinglePayment => 'Pago único';
+
+  @override
+  String get lendPreviewPayment => 'Pago';
+
+  @override
+  String lendPreviewPerPaymentInterest(
+    String amount,
+    String cadence,
+    int count,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pagos',
+      one: '1 pago',
+    );
+    return '$amount$cadence de interés  ·  $_temp0';
+  }
+
+  @override
+  String lendPreviewPerPaymentCount(String amount, String cadence, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pagos',
+      one: '1 pago',
+    );
+    return '$amount$cadence  ·  $_temp0';
+  }
+
+  @override
+  String get lendPreviewPrincipalAtMaturity => 'Capital al vencimiento';
+
+  @override
+  String lendPreviewDueWithFinalPayment(String amount) {
+    return '$amount  ·  con el pago final';
+  }
+
+  @override
+  String get lendPreviewEnterPaymentSolve =>
+      'Ingresa un pago para ver cuánto tarda';
+
+  @override
+  String get lendToastEnterPaymentCompute =>
+      'Ingresa un pago para calcular el plazo';
+
+  @override
+  String lendEditRatePerPeriod(String period) {
+    String _temp0 = intl.Intl.selectLogic(period, {
+      'monthly': 'Tasa % por mes',
+      'other': 'Tasa % por año',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String lendTermsSummaryTermMonths(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'plazo de $count meses',
+      one: 'plazo de 1 mes',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lendTermsSummaryMonthlyPayments => 'pagos mensuales';
+
+  @override
+  String get lendTermsSummaryWeeklyPayments => 'pagos semanales';
+
+  @override
+  String get lendTermsSummaryLumpSumPayment => 'pago único';
+
+  @override
+  String lendTermsSummaryFixed(String parts) {
+    return 'El plazo y el calendario ($parts) son fijos — elimina y vuelve a agregar para cambiarlos.';
+  }
+
+  @override
+  String get lendNoMatchingOutflow =>
+      'No se encontró ninguna salida cercana a la fecha del préstamo — elige una manualmente abajo.';
+
+  @override
+  String get lendScheduleGenerate => 'Generar';
+
+  @override
+  String get lendScheduleRegenerate => 'Regenerar';
+
+  @override
+  String get lendScheduleEmptyHasTerms =>
+      'Aún no hay calendario. Genera uno para ver el plan de amortización (capital + interés por cuota).';
+
+  @override
+  String get lendScheduleEmptyNoTerms =>
+      'Este préstamo no tiene plazo ni frecuencia de pago, así que no hay calendario fijo — registra los pagos a medida que lleguen.';
+
+  @override
+  String lendPayBackByWhen(String date, String when) {
+    return 'Pagar antes del $date · $when';
+  }
+
+  @override
+  String get lendToastUnreconcileFirst =>
+      'Primero anula la conciliación de los pagos para regenerar';
+
+  @override
+  String get lendToastCouldntGenerateSchedule =>
+      'No se pudo generar el calendario';
+
+  @override
+  String get lendPayoffConfirmBody =>
+      'Marca el préstamo como liquidado y borra cualquier cuota programada pendiente. Esto no crea un pago — vincula la transacción final real desde la lista de Pagos para que los ingresos por intereses sigan siendo exactos.';
+
+  @override
+  String get lendToastLoanNoLongerActive => 'El préstamo ya no está activo';
+
+  @override
+  String get lendToastCouldntPayOff => 'No se pudo liquidar el préstamo';
+
+  @override
+  String get lendDeleteLoanBody =>
+      'Esto elimina el préstamo y sus registros de pago. Las transacciones bancarias en sí no se eliminan.';
+
+  @override
+  String get lendSheetRecordPayment => 'Registrar un pago';
+
+  @override
+  String get lendSheetLinkDisbursement => 'Vincular el desembolso';
+
+  @override
+  String get lendSearchInflows => 'Buscar entradas (dinero recibido)';
+
+  @override
+  String get lendSearchOutflows => 'Buscar salidas (dinero enviado)';
+
+  @override
+  String get lendNoIncomingTx =>
+      'No se encontraron transacciones entrantes. Prueba la pestaña de Efectivo para registrar un pago fuera del banco.';
+
+  @override
+  String get lendNoOutgoingTx => 'No se encontraron transacciones salientes.';
+
+  @override
+  String get lendCashFormHint =>
+      'Registra un pago que no pasó por una cuenta bancaria vinculada (p. ej. efectivo). Reduce el saldo pendiente pero no está ligado a una transacción.';
+
+  @override
+  String get lendToastTxAlreadyLinked => 'Esa transacción ya está vinculada';
+
+  @override
+  String get lendToastCouldntRecordThat => 'No se pudo registrar eso';
+
+  @override
   String get lendLinkBankTx => 'Vincular transacción bancaria';
 
   @override

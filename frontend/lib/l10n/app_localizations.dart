@@ -8660,6 +8660,748 @@ abstract class AppLocalizations {
   /// **'Compound'**
   String get lendInterestTypeCompound;
 
+  /// No description provided for @lendAddLoanSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Record money you lent and track repayment'**
+  String get lendAddLoanSubtitle;
+
+  /// No description provided for @lendEditLoanTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit loan'**
+  String get lendEditLoanTitle;
+
+  /// No description provided for @lendEditLoanSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Correct the borrower, amount, or interest terms'**
+  String get lendEditLoanSubtitle;
+
+  /// No description provided for @lendFieldBorrowerName.
+  ///
+  /// In en, this message translates to:
+  /// **'Borrower name'**
+  String get lendFieldBorrowerName;
+
+  /// No description provided for @lendFieldAmountLent.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount lent'**
+  String get lendFieldAmountLent;
+
+  /// No description provided for @lendFieldCurrency.
+  ///
+  /// In en, this message translates to:
+  /// **'Currency'**
+  String get lendFieldCurrency;
+
+  /// No description provided for @lendFieldLentOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Lent on'**
+  String get lendFieldLentOn;
+
+  /// No description provided for @lendFieldInterestRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest rate'**
+  String get lendFieldInterestRate;
+
+  /// No description provided for @lendFieldOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'Optional'**
+  String get lendFieldOptional;
+
+  /// No description provided for @lendFieldTermMonths.
+  ///
+  /// In en, this message translates to:
+  /// **'Term (months)'**
+  String get lendFieldTermMonths;
+
+  /// No description provided for @lendFieldMostTheyCanPay.
+  ///
+  /// In en, this message translates to:
+  /// **'Most they can pay'**
+  String get lendFieldMostTheyCanPay;
+
+  /// No description provided for @lendFieldRateIsPer.
+  ///
+  /// In en, this message translates to:
+  /// **'Rate is per'**
+  String get lendFieldRateIsPer;
+
+  /// No description provided for @lendFieldPaymentFrequency.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment frequency'**
+  String get lendFieldPaymentFrequency;
+
+  /// No description provided for @lendFieldPayBackBy.
+  ///
+  /// In en, this message translates to:
+  /// **'Pay back by'**
+  String get lendFieldPayBackBy;
+
+  /// No description provided for @lendFieldInterestType.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest type'**
+  String get lendFieldInterestType;
+
+  /// No description provided for @lendFieldAmountReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount received'**
+  String get lendFieldAmountReceived;
+
+  /// No description provided for @lendFieldReceivedOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Received on'**
+  String get lendFieldReceivedOn;
+
+  /// No description provided for @lendSegSetTheTerm.
+  ///
+  /// In en, this message translates to:
+  /// **'Set the term'**
+  String get lendSegSetTheTerm;
+
+  /// No description provided for @lendSegSetThePayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Set the payment'**
+  String get lendSegSetThePayment;
+
+  /// No description provided for @lendSegBankTransaction.
+  ///
+  /// In en, this message translates to:
+  /// **'Bank transaction'**
+  String get lendSegBankTransaction;
+
+  /// No description provided for @lendSegCash.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash'**
+  String get lendSegCash;
+
+  /// No description provided for @lendAdvancedOptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced options'**
+  String get lendAdvancedOptions;
+
+  /// No description provided for @lendPreviewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Loan preview'**
+  String get lendPreviewTitle;
+
+  /// No description provided for @lendPreviewEstimate.
+  ///
+  /// In en, this message translates to:
+  /// **'estimate'**
+  String get lendPreviewEstimate;
+
+  /// No description provided for @lendPreviewEnterAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an amount to see the projection'**
+  String get lendPreviewEnterAmount;
+
+  /// No description provided for @lendPreviewTotalToRepay.
+  ///
+  /// In en, this message translates to:
+  /// **'Total to repay'**
+  String get lendPreviewTotalToRepay;
+
+  /// No description provided for @lendPreviewProjectedInterest.
+  ///
+  /// In en, this message translates to:
+  /// **'Projected interest'**
+  String get lendPreviewProjectedInterest;
+
+  /// No description provided for @lendPreviewNoInterest.
+  ///
+  /// In en, this message translates to:
+  /// **'No interest on this loan'**
+  String get lendPreviewNoInterest;
+
+  /// No description provided for @lendPreviewOpenEnded.
+  ///
+  /// In en, this message translates to:
+  /// **'Open-ended — repay anytime, no fixed schedule'**
+  String get lendPreviewOpenEnded;
+
+  /// No description provided for @lendPreviewMinimumPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimum payment'**
+  String get lendPreviewMinimumPayment;
+
+  /// No description provided for @lendPreviewPaidOffIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Paid off in'**
+  String get lendPreviewPaidOffIn;
+
+  /// No description provided for @lendPreviewPaidOffValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 payment} other{{count} payments}}  ·  {term}'**
+  String lendPreviewPaidOffValue(int count, String term);
+
+  /// No description provided for @lendTermMonths.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 month} other{{count} months}}'**
+  String lendTermMonths(int count);
+
+  /// No description provided for @lendTermYearsAbbrev.
+  ///
+  /// In en, this message translates to:
+  /// **'~{years} yr'**
+  String lendTermYearsAbbrev(String years);
+
+  /// No description provided for @lendSaveChanges.
+  ///
+  /// In en, this message translates to:
+  /// **'Save changes'**
+  String get lendSaveChanges;
+
+  /// No description provided for @lendDisbursementLinked.
+  ///
+  /// In en, this message translates to:
+  /// **'Linked to a bank transaction'**
+  String get lendDisbursementLinked;
+
+  /// No description provided for @lendWhichTxFunded.
+  ///
+  /// In en, this message translates to:
+  /// **'Which transaction funded this loan?'**
+  String get lendWhichTxFunded;
+
+  /// No description provided for @lendLinkATransaction.
+  ///
+  /// In en, this message translates to:
+  /// **'Link a transaction'**
+  String get lendLinkATransaction;
+
+  /// No description provided for @lendNoneRecordedYet.
+  ///
+  /// In en, this message translates to:
+  /// **'None recorded yet.'**
+  String get lendNoneRecordedYet;
+
+  /// No description provided for @lendSuggestedRepayments.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested repayments'**
+  String get lendSuggestedRepayments;
+
+  /// No description provided for @lendRecordAPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Record a payment'**
+  String get lendRecordAPayment;
+
+  /// No description provided for @lendConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get lendConfirm;
+
+  /// No description provided for @lendExportPrintablePlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Printable plan (PDF)'**
+  String get lendExportPrintablePlan;
+
+  /// No description provided for @lendExportDownloadCsv.
+  ///
+  /// In en, this message translates to:
+  /// **'Download CSV (Google Sheets / Excel)'**
+  String get lendExportDownloadCsv;
+
+  /// No description provided for @lendActionEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get lendActionEdit;
+
+  /// No description provided for @lendActionAgreement.
+  ///
+  /// In en, this message translates to:
+  /// **'Agreement'**
+  String get lendActionAgreement;
+
+  /// No description provided for @lendActionPayOffInFull.
+  ///
+  /// In en, this message translates to:
+  /// **'Pay off in full'**
+  String get lendActionPayOffInFull;
+
+  /// No description provided for @lendActionMarkDefaulted.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark defaulted'**
+  String get lendActionMarkDefaulted;
+
+  /// No description provided for @lendActionWriteOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Write off'**
+  String get lendActionWriteOff;
+
+  /// No description provided for @lendActionReactivate.
+  ///
+  /// In en, this message translates to:
+  /// **'Reactivate'**
+  String get lendActionReactivate;
+
+  /// No description provided for @lendPayoffConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pay off in full?'**
+  String get lendPayoffConfirmTitle;
+
+  /// No description provided for @lendPayoffConfirmButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Pay off'**
+  String get lendPayoffConfirmButton;
+
+  /// No description provided for @lendDeleteLoan.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete loan'**
+  String get lendDeleteLoan;
+
+  /// No description provided for @lendDeleteLoanTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete loan?'**
+  String get lendDeleteLoanTitle;
+
+  /// No description provided for @lendTooltipClearDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear date'**
+  String get lendTooltipClearDate;
+
+  /// No description provided for @lendTooltipUnlink.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlink'**
+  String get lendTooltipUnlink;
+
+  /// No description provided for @lendTooltipExportPaymentPlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Export payment plan'**
+  String get lendTooltipExportPaymentPlan;
+
+  /// No description provided for @lendToastEnterBorrowerName.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a borrower name'**
+  String get lendToastEnterBorrowerName;
+
+  /// No description provided for @lendToastEnterValidAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid amount'**
+  String get lendToastEnterValidAmount;
+
+  /// No description provided for @lendToastFailedToAddLoan.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to add loan'**
+  String get lendToastFailedToAddLoan;
+
+  /// No description provided for @lendToastCouldntSaveChanges.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save changes'**
+  String get lendToastCouldntSaveChanges;
+
+  /// No description provided for @lendToastScheduleGenerated.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedule generated'**
+  String get lendToastScheduleGenerated;
+
+  /// No description provided for @lendToastLoanUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Loan updated'**
+  String get lendToastLoanUpdated;
+
+  /// No description provided for @lendToastCouldntUpdateStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t update status'**
+  String get lendToastCouldntUpdateStatus;
+
+  /// No description provided for @lendToastLoanPaidOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Loan paid off'**
+  String get lendToastLoanPaidOff;
+
+  /// No description provided for @lendToastCouldntLinkTx.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t link that transaction'**
+  String get lendToastCouldntLinkTx;
+
+  /// No description provided for @lendToastCouldntRecordRepayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t record that repayment'**
+  String get lendToastCouldntRecordRepayment;
+
+  /// No description provided for @lendToastCouldntUnlink.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t unlink'**
+  String get lendToastCouldntUnlink;
+
+  /// No description provided for @lendToastCouldntDeleteLoan.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t delete loan'**
+  String get lendToastCouldntDeleteLoan;
+
+  /// No description provided for @lendToastRecordCashPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Record cash payment'**
+  String get lendToastRecordCashPayment;
+
+  /// No description provided for @lendToastCouldntRecordCashPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t record cash payment'**
+  String get lendToastCouldntRecordCashPayment;
+
+  /// No description provided for @lendSectionBorrowerAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Borrower & amount'**
+  String get lendSectionBorrowerAmount;
+
+  /// No description provided for @lendSectionHowLoanWorks.
+  ///
+  /// In en, this message translates to:
+  /// **'How the loan works'**
+  String get lendSectionHowLoanWorks;
+
+  /// No description provided for @lendSectionExpectedRepayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Expected repayment'**
+  String get lendSectionExpectedRepayment;
+
+  /// No description provided for @lendSectionNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes'**
+  String get lendSectionNotes;
+
+  /// No description provided for @lendSectionInterestTerms.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest terms'**
+  String get lendSectionInterestTerms;
+
+  /// No description provided for @lendSectionDisbursement.
+  ///
+  /// In en, this message translates to:
+  /// **'Disbursement'**
+  String get lendSectionDisbursement;
+
+  /// No description provided for @lendSectionRepayments.
+  ///
+  /// In en, this message translates to:
+  /// **'Repayments'**
+  String get lendSectionRepayments;
+
+  /// No description provided for @lendSectionPaymentSchedule.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment schedule'**
+  String get lendSectionPaymentSchedule;
+
+  /// No description provided for @lendStyleNoInterestDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'They pay back exactly what they borrowed.'**
+  String get lendStyleNoInterestDesc;
+
+  /// No description provided for @lendStyleStandardLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Standard loan'**
+  String get lendStyleStandardLabel;
+
+  /// No description provided for @lendStyleStandardDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Equal payments over time; each covers interest plus a bit of principal.'**
+  String get lendStyleStandardDesc;
+
+  /// No description provided for @lendStyleFlatLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Flat interest'**
+  String get lendStyleFlatLabel;
+
+  /// No description provided for @lendStyleFlatDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest figured once on the full amount, split evenly across payments.'**
+  String get lendStyleFlatDesc;
+
+  /// No description provided for @lendStyleInterestOnlyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest-only + balloon'**
+  String get lendStyleInterestOnlyLabel;
+
+  /// No description provided for @lendStyleInterestOnlyDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'They pay just interest each period, then the whole amount at the end.'**
+  String get lendStyleInterestOnlyDesc;
+
+  /// No description provided for @lendStylePayAtEndLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Pay all at the end'**
+  String get lendStylePayAtEndLabel;
+
+  /// No description provided for @lendStylePayAtEndDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing\'s due until the end; interest builds up until then.'**
+  String get lendStylePayAtEndDesc;
+
+  /// No description provided for @lendPreviewSinglePayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Single payment'**
+  String get lendPreviewSinglePayment;
+
+  /// No description provided for @lendPreviewPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment'**
+  String get lendPreviewPayment;
+
+  /// No description provided for @lendPreviewPerPaymentInterest.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount}{cadence} interest  ·  {count, plural, =1{1 payment} other{{count} payments}}'**
+  String lendPreviewPerPaymentInterest(
+    String amount,
+    String cadence,
+    int count,
+  );
+
+  /// No description provided for @lendPreviewPerPaymentCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount}{cadence}  ·  {count, plural, =1{1 payment} other{{count} payments}}'**
+  String lendPreviewPerPaymentCount(String amount, String cadence, int count);
+
+  /// No description provided for @lendPreviewPrincipalAtMaturity.
+  ///
+  /// In en, this message translates to:
+  /// **'Principal at maturity'**
+  String get lendPreviewPrincipalAtMaturity;
+
+  /// No description provided for @lendPreviewDueWithFinalPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount}  ·  due with final payment'**
+  String lendPreviewDueWithFinalPayment(String amount);
+
+  /// No description provided for @lendPreviewEnterPaymentSolve.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a payment to see how long it takes'**
+  String get lendPreviewEnterPaymentSolve;
+
+  /// No description provided for @lendToastEnterPaymentCompute.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a payment to compute the term'**
+  String get lendToastEnterPaymentCompute;
+
+  /// No description provided for @lendEditRatePerPeriod.
+  ///
+  /// In en, this message translates to:
+  /// **'{period, select, monthly{Rate % per month} other{Rate % per year}}'**
+  String lendEditRatePerPeriod(String period);
+
+  /// No description provided for @lendTermsSummaryTermMonths.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1-month term} other{{count}-month term}}'**
+  String lendTermsSummaryTermMonths(int count);
+
+  /// No description provided for @lendTermsSummaryMonthlyPayments.
+  ///
+  /// In en, this message translates to:
+  /// **'monthly payments'**
+  String get lendTermsSummaryMonthlyPayments;
+
+  /// No description provided for @lendTermsSummaryWeeklyPayments.
+  ///
+  /// In en, this message translates to:
+  /// **'weekly payments'**
+  String get lendTermsSummaryWeeklyPayments;
+
+  /// No description provided for @lendTermsSummaryLumpSumPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'single lump-sum payment'**
+  String get lendTermsSummaryLumpSumPayment;
+
+  /// No description provided for @lendTermsSummaryFixed.
+  ///
+  /// In en, this message translates to:
+  /// **'Term & schedule ({parts}) are fixed — delete and re-add to change them.'**
+  String lendTermsSummaryFixed(String parts);
+
+  /// No description provided for @lendNoMatchingOutflow.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching outflow found near the loan date — pick one manually below.'**
+  String get lendNoMatchingOutflow;
+
+  /// No description provided for @lendScheduleGenerate.
+  ///
+  /// In en, this message translates to:
+  /// **'Generate'**
+  String get lendScheduleGenerate;
+
+  /// No description provided for @lendScheduleRegenerate.
+  ///
+  /// In en, this message translates to:
+  /// **'Regenerate'**
+  String get lendScheduleRegenerate;
+
+  /// No description provided for @lendScheduleEmptyHasTerms.
+  ///
+  /// In en, this message translates to:
+  /// **'No schedule yet. Generate one to see the amortization plan (principal + interest per installment).'**
+  String get lendScheduleEmptyHasTerms;
+
+  /// No description provided for @lendScheduleEmptyNoTerms.
+  ///
+  /// In en, this message translates to:
+  /// **'This loan has no term / payment frequency, so there\'s no fixed schedule — record repayments as they come in.'**
+  String get lendScheduleEmptyNoTerms;
+
+  /// No description provided for @lendPayBackByWhen.
+  ///
+  /// In en, this message translates to:
+  /// **'Pay back by {date} · {when}'**
+  String lendPayBackByWhen(String date, String when);
+
+  /// No description provided for @lendToastUnreconcileFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'Unreconcile payments first to regenerate'**
+  String get lendToastUnreconcileFirst;
+
+  /// No description provided for @lendToastCouldntGenerateSchedule.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t generate schedule'**
+  String get lendToastCouldntGenerateSchedule;
+
+  /// No description provided for @lendPayoffConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Marks the loan as paid off and clears any remaining scheduled installments. This does not create a repayment — link the actual final transaction from the Repayments list so interest income stays accurate.'**
+  String get lendPayoffConfirmBody;
+
+  /// No description provided for @lendToastLoanNoLongerActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Loan is no longer active'**
+  String get lendToastLoanNoLongerActive;
+
+  /// No description provided for @lendToastCouldntPayOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t pay off loan'**
+  String get lendToastCouldntPayOff;
+
+  /// No description provided for @lendDeleteLoanBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This removes the loan and its repayment records. The bank transactions themselves are not deleted.'**
+  String get lendDeleteLoanBody;
+
+  /// No description provided for @lendSheetRecordPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Record a payment'**
+  String get lendSheetRecordPayment;
+
+  /// No description provided for @lendSheetLinkDisbursement.
+  ///
+  /// In en, this message translates to:
+  /// **'Link the disbursement'**
+  String get lendSheetLinkDisbursement;
+
+  /// No description provided for @lendSearchInflows.
+  ///
+  /// In en, this message translates to:
+  /// **'Search inflows (money received)'**
+  String get lendSearchInflows;
+
+  /// No description provided for @lendSearchOutflows.
+  ///
+  /// In en, this message translates to:
+  /// **'Search outflows (money sent)'**
+  String get lendSearchOutflows;
+
+  /// No description provided for @lendNoIncomingTx.
+  ///
+  /// In en, this message translates to:
+  /// **'No incoming transactions found. Try the Cash tab to record an off-bank repayment.'**
+  String get lendNoIncomingTx;
+
+  /// No description provided for @lendNoOutgoingTx.
+  ///
+  /// In en, this message translates to:
+  /// **'No outgoing transactions found.'**
+  String get lendNoOutgoingTx;
+
+  /// No description provided for @lendCashFormHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Record a repayment that didn\'t come through a linked bank account (e.g. cash). It reduces the outstanding balance but isn\'t tied to a transaction.'**
+  String get lendCashFormHint;
+
+  /// No description provided for @lendToastTxAlreadyLinked.
+  ///
+  /// In en, this message translates to:
+  /// **'That transaction is already linked'**
+  String get lendToastTxAlreadyLinked;
+
+  /// No description provided for @lendToastCouldntRecordThat.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t record that'**
+  String get lendToastCouldntRecordThat;
+
   /// Action on an off-bank (cash-recorded) repayment to attach the real bank inflow once the statement is imported.
   ///
   /// In en, this message translates to:

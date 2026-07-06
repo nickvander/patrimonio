@@ -5341,6 +5341,452 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lendInterestTypeCompound => 'Compound';
 
   @override
+  String get lendAddLoanSubtitle => 'Record money you lent and track repayment';
+
+  @override
+  String get lendEditLoanTitle => 'Edit loan';
+
+  @override
+  String get lendEditLoanSubtitle =>
+      'Correct the borrower, amount, or interest terms';
+
+  @override
+  String get lendFieldBorrowerName => 'Borrower name';
+
+  @override
+  String get lendFieldAmountLent => 'Amount lent';
+
+  @override
+  String get lendFieldCurrency => 'Currency';
+
+  @override
+  String get lendFieldLentOn => 'Lent on';
+
+  @override
+  String get lendFieldInterestRate => 'Interest rate';
+
+  @override
+  String get lendFieldOptional => 'Optional';
+
+  @override
+  String get lendFieldTermMonths => 'Term (months)';
+
+  @override
+  String get lendFieldMostTheyCanPay => 'Most they can pay';
+
+  @override
+  String get lendFieldRateIsPer => 'Rate is per';
+
+  @override
+  String get lendFieldPaymentFrequency => 'Payment frequency';
+
+  @override
+  String get lendFieldPayBackBy => 'Pay back by';
+
+  @override
+  String get lendFieldInterestType => 'Interest type';
+
+  @override
+  String get lendFieldAmountReceived => 'Amount received';
+
+  @override
+  String get lendFieldReceivedOn => 'Received on';
+
+  @override
+  String get lendSegSetTheTerm => 'Set the term';
+
+  @override
+  String get lendSegSetThePayment => 'Set the payment';
+
+  @override
+  String get lendSegBankTransaction => 'Bank transaction';
+
+  @override
+  String get lendSegCash => 'Cash';
+
+  @override
+  String get lendAdvancedOptions => 'Advanced options';
+
+  @override
+  String get lendPreviewTitle => 'Loan preview';
+
+  @override
+  String get lendPreviewEstimate => 'estimate';
+
+  @override
+  String get lendPreviewEnterAmount => 'Enter an amount to see the projection';
+
+  @override
+  String get lendPreviewTotalToRepay => 'Total to repay';
+
+  @override
+  String get lendPreviewProjectedInterest => 'Projected interest';
+
+  @override
+  String get lendPreviewNoInterest => 'No interest on this loan';
+
+  @override
+  String get lendPreviewOpenEnded =>
+      'Open-ended — repay anytime, no fixed schedule';
+
+  @override
+  String get lendPreviewMinimumPayment => 'Minimum payment';
+
+  @override
+  String get lendPreviewPaidOffIn => 'Paid off in';
+
+  @override
+  String lendPreviewPaidOffValue(int count, String term) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count payments',
+      one: '1 payment',
+    );
+    return '$_temp0  ·  $term';
+  }
+
+  @override
+  String lendTermMonths(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count months',
+      one: '1 month',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lendTermYearsAbbrev(String years) {
+    return '~$years yr';
+  }
+
+  @override
+  String get lendSaveChanges => 'Save changes';
+
+  @override
+  String get lendDisbursementLinked => 'Linked to a bank transaction';
+
+  @override
+  String get lendWhichTxFunded => 'Which transaction funded this loan?';
+
+  @override
+  String get lendLinkATransaction => 'Link a transaction';
+
+  @override
+  String get lendNoneRecordedYet => 'None recorded yet.';
+
+  @override
+  String get lendSuggestedRepayments => 'Suggested repayments';
+
+  @override
+  String get lendRecordAPayment => 'Record a payment';
+
+  @override
+  String get lendConfirm => 'Confirm';
+
+  @override
+  String get lendExportPrintablePlan => 'Printable plan (PDF)';
+
+  @override
+  String get lendExportDownloadCsv => 'Download CSV (Google Sheets / Excel)';
+
+  @override
+  String get lendActionEdit => 'Edit';
+
+  @override
+  String get lendActionAgreement => 'Agreement';
+
+  @override
+  String get lendActionPayOffInFull => 'Pay off in full';
+
+  @override
+  String get lendActionMarkDefaulted => 'Mark defaulted';
+
+  @override
+  String get lendActionWriteOff => 'Write off';
+
+  @override
+  String get lendActionReactivate => 'Reactivate';
+
+  @override
+  String get lendPayoffConfirmTitle => 'Pay off in full?';
+
+  @override
+  String get lendPayoffConfirmButton => 'Pay off';
+
+  @override
+  String get lendDeleteLoan => 'Delete loan';
+
+  @override
+  String get lendDeleteLoanTitle => 'Delete loan?';
+
+  @override
+  String get lendTooltipClearDate => 'Clear date';
+
+  @override
+  String get lendTooltipUnlink => 'Unlink';
+
+  @override
+  String get lendTooltipExportPaymentPlan => 'Export payment plan';
+
+  @override
+  String get lendToastEnterBorrowerName => 'Enter a borrower name';
+
+  @override
+  String get lendToastEnterValidAmount => 'Enter a valid amount';
+
+  @override
+  String get lendToastFailedToAddLoan => 'Failed to add loan';
+
+  @override
+  String get lendToastCouldntSaveChanges => 'Couldn\'t save changes';
+
+  @override
+  String get lendToastScheduleGenerated => 'Schedule generated';
+
+  @override
+  String get lendToastLoanUpdated => 'Loan updated';
+
+  @override
+  String get lendToastCouldntUpdateStatus => 'Couldn\'t update status';
+
+  @override
+  String get lendToastLoanPaidOff => 'Loan paid off';
+
+  @override
+  String get lendToastCouldntLinkTx => 'Couldn\'t link that transaction';
+
+  @override
+  String get lendToastCouldntRecordRepayment =>
+      'Couldn\'t record that repayment';
+
+  @override
+  String get lendToastCouldntUnlink => 'Couldn\'t unlink';
+
+  @override
+  String get lendToastCouldntDeleteLoan => 'Couldn\'t delete loan';
+
+  @override
+  String get lendToastRecordCashPayment => 'Record cash payment';
+
+  @override
+  String get lendToastCouldntRecordCashPayment =>
+      'Couldn\'t record cash payment';
+
+  @override
+  String get lendSectionBorrowerAmount => 'Borrower & amount';
+
+  @override
+  String get lendSectionHowLoanWorks => 'How the loan works';
+
+  @override
+  String get lendSectionExpectedRepayment => 'Expected repayment';
+
+  @override
+  String get lendSectionNotes => 'Notes';
+
+  @override
+  String get lendSectionInterestTerms => 'Interest terms';
+
+  @override
+  String get lendSectionDisbursement => 'Disbursement';
+
+  @override
+  String get lendSectionRepayments => 'Repayments';
+
+  @override
+  String get lendSectionPaymentSchedule => 'Payment schedule';
+
+  @override
+  String get lendStyleNoInterestDesc =>
+      'They pay back exactly what they borrowed.';
+
+  @override
+  String get lendStyleStandardLabel => 'Standard loan';
+
+  @override
+  String get lendStyleStandardDesc =>
+      'Equal payments over time; each covers interest plus a bit of principal.';
+
+  @override
+  String get lendStyleFlatLabel => 'Flat interest';
+
+  @override
+  String get lendStyleFlatDesc =>
+      'Interest figured once on the full amount, split evenly across payments.';
+
+  @override
+  String get lendStyleInterestOnlyLabel => 'Interest-only + balloon';
+
+  @override
+  String get lendStyleInterestOnlyDesc =>
+      'They pay just interest each period, then the whole amount at the end.';
+
+  @override
+  String get lendStylePayAtEndLabel => 'Pay all at the end';
+
+  @override
+  String get lendStylePayAtEndDesc =>
+      'Nothing\'s due until the end; interest builds up until then.';
+
+  @override
+  String get lendPreviewSinglePayment => 'Single payment';
+
+  @override
+  String get lendPreviewPayment => 'Payment';
+
+  @override
+  String lendPreviewPerPaymentInterest(
+    String amount,
+    String cadence,
+    int count,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count payments',
+      one: '1 payment',
+    );
+    return '$amount$cadence interest  ·  $_temp0';
+  }
+
+  @override
+  String lendPreviewPerPaymentCount(String amount, String cadence, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count payments',
+      one: '1 payment',
+    );
+    return '$amount$cadence  ·  $_temp0';
+  }
+
+  @override
+  String get lendPreviewPrincipalAtMaturity => 'Principal at maturity';
+
+  @override
+  String lendPreviewDueWithFinalPayment(String amount) {
+    return '$amount  ·  due with final payment';
+  }
+
+  @override
+  String get lendPreviewEnterPaymentSolve =>
+      'Enter a payment to see how long it takes';
+
+  @override
+  String get lendToastEnterPaymentCompute =>
+      'Enter a payment to compute the term';
+
+  @override
+  String lendEditRatePerPeriod(String period) {
+    String _temp0 = intl.Intl.selectLogic(period, {
+      'monthly': 'Rate % per month',
+      'other': 'Rate % per year',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String lendTermsSummaryTermMonths(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count-month term',
+      one: '1-month term',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get lendTermsSummaryMonthlyPayments => 'monthly payments';
+
+  @override
+  String get lendTermsSummaryWeeklyPayments => 'weekly payments';
+
+  @override
+  String get lendTermsSummaryLumpSumPayment => 'single lump-sum payment';
+
+  @override
+  String lendTermsSummaryFixed(String parts) {
+    return 'Term & schedule ($parts) are fixed — delete and re-add to change them.';
+  }
+
+  @override
+  String get lendNoMatchingOutflow =>
+      'No matching outflow found near the loan date — pick one manually below.';
+
+  @override
+  String get lendScheduleGenerate => 'Generate';
+
+  @override
+  String get lendScheduleRegenerate => 'Regenerate';
+
+  @override
+  String get lendScheduleEmptyHasTerms =>
+      'No schedule yet. Generate one to see the amortization plan (principal + interest per installment).';
+
+  @override
+  String get lendScheduleEmptyNoTerms =>
+      'This loan has no term / payment frequency, so there\'s no fixed schedule — record repayments as they come in.';
+
+  @override
+  String lendPayBackByWhen(String date, String when) {
+    return 'Pay back by $date · $when';
+  }
+
+  @override
+  String get lendToastUnreconcileFirst =>
+      'Unreconcile payments first to regenerate';
+
+  @override
+  String get lendToastCouldntGenerateSchedule => 'Couldn\'t generate schedule';
+
+  @override
+  String get lendPayoffConfirmBody =>
+      'Marks the loan as paid off and clears any remaining scheduled installments. This does not create a repayment — link the actual final transaction from the Repayments list so interest income stays accurate.';
+
+  @override
+  String get lendToastLoanNoLongerActive => 'Loan is no longer active';
+
+  @override
+  String get lendToastCouldntPayOff => 'Couldn\'t pay off loan';
+
+  @override
+  String get lendDeleteLoanBody =>
+      'This removes the loan and its repayment records. The bank transactions themselves are not deleted.';
+
+  @override
+  String get lendSheetRecordPayment => 'Record a payment';
+
+  @override
+  String get lendSheetLinkDisbursement => 'Link the disbursement';
+
+  @override
+  String get lendSearchInflows => 'Search inflows (money received)';
+
+  @override
+  String get lendSearchOutflows => 'Search outflows (money sent)';
+
+  @override
+  String get lendNoIncomingTx =>
+      'No incoming transactions found. Try the Cash tab to record an off-bank repayment.';
+
+  @override
+  String get lendNoOutgoingTx => 'No outgoing transactions found.';
+
+  @override
+  String get lendCashFormHint =>
+      'Record a repayment that didn\'t come through a linked bank account (e.g. cash). It reduces the outstanding balance but isn\'t tied to a transaction.';
+
+  @override
+  String get lendToastTxAlreadyLinked => 'That transaction is already linked';
+
+  @override
+  String get lendToastCouldntRecordThat => 'Couldn\'t record that';
+
+  @override
   String get lendLinkBankTx => 'Link bank transaction';
 
   @override
