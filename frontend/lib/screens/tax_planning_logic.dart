@@ -26,16 +26,25 @@ class GainsSubtotals {
 }
 
 /// Build the tax-year dropdown list from the data actually present, newest
-/// first. Statement imports reach further back than "this year / last year",
-/// so the list is the union of every year seen in income transactions and
-/// disposals, plus the current year (always selectable even with no data yet).
+/// first: the union of every year seen in income transactions, disposals and
+/// the all-history `byYear` rows, plus the current year (always selectable
+/// even with no data yet).
+///
+/// `transactions` and `disposals` are the SELECTED year's fetches, so on
+/// their own they can only ever echo the year already chosen — deriving the
+/// options purely from them made every other year unreachable app-wide.
+/// `byYear` breaks that circularity: it is `/dashboard/realized-gains`'
+/// `by_year` list (one `{year, realized_usd}` row per year with disposals,
+/// independent of any year filter), so e.g. 2025 stays offered while viewing
+/// 2026. Bare int/num entries are accepted too for convenience.
 ///
 /// `transactions` rows carry a `date` (ISO `yyyy-MM-dd...`); `disposals` rows
-/// carry a `sell_date`. Unparseable/missing dates are ignored.
+/// carry a `sell_date`. Unparseable/missing dates and rows are ignored.
 List<int> deriveTaxYears(
   List<dynamic>? transactions,
   List<dynamic>? disposals, {
   required int currentYear,
+  List<dynamic>? byYear,
 }) {
   final years = <int>{currentYear};
 
@@ -51,6 +60,14 @@ List<int> deriveTaxYears(
 
   addFrom(transactions, 'date');
   addFrom(disposals, 'sell_date');
+
+  if (byYear != null) {
+    for (final r in byYear) {
+      final raw = r is Map ? r['year'] : r;
+      final y = raw is num ? raw.toInt() : null;
+      if (y != null && y > 1900 && y < 3000) years.add(y);
+    }
+  }
 
   final sorted = years.toList()..sort((a, b) => b.compareTo(a));
   return sorted;

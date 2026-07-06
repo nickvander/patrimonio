@@ -48,6 +48,60 @@ void main() {
       final years = deriveTaxYears(null, disposals, currentYear: 2025);
       expect(years, [2025, 2018]);
     });
+
+    test(
+        'byYear (all-history realized-gains by_year) surfaces years the '
+        'year-filtered fetches can never see — the old circular derivation '
+        'made every other year unreachable', () {
+      // Viewing 2026: transactions + disposals are filtered to 2026, so on
+      // their own they could only ever offer 2026 back.
+      final txns = [
+        {'date': '2026-02-01'},
+      ];
+      final disposals = [
+        {'sell_date': '2026-03-15'},
+      ];
+      final byYear = [
+        {'year': 2025, 'realized_usd': 4053.50},
+        {'year': 2026, 'realized_usd': 2969.50},
+      ];
+      final years = deriveTaxYears(txns, disposals,
+          currentYear: 2026, byYear: byYear);
+      expect(years, [2026, 2025]);
+    });
+
+    test('byYear unions with the filtered lists and the current year', () {
+      final byYear = [
+        {'year': 2024, 'realized_usd': 10.0},
+      ];
+      final years = deriveTaxYears(
+        [
+          {'date': '2023-01-01'},
+        ],
+        null,
+        currentYear: 2026,
+        byYear: byYear,
+      );
+      expect(years, [2026, 2024, 2023]);
+    });
+
+    test('byYear accepts bare ints and skips junk rows', () {
+      final years = deriveTaxYears(
+        null,
+        null,
+        currentYear: 2026,
+        byYear: [2022, {'year': 2021}, {'no_year': true}, 'junk', null, 0],
+      );
+      expect(years, [2026, 2022, 2021]);
+    });
+
+    test('omitting byYear keeps the legacy behavior', () {
+      expect(deriveTaxYears(null, null, currentYear: 2025), [2025]);
+      expect(
+        deriveTaxYears(null, null, currentYear: 2025, byYear: null),
+        [2025],
+      );
+    });
   });
 
   group('sumIncomeUsd', () {

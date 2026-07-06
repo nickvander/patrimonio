@@ -970,7 +970,38 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     );
   }
 
+  /// Deleting a holding cascade-deletes its `holding_lots` and
+  /// `lot_disposals` (realized-gain tax records) on the backend, so it must
+  /// NEVER fire without an explicit, destructive-styled confirmation.
+  /// Cancel / Esc / outside-tap all resolve to "keep it".
   Future<void> _deleteHolding(dynamic h) async {
+    final l = AppLocalizations.of(context);
+    final symbol = (h['symbol'] ?? '').toString().trim();
+    final name = (h['name'] ?? '').toString().trim();
+    final label = symbol.isNotEmpty ? symbol : name;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        title: Text(l.acctDeleteHoldingTitle(label)),
+        content: Text(
+          l.acctDeleteHoldingBody,
+          style: TextStyle(color: context.textMuted, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(l.actionCancel),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: context.negative),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(l.acctDeleteHoldingConfirm),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return; // cancel/dismiss → nothing is called
     try {
       await _apiService.deleteHolding(_accountId, (h['id'] ?? '').toString());
       _fetchHoldings();

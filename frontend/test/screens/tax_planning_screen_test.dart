@@ -201,6 +201,14 @@ Widget _host({Map<String, dynamic>? settingStore}) {
             ({required int year, required String status}) async => _unrealized,
         fbarFetcher: (int year) async => _fbar,
         contributionsFetcher: (int year) async => _contributions,
+        // All-history realized-gains by_year — the (fixed) source of the year
+        // dropdown; 2024 appears in NO year-filtered fixture above, so it can
+        // only reach the dropdown through this list.
+        realizedYearsFetcher: () async => const {
+          'by_year': [
+            {'year': 2024, 'realized_usd': 500.0},
+          ],
+        },
         settingReader: (key) async => store[key],
         settingWriter: (key, value) async => store[key] = value,
       ),
@@ -292,6 +300,21 @@ void main() {
     expect(find.text(l.taxFbarExceeded), findsOneWidget);
     // The foreign account contributing to the peak is listed.
     expect(find.text('Banamex Checking'), findsOneWidget);
+  });
+
+  testWidgets(
+      'year dropdown offers all-history disposal years from by_year, not '
+      'just the (circular) selected-year data', (tester) async {
+    _setSize(tester, const Size(1100, 1600));
+    await tester.pumpWidget(_host());
+    await tester.pumpAndSettle();
+
+    // 2024 exists only in the realized-gains by_year fixture — before the
+    // fix the dropdown derived its options from the year-filtered fetches,
+    // so a past year with disposals was unreachable app-wide.
+    await tester.tap(find.byType(DropdownButton<int>));
+    await tester.pumpAndSettle();
+    expect(find.text('2024'), findsWidgets);
   });
 
   testWidgets('T15: a contribution row shows remaining room', (tester) async {

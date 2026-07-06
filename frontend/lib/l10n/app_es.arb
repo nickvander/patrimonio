@@ -1982,24 +1982,38 @@
   "lendPreviewPerPaymentInterest": "{amount}{cadence} de interés  ·  {count, plural, =1{1 pago} other{{count} pagos}}",
   "@lendPreviewPerPaymentInterest": {
     "placeholders": {
-      "amount": { "type": "String" },
-      "cadence": { "type": "String" },
-      "count": { "type": "int" }
+      "amount": {
+        "type": "String"
+      },
+      "cadence": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
     }
   },
   "lendPreviewPerPaymentCount": "{amount}{cadence}  ·  {count, plural, =1{1 pago} other{{count} pagos}}",
   "@lendPreviewPerPaymentCount": {
     "placeholders": {
-      "amount": { "type": "String" },
-      "cadence": { "type": "String" },
-      "count": { "type": "int" }
+      "amount": {
+        "type": "String"
+      },
+      "cadence": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
     }
   },
   "lendPreviewPrincipalAtMaturity": "Capital al vencimiento",
   "lendPreviewDueWithFinalPayment": "{amount}  ·  con el pago final",
   "@lendPreviewDueWithFinalPayment": {
     "placeholders": {
-      "amount": { "type": "String" }
+      "amount": {
+        "type": "String"
+      }
     }
   },
   "lendPreviewEnterPaymentSolve": "Ingresa un pago para ver cuánto tarda",
@@ -2007,13 +2021,17 @@
   "lendEditRatePerPeriod": "{period, select, monthly{Tasa % por mes} other{Tasa % por año}}",
   "@lendEditRatePerPeriod": {
     "placeholders": {
-      "period": { "type": "String" }
+      "period": {
+        "type": "String"
+      }
     }
   },
   "lendTermsSummaryTermMonths": "{count, plural, =1{plazo de 1 mes} other{plazo de {count} meses}}",
   "@lendTermsSummaryTermMonths": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "lendTermsSummaryMonthlyPayments": "pagos mensuales",
@@ -2022,7 +2040,9 @@
   "lendTermsSummaryFixed": "El plazo y el calendario ({parts}) son fijos — elimina y vuelve a agregar para cambiarlos.",
   "@lendTermsSummaryFixed": {
     "placeholders": {
-      "parts": { "type": "String" }
+      "parts": {
+        "type": "String"
+      }
     }
   },
   "lendNoMatchingOutflow": "No se encontró ninguna salida cercana a la fecha del préstamo — elige una manualmente abajo.",
@@ -2033,8 +2053,12 @@
   "lendPayBackByWhen": "Pagar antes del {date} · {when}",
   "@lendPayBackByWhen": {
     "placeholders": {
-      "date": { "type": "String" },
-      "when": { "type": "String" }
+      "date": {
+        "type": "String"
+      },
+      "when": {
+        "type": "String"
+      }
     }
   },
   "lendToastUnreconcileFirst": "Primero anula la conciliación de los pagos para regenerar",
@@ -2095,5 +2119,56 @@
   "pfDivDetailAccounts": "En cuentas",
   "pfDivDetailTaxAdvantaged": "Con ventaja fiscal",
   "pfDivDetailNoHistory": "Este símbolo aún no tiene historial de dividendos.",
-  "pfDivDetailLoadError": "No se pudo cargar el detalle de dividendos"
+  "pfDivDetailLoadError": "No se pudo cargar el detalle de dividendos",
+  "rgShowAll": "Mostrar todas ({count})",
+  "@rgShowAll": {
+    "description": "Expands the realized-gains card's disposal list from the newest 8 rows to every disposal; count is the total number of disposals.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "rgShowFewer": "Mostrar menos",
+  "@rgShowFewer": {
+    "description": "Collapses the expanded realized-gains disposal list back to the newest rows."
+  },
+  "rgYearTile": "{year}",
+  "@rgYearTile": {
+    "description": "Caption of the realized-gains year-to-date summary tile, naming the calendar year it covers (e.g. \"2026\"). Was the ambiguous \"This year\".",
+    "placeholders": {
+      "year": {
+        "type": "String"
+      }
+    }
+  },
+  "rgEmpty": "Aún no hay ganancias realizadas",
+  "@rgEmpty": {
+    "description": "One-line empty state on the realized-gains card when the user has never sold a security."
+  },
+  "rgLoadError": "No se pudieron cargar las ganancias realizadas",
+  "@rgLoadError": {
+    "description": "Inline error row on the realized-gains card when the fetch fails; shown next to a Retry button."
+  },
+  "rgRetry": "Reintentar",
+  "@rgRetry": {
+    "description": "Retry button on the realized-gains card's inline error row."
+  },
+  "acctDeleteHoldingTitle": "¿Eliminar {symbol}?",
+  "@acctDeleteHoldingTitle": {
+    "description": "Title of the destructive confirmation dialog shown before deleting a holding; symbol is the ticker (or name) of the holding.",
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
+  "acctDeleteHoldingBody": "Esto elimina permanentemente la posición, todos sus lotes de compra y sus registros fiscales de ganancias realizadas. No se puede deshacer.",
+  "@acctDeleteHoldingBody": {
+    "description": "Body of the delete-holding confirmation dialog, spelling out the cascade to purchase lots and realized-gain tax records."
+  },
+  "acctDeleteHoldingConfirm": "Eliminar permanentemente",
+  "@acctDeleteHoldingConfirm": {
+    "description": "Destructive confirm button of the delete-holding dialog."
+  }
 }

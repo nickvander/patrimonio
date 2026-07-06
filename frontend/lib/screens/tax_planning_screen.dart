@@ -24,6 +24,10 @@ typedef TaxUnrealizedFetcher = Future<Map<String, dynamic>> Function(
     {required int year, required String status});
 typedef TaxFbarFetcher = Future<Map<String, dynamic>> Function(int year);
 typedef TaxContributionsFetcher = Future<Map<String, dynamic>> Function(int year);
+/// All-history realized-gains response (`/dashboard/realized-gains`); only its
+/// `by_year` list is consumed here, so the year dropdown can offer every year
+/// with disposals (the year-filtered disposals fetch can never see other years).
+typedef TaxRealizedYearsFetcher = Future<Map<String, dynamic>> Function();
 
 /// Backend setting key the tax estimator reads as the default filing status
 /// when the query param is absent (so the persisted choice also reaches the
@@ -52,6 +56,7 @@ class TaxPlanningScreen extends StatefulWidget {
   final TaxUnrealizedFetcher? unrealizedFetcher;
   final TaxFbarFetcher? fbarFetcher;
   final TaxContributionsFetcher? contributionsFetcher;
+  final TaxRealizedYearsFetcher? realizedYearsFetcher;
 
   const TaxPlanningScreen({
     super.key,
@@ -67,6 +72,7 @@ class TaxPlanningScreen extends StatefulWidget {
     this.unrealizedFetcher,
     this.fbarFetcher,
     this.contributionsFetcher,
+    this.realizedYearsFetcher,
   });
 
   @override
@@ -89,6 +95,11 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   Map<String, dynamic>? _unrealized;
   Map<String, dynamic>? _fbar;
   Map<String, dynamic>? _contributions;
+  /// `by_year` rows from `/dashboard/realized-gains` — one entry per year
+  /// with a disposal, independent of the selected year's filter. Feeds the
+  /// year dropdown; kept across refetches so a transient failure while
+  /// switching years doesn't shrink the options list.
+  List<dynamic>? _realizedByYear;
 
   int _selectedYear = DateTime.now().year;
   // Backend filing-status vocabulary (normalize accepts these exact tokens).
@@ -122,6 +133,8 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       widget.fbarFetcher ?? _apiService.getFbarStatus;
   TaxContributionsFetcher get _fetchContributions =>
       widget.contributionsFetcher ?? _apiService.getRetirementContributions;
+  TaxRealizedYearsFetcher get _fetchRealizedYears =>
+      widget.realizedYearsFetcher ?? () => _apiService.getRealizedGains();
 
   @override
   void initState() {
@@ -187,6 +200,8 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         soft(_fetchUnrealized(year: _selectedYear, status: _filingStatus)),
         soft(_fetchFbar(_selectedYear)),
         soft(_fetchContributions(_selectedYear)),
+        // Year-dropdown source: all-history by_year, never year-filtered.
+        soft(_fetchRealizedYears()),
       ]);
 
       if (!mounted) return;
@@ -197,6 +212,8 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         _unrealized = optional[0];
         _fbar = optional[1];
         _contributions = optional[2];
+        _realizedByYear =
+            (optional[3]?['by_year'] as List<dynamic>?) ?? _realizedByYear;
         _firstLoad = false;
         _refetching = false;
       });
@@ -555,6 +572,10 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
       _taxTransactions,
       _taxDisposals,
       currentYear: DateTime.now().year,
+      // All-history disposal years — without these the options were derived
+      // from data already filtered to the selected year, so no other year was
+      // ever offered (2025 was unreachable app-wide).
+      byYear: _realizedByYear,
     );
     // Guard: the selected year must be in the items list or the dropdown asserts.
     final yearItems = years.contains(_selectedYear)
@@ -2585,8 +2606,8 @@ class _TaxSkeleton extends StatelessWidget {
       builder: (context, c) {
         final stackKpis = c.maxWidth < 600;
         final kpi = stackKpis
-            ? Column(
-                children: const [
+            ? const Column(
+                children: [
                   SkeletonBox(height: 150),
                   SizedBox(height: 16),
                   SkeletonBox(height: 150),
@@ -2594,8 +2615,8 @@ class _TaxSkeleton extends StatelessWidget {
                   SkeletonBox(height: 150),
                 ],
               )
-            : Row(
-                children: const [
+            : const Row(
+                children: [
                   Expanded(child: SkeletonBox(height: 150)),
                   SizedBox(width: 24),
                   Expanded(child: SkeletonBox(height: 150)),
@@ -2608,9 +2629,9 @@ class _TaxSkeleton extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
+              const Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: const [
+                children: [
                   SkeletonBox(width: 160, height: 24),
                   SkeletonBox(width: 220, height: 36),
                 ],
