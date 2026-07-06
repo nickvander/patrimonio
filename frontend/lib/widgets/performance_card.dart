@@ -324,7 +324,11 @@ class _PerformanceCardState extends State<PerformanceCard> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _headline(context, headlineValue, l.lwPerfTwrReturn),
+            // The headline is the current portfolio *value* in dollars — the
+            // TWR % (which lwPerfTwrReturn correctly names) lives in the pill
+            // below, so captioning this figure "Time-weighted return" was a
+            // mislabel.
+            _headline(context, headlineValue, l.rgxPerfPortfolioValue),
             const SizedBox(height: 14),
             twrBody,
             const SizedBox(height: 8),

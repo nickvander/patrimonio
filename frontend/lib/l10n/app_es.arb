@@ -2338,5 +2338,13 @@
   "insDivShowFewerPayments": "Mostrar menos",
   "@insDivShowFewerPayments": {
     "description": "Collapses the dividend payments list back to the first 12 entries."
-  }
+  },
+  "rgxAllYears": "Todos",
+  "rgxNoSalesInYear": "Sin ventas en {year}",
+  "rgxTaxAdvBadge": "Vent. fiscal",
+  "rgxTaxAdvTooltip": "Roth/IRA/401k/HSA — no gravable",
+  "rgxTaxableCaptionPrefix": "Gravable",
+  "rgxTaxableCaptionSuffix": "de {total} — el resto está en cuentas con ventajas fiscales",
+  "rgxExportCsvTooltip": "Exportar CSV",
+  "rgxPerfPortfolioValue": "Valor del portafolio"
 }

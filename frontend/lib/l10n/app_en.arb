@@ -2726,5 +2726,47 @@
   "insDivShowFewerPayments": "Show fewer",
   "@insDivShowFewerPayments": {
     "description": "Collapses the dividend payments list back to the first 12 entries."
+  },
+  "rgxAllYears": "All",
+  "@rgxAllYears": {
+    "description": "Realized-gains year selector: chip that clears the year filter and shows every disposal."
+  },
+  "rgxNoSalesInYear": "No sales in {year}",
+  "@rgxNoSalesInYear": {
+    "description": "Realized-gains card: shown instead of the disposal list when the selected year has no disposals.",
+    "placeholders": {
+      "year": {
+        "type": "String"
+      }
+    }
+  },
+  "rgxTaxAdvBadge": "Tax-adv.",
+  "@rgxTaxAdvBadge": {
+    "description": "Compact chip on a disposal row marking a sale inside a tax-advantaged account (Roth/IRA/401k/HSA). Keep very short."
+  },
+  "rgxTaxAdvTooltip": "Roth/IRA/401k/HSA — not taxable",
+  "@rgxTaxAdvTooltip": {
+    "description": "Tooltip explaining the tax-advantaged chip on a disposal row."
+  },
+  "rgxTaxableCaptionPrefix": "Taxable",
+  "@rgxTaxableCaptionPrefix": {
+    "description": "Realized-gains taxable caption, first fragment. Rendered as: '<prefix> +$X <suffix>' where +$X is the taxable subtotal (bolded in code)."
+  },
+  "rgxTaxableCaptionSuffix": "of {total} — the rest is inside tax-advantaged accounts",
+  "@rgxTaxableCaptionSuffix": {
+    "description": "Realized-gains taxable caption, fragment after the bolded taxable figure. {total} is the shown period's total realized P&L.",
+    "placeholders": {
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "rgxExportCsvTooltip": "Export CSV",
+  "@rgxExportCsvTooltip": {
+    "description": "Tooltip/semantic label for the realized-gains CSV download button."
+  },
+  "rgxPerfPortfolioValue": "Portfolio value",
+  "@rgxPerfPortfolioValue": {
+    "description": "Caption over the performance card's headline dollar figure (the current portfolio value)."
   }
 }
