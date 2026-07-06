@@ -2555,5 +2555,68 @@
   "acctDeleteHoldingConfirm": "Delete permanently",
   "@acctDeleteHoldingConfirm": {
     "description": "Destructive confirm button of the delete-holding dialog."
+  },
+  "allocTapToFilterHint": "Tap a band to filter the holdings table",
+  "@allocTapToFilterHint": {
+    "description": "Always-visible hint in the allocation card telling the user the bands below are tappable filters."
+  },
+  "allocActiveFilter": "Filtered: {label}",
+  "@allocActiveFilter": {
+    "description": "Active-filter indicator in the allocation card header; label is the tapped band's display name.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "allocClearFilter": "Clear filter",
+  "@allocClearFilter": {
+    "description": "Tooltip/semantics of the inline X next to the allocation card's active-filter indicator."
+  },
+  "allocBandSemanticsHoldings": "{label}, {value}, {count, plural, one{{count} holding} other{{count} holdings}}",
+  "@allocBandSemanticsHoldings": {
+    "description": "Screen-reader label for an asset-class allocation band: display label, percentage + amount, real holdings count.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "allocBandSemanticsAccounts": "{label}, {value}, {count, plural, one{{count} account} other{{count} accounts}}",
+  "@allocBandSemanticsAccounts": {
+    "description": "Screen-reader label for an account-type/institution allocation band: display label, percentage + amount, account count.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "allocBandSemanticsNoCount": "{label}, {value}",
+  "@allocBandSemanticsNoCount": {
+    "description": "Screen-reader label for an allocation band whose backend row carries no count.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "allocBandFiltersTable": "filters the holdings table",
+  "@allocBandFiltersTable": {
+    "description": "Suffix appended to a tappable allocation band's screen-reader label, announcing the tap action."
   }
 }

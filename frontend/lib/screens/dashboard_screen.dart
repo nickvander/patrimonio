@@ -224,6 +224,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Category that the AllocationHeatmap is currently drilled into. When
   // non-null, the PortfolioCard's holdings table filters to that category.
   String? _portfolioCategoryFilter;
+  // Anchors the holdings-table card on the Portfolio tab so a heatmap
+  // band tap can scroll the (below-the-fold) filtered table into view.
+  final GlobalKey _holdingsTableKey = GlobalKey();
   // Cmd-K deep-link search overrides — set by the palette callbacks so
   // the target tab pre-filters to the picked row. They're cleared on
   // any user-driven search change in the target widget.
@@ -3029,6 +3032,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final subCategory = e['sub_category'] as String;
           final value = (e['value'] as num).toDouble();
           final quantity = (e['quantity'] as num?)?.toDouble() ?? 0.0;
+          // Canonical asset-class key (C2). Defensive: older backends
+          // don't send it — null makes the heatmap fall back to emitting
+          // the legacy bare category as the filter value.
+          final assetClassRaw = e['asset_class'];
+          final assetClass =
+              assetClassRaw is String && assetClassRaw.isNotEmpty
+                  ? assetClassRaw
+                  : null;
 
           return AllocationData(
             category,
@@ -3036,6 +3047,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             value,
             categoryColors[category] ?? Colors.blueGrey,
             quantity: quantity,
+            assetClassKey: assetClass,
           );
         }).toList();
 
@@ -4148,12 +4160,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 institutionBreakdown:
                     (_overview?['institution_breakdown'] as List?) ?? const [],
                 activeCategory: _portfolioCategoryFilter,
-                onCategorySelected: (cat) => setState(() {
+                onCategorySelected: (cat) {
                   // Tapping the active band clears the filter — saves a
                   // round-trip through the chip's X button.
-                  _portfolioCategoryFilter =
-                      _portfolioCategoryFilter == cat ? null : cat;
-                }),
+                  final clearing = _portfolioCategoryFilter == cat;
+                  setState(() {
+                    _portfolioCategoryFilter = clearing ? null : cat;
+                  });
+                  // Setting (not clearing) a filter: the filtered table
+                  // sits well below the fold, so scroll it into view or
+                  // the tap looks like it did nothing. Post-frame so the
+                  // rebuild above has laid out first; the nearest
+                  // Scrollable is this tab's SingleChildScrollView
+                  // (buildTabContainer).
+                  if (!clearing) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      final ctx = _holdingsTableKey.currentContext;
+                      if (!mounted || ctx == null) return;
+                      Scrollable.ensureVisible(
+                        ctx,
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeInOutCubic,
+                        // Land the table near the top of the viewport so
+                        // its header + first rows are visible.
+                        alignment: 0.05,
+                      );
+                    });
+                  }
+                },
               ),
             ),
             const SizedBox(height: 24),
@@ -4169,7 +4203,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 24),
           // 5 · Holdings — searchable table, drill-down filter from above.
+          // Keyed so the allocation band-tap can ensureVisible it.
           PortfolioCard(
+            key: _holdingsTableKey,
             section: PortfolioSection.holdings,
             portfolioData: portfolioData,
             conversionFactor: conversionFactor,

@@ -10,12 +10,19 @@ class AllocationData {
   final Color color;
   final double quantity;
 
+  /// Canonical backend asset-class key (`equity | bonds | cash | crypto |
+  /// real_estate | commodities | other`). Null when the backend doesn't
+  /// send `asset_class` yet — band taps then fall back to emitting the
+  /// legacy bare [category] as the filter value.
+  final String? assetClassKey;
+
   AllocationData(
     this.category,
     this.subCategory,
     this.value,
     this.color, {
     this.quantity = 0,
+    this.assetClassKey,
   });
 }
 
@@ -48,11 +55,15 @@ String _displayCategory(String raw, AppLocalizations l) {
 /// keep short acronyms (IRA, ETF) uppercase.
 String _prettyLabel(String raw, AppLocalizations l) {
   if (raw.isEmpty) return l.pfOther;
+  const acronyms = {'ira', 'hsa', 'cd', '401k', 'etf', 'reit'};
   final normalised = raw.replaceAll('_', ' ').replaceAll('-', ' ').trim();
   return normalised
       .split(' ')
       .where((p) => p.isNotEmpty)
       .map((p) {
+        // Known acronyms render all-caps regardless of input case
+        // ("ira" → "IRA", "401k" → "401K").
+        if (acronyms.contains(p.toLowerCase())) return p.toUpperCase();
         final upper = p.toUpperCase();
         if (upper == p && p.length <= 4) return p; // already an acronym
         return p[0].toUpperCase() + p.substring(1).toLowerCase();
@@ -74,13 +85,18 @@ class _Band {
   /// preview / expand state. Null for type/institution bands.
   final String? rawCategory;
 
-  /// Raw value tapping this band filters the holdings table by (matched
-  /// against the holding's holding_type / account_type / institution_name).
-  /// Empty = not tappable.
+  /// Dimension-prefixed value tapping this band emits to filter the
+  /// holdings table (contract C3): `asset:<canonical key>`,
+  /// `account_type:<raw type>` or `institution:<raw name>`. A bare
+  /// (unprefixed) legacy category is emitted when the backend doesn't
+  /// send `asset_class` yet. Empty = not tappable.
   final String filterValue;
 
   /// Holdings count shown as a chip (asset-class dimension only).
   final int? holdingsCount;
+
+  /// Account count (type / institution dimensions) — semantics only.
+  final int? accountsCount;
 
   _Band({
     required this.label,
@@ -90,6 +106,7 @@ class _Band {
     this.rawCategory,
     this.filterValue = '',
     this.holdingsCount,
+    this.accountsCount,
   });
 }
 
@@ -143,6 +160,13 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
 
   // Active dimension: 0 = asset class, 1 = account type, 2 = institution.
   int _dim = 0;
+
+  /// C3 prefix each dimension's bands emit as filter values.
+  static String _dimPrefix(int dim) => switch (dim) {
+        0 => 'asset:',
+        1 => 'account_type:',
+        _ => 'institution:',
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -225,6 +249,11 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
               const SizedBox(height: 16),
               _dimensionToggle(dim, hasType, hasInst, l),
             ],
+            // Permanent tap affordance / active-filter indicator — the
+            // filtered table lives below the fold, so the state has to be
+            // readable up here.
+            const SizedBox(height: 14),
+            _filterStatusRow(bands, l),
             if (showConcentration && topHolding != null) ...[
               const SizedBox(height: 16),
               _concentrationBanner(context, l, topHolding.subCategory, topShare),
@@ -265,13 +294,25 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
         });
       return cats.map((cat) {
         final items = grouped[cat]!;
+        // C3 emit side: prefix with the dimension + the backend's
+        // canonical asset-class key (C2). If the backend doesn't send
+        // `asset_class` yet, fall back to the legacy bare category so
+        // tap-to-filter keeps working before the backend merge.
+        String? classKey;
+        for (final item in items) {
+          final k = item.assetClassKey;
+          if (k != null && k.isNotEmpty) {
+            classKey = k;
+            break;
+          }
+        }
         return _Band(
           label: _displayCategory(cat, l),
           value: items.fold<double>(0, (s, i) => s + i.value),
           color: colors[cat]!,
           items: items,
           rawCategory: cat,
-          filterValue: cat,
+          filterValue: classKey != null ? 'asset:$classKey' : cat,
           holdingsCount: items.length,
         );
       }).toList();
@@ -284,14 +325,24 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
       final value = ((raw['total_usd'] ?? raw['total'] ?? 0) as num).toDouble();
       if (value <= 0) continue;
       // Keep the RAW value for filtering (matches holdings' account_type /
-      // institution_name); prettify only the display label.
+      // institution_name); prettify only the display label. C3 emit side:
+      // prefix the raw value with its dimension.
       final rawValue = dim == 1
           ? (raw['account_type'] ?? '').toString()
           : (raw['name'] ?? '').toString();
       final label =
           dim == 1 ? _prettyLabel(rawValue, l) : (rawValue.isEmpty ? l.pfOther : rawValue);
+      final filterValue = rawValue.isEmpty
+          ? ''
+          : (dim == 1 ? 'account_type:$rawValue' : 'institution:$rawValue');
+      final accounts =
+          ((raw['count'] ?? raw['account_count']) as num?)?.toInt();
       bands.add(_Band(
-          label: label, value: value, color: Colors.transparent, filterValue: rawValue));
+          label: label,
+          value: value,
+          color: Colors.transparent,
+          filterValue: filterValue,
+          accountsCount: accounts));
     }
     bands.sort((a, b) => b.value.compareTo(a.value));
     // Assign palette colors after sorting so the biggest bands lead.
@@ -302,6 +353,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
           value: bands[i].value,
           color: paletteAt(i),
           filterValue: bands[i].filterValue,
+          accountsCount: bands[i].accountsCount,
         ),
     ];
   }
@@ -310,7 +362,22 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
     Widget chip(String label, int idx) {
       final active = dim == idx;
       return InkWell(
-        onTap: () => setState(() => _dim = idx),
+        onTap: () {
+          // Switching dimension must not leave an invisible
+          // cross-dimension filter applied — if the active filter
+          // wasn't emitted by the new dimension (prefix mismatch, or a
+          // legacy bare value), toggle-clear it via the same callback
+          // the bands use.
+          final activeFilter = widget.activeCategory;
+          if (idx != dim &&
+              activeFilter != null &&
+              activeFilter.isNotEmpty &&
+              !activeFilter.startsWith(_dimPrefix(idx)) &&
+              widget.onCategorySelected != null) {
+            widget.onCategorySelected!(activeFilter);
+          }
+          setState(() => _dim = idx);
+        },
         borderRadius: BorderRadius.circular(20),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
@@ -345,6 +412,90 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
         chip(l.lwAllocDimClass, 0),
         if (hasType) chip(l.lwAllocDimType, 1),
         if (hasInst) chip(l.lwAllocDimInstitution, 2),
+      ],
+    );
+  }
+
+  /// Always-visible affordance under the header: either the "tap a band
+  /// to filter" hint, or — when a filter is applied — its display label
+  /// with an inline ✕ that clears it (same toggle callback the bands use).
+  Widget _filterStatusRow(List<_Band> bands, AppLocalizations l) {
+    final active = widget.activeCategory;
+    _Band? match;
+    if (active != null && active.isNotEmpty) {
+      for (final b in bands) {
+        if (b.filterValue == active) {
+          match = b;
+          break;
+        }
+      }
+    }
+    if (match == null) {
+      return Row(
+        children: [
+          Icon(Icons.touch_app_outlined, size: 14, color: context.textFaint),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              l.allocTapToFilterHint,
+              style: TextStyle(
+                fontSize: 11.5,
+                color: context.textFaint,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    }
+    final band = match;
+    return Row(
+      children: [
+        Flexible(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: band.color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: band.color.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    l.allocActiveFilter(band.label),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: band.color,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (widget.onCategorySelected != null) ...[
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () =>
+                        widget.onCategorySelected!(band.filterValue),
+                    borderRadius: BorderRadius.circular(10),
+                    child: Tooltip(
+                      message: l.allocClearFilter,
+                      child: Semantics(
+                        button: true,
+                        label: l.allocClearFilter,
+                        child: Icon(Icons.close, size: 14, color: band.color),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -471,11 +622,23 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
       ),
     );
 
-    final semanticLabel = l.lwAllocSemanticLabel(
-      b.label,
-      '${(pct * 100).toStringAsFixed(1)}%',
-      b.holdingsCount ?? 0,
-    );
+    // Real counts, never a hardcoded 0: asset-class bands carry their
+    // holdings count (items.length); type/institution bands carry the
+    // breakdown rows' account count. Bands with neither omit the count.
+    final valueLabel =
+        '${(pct * 100).toStringAsFixed(1)}% · ${widget.currencyFormat.format(b.value * widget.conversionFactor)}';
+    final String baseLabel;
+    if (b.holdingsCount != null) {
+      baseLabel =
+          l.allocBandSemanticsHoldings(b.label, valueLabel, b.holdingsCount!);
+    } else if (b.accountsCount != null) {
+      baseLabel =
+          l.allocBandSemanticsAccounts(b.label, valueLabel, b.accountsCount!);
+    } else {
+      baseLabel = l.allocBandSemanticsNoCount(b.label, valueLabel);
+    }
+    final semanticLabel =
+        canTap ? '$baseLabel, ${l.allocBandFiltersTable}' : baseLabel;
 
     if (!canTap) {
       return Semantics(label: semanticLabel, child: inner);
