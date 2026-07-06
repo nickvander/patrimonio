@@ -4890,3 +4890,675 @@ async fn continuity_report_lists_imported_accounts_with_institution() {
     assert_eq!(accounts[0]["institution_name"], serde_json::json!("Test Bank"), "{body}");
     assert_eq!(accounts[0]["statement_count"], serde_json::json!(2), "{body}");
 }
+
+// =====================================================================
+// Round 2 — WS1: day change (C-B), instrument detail (C-A), dividend
+// payments (C-D), realized-gains account context (C-C), CSV exports
+// (C-E), unclassified allocation band (C-G).
+// =====================================================================
+
+/// Read a (non-JSON) body as UTF-8 text — for the CSV exporters.
+async fn body_text(body: Body) -> String {
+    let bytes = to_bytes(body, 1024 * 1024).await.expect("read body");
+    String::from_utf8(bytes.to_vec()).expect("utf-8 body")
+}
+
+/// Seed an investment-ish account under an existing institution.
+async fn seed_typed_account(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    inst: uuid::Uuid,
+    name: &str,
+    account_type: &str,
+    balance: &str,
+) -> uuid::Uuid {
+    sqlx::query_scalar(
+        "INSERT INTO accounts (institution_id, name, account_type, currency, current_balance, user_id) \
+         VALUES ($1, $2, $3, 'USD', $4::numeric, $5) RETURNING id",
+    )
+    .bind(inst)
+    .bind(name)
+    .bind(account_type)
+    .bind(balance)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .expect("seed typed account")
+}
+
+/// Seed one holding row; returns its id.
+async fn seed_holding(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    symbol: &str,
+    name: &str,
+    holding_type: &str,
+    qty: &str,
+    price: Option<&str>,
+    value: &str,
+    cost_basis: Option<&str>,
+) -> uuid::Uuid {
+    sqlx::query_scalar(
+        "INSERT INTO holdings (account_id, symbol, name, holding_type, currency, quantity, price, value, cost_basis, user_id) \
+         VALUES ($1, $2, $3, $4, 'USD', $5::numeric, $6::numeric, $7::numeric, $8::numeric, $9) RETURNING id",
+    )
+    .bind(account_id)
+    .bind(symbol)
+    .bind(name)
+    .bind(holding_type)
+    .bind(qty)
+    .bind(price)
+    .bind(value)
+    .bind(cost_basis)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .expect("seed holding")
+}
+
+/// Seed a benchmark close `days_ago` days back.
+async fn seed_close(pool: &PgPool, symbol: &str, days_ago: i32, close: &str) {
+    sqlx::query(
+        "INSERT INTO benchmark_prices (symbol, price_date, close) \
+         VALUES ($1, (CURRENT_DATE - make_interval(days => $2))::date, $3::numeric) \
+         ON CONFLICT (symbol, price_date) DO UPDATE SET close = EXCLUDED.close",
+    )
+    .bind(symbol)
+    .bind(days_ago)
+    .bind(close)
+    .execute(pool)
+    .await
+    .expect("seed close");
+}
+
+/// C-B: per-row day change comes from the last two STORED closes; cash
+/// sleeves, single-close and stale-close symbols stay null and are excluded
+/// from the totals + coverage numerator.
+#[tokio::test]
+#[serial_test::serial]
+async fn holdings_day_change_from_stored_closes_and_coverage() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (inst, _acct) = seed_account(&pool, user_id).await;
+    let brok = seed_typed_account(&pool, user_id, inst, "Brokerage", "brokerage", "2090.00").await;
+
+    // Covered: GOOG, two fresh closes 100 -> 102 (+2%).
+    seed_holding(&pool, user_id, brok, "GOOG", "Alphabet", "equity", "10", Some("102"), "1020", Some("900")).await;
+    seed_close(&pool, "GOOG", 1, "100").await;
+    seed_close(&pool, "GOOG", 0, "102").await;
+    // Null paths: 401k-trust style row (no closes at all)…
+    seed_holding(&pool, user_id, brok, "VANG TARGET RET 2045", "Vanguard Target 2045 Trust", "", "47", None, "470", None).await;
+    // …cash sleeve (fresh closes exist but the row is cash)…
+    seed_holding(&pool, user_id, brok, "CUR:USD", "US Dollar", "cash", "200", Some("1"), "200", None).await;
+    // …stale series (latest close 8 days old)…
+    seed_holding(&pool, user_id, brok, "MSFT", "Microsoft", "equity", "1", Some("300"), "300", None).await;
+    seed_close(&pool, "MSFT", 9, "290").await;
+    seed_close(&pool, "MSFT", 8, "300").await;
+    // …and a single-close symbol.
+    seed_holding(&pool, user_id, brok, "NVDA", "NVIDIA", "equity", "1", Some("100"), "100", None).await;
+    seed_close(&pool, "NVDA", 0, "100").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/holdings", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+
+    let holdings = body["holdings"].as_array().unwrap();
+    let by_symbol = |s: &str| holdings.iter().find(|h| h["symbol"] == s).unwrap();
+
+    let goog = by_symbol("GOOG");
+    assert!((goog["day_change_pct"].as_f64().unwrap() - 2.0).abs() < 1e-6, "{goog}");
+    assert!((goog["day_change_usd"].as_f64().unwrap() - 20.4).abs() < 1e-6, "{goog}");
+    let today = chrono::Utc::now().date_naive().to_string();
+    assert_eq!(goog["price_as_of"].as_str().unwrap(), today);
+    // Round-1 regression guard: asset_class untouched.
+    assert_eq!(goog["asset_class"], "equity");
+
+    for sym in ["VANG TARGET RET 2045", "CUR:USD", "MSFT", "NVDA"] {
+        let h = by_symbol(sym);
+        assert!(h["day_change_usd"].is_null(), "{sym} should be null: {h}");
+        assert!(h["day_change_pct"].is_null(), "{sym} should be null: {h}");
+        assert!(h["price_as_of"].is_null(), "{sym} should be null: {h}");
+    }
+
+    // Totals cover GOOG only: +20.4 on a prior value of 999.6.
+    assert!((body["day_change_usd"].as_f64().unwrap() - 20.4).abs() < 1e-6);
+    assert!((body["day_change_pct"].as_f64().unwrap() - (20.4 / 999.6 * 100.0)).abs() < 1e-6);
+    // Coverage: 1020 covered of 2090 total.
+    assert!(
+        (body["day_change_coverage_pct"].as_f64().unwrap() - (1020.0 / 2090.0 * 100.0)).abs()
+            < 1e-6,
+        "coverage: {}",
+        body["day_change_coverage_pct"]
+    );
+    assert_eq!(body["day_change_as_of"].as_str().unwrap(), today);
+}
+
+/// C-A: full contract for a held ticker (chart ranges honored), graceful
+/// degradation for an opaque symbol, 404 for an unheld one.
+#[tokio::test]
+#[serial_test::serial]
+async fn instrument_detail_contract_ranges_opaque_and_404() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (inst, _acct) = seed_account(&pool, user_id).await;
+    let brok = seed_typed_account(&pool, user_id, inst, "Robinhood", "brokerage", "5085.80").await;
+    let k401 = seed_typed_account(&pool, user_id, inst, "Employer 401k", "401k", "12000.00").await;
+
+    let nvda = seed_holding(&pool, user_id, brok, "NVDA", "NVIDIA Corp", "equity", "29.5", Some("172.40"), "5085.80", Some("3100")).await;
+    seed_holding(&pool, user_id, k401, "VANG TARGET RET 2045", "Vanguard Target Retirement 2045 Trust", "", "100", None, "12000", None).await;
+    sqlx::query(
+        "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) \
+         VALUES ($1, $2, $3, '2024-03-01', 10, 88.10, 'USD', 1.0, 'lot-nvda')",
+    )
+    .bind(nvda)
+    .bind(brok)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Four stored closes; latest is CURRENT_DATE so the freshness gate never
+    // reaches for Yahoo during the test.
+    seed_close(&pool, "NVDA", 100, "150").await;
+    seed_close(&pool, "NVDA", 50, "160").await;
+    seed_close(&pool, "NVDA", 10, "170").await;
+    seed_close(&pool, "NVDA", 0, "171.7").await;
+
+    // Case-insensitive match + default 1y range.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/instruments/nvda", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+
+    assert_eq!(body["symbol"], "NVDA");
+    assert_eq!(body["name"], "NVIDIA Corp");
+    assert_eq!(body["currency"], "USD");
+    assert_eq!(body["asset_class"], "equity");
+    assert!((body["quantity"].as_f64().unwrap() - 29.5).abs() < 1e-9);
+    assert!((body["price"].as_f64().unwrap() - 172.40).abs() < 1e-9);
+    assert!((body["value_usd"].as_f64().unwrap() - 5085.80).abs() < 1e-9);
+    // Lots-preferred basis: the single lot (881) outranks the flat 3100.
+    assert!((body["cost_basis_usd"].as_f64().unwrap() - 881.0).abs() < 1e-9);
+    assert!((body["gain_loss_usd"].as_f64().unwrap() - 4204.8).abs() < 1e-9);
+    // Weight over the whole holdings portfolio (5085.80 + 12000).
+    let want_weight = (5085.80f64 / 17085.80 * 100.0 * 100.0).round() / 100.0;
+    assert!((body["portfolio_weight_pct"].as_f64().unwrap() - want_weight).abs() < 1e-9);
+    // Day change from the last two closes: 170 -> 171.7 = +1%.
+    assert!((body["day_change_pct"].as_f64().unwrap() - 1.0).abs() < 1e-9);
+    assert!((body["day_change_usd"].as_f64().unwrap() - 50.86).abs() < 1e-9);
+    let today = chrono::Utc::now().date_naive().to_string();
+    assert_eq!(body["price_as_of"].as_str().unwrap(), today);
+    let accounts = body["accounts"].as_array().unwrap();
+    assert_eq!(accounts.len(), 1);
+    assert_eq!(accounts[0]["account_name"], "Robinhood");
+    assert_eq!(accounts[0]["account_type"], "brokerage");
+    assert_eq!(accounts[0]["tax_advantaged"], false);
+    let lots = body["lots"].as_array().unwrap();
+    assert_eq!(lots.len(), 1);
+    assert_eq!(lots[0]["acquired_at"], "2024-03-01");
+    assert!((lots[0]["usd_cost"].as_f64().unwrap() - 881.0).abs() < 1e-9);
+    assert_eq!(body["prices"].as_array().unwrap().len(), 4, "1y default: all four closes");
+
+    // Ranges narrow the series.
+    for (range, want_points) in [("1m", 2), ("3m", 3), ("max", 4)] {
+        let res = app
+            .clone()
+            .oneshot(req(
+                Method::GET,
+                &format!("/api/dashboard/instruments/NVDA?range={range}"),
+                None,
+                Some(&token),
+            ))
+            .await
+            .unwrap();
+        let body = body_json(res.into_body()).await;
+        assert_eq!(
+            body["prices"].as_array().unwrap().len(),
+            want_points,
+            "range={range}"
+        );
+    }
+
+    // Opaque symbol: 200 with empty prices + null day stats, accounts intact.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/instruments/VANG%20TARGET%20RET%202045",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["prices"], serde_json::json!([]));
+    assert!(body["day_change_usd"].is_null());
+    assert!(body["day_change_pct"].is_null());
+    assert!(body["price_as_of"].is_null());
+    assert!(body["price"].is_null());
+    assert!(body["cost_basis_usd"].is_null());
+    assert_eq!(body["accounts"][0]["account_type"], "401k");
+    assert_eq!(body["accounts"][0]["tax_advantaged"], true);
+
+    // Unheld symbol: 404 with the C-A error shape.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/instruments/TSLA", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["error"], "unknown symbol");
+}
+
+/// Seed one dated, categorized transaction (for the C-D payment matcher).
+async fn seed_dividend_tx(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    description: &str,
+    amount: &str,
+    category_detailed: Option<&str>,
+    days_ago: i32,
+) {
+    sqlx::query(
+        "INSERT INTO transactions (account_id, date, description, amount, currency, category_detailed, source, user_id) \
+         VALUES ($1, (CURRENT_DATE - make_interval(days => $2))::date, $3, $4::numeric, 'USD', $5, 'manual', $6)",
+    )
+    .bind(account_id)
+    .bind(days_ago)
+    .bind(description)
+    .bind(amount)
+    .bind(category_detailed)
+    .bind(user_id)
+    .execute(pool)
+    .await
+    .expect("seed dividend tx");
+}
+
+/// C-D: payments match conservatively — positive INCOME_DIVIDENDS (or
+/// dividend-worded) rows naming the ticker as a whole word, in accounts
+/// that hold the symbol; everything else stays out; regex-unsafe symbols
+/// skip matching entirely.
+#[tokio::test]
+#[serial_test::serial]
+async fn dividend_detail_payments_matched_conservatively() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (inst, _acct) = seed_account(&pool, user_id).await;
+    let holder = seed_typed_account(&pool, user_id, inst, "Fidelity HSA", "hsa", "1000.00").await;
+    let other = seed_typed_account(&pool, user_id, inst, "Other Brokerage", "brokerage", "1000.00").await;
+
+    // ZZTQ deliberately unresolvable on Yahoo — the live dividend fetch
+    // degrades to none and the payments section still populates.
+    seed_holding(&pool, user_id, holder, "ZZTQ", "ZZ Test Corp", "equity", "10", Some("100"), "1000", None).await;
+
+    // Matches: positive + INCOME_DIVIDENDS + ticker as a whole word, in the
+    // holding account.
+    seed_dividend_tx(&pool, user_id, holder, "Dividend received: ZZTQ", "105.60", Some("INCOME_DIVIDENDS"), 0).await;
+    // Matches: no category, but the Spanish "dividendo" wording + ticker.
+    seed_dividend_tx(&pool, user_id, holder, "Dividendo ZZTQ pagado", "33.00", None, 30).await;
+    // No match: ticker only as a substring (ZZTQX).
+    seed_dividend_tx(&pool, user_id, holder, "ZZTQX distribution", "50.00", Some("INCOME_DIVIDENDS"), 1).await;
+    // No match: negative amount (a reversal).
+    seed_dividend_tx(&pool, user_id, holder, "ZZTQ dividend reversal", "-105.60", Some("INCOME_DIVIDENDS"), 2).await;
+    // No match: right wording, WRONG account (doesn't hold ZZTQ).
+    seed_dividend_tx(&pool, user_id, other, "ZZTQ dividend", "75.00", Some("INCOME_DIVIDENDS"), 3).await;
+    // No match: dividend wording without the ticker.
+    seed_dividend_tx(&pool, user_id, holder, "Quarterly dividend payment", "12.00", None, 4).await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/dividends/ZZTQ", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+
+    let payments = body["payments"].as_array().expect("payments array");
+    assert_eq!(payments.len(), 2, "exactly the two conservative matches: {payments:#?}");
+    // Newest first.
+    assert!((payments[0]["amount_usd"].as_f64().unwrap() - 105.60).abs() < 0.001);
+    assert_eq!(payments[0]["account_name"], "Fidelity HSA");
+    assert!((payments[1]["amount_usd"].as_f64().unwrap() - 33.0).abs() < 0.001);
+
+    // Regex-unsafe symbol (':' outside [A-Za-z0-9.-]): matching is skipped
+    // entirely — empty payments even with a would-be-matching row present.
+    seed_holding(&pool, user_id, holder, "ZZ:WEIRD", "Weird Pseudo", "equity", "1", Some("1"), "1", None).await;
+    seed_dividend_tx(&pool, user_id, holder, "ZZ:WEIRD dividend", "9.00", Some("INCOME_DIVIDENDS"), 5).await;
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/dividends/ZZ%3AWEIRD", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["payments"], serde_json::json!([]));
+}
+
+/// Seed a (holding, disposal) pair in an account; returns nothing. P&L and
+/// dates are caller-chosen so tests can pin taxable vs advantaged sums.
+async fn seed_disposal(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    symbol: &str,
+    pnl: &str,
+    years_ago: i32,
+    source_id: &str,
+) {
+    let holding_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO holdings (account_id, symbol, name, currency, user_id) \
+         VALUES ($1, $2, $2, 'USD', $3) RETURNING id",
+    )
+    .bind(account_id)
+    .bind(symbol)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .expect("seed disposal holding");
+    sqlx::query(
+        "INSERT INTO lot_disposals \
+         (user_id, holding_id, account_id, lot_id, sell_source_id, qty_sold, sell_price_per_unit, \
+          sell_currency, sell_fx_rate, sell_date, cost_per_unit, cost_fx_rate, realized_pnl_usd) \
+         VALUES ($1, $2, $3, NULL, $4, 10, 100, 'USD', 1.0, \
+                 (CURRENT_DATE - make_interval(years => $5))::date, 60, 1.0, $6::numeric)",
+    )
+    .bind(user_id)
+    .bind(holding_id)
+    .bind(account_id)
+    .bind(source_id)
+    .bind(years_ago)
+    .bind(pnl)
+    .execute(pool)
+    .await
+    .expect("seed disposal");
+}
+
+/// C-C: every disposal row carries its account context + advantaged flag,
+/// and the summary's taxable subtotal covers the returned (year-filtered)
+/// list's non-advantaged rows only.
+#[tokio::test]
+#[serial_test::serial]
+async fn realized_gains_account_context_and_taxable_subtotal() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (inst, _acct) = seed_account(&pool, user_id).await;
+    let brok = seed_typed_account(&pool, user_id, inst, "Robinhood", "brokerage", "0").await;
+    let roth = seed_typed_account(&pool, user_id, inst, "Roth IRA", "roth", "0").await;
+    // Nickname outranks the bank name in the row context.
+    sqlx::query("UPDATE accounts SET nickname = 'My Roth' WHERE id = $1")
+        .bind(roth)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    seed_disposal(&pool, user_id, brok, "VTI", "1774.50", 0, "s1").await;
+    seed_disposal(&pool, user_id, roth, "SCHD", "1195.00", 0, "s2").await;
+    seed_disposal(&pool, user_id, brok, "VXUS", "4053.50", 1, "s3").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/realized-gains", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+
+    let disposals = body["disposals"].as_array().unwrap();
+    assert_eq!(disposals.len(), 3);
+    let schd = disposals.iter().find(|d| d["symbol"] == "SCHD").unwrap();
+    assert_eq!(schd["account_name"], "My Roth");
+    assert_eq!(schd["account_type"], "roth");
+    assert_eq!(schd["tax_advantaged"], true);
+    let vti = disposals.iter().find(|d| d["symbol"] == "VTI").unwrap();
+    assert_eq!(vti["account_name"], "Robinhood");
+    assert_eq!(vti["tax_advantaged"], false);
+    // All-history list: both brokerage disposals are taxable.
+    assert!(
+        (body["summary"]["taxable_realized_usd"].as_f64().unwrap() - 5828.0).abs() < 0.001,
+        "taxable: {}",
+        body["summary"]["taxable_realized_usd"]
+    );
+
+    // Year filter recomputes the taxable subtotal over that year's list.
+    let this_year = chrono::Utc::now().format("%Y").to_string();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/dashboard/realized-gains?year={this_year}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["summary"]["count"].as_i64().unwrap(), 2);
+    assert!(
+        (body["summary"]["taxable_realized_usd"].as_f64().unwrap() - 1774.50).abs() < 0.001,
+        "year-filtered taxable: {}",
+        body["summary"]["taxable_realized_usd"]
+    );
+}
+
+/// C-E: holdings + lots CSV exports — headers, filename, RFC-4180 quoting
+/// of a name containing a comma AND quotes, and row counts matching the
+/// JSON endpoint's data.
+#[tokio::test]
+#[serial_test::serial]
+async fn holdings_and_lots_csv_exports() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (inst, _acct) = seed_account(&pool, user_id).await;
+    let brok = seed_typed_account(&pool, user_id, inst, "Main Brokerage", "brokerage", "1000").await;
+    let acme = seed_holding(
+        &pool, user_id, brok,
+        "ACME", "Acme \"Widgets\", Inc", "equity", "10", Some("100"), "1000", Some("800"),
+    )
+    .await;
+    sqlx::query(
+        "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) \
+         VALUES ($1, $2, $3, '2024-01-15', 10, 80, 'USD', 1.0, 'lot-acme'), \
+                ($1, $2, $3, '2024-02-15', 0, 90, 'USD', 1.0, 'depletion-marker')",
+    )
+    .bind(acme)
+    .bind(brok)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/holdings/export", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert!(res
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .starts_with("text/csv"));
+    let dispo = res
+        .headers()
+        .get(header::CONTENT_DISPOSITION)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(dispo.contains("attachment"), "{dispo}");
+    assert!(dispo.contains("patrimonio_holdings_"), "{dispo}");
+    let body = body_text(res.into_body()).await;
+    let lines: Vec<&str> = body.trim_end().split('\n').collect();
+    assert_eq!(lines[0], "symbol,name,account,institution,account_type,asset_class,quantity,price,currency,value,value_usd,cost_basis_usd,gain_loss_usd,gain_loss_pct");
+    assert_eq!(lines.len(), 2, "header + one holding: {body}");
+    // RFC-4180: embedded quotes doubled, whole field quoted, comma preserved.
+    assert!(
+        lines[1].contains("\"Acme \"\"Widgets\"\", Inc\""),
+        "quoting: {}",
+        lines[1]
+    );
+    // Lots-preferred basis (800) surfaces in the row.
+    assert!(lines[1].contains(",800,"), "basis: {}", lines[1]);
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/holdings/lots/export", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let dispo = res
+        .headers()
+        .get(header::CONTENT_DISPOSITION)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(dispo.contains("patrimonio_lots_"), "{dispo}");
+    let body = body_text(res.into_body()).await;
+    let lines: Vec<&str> = body.trim_end().split('\n').collect();
+    assert_eq!(lines[0], "symbol,account,acquired_at,qty,cost_per_unit,currency,usd_cost");
+    // The qty-0 depletion marker is filtered — one active lot only.
+    assert_eq!(lines.len(), 2, "header + one active lot: {body}");
+    assert!(lines[1].contains("2024-01-15"), "{}", lines[1]);
+    assert!(lines[1].ends_with(",800"), "usd_cost: {}", lines[1]);
+}
+
+/// C-E: realized-gains CSV honors the year filter, carries the C-C account
+/// context, and rejects unauthenticated callers like its siblings.
+#[tokio::test]
+#[serial_test::serial]
+async fn realized_gains_csv_export_year_filter_and_auth() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (inst, _acct) = seed_account(&pool, user_id).await;
+    let brok = seed_typed_account(&pool, user_id, inst, "Robinhood", "brokerage", "0").await;
+    let roth = seed_typed_account(&pool, user_id, inst, "Roth IRA", "roth", "0").await;
+
+    seed_disposal(&pool, user_id, brok, "VTI", "1774.50", 0, "s1").await;
+    seed_disposal(&pool, user_id, roth, "SCHD", "1195.00", 0, "s2").await;
+    seed_disposal(&pool, user_id, brok, "VXUS", "4053.50", 1, "s3").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/realized-gains/export", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let dispo = res
+        .headers()
+        .get(header::CONTENT_DISPOSITION)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(dispo.contains("patrimonio_realized_gains_"), "{dispo}");
+    let body = body_text(res.into_body()).await;
+    let lines: Vec<&str> = body.trim_end().split('\n').collect();
+    assert_eq!(lines[0], "sell_date,symbol,name,account,account_type,tax_advantaged,qty_sold,proceeds_usd,cost_usd,realized_pnl_usd,holding_days,long_term");
+    assert_eq!(lines.len(), 4, "header + all three disposals: {body}");
+    let schd_line = lines.iter().find(|l| l.contains("SCHD")).unwrap();
+    assert!(schd_line.contains("\"roth\",true"), "C-C context in CSV: {schd_line}");
+
+    // Year filter: only the prior-year row, and the year lands in the filename.
+    let prior_year = chrono::Utc::now().format("%Y").to_string().parse::<i32>().unwrap() - 1;
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/dashboard/realized-gains/export?year={prior_year}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let dispo = res
+        .headers()
+        .get(header::CONTENT_DISPOSITION)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        dispo.contains(&format!("patrimonio_realized_gains_{prior_year}_")),
+        "{dispo}"
+    );
+    let body = body_text(res.into_body()).await;
+    let lines: Vec<&str> = body.trim_end().split('\n').collect();
+    assert_eq!(lines.len(), 2, "header + the one {prior_year} row: {body}");
+    assert!(lines[1].contains("VXUS"), "{}", lines[1]);
+
+    // Unauthenticated: same rejection as the transactions export.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/realized-gains/export", None, None))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+}
+
+/// C-G: an active investment-category account with a balance but NO
+/// holdings rows surfaces as an 'unclassified' allocation band; the same
+/// category of account WITH holdings never double-counts.
+#[tokio::test]
+#[serial_test::serial]
+async fn allocation_unclassified_band_for_holdingsless_investment_account() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (inst, _acct) = seed_account(&pool, user_id).await;
+
+    // Balance-only investment account (the CETES case).
+    seed_typed_account(&pool, user_id, inst, "CETES", "investment", "12000.00").await;
+    // Investment account WITH holdings — must NOT produce a band.
+    let brok = seed_typed_account(&pool, user_id, inst, "Brokerage", "brokerage", "6000.00").await;
+    seed_holding(&pool, user_id, brok, "VTI", "Vanguard Total Market", "equity", "10", Some("600"), "6000", None).await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/allocation", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    let rows = body.as_array().unwrap();
+
+    let unclassified: Vec<_> = rows
+        .iter()
+        .filter(|r| r["asset_class"] == "unclassified")
+        .collect();
+    assert_eq!(unclassified.len(), 1, "exactly the CETES band: {rows:#?}");
+    assert_eq!(unclassified[0]["category"], "Unclassified");
+    assert_eq!(unclassified[0]["sub_category"], "CETES");
+    assert!((unclassified[0]["value"].as_f64().unwrap() - 12000.0).abs() < 0.01);
+    // The holdings-backed account still classifies through its holdings.
+    assert!(rows
+        .iter()
+        .any(|r| r["asset_class"] == "equity" && r["sub_category"] == "VTI"));
+}

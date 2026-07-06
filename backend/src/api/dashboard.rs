@@ -19,13 +19,17 @@ pub fn router() -> Router<AppState> {
         .route("/net-worth-history", get(net_worth_history))
         .route("/portfolio-value-history", get(portfolio_value_history))
         .route("/holdings", get(holdings))
+        .route("/holdings/export", get(export_holdings_csv))
+        .route("/holdings/lots/export", get(export_lots_csv))
         .route("/holdings/dividends", get(portfolio_dividends))
         .route("/dividends/{symbol}", get(dividend_detail))
+        .route("/instruments/{symbol}", get(instrument_detail))
         .route("/allocation", get(asset_allocation))
         .route("/trends", get(cash_flow_trends))
         .route("/spending-by-category", get(spending_by_category))
         .route("/spending-insights", get(spending_insights))
         .route("/realized-gains", get(realized_gains))
+        .route("/realized-gains/export", get(export_realized_gains_csv))
         .route("/account-balance-history", get(account_balance_history))
         .route("/emergency-fund", get(emergency_fund))
         .route("/benchmark", get(benchmark_series))
@@ -496,16 +500,16 @@ async fn portfolio_value_history(
 /// populate it yet) we fall back to `holdings.cost_basis` converted
 /// at the current FX rate, which still produces the right number in
 /// the native currency and a reasonable approximation in the other.
-async fn holdings(
-    State(state): State<AppState>,
-    Extension(ctx): Extension<AuthContext>,
-) -> Json<HoldingsResponse> {
-    // FX rate + staleness flag (missing or >7 days old). Replaces the old
-    // silent 20.0 fallback so MXN-converted portfolio figures can be badged.
-    let fx_info = latest_usd_mxn_rate(&state.db).await;
-    let fx_usd_to_mxn: f64 = fx_info.rate;
-    let fx_stale = fx_info.stale;
-
+/// Fetch + decode every active-account holding row for `user_id`, with the
+/// lots-aware dual-currency cost basis. Shared by the JSON handler and the
+/// CSV exporter (contract C-E) so the two can never disagree on a row.
+/// Day-change fields are left `None` here; the JSON handler fills them from
+/// `benchmark_prices` afterwards (contract C-B).
+async fn fetch_holdings_details(
+    db: &sqlx::PgPool,
+    user_id: uuid::Uuid,
+    fx_usd_to_mxn: f64,
+) -> Vec<HoldingDetail> {
     let rows = sqlx::query(
         r#"
         SELECT h.id, h.symbol, h.name, h.quantity, h.price, h.value,
@@ -519,8 +523,8 @@ async fn holdings(
         ORDER BY h.value DESC NULLS LAST
         "#
     )
-    .bind(ctx.user_id)
-    .fetch_all(&state.db)
+    .bind(user_id)
+    .fetch_all(db)
     .await
     .unwrap_or_default();
 
@@ -538,8 +542,8 @@ async fn holdings(
         ORDER BY acquired_at ASC, id ASC
         "#
     )
-    .bind(ctx.user_id)
-    .fetch_all(&state.db)
+    .bind(user_id)
+    .fetch_all(db)
     .await
     .unwrap_or_default();
 
@@ -591,7 +595,7 @@ async fn holdings(
         }
     };
 
-    let holdings_list: Vec<HoldingDetail> = rows.iter()
+    rows.iter()
         .map(|r| {
             let id: uuid::Uuid = r.try_get("id").unwrap_or_else(|_| uuid::Uuid::nil());
             let value: f64 = r.try_get::<rust_decimal::Decimal, _>("value")
@@ -672,10 +676,203 @@ async fn holdings(
                 account_type: r.try_get::<String, _>("account_type").unwrap_or_default(),
                 account_name: r.get("account_name"),
                 institution_name: r.get("institution_name"),
+                // Filled by the JSON handler from `benchmark_prices` (C-B);
+                // stays null for consumers that never compute it (CSV export).
+                day_change_usd: None,
+                day_change_pct: None,
+                price_as_of: None,
                 lots: lot_details_by_holding.remove(&id).unwrap_or_default(),
             }
         })
-        .collect();
+        .collect()
+}
+
+/// Day change for one holdings row, derived from its last two stored closes
+/// (contract C-B). `closes` is the per-symbol result of [`latest_two_closes`]
+/// — newest first. Returns `None` (all three JSON fields null, row excluded
+/// from the totals + coverage numerator) for cash sleeves, symbols with fewer
+/// than two stored closes, and stale series (latest close more than 7
+/// calendar days before `today`).
+struct RowDayChange {
+    day_change_usd: f64,
+    /// Percent (already ×100), native-currency-agnostic since the underlying
+    /// ratio comes from the symbol's own close series.
+    day_change_pct: f64,
+    as_of: chrono::NaiveDate,
+}
+
+fn day_change_for_row(
+    value_usd: f64,
+    is_cash: bool,
+    closes: Option<&[(chrono::NaiveDate, f64)]>,
+    today: chrono::NaiveDate,
+) -> Option<RowDayChange> {
+    if is_cash {
+        return None;
+    }
+    let closes = closes?;
+    if closes.len() < 2 {
+        return None;
+    }
+    let (d0, c0) = closes[0];
+    let (_, c1) = closes[1];
+    if today.signed_duration_since(d0) > chrono::Duration::days(7) {
+        return None;
+    }
+    if c1 <= 0.0 {
+        return None;
+    }
+    let pct = (c0 - c1) / c1;
+    Some(RowDayChange {
+        day_change_usd: value_usd * pct,
+        day_change_pct: pct * 100.0,
+        as_of: d0,
+    })
+}
+
+/// Response-level day-change aggregates over the per-row results (C-B).
+/// `rows` yields `(value_usd, day_change_usd, price_as_of)` per holding; a
+/// row is "covered" when its day change is known.
+struct DayChangeTotals {
+    day_change_usd: Option<f64>,
+    day_change_pct: Option<f64>,
+    /// Σ value_usd of covered rows ÷ total value_usd × 100; 0 when none.
+    coverage_pct: f64,
+    /// Max covered close date (ISO), i.e. the freshest close the totals use.
+    as_of: Option<String>,
+}
+
+fn day_change_totals<'a, I>(rows: I) -> DayChangeTotals
+where
+    I: Iterator<Item = (f64, Option<f64>, Option<&'a str>)>,
+{
+    let mut total_value = 0.0_f64;
+    let mut covered_value = 0.0_f64;
+    let mut prior_value = 0.0_f64;
+    let mut change_sum = 0.0_f64;
+    let mut any_covered = false;
+    let mut as_of: Option<String> = None;
+    for (value_usd, day_change_usd, price_as_of) in rows {
+        total_value += value_usd;
+        let Some(chg) = day_change_usd else { continue };
+        any_covered = true;
+        change_sum += chg;
+        covered_value += value_usd;
+        prior_value += value_usd - chg;
+        if let Some(d) = price_as_of {
+            if as_of.as_deref().is_none_or(|cur| d > cur) {
+                as_of = Some(d.to_string());
+            }
+        }
+    }
+    DayChangeTotals {
+        day_change_usd: any_covered.then_some(change_sum),
+        day_change_pct: if any_covered && prior_value > 0.0 {
+            Some(change_sum / prior_value * 100.0)
+        } else {
+            None
+        },
+        coverage_pct: if total_value > 0.0 {
+            covered_value / total_value * 100.0
+        } else {
+            0.0
+        },
+        as_of,
+    }
+}
+
+/// The two most recent stored closes per symbol (newest first) from
+/// `benchmark_prices` — the C-B day-change data path. One query, no network:
+/// the nightly refresh + TWR quote cache keep real tickers populated; opaque
+/// symbols simply have no rows and degrade to null day changes.
+async fn latest_two_closes(
+    db: &sqlx::PgPool,
+    symbols: &[String],
+) -> HashMap<String, Vec<(chrono::NaiveDate, f64)>> {
+    if symbols.is_empty() {
+        return HashMap::new();
+    }
+    let rows = sqlx::query(
+        r#"
+        SELECT symbol, price_date, close
+        FROM (
+            SELECT symbol, price_date, close,
+                   ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY price_date DESC) AS rn
+            FROM benchmark_prices
+            WHERE symbol = ANY($1)
+        ) ranked
+        WHERE rn <= 2
+        ORDER BY symbol ASC, price_date DESC
+        "#,
+    )
+    .bind(symbols)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+
+    let mut by_symbol: HashMap<String, Vec<(chrono::NaiveDate, f64)>> = HashMap::new();
+    for r in &rows {
+        let (Ok(symbol), Ok(date)) = (
+            r.try_get::<String, _>("symbol"),
+            r.try_get::<chrono::NaiveDate, _>("price_date"),
+        ) else {
+            continue;
+        };
+        let close = r
+            .try_get::<rust_decimal::Decimal, _>("close")
+            .ok()
+            .and_then(|d| d.to_string().parse::<f64>().ok())
+            .unwrap_or(0.0);
+        by_symbol.entry(symbol).or_default().push((date, close));
+    }
+    by_symbol
+}
+
+async fn holdings(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Json<HoldingsResponse> {
+    // FX rate + staleness flag (missing or >7 days old). Replaces the old
+    // silent 20.0 fallback so MXN-converted portfolio figures can be badged.
+    let fx_info = latest_usd_mxn_rate(&state.db).await;
+    let fx_usd_to_mxn: f64 = fx_info.rate;
+    let fx_stale = fx_info.stale;
+
+    let mut holdings_list = fetch_holdings_details(&state.db, ctx.user_id, fx_usd_to_mxn).await;
+
+    // C-B: day change between the last two STORED closes per symbol — one
+    // query over `benchmark_prices`, never a live quote fan-out. Cash sleeves
+    // and unresolvable symbols honestly stay null instead of pretending.
+    let quote_symbols: Vec<String> = {
+        let mut seen = std::collections::HashSet::new();
+        holdings_list
+            .iter()
+            .filter(|h| h.holding_type != "cash" && h.asset_class != "cash")
+            .filter(|h| !h.symbol.is_empty())
+            .filter(|h| seen.insert(h.symbol.clone()))
+            .map(|h| h.symbol.clone())
+            .collect()
+    };
+    let closes_by_symbol = latest_two_closes(&state.db, &quote_symbols).await;
+    let today = chrono::Utc::now().date_naive();
+    for h in &mut holdings_list {
+        let is_cash = h.holding_type == "cash" || h.asset_class == "cash";
+        if let Some(rc) = day_change_for_row(
+            h.value_usd,
+            is_cash,
+            closes_by_symbol.get(&h.symbol).map(|v| v.as_slice()),
+            today,
+        ) {
+            h.day_change_usd = Some(rc.day_change_usd);
+            h.day_change_pct = Some(rc.day_change_pct);
+            h.price_as_of = Some(rc.as_of.to_string());
+        }
+    }
+    let day_totals = day_change_totals(
+        holdings_list
+            .iter()
+            .map(|h| (h.value_usd, h.day_change_usd, h.price_as_of.as_deref())),
+    );
 
     // Total value covers EVERY holding; the gain/loss totals only
     // cover holdings with a KNOWN basis (numerator and denominator
@@ -712,6 +909,10 @@ async fn holdings(
         holdings_without_basis,
         fx_rate_used: fx_usd_to_mxn,
         fx_stale,
+        day_change_usd: day_totals.day_change_usd,
+        day_change_pct: day_totals.day_change_pct,
+        day_change_coverage_pct: day_totals.coverage_pct,
+        day_change_as_of: day_totals.as_of,
         holdings: holdings_list,
     })
 }
@@ -1053,6 +1254,138 @@ async fn export_transactions_csv(
         .unwrap()
 }
 
+/// RFC-4180 field quoting for the CSV exporters (contract C-E): wrap every
+/// text field in double quotes and double any embedded double quote — same
+/// escaping `export_transactions_csv` applies. Numeric/date/bool fields
+/// serialise bare; nulls serialise as an empty field.
+fn csv_field(s: &str) -> String {
+    format!("\"{}\"", s.replace('"', "\"\""))
+}
+
+/// The `text/csv` + `Content-Disposition: attachment` response shell every
+/// CSV exporter shares (cookie-auth same-tab navigation on the frontend).
+fn csv_attachment_response(filename: &str, body: axum::body::Body) -> Response {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "text/csv; charset=utf-8")
+        .header(
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{}\"", filename),
+        )
+        .body(body)
+        .unwrap()
+}
+
+/// C-E: the holdings table as a CSV download. Reuses the JSON handler's row
+/// builder (`fetch_holdings_details`) so counts and the lots-aware basis
+/// match the endpoint exactly. Holdings are bounded (tens of rows), so the
+/// body is assembled in memory — the streaming channel of the transactions
+/// exporter buys nothing here while the lots map needs the whole set anyway.
+async fn export_holdings_csv(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Response {
+    let fx_info = latest_usd_mxn_rate(&state.db).await;
+    let list = fetch_holdings_details(&state.db, ctx.user_id, fx_info.rate).await;
+
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let filename = format!("patrimonio_holdings_{}.csv", today);
+
+    let opt = |v: Option<f64>| v.map(|x| x.to_string()).unwrap_or_default();
+    let mut csv = String::from(
+        "symbol,name,account,institution,account_type,asset_class,quantity,price,currency,value,value_usd,cost_basis_usd,gain_loss_usd,gain_loss_pct\n",
+    );
+    for h in &list {
+        csv.push_str(&format!(
+            "{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+            csv_field(&h.symbol),
+            csv_field(&h.name),
+            csv_field(&h.account_name),
+            csv_field(&h.institution_name),
+            csv_field(&h.account_type),
+            csv_field(&h.asset_class),
+            h.quantity,
+            h.price,
+            h.currency,
+            h.value,
+            h.value_usd,
+            opt(h.cost_basis_usd),
+            opt(h.gain_loss_usd),
+            opt(h.gain_loss_pct),
+        ));
+    }
+    csv_attachment_response(&filename, axum::body::Body::from(csv))
+}
+
+/// C-E: every active purchase lot as a CSV download. Same depletion-marker
+/// filter (`qty > 0`) and USD-cost math as the JSON endpoint's nested lots.
+async fn export_lots_csv(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+) -> Response {
+    let rows = sqlx::query(
+        r#"
+        SELECT h.symbol,
+               COALESCE(NULLIF(a.nickname, ''), a.name) AS account_name,
+               l.acquired_at, l.qty, l.cost_per_unit, l.currency, l.usd_fx_rate
+        FROM holding_lots l
+        JOIN holdings h ON h.id = l.holding_id
+        JOIN accounts a ON a.id = h.account_id
+        WHERE l.user_id = $1 AND l.qty > 0 AND a.archived_at IS NULL
+        ORDER BY h.symbol ASC, l.acquired_at ASC, l.id ASC
+        "#,
+    )
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let filename = format!("patrimonio_lots_{}.csv", today);
+
+    let mut csv = String::from("symbol,account,acquired_at,qty,cost_per_unit,currency,usd_cost\n");
+    for r in &rows {
+        let dec = |col: &str| -> f64 {
+            r.try_get::<rust_decimal::Decimal, _>(col)
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0)
+        };
+        let qty = dec("qty");
+        let cpu = dec("cost_per_unit");
+        let fx = dec("usd_fx_rate");
+        let currency: String = r.try_get("currency").unwrap_or_else(|_| "USD".to_string());
+        let native_cost = qty * cpu;
+        // Mirrors the HoldingLot::usd_cost conversion in the JSON handler.
+        let usd_cost = match currency.as_str() {
+            "USD" => native_cost,
+            "MXN" => {
+                if fx > 0.0 {
+                    native_cost / fx
+                } else {
+                    native_cost
+                }
+            }
+            _ => native_cost,
+        };
+        let acquired_at: String = r
+            .try_get::<chrono::NaiveDate, _>("acquired_at")
+            .map(|d| d.to_string())
+            .unwrap_or_default();
+        csv.push_str(&format!(
+            "{},{},{},{},{},{},{}\n",
+            csv_field(&r.try_get::<String, _>("symbol").unwrap_or_default()),
+            csv_field(&r.try_get::<String, _>("account_name").unwrap_or_default()),
+            acquired_at,
+            qty,
+            cpu,
+            currency,
+            usd_cost,
+        ));
+    }
+    csv_attachment_response(&filename, axum::body::Body::from(csv))
+}
+
 #[derive(Deserialize)]
 struct CreateManualTransactionRequest {
     account_id: uuid::Uuid,
@@ -1167,6 +1500,10 @@ fn asset_class_label(key: &str) -> &'static str {
         "crypto" => "Crypto",
         "real_estate" => "Real estate",
         "commodities" => "Commodities",
+        // Contract C-G: investment-category account balances with no holdings
+        // rows — real value the asset-class view would otherwise omit, but
+        // with no per-holding detail to classify or filter to.
+        "unclassified" => "Unclassified",
         _ => "Other",
     }
 }
@@ -1247,6 +1584,28 @@ async fn asset_allocation(
             WHERE account_type IN ('crypto')
               AND user_id = $2
               AND archived_at IS NULL
+            UNION ALL
+            -- Contract C-G: active investment-category accounts with NO
+            -- holdings rows (e.g. a CETES account tracked by balance only).
+            -- Surfacing the balance as an 'unclassified' band reconciles the
+            -- asset-class view with net worth; accounts WITH holdings are
+            -- covered by the holdings branch and never double-counted here.
+            SELECT 'unclassified' as kind,
+                   NULL as holding_type,
+                   NULL as symbol,
+                   name,
+                   name as sub_category,
+                   CASE
+                       WHEN currency = 'MXN' THEN current_balance / $1::numeric
+                       ELSE current_balance
+                   END as value_usd,
+                   0::numeric as qty
+            FROM accounts
+            WHERE account_type IN ('brokerage', '401k', '403b', '457b', 'ira', 'roth',
+                                   'roth 401k', 'hsa', '529', 'pension', 'investment', 'bonds')
+              AND user_id = $2
+              AND archived_at IS NULL
+              AND NOT EXISTS (SELECT 1 FROM holdings h WHERE h.account_id = accounts.id)
         ) sub
         "#
     )
@@ -1283,6 +1642,7 @@ async fn asset_allocation(
         let asset_class = match kind.as_str() {
             "cash" => "cash",
             "crypto" => "crypto",
+            "unclassified" => "unclassified",
             _ => {
                 let holding_type: String = r
                     .try_get::<Option<String>, _>("holding_type")
@@ -2072,6 +2432,15 @@ struct RealizedGainsQuery {
 struct RealizedDisposal {
     symbol: String,
     name: String,
+    /// Contract C-C: owning account's display name (nickname-aware).
+    /// Archived accounts are included — history must keep its context. Null
+    /// only if the account row is gone.
+    account_name: Option<String>,
+    account_type: Option<String>,
+    /// Whether the disposal happened inside a tax-advantaged wrapper — the
+    /// SAME `TAX_ADVANTAGED_ACCOUNT_TYPES` list Tax planning uses, so the
+    /// card's taxable subtotal and the tax module never disagree.
+    tax_advantaged: bool,
     sell_date: String,
     qty_sold: f64,
     proceeds_usd: f64,
@@ -2083,6 +2452,97 @@ struct RealizedDisposal {
     long_term: Option<bool>,
 }
 
+/// Decode one disposal row (the C-C query shape) into its JSON form —
+/// shared by the JSON handler and the CSV exporter so the per-row math
+/// (FX-aware proceeds/cost, calendar long-term rule) lives in one place.
+fn disposal_from_row(r: &sqlx::postgres::PgRow) -> RealizedDisposal {
+    let dec = |col: &str| -> f64 {
+        r.try_get::<rust_decimal::Decimal, _>(col)
+            .ok()
+            .map(|d| d.to_string().parse().unwrap_or(0.0))
+            .unwrap_or(0.0)
+    };
+
+    let qty = dec("qty_sold");
+    let sell_px = dec("sell_price_per_unit");
+    let sell_fx = dec("sell_fx_rate");
+    let cost_px = dec("cost_per_unit");
+    let cost_fx = dec("cost_fx_rate");
+    // fx rate is native-units-per-USD (1.0 for USD securities), so
+    // divide native amounts by it to land in USD.
+    let proceeds_usd = if sell_fx > 0.0 {
+        qty * sell_px / sell_fx
+    } else {
+        qty * sell_px
+    };
+    let cost_usd = if cost_fx > 0.0 {
+        qty * cost_px / cost_fx
+    } else {
+        qty * cost_px
+    };
+    let holding_days: Option<i32> = r.try_get("holding_days").ok();
+    // Long-term flag uses the SAME calendar rule as the tax module
+    // (TaxCalculator::is_long_term): sold > acquired + 12 calendar
+    // months, with checked_add_months clamping Feb-29 → Feb-28. This
+    // replaces the old `holding_days > 365` count so the flag agrees
+    // across leap years and with the tax-filing buckets. When the
+    // source lot is gone (LEFT JOIN → NULL acquired_at) we can't apply
+    // the calendar rule, so the flag stays None.
+    let acquired_date: Option<chrono::NaiveDate> = r.try_get("acquired_date").ok();
+    let sell_date_raw: Option<chrono::NaiveDate> = r.try_get("sell_date_raw").ok();
+    let long_term = match (acquired_date, sell_date_raw) {
+        (Some(acq), Some(sold)) => acq
+            .checked_add_months(chrono::Months::new(12))
+            .map(|anniversary| sold > anniversary),
+        _ => None,
+    };
+    let account_type: Option<String> = r
+        .try_get::<Option<String>, _>("account_type")
+        .ok()
+        .flatten();
+    let tax_advantaged =
+        crate::services::tax::is_tax_advantaged_account_type(account_type.as_deref());
+    RealizedDisposal {
+        symbol: r.get("symbol"),
+        name: r.get("name"),
+        account_name: r
+            .try_get::<Option<String>, _>("account_name")
+            .ok()
+            .flatten(),
+        account_type,
+        tax_advantaged,
+        sell_date: r.get("sell_date"),
+        qty_sold: qty,
+        proceeds_usd,
+        cost_usd,
+        realized_pnl_usd: dec("realized_pnl_usd"),
+        holding_days,
+        long_term,
+    }
+}
+
+/// The disposals query shared by the JSON handler and the CSV exporter
+/// (C-C / C-E). `LEFT JOIN accounts` with NO archived filter: a disposal
+/// that happened in a since-archived account must keep its context.
+const REALIZED_DISPOSALS_SQL: &str = r#"
+        SELECT TO_CHAR(d.sell_date, 'YYYY-MM-DD') AS sell_date,
+               d.sell_date AS sell_date_raw,
+               l.acquired_at AS acquired_date,
+               d.qty_sold, d.sell_price_per_unit, d.sell_fx_rate,
+               d.cost_per_unit, d.cost_fx_rate, d.realized_pnl_usd,
+               h.symbol, h.name,
+               COALESCE(NULLIF(a.nickname, ''), a.name) AS account_name,
+               a.account_type,
+               (d.sell_date - l.acquired_at) AS holding_days
+        FROM lot_disposals d
+        JOIN holdings h ON h.id = d.holding_id
+        LEFT JOIN holding_lots l ON l.id = d.lot_id
+        LEFT JOIN accounts a ON a.id = h.account_id
+        WHERE d.user_id = $1
+          AND ($2::int IS NULL OR EXTRACT(YEAR FROM d.sell_date)::int = $2)
+        ORDER BY d.sell_date DESC
+"#;
+
 #[derive(Serialize)]
 struct RealizedYear {
     year: i32,
@@ -2093,6 +2553,10 @@ struct RealizedYear {
 struct RealizedGainsSummary {
     ytd_realized_usd: f64,
     total_realized_usd: f64,
+    /// Contract C-C: Σ `realized_pnl_usd` over the returned (year-filtered)
+    /// list's rows that sit in NON-tax-advantaged accounts — the number that
+    /// must match Tax planning's taxable figure to the cent.
+    taxable_realized_usd: f64,
     /// Count of disposal rows in the (optionally year-filtered) list.
     count: i64,
     /// The year filter applied to the list, if any.
@@ -2125,83 +2589,23 @@ async fn realized_gains(
             .unwrap_or(0.0)
     };
 
-    let rows = sqlx::query(
-        r#"
-        SELECT TO_CHAR(d.sell_date, 'YYYY-MM-DD') AS sell_date,
-               d.sell_date AS sell_date_raw,
-               l.acquired_at AS acquired_date,
-               d.qty_sold, d.sell_price_per_unit, d.sell_fx_rate,
-               d.cost_per_unit, d.cost_fx_rate, d.realized_pnl_usd,
-               h.symbol, h.name,
-               (d.sell_date - l.acquired_at) AS holding_days
-        FROM lot_disposals d
-        JOIN holdings h ON h.id = d.holding_id
-        LEFT JOIN holding_lots l ON l.id = d.lot_id
-        WHERE d.user_id = $1
-          AND ($2::int IS NULL OR EXTRACT(YEAR FROM d.sell_date)::int = $2)
-        ORDER BY d.sell_date DESC
-        LIMIT 500
-        "#,
-    )
-    .bind(ctx.user_id)
-    .bind(q.year)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+    let rows = sqlx::query(&format!("{REALIZED_DISPOSALS_SQL} LIMIT 500"))
+        .bind(ctx.user_id)
+        .bind(q.year)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
 
-    let disposals: Vec<RealizedDisposal> = rows
-        .iter()
-        .map(|r| {
-            let qty = dec(r, "qty_sold");
-            let sell_px = dec(r, "sell_price_per_unit");
-            let sell_fx = dec(r, "sell_fx_rate");
-            let cost_px = dec(r, "cost_per_unit");
-            let cost_fx = dec(r, "cost_fx_rate");
-            // fx rate is native-units-per-USD (1.0 for USD securities), so
-            // divide native amounts by it to land in USD.
-            let proceeds_usd = if sell_fx > 0.0 {
-                qty * sell_px / sell_fx
-            } else {
-                qty * sell_px
-            };
-            let cost_usd = if cost_fx > 0.0 {
-                qty * cost_px / cost_fx
-            } else {
-                qty * cost_px
-            };
-            let holding_days: Option<i32> = r.try_get("holding_days").ok();
-            // Long-term flag uses the SAME calendar rule as the tax module
-            // (TaxCalculator::is_long_term): sold > acquired + 12 calendar
-            // months, with checked_add_months clamping Feb-29 → Feb-28. This
-            // replaces the old `holding_days > 365` count so the flag agrees
-            // across leap years and with the tax-filing buckets. When the
-            // source lot is gone (LEFT JOIN → NULL acquired_at) we can't apply
-            // the calendar rule, so the flag stays None.
-            let acquired_date: Option<chrono::NaiveDate> =
-                r.try_get("acquired_date").ok();
-            let sell_date_raw: Option<chrono::NaiveDate> =
-                r.try_get("sell_date_raw").ok();
-            let long_term = match (acquired_date, sell_date_raw) {
-                (Some(acq), Some(sold)) => acq
-                    .checked_add_months(chrono::Months::new(12))
-                    .map(|anniversary| sold > anniversary),
-                _ => None,
-            };
-            RealizedDisposal {
-                symbol: r.get("symbol"),
-                name: r.get("name"),
-                sell_date: r.get("sell_date"),
-                qty_sold: qty,
-                proceeds_usd,
-                cost_usd,
-                realized_pnl_usd: dec(r, "realized_pnl_usd"),
-                holding_days,
-                long_term,
-            }
-        })
-        .collect();
+    let disposals: Vec<RealizedDisposal> = rows.iter().map(disposal_from_row).collect();
 
     let count = disposals.len() as i64;
+    // C-C: taxable subtotal over the RETURNED (year-filtered) list only —
+    // the card caption pairs it with the same period's total.
+    let taxable_realized_usd: f64 = disposals
+        .iter()
+        .filter(|d| !d.tax_advantaged)
+        .map(|d| d.realized_pnl_usd)
+        .sum();
 
     // By-year totals across ALL history (independent of the list filter).
     let year_rows = sqlx::query(
@@ -2248,12 +2652,91 @@ async fn realized_gains(
         summary: RealizedGainsSummary {
             ytd_realized_usd,
             total_realized_usd,
+            taxable_realized_usd,
             count,
             year: q.year,
         },
         by_year,
         disposals,
     })
+}
+
+/// C-E: the realized-gains list as a CSV download — same rows and order as
+/// the JSON endpoint (including the C-C account context), but with NO
+/// LIMIT-500 truncation: both ends of the pipe stream, cloning
+/// `export_transactions_csv`'s channel pattern.
+async fn export_realized_gains_csv(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Query(q): Query<RealizedGainsQuery>,
+) -> Response {
+    use bytes::Bytes;
+    use futures_util::StreamExt;
+
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let filename = match q.year {
+        Some(y) => format!("patrimonio_realized_gains_{y}_{today}.csv"),
+        None => format!("patrimonio_realized_gains_{today}.csv"),
+    };
+
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(16);
+    let db = state.db.clone();
+    let user_id = ctx.user_id;
+    let year = q.year;
+
+    tokio::spawn(async move {
+        if tx
+            .send(Ok(Bytes::from_static(
+                b"sell_date,symbol,name,account,account_type,tax_advantaged,qty_sold,proceeds_usd,cost_usd,realized_pnl_usd,holding_days,long_term\n",
+            )))
+            .await
+            .is_err()
+        {
+            return;
+        }
+
+        let mut stream = sqlx::query(REALIZED_DISPOSALS_SQL)
+            .bind(user_id)
+            .bind(year)
+            .fetch(&db);
+
+        while let Some(row_result) = stream.next().await {
+            let row = match row_result {
+                Ok(r) => r,
+                Err(e) => {
+                    error!("export_realized_gains_csv stream error: {}", e);
+                    let _ = tx
+                        .send(Err(std::io::Error::other(format!("csv stream: {}", e))))
+                        .await;
+                    return;
+                }
+            };
+            let d = disposal_from_row(&row);
+            let line = format!(
+                "{},{},{},{},{},{},{},{},{},{},{},{}\n",
+                d.sell_date,
+                csv_field(&d.symbol),
+                csv_field(&d.name),
+                csv_field(d.account_name.as_deref().unwrap_or("")),
+                csv_field(d.account_type.as_deref().unwrap_or("")),
+                d.tax_advantaged,
+                d.qty_sold,
+                d.proceeds_usd,
+                d.cost_usd,
+                d.realized_pnl_usd,
+                // Empty string for unknowns (deleted source lot), per C-E.
+                d.holding_days.map(|v| v.to_string()).unwrap_or_default(),
+                d.long_term.map(|v| v.to_string()).unwrap_or_default(),
+            );
+            if tx.send(Ok(Bytes::from(line))).await.is_err() {
+                return;
+            }
+        }
+    });
+
+    let body =
+        axum::body::Body::from_stream(tokio_stream::wrappers::ReceiverStream::new(rx));
+    csv_attachment_response(&filename, body)
 }
 
 #[derive(Serialize)]
@@ -2368,6 +2851,17 @@ struct HoldingsResponse {
     /// True when that FX rate is missing or older than 7 days — the MXN-side
     /// totals are approximate and should be flagged in the UI.
     fx_stale: bool,
+    /// Contract C-B: portfolio day change summed over the COVERED rows (rows
+    /// whose per-row `day_change_usd` is non-null). Null when no row is
+    /// covered — the UI hides the "Today" pill rather than showing $0.
+    day_change_usd: Option<f64>,
+    /// Σ day change ÷ Σ prior-close value of covered rows × 100.
+    day_change_pct: Option<f64>,
+    /// Σ value_usd of covered rows ÷ total value_usd × 100 (0 when none) —
+    /// lets the header pill carry an honest "covers N% of portfolio" note.
+    day_change_coverage_pct: f64,
+    /// Max covered close date (YYYY-MM-DD): the "as of" label for the pill.
+    day_change_as_of: Option<String>,
     holdings: Vec<HoldingDetail>,
 }
 
@@ -2413,6 +2907,14 @@ struct HoldingDetail {
     account_type: String,
     account_name: String,
     institution_name: String,
+    /// Contract C-B: change between the symbol's last two stored closes,
+    /// applied to this row's USD value. All three stay null (real JSON
+    /// nulls, no skip attrs) for cash sleeves, symbols with fewer than two
+    /// stored closes, and closes older than 7 calendar days.
+    day_change_usd: Option<f64>,
+    day_change_pct: Option<f64>,
+    /// Date of the latest stored close backing the day change (YYYY-MM-DD).
+    price_as_of: Option<String>,
     /// Per-lot breakdown when `holding_lots` rows exist for this
     /// holding. Lets power users see WHY the FX-aware cost basis
     /// differs from the naive current-FX number — each lot carries
@@ -3668,10 +4170,38 @@ struct PortfolioDividendsResponse {
     blended_yield_pct: Option<f64>,
     /// Per-symbol contributions, dividend payers first, by income descending.
     contributions: Vec<DividendSymbolContribution>,
-    /// Soonest estimated ex-dates among held payers (up to 5).
+    /// Every held payer's upcoming estimated ex-date, soonest first — one
+    /// entry per payer, NO server-side cap (the old truncate-to-5 silently
+    /// dropped the later-quarter dates; the list is bounded by payer count).
     upcoming_ex_dates: Vec<UpcomingExDate>,
     /// True when an MXN position was converted with a missing/stale FX rate.
     fx_stale: bool,
+}
+
+/// Every payer's upcoming estimated ex-date (est date >= `today`, ISO),
+/// soonest first. Deliberately uncapped — the round-1 truncate-to-5 was
+/// exactly what cut the September/October entries out of the upcoming list.
+/// Pure so the no-cap behaviour is unit-testable offline.
+fn upcoming_ex_dates(
+    contributions: &[DividendSymbolContribution],
+    today: &str,
+) -> Vec<UpcomingExDate> {
+    let mut upcoming: Vec<UpcomingExDate> = contributions
+        .iter()
+        .filter(|c| c.annual_income_usd > 0.0)
+        .filter_map(|c| {
+            c.est_next_ex_date
+                .as_ref()
+                .filter(|d| d.as_str() >= today)
+                .map(|d| UpcomingExDate {
+                    symbol: c.symbol.clone(),
+                    est_next_ex_date: d.clone(),
+                    annual_income_usd: c.annual_income_usd,
+                })
+        })
+        .collect();
+    upcoming.sort_by(|a, b| a.est_next_ex_date.cmp(&b.est_next_ex_date));
+    upcoming
 }
 
 /// Portfolio-wide dividend income: aggregates the per-symbol dividend engine
@@ -3872,27 +4402,14 @@ async fn portfolio_dividends(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    // Soonest UPCOMING estimated ex-dates among held payers. ISO date strings
-    // sort lexicographically, so a plain string sort/compare is chronological;
-    // drop estimates already in the past (a payer whose last dividend is older
-    // than one pay-interval estimates a date that has already passed).
+    // ALL upcoming estimated ex-dates among held payers, soonest first — one
+    // row per payer, uncapped (the list is bounded by payer count). ISO date
+    // strings sort lexicographically, so a plain string sort/compare is
+    // chronological; drop estimates already in the past (a payer whose last
+    // dividend is older than one pay-interval estimates a date that has
+    // already passed).
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    let mut upcoming: Vec<UpcomingExDate> = contributions
-        .iter()
-        .filter(|c| c.annual_income_usd > 0.0)
-        .filter_map(|c| {
-            c.est_next_ex_date
-                .as_ref()
-                .filter(|d| d.as_str() >= today.as_str())
-                .map(|d| UpcomingExDate {
-                    symbol: c.symbol.clone(),
-                    est_next_ex_date: d.clone(),
-                    annual_income_usd: c.annual_income_usd,
-                })
-        })
-        .collect();
-    upcoming.sort_by(|a, b| a.est_next_ex_date.cmp(&b.est_next_ex_date));
-    upcoming.truncate(5);
+    let upcoming = upcoming_ex_dates(&contributions, &today);
 
     let total_income_usd = (total_income_usd * 100.0).round() / 100.0;
     let blended_yield_pct = if total_valued_usd > 0.0 && total_income_usd > 0.0 {
@@ -3964,6 +4481,122 @@ struct DividendDetailResponse {
     /// Next 12 months: `per_year` payments starting at `est_next_ex_date`,
     /// spaced 365/per_year days.
     schedule: Vec<DividendScheduleEntry>,
+    /// Contract C-D: dividend payments that actually LANDED in the user's
+    /// accounts, newest first (≤40). Conservatively matched (see
+    /// `fetch_dividend_payments`) — may under-report, never mis-attributes.
+    /// Empty when nothing matches; never an error.
+    payments: Vec<DividendPayment>,
+}
+
+/// One real dividend transaction matched to this symbol (contract C-D).
+#[derive(Serialize)]
+struct DividendPayment {
+    /// Transaction date (YYYY-MM-DD).
+    date: String,
+    amount_usd: f64,
+    /// Receiving account's display name (nickname-aware).
+    account_name: String,
+}
+
+/// Postgres regex matching `symbol` as a whole word (`\m…\M`), or `None`
+/// when the symbol contains characters outside `[A-Za-z0-9.-]` — opaque
+/// symbols (`CUR:USD`, 401k trust names with spaces) skip transaction
+/// matching entirely rather than risk a malformed or over-broad pattern
+/// (veto #8: conservative by design).
+fn dividend_symbol_word_pattern(symbol: &str) -> Option<String> {
+    let sym = symbol.trim();
+    if sym.is_empty()
+        || !sym
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+    {
+        return None;
+    }
+    // Escape the two permitted non-alphanumerics ('.' would otherwise match
+    // any character; '-' is escaped for belt-and-braces clarity).
+    let escaped: String = sym
+        .chars()
+        .flat_map(|c| {
+            if c.is_ascii_alphanumeric() {
+                vec![c]
+            } else {
+                vec!['\\', c]
+            }
+        })
+        .collect();
+    Some(format!(r"\m{escaped}\M"))
+}
+
+/// The C-D payment-history query: positive transactions in the accounts
+/// that hold the symbol, tagged `INCOME_DIVIDENDS` (or "dividend"-worded)
+/// AND naming the ticker as a whole word. Deliberately conservative — a
+/// broker description without the ticker won't match (under-reporting),
+/// but a row can never be attributed to the wrong symbol or account.
+async fn fetch_dividend_payments(
+    db: &sqlx::PgPool,
+    user_id: uuid::Uuid,
+    holding_account_ids: &[uuid::Uuid],
+    symbol: &str,
+    fx_usd_to_mxn: f64,
+) -> Vec<DividendPayment> {
+    let Some(pattern) = dividend_symbol_word_pattern(symbol) else {
+        return Vec::new();
+    };
+    if holding_account_ids.is_empty() {
+        return Vec::new();
+    }
+    let rows = sqlx::query(
+        r#"
+        SELECT t.date, t.amount, t.currency,
+               COALESCE(NULLIF(a.nickname, ''), a.name) AS account_name
+        FROM transactions t
+        JOIN accounts a ON a.id = t.account_id
+        WHERE a.user_id = $1
+          AND t.account_id = ANY($2)
+          AND t.amount > 0
+          AND (UPPER(COALESCE(t.category_detailed, '')) = 'INCOME_DIVIDENDS'
+               OR t.description ~* '\mdividend(o|s|os)?\M')
+          AND t.description ~* $3
+        ORDER BY t.date DESC
+        LIMIT 40
+        "#,
+    )
+    .bind(user_id)
+    .bind(holding_account_ids)
+    .bind(&pattern)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+
+    rows.iter()
+        .map(|r| {
+            let amount: f64 = r
+                .try_get::<rust_decimal::Decimal, _>("amount")
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0);
+            let currency: String = r.try_get("currency").unwrap_or_else(|_| "USD".to_string());
+            let amount_usd = match currency.as_str() {
+                "USD" => amount,
+                "MXN" => {
+                    if fx_usd_to_mxn > 0.0 {
+                        amount / fx_usd_to_mxn
+                    } else {
+                        amount
+                    }
+                }
+                _ => amount,
+            };
+            DividendPayment {
+                date: r
+                    .try_get::<chrono::NaiveDate, _>("date")
+                    .map(|d| d.to_string())
+                    .unwrap_or_default(),
+                amount_usd: (amount_usd * 100.0).round() / 100.0,
+                account_name: r.try_get("account_name").unwrap_or_default(),
+            }
+        })
+        .collect()
 }
 
 /// One of the user's holdings rows for the requested symbol (plus its
@@ -3989,6 +4622,7 @@ fn build_dividend_detail(
     positions: &[DetailPosition],
     info: &crate::services::dividends::DividendInfo,
     fx_usd_to_mxn: f64,
+    payments: Vec<DividendPayment>,
 ) -> DividendDetailResponse {
     let to_usd = |amount: f64, ccy: &str| -> f64 {
         match ccy {
@@ -4093,6 +4727,7 @@ fn build_dividend_detail(
             .collect(),
         history: info.history.clone(),
         schedule,
+        payments,
     }
 }
 
@@ -4168,7 +4803,438 @@ async fn dividend_detail(
         .unwrap_or_else(|_| crate::services::dividends::DividendInfo::none(&canonical_symbol));
 
     let fx_info = latest_usd_mxn_rate(&state.db).await;
-    Json(build_dividend_detail(&positions, &info, fx_info.rate)).into_response()
+
+    // C-D: real payments, matched only within the accounts that hold the
+    // symbol (already fetched above).
+    let holding_account_ids: Vec<uuid::Uuid> = rows
+        .iter()
+        .filter_map(|r| r.try_get::<uuid::Uuid, _>("account_id").ok())
+        .collect();
+    let payments = fetch_dividend_payments(
+        &state.db,
+        ctx.user_id,
+        &holding_account_ids,
+        &canonical_symbol,
+        fx_info.rate,
+    )
+    .await;
+
+    Json(build_dividend_detail(&positions, &info, fx_info.rate, payments)).into_response()
+}
+
+// =====================================================================
+// Instrument detail (contract C-A)
+// =====================================================================
+
+/// One account's share of the position, for the instrument sheet.
+#[derive(Serialize)]
+struct InstrumentAccount {
+    account_id: String,
+    account_name: String,
+    account_type: String,
+    /// `services::tax::is_tax_advantaged_account_type` — the same list Tax
+    /// planning uses.
+    tax_advantaged: bool,
+    quantity: f64,
+    value_usd: f64,
+}
+
+/// One active purchase lot (depletion markers already filtered out).
+#[derive(Serialize)]
+struct InstrumentLot {
+    acquired_at: String,
+    qty: f64,
+    cost_per_unit: f64,
+    currency: String,
+    usd_cost: f64,
+}
+
+/// One daily close of the instrument's stored price series.
+#[derive(Serialize)]
+struct InstrumentPricePoint {
+    date: String,
+    close: f64,
+}
+
+/// Per-symbol instrument detail (contract C-A) — consumed by the Portfolio
+/// tab's instrument sheet. Every nullable stays a real JSON `null` (no skip
+/// attrs): the frontend is built against the full field set.
+#[derive(Serialize)]
+struct InstrumentDetailResponse {
+    symbol: String,
+    name: String,
+    /// Native currency of the (dominant) position.
+    currency: String,
+    /// Canonical asset class (contract C2), same classifier as holdings.
+    asset_class: String,
+    /// Shares held across all of the user's active accounts.
+    quantity: f64,
+    /// Latest per-share price (native currency); null when unpriced.
+    price: Option<f64>,
+    value_usd: f64,
+    /// Null when any account's basis is unknown (all-or-nothing: a partial
+    /// basis would silently misstate the gain).
+    cost_basis_usd: Option<f64>,
+    gain_loss_usd: Option<f64>,
+    gain_loss_pct: Option<f64>,
+    /// Symbol value ÷ total portfolio (holdings) value × 100.
+    portfolio_weight_pct: f64,
+    /// C-B day-change rules applied to the aggregate position: null for
+    /// cash sleeves, <2 stored closes, or a stale (>7 day) latest close.
+    day_change_usd: Option<f64>,
+    day_change_pct: Option<f64>,
+    price_as_of: Option<String>,
+    accounts: Vec<InstrumentAccount>,
+    lots: Vec<InstrumentLot>,
+    /// Stored daily closes over the requested range, ascending. Empty for
+    /// opaque/unresolvable symbols — never an error.
+    prices: Vec<InstrumentPricePoint>,
+}
+
+/// One of the user's holdings rows for the requested symbol, already
+/// decoded — input to `build_instrument_detail`. The per-holding USD basis
+/// is pre-computed by the handler with the SAME lots-aware logic the
+/// holdings endpoint uses.
+struct InstrumentPosition {
+    symbol: String,
+    name: String,
+    holding_type: String,
+    quantity: f64,
+    price: Option<f64>,
+    value: f64,
+    cost_basis_usd: Option<f64>,
+    currency: String,
+    account_id: String,
+    account_name: String,
+    account_type: String,
+}
+
+/// Inclusive start date for the requested chart range. Unknown/absent
+/// values fail soft to the 1-year default.
+fn instrument_range_start(range: Option<&str>, today: chrono::NaiveDate) -> chrono::NaiveDate {
+    match range.unwrap_or("1y") {
+        "1m" => today - chrono::Duration::days(31),
+        "3m" => today - chrono::Duration::days(92),
+        "max" => chrono::NaiveDate::from_ymd_opt(2000, 1, 1).unwrap(),
+        _ => today - chrono::Duration::days(365),
+    }
+}
+
+/// Assemble the C-A response from the user's rows + lots + stored prices.
+/// Pure so the shape and math are unit-testable offline. `positions` must be
+/// non-empty, ordered by value descending — the first row donates the
+/// representative name/price/currency. `closes` is the symbol's last two
+/// stored closes (newest first), when available.
+fn build_instrument_detail(
+    positions: &[InstrumentPosition],
+    lots: Vec<InstrumentLot>,
+    prices: &[(chrono::NaiveDate, f64)],
+    closes: Option<&[(chrono::NaiveDate, f64)]>,
+    total_portfolio_value_usd: f64,
+    fx_usd_to_mxn: f64,
+    today: chrono::NaiveDate,
+) -> InstrumentDetailResponse {
+    let to_usd = |amount: f64, ccy: &str| -> f64 {
+        match ccy {
+            "USD" => amount,
+            "MXN" => {
+                if fx_usd_to_mxn > 0.0 {
+                    amount / fx_usd_to_mxn
+                } else {
+                    amount
+                }
+            }
+            _ => amount,
+        }
+    };
+    let round2 = |v: f64| (v * 100.0).round() / 100.0;
+
+    let first = &positions[0];
+    let quantity: f64 = positions.iter().map(|p| p.quantity).sum();
+    let value_usd = round2(positions.iter().map(|p| to_usd(p.value, &p.currency)).sum());
+
+    // Basis is all-or-nothing, same rationale as the dividend detail: a
+    // partial basis would misstate the aggregate gain.
+    let cost_basis_usd: Option<f64> = if positions.iter().all(|p| p.cost_basis_usd.is_some()) {
+        Some(round2(
+            positions.iter().map(|p| p.cost_basis_usd.unwrap_or(0.0)).sum(),
+        ))
+    } else {
+        None
+    };
+    let gain_loss_usd = cost_basis_usd.map(|cb| round2(value_usd - cb));
+    let gain_loss_pct = cost_basis_usd
+        .filter(|cb| *cb > 0.0)
+        .map(|cb| round2((value_usd - cb) / cb * 100.0));
+
+    let asset_class =
+        crate::services::holdings::classify_asset(&first.holding_type, &first.symbol, &first.name)
+            .to_string();
+    let is_cash = first.holding_type == "cash" || asset_class == "cash";
+    let day = day_change_for_row(value_usd, is_cash, closes, today);
+
+    let portfolio_weight_pct = if total_portfolio_value_usd > 0.0 {
+        round2(value_usd / total_portfolio_value_usd * 100.0)
+    } else {
+        0.0
+    };
+
+    InstrumentDetailResponse {
+        symbol: first.symbol.clone(),
+        name: first.name.clone(),
+        currency: first.currency.clone(),
+        asset_class,
+        quantity,
+        price: first.price,
+        value_usd,
+        cost_basis_usd,
+        gain_loss_usd,
+        gain_loss_pct,
+        portfolio_weight_pct,
+        day_change_usd: day.as_ref().map(|d| round2(d.day_change_usd)),
+        day_change_pct: day.as_ref().map(|d| round2(d.day_change_pct)),
+        price_as_of: day.as_ref().map(|d| d.as_of.to_string()),
+        accounts: positions
+            .iter()
+            .map(|p| InstrumentAccount {
+                account_id: p.account_id.clone(),
+                account_name: p.account_name.clone(),
+                account_type: p.account_type.clone(),
+                tax_advantaged: crate::services::tax::is_tax_advantaged_account_type(Some(
+                    &p.account_type,
+                )),
+                quantity: p.quantity,
+                value_usd: round2(to_usd(p.value, &p.currency)),
+            })
+            .collect(),
+        lots,
+        prices: prices
+            .iter()
+            .map(|(d, c)| InstrumentPricePoint {
+                date: d.to_string(),
+                close: *c,
+            })
+            .collect(),
+    }
+}
+
+#[derive(Deserialize)]
+struct InstrumentQuery {
+    /// Chart range: 1m | 3m | 1y (default) | max.
+    range: Option<String>,
+}
+
+/// GET /instruments/{symbol} — instrument detail for one held symbol
+/// (contract C-A). Matched case-insensitively against the caller's
+/// active-account holdings; 404 when they hold no such symbol. Opaque
+/// symbols (401k trust units, `CUR:USD`) still answer 200 with empty
+/// `prices` and null day-change stats — never a 500. Prices come from the
+/// stored `benchmark_prices` series after a best-effort 4-day-gated
+/// refresh, and ONLY for ticker-shaped symbols (no doomed Yahoo lookups
+/// for trust-fund names).
+async fn instrument_detail(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    axum::extract::Path(symbol): axum::extract::Path<String>,
+    Query(q): Query<InstrumentQuery>,
+) -> Response {
+    let fx_info = latest_usd_mxn_rate(&state.db).await;
+    let fx_usd_to_mxn = fx_info.rate;
+
+    let rows = sqlx::query(
+        r#"
+        SELECT h.id, h.symbol, h.name, h.quantity, h.price, h.value, h.cost_basis,
+               h.currency, COALESCE(h.holding_type, '') AS holding_type,
+               a.id AS account_id, a.account_type,
+               COALESCE(NULLIF(a.nickname, ''), a.name) AS account_name
+        FROM holdings h
+        JOIN accounts a ON h.account_id = a.id
+        WHERE h.user_id = $1
+          AND a.archived_at IS NULL
+          AND UPPER(h.symbol) = UPPER($2)
+        ORDER BY h.value DESC NULLS LAST
+        "#,
+    )
+    .bind(ctx.user_id)
+    .bind(&symbol)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    if rows.is_empty() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "unknown symbol"})),
+        )
+            .into_response();
+    }
+
+    // Active lots for these holdings — both the per-lot breakdown and the
+    // lots-preferred (FX-aware) cost basis, mirroring the holdings handler.
+    let holding_ids: Vec<uuid::Uuid> = rows
+        .iter()
+        .filter_map(|r| r.try_get::<uuid::Uuid, _>("id").ok())
+        .collect();
+    let lot_rows = sqlx::query(
+        r#"
+        SELECT holding_id, qty, cost_per_unit, currency, usd_fx_rate, acquired_at
+        FROM holding_lots
+        WHERE user_id = $1 AND holding_id = ANY($2) AND qty > 0
+        ORDER BY acquired_at ASC, id ASC
+        "#,
+    )
+    .bind(ctx.user_id)
+    .bind(&holding_ids)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let mut lots: Vec<InstrumentLot> = Vec::new();
+    let mut lot_basis_by_holding: HashMap<uuid::Uuid, f64> = HashMap::new();
+    for r in &lot_rows {
+        let hid: uuid::Uuid = match r.try_get("holding_id") {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let dec = |col: &str| -> f64 {
+            r.try_get::<rust_decimal::Decimal, _>(col)
+                .ok()
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0)
+        };
+        let qty = dec("qty");
+        let cpu = dec("cost_per_unit");
+        let fx = dec("usd_fx_rate");
+        let ccy: String = r.try_get("currency").unwrap_or_else(|_| "USD".to_string());
+        let native_cost = qty * cpu;
+        // Same conversion as the holdings handler's lots-preferred basis:
+        // the lot's own historical FX rate, current-FX fallback.
+        let usd_cost = match ccy.as_str() {
+            "USD" => native_cost,
+            "MXN" => {
+                if fx > 0.0 {
+                    native_cost / fx
+                } else {
+                    native_cost / fx_usd_to_mxn
+                }
+            }
+            _ => native_cost,
+        };
+        *lot_basis_by_holding.entry(hid).or_insert(0.0) += usd_cost;
+        lots.push(InstrumentLot {
+            acquired_at: r
+                .try_get::<chrono::NaiveDate, _>("acquired_at")
+                .map(|d| d.to_string())
+                .unwrap_or_default(),
+            qty,
+            cost_per_unit: cpu,
+            currency: ccy,
+            usd_cost,
+        });
+    }
+
+    let dec_f64 = |r: &sqlx::postgres::PgRow, col: &str| -> Option<f64> {
+        r.try_get::<Option<rust_decimal::Decimal>, _>(col)
+            .ok()
+            .flatten()
+            .map(|d| d.to_string().parse().unwrap_or(0.0))
+    };
+    let positions: Vec<InstrumentPosition> = rows
+        .iter()
+        .map(|r| {
+            let currency: String = r.try_get("currency").unwrap_or_else(|_| "USD".to_string());
+            let hid: uuid::Uuid = r.try_get("id").unwrap_or_else(|_| uuid::Uuid::nil());
+            // Lots-preferred USD basis; flat-basis fallback at current FX —
+            // exactly the holdings handler's policy.
+            let cost_basis_usd = lot_basis_by_holding.get(&hid).copied().or_else(|| {
+                dec_f64(r, "cost_basis").map(|cb| match currency.as_str() {
+                    "USD" => cb,
+                    "MXN" => {
+                        if fx_usd_to_mxn > 0.0 {
+                            cb / fx_usd_to_mxn
+                        } else {
+                            cb
+                        }
+                    }
+                    _ => cb,
+                })
+            });
+            InstrumentPosition {
+                symbol: r.get("symbol"),
+                name: r.get("name"),
+                holding_type: r.try_get("holding_type").unwrap_or_default(),
+                quantity: dec_f64(r, "quantity").unwrap_or(0.0),
+                price: dec_f64(r, "price").filter(|p| *p > 0.0),
+                value: dec_f64(r, "value").unwrap_or(0.0),
+                cost_basis_usd,
+                currency,
+                account_id: r
+                    .try_get::<uuid::Uuid, _>("account_id")
+                    .map(|u| u.to_string())
+                    .unwrap_or_default(),
+                account_name: r.get("account_name"),
+                account_type: r.try_get::<String, _>("account_type").unwrap_or_default(),
+            }
+        })
+        .collect();
+
+    // Denominator for the portfolio weight: every active-account holding,
+    // converted with the same MXN policy as the holdings handler.
+    let total_portfolio_value_usd: f64 = sqlx::query(
+        r#"
+        SELECT COALESCE(SUM(
+            CASE WHEN h.currency = 'MXN' THEN h.value / $1::numeric ELSE h.value END
+        ), 0) AS total
+        FROM holdings h
+        JOIN accounts a ON h.account_id = a.id
+        WHERE h.user_id = $2 AND a.archived_at IS NULL
+        "#,
+    )
+    .bind(fx_usd_to_mxn)
+    .bind(ctx.user_id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()
+    .and_then(|r| r.try_get::<rust_decimal::Decimal, _>("total").ok())
+    .and_then(|d| d.to_string().parse::<f64>().ok())
+    .unwrap_or(0.0);
+
+    // Stored price series — ticker-shaped symbols only. `ensure_symbol_fresh`
+    // is best-effort (4-day gate, tolerates network failure when cached data
+    // exists); opaque symbols skip straight to the empty-series degradation.
+    let today = chrono::Utc::now().date_naive();
+    let canonical_symbol = positions[0].symbol.clone();
+    let (prices, closes_by_symbol) =
+        if crate::services::twr::looks_like_ticker(&canonical_symbol) {
+            let _ = crate::services::benchmark::ensure_symbol_fresh(
+                &state.db,
+                &canonical_symbol,
+                &canonical_symbol,
+            )
+            .await;
+            let from = instrument_range_start(q.range.as_deref(), today);
+            (
+                crate::services::benchmark::series(&state.db, &canonical_symbol, from).await,
+                latest_two_closes(&state.db, std::slice::from_ref(&canonical_symbol)).await,
+            )
+        } else {
+            (Vec::new(), HashMap::new())
+        };
+    let closes = closes_by_symbol
+        .get(&canonical_symbol)
+        .map(|v| v.as_slice());
+
+    Json(build_instrument_detail(
+        &positions,
+        lots,
+        &prices,
+        closes,
+        total_portfolio_value_usd,
+        fx_usd_to_mxn,
+        today,
+    ))
+    .into_response()
 }
 
 #[cfg(test)]
@@ -4205,7 +5271,9 @@ mod tests {
             ],
         };
 
-        let got = serde_json::to_value(build_dividend_detail(&positions, &info, 20.0)).unwrap();
+        let got =
+            serde_json::to_value(build_dividend_detail(&positions, &info, 20.0, Vec::new()))
+                .unwrap();
         let want = serde_json::json!({
             "symbol": "NVDA",
             "name": "NVIDIA Corp",
@@ -4239,7 +5307,8 @@ mod tests {
                 {"est_date": "2026-12-10", "est_amount_usd": 0.295},
                 {"est_date": "2027-03-11", "est_amount_usd": 0.295},
                 {"est_date": "2027-06-10", "est_amount_usd": 0.295}
-            ]
+            ],
+            "payments": []
         });
         assert_eq!(got, want);
     }
@@ -4262,7 +5331,9 @@ mod tests {
         }];
         let info = DividendInfo::none("VANG TARGET RET 2045");
 
-        let got = serde_json::to_value(build_dividend_detail(&positions, &info, 20.0)).unwrap();
+        let got =
+            serde_json::to_value(build_dividend_detail(&positions, &info, 20.0, Vec::new()))
+                .unwrap();
         assert_eq!(got["per_year"], 0);
         assert_eq!(got["rate_per_share_annual"], 0.0);
         assert_eq!(got["annual_income_usd"], 0.0);
@@ -4318,7 +5389,9 @@ mod tests {
             history: Vec::new(),
         };
 
-        let got = serde_json::to_value(build_dividend_detail(&positions, &info, 20.0)).unwrap();
+        let got =
+            serde_json::to_value(build_dividend_detail(&positions, &info, 20.0, Vec::new()))
+                .unwrap();
         // 1000 USD + 20000 MXN / 20 = 2000 USD.
         assert_eq!(got["market_value_usd"], 2000.0);
         // Income: 40 USD + 40 MXN / 20 = 42 USD; NOT 80 (both as USD) nor
@@ -4328,5 +5401,310 @@ mod tests {
         assert_eq!(got["cost_basis_usd"], 1600.0);
         assert_eq!(got["quantity"], 20.0);
         assert_eq!(got["accounts"].as_array().unwrap().len(), 2);
+    }
+
+    // =================================================================
+    // C-B — day change from stored closes
+    // =================================================================
+
+    fn day(y: i32, m: u32, d: u32) -> chrono::NaiveDate {
+        chrono::NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    }
+
+    /// Cash sleeves never carry a day change, even with a fresh series.
+    #[test]
+    fn day_change_null_for_cash_row() {
+        let closes = [(day(2026, 7, 2), 1.0), (day(2026, 7, 1), 1.0)];
+        assert!(day_change_for_row(200.0, true, Some(&closes), day(2026, 7, 6)).is_none());
+    }
+
+    /// One stored close (or none) is not enough to compute a change.
+    #[test]
+    fn day_change_null_for_single_close_or_missing_series() {
+        let one = [(day(2026, 7, 2), 171.7)];
+        assert!(day_change_for_row(1000.0, false, Some(&one), day(2026, 7, 6)).is_none());
+        assert!(day_change_for_row(1000.0, false, None, day(2026, 7, 6)).is_none());
+    }
+
+    /// A latest close more than 7 calendar days old is stale — null rather
+    /// than presenting a week-old move as "today".
+    #[test]
+    fn day_change_null_for_stale_close() {
+        let stale = [(day(2026, 6, 28), 102.0), (day(2026, 6, 27), 100.0)];
+        assert!(day_change_for_row(1000.0, false, Some(&stale), day(2026, 7, 6)).is_none());
+        // Exactly 7 days old is still acceptable (weekend + holiday runs).
+        let edge = [(day(2026, 6, 29), 102.0), (day(2026, 6, 28), 100.0)];
+        assert!(day_change_for_row(1000.0, false, Some(&edge), day(2026, 7, 6)).is_some());
+    }
+
+    /// pct = (c0 − c1)/c1 in the symbol's native currency; the row's USD
+    /// change scales its USD value by that same ratio.
+    #[test]
+    fn day_change_math_from_last_two_closes() {
+        let closes = [(day(2026, 7, 2), 102.0), (day(2026, 7, 1), 100.0)];
+        let rc = day_change_for_row(1000.0, false, Some(&closes), day(2026, 7, 6)).unwrap();
+        assert!((rc.day_change_pct - 2.0).abs() < 1e-9);
+        assert!((rc.day_change_usd - 20.0).abs() < 1e-9);
+        assert_eq!(rc.as_of, day(2026, 7, 2));
+    }
+
+    /// Coverage counts ONLY rows with a known day change; the top-level pct
+    /// divides by the covered rows' prior value; as_of is the max covered
+    /// close date.
+    #[test]
+    fn day_change_totals_coverage_and_pct_math() {
+        // Covered: 1020 (chg +20, as-of Jul 2), 510 (chg +10, as-of Jul 1).
+        // Uncovered: a 470 trust row → coverage = 1530/2000 = 76.5%.
+        let rows = vec![
+            (1020.0, Some(20.0), Some("2026-07-02")),
+            (510.0, Some(10.0), Some("2026-07-01")),
+            (470.0, None, None),
+        ];
+        let t = day_change_totals(rows.into_iter());
+        assert!((t.day_change_usd.unwrap() - 30.0).abs() < 1e-9);
+        // Prior value = (1020-20) + (510-10) = 1500 → 30/1500 = 2%.
+        assert!((t.day_change_pct.unwrap() - 2.0).abs() < 1e-9);
+        assert!((t.coverage_pct - 76.5).abs() < 1e-9);
+        assert_eq!(t.as_of.as_deref(), Some("2026-07-02"));
+    }
+
+    /// No covered rows: null totals, 0 coverage — the UI hides the pill.
+    #[test]
+    fn day_change_totals_null_when_nothing_covered() {
+        let rows = vec![(470.0, None, None), (200.0, None, None)];
+        let t = day_change_totals(rows.into_iter());
+        assert!(t.day_change_usd.is_none());
+        assert!(t.day_change_pct.is_none());
+        assert!((t.coverage_pct - 0.0).abs() < 1e-9);
+        assert!(t.as_of.is_none());
+    }
+
+    // =================================================================
+    // C-A — instrument detail
+    // =================================================================
+
+    /// The C-A contract shape, field for field, for a held ticker. The
+    /// frontend instrument sheet is built against exactly this JSON.
+    #[test]
+    fn instrument_detail_matches_contract_c_a_for_held_ticker() {
+        let positions = vec![InstrumentPosition {
+            symbol: "NVDA".to_string(),
+            name: "NVIDIA Corp".to_string(),
+            holding_type: "equity".to_string(),
+            quantity: 29.5,
+            price: Some(172.40),
+            value: 5085.80,
+            cost_basis_usd: Some(3100.00),
+            currency: "USD".to_string(),
+            account_id: "6e9c1a4e-0000-0000-0000-000000000001".to_string(),
+            account_name: "Robinhood".to_string(),
+            account_type: "brokerage".to_string(),
+        }];
+        let lots = vec![InstrumentLot {
+            acquired_at: "2024-03-01".to_string(),
+            qty: 10.0,
+            cost_per_unit: 88.10,
+            currency: "USD".to_string(),
+            usd_cost: 881.00,
+        }];
+        let prices = vec![(day(2026, 7, 1), 170.0), (day(2026, 7, 2), 171.7)];
+        // Newest first, +1.0% day move.
+        let closes = [(day(2026, 7, 2), 171.7), (day(2026, 7, 1), 170.0)];
+
+        let got = serde_json::to_value(build_instrument_detail(
+            &positions,
+            lots,
+            &prices,
+            Some(&closes),
+            1_525_740.0,
+            20.0,
+            day(2026, 7, 6),
+        ))
+        .unwrap();
+        let want = serde_json::json!({
+            "symbol": "NVDA",
+            "name": "NVIDIA Corp",
+            "currency": "USD",
+            "asset_class": "equity",
+            "quantity": 29.5,
+            "price": 172.40,
+            "value_usd": 5085.80,
+            "cost_basis_usd": 3100.00,
+            "gain_loss_usd": 1985.80,
+            "gain_loss_pct": 64.06,
+            "portfolio_weight_pct": 0.33,
+            "day_change_usd": 50.86,
+            "day_change_pct": 1.0,
+            "price_as_of": "2026-07-02",
+            "accounts": [
+                {
+                    "account_id": "6e9c1a4e-0000-0000-0000-000000000001",
+                    "account_name": "Robinhood",
+                    "account_type": "brokerage",
+                    "tax_advantaged": false,
+                    "quantity": 29.5,
+                    "value_usd": 5085.80
+                }
+            ],
+            "lots": [
+                {"acquired_at": "2024-03-01", "qty": 10.0, "cost_per_unit": 88.10,
+                 "currency": "USD", "usd_cost": 881.00}
+            ],
+            "prices": [
+                {"date": "2026-07-01", "close": 170.0},
+                {"date": "2026-07-02", "close": 171.7}
+            ]
+        });
+        assert_eq!(got, want);
+    }
+
+    /// An opaque symbol (401k trust units): 200 with empty prices and null
+    /// price/basis/day-change stats — everything else still renders. The
+    /// 401k account is flagged tax-advantaged via the tax module's list.
+    #[test]
+    fn instrument_detail_opaque_symbol_degrades_to_empty_prices_and_nulls() {
+        let positions = vec![InstrumentPosition {
+            symbol: "VANG TARGET RET 2045".to_string(),
+            name: "Vanguard Target Retirement 2045 Trust".to_string(),
+            holding_type: String::new(),
+            quantity: 100.0,
+            price: None,
+            value: 12000.0,
+            cost_basis_usd: None,
+            currency: "USD".to_string(),
+            account_id: "6e9c1a4e-0000-0000-0000-000000000002".to_string(),
+            account_name: "Employer 401k".to_string(),
+            account_type: "401k".to_string(),
+        }];
+
+        let got = serde_json::to_value(build_instrument_detail(
+            &positions,
+            Vec::new(),
+            &[],
+            None,
+            24000.0,
+            20.0,
+            day(2026, 7, 6),
+        ))
+        .unwrap();
+        assert_eq!(got["symbol"], "VANG TARGET RET 2045");
+        // Name/type default classifies trust units as equity (round-1 C2).
+        assert_eq!(got["asset_class"], "equity");
+        assert_eq!(got["value_usd"], 12000.0);
+        assert_eq!(got["portfolio_weight_pct"], 50.0);
+        // Nullables are real JSON nulls, not absent keys.
+        assert!(got["price"].is_null());
+        assert!(got["cost_basis_usd"].is_null());
+        assert!(got["gain_loss_usd"].is_null());
+        assert!(got["gain_loss_pct"].is_null());
+        assert!(got["day_change_usd"].is_null());
+        assert!(got["day_change_pct"].is_null());
+        assert!(got["price_as_of"].is_null());
+        assert_eq!(got["prices"], serde_json::json!([]));
+        assert_eq!(got["lots"], serde_json::json!([]));
+        assert_eq!(got["accounts"][0]["tax_advantaged"], true);
+    }
+
+    /// Range keys map to sensible window starts; unknown fails soft to 1y.
+    #[test]
+    fn instrument_range_start_windows() {
+        let today = day(2026, 7, 6);
+        assert_eq!(instrument_range_start(Some("1m"), today), day(2026, 6, 5));
+        assert_eq!(instrument_range_start(Some("3m"), today), day(2026, 4, 5));
+        assert_eq!(instrument_range_start(Some("1y"), today), day(2025, 7, 6));
+        assert_eq!(instrument_range_start(Some("max"), today), day(2000, 1, 1));
+        assert_eq!(instrument_range_start(None, today), day(2025, 7, 6));
+        assert_eq!(instrument_range_start(Some("bogus"), today), day(2025, 7, 6));
+    }
+
+    // =================================================================
+    // C-D — conservative payment matching (regex gate)
+    // =================================================================
+
+    /// Ticker-shaped symbols produce a whole-word pattern with regex
+    /// metacharacters escaped.
+    #[test]
+    fn dividend_symbol_pattern_escapes_safe_symbols() {
+        assert_eq!(
+            dividend_symbol_word_pattern("SCHD").as_deref(),
+            Some(r"\mSCHD\M")
+        );
+        assert_eq!(
+            dividend_symbol_word_pattern("BRK.B").as_deref(),
+            Some(r"\mBRK\.B\M")
+        );
+        assert_eq!(
+            dividend_symbol_word_pattern("BF-B").as_deref(),
+            Some(r"\mBF\-B\M")
+        );
+    }
+
+    /// Symbols with characters outside [A-Za-z0-9.-] (pseudo-symbols, trust
+    /// names) skip transaction matching entirely — `[]`, never a bad regex.
+    #[test]
+    fn dividend_symbol_pattern_rejects_unsafe_symbols() {
+        assert!(dividend_symbol_word_pattern("CUR:USD").is_none());
+        assert!(dividend_symbol_word_pattern("VANG TARGET RET 2045").is_none());
+        assert!(dividend_symbol_word_pattern("").is_none());
+        assert!(dividend_symbol_word_pattern("A|B").is_none());
+    }
+
+    // =================================================================
+    // C-E — CSV quoting
+    // =================================================================
+
+    /// RFC-4180: fields are always quoted; embedded quotes double; commas
+    /// and quotes survive a round-trip.
+    #[test]
+    fn csv_field_quotes_commas_and_quotes() {
+        assert_eq!(csv_field("Acme, Inc"), "\"Acme, Inc\"");
+        assert_eq!(csv_field("Bob's \"Fund\""), "\"Bob's \"\"Fund\"\"\"");
+        assert_eq!(csv_field(""), "\"\"");
+        assert_eq!(csv_field("plain"), "\"plain\"");
+    }
+
+    // =================================================================
+    // B3 — upcoming ex-dates are uncapped
+    // =================================================================
+
+    /// Ten payers spanning Jul–Oct: ALL ten surface (the old truncate(5)
+    /// cut exactly the September/October rows), ascending, past dates and
+    /// non-payers dropped.
+    #[test]
+    fn upcoming_ex_dates_uncapped_ascending_and_future_only() {
+        let mk = |sym: &str, date: Option<&str>, income: f64| DividendSymbolContribution {
+            symbol: sym.to_string(),
+            quantity: 1.0,
+            annual_rate: 1.0,
+            annual_income_usd: income,
+            yield_pct: None,
+            last_ex_date: None,
+            est_next_ex_date: date.map(str::to_string),
+            per_year: 4,
+        };
+        let contributions = vec![
+            mk("A", Some("2026-07-10"), 10.0),
+            mk("B", Some("2026-07-24"), 10.0),
+            mk("C", Some("2026-08-05"), 10.0),
+            mk("D", Some("2026-08-19"), 10.0),
+            mk("E", Some("2026-09-02"), 10.0),
+            mk("F", Some("2026-09-16"), 10.0),
+            mk("G", Some("2026-09-30"), 10.0),
+            mk("H", Some("2026-10-08"), 10.0),
+            mk("I", Some("2026-10-21"), 10.0),
+            mk("J", Some("2026-10-29"), 10.0),
+            // Dropped: estimate already past / zero projected income.
+            mk("PAST", Some("2026-06-30"), 10.0),
+            mk("NOPAY", Some("2026-09-09"), 0.0),
+        ];
+        let upcoming = upcoming_ex_dates(&contributions, "2026-07-06");
+        assert_eq!(upcoming.len(), 10, "no server-side cap");
+        assert!(upcoming
+            .windows(2)
+            .all(|w| w[0].est_next_ex_date <= w[1].est_next_ex_date));
+        assert!(upcoming
+            .iter()
+            .any(|u| u.est_next_ex_date.starts_with("2026-09")));
+        assert!(upcoming.iter().all(|u| u.symbol != "PAST" && u.symbol != "NOPAY"));
     }
 }

@@ -86,7 +86,7 @@ impl TwrResult {
 /// the frontend's "hide Plaid security_id hash" heuristic: real tickers are
 /// short and upper-case; Plaid `security_id`s are long and mixed-case.
 /// `CUR:*` pseudo-symbols are brokerage cash, not securities.
-fn looks_like_ticker(s: &str) -> bool {
+pub(crate) fn looks_like_ticker(s: &str) -> bool {
     if s.is_empty() || s.starts_with("CUR:") {
         return false;
     }
