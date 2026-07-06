@@ -5991,4 +5991,174 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get allocBandFiltersTable => 'filters the holdings table';
+
+  @override
+  String get insLoadError => 'Couldn\'t load instrument details';
+
+  @override
+  String insAsOf(String date) {
+    return 'as of $date';
+  }
+
+  @override
+  String get insRange1m => '1M';
+
+  @override
+  String get insRange3m => '3M';
+
+  @override
+  String get insRange1y => '1Y';
+
+  @override
+  String get insRangeMax => 'Max';
+
+  @override
+  String get insNoPriceHistory => 'No price history for this holding';
+
+  @override
+  String get insStatMarketValue => 'Market value';
+
+  @override
+  String get insStatQuantity => 'Quantity';
+
+  @override
+  String get insStatCostBasis => 'Cost basis';
+
+  @override
+  String get insStatGain => 'Gain';
+
+  @override
+  String get insStatWeight => 'Portfolio weight';
+
+  @override
+  String get insStatAssetClass => 'Asset class';
+
+  @override
+  String get insLotsSection => 'Purchase lots';
+
+  @override
+  String insLotQtyAtPrice(String qty, String price) {
+    return '$qty shares @ $price';
+  }
+
+  @override
+  String get insLotsTotal => 'Total';
+
+  @override
+  String get insDividendsLink => 'Dividend details';
+
+  @override
+  String get insDivPaymentsSection => 'Payments received';
+
+  @override
+  String insDivShowAllPayments(int count) {
+    return 'Show all ($count)';
+  }
+
+  @override
+  String get insDivShowFewerPayments => 'Show fewer';
+
+  @override
+  String get rgxAllYears => 'All';
+
+  @override
+  String rgxNoSalesInYear(String year) {
+    return 'No sales in $year';
+  }
+
+  @override
+  String get rgxTaxAdvBadge => 'Tax-adv.';
+
+  @override
+  String get rgxTaxAdvTooltip => 'Roth/IRA/401k/HSA — not taxable';
+
+  @override
+  String get rgxTaxableCaptionPrefix => 'Taxable';
+
+  @override
+  String rgxTaxableCaptionSuffix(String total) {
+    return 'of $total — the rest is inside tax-advantaged accounts';
+  }
+
+  @override
+  String get rgxExportCsvTooltip => 'Export CSV';
+
+  @override
+  String get rgxPerfPortfolioValue => 'Portfolio value';
+
+  @override
+  String pfDayPillToday(String change) {
+    return '$change today';
+  }
+
+  @override
+  String pfDayPillTooltip(String date, String coverage) {
+    return 'As of $date close · covers $coverage% of portfolio value';
+  }
+
+  @override
+  String get pfDayColHeader => 'Day';
+
+  @override
+  String get pfDayUnavailable => 'No recent closing price for this holding';
+
+  @override
+  String pfDaySemPayerRow(String symbol, String income) {
+    return '$symbol, $income per year, opens dividend details';
+  }
+
+  @override
+  String pfDaySemExDateRow(String symbol, String date, String amount) {
+    return '$symbol, estimated ex-date $date, expected $amount';
+  }
+
+  @override
+  String pfDaySemPositionsSubtotal(int count, String amount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count positions',
+      one: '1 position',
+    );
+    return '$_temp0, subtotal $amount';
+  }
+
+  @override
+  String pfDaySemHoldingRow(
+    String symbol,
+    String qty,
+    String value,
+    String ret,
+  ) {
+    return '$symbol, $qty shares, $value, $ret return';
+  }
+
+  @override
+  String get pfCsvExportTooltip => 'Export CSV';
+
+  @override
+  String get pfCsvHoldings => 'Holdings (CSV)';
+
+  @override
+  String get pfCsvLots => 'Purchase lots (CSV)';
+
+  @override
+  String get ovwOpensAccountDetails => 'Opens account details';
+
+  @override
+  String ovwEndingIn(String digits) {
+    return 'ending in $digits';
+  }
+
+  @override
+  String ovwAccountActionsFor(String name) {
+    return 'Account actions for $name';
+  }
+
+  @override
+  String get alloc2UnclassifiedBand => 'Unclassified (account balance)';
+
+  @override
+  String get alloc2UnclassifiedTooltip =>
+      'Account balance without holdings detail — open the account to see it';
 }

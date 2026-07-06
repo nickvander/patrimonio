@@ -9731,6 +9731,275 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'filters the holdings table'**
   String get allocBandFiltersTable;
+
+  /// Inline error shown in the instrument detail sheet when the fetch fails; paired with a Retry button.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load instrument details'**
+  String get insLoadError;
+
+  /// Muted staleness caption next to the instrument sheet's big price when the latest stored close predates today.
+  ///
+  /// In en, this message translates to:
+  /// **'as of {date}'**
+  String insAsOf(String date);
+
+  /// Instrument price-chart range chip: one month.
+  ///
+  /// In en, this message translates to:
+  /// **'1M'**
+  String get insRange1m;
+
+  /// Instrument price-chart range chip: three months.
+  ///
+  /// In en, this message translates to:
+  /// **'3M'**
+  String get insRange3m;
+
+  /// Instrument price-chart range chip: one year.
+  ///
+  /// In en, this message translates to:
+  /// **'1Y'**
+  String get insRange1y;
+
+  /// Instrument price-chart range chip: full available history.
+  ///
+  /// In en, this message translates to:
+  /// **'Max'**
+  String get insRangeMax;
+
+  /// Graceful empty state replacing the price chart for symbols without stored closes (401k trusts, cash sleeves).
+  ///
+  /// In en, this message translates to:
+  /// **'No price history for this holding'**
+  String get insNoPriceHistory;
+
+  /// Instrument sheet stat-grid tile: current USD market value of the position.
+  ///
+  /// In en, this message translates to:
+  /// **'Market value'**
+  String get insStatMarketValue;
+
+  /// Instrument sheet stat-grid tile: total shares/units held across accounts.
+  ///
+  /// In en, this message translates to:
+  /// **'Quantity'**
+  String get insStatQuantity;
+
+  /// Instrument sheet stat-grid tile: total USD cost basis; em-dash when unknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Cost basis'**
+  String get insStatCostBasis;
+
+  /// Instrument sheet stat-grid tile: unrealized gain/loss in USD and percent.
+  ///
+  /// In en, this message translates to:
+  /// **'Gain'**
+  String get insStatGain;
+
+  /// Instrument sheet stat-grid tile: the position's share of total portfolio value.
+  ///
+  /// In en, this message translates to:
+  /// **'Portfolio weight'**
+  String get insStatWeight;
+
+  /// Instrument sheet stat-grid tile: the holding's canonical asset class, shown as a chip.
+  ///
+  /// In en, this message translates to:
+  /// **'Asset class'**
+  String get insStatAssetClass;
+
+  /// Instrument sheet section header listing the position's purchase lots.
+  ///
+  /// In en, this message translates to:
+  /// **'Purchase lots'**
+  String get insLotsSection;
+
+  /// Purchase-lot row detail: quantity bought at the per-unit price (native currency).
+  ///
+  /// In en, this message translates to:
+  /// **'{qty} shares @ {price}'**
+  String insLotQtyAtPrice(String qty, String price);
+
+  /// Label on the purchase-lots totals row (summed quantity + summed USD cost).
+  ///
+  /// In en, this message translates to:
+  /// **'Total'**
+  String get insLotsTotal;
+
+  /// TextButton in the instrument sheet that opens the per-symbol dividend detail sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Dividend details'**
+  String get insDividendsLink;
+
+  /// Dividend-sheet section header for real dividend payments matched from account transactions (contract C-D).
+  ///
+  /// In en, this message translates to:
+  /// **'Payments received'**
+  String get insDivPaymentsSection;
+
+  /// Expander under the dividend payments list when more than 12 payments exist.
+  ///
+  /// In en, this message translates to:
+  /// **'Show all ({count})'**
+  String insDivShowAllPayments(int count);
+
+  /// Collapses the dividend payments list back to the first 12 entries.
+  ///
+  /// In en, this message translates to:
+  /// **'Show fewer'**
+  String get insDivShowFewerPayments;
+
+  /// Realized-gains year selector: chip that clears the year filter and shows every disposal.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get rgxAllYears;
+
+  /// Realized-gains card: shown instead of the disposal list when the selected year has no disposals.
+  ///
+  /// In en, this message translates to:
+  /// **'No sales in {year}'**
+  String rgxNoSalesInYear(String year);
+
+  /// Compact chip on a disposal row marking a sale inside a tax-advantaged account (Roth/IRA/401k/HSA). Keep very short.
+  ///
+  /// In en, this message translates to:
+  /// **'Tax-adv.'**
+  String get rgxTaxAdvBadge;
+
+  /// Tooltip explaining the tax-advantaged chip on a disposal row.
+  ///
+  /// In en, this message translates to:
+  /// **'Roth/IRA/401k/HSA — not taxable'**
+  String get rgxTaxAdvTooltip;
+
+  /// Realized-gains taxable caption, first fragment. Rendered as: '<prefix> +$X <suffix>' where +$X is the taxable subtotal (bolded in code).
+  ///
+  /// In en, this message translates to:
+  /// **'Taxable'**
+  String get rgxTaxableCaptionPrefix;
+
+  /// Realized-gains taxable caption, fragment after the bolded taxable figure. {total} is the shown period's total realized P&L.
+  ///
+  /// In en, this message translates to:
+  /// **'of {total} — the rest is inside tax-advantaged accounts'**
+  String rgxTaxableCaptionSuffix(String total);
+
+  /// Tooltip/semantic label for the realized-gains CSV download button.
+  ///
+  /// In en, this message translates to:
+  /// **'Export CSV'**
+  String get rgxExportCsvTooltip;
+
+  /// Caption over the performance card's headline dollar figure (the current portfolio value).
+  ///
+  /// In en, this message translates to:
+  /// **'Portfolio value'**
+  String get rgxPerfPortfolioValue;
+
+  /// Hero 'Today' pill next to the all-time gain pill. {change} is the pre-formatted day change, e.g. '+$4,321 (+0.29%)'.
+  ///
+  /// In en, this message translates to:
+  /// **'{change} today'**
+  String pfDayPillToday(String change);
+
+  /// Tooltip on the Today pill when day-change coverage is partial or the latest close pre-dates today.
+  ///
+  /// In en, this message translates to:
+  /// **'As of {date} close · covers {coverage}% of portfolio value'**
+  String pfDayPillTooltip(String date, String coverage);
+
+  /// Holdings-table column header for the change since the last stored close (contract C-B).
+  ///
+  /// In en, this message translates to:
+  /// **'Day'**
+  String get pfDayColHeader;
+
+  /// Tooltip on the em dash in the Day column (cash sleeves, opaque symbols, or stale stored closes).
+  ///
+  /// In en, this message translates to:
+  /// **'No recent closing price for this holding'**
+  String get pfDayUnavailable;
+
+  /// Screen-reader label for a dividend-card payer row (WS4 a11y).
+  ///
+  /// In en, this message translates to:
+  /// **'{symbol}, {income} per year, opens dividend details'**
+  String pfDaySemPayerRow(String symbol, String income);
+
+  /// Screen-reader label for an upcoming ex-date row on the dividend card (WS4 a11y).
+  ///
+  /// In en, this message translates to:
+  /// **'{symbol}, estimated ex-date {date}, expected {amount}'**
+  String pfDaySemExDateRow(String symbol, String date, String amount);
+
+  /// Tail of the screen-reader label for a grouped-by-account section header; preceded by the account and institution names (WS4 a11y).
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 position} other{{count} positions}}, subtotal {amount}'**
+  String pfDaySemPositionsSubtotal(int count, String amount);
+
+  /// Screen-reader label for a compact holding row in the grouped-by-account view. {ret} is the pre-formatted return, e.g. '+12.34%', or an em dash (WS4 a11y).
+  ///
+  /// In en, this message translates to:
+  /// **'{symbol}, {qty} shares, {value}, {ret} return'**
+  String pfDaySemHoldingRow(
+    String symbol,
+    String qty,
+    String value,
+    String ret,
+  );
+
+  /// Tooltip on the holdings-toolbar download menu button (contract C-E).
+  ///
+  /// In en, this message translates to:
+  /// **'Export CSV'**
+  String get pfCsvExportTooltip;
+
+  /// Export-menu item: download the holdings table as CSV.
+  ///
+  /// In en, this message translates to:
+  /// **'Holdings (CSV)'**
+  String get pfCsvHoldings;
+
+  /// Export-menu item: download the purchase lots as CSV.
+  ///
+  /// In en, this message translates to:
+  /// **'Purchase lots (CSV)'**
+  String get pfCsvLots;
+
+  /// Screen-reader hint on an Overview account row: activating it opens the account detail panel.
+  ///
+  /// In en, this message translates to:
+  /// **'Opens account details'**
+  String get ovwOpensAccountDetails;
+
+  /// Screen-reader fragment for a masked account number (••1234) in an Overview row label.
+  ///
+  /// In en, this message translates to:
+  /// **'ending in {digits}'**
+  String ovwEndingIn(String digits);
+
+  /// Tooltip/screen-reader label of the per-account overflow menu on the Overview accounts list.
+  ///
+  /// In en, this message translates to:
+  /// **'Account actions for {name}'**
+  String ovwAccountActionsFor(String name);
+
+  /// Label of the muted, non-tappable allocation band for investment accounts that carry a balance but no holdings rows (contract C-G).
+  ///
+  /// In en, this message translates to:
+  /// **'Unclassified (account balance)'**
+  String get alloc2UnclassifiedBand;
+
+  /// Tooltip + screen-reader explanation on the Unclassified allocation band.
+  ///
+  /// In en, this message translates to:
+  /// **'Account balance without holdings detail — open the account to see it'**
+  String get alloc2UnclassifiedTooltip;
 }
 
 class _AppLocalizationsDelegate

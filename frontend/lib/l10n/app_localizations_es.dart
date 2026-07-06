@@ -6043,4 +6043,175 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get allocBandFiltersTable => 'filtra la tabla de posiciones';
+
+  @override
+  String get insLoadError => 'No se pudo cargar el detalle del instrumento';
+
+  @override
+  String insAsOf(String date) {
+    return 'al $date';
+  }
+
+  @override
+  String get insRange1m => '1M';
+
+  @override
+  String get insRange3m => '3M';
+
+  @override
+  String get insRange1y => '1A';
+
+  @override
+  String get insRangeMax => 'Máx';
+
+  @override
+  String get insNoPriceHistory => 'Sin historial de precios para esta posición';
+
+  @override
+  String get insStatMarketValue => 'Valor de mercado';
+
+  @override
+  String get insStatQuantity => 'Cantidad';
+
+  @override
+  String get insStatCostBasis => 'Costo base';
+
+  @override
+  String get insStatGain => 'Ganancia';
+
+  @override
+  String get insStatWeight => 'Peso en el portafolio';
+
+  @override
+  String get insStatAssetClass => 'Clase de activo';
+
+  @override
+  String get insLotsSection => 'Lotes de compra';
+
+  @override
+  String insLotQtyAtPrice(String qty, String price) {
+    return '$qty acciones a $price';
+  }
+
+  @override
+  String get insLotsTotal => 'Total';
+
+  @override
+  String get insDividendsLink => 'Detalle de dividendos';
+
+  @override
+  String get insDivPaymentsSection => 'Pagos recibidos';
+
+  @override
+  String insDivShowAllPayments(int count) {
+    return 'Mostrar todos ($count)';
+  }
+
+  @override
+  String get insDivShowFewerPayments => 'Mostrar menos';
+
+  @override
+  String get rgxAllYears => 'Todos';
+
+  @override
+  String rgxNoSalesInYear(String year) {
+    return 'Sin ventas en $year';
+  }
+
+  @override
+  String get rgxTaxAdvBadge => 'Vent. fiscal';
+
+  @override
+  String get rgxTaxAdvTooltip => 'Roth/IRA/401k/HSA — no gravable';
+
+  @override
+  String get rgxTaxableCaptionPrefix => 'Gravable';
+
+  @override
+  String rgxTaxableCaptionSuffix(String total) {
+    return 'de $total — el resto está en cuentas con ventajas fiscales';
+  }
+
+  @override
+  String get rgxExportCsvTooltip => 'Exportar CSV';
+
+  @override
+  String get rgxPerfPortfolioValue => 'Valor del portafolio';
+
+  @override
+  String pfDayPillToday(String change) {
+    return '$change hoy';
+  }
+
+  @override
+  String pfDayPillTooltip(String date, String coverage) {
+    return 'Al cierre del $date · cubre el $coverage% del valor del portafolio';
+  }
+
+  @override
+  String get pfDayColHeader => 'Día';
+
+  @override
+  String get pfDayUnavailable =>
+      'Sin precio de cierre reciente para esta posición';
+
+  @override
+  String pfDaySemPayerRow(String symbol, String income) {
+    return '$symbol, $income al año, abre el detalle de dividendos';
+  }
+
+  @override
+  String pfDaySemExDateRow(String symbol, String date, String amount) {
+    return '$symbol, fecha ex-dividendo estimada $date, pago esperado $amount';
+  }
+
+  @override
+  String pfDaySemPositionsSubtotal(int count, String amount) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count posiciones',
+      one: '1 posición',
+    );
+    return '$_temp0, subtotal $amount';
+  }
+
+  @override
+  String pfDaySemHoldingRow(
+    String symbol,
+    String qty,
+    String value,
+    String ret,
+  ) {
+    return '$symbol, $qty acciones, $value, rendimiento de $ret';
+  }
+
+  @override
+  String get pfCsvExportTooltip => 'Exportar CSV';
+
+  @override
+  String get pfCsvHoldings => 'Posiciones (CSV)';
+
+  @override
+  String get pfCsvLots => 'Lotes de compra (CSV)';
+
+  @override
+  String get ovwOpensAccountDetails => 'Abre los detalles de la cuenta';
+
+  @override
+  String ovwEndingIn(String digits) {
+    return 'terminada en $digits';
+  }
+
+  @override
+  String ovwAccountActionsFor(String name) {
+    return 'Acciones de la cuenta $name';
+  }
+
+  @override
+  String get alloc2UnclassifiedBand => 'Sin clasificar (saldo de la cuenta)';
+
+  @override
+  String get alloc2UnclassifiedTooltip =>
+      'Saldo de la cuenta sin detalle de posiciones — abre la cuenta para verlo';
 }
