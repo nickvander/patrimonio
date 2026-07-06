@@ -1831,7 +1831,10 @@ async fn holdings_dividends(
         return StatusCode::NOT_FOUND.into_response();
     }
     let rows = sqlx::query(
-        "SELECT symbol, quantity, price FROM holdings WHERE account_id = $1 AND user_id = $2",
+        // Skip cash-sleeve rows (mirrors the portfolio-wide endpoint) —
+        // they're fixed at 1.00, never pay a dividend, and a Yahoo lookup
+        // for them only wastes a request + logs a miss.
+        "SELECT symbol, quantity, price FROM holdings WHERE account_id = $1 AND user_id = $2 AND COALESCE(holding_type, '') <> 'cash'",
     )
     .bind(account_id)
     .bind(ctx.user_id)

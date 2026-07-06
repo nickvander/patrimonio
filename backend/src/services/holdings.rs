@@ -6,6 +6,76 @@
 use crate::services::benchmark;
 use sqlx::PgPool;
 
+/// Bond funds that don't self-identify: Plaid/imports type them 'etf' or
+/// 'mutual fund', so without this list VBTLX and BND land in the equity band
+/// and the allocation view shows zero bond exposure. Uppercase tickers.
+const BOND_FUND_SYMBOLS: &[&str] = &[
+    "BND", "AGG", "TLT", "IEF", "SHY", "BNDX", "VBTLX", "VBMFX", "VBILX", "FXNAX", "VGIT",
+    "VGSH", "VGLT", "VCIT", "VCSH", "VTEB", "MUB", "LQD", "HYG", "JNK", "TIP", "VTIP", "GOVT",
+    "BIV", "BSV", "BLV", "SCHZ",
+];
+
+/// Money-market funds — cash sleeves that arrive typed 'mutual fund'.
+const MONEY_MARKET_SYMBOLS: &[&str] = &["SPAXX", "VMFXX", "SWVXX", "SPRXX", "FDRXX", "FDLXX"];
+
+/// Canonical asset class for a holding (contract C2). Returns one of:
+/// `equity | bonds | cash | crypto | real_estate | commodities | other`.
+///
+/// Display labels stay human elsewhere; FILTERING keys on this value, which
+/// is what makes a 'mutual fund' bond fund (VBTLX) and 'etf' bond funds
+/// (BND/TLT) land in the same Bonds band. Heuristics run in order —
+/// holding_type first (most authoritative when it's specific), then the
+/// known-symbol sets, then name matching, then the equity default for the
+/// generic instrument-shaped types.
+pub(crate) fn classify_asset(holding_type: &str, symbol: &str, name: &str) -> &'static str {
+    let ht = holding_type.trim().to_lowercase();
+    let sym = symbol.trim().to_uppercase();
+    let name_l = name.to_lowercase();
+
+    // Bonds: explicit type, known fund ticker, or a bond-shaped name.
+    // 'fixed income' is Plaid's spelling of the bonds holding type.
+    if ht == "bonds" || ht == "bond" || ht == "fixed income" || ht == "fixed_income" {
+        return "bonds";
+    }
+    if BOND_FUND_SYMBOLS.contains(&sym.as_str()) {
+        return "bonds";
+    }
+    if ["bond", "treasur", "fixed income", "tips", "gnma"]
+        .iter()
+        .any(|kw| name_l.contains(kw))
+    {
+        return "bonds";
+    }
+
+    // Cash: cash sleeves, money-market funds, and Plaid's `CUR:XXX`
+    // brokerage-cash pseudo-symbols (see services/twr.rs).
+    if ht == "cash"
+        || sym.starts_with("CUR:")
+        || MONEY_MARKET_SYMBOLS.contains(&sym.as_str())
+        || name_l.contains("money market")
+    {
+        return "cash";
+    }
+
+    if ht == "crypto" || ht == "cryptocurrency" {
+        return "crypto";
+    }
+    if ht == "real estate" || ht == "real_estate" || ht == "reit" {
+        return "real_estate";
+    }
+    if ht == "commodity" || ht == "commodities" {
+        return "commodities";
+    }
+
+    // The generic instrument-shaped types (and the untyped default) are
+    // equity once nothing above matched; anything more exotic
+    // ('derivative', 'loan', …) is honestly 'other'.
+    match ht.as_str() {
+        "" | "equity" | "etf" | "mutual fund" | "mutual_fund" | "stock" => "equity",
+        _ => "other",
+    }
+}
+
 /// Latest cached close for a symbol, after a best-effort (4-day-gated) Yahoo
 /// refresh. Used by the on-demand handlers (add/refresh holding) where a stale
 /// cached price is fine.
@@ -162,4 +232,56 @@ pub async fn refresh_all_prices(db: &PgPool) -> RefreshSummary {
         summary.accounts += 1;
     }
     summary
+}
+
+#[cfg(test)]
+mod tests {
+    use super::classify_asset;
+
+    #[test]
+    fn bond_funds_classify_as_bonds_regardless_of_holding_type() {
+        // The prod repro: the only bond exposure is a 'mutual fund' (VBTLX)
+        // and two 'etf's (BND, TLT) — the type column alone puts all three
+        // in equity.
+        assert_eq!(classify_asset("mutual fund", "VBTLX", "Vanguard Total Bond Market Index Fund"), "bonds");
+        assert_eq!(classify_asset("etf", "BND", "Vanguard Total Bond Market ETF"), "bonds");
+        assert_eq!(classify_asset("etf", "TLT", "iShares 20+ Year Treasury Bond ETF"), "bonds");
+        // Explicit type wins even with no recognizable symbol/name.
+        assert_eq!(classify_asset("bonds", "XYZ", "Some Fund"), "bonds");
+        assert_eq!(classify_asset("fixed income", "912828XY", "Note"), "bonds");
+        // Name-only match (unknown ticker, generic type), case-insensitive.
+        assert_eq!(classify_asset("mutual fund", "ZZBOND", "Corporate Bond Ladder 2030"), "bonds");
+        assert_eq!(classify_asset("etf", "SCHP", "Schwab U.S. TIPS ETF"), "bonds");
+        assert_eq!(classify_asset("", "T2026", "US Treasury Note 4.25% 2026"), "bonds");
+    }
+
+    #[test]
+    fn cash_sleeves_and_pseudo_symbols_classify_as_cash() {
+        assert_eq!(classify_asset("cash", "CASH", "Cash sleeve"), "cash");
+        // Plaid brokerage-cash pseudo-symbols.
+        assert_eq!(classify_asset("", "CUR:USD", "US Dollar"), "cash");
+        assert_eq!(classify_asset("equity", "cur:mxn", "Mexican Peso"), "cash");
+        // Money-market funds arrive typed 'mutual fund'.
+        assert_eq!(classify_asset("mutual fund", "SPAXX", "Fidelity Government Money Market"), "cash");
+        assert_eq!(classify_asset("mutual fund", "VMFXX", "Vanguard Federal Money Market Fund"), "cash");
+        assert_eq!(classify_asset("etf", "XX123", "Premier Money Market Portfolio"), "cash");
+    }
+
+    #[test]
+    fn remaining_types_map_to_their_canonical_keys() {
+        assert_eq!(classify_asset("crypto", "BTC", "Bitcoin"), "crypto");
+        assert_eq!(classify_asset("cryptocurrency", "ETH", "Ethereum"), "crypto");
+        assert_eq!(classify_asset("real estate", "VNQ2", "Real Estate Holding"), "real_estate");
+        assert_eq!(classify_asset("commodities", "GLD2", "Gold Trust"), "commodities");
+        // NULL/'' and the generic instrument types default to equity.
+        assert_eq!(classify_asset("", "AAPL", "Apple Inc"), "equity");
+        assert_eq!(classify_asset("equity", "NVDA", "NVIDIA Corp"), "equity");
+        assert_eq!(classify_asset("etf", "VTI", "Vanguard Total Stock Market ETF"), "equity");
+        assert_eq!(classify_asset("mutual fund", "FXAIX", "Fidelity 500 Index Fund"), "equity");
+        // 401k trust units with no symbol and an opaque name: equity default.
+        assert_eq!(classify_asset("", "", "Vanguard Target Retirement 2045 Trust"), "equity");
+        // Exotic types are honestly 'other'.
+        assert_eq!(classify_asset("derivative", "SPX260918C", "SPX Call"), "other");
+        assert_eq!(classify_asset("loan", "", "Private note"), "other");
+    }
 }

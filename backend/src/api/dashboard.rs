@@ -20,6 +20,7 @@ pub fn router() -> Router<AppState> {
         .route("/portfolio-value-history", get(portfolio_value_history))
         .route("/holdings", get(holdings))
         .route("/holdings/dividends", get(portfolio_dividends))
+        .route("/dividends/{symbol}", get(dividend_detail))
         .route("/allocation", get(asset_allocation))
         .route("/trends", get(cash_flow_trends))
         .route("/spending-by-category", get(spending_by_category))
@@ -633,9 +634,19 @@ async fn holdings(
             let cost_basis_mxn = cost_basis_usd.map(|cb| cb * fx_usd_to_mxn);
             let value_mxn = value_usd * fx_usd_to_mxn;
 
+            let symbol: String = r.get("symbol");
+            let name: String = r.get("name");
+            let holding_type: String = r.try_get::<String, _>("holding_type").unwrap_or_default();
+            // Canonical asset class (contract C2) — the allocation endpoint
+            // classifies with the same function, so a band's key always
+            // matches the rows the band should filter to.
+            let asset_class =
+                crate::services::holdings::classify_asset(&holding_type, &symbol, &name)
+                    .to_string();
+
             HoldingDetail {
-                symbol: r.get("symbol"),
-                name: r.get("name"),
+                symbol,
+                name,
                 quantity: r.try_get::<rust_decimal::Decimal, _>("quantity")
                     .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
                 price: r.try_get::<rust_decimal::Decimal, _>("price")
@@ -656,7 +667,8 @@ async fn holdings(
                 gain_loss_usd: cost_basis_usd.map(|cb| value_usd - cb),
                 gain_loss_mxn: cost_basis_mxn.map(|cb| value_mxn - cb),
                 currency,
-                holding_type: r.try_get::<String, _>("holding_type").unwrap_or_default(),
+                holding_type,
+                asset_class,
                 account_type: r.try_get::<String, _>("account_type").unwrap_or_default(),
                 account_name: r.get("account_name"),
                 institution_name: r.get("institution_name"),
@@ -1145,7 +1157,28 @@ async fn create_manual_transaction(
     }
 }
 
+/// Human display label for a canonical asset-class key (contract C2). The
+/// frontend renders this; FILTERING keys on the canonical value itself.
+fn asset_class_label(key: &str) -> &'static str {
+    match key {
+        "equity" => "Stocks & funds",
+        "bonds" => "Bonds",
+        "cash" => "Cash",
+        "crypto" => "Crypto",
+        "real_estate" => "Real estate",
+        "commodities" => "Commodities",
+        _ => "Other",
+    }
+}
+
 /// Asset allocation by category and sub-category, scoped to caller.
+///
+/// Classification happens in Rust via `classify_asset` (contract C2) rather
+/// than on the raw `holding_type` in SQL: the type column alone puts a
+/// 'mutual fund' bond fund (VBTLX) and 'etf' bond funds (BND/TLT) in the
+/// equity band, so a user whose whole bond exposure is funds sees no Bonds
+/// band at all. The cash/crypto accounts-union rows (bank balances have no
+/// holdings rows) are tagged with their canonical class directly.
 async fn asset_allocation(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
@@ -1163,18 +1196,12 @@ async fn asset_allocation(
 
     let rows = sqlx::query(
         r#"
-        SELECT category, sub_category, SUM(value_usd) as value, SUM(qty) as quantity
+        SELECT kind, holding_type, symbol, name, sub_category, value_usd, qty
         FROM (
-            -- Normalize holding_type casing so it groups consistently. Source
-            -- data stores lower-case types ('cash', 'equity', 'mutual fund')
-            -- while the accounts/crypto unions below use Title-Case literals;
-            -- without INITCAP a 'cash' money-market holding and a 'Cash' bank
-            -- account render as two separate "Cash" bands. NULL/'' keeps the
-            -- 'Stocks/ETFs' default verbatim (INITCAP would mangle the slash).
-            SELECT CASE
-                       WHEN holding_type IS NULL OR holding_type = '' THEN 'Stocks/ETFs'
-                       ELSE INITCAP(holding_type)
-                   END as category,
+            SELECT 'holding' as kind,
+                   holding_type,
+                   symbol,
+                   name,
                    CASE
                        WHEN symbol IS NULL THEN name
                        WHEN LENGTH(symbol) > 8 OR (symbol <> UPPER(symbol) AND LENGTH(symbol) > 4)
@@ -1191,7 +1218,10 @@ async fn asset_allocation(
               AND EXISTS (SELECT 1 FROM accounts a
                           WHERE a.id = h.account_id AND a.archived_at IS NULL)
             UNION ALL
-            SELECT 'Cash' as category,
+            SELECT 'cash' as kind,
+                   NULL as holding_type,
+                   NULL as symbol,
+                   name,
                    name as sub_category,
                    CASE
                        WHEN currency = 'MXN' THEN current_balance / $1::numeric
@@ -1203,7 +1233,10 @@ async fn asset_allocation(
               AND user_id = $2
               AND archived_at IS NULL
             UNION ALL
-            SELECT 'Crypto' as category,
+            SELECT 'crypto' as kind,
+                   NULL as holding_type,
+                   NULL as symbol,
+                   name,
                    name as sub_category,
                    CASE
                        WHEN currency = 'MXN' THEN current_balance / $1::numeric
@@ -1215,8 +1248,6 @@ async fn asset_allocation(
               AND user_id = $2
               AND archived_at IS NULL
         ) sub
-        GROUP BY category, sub_category
-        ORDER BY value DESC
         "#
     )
     .bind(fx_rate)
@@ -1225,25 +1256,70 @@ async fn asset_allocation(
     .await
     .unwrap_or_default();
 
-    Json(
-        rows.iter()
-            .map(|r| {
-                let value: f64 = r.try_get::<rust_decimal::Decimal, _>("value")
-                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
-                let quantity: f64 = r
-                    .try_get::<rust_decimal::Decimal, _>("quantity")
+    // Classify each row, then group by (canonical class, sub-category). A
+    // HashMap keyed on both keeps the same grouping the old SQL GROUP BY
+    // gave, with the class computed in Rust.
+    let mut grouped: HashMap<(&'static str, String), (f64, f64)> = HashMap::new();
+    for r in &rows {
+        let kind: String = r.try_get("kind").unwrap_or_default();
+        let value: f64 = r
+            .try_get::<rust_decimal::Decimal, _>("value_usd")
+            .ok()
+            .map(|d| d.to_string().parse().unwrap_or(0.0))
+            .unwrap_or(0.0);
+        let qty: f64 = r
+            .try_get::<rust_decimal::Decimal, _>("qty")
+            .ok()
+            .map(|d| d.to_string().parse().unwrap_or(0.0))
+            .unwrap_or(0.0);
+        let sub_category: String = r
+            .try_get::<Option<String>, _>("sub_category")
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        // Accounts-union rows (bank cash, crypto-by-balance) carry their
+        // class in `kind`; holdings rows go through the shared classifier.
+        let asset_class = match kind.as_str() {
+            "cash" => "cash",
+            "crypto" => "crypto",
+            _ => {
+                let holding_type: String = r
+                    .try_get::<Option<String>, _>("holding_type")
                     .ok()
-                    .map(|d| d.to_string().parse().unwrap_or(0.0))
-                    .unwrap_or(0.0);
-                AllocationEntry {
-                    category: r.try_get::<String, _>("category").unwrap_or_else(|_| "Other".to_string()),
-                    sub_category: r.try_get::<String, _>("sub_category").unwrap_or_else(|_| "Unknown".to_string()),
-                    value,
-                    quantity,
-                }
-            })
-            .collect(),
-    )
+                    .flatten()
+                    .unwrap_or_default();
+                let symbol: String = r
+                    .try_get::<Option<String>, _>("symbol")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default();
+                let name: String = r
+                    .try_get::<Option<String>, _>("name")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default();
+                crate::services::holdings::classify_asset(&holding_type, &symbol, &name)
+            }
+        };
+
+        let slot = grouped.entry((asset_class, sub_category)).or_insert((0.0, 0.0));
+        slot.0 += value;
+        slot.1 += qty;
+    }
+
+    let mut entries: Vec<AllocationEntry> = grouped
+        .into_iter()
+        .map(|((asset_class, sub_category), (value, quantity))| AllocationEntry {
+            category: asset_class_label(asset_class).to_string(),
+            asset_class: asset_class.to_string(),
+            sub_category,
+            value,
+            quantity,
+        })
+        .collect();
+    entries.sort_by(|a, b| b.value.partial_cmp(&a.value).unwrap_or(std::cmp::Ordering::Equal));
+    Json(entries)
 }
 
 #[derive(Deserialize)]
@@ -2326,6 +2402,12 @@ struct HoldingDetail {
     gain_loss_mxn: Option<f64>,
     currency: String,
     holding_type: String,
+    /// Canonical asset class (contract C2):
+    /// equity|bonds|cash|crypto|real_estate|commodities|other. Derived from
+    /// (holding_type, symbol, name) by `services::holdings::classify_asset`
+    /// — same classifier as the allocation endpoint, so tapping an
+    /// asset-class band filters to exactly the rows carrying its key.
+    asset_class: String,
     /// Owning account's type (e.g. "401k", "brokerage") — lets the frontend
     /// filter the table when an account-type allocation band is tapped.
     account_type: String,
@@ -2448,7 +2530,11 @@ struct TransactionEntry {
 
 #[derive(Serialize)]
 struct AllocationEntry {
+    /// Human display label ("Bonds", "Stocks & funds") for the band.
     category: String,
+    /// Canonical machine key (contract C2) the band filters on:
+    /// equity|bonds|cash|crypto|real_estate|commodities|other.
+    asset_class: String,
     sub_category: String,
     value: f64,
     /// Total share count for holdings (0 for cash and crypto-by-value rows).
@@ -3603,22 +3689,26 @@ async fn portfolio_dividends(
     let fx_usd_to_mxn = fx_info.rate;
     let mut fx_stale_used = false;
 
-    // Combine quantity (and the latest seen price/currency) per symbol across
-    // every active, non-cash holding. Cash-sleeve rows are fixed at 1.00 and
-    // never pay a dividend, so they're filtered out before the fan-out.
+    // Combine quantity (and the latest seen price) per (symbol, currency)
+    // across every active, non-cash holding. Grouping by currency too — not
+    // one arbitrary MAX(currency)/MAX(price) per symbol — keeps a position
+    // held in both a USD and an MXN account convertible per sleeve; the
+    // sleeves merge back into one per-symbol contribution below. Cash-sleeve
+    // rows are fixed at 1.00 and never pay a dividend, so they're filtered
+    // out before the fan-out.
     let rows = sqlx::query(
         r#"
         SELECT h.symbol,
+               h.currency,
                COALESCE(SUM(h.quantity), 0) AS quantity,
-               MAX(h.price) AS price,
-               MAX(h.currency) AS currency
+               MAX(h.price) AS price
         FROM holdings h
         JOIN accounts a ON h.account_id = a.id
         WHERE h.user_id = $1
           AND a.archived_at IS NULL
           AND COALESCE(h.holding_type, '') <> 'cash'
           AND h.symbol IS NOT NULL AND h.symbol <> ''
-        GROUP BY h.symbol
+        GROUP BY h.symbol, h.currency
         "#,
     )
     .bind(ctx.user_id)
@@ -3657,9 +3747,17 @@ async fn portfolio_dividends(
     // Fan out the live dividend lookups with BOUNDED concurrency (mirrors the
     // sync batch's buffer_unordered pattern) instead of awaiting them one at a
     // time. Each future returns its symbol + the dividend tuple (or None on a
-    // fetch error) so a single failure degrades only that symbol.
+    // fetch error) so a single failure degrades only that symbol. Dedupe
+    // first — a symbol held in two currencies is two positions but one fetch.
     use futures_util::StreamExt;
-    let symbols: Vec<String> = positions.iter().map(|p| p.symbol.clone()).collect();
+    let symbols: Vec<String> = {
+        let mut seen = std::collections::HashSet::new();
+        positions
+            .iter()
+            .filter(|p| seen.insert(p.symbol.clone()))
+            .map(|p| p.symbol.clone())
+            .collect()
+    };
     let fetched: HashMap<String, (f64, Option<String>, Option<String>, i32)> =
         futures_util::stream::iter(symbols.into_iter().map(|symbol| {
             async move {
@@ -3702,33 +3800,60 @@ async fn portfolio_dividends(
     let mut total_income_usd = 0.0_f64;
     let mut total_valued_usd = 0.0_f64;
 
+    // Merge the per-(symbol, currency) sleeves back into ONE contribution
+    // per symbol: each sleeve converts its own income/value to USD before
+    // the sums, so the per-symbol income is exactly the sum of the
+    // correctly-converted per-account incomes.
+    let mut symbol_order: Vec<&str> = Vec::new();
+    let mut sleeves: HashMap<&str, Vec<&Pos>> = HashMap::new();
     for p in &positions {
+        let entry = sleeves.entry(p.symbol.as_str()).or_default();
+        if entry.is_empty() {
+            symbol_order.push(p.symbol.as_str());
+        }
+        entry.push(p);
+    }
+
+    for symbol in symbol_order {
         // Missing tuple = fetch failed for this symbol: degrade to zero income
         // for it alone, but still surface the row so the position isn't hidden.
         let (annual_rate, last_ex_date, est_next_ex_date, per_year) =
-            fetched.get(&p.symbol).cloned().unwrap_or((0.0, None, None, 0));
+            fetched.get(symbol).cloned().unwrap_or((0.0, None, None, 0));
 
-        let annual_income_native = annual_rate * p.quantity;
-        let annual_income_usd =
-            (to_usd(annual_income_native, &p.currency) * 100.0).round() / 100.0;
-        if p.currency == "MXN" && annual_income_native != 0.0 && fx_info.stale {
-            fx_stale_used = true;
+        let mut quantity = 0.0_f64;
+        let mut income_usd = 0.0_f64;
+        let mut valued_usd = 0.0_f64;
+        let mut priced = false;
+        for p in &sleeves[symbol] {
+            quantity += p.quantity;
+            let income_native = annual_rate * p.quantity;
+            income_usd += to_usd(income_native, &p.currency);
+            if p.currency == "MXN" && income_native != 0.0 && fx_info.stale {
+                fx_stale_used = true;
+            }
+            // Only priced sleeves feed the yield-on-value denominators.
+            if let Some(px) = p.price.filter(|px| *px > 0.0) {
+                valued_usd += to_usd(px * p.quantity, &p.currency);
+                priced = true;
+            }
         }
 
-        let yield_pct = p
-            .price
-            .filter(|px| *px > 0.0)
-            .map(|px| ((annual_rate / px * 100.0) * 100.0).round() / 100.0);
+        let annual_income_usd = (income_usd * 100.0).round() / 100.0;
+        // Income / value — identical to the old rate/price form for a
+        // single-currency position, and well-defined when the symbol is
+        // valued in two currencies.
+        let yield_pct = if priced && valued_usd > 0.0 {
+            Some(((annual_income_usd / valued_usd * 100.0) * 100.0).round() / 100.0)
+        } else {
+            None
+        };
 
-        // Only priced positions feed the blended yield-on-value denominator.
-        if let Some(px) = p.price.filter(|px| *px > 0.0) {
-            total_valued_usd += to_usd(px * p.quantity, &p.currency);
-        }
+        total_valued_usd += valued_usd;
         total_income_usd += annual_income_usd;
 
         contributions.push(DividendSymbolContribution {
-            symbol: p.symbol.clone(),
-            quantity: p.quantity,
+            symbol: symbol.to_string(),
+            quantity,
             annual_rate,
             annual_income_usd,
             yield_pct,
@@ -3783,4 +3908,425 @@ async fn portfolio_dividends(
         upcoming_ex_dates: upcoming,
         fx_stale: fx_stale_used,
     })
+}
+
+/// One account's share of a position, for the dividend detail sheet (lets
+/// the frontend badge Roth/IRA context per account).
+#[derive(Serialize)]
+struct DividendDetailAccount {
+    account_id: String,
+    account_name: String,
+    account_type: String,
+    quantity: f64,
+}
+
+/// One projected payment in the next-12-months schedule.
+#[derive(Serialize)]
+struct DividendScheduleEntry {
+    /// Estimated ex-date (YYYY-MM-DD).
+    est_date: String,
+    /// Expected payment for the whole held position, USD.
+    est_amount_usd: f64,
+}
+
+/// Per-symbol dividend detail (contract C1) — consumed by the Portfolio
+/// tab's click-through sheet. Every nullable stays a real JSON `null` (no
+/// skip attrs): the frontend is built against the full field set.
+#[derive(Serialize)]
+struct DividendDetailResponse {
+    symbol: String,
+    name: String,
+    /// Native currency of the (dominant) position.
+    currency: String,
+    /// Shares held across all of the user's accounts.
+    quantity: f64,
+    /// Latest per-share price (native currency); null when unpriced.
+    price: Option<f64>,
+    market_value_usd: f64,
+    /// Null when no account reports a basis (all-or-nothing: a partial
+    /// basis would silently overstate yield-on-cost).
+    cost_basis_usd: Option<f64>,
+    /// Forward annual dividend per share, native currency.
+    rate_per_share_annual: f64,
+    per_year: i32,
+    /// Expected USD payment per distribution for the whole position
+    /// (= rate/per_year × quantity, converted).
+    per_payment_amount: f64,
+    annual_income_usd: f64,
+    /// Income / market value, percent (0 when unvalued).
+    yield_pct: f64,
+    yield_on_cost_pct: Option<f64>,
+    last_ex_date: Option<String>,
+    est_next_ex_date: Option<String>,
+    accounts: Vec<DividendDetailAccount>,
+    /// Raw ~2y Yahoo event history, ascending by ex-date.
+    history: Vec<crate::services::dividends::DividendEvent>,
+    /// Next 12 months: `per_year` payments starting at `est_next_ex_date`,
+    /// spaced 365/per_year days.
+    schedule: Vec<DividendScheduleEntry>,
+}
+
+/// One of the user's holdings rows for the requested symbol (plus its
+/// owning account), already decoded — input to `build_dividend_detail`.
+struct DetailPosition {
+    symbol: String,
+    name: String,
+    quantity: f64,
+    price: Option<f64>,
+    value: f64,
+    cost_basis: Option<f64>,
+    currency: String,
+    account_id: String,
+    account_name: String,
+    account_type: String,
+}
+
+/// Assemble the C1 response from the user's rows + the (possibly empty)
+/// dividend info. Pure so the shape and math are unit-testable offline.
+/// `positions` must be non-empty, ordered by value descending — the first
+/// row donates the representative name/price/currency.
+fn build_dividend_detail(
+    positions: &[DetailPosition],
+    info: &crate::services::dividends::DividendInfo,
+    fx_usd_to_mxn: f64,
+) -> DividendDetailResponse {
+    let to_usd = |amount: f64, ccy: &str| -> f64 {
+        match ccy {
+            "USD" => amount,
+            "MXN" => {
+                if fx_usd_to_mxn > 0.0 {
+                    amount / fx_usd_to_mxn
+                } else {
+                    amount
+                }
+            }
+            _ => amount,
+        }
+    };
+    let round2 = |v: f64| (v * 100.0).round() / 100.0;
+
+    let first = &positions[0];
+    let quantity: f64 = positions.iter().map(|p| p.quantity).sum();
+    let market_value_usd = round2(positions.iter().map(|p| to_usd(p.value, &p.currency)).sum());
+
+    // Basis is all-or-nothing: summing only the accounts that report one
+    // would divide full income by a partial basis and overstate
+    // yield-on-cost.
+    let cost_basis_usd: Option<f64> = if positions.iter().all(|p| p.cost_basis.is_some()) {
+        Some(round2(
+            positions
+                .iter()
+                .map(|p| to_usd(p.cost_basis.unwrap_or(0.0), &p.currency))
+                .sum(),
+        ))
+    } else {
+        None
+    };
+
+    // Income converts per position (each row in its own currency), same as
+    // the portfolio-wide endpoint.
+    let annual_income_usd = round2(
+        positions
+            .iter()
+            .map(|p| to_usd(info.annual_rate * p.quantity, &p.currency))
+            .sum(),
+    );
+    let per_payment_amount = if info.per_year > 0 {
+        ((annual_income_usd / info.per_year as f64) * 10000.0).round() / 10000.0
+    } else {
+        0.0
+    };
+
+    let yield_pct = if market_value_usd > 0.0 {
+        round2(annual_income_usd / market_value_usd * 100.0)
+    } else {
+        0.0
+    };
+    let yield_on_cost_pct = cost_basis_usd
+        .filter(|cb| *cb > 0.0)
+        .map(|cb| round2(annual_income_usd / cb * 100.0));
+
+    // Projection: per_year payments from est_next_ex_date, one cadence step
+    // apart, each the expected per-payment amount. Empty for non-payers and
+    // Yahoo-unresolvable symbols.
+    let mut schedule: Vec<DividendScheduleEntry> = Vec::new();
+    if info.per_year > 0 {
+        if let Some(start) = info
+            .est_next_ex_date
+            .as_deref()
+            .and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+        {
+            let step = (365.0 / info.per_year as f64).round() as i64;
+            for k in 0..info.per_year as i64 {
+                schedule.push(DividendScheduleEntry {
+                    est_date: (start + chrono::Duration::days(step * k)).to_string(),
+                    est_amount_usd: per_payment_amount,
+                });
+            }
+        }
+    }
+
+    DividendDetailResponse {
+        symbol: first.symbol.clone(),
+        name: first.name.clone(),
+        currency: first.currency.clone(),
+        quantity,
+        price: first.price,
+        market_value_usd,
+        cost_basis_usd,
+        rate_per_share_annual: info.annual_rate,
+        per_year: info.per_year,
+        per_payment_amount,
+        annual_income_usd,
+        yield_pct,
+        yield_on_cost_pct,
+        last_ex_date: info.last_ex_date.clone(),
+        est_next_ex_date: info.est_next_ex_date.clone(),
+        accounts: positions
+            .iter()
+            .map(|p| DividendDetailAccount {
+                account_id: p.account_id.clone(),
+                account_name: p.account_name.clone(),
+                account_type: p.account_type.clone(),
+                quantity: p.quantity,
+            })
+            .collect(),
+        history: info.history.clone(),
+        schedule,
+    }
+}
+
+/// GET /dividends/{symbol} — dividend detail for one held symbol (contract
+/// C1). Matched case-insensitively against the caller's non-cash holdings;
+/// 404 when they hold no such symbol. A held symbol Yahoo can't resolve
+/// (401k trust units, `CUR:USD` pseudo-symbols) still answers 200 with
+/// zeroed rates and empty history/schedule — never a 500.
+async fn dividend_detail(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    axum::extract::Path(symbol): axum::extract::Path<String>,
+) -> Response {
+    let rows = sqlx::query(
+        r#"
+        SELECT h.symbol, h.name, h.quantity, h.price, h.value, h.cost_basis,
+               h.currency, a.id AS account_id, a.account_type,
+               COALESCE(NULLIF(a.nickname, ''), a.name) AS account_name
+        FROM holdings h
+        JOIN accounts a ON h.account_id = a.id
+        WHERE h.user_id = $1
+          AND a.archived_at IS NULL
+          AND COALESCE(h.holding_type, '') <> 'cash'
+          AND UPPER(h.symbol) = UPPER($2)
+        ORDER BY h.value DESC NULLS LAST
+        "#,
+    )
+    .bind(ctx.user_id)
+    .bind(&symbol)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    if rows.is_empty() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "unknown symbol"})),
+        )
+            .into_response();
+    }
+
+    let dec_f64 = |r: &sqlx::postgres::PgRow, col: &str| -> Option<f64> {
+        r.try_get::<Option<rust_decimal::Decimal>, _>(col)
+            .ok()
+            .flatten()
+            .map(|d| d.to_string().parse().unwrap_or(0.0))
+    };
+    let positions: Vec<DetailPosition> = rows
+        .iter()
+        .map(|r| DetailPosition {
+            symbol: r.get("symbol"),
+            name: r.get("name"),
+            quantity: dec_f64(r, "quantity").unwrap_or(0.0),
+            price: dec_f64(r, "price").filter(|p| *p > 0.0),
+            value: dec_f64(r, "value").unwrap_or(0.0),
+            cost_basis: dec_f64(r, "cost_basis"),
+            currency: r.try_get("currency").unwrap_or_else(|_| "USD".to_string()),
+            account_id: r
+                .try_get::<uuid::Uuid, _>("account_id")
+                .map(|u| u.to_string())
+                .unwrap_or_default(),
+            account_name: r.get("account_name"),
+            account_type: r.try_get::<String, _>("account_type").unwrap_or_default(),
+        })
+        .collect();
+
+    // Use the stored casing for the Yahoo lookup, not the caller's. A fetch
+    // error degrades to the zeroed non-payer info — same policy as the
+    // portfolio fan-out.
+    let canonical_symbol = positions[0].symbol.clone();
+    let info = crate::services::dividends::fetch_dividends(&canonical_symbol)
+        .await
+        .unwrap_or_else(|_| crate::services::dividends::DividendInfo::none(&canonical_symbol));
+
+    let fx_info = latest_usd_mxn_rate(&state.db).await;
+    Json(build_dividend_detail(&positions, &info, fx_info.rate)).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::dividends::{DividendEvent, DividendInfo};
+
+    /// The C1 contract shape, field for field, for a quarterly payer. The
+    /// frontend sheet is built against exactly this JSON.
+    #[test]
+    fn dividend_detail_matches_contract_c1_for_quarterly_payer() {
+        let positions = vec![DetailPosition {
+            symbol: "NVDA".to_string(),
+            name: "NVIDIA Corp".to_string(),
+            quantity: 29.5,
+            price: Some(172.40),
+            value: 5085.80,
+            cost_basis: Some(3100.00),
+            currency: "USD".to_string(),
+            account_id: "6e9c1a4e-0000-0000-0000-000000000001".to_string(),
+            account_name: "Robinhood".to_string(),
+            account_type: "brokerage".to_string(),
+        }];
+        let info = DividendInfo {
+            symbol: "NVDA".to_string(),
+            annual_rate: 0.04,
+            last_amount: 0.01,
+            last_ex_date: Some("2026-06-11".to_string()),
+            est_next_ex_date: Some("2026-09-10".to_string()),
+            per_year: 4,
+            history: vec![
+                DividendEvent { ex_date: "2024-08-28".to_string(), amount_per_share: 0.01 },
+                DividendEvent { ex_date: "2026-06-11".to_string(), amount_per_share: 0.01 },
+            ],
+        };
+
+        let got = serde_json::to_value(build_dividend_detail(&positions, &info, 20.0)).unwrap();
+        let want = serde_json::json!({
+            "symbol": "NVDA",
+            "name": "NVIDIA Corp",
+            "currency": "USD",
+            "quantity": 29.5,
+            "price": 172.40,
+            "market_value_usd": 5085.80,
+            "cost_basis_usd": 3100.00,
+            "rate_per_share_annual": 0.04,
+            "per_year": 4,
+            "per_payment_amount": 0.295,
+            "annual_income_usd": 1.18,
+            "yield_pct": 0.02,
+            "yield_on_cost_pct": 0.04,
+            "last_ex_date": "2026-06-11",
+            "est_next_ex_date": "2026-09-10",
+            "accounts": [
+                {
+                    "account_id": "6e9c1a4e-0000-0000-0000-000000000001",
+                    "account_name": "Robinhood",
+                    "account_type": "brokerage",
+                    "quantity": 29.5
+                }
+            ],
+            "history": [
+                {"ex_date": "2024-08-28", "amount_per_share": 0.01},
+                {"ex_date": "2026-06-11", "amount_per_share": 0.01}
+            ],
+            "schedule": [
+                {"est_date": "2026-09-10", "est_amount_usd": 0.295},
+                {"est_date": "2026-12-10", "est_amount_usd": 0.295},
+                {"est_date": "2027-03-11", "est_amount_usd": 0.295},
+                {"est_date": "2027-06-10", "est_amount_usd": 0.295}
+            ]
+        });
+        assert_eq!(got, want);
+    }
+
+    /// A held symbol Yahoo can't resolve (401k trust units, CUR:USD): 200
+    /// with zeroed rates, nulls, and empty history/schedule — never a 500.
+    #[test]
+    fn dividend_detail_unresolvable_symbol_degrades_to_nulls_and_empties() {
+        let positions = vec![DetailPosition {
+            symbol: "VANG TARGET RET 2045".to_string(),
+            name: "Vanguard Target Retirement 2045 Trust".to_string(),
+            quantity: 100.0,
+            price: None,
+            value: 0.0,
+            cost_basis: None,
+            currency: "USD".to_string(),
+            account_id: "6e9c1a4e-0000-0000-0000-000000000002".to_string(),
+            account_name: "Employer 401k".to_string(),
+            account_type: "401k".to_string(),
+        }];
+        let info = DividendInfo::none("VANG TARGET RET 2045");
+
+        let got = serde_json::to_value(build_dividend_detail(&positions, &info, 20.0)).unwrap();
+        assert_eq!(got["per_year"], 0);
+        assert_eq!(got["rate_per_share_annual"], 0.0);
+        assert_eq!(got["annual_income_usd"], 0.0);
+        assert_eq!(got["yield_pct"], 0.0);
+        // Nullables are real JSON nulls, not absent keys.
+        assert!(got["price"].is_null());
+        assert!(got["cost_basis_usd"].is_null());
+        assert!(got["yield_on_cost_pct"].is_null());
+        assert!(got["last_ex_date"].is_null());
+        assert!(got["est_next_ex_date"].is_null());
+        assert_eq!(got["history"], serde_json::json!([]));
+        assert_eq!(got["schedule"], serde_json::json!([]));
+        assert_eq!(got["accounts"][0]["account_type"], "401k");
+    }
+
+    /// Same symbol held in USD and MXN accounts: each sleeve converts in its
+    /// own currency before the sums (B5).
+    #[test]
+    fn dividend_detail_converts_each_currency_sleeve_separately() {
+        let positions = vec![
+            DetailPosition {
+                symbol: "ACME".to_string(),
+                name: "Acme Corp".to_string(),
+                quantity: 10.0,
+                price: Some(100.0),
+                value: 1000.0,
+                cost_basis: Some(800.0),
+                currency: "USD".to_string(),
+                account_id: "a".to_string(),
+                account_name: "US broker".to_string(),
+                account_type: "brokerage".to_string(),
+            },
+            DetailPosition {
+                symbol: "ACME".to_string(),
+                name: "Acme Corp".to_string(),
+                quantity: 10.0,
+                price: Some(2000.0),
+                value: 20000.0,
+                cost_basis: Some(16000.0),
+                currency: "MXN".to_string(),
+                account_id: "b".to_string(),
+                account_name: "MX broker".to_string(),
+                account_type: "brokerage".to_string(),
+            },
+        ];
+        let info = DividendInfo {
+            symbol: "ACME".to_string(),
+            annual_rate: 4.0,
+            last_amount: 1.0,
+            last_ex_date: Some("2026-06-01".to_string()),
+            est_next_ex_date: Some("2026-08-31".to_string()),
+            per_year: 4,
+            history: Vec::new(),
+        };
+
+        let got = serde_json::to_value(build_dividend_detail(&positions, &info, 20.0)).unwrap();
+        // 1000 USD + 20000 MXN / 20 = 2000 USD.
+        assert_eq!(got["market_value_usd"], 2000.0);
+        // Income: 40 USD + 40 MXN / 20 = 42 USD; NOT 80 (both as USD) nor
+        // 4 (both as MXN) — the old MAX(currency) bug's two failure modes.
+        assert_eq!(got["annual_income_usd"], 42.0);
+        // Basis: 800 USD + 16000 MXN / 20 = 1600 USD.
+        assert_eq!(got["cost_basis_usd"], 1600.0);
+        assert_eq!(got["quantity"], 20.0);
+        assert_eq!(got["accounts"].as_array().unwrap().len(), 2);
+    }
 }

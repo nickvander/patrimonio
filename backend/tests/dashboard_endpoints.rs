@@ -2891,24 +2891,33 @@ async fn allocation_merges_cash_holdings_with_cash_accounts() {
     let body = body_json(res.into_body()).await;
     let rows = body.as_array().unwrap();
 
-    // Every category is Title-Cased: the 'cash' holding became 'Cash' (merging
-    // with the checking account) and 'equity' became 'Equity'.
+    // Every category carries a human display label plus the canonical
+    // asset_class key (contract C2): the 'cash' holding classifies as 'cash'
+    // (merging with the checking account) and 'equity' as 'equity'.
     assert!(
         !rows.iter().any(|r| r["category"] == "cash" || r["category"] == "equity"),
-        "categories should be normalized to Title-Case, got {rows:#?}"
+        "categories should be human display labels, got {rows:#?}"
     );
     // Both the money-market holding (VMFXX) and the checking account sit under a
-    // single 'Cash' category — no duplicate lower/Title-case split.
+    // single 'Cash' band — the classifier and the accounts-union agree on the
+    // canonical 'cash' key.
     let cash_subs: Vec<&str> = rows
         .iter()
-        .filter(|r| r["category"] == "Cash")
+        .filter(|r| r["asset_class"] == "cash")
         .filter_map(|r| r["sub_category"].as_str())
         .collect();
     // VMFXX is a short all-caps symbol, so the endpoint surfaces it as the
     // symbol rather than the long fund name.
     assert!(cash_subs.contains(&"VMFXX"), "MM holding under Cash: {cash_subs:?}");
     assert!(cash_subs.contains(&"Checking"), "checking under Cash: {cash_subs:?}");
-    assert!(rows.iter().any(|r| r["category"] == "Equity"));
+    assert!(rows.iter().all(|r| r["asset_class"] != "cash" || r["category"] == "Cash"));
+    // The equity holding lands under the canonical 'equity' key with its
+    // human display label.
+    let equity = rows
+        .iter()
+        .find(|r| r["asset_class"] == "equity")
+        .expect("an equity band");
+    assert_eq!(equity["category"], "Stocks & funds");
 }
 
 #[tokio::test]
