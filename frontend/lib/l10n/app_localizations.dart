@@ -6210,11 +6210,11 @@ abstract class AppLocalizations {
   /// **'Search ticker, name, account, or institution…'**
   String get pfSearchHint;
 
-  /// No description provided for @pfHoldingsAccountsCount.
+  /// Toolbar counter. Placeholder order matters: gen-l10n derives the positional parameters from this declaration order, and the call site passes (holdings, accounts) — declaring accounts first transposed the two numbers.
   ///
   /// In en, this message translates to:
   /// **'{holdings, plural, =1{1 holding} other{{holdings} holdings}} · {accounts, plural, =1{1 account} other{{accounts} accounts}}'**
-  String pfHoldingsAccountsCount(int accounts, int holdings);
+  String pfHoldingsAccountsCount(int holdings, int accounts);
 
   /// No description provided for @pfShownOfTotal.
   ///
@@ -9425,6 +9425,270 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t link that bank transaction'**
   String get lendLinkBankTxError;
+
+  /// Zero-result state of the holdings table when an allocation filter or search matched nothing (portfolio is NOT empty).
+  ///
+  /// In en, this message translates to:
+  /// **'No holdings match \"{filter}\"'**
+  String pfFilterNoMatches(Object filter);
+
+  /// No description provided for @pfFilterClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear filter'**
+  String get pfFilterClear;
+
+  /// Toolbar counter while an allocation filter or search is active.
+  ///
+  /// In en, this message translates to:
+  /// **'{shown} of {total, plural, =1{1 holding} other{{total} holdings}}'**
+  String pfFilterShownOfTotal(int shown, int total);
+
+  /// No description provided for @pfDivShowAllPayers.
+  ///
+  /// In en, this message translates to:
+  /// **'Show all ({count})'**
+  String pfDivShowAllPayers(int count);
+
+  /// No description provided for @pfDivShowFewerPayers.
+  ///
+  /// In en, this message translates to:
+  /// **'Show fewer'**
+  String get pfDivShowFewerPayers;
+
+  /// No description provided for @pfDivLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load dividend income'**
+  String get pfDivLoadError;
+
+  /// No description provided for @pfDivRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get pfDivRetry;
+
+  /// No description provided for @pfDivDetailFreqMonthly.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly'**
+  String get pfDivDetailFreqMonthly;
+
+  /// No description provided for @pfDivDetailFreqQuarterly.
+  ///
+  /// In en, this message translates to:
+  /// **'Quarterly'**
+  String get pfDivDetailFreqQuarterly;
+
+  /// No description provided for @pfDivDetailFreqSemiAnnual.
+  ///
+  /// In en, this message translates to:
+  /// **'Semi-annual'**
+  String get pfDivDetailFreqSemiAnnual;
+
+  /// No description provided for @pfDivDetailFreqAnnual.
+  ///
+  /// In en, this message translates to:
+  /// **'Annual'**
+  String get pfDivDetailFreqAnnual;
+
+  /// No description provided for @pfDivDetailSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Estimated from the recent payment history — actual dates and amounts may vary.'**
+  String get pfDivDetailSubtitle;
+
+  /// No description provided for @pfDivDetailShares.
+  ///
+  /// In en, this message translates to:
+  /// **'Shares'**
+  String get pfDivDetailShares;
+
+  /// No description provided for @pfDivDetailMarketValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Market value'**
+  String get pfDivDetailMarketValue;
+
+  /// No description provided for @pfDivDetailRatePerShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Rate / share (annual)'**
+  String get pfDivDetailRatePerShare;
+
+  /// No description provided for @pfDivDetailPerPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Per payment'**
+  String get pfDivDetailPerPayment;
+
+  /// No description provided for @pfDivDetailAnnualIncome.
+  ///
+  /// In en, this message translates to:
+  /// **'Annual income'**
+  String get pfDivDetailAnnualIncome;
+
+  /// No description provided for @pfDivDetailYield.
+  ///
+  /// In en, this message translates to:
+  /// **'Yield'**
+  String get pfDivDetailYield;
+
+  /// No description provided for @pfDivDetailYieldOnCost.
+  ///
+  /// In en, this message translates to:
+  /// **'Yield on cost'**
+  String get pfDivDetailYieldOnCost;
+
+  /// No description provided for @pfDivDetailLastExDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Last ex-date'**
+  String get pfDivDetailLastExDate;
+
+  /// No description provided for @pfDivDetailNextExDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Est. next ex-date'**
+  String get pfDivDetailNextExDate;
+
+  /// No description provided for @pfDivDetailSchedule.
+  ///
+  /// In en, this message translates to:
+  /// **'Next 12 months'**
+  String get pfDivDetailSchedule;
+
+  /// No description provided for @pfDivDetailHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment history'**
+  String get pfDivDetailHistory;
+
+  /// No description provided for @pfDivDetailPerShare.
+  ///
+  /// In en, this message translates to:
+  /// **'per share'**
+  String get pfDivDetailPerShare;
+
+  /// No description provided for @pfDivDetailAccounts.
+  ///
+  /// In en, this message translates to:
+  /// **'Held in'**
+  String get pfDivDetailAccounts;
+
+  /// No description provided for @pfDivDetailTaxAdvantaged.
+  ///
+  /// In en, this message translates to:
+  /// **'Tax-advantaged'**
+  String get pfDivDetailTaxAdvantaged;
+
+  /// No description provided for @pfDivDetailNoHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'No dividend history for this symbol yet.'**
+  String get pfDivDetailNoHistory;
+
+  /// No description provided for @pfDivDetailLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load dividend details'**
+  String get pfDivDetailLoadError;
+
+  /// Expands the realized-gains card's disposal list from the newest 8 rows to every disposal; count is the total number of disposals.
+  ///
+  /// In en, this message translates to:
+  /// **'Show all ({count})'**
+  String rgShowAll(int count);
+
+  /// Collapses the expanded realized-gains disposal list back to the newest rows.
+  ///
+  /// In en, this message translates to:
+  /// **'Show fewer'**
+  String get rgShowFewer;
+
+  /// Caption of the realized-gains year-to-date summary tile, naming the calendar year it covers (e.g. "2026"). Was the ambiguous "This year".
+  ///
+  /// In en, this message translates to:
+  /// **'{year}'**
+  String rgYearTile(String year);
+
+  /// One-line empty state on the realized-gains card when the user has never sold a security.
+  ///
+  /// In en, this message translates to:
+  /// **'No realized gains yet'**
+  String get rgEmpty;
+
+  /// Inline error row on the realized-gains card when the fetch fails; shown next to a Retry button.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load realized gains'**
+  String get rgLoadError;
+
+  /// Retry button on the realized-gains card's inline error row.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get rgRetry;
+
+  /// Title of the destructive confirmation dialog shown before deleting a holding; symbol is the ticker (or name) of the holding.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete {symbol}?'**
+  String acctDeleteHoldingTitle(String symbol);
+
+  /// Body of the delete-holding confirmation dialog, spelling out the cascade to purchase lots and realized-gain tax records.
+  ///
+  /// In en, this message translates to:
+  /// **'This permanently deletes the holding, all of its purchase lots, and its realized-gain (tax) records. This cannot be undone.'**
+  String get acctDeleteHoldingBody;
+
+  /// Destructive confirm button of the delete-holding dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete permanently'**
+  String get acctDeleteHoldingConfirm;
+
+  /// Always-visible hint in the allocation card telling the user the bands below are tappable filters.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap a band to filter the holdings table'**
+  String get allocTapToFilterHint;
+
+  /// Active-filter indicator in the allocation card header; label is the tapped band's display name.
+  ///
+  /// In en, this message translates to:
+  /// **'Filtered: {label}'**
+  String allocActiveFilter(String label);
+
+  /// Tooltip/semantics of the inline X next to the allocation card's active-filter indicator.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear filter'**
+  String get allocClearFilter;
+
+  /// Screen-reader label for an asset-class allocation band: display label, percentage + amount, real holdings count.
+  ///
+  /// In en, this message translates to:
+  /// **'{label}, {value}, {count, plural, one{{count} holding} other{{count} holdings}}'**
+  String allocBandSemanticsHoldings(String label, String value, int count);
+
+  /// Screen-reader label for an account-type/institution allocation band: display label, percentage + amount, account count.
+  ///
+  /// In en, this message translates to:
+  /// **'{label}, {value}, {count, plural, one{{count} account} other{{count} accounts}}'**
+  String allocBandSemanticsAccounts(String label, String value, int count);
+
+  /// Screen-reader label for an allocation band whose backend row carries no count.
+  ///
+  /// In en, this message translates to:
+  /// **'{label}, {value}'**
+  String allocBandSemanticsNoCount(String label, String value);
+
+  /// Suffix appended to a tappable allocation band's screen-reader label, announcing the tap action.
+  ///
+  /// In en, this message translates to:
+  /// **'filters the holdings table'**
+  String get allocBandFiltersTable;
 }
 
 class _AppLocalizationsDelegate

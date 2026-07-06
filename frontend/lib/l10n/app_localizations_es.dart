@@ -3784,7 +3784,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get pfSearchHint => 'Buscar símbolo, nombre, cuenta o institución…';
 
   @override
-  String pfHoldingsAccountsCount(int accounts, int holdings) {
+  String pfHoldingsAccountsCount(int holdings, int accounts) {
     String _temp0 = intl.Intl.pluralLogic(
       holdings,
       locale: localeName,
@@ -5846,4 +5846,180 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get lendLinkBankTxError =>
       'No se pudo vincular esa transacción bancaria';
+
+  @override
+  String pfFilterNoMatches(Object filter) {
+    return 'Ninguna posición coincide con \"$filter\"';
+  }
+
+  @override
+  String get pfFilterClear => 'Quitar filtro';
+
+  @override
+  String pfFilterShownOfTotal(int shown, int total) {
+    String _temp0 = intl.Intl.pluralLogic(
+      total,
+      locale: localeName,
+      other: '$total posiciones',
+      one: '1 posición',
+    );
+    return '$shown de $_temp0';
+  }
+
+  @override
+  String pfDivShowAllPayers(int count) {
+    return 'Ver todos ($count)';
+  }
+
+  @override
+  String get pfDivShowFewerPayers => 'Ver menos';
+
+  @override
+  String get pfDivLoadError =>
+      'No se pudieron cargar los ingresos por dividendos';
+
+  @override
+  String get pfDivRetry => 'Reintentar';
+
+  @override
+  String get pfDivDetailFreqMonthly => 'Mensual';
+
+  @override
+  String get pfDivDetailFreqQuarterly => 'Trimestral';
+
+  @override
+  String get pfDivDetailFreqSemiAnnual => 'Semestral';
+
+  @override
+  String get pfDivDetailFreqAnnual => 'Anual';
+
+  @override
+  String get pfDivDetailSubtitle =>
+      'Estimado a partir del historial de pagos reciente; las fechas y montos reales pueden variar.';
+
+  @override
+  String get pfDivDetailShares => 'Acciones';
+
+  @override
+  String get pfDivDetailMarketValue => 'Valor de mercado';
+
+  @override
+  String get pfDivDetailRatePerShare => 'Tasa / acción (anual)';
+
+  @override
+  String get pfDivDetailPerPayment => 'Por pago';
+
+  @override
+  String get pfDivDetailAnnualIncome => 'Ingreso anual';
+
+  @override
+  String get pfDivDetailYield => 'Rendimiento';
+
+  @override
+  String get pfDivDetailYieldOnCost => 'Rendimiento sobre costo';
+
+  @override
+  String get pfDivDetailLastExDate => 'Última fecha ex-dividendo';
+
+  @override
+  String get pfDivDetailNextExDate => 'Próxima fecha ex-dividendo (est.)';
+
+  @override
+  String get pfDivDetailSchedule => 'Próximos 12 meses';
+
+  @override
+  String get pfDivDetailHistory => 'Historial de pagos';
+
+  @override
+  String get pfDivDetailPerShare => 'por acción';
+
+  @override
+  String get pfDivDetailAccounts => 'En cuentas';
+
+  @override
+  String get pfDivDetailTaxAdvantaged => 'Con ventaja fiscal';
+
+  @override
+  String get pfDivDetailNoHistory =>
+      'Este símbolo aún no tiene historial de dividendos.';
+
+  @override
+  String get pfDivDetailLoadError =>
+      'No se pudo cargar el detalle de dividendos';
+
+  @override
+  String rgShowAll(int count) {
+    return 'Mostrar todas ($count)';
+  }
+
+  @override
+  String get rgShowFewer => 'Mostrar menos';
+
+  @override
+  String rgYearTile(String year) {
+    return '$year';
+  }
+
+  @override
+  String get rgEmpty => 'Aún no hay ganancias realizadas';
+
+  @override
+  String get rgLoadError => 'No se pudieron cargar las ganancias realizadas';
+
+  @override
+  String get rgRetry => 'Reintentar';
+
+  @override
+  String acctDeleteHoldingTitle(String symbol) {
+    return '¿Eliminar $symbol?';
+  }
+
+  @override
+  String get acctDeleteHoldingBody =>
+      'Esto elimina permanentemente la posición, todos sus lotes de compra y sus registros fiscales de ganancias realizadas. No se puede deshacer.';
+
+  @override
+  String get acctDeleteHoldingConfirm => 'Eliminar permanentemente';
+
+  @override
+  String get allocTapToFilterHint =>
+      'Toca una banda para filtrar la tabla de posiciones';
+
+  @override
+  String allocActiveFilter(String label) {
+    return 'Filtrado: $label';
+  }
+
+  @override
+  String get allocClearFilter => 'Quitar filtro';
+
+  @override
+  String allocBandSemanticsHoldings(String label, String value, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count posiciones',
+      one: '$count posición',
+    );
+    return '$label, $value, $_temp0';
+  }
+
+  @override
+  String allocBandSemanticsAccounts(String label, String value, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count cuentas',
+      one: '$count cuenta',
+    );
+    return '$label, $value, $_temp0';
+  }
+
+  @override
+  String allocBandSemanticsNoCount(String label, String value) {
+    return '$label, $value';
+  }
+
+  @override
+  String get allocBandFiltersTable => 'filtra la tabla de posiciones';
 }

@@ -3746,7 +3746,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pfSearchHint => 'Search ticker, name, account, or institution…';
 
   @override
-  String pfHoldingsAccountsCount(int accounts, int holdings) {
+  String pfHoldingsAccountsCount(int holdings, int accounts) {
     String _temp0 = intl.Intl.pluralLogic(
       holdings,
       locale: localeName,
@@ -5798,4 +5798,176 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lendLinkBankTxError => 'Couldn\'t link that bank transaction';
+
+  @override
+  String pfFilterNoMatches(Object filter) {
+    return 'No holdings match \"$filter\"';
+  }
+
+  @override
+  String get pfFilterClear => 'Clear filter';
+
+  @override
+  String pfFilterShownOfTotal(int shown, int total) {
+    String _temp0 = intl.Intl.pluralLogic(
+      total,
+      locale: localeName,
+      other: '$total holdings',
+      one: '1 holding',
+    );
+    return '$shown of $_temp0';
+  }
+
+  @override
+  String pfDivShowAllPayers(int count) {
+    return 'Show all ($count)';
+  }
+
+  @override
+  String get pfDivShowFewerPayers => 'Show fewer';
+
+  @override
+  String get pfDivLoadError => 'Couldn\'t load dividend income';
+
+  @override
+  String get pfDivRetry => 'Retry';
+
+  @override
+  String get pfDivDetailFreqMonthly => 'Monthly';
+
+  @override
+  String get pfDivDetailFreqQuarterly => 'Quarterly';
+
+  @override
+  String get pfDivDetailFreqSemiAnnual => 'Semi-annual';
+
+  @override
+  String get pfDivDetailFreqAnnual => 'Annual';
+
+  @override
+  String get pfDivDetailSubtitle =>
+      'Estimated from the recent payment history — actual dates and amounts may vary.';
+
+  @override
+  String get pfDivDetailShares => 'Shares';
+
+  @override
+  String get pfDivDetailMarketValue => 'Market value';
+
+  @override
+  String get pfDivDetailRatePerShare => 'Rate / share (annual)';
+
+  @override
+  String get pfDivDetailPerPayment => 'Per payment';
+
+  @override
+  String get pfDivDetailAnnualIncome => 'Annual income';
+
+  @override
+  String get pfDivDetailYield => 'Yield';
+
+  @override
+  String get pfDivDetailYieldOnCost => 'Yield on cost';
+
+  @override
+  String get pfDivDetailLastExDate => 'Last ex-date';
+
+  @override
+  String get pfDivDetailNextExDate => 'Est. next ex-date';
+
+  @override
+  String get pfDivDetailSchedule => 'Next 12 months';
+
+  @override
+  String get pfDivDetailHistory => 'Payment history';
+
+  @override
+  String get pfDivDetailPerShare => 'per share';
+
+  @override
+  String get pfDivDetailAccounts => 'Held in';
+
+  @override
+  String get pfDivDetailTaxAdvantaged => 'Tax-advantaged';
+
+  @override
+  String get pfDivDetailNoHistory => 'No dividend history for this symbol yet.';
+
+  @override
+  String get pfDivDetailLoadError => 'Couldn\'t load dividend details';
+
+  @override
+  String rgShowAll(int count) {
+    return 'Show all ($count)';
+  }
+
+  @override
+  String get rgShowFewer => 'Show fewer';
+
+  @override
+  String rgYearTile(String year) {
+    return '$year';
+  }
+
+  @override
+  String get rgEmpty => 'No realized gains yet';
+
+  @override
+  String get rgLoadError => 'Couldn\'t load realized gains';
+
+  @override
+  String get rgRetry => 'Retry';
+
+  @override
+  String acctDeleteHoldingTitle(String symbol) {
+    return 'Delete $symbol?';
+  }
+
+  @override
+  String get acctDeleteHoldingBody =>
+      'This permanently deletes the holding, all of its purchase lots, and its realized-gain (tax) records. This cannot be undone.';
+
+  @override
+  String get acctDeleteHoldingConfirm => 'Delete permanently';
+
+  @override
+  String get allocTapToFilterHint => 'Tap a band to filter the holdings table';
+
+  @override
+  String allocActiveFilter(String label) {
+    return 'Filtered: $label';
+  }
+
+  @override
+  String get allocClearFilter => 'Clear filter';
+
+  @override
+  String allocBandSemanticsHoldings(String label, String value, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count holdings',
+      one: '$count holding',
+    );
+    return '$label, $value, $_temp0';
+  }
+
+  @override
+  String allocBandSemanticsAccounts(String label, String value, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count accounts',
+      one: '$count account',
+    );
+    return '$label, $value, $_temp0';
+  }
+
+  @override
+  String allocBandSemanticsNoCount(String label, String value) {
+    return '$label, $value';
+  }
+
+  @override
+  String get allocBandFiltersTable => 'filters the holdings table';
 }
