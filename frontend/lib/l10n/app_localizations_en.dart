@@ -5819,6 +5819,27 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get pfFilterAssetEquity => 'Stocks & funds';
+
+  @override
+  String get pfFilterAssetBonds => 'Bonds';
+
+  @override
+  String get pfFilterAssetCash => 'Cash';
+
+  @override
+  String get pfFilterAssetCrypto => 'Crypto';
+
+  @override
+  String get pfFilterAssetRealEstate => 'Real estate';
+
+  @override
+  String get pfFilterAssetCommodities => 'Commodities';
+
+  @override
+  String get pfFilterAssetOther => 'Other';
+
+  @override
   String pfDivShowAllPayers(int count) {
     return 'Show all ($count)';
   }

@@ -48,14 +48,34 @@ bool holdingMatchesCategoryFilter(Map h, String? filter) {
 /// C3 dimension prefix and title-cases the value ("asset:bonds" → "Bonds",
 /// "institution:vanguard" → "Vanguard"). Bare legacy values are only
 /// title-cased.
-String categoryFilterLabel(String filter) {
+///
+/// When [l] is given, `asset:` canonical keys (contract C2) render as the
+/// same display names the allocation band shows (the backend's
+/// `asset_class_label` mapping) — "asset:equity" must echo the tapped
+/// "Stocks & funds" band, not a raw "Equity". Unknown keys keep the
+/// title-cased fallback.
+String categoryFilterLabel(String filter, [AppLocalizations? l]) {
   var value = filter.trim();
   final colon = value.indexOf(':');
   final space = value.indexOf(' ');
   if (colon > 0 && (space == -1 || colon < space)) {
+    final dim = value.substring(0, colon).toLowerCase();
     const dims = {'asset', 'account_type', 'institution'};
-    if (dims.contains(value.substring(0, colon).toLowerCase())) {
+    if (dims.contains(dim)) {
       value = value.substring(colon + 1).trim();
+      if (dim == 'asset' && l != null) {
+        final assetLabel = switch (value.toLowerCase()) {
+          'equity' => l.pfFilterAssetEquity,
+          'bonds' => l.pfFilterAssetBonds,
+          'cash' => l.pfFilterAssetCash,
+          'crypto' => l.pfFilterAssetCrypto,
+          'real_estate' => l.pfFilterAssetRealEstate,
+          'commodities' => l.pfFilterAssetCommodities,
+          'other' => l.pfFilterAssetOther,
+          _ => null,
+        };
+        if (assetLabel != null) return assetLabel;
+      }
     }
   }
   return value
@@ -1380,11 +1400,12 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 child: InputChip(
                   avatar: const Icon(Icons.filter_alt, size: 16),
                   label: Text(
-                      // Prefix-stripped, title-cased display value: the raw
-                      // filter string is a dimension-scoped key like
-                      // "asset:bonds" (contract C3), not a label.
+                      // Prefix-stripped display value: the raw filter string
+                      // is a dimension-scoped key like "asset:bonds"
+                      // (contract C3), not a label. `l` maps asset: keys to
+                      // the allocation band's display names.
                       l.pfCategoryFilter(
-                          categoryFilterLabel(widget.categoryFilter ?? '')),
+                          categoryFilterLabel(widget.categoryFilter ?? '', l)),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                   onDeleted: widget.onClearCategoryFilter,
@@ -1489,9 +1510,15 @@ class _PortfolioCardState extends State<PortfolioCard> {
       // and offer a way out — never tell a funded user to "link a
       // brokerage".
       final isFiltered = _allHoldings.isNotEmpty;
-      final filterLabel = widget.categoryFilter != null
-          ? categoryFilterLabel(widget.categoryFilter!)
-          : _searchQuery.trim();
+      // Quote whatever actually caused the miss: a typed search wins over
+      // the category filter (searching "xyz" under a Bonds filter must say
+      // no match for "xyz", not for "Bonds").
+      final search = _searchQuery.trim();
+      final filterLabel = search.isNotEmpty
+          ? search
+          : widget.categoryFilter != null
+              ? categoryFilterLabel(widget.categoryFilter!, l)
+              : '';
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -3070,9 +3097,10 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
     );
   }
 
-  /// Fixed-footprint placeholder mirroring the loaded card's layout
-  /// (header, two summary tiles, payer rows) so data landing doesn't
-  /// shove the page.
+  /// Fixed-footprint placeholder mirroring the loaded card's layout at its
+  /// real heights (header, two summary tiles, the five collapsed payer rows
+  /// + show-all button, and the upcoming ex-dates section) so data landing
+  /// doesn't shove the page.
   Widget _buildLoadingSkeleton(BuildContext context) {
     final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     return Card(
@@ -3092,12 +3120,24 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
                 Expanded(child: SkeletonBox(height: 72)),
               ],
             ),
+            // "Top payers" section: header + the 5 collapsed two-line payer
+            // rows (~52px each with their padding) + the show-all button.
             const SizedBox(height: 24),
             const SkeletonBox(width: 100, height: 12),
             const SizedBox(height: 12),
             for (var i = 0; i < 5; i++) ...[
-              const SkeletonBox(height: 34),
+              const SkeletonBox(height: 52),
               if (i < 4) const SizedBox(height: 8),
+            ],
+            const SizedBox(height: 12),
+            const SkeletonBox(width: 90, height: 16),
+            // "Upcoming ex-dates" section: header + single-line rows.
+            const SizedBox(height: 24),
+            const SkeletonBox(width: 100, height: 12),
+            const SizedBox(height: 12),
+            for (var i = 0; i < 4; i++) ...[
+              const SkeletonBox(height: 24),
+              if (i < 3) const SizedBox(height: 8),
             ],
           ],
         ),

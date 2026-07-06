@@ -9444,6 +9444,48 @@ abstract class AppLocalizations {
   /// **'{shown} of {total, plural, =1{1 holding} other{{total} holdings}}'**
   String pfFilterShownOfTotal(int shown, int total);
 
+  /// Filter-chip / zero-result label for the asset:equity canonical key — must echo the allocation band's display name (the backend's asset_class_label mapping), as must the six sibling pfFilterAsset* keys below.
+  ///
+  /// In en, this message translates to:
+  /// **'Stocks & funds'**
+  String get pfFilterAssetEquity;
+
+  /// No description provided for @pfFilterAssetBonds.
+  ///
+  /// In en, this message translates to:
+  /// **'Bonds'**
+  String get pfFilterAssetBonds;
+
+  /// No description provided for @pfFilterAssetCash.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash'**
+  String get pfFilterAssetCash;
+
+  /// No description provided for @pfFilterAssetCrypto.
+  ///
+  /// In en, this message translates to:
+  /// **'Crypto'**
+  String get pfFilterAssetCrypto;
+
+  /// No description provided for @pfFilterAssetRealEstate.
+  ///
+  /// In en, this message translates to:
+  /// **'Real estate'**
+  String get pfFilterAssetRealEstate;
+
+  /// No description provided for @pfFilterAssetCommodities.
+  ///
+  /// In en, this message translates to:
+  /// **'Commodities'**
+  String get pfFilterAssetCommodities;
+
+  /// No description provided for @pfFilterAssetOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get pfFilterAssetOther;
+
   /// No description provided for @pfDivShowAllPayers.
   ///
   /// In en, this message translates to:

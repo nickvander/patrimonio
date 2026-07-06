@@ -2473,6 +2473,16 @@
       }
     }
   },
+  "pfFilterAssetEquity": "Stocks & funds",
+  "@pfFilterAssetEquity": {
+    "description": "Filter-chip / zero-result label for the asset:equity canonical key — must echo the allocation band's display name (the backend's asset_class_label mapping), as must the six sibling pfFilterAsset* keys below."
+  },
+  "pfFilterAssetBonds": "Bonds",
+  "pfFilterAssetCash": "Cash",
+  "pfFilterAssetCrypto": "Crypto",
+  "pfFilterAssetRealEstate": "Real estate",
+  "pfFilterAssetCommodities": "Commodities",
+  "pfFilterAssetOther": "Other",
   "pfDivShowAllPayers": "Show all ({count})",
   "@pfDivShowAllPayers": {
     "placeholders": {
