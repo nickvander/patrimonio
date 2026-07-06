@@ -315,11 +315,11 @@ class ApiService {
       Uri.parse('$_baseUrl/auth/invites'),
       headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({
-        if (expiresInHours != null) 'expires_in_hours': expiresInHours,
+        'expires_in_hours': ?expiresInHours,
         if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
         // 'owner' or 'read_only'. Omitted → backend defaults to 'owner',
         // preserving the historical invite contract.
-        if (role != null) 'role': role,
+        'role': ?role,
       }),
     );
     _maybeUnauthorized(res);
@@ -1238,7 +1238,7 @@ class ApiService {
       'message': message,
       'transactions_count': merged.length,
       'transactions': merged,
-      if (accountInfo != null) 'account_info': accountInfo,
+      'account_info': ?accountInfo,
     };
   }
 
@@ -1767,9 +1767,9 @@ class ApiService {
   }) async {
     final body = <String, dynamic>{
       'ids': ids,
-      if (category != null) 'user_category': category,
-      if (accountId != null) 'account_id': accountId,
-      if (description != null) 'user_description': description,
+      'user_category': ?category,
+      'account_id': ?accountId,
+      'user_description': ?description,
     };
     final response = await _patch(
       Uri.parse('$_baseUrl/accounts/transactions/batch'),
@@ -1968,7 +1968,7 @@ class ApiService {
         'symbol': symbol,
         'quantity': quantity,
         if (name != null && name.isNotEmpty) 'name': name,
-        if (costBasis != null) 'cost_basis': costBasis,
+        'cost_basis': ?costBasis,
       }),
     );
     if (res.statusCode != 201) {
@@ -2033,6 +2033,20 @@ class ApiService {
       }
     } catch (_) {}
     return null;
+  }
+
+  /// Per-symbol dividend detail for the click-through sheet: aggregates
+  /// (rate, frequency, income, yields), per-account quantities, the parsed
+  /// ~2y payment history, and a next-12-months schedule projection. Throws
+  /// on failure so the sheet can render its own error + retry state.
+  Future<Map<String, dynamic>> getDividendDetail(String symbol) async {
+    final response = await _get(
+        Uri.parse('$_baseUrl/dashboard/dividends/${Uri.encodeComponent(symbol)}'));
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception(_t('Failed to load dividend detail',
+        'No se pudo cargar el detalle de dividendos'));
   }
 
   Future<Map<String, dynamic>> getWealthProjection({
@@ -2361,10 +2375,10 @@ class ApiService {
       'interest_rate': interestRate,
       'interest_type': interestType,
       'rate_period': ratePeriod,
-      if (termMonths != null) 'term_months': termMonths,
-      if (paymentFrequency != null) 'payment_frequency': paymentFrequency,
+      'term_months': ?termMonths,
+      'payment_frequency': ?paymentFrequency,
       if (notes != null && notes.isNotEmpty) 'notes': notes,
-      if (personId != null) 'person_id': personId,
+      'person_id': ?personId,
       if (expectedRepaymentDate != null)
         'expected_repayment_date': _isoDate(expectedRepaymentDate),
     };
@@ -2405,11 +2419,11 @@ class ApiService {
   }) async {
     final body = <String, dynamic>{
       ...changes,
-      if (borrowerName != null) 'borrower_name': borrowerName,
-      if (principal != null) 'principal': principal,
-      if (interestRate != null) 'interest_rate': interestRate,
-      if (interestType != null) 'interest_type': interestType,
-      if (notes != null) 'notes': notes,
+      'borrower_name': ?borrowerName,
+      'principal': ?principal,
+      'interest_rate': ?interestRate,
+      'interest_type': ?interestType,
+      'notes': ?notes,
       if (expectedRepaymentDate != null)
         'expected_repayment_date': _isoDate(expectedRepaymentDate),
     };

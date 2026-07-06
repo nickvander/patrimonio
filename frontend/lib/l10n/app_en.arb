@@ -1420,11 +1420,12 @@
   "pfSearchHint": "Search ticker, name, account, or institution…",
   "pfHoldingsAccountsCount": "{holdings, plural, =1{1 holding} other{{holdings} holdings}} · {accounts, plural, =1{1 account} other{{accounts} accounts}}",
   "@pfHoldingsAccountsCount": {
+    "description": "Toolbar counter. Placeholder order matters: gen-l10n derives the positional parameters from this declaration order, and the call site passes (holdings, accounts) — declaring accounts first transposed the two numbers.",
     "placeholders": {
-      "accounts": {
+      "holdings": {
         "type": "int"
       },
-      "holdings": {
+      "accounts": {
         "type": "int"
       }
     }
@@ -2425,5 +2426,59 @@
   "lendLinkBankTxError": "Couldn't link that bank transaction",
   "@lendLinkBankTxError": {
     "description": "Toast shown when attaching a bank transaction to an off-bank repayment fails."
-  }
+  },
+  "pfFilterNoMatches": "No holdings match \"{filter}\"",
+  "@pfFilterNoMatches": {
+    "description": "Zero-result state of the holdings table when an allocation filter or search matched nothing (portfolio is NOT empty).",
+    "placeholders": {
+      "filter": {
+        "type": "Object"
+      }
+    }
+  },
+  "pfFilterClear": "Clear filter",
+  "pfFilterShownOfTotal": "{shown} of {total, plural, =1{1 holding} other{{total} holdings}}",
+  "@pfFilterShownOfTotal": {
+    "description": "Toolbar counter while an allocation filter or search is active.",
+    "placeholders": {
+      "shown": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "pfDivShowAllPayers": "Show all ({count})",
+  "@pfDivShowAllPayers": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "pfDivShowFewerPayers": "Show fewer",
+  "pfDivLoadError": "Couldn't load dividend income",
+  "pfDivRetry": "Retry",
+  "pfDivDetailFreqMonthly": "Monthly",
+  "pfDivDetailFreqQuarterly": "Quarterly",
+  "pfDivDetailFreqSemiAnnual": "Semi-annual",
+  "pfDivDetailFreqAnnual": "Annual",
+  "pfDivDetailSubtitle": "Estimated from the recent payment history — actual dates and amounts may vary.",
+  "pfDivDetailShares": "Shares",
+  "pfDivDetailMarketValue": "Market value",
+  "pfDivDetailRatePerShare": "Rate / share (annual)",
+  "pfDivDetailPerPayment": "Per payment",
+  "pfDivDetailAnnualIncome": "Annual income",
+  "pfDivDetailYield": "Yield",
+  "pfDivDetailYieldOnCost": "Yield on cost",
+  "pfDivDetailLastExDate": "Last ex-date",
+  "pfDivDetailNextExDate": "Est. next ex-date",
+  "pfDivDetailSchedule": "Next 12 months",
+  "pfDivDetailHistory": "Payment history",
+  "pfDivDetailPerShare": "per share",
+  "pfDivDetailAccounts": "Held in",
+  "pfDivDetailTaxAdvantaged": "Tax-advantaged",
+  "pfDivDetailNoHistory": "No dividend history for this symbol yet.",
+  "pfDivDetailLoadError": "Couldn't load dividend details"
 }

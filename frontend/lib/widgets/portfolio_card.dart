@@ -6,6 +6,63 @@ import '../services/preferences.dart';
 import '../utils/currency.dart';
 import '../utils/mask_aware_name.dart';
 import '../utils/theme_colors.dart';
+import 'dividend_detail_sheet.dart';
+import 'skeleton.dart';
+
+/// True when holding [h] passes the allocation-band filter [filter].
+///
+/// The allocation heatmap emits dimension-prefixed values (contract C3) —
+/// `asset:<canonical class>`, `account_type:<raw type>`,
+/// `institution:<raw name>` — and each prefix matches ONLY its own field.
+/// `asset:` keys on the backend's canonical `asset_class` (contract C2), so
+/// a VBTLX-style bond *mutual fund* lands under `asset:bonds` and a holding
+/// inside a bonds-typed *account* no longer matches everything. A bare
+/// value (no colon before the first space, or an unknown prefix) falls back
+/// to the legacy any-field OR so the card keeps filtering if the emitter
+/// and parser ship at different times. Matching is case-insensitive.
+/// Top-level (not a method) so tests can exercise the parsing directly.
+bool holdingMatchesCategoryFilter(Map h, String? filter) {
+  final catFilter = (filter ?? '').toLowerCase().trim();
+  if (catFilter.isEmpty) return true;
+  String field(String key) => (h[key] ?? '').toString().toLowerCase();
+  final colon = catFilter.indexOf(':');
+  final space = catFilter.indexOf(' ');
+  if (colon > 0 && (space == -1 || colon < space)) {
+    final value = catFilter.substring(colon + 1).trim();
+    switch (catFilter.substring(0, colon)) {
+      case 'asset':
+        return field('asset_class') == value;
+      case 'account_type':
+        return field('account_type') == value;
+      case 'institution':
+        return field('institution_name') == value;
+      // Unknown prefix: fall through to the legacy any-field match below.
+    }
+  }
+  return field('holding_type') == catFilter ||
+      field('account_type') == catFilter ||
+      field('institution_name') == catFilter;
+}
+
+/// Human label for the active-filter chip / zero-result state: strips the
+/// C3 dimension prefix and title-cases the value ("asset:bonds" → "Bonds",
+/// "institution:vanguard" → "Vanguard"). Bare legacy values are only
+/// title-cased.
+String categoryFilterLabel(String filter) {
+  var value = filter.trim();
+  final colon = value.indexOf(':');
+  final space = value.indexOf(' ');
+  if (colon > 0 && (space == -1 || colon < space)) {
+    const dims = {'asset', 'account_type', 'institution'};
+    if (dims.contains(value.substring(0, colon).toLowerCase())) {
+      value = value.substring(colon + 1).trim();
+    }
+  }
+  return value
+      .split(' ')
+      .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1))
+      .join(' ');
+}
 
 /// Which slice of the portfolio surface a [PortfolioCard] instance renders.
 ///
@@ -132,26 +189,10 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
   void _applySearch() {
     final q = _searchQuery.toLowerCase().trim();
-    final catFilter = widget.categoryFilter?.toLowerCase().trim() ?? '';
-    bool matchesCat(Map h) {
-      if (catFilter.isEmpty) return true;
-      // The allocation card can filter by asset class, account type, or
-      // institution; the tapped raw value matches whichever field the
-      // holding carries (value spaces don't collide). Keep category /
-      // sub_category too for backwards compatibility.
-      final ht = (h['holding_type'] ?? '').toString().toLowerCase();
-      final at = (h['account_type'] ?? '').toString().toLowerCase();
-      final inst = (h['institution_name'] ?? '').toString().toLowerCase();
-      final cat = (h['category'] ?? '').toString().toLowerCase();
-      final sub = (h['sub_category'] ?? '').toString().toLowerCase();
-      return ht == catFilter ||
-          at == catFilter ||
-          inst == catFilter ||
-          cat == catFilter ||
-          sub == catFilter;
-    }
-
-    final base = _allHoldings.where((h) => matchesCat(h as Map)).toList();
+    final base = _allHoldings
+        .where(
+            (h) => holdingMatchesCategoryFilter(h as Map, widget.categoryFilter))
+        .toList();
     if (q.isEmpty) {
       _holdings = base;
     } else {
@@ -160,10 +201,14 @@ class _PortfolioCardState extends State<PortfolioCard> {
         final name = (h['name'] ?? '').toString().toLowerCase();
         final inst = (h['institution_name'] ?? '').toString().toLowerCase();
         final acct = (h['account_name'] ?? '').toString().toLowerCase();
+        // Canonical asset class (contract C2) so typing "bonds" surfaces
+        // the bond funds regardless of their ticker or fund name.
+        final assetClass = (h['asset_class'] ?? '').toString().toLowerCase();
         return sym.contains(q) ||
             name.contains(q) ||
             inst.contains(q) ||
-            acct.contains(q);
+            acct.contains(q) ||
+            assetClass.contains(q);
       }).toList();
     }
   }
@@ -1335,7 +1380,11 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 child: InputChip(
                   avatar: const Icon(Icons.filter_alt, size: 16),
                   label: Text(
-                      l.pfCategoryFilter(widget.categoryFilter ?? ''),
+                      // Prefix-stripped, title-cased display value: the raw
+                      // filter string is a dimension-scoped key like
+                      // "asset:bonds" (contract C3), not a label.
+                      l.pfCategoryFilter(
+                          categoryFilterLabel(widget.categoryFilter ?? '')),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                   onDeleted: widget.onClearCategoryFilter,
@@ -1379,9 +1428,12 @@ class _PortfolioCardState extends State<PortfolioCard> {
           ),
           const SizedBox(width: 12),
           Text(
-            _searchQuery.isEmpty
-                ? l.pfHoldingsAccountsCount(totalHoldings, accountCount)
-                : l.pfShownOfTotal(shownHoldings, totalHoldings),
+            // Filter-aware counter: with a category filter or a search
+            // active it reads "N of M holdings"; unfiltered it reads the
+            // full "M holdings · K accounts".
+            widget.categoryFilter != null || _searchQuery.isNotEmpty
+                ? l.pfFilterShownOfTotal(shownHoldings, totalHoldings)
+                : l.pfHoldingsAccountsCount(totalHoldings, accountCount),
             style: TextStyle(fontSize: 12, color: context.textSubtle),
           ),
           const SizedBox(width: 12),
@@ -1416,9 +1468,30 @@ class _PortfolioCardState extends State<PortfolioCard> {
     );
   }
 
+  /// Clears whatever narrowed the table to zero rows: the pushed-in
+  /// category filter (via the same callback the chip's ✕ uses) and any
+  /// typed search query.
+  void _clearFilterAndSearch() {
+    setState(() {
+      _searchQuery = '';
+      _searchController.clear();
+      _applySearch();
+      _sort(_sortColumnIndex ?? 3, _isAscending);
+    });
+    widget.onClearCategoryFilter?.call();
+  }
+
   Widget _buildHoldingsTable() {
     final l = AppLocalizations.of(context);
     if (_holdings.isEmpty) {
+      // Two very different empties: a genuinely empty portfolio gets the
+      // onboarding copy; a filter/search that matched nothing must say so
+      // and offer a way out — never tell a funded user to "link a
+      // brokerage".
+      final isFiltered = _allHoldings.isNotEmpty;
+      final filterLabel = widget.categoryFilter != null
+          ? categoryFilterLabel(widget.categoryFilter!)
+          : _searchQuery.trim();
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1430,22 +1503,39 @@ class _PortfolioCardState extends State<PortfolioCard> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.show_chart, size: 56, color: Colors.grey.shade700),
+                  Icon(
+                    isFiltered ? Icons.filter_alt_off : Icons.show_chart,
+                    size: 56,
+                    color: Colors.grey.shade700,
+                  ),
                   const SizedBox(height: 16),
                   Text(
-                    l.pfNoHoldingsYet,
+                    isFiltered
+                        ? l.pfFilterNoMatches(filterLabel)
+                        : l.pfNoHoldingsYet,
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 16,
                       color: context.textMuted,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    l.pfNoHoldingsBody,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-                  ),
+                  if (isFiltered) ...[
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: _clearFilterAndSearch,
+                      icon: const Icon(Icons.clear, size: 16),
+                      label: Text(l.pfFilterClear),
+                    ),
+                  ] else ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      l.pfNoHoldingsBody,
+                      textAlign: TextAlign.center,
+                      style:
+                          TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -2653,10 +2743,11 @@ class DividendIncomeCard extends StatefulWidget {
 class _DividendIncomeCardState extends State<DividendIncomeCard> {
   bool _loading = true;
   Map<String, dynamic>? _data;
-  // Top payers + upcoming ex-dates are both capped — this is a glanceable
-  // income summary, not the full holdings table.
+  // Payers preview cap — the glanceable summary shows the top 5 with a
+  // "Show all (N)" expander (same pattern as the holdings table) so the
+  // remaining payers' income isn't invisible.
   static const _maxPayers = 5;
-  static const _maxExDates = 4;
+  bool _showAllPayers = false;
 
   @override
   void initState() {
@@ -2665,14 +2756,16 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
   }
 
   Future<void> _load() async {
-    try {
-      final data = await widget.apiService.getPortfolioDividends();
-      if (mounted) setState(() => _data = data);
-    } catch (_) {
-      // Swallow — the empty/collapsed render handles the failure case.
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    if (!_loading) setState(() => _loading = true);
+    // getPortfolioDividends is best-effort and returns null on failure —
+    // a null after loading is the card's error state (with retry), not a
+    // silent vanish.
+    final data = await widget.apiService.getPortfolioDividends();
+    if (!mounted) return;
+    setState(() {
+      _data = data;
+      _loading = false;
+    });
   }
 
   /// USD figure scaled into the display currency, same pattern as the
@@ -2682,11 +2775,13 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
 
   @override
   Widget build(BuildContext context) {
-    // Stay invisible until loaded, then hide entirely when the portfolio
-    // earns no dividends (no payers / all fetches degraded to zero).
-    if (_loading) return const SizedBox.shrink();
+    // Fixed-footprint skeleton while loading so the tall card doesn't pop
+    // in late and shove the layout; an inline error row (with retry) when
+    // the fetch failed; hidden only when the portfolio genuinely earns no
+    // dividends.
+    if (_loading) return _buildLoadingSkeleton(context);
     final data = _data;
-    if (data == null) return const SizedBox.shrink();
+    if (data == null) return _buildErrorCard(context);
 
     final income =
         (data['projected_annual_income_usd'] as num?)?.toDouble() ?? 0.0;
@@ -2705,6 +2800,13 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
         .toList();
     final upcoming =
         (data['upcoming_ex_dates'] as List<dynamic>?) ?? const [];
+    // Payment frequency per symbol, for deriving each upcoming ex-date's
+    // expected payment amount (annual income ÷ payments/yr).
+    final perYearBySymbol = <String, int>{
+      for (final c in payers)
+        ((c as Map)['symbol'] ?? '').toString():
+            (c['per_year'] as num?)?.toInt() ?? 0,
+    };
 
     final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 
@@ -2774,9 +2876,19 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
                 ),
               ),
               const SizedBox(height: 8),
-              ...payers
-                  .take(_maxPayers)
+              ...(_showAllPayers ? payers : payers.take(_maxPayers))
                   .map((c) => _payerRow(c as Map<String, dynamic>)),
+              if (payers.length > _maxPayers)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: () =>
+                        setState(() => _showAllPayers = !_showAllPayers),
+                    child: Text(_showAllPayers
+                        ? l.pfDivShowFewerPayers
+                        : l.pfDivShowAllPayers(payers.length)),
+                  ),
+                ),
             ],
             if (upcoming.isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -2791,9 +2903,10 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
                 ),
               ),
               const SizedBox(height: 8),
-              ...upcoming
-                  .take(_maxExDates)
-                  .map((e) => _exDateRow(e as Map<String, dynamic>)),
+              // All the entries the API returns, each with the expected
+              // payment amount (per-symbol annual income ÷ payments/yr).
+              ...upcoming.map((e) =>
+                  _exDateRow(e as Map<String, dynamic>, perYearBySymbol)),
             ],
           ],
         ),
@@ -2830,6 +2943,25 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
     );
   }
 
+  /// Opens the per-symbol dividend detail sheet (self-fetching, same
+  /// bottom-sheet chrome as the lending tab's interest-income drill-down).
+  Future<void> _openDividendDetail(String symbol) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => DividendDetailSheet(
+        apiService: widget.apiService,
+        symbol: symbol,
+        conversionFactor: widget.conversionFactor,
+        currencyFormat: widget.currencyFormat,
+      ),
+    );
+  }
+
   Widget _payerRow(Map<String, dynamic> c) {
     final l = AppLocalizations.of(context);
     final symbol = c['symbol']?.toString() ?? '';
@@ -2837,52 +2969,67 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
     final yieldPct = (c['yield_pct'] as num?)?.toDouble();
     final perYear = (c['per_year'] as num?)?.toInt() ?? 0;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  symbol.isNotEmpty ? symbol : '—',
-                  style: TextStyle(
-                    color: context.textPrimary,
-                    fontWeight: FontWeight.w600,
+    // InkWell (over GestureDetector) keeps the row keyboard-focusable and
+    // Enter/Space-activatable, matching the holdings-row pattern.
+    return InkWell(
+      onTap: symbol.isEmpty ? null : () => _openDividendDetail(symbol),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    symbol.isNotEmpty ? symbol : '—',
+                    style: TextStyle(
+                      color: context.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  yieldPct == null
-                      ? l.divPaymentsPerYear(perYear)
-                      : '${yieldPct.toStringAsFixed(2)}% · ${l.divPaymentsPerYear(perYear)}',
-                  style: TextStyle(color: context.textFaint, fontSize: 11),
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  Text(
+                    yieldPct == null
+                        ? l.divPaymentsPerYear(perYear)
+                        : '${yieldPct.toStringAsFixed(2)}% · ${l.divPaymentsPerYear(perYear)}',
+                    style: TextStyle(color: context.textFaint, fontSize: 11),
+                  ),
+                ],
+              ),
             ),
-          ),
-          Text(
-            _money(incomeUsd),
-            style: TextStyle(
-              color: context.textPrimary,
-              fontWeight: FontWeight.bold,
-              fontFeatures: const [FontFeature.tabularFigures()],
+            Text(
+              _money(incomeUsd),
+              style: TextStyle(
+                color: context.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
-          ),
-        ],
+            if (symbol.isNotEmpty) ...[
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right, size: 16, color: context.textFaint),
+            ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _exDateRow(Map<String, dynamic> e) {
+  Widget _exDateRow(Map<String, dynamic> e, Map<String, int> perYearBySymbol) {
     final symbol = e['symbol']?.toString() ?? '';
     final dateStr = e['est_next_ex_date']?.toString() ?? '';
     final parsed = DateTime.tryParse(dateStr);
     final dateLabel =
         parsed == null ? dateStr : DateFormat.yMMMd().format(parsed);
+    // Expected payment landing around that date: the symbol's projected
+    // annual income split across its payments per year.
+    final annualUsd = (e['annual_income_usd'] as num?)?.toDouble() ?? 0.0;
+    final perYear = perYearBySymbol[symbol] ?? 0;
+    final expectedUsd = perYear > 0 ? annualUsd / perYear : null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
@@ -2908,7 +3055,80 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
+          const SizedBox(width: 12),
+          Text(
+            expectedUsd == null ? '—' : _money(expectedUsd),
+            style: TextStyle(
+              color: context.textPrimary,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  /// Fixed-footprint placeholder mirroring the loaded card's layout
+  /// (header, two summary tiles, payer rows) so data landing doesn't
+  /// shove the page.
+  Widget _buildLoadingSkeleton(BuildContext context) {
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: EdgeInsets.all(pad),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SkeletonBox(width: 160, height: 18),
+            const SizedBox(height: 16),
+            const Row(
+              children: [
+                Expanded(child: SkeletonBox(height: 72)),
+                SizedBox(width: 12),
+                Expanded(child: SkeletonBox(height: 72)),
+              ],
+            ),
+            const SizedBox(height: 24),
+            const SkeletonBox(width: 100, height: 12),
+            const SizedBox(height: 12),
+            for (var i = 0; i < 5; i++) ...[
+              const SkeletonBox(height: 34),
+              if (i < 4) const SizedBox(height: 8),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Compact inline error row with retry — the card must not silently
+  /// vanish when the fetch fails mid-session.
+  Widget _buildErrorCard(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline, size: 18, color: context.warning),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                l.pfDivLoadError,
+                style: TextStyle(fontSize: 13, color: context.textMuted),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            TextButton(onPressed: _load, child: Text(l.pfDivRetry)),
+          ],
+        ),
       ),
     );
   }
