@@ -194,6 +194,47 @@ fn account_name_looks_generic(name: &str) -> bool {
         .any(|b| l.starts_with(&format!("{b} account")))
 }
 
+/// Friendly display name for one Plaid account payload. Prefer Plaid's
+/// official name; otherwise rewrite a generic "<broad type> Account <mask>"
+/// (some banks — e.g. Capital One — return "depository Account 0916" from
+/// the broad `type`, not the subtype) or an empty/"Unknown" name into
+/// "<Subtype> ••<mask>" ("Checking ••0916").
+fn plaid_display_name(acc: &serde_json::Value) -> String {
+    let subtype = acc["subtype"].as_str().unwrap_or("checking");
+    let mask = acc["mask"].as_str().unwrap_or("");
+    let pretty_subtype = subtype
+        .split(' ')
+        .map(|w| {
+            let mut ch = w.chars();
+            match ch.next() {
+                Some(f) => f.to_uppercase().collect::<String>() + ch.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    let official = acc["official_name"]
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let plaid_name = acc["name"]
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let is_generic = plaid_name.is_none_or(account_name_looks_generic);
+    if let Some(o) = official {
+        o.to_string()
+    } else if is_generic {
+        if mask.is_empty() {
+            format!("{pretty_subtype} account")
+        } else {
+            format!("{pretty_subtype} \u{2022}\u{2022}{mask}")
+        }
+    } else {
+        plaid_name.unwrap().to_string()
+    }
+}
+
 async fn sync_one_inst(db: &PgPool, config: &AppConfig, client: &Client, inst: InstRow) {
     let inst_id = inst.id;
     let inst_user_id = inst.user_id;
@@ -257,6 +298,16 @@ async fn sync_one_inst(db: &PgPool, config: &AppConfig, client: &Client, inst: I
                     // the loop to archive the ones it has stopped returning
                     // (closed/removed at the bank).
                     let mut returned_ids: Vec<String> = Vec::with_capacity(accounts.len());
+                    // Pre-pass: some issuers (Chase) return the identical
+                    // marketing name — "Ultimate Rewards®" — as name AND
+                    // official_name for several distinct cards. Count the
+                    // computed display names so duplicates can be
+                    // disambiguated with the card mask in the main loop.
+                    let mut name_counts: std::collections::HashMap<String, usize> =
+                        std::collections::HashMap::new();
+                    for acc in accounts {
+                        *name_counts.entry(plaid_display_name(acc)).or_default() += 1;
+                    }
                     for acc in accounts {
                         let external_id = acc["account_id"].as_str().unwrap_or("");
                         if !external_id.is_empty() {
@@ -264,45 +315,20 @@ async fn sync_one_inst(db: &PgPool, config: &AppConfig, client: &Client, inst: I
                         }
                         let subtype = acc["subtype"].as_str().unwrap_or("checking");
                         let mask = acc["mask"].as_str().unwrap_or("");
-                        // Friendly display name. Prefer Plaid's official name;
-                        // otherwise rewrite a generic "<broad type> Account
-                        // <mask>" (some banks — e.g. Capital One — return
-                        // "depository Account 0916" from the broad `type`, not
-                        // the subtype) or an empty/"Unknown" name into
-                        // "<Subtype> ••<mask>" ("Checking ••0916").
-                        let pretty_subtype = subtype
-                            .split(' ')
-                            .map(|w| {
-                                let mut ch = w.chars();
-                                match ch.next() {
-                                    Some(f) => {
-                                        f.to_uppercase().collect::<String>() + ch.as_str()
-                                    }
-                                    None => String::new(),
-                                }
-                            })
-                            .collect::<Vec<_>>()
-                            .join(" ");
-                        let official = acc["official_name"]
-                            .as_str()
-                            .map(str::trim)
-                            .filter(|s| !s.is_empty());
-                        let plaid_name = acc["name"]
-                            .as_str()
-                            .map(str::trim)
-                            .filter(|s| !s.is_empty());
-                        let is_generic =
-                            plaid_name.is_none_or(account_name_looks_generic);
-                        let name: String = if let Some(o) = official {
-                            o.to_string()
-                        } else if is_generic {
-                            if mask.is_empty() {
-                                format!("{pretty_subtype} account")
-                            } else {
-                                format!("{pretty_subtype} \u{2022}\u{2022}{mask}")
-                            }
+                        let base_name = plaid_display_name(acc);
+                        // Same-named siblings (Chase's three "Ultimate
+                        // Rewards®" cards) get the mask appended so they stay
+                        // tell-apart-able; unique names pass through as-is.
+                        let name: String = if name_counts
+                            .get(&base_name)
+                            .copied()
+                            .unwrap_or(0)
+                            > 1
+                            && !mask.is_empty()
+                        {
+                            format!("{base_name} \u{2022}\u{2022}{mask}")
                         } else {
-                            plaid_name.unwrap().to_string()
+                            base_name
                         };
                         let current_bal = acc["balances"]["current"].as_f64();
                         let available_bal = acc["balances"]["available"].as_f64();
@@ -333,8 +359,20 @@ async fn sync_one_inst(db: &PgPool, config: &AppConfig, client: &Client, inst: I
                             // user is implicitly relying on) is never clobbered.
                             let stored_name: String =
                                 row.try_get("name").unwrap_or_default();
+                            // Also refresh when the only change is the mask
+                            // suffix — that's the duplicate-name
+                            // disambiguation catching cards stored under the
+                            // same name by earlier syncs, not a user rename
+                            // (a rename wouldn't equal the computed base).
+                            let mask_disambiguated = !mask.is_empty()
+                                && name
+                                    == format!(
+                                        "{} \u{2022}\u{2022}{mask}",
+                                        stored_name.trim()
+                                    );
                             let refresh_name = name != stored_name
-                                && account_name_looks_generic(&stored_name);
+                                && (account_name_looks_generic(&stored_name)
+                                    || mask_disambiguated);
                             // COALESCE keeps a previously-fetched limit when a
                             // later sync returns null (Plaid is sometimes
                             // inconsistent about populating it).

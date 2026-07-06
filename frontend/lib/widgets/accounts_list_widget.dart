@@ -194,7 +194,11 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
         case AccountCategory.other:
           otherAccounts.add(acc);
           final raw = (acc['account_type'] ?? '').toString().trim();
-          if (raw.isNotEmpty) unknownTypes.add(raw);
+          // 'other' is an explicitly supported subtype, not a classifier
+          // gap — only genuinely unrecognized tokens get surfaced.
+          if (raw.isNotEmpty && raw.toLowerCase() != 'other') {
+            unknownTypes.add(raw);
+          }
       }
     }
 
