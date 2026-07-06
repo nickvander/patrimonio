@@ -3625,10 +3625,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get pfVaults => 'Apartados';
 
   @override
-  String get pfBase => 'base';
+  String get pfCards => 'Tarjetas';
 
   @override
-  String get pfAccountsDescriptor => 'Cuentas';
+  String get pfBase => 'base';
 
   @override
   String pfInstDescriptor(Object descriptor, Object inst) {

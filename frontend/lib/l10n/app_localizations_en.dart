@@ -3589,10 +3589,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pfVaults => 'Vaults';
 
   @override
-  String get pfBase => 'base';
+  String get pfCards => 'Cards';
 
   @override
-  String get pfAccountsDescriptor => 'Accounts';
+  String get pfBase => 'base';
 
   @override
   String pfInstDescriptor(Object descriptor, Object inst) {

@@ -6,6 +6,15 @@ import '../utils/account_category.dart';
 import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
+/// Width of the trailing slot at the right edge of every account-style row:
+/// the account rows' more_vert menu button, the collapsible headers'
+/// chevrons, and the header/vault-row spacers all occupy exactly this width,
+/// so balances and totals share one right edge (8px row padding + this slot).
+/// Kept as an explicit shared constant because IconButton-style widgets
+/// shrink to ~32px on desktop/web (shrinkWrap tap targets + compact visual
+/// density), which would otherwise misalign the balance column per platform.
+const double _kTrailingSlotWidth = 48;
+
 class AccountsListWidget extends StatefulWidget {
   final List<dynamic> accounts;
   final double conversionFactor;
@@ -514,6 +523,11 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                 textAlign: TextAlign.right,
               );
 
+              // Left inset that lines the subtitle / currency pills up with
+              // the title text's left edge in the header Row:
+              // chevron (20) + gap (4) + icon chip (8 + 18 + 8) + gap (12).
+              const subLeft = 70.0;
+
               // Only worth showing when the group spans >1 currency. Each
               // currency reads as its own self-labelled pill ("USD 9,591.00")
               // — never a bare "$" that's ambiguous in a mixed list — and a
@@ -534,7 +548,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
               final currencyLine = byCurrency.length < 2
                   ? null
                   : Padding(
-                      padding: const EdgeInsets.only(top: 8, left: 38),
+                      padding: const EdgeInsets.only(top: 8, left: subLeft),
                       child: Wrap(
                         spacing: 8,
                         runSpacing: 6,
@@ -589,7 +603,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
               final subtitleText = subtitle == null
                   ? null
                   : Padding(
-                      padding: const EdgeInsets.only(top: 4, left: 38),
+                      padding: const EdgeInsets.only(top: 4, left: subLeft),
                       child: Text(
                         subtitle,
                         style: TextStyle(
@@ -644,7 +658,13 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                         const SizedBox(width: 12),
                         Expanded(child: titleText),
                         const SizedBox(width: 12),
-                        totalText,
+                        // Cap the total so a pathological value truncates
+                        // (it has maxLines/ellipsis) instead of overflowing.
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                              maxWidth: constraints.maxWidth * 0.4),
+                          child: totalText,
+                        ),
                       ],
                     ),
                     ?subtitleText,
@@ -677,7 +697,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
   /// Group accounts by (institution, account_type) within an already
   /// type-filtered group. When a cluster has multiple accounts (e.g. SoFi
   /// Savings + its vaults), pick the dominant one (largest balance) as the
-  /// "primary" and render the rest indented below it as sub-accounts.
+  /// "primary" and render the rest nested below it as sub-accounts.
   /// This collapses SoFi vaults (Car, Cards, Emergency, Rent, Taxes, etc.)
   /// under SoFi Savings without losing them.
   List<Widget> _renderAccountsWithVaults(
@@ -699,18 +719,6 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
     final l = AppLocalizations.of(context);
     double bal(dynamic a) =>
         ((a['current_balance'] ?? 0.0) as num).toDouble().abs();
-    // Converted-to-target total of a vault list, for the collapsed summary.
-    double vaultTotal(List<dynamic> vs) => vs.fold<double>(
-          0.0,
-          (s, v) =>
-              s +
-              convertCurrency(
-                ((v['current_balance'] ?? 0.0) as num).toDouble(),
-                from: (v['currency'] ?? targetCurrency).toString(),
-                to: targetCurrency,
-                usdMxnRate: usdMxnRate,
-              ),
-        );
 
     final widgets = <Widget>[];
     for (final inst in order) {
@@ -739,12 +747,13 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
 
       if (products.isEmpty) {
         // All siblings (no real product) — institution-scoped header + the
-        // vaults collapsed beneath it (tap to expand).
+        // sub-accounts collapsed beneath it (tap to expand). The cluster
+        // header already carries the combined total, so the summary line
+        // below it stays total-free instead of repeating the same figure.
         widgets.add(_buildVaultClusterHeader(context, cluster));
         widgets.add(_CollapsibleVaults(
-          label: l.pfVaults,
+          label: _subgroupLabel(context, cluster.first),
           count: cluster.length,
-          totalLabel: currencyFormat.format(vaultTotal(cluster)),
           rows: cluster.map((v) => _buildVaultRow(context, v)).toList(),
         ));
         continue;
@@ -778,6 +787,8 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
       // products (e.g. SoFi Checking + Savings, Revolut Cuenta + Savings) then
       // reads as a single compact line that expands on tap.
       final inner = <Widget>[];
+      final vaultsLabel =
+          vaults.isEmpty ? null : _subgroupLabel(context, vaults.first);
       for (var i = 0; i < products.length; i++) {
         final isAttach = i == attachIdx && vaults.isNotEmpty;
         inner.add(_buildAccountRow(
@@ -785,11 +796,12 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
           products[i],
           vaultExtraNative: isAttach ? vaultExtra : null,
           vaultCount: isAttach ? vaults.length : null,
+          vaultLabel: isAttach ? vaultsLabel : null,
           nested: true,
         ));
         if (isAttach) {
           inner.add(_CollapsibleVaults(
-            label: l.pfVaults,
+            label: vaultsLabel!,
             count: vaults.length,
             rows: vaults.map((v) => _buildVaultRow(context, v)).toList(),
           ));
@@ -827,17 +839,28 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
     return widgets;
   }
 
-  /// Header for a cluster of sibling vaults that has no real parent account.
-  /// Labels the group by institution + a generic "Vaults" descriptor (SoFi /
-  /// Ally-style sub-accounts) with the combined total — instead of borrowing
-  /// one vault's name (which read as a credit-card account).
+  /// Label for a collapsed sub-group of sibling sub-accounts, derived from
+  /// what the accounts actually ARE rather than a hardcoded "Vaults": credit
+  /// products are card products ("Cards" — a Chase Sapphire is not a vault),
+  /// cash sub-accounts are true savings buckets ("Vaults"), and anything
+  /// else falls back to the neutral "Accounts".
+  String _subgroupLabel(BuildContext context, dynamic acc) {
+    final l = AppLocalizations.of(context);
+    return switch (categorizeAccount((acc['account_type'] ?? '').toString())) {
+      AccountCategory.credit => l.pfCards,
+      AccountCategory.cash => l.pfVaults,
+      _ => l.txAccounts,
+    };
+  }
+
+  /// Header for a cluster of sibling sub-accounts that has no real parent
+  /// account. Labels the group by institution + the sub-group descriptor
+  /// (Vaults / Cards / Accounts) with the combined total — instead of
+  /// borrowing one sub-account's name (which read as a credit-card account).
   Widget _buildVaultClusterHeader(BuildContext context, List<dynamic> cluster) {
     final inst = (cluster.first['institution_name'] ?? '').toString();
-    final type = (cluster.first['account_type'] ?? '').toString().toLowerCase();
     final l = AppLocalizations.of(context);
-    final descriptor = type.contains('cash management')
-        ? l.pfVaults
-        : l.pfAccountsDescriptor;
+    final descriptor = _subgroupLabel(context, cluster.first);
     final total = cluster.fold<double>(0.0, (sum, acc) {
       final bal = ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
       final cur = (acc['currency'] ?? targetCurrency).toString();
@@ -846,40 +869,56 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
               from: cur, to: targetCurrency, usdMxnRate: usdMxnRate);
     });
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 12, 6),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              inst.isEmpty ? descriptor : l.pfInstDescriptor(inst, descriptor),
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: context.textPrimary,
+      padding: const EdgeInsets.fromLTRB(16, 4, 8, 6),
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          children: [
+            Expanded(
+              child: Text(
+                inst.isEmpty
+                    ? descriptor
+                    : l.pfInstDescriptor(inst, descriptor),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: context.textPrimary,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            currencyFormat.format(total),
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: context.textMuted,
-              fontFeatures: const [FontFeature.tabularFigures()],
+            const SizedBox(width: 8),
+            // Cap the total so a pathological value truncates (it has
+            // maxLines/ellipsis) instead of overflowing — as a non-flex
+            // Row child it would otherwise get unbounded width.
+            ConstrainedBox(
+              constraints:
+                  BoxConstraints(maxWidth: constraints.maxWidth * 0.4),
+              child: Text(
+                currencyFormat.format(total),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: context.textMuted,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+            // Mirrors the account rows' menu-button slot so this total
+            // right-aligns with the row balances.
+            const SizedBox(width: _kTrailingSlotWidth),
+          ],
+        ),
       ),
     );
   }
 
-  /// Compact sub-row for SoFi-style "vaults". Smaller type, no institution
-  /// label (it's implied from the parent above), no chevron, indented.
+  /// Compact sub-row for SoFi-style "vaults". Smaller muted type, no
+  /// institution label (it's implied from the parent above), no chevron; a
+  /// dash marker in the left gutter is the only nesting affordance so the
+  /// name and balance stay in the shared row columns.
   Widget _buildVaultRow(BuildContext context, dynamic acc) {
     final balance =
         ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
@@ -905,15 +944,17 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
         );
       },
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.fromLTRB(0, 6, 8, 6),
         child: Row(
           children: [
+            // Dash marker tucked inside the 16px gutter (4 + 8 + 4) so the
+            // vault name starts in the same column as account rows.
             Container(
-              width: 14,
+              width: 8,
               height: 1,
+              margin: const EdgeInsets.symmetric(horizontal: 4),
               color: context.hairline,
             ),
-            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 name,
@@ -935,6 +976,9 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                 fontFeatures: [const FontFeature.tabularFigures()],
               ),
             ),
+            // Mirrors the account rows' menu-button slot so vault
+            // balances right-align with the row balances above them.
+            const SizedBox(width: _kTrailingSlotWidth),
           ],
         ),
       ),
@@ -954,6 +998,9 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
     dynamic acc, {
     double? vaultExtraNative,
     int? vaultCount,
+    // Localized label for the nested sub-accounts folded into this row's
+    // total ("vaults" / "cards" / "accounts"); pairs with [vaultCount].
+    String? vaultLabel,
     // True when the row is rendered inside a collapsed institution group: the
     // bank name already sits in the group header, so we drop the per-row
     // institution sub-label to cut the left-side density.
@@ -996,7 +1043,9 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
           fontWeight: FontWeight.w600,
           color: context.textPrimary,
         ),
-        maxLines: 2,
+        // One line keeps every row the same height so the name and balance
+        // columns stay aligned; the Tooltip above reveals the full name.
+        maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
     );
@@ -1046,7 +1095,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
       // savings base enhanced by the vaults, with the base called out.
       subBalance = Text(
         '${formatCurrencyAmount(base, sourceCurrency)} ${l.pfBase} '
-        '+ ${vaultCount ?? 0} ${l.pfVaults.toLowerCase()}',
+        '+ ${vaultCount ?? 0} ${(vaultLabel ?? l.pfVaults).toLowerCase()}',
         style: TextStyle(
           fontSize: 11,
           color: context.textFaint,
@@ -1072,7 +1121,6 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
         style: TextStyle(
           fontSize: 11,
           color: context.textFaint,
-          fontStyle: FontStyle.italic,
           fontFeatures: [const FontFeature.tabularFigures()],
         ),
         maxLines: 1,
@@ -1169,6 +1217,18 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
         ),
       ],
     );
+    // Pin the button to the shared trailing-slot width: on desktop/web the
+    // ThemeData defaults (shrinkWrap tap targets + compact density) shrink
+    // it to ~32px, which would knock the balance column ~16px out of line
+    // with the header/vault spacers. The height cap keeps the icon level
+    // with the row's first text line under the CrossAxisAlignment.start
+    // layouts below — a full 48px-tall button sags ~14px on single-line
+    // rows — while the 48px-wide slot keeps the tap target comfortable.
+    menuButton = SizedBox(
+      width: _kTrailingSlotWidth,
+      height: 20,
+      child: Center(child: menuButton),
+    );
 
     return InkWell(
       onTap: () {
@@ -1222,7 +1282,9 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
           return Padding(
             padding: const EdgeInsets.fromLTRB(16, 13, 8, 13),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+              // .start (like the narrow layout) keeps the name's first line
+              // level with the balance even when only one side has a sub-line.
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
                   child: Column(
@@ -1405,18 +1467,18 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
 }
 
 /// Collapsible group of "vault" sub-accounts (SoFi buckets, Nu cajitas). Shows
-/// one summary line — "Vaults · N · $total" — that expands to the individual
-/// rows on tap, so a bank with several buckets doesn't consume several rows.
+/// one summary line — "Vaults · N" — that expands to the individual rows on
+/// tap, so a bank with several buckets doesn't consume several rows. The
+/// combined total lives on the header above (parent account row or vault
+/// cluster header), never here, so the same figure isn't stacked twice.
 class _CollapsibleVaults extends StatefulWidget {
   final String label;
   final int count;
-  final String? totalLabel;
   final List<Widget> rows;
 
   const _CollapsibleVaults({
     required this.label,
     required this.count,
-    this.totalLabel,
     required this.rows,
   });
 
@@ -1430,7 +1492,7 @@ class _CollapsibleVaultsState extends State<_CollapsibleVaults> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(left: 40, right: 12, bottom: 4),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1438,29 +1500,34 @@ class _CollapsibleVaultsState extends State<_CollapsibleVaults> {
             onTap: () => setState(() => _open = !_open),
             borderRadius: BorderRadius.circular(8),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
+              // Same L/R padding as _buildAccountRow so the label shares the
+              // rows' 16px name column and the total shares their right edge.
+              padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
               child: Row(
                 children: [
-                  Icon(_open ? Icons.expand_more : Icons.chevron_right,
-                      size: 18, color: context.textSubtle),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${widget.label} · ${widget.count}',
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
+                  Expanded(
+                    child: Text(
+                      '${widget.label} · ${widget.count}',
+                      // Same 13px size as the vault cluster header / vault
+                      // rows; the lighter weight + muted color mark it as a
+                      // nested summary rather than a bank-level header.
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: context.textMuted),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  // Chevron in the same trailing slot as the account rows'
+                  // menu button, keeping the total column aligned.
+                  SizedBox(
+                    width: _kTrailingSlotWidth,
+                    child: Icon(
+                        _open ? Icons.expand_more : Icons.chevron_right,
+                        size: 18,
                         color: context.textSubtle),
                   ),
-                  const Spacer(),
-                  if (widget.totalLabel != null)
-                    Text(
-                      widget.totalLabel!,
-                      style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: context.textSubtle,
-                          fontFeatures: const [FontFeature.tabularFigures()]),
-                    ),
                 ],
               ),
             ),
@@ -1518,47 +1585,64 @@ class _CollapsibleInstitutionState extends State<_CollapsibleInstitution> {
         InkWell(
           onTap: () => setState(() => _open = !_open),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
-            child: Row(
-              children: [
-                Icon(_open ? Icons.expand_more : Icons.chevron_right,
-                    size: 20, color: context.textSubtle),
-                const SizedBox(width: 8),
-                Icon(Icons.account_balance_rounded,
-                    size: 18, color: context.textSubtle),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: context.textPrimary),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        widget.countLabel,
-                        style:
-                            TextStyle(fontSize: 12, color: context.textSubtle),
-                      ),
-                    ],
+            // Same L/R padding as _buildAccountRow so the bank name shares
+            // the account rows' 16px name column.
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+            child: LayoutBuilder(
+              builder: (context, constraints) => Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: context.textPrimary),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.countLabel,
+                          style: TextStyle(
+                              fontSize: 12, color: context.textSubtle),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  widget.totalLabel,
-                  style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: context.textPrimary,
-                      fontFeatures: const [FontFeature.tabularFigures()]),
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  // Cap the total so a pathological value truncates (it has
+                  // maxLines/ellipsis) instead of overflowing — as a non-flex
+                  // Row child it would otherwise get unbounded width.
+                  ConstrainedBox(
+                    constraints:
+                        BoxConstraints(maxWidth: constraints.maxWidth * 0.4),
+                    child: Text(
+                      widget.totalLabel,
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: context.textPrimary,
+                          fontFeatures: const [FontFeature.tabularFigures()]),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  // Chevron lives in the same trailing slot as the account
+                  // rows' menu button, so the total right-aligns exactly with
+                  // the row balances.
+                  SizedBox(
+                    width: _kTrailingSlotWidth,
+                    child: Icon(
+                        _open ? Icons.expand_more : Icons.chevron_right,
+                        size: 20, color: context.textSubtle),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -1568,20 +1652,26 @@ class _CollapsibleInstitutionState extends State<_CollapsibleInstitution> {
           crossFadeState:
               _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
           firstChild: const SizedBox(width: double.infinity),
-          // Indent the accounts + a hairline guide rail so they read as nested
-          // under the bank instead of crowding the same left margin.
+          // The nested rows keep the exact same name/balance columns as
+          // single-account rows; a hairline guide rail tucked inside their
+          // 16px left gutter is the only nesting affordance.
           secondChild: Padding(
-            padding: const EdgeInsets.only(left: 20, bottom: 4),
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border(
-                  left: BorderSide(color: context.hairline, width: 1.5),
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Stack(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: widget.rows,
                 ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: widget.rows,
-              ),
+                Positioned(
+                  left: 7,
+                  top: 2,
+                  bottom: 2,
+                  child: IgnorePointer(
+                    child: Container(width: 1.5, color: context.hairline),
+                  ),
+                ),
+              ],
             ),
           ),
         ),

@@ -5958,17 +5958,17 @@ abstract class AppLocalizations {
   /// **'Vaults'**
   String get pfVaults;
 
+  /// No description provided for @pfCards.
+  ///
+  /// In en, this message translates to:
+  /// **'Cards'**
+  String get pfCards;
+
   /// No description provided for @pfBase.
   ///
   /// In en, this message translates to:
   /// **'base'**
   String get pfBase;
-
-  /// No description provided for @pfAccountsDescriptor.
-  ///
-  /// In en, this message translates to:
-  /// **'Accounts'**
-  String get pfAccountsDescriptor;
 
   /// No description provided for @pfInstDescriptor.
   ///

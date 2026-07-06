@@ -1359,8 +1359,8 @@
     }
   },
   "pfVaults": "Vaults",
+  "pfCards": "Cards",
   "pfBase": "base",
-  "pfAccountsDescriptor": "Accounts",
   "pfInstDescriptor": "{inst} · {descriptor}",
   "pfVault": "Vault",
   "pfUnknownAccount": "Unknown account",
