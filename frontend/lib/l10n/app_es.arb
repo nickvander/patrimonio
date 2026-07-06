@@ -2240,5 +2240,103 @@
   "allocBandFiltersTable": "filtra la tabla de posiciones",
   "@allocBandFiltersTable": {
     "description": "Suffix appended to a tappable allocation band's screen-reader label, announcing the tap action."
+  },
+  "insLoadError": "No se pudo cargar el detalle del instrumento",
+  "@insLoadError": {
+    "description": "Inline error shown in the instrument detail sheet when the fetch fails; paired with a Retry button."
+  },
+  "insAsOf": "al {date}",
+  "@insAsOf": {
+    "description": "Muted staleness caption next to the instrument sheet's big price when the latest stored close predates today.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "insRange1m": "1M",
+  "@insRange1m": {
+    "description": "Instrument price-chart range chip: one month."
+  },
+  "insRange3m": "3M",
+  "@insRange3m": {
+    "description": "Instrument price-chart range chip: three months."
+  },
+  "insRange1y": "1A",
+  "@insRange1y": {
+    "description": "Instrument price-chart range chip: one year."
+  },
+  "insRangeMax": "Máx",
+  "@insRangeMax": {
+    "description": "Instrument price-chart range chip: full available history."
+  },
+  "insNoPriceHistory": "Sin historial de precios para esta posición",
+  "@insNoPriceHistory": {
+    "description": "Graceful empty state replacing the price chart for symbols without stored closes (401k trusts, cash sleeves)."
+  },
+  "insStatMarketValue": "Valor de mercado",
+  "@insStatMarketValue": {
+    "description": "Instrument sheet stat-grid tile: current USD market value of the position."
+  },
+  "insStatQuantity": "Cantidad",
+  "@insStatQuantity": {
+    "description": "Instrument sheet stat-grid tile: total shares/units held across accounts."
+  },
+  "insStatCostBasis": "Costo base",
+  "@insStatCostBasis": {
+    "description": "Instrument sheet stat-grid tile: total USD cost basis; em-dash when unknown."
+  },
+  "insStatGain": "Ganancia",
+  "@insStatGain": {
+    "description": "Instrument sheet stat-grid tile: unrealized gain/loss in USD and percent."
+  },
+  "insStatWeight": "Peso en el portafolio",
+  "@insStatWeight": {
+    "description": "Instrument sheet stat-grid tile: the position's share of total portfolio value."
+  },
+  "insStatAssetClass": "Clase de activo",
+  "@insStatAssetClass": {
+    "description": "Instrument sheet stat-grid tile: the holding's canonical asset class, shown as a chip."
+  },
+  "insLotsSection": "Lotes de compra",
+  "@insLotsSection": {
+    "description": "Instrument sheet section header listing the position's purchase lots."
+  },
+  "insLotQtyAtPrice": "{qty} acciones a {price}",
+  "@insLotQtyAtPrice": {
+    "description": "Purchase-lot row detail: quantity bought at the per-unit price (native currency).",
+    "placeholders": {
+      "qty": {
+        "type": "String"
+      },
+      "price": {
+        "type": "String"
+      }
+    }
+  },
+  "insLotsTotal": "Total",
+  "@insLotsTotal": {
+    "description": "Label on the purchase-lots totals row (summed quantity + summed USD cost)."
+  },
+  "insDividendsLink": "Detalle de dividendos",
+  "@insDividendsLink": {
+    "description": "TextButton in the instrument sheet that opens the per-symbol dividend detail sheet."
+  },
+  "insDivPaymentsSection": "Pagos recibidos",
+  "@insDivPaymentsSection": {
+    "description": "Dividend-sheet section header for real dividend payments matched from account transactions (contract C-D)."
+  },
+  "insDivShowAllPayments": "Mostrar todos ({count})",
+  "@insDivShowAllPayments": {
+    "description": "Expander under the dividend payments list when more than 12 payments exist.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insDivShowFewerPayments": "Mostrar menos",
+  "@insDivShowFewerPayments": {
+    "description": "Collapses the dividend payments list back to the first 12 entries."
   }
 }

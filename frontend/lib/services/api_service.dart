@@ -2049,6 +2049,24 @@ class ApiService {
         'No se pudo cargar el detalle de dividendos'));
   }
 
+  /// Per-holding instrument detail for the click-through sheet (contract
+  /// C-A): position aggregates (value, basis, gain, weight, day change),
+  /// per-account quantities, purchase lots, and the stored daily-close
+  /// series for the requested range (`1m|3m|1y|max`). Uncached — this is
+  /// an always-fresh detail view, like the dividend detail. Throws a
+  /// localized error on non-200 so the sheet owns its error + retry state.
+  Future<Map<String, dynamic>> getInstrumentDetail(String symbol,
+      {String range = '1y'}) async {
+    final response = await _get(Uri.parse(
+        '$_baseUrl/dashboard/instruments/${Uri.encodeComponent(symbol)}'
+        '?range=${Uri.encodeComponent(range)}'));
+    if (response.statusCode == 200) {
+      return json.decode(response.body) as Map<String, dynamic>;
+    }
+    throw Exception(_t('Failed to load instrument detail',
+        'No se pudo cargar el detalle del instrumento'));
+  }
+
   Future<Map<String, dynamic>> getWealthProjection({
     required double startBalance,
     required double monthlyContribution,

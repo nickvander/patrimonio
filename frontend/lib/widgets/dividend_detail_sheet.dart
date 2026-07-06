@@ -24,12 +24,18 @@ class DividendDetailSheet extends StatefulWidget {
   final double conversionFactor;
   final NumberFormat currencyFormat;
 
+  /// Test seam: widget tests inject a canned-payload fetcher here (the
+  /// test VM can't subclass ApiService); null in production.
+  @visibleForTesting
+  final Future<Map<String, dynamic>> Function(String symbol)? fetchOverride;
+
   const DividendDetailSheet({
     super.key,
     required this.apiService,
     required this.symbol,
     required this.conversionFactor,
     required this.currencyFormat,
+    this.fetchOverride,
   });
 
   @override
@@ -40,6 +46,11 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
   Map<String, dynamic> _data = {};
   bool _loading = true;
   String? _error;
+
+  /// "Payments received" starts capped at [_maxPayments] rows; the
+  /// expander toggles the full list (payers-expander pattern).
+  bool _showAllPayments = false;
+  static const int _maxPayments = 12;
 
   @override
   void initState() {
@@ -53,7 +64,8 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
       _error = null;
     });
     try {
-      final data = await widget.apiService.getDividendDetail(widget.symbol);
+      final data = await (widget.fetchOverride ??
+          widget.apiService.getDividendDetail)(widget.symbol);
       if (!mounted) return;
       setState(() {
         _data = data;
@@ -250,6 +262,9 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
     final schedule = (_data['schedule'] as List?) ?? const [];
     final history = (_data['history'] as List?) ?? const [];
     final accounts = (_data['accounts'] as List?) ?? const [];
+    // Real dividends received (contract C-D). Missing (older backend) or
+    // empty → the section is entirely absent, never an empty shell.
+    final payments = (_data['payments'] as List?) ?? const [];
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
@@ -263,6 +278,10 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
         if (schedule.isNotEmpty) ...[
           const SizedBox(height: 24),
           _buildSchedule(l10n, schedule),
+        ],
+        if (payments.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          _buildPayments(l10n, payments),
         ],
         const SizedBox(height: 24),
         _buildHistory(l10n, history),
@@ -422,6 +441,102 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  // ---------- payments actually received (contract C-D) ----------
+
+  /// The dollars that actually landed: positive dividend-tagged
+  /// transactions matched to this symbol's accounts, newest first from
+  /// the API. Date + account name (muted, truncating) + USD amount
+  /// right-aligned; capped at [_maxPayments] behind a "Show all (N)"
+  /// expander like the card's payer list.
+  Widget _buildPayments(AppLocalizations l10n, List<dynamic> payments) {
+    final rows = payments.whereType<Map>().map((m) {
+      final r = m.cast<String, dynamic>();
+      return (
+        date: _fmtDate(r['date']) ?? '—',
+        account: (r['account_name'] ?? '').toString(),
+        amountUsd: (r['amount_usd'] as num?)?.toDouble(),
+      );
+    }).toList();
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    final visible = _showAllPayments ? rows : rows.take(_maxPayments).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel(l10n.insDivPaymentsSection),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: context.tileSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: context.hairline),
+          ),
+          child: Column(
+            children: [
+              for (var i = 0; i < visible.length; i++) ...[
+                if (i > 0)
+                  Divider(
+                      height: 1,
+                      color: context.hairline.withValues(alpha: 0.5)),
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  child: Row(
+                    children: [
+                      Text(
+                        visible[i].date,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: context.textPrimary,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          visible[i].account,
+                          style:
+                              TextStyle(fontSize: 12, color: context.textMuted),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        visible[i].amountUsd == null
+                            ? '—'
+                            : '+${_money(visible[i].amountUsd!)}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: context.positive,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (rows.length > _maxPayments)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: () =>
+                  setState(() => _showAllPayments = !_showAllPayments),
+              child: Text(_showAllPayments
+                  ? l10n.insDivShowFewerPayments
+                  : l10n.insDivShowAllPayments(rows.length)),
+            ),
+          ),
       ],
     );
   }

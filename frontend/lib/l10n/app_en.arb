@@ -2628,5 +2628,103 @@
   "allocBandFiltersTable": "filters the holdings table",
   "@allocBandFiltersTable": {
     "description": "Suffix appended to a tappable allocation band's screen-reader label, announcing the tap action."
+  },
+  "insLoadError": "Couldn't load instrument details",
+  "@insLoadError": {
+    "description": "Inline error shown in the instrument detail sheet when the fetch fails; paired with a Retry button."
+  },
+  "insAsOf": "as of {date}",
+  "@insAsOf": {
+    "description": "Muted staleness caption next to the instrument sheet's big price when the latest stored close predates today.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "insRange1m": "1M",
+  "@insRange1m": {
+    "description": "Instrument price-chart range chip: one month."
+  },
+  "insRange3m": "3M",
+  "@insRange3m": {
+    "description": "Instrument price-chart range chip: three months."
+  },
+  "insRange1y": "1Y",
+  "@insRange1y": {
+    "description": "Instrument price-chart range chip: one year."
+  },
+  "insRangeMax": "Max",
+  "@insRangeMax": {
+    "description": "Instrument price-chart range chip: full available history."
+  },
+  "insNoPriceHistory": "No price history for this holding",
+  "@insNoPriceHistory": {
+    "description": "Graceful empty state replacing the price chart for symbols without stored closes (401k trusts, cash sleeves)."
+  },
+  "insStatMarketValue": "Market value",
+  "@insStatMarketValue": {
+    "description": "Instrument sheet stat-grid tile: current USD market value of the position."
+  },
+  "insStatQuantity": "Quantity",
+  "@insStatQuantity": {
+    "description": "Instrument sheet stat-grid tile: total shares/units held across accounts."
+  },
+  "insStatCostBasis": "Cost basis",
+  "@insStatCostBasis": {
+    "description": "Instrument sheet stat-grid tile: total USD cost basis; em-dash when unknown."
+  },
+  "insStatGain": "Gain",
+  "@insStatGain": {
+    "description": "Instrument sheet stat-grid tile: unrealized gain/loss in USD and percent."
+  },
+  "insStatWeight": "Portfolio weight",
+  "@insStatWeight": {
+    "description": "Instrument sheet stat-grid tile: the position's share of total portfolio value."
+  },
+  "insStatAssetClass": "Asset class",
+  "@insStatAssetClass": {
+    "description": "Instrument sheet stat-grid tile: the holding's canonical asset class, shown as a chip."
+  },
+  "insLotsSection": "Purchase lots",
+  "@insLotsSection": {
+    "description": "Instrument sheet section header listing the position's purchase lots."
+  },
+  "insLotQtyAtPrice": "{qty} shares @ {price}",
+  "@insLotQtyAtPrice": {
+    "description": "Purchase-lot row detail: quantity bought at the per-unit price (native currency).",
+    "placeholders": {
+      "qty": {
+        "type": "String"
+      },
+      "price": {
+        "type": "String"
+      }
+    }
+  },
+  "insLotsTotal": "Total",
+  "@insLotsTotal": {
+    "description": "Label on the purchase-lots totals row (summed quantity + summed USD cost)."
+  },
+  "insDividendsLink": "Dividend details",
+  "@insDividendsLink": {
+    "description": "TextButton in the instrument sheet that opens the per-symbol dividend detail sheet."
+  },
+  "insDivPaymentsSection": "Payments received",
+  "@insDivPaymentsSection": {
+    "description": "Dividend-sheet section header for real dividend payments matched from account transactions (contract C-D)."
+  },
+  "insDivShowAllPayments": "Show all ({count})",
+  "@insDivShowAllPayments": {
+    "description": "Expander under the dividend payments list when more than 12 payments exist.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "insDivShowFewerPayments": "Show fewer",
+  "@insDivShowFewerPayments": {
+    "description": "Collapses the dividend payments list back to the first 12 entries."
   }
 }
