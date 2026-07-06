@@ -16,6 +16,17 @@ import '../utils/theme_colors.dart';
 /// density), which would otherwise misalign the balance column per platform.
 const double _kTrailingSlotWidth = 48;
 
+/// Screen-reader label for an account-style row, built from the same values
+/// the row renders: display name (with a trailing "••1234" mask spoken as
+/// "ending in 1234" instead of bullet glyphs) followed by the row's
+/// native-currency balance. Mask regex mirrors [maskAwareNameText].
+String _accountRowSemanticsLabel(
+    AppLocalizations l, String name, String balanceText) {
+  final m = RegExp(r'^(.*\S)\s+••(\S{1,6})$').firstMatch(name);
+  if (m == null) return '$name, $balanceText';
+  return '${m.group(1)}, ${l.ovwEndingIn(m.group(2)!)}, $balanceText';
+}
+
 class AccountsListWidget extends StatefulWidget {
   final List<dynamic> accounts;
   final double conversionFactor;
@@ -925,13 +936,20 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
   /// dash marker in the left gutter is the only nesting affordance so the
   /// name and balance stay in the shared row columns.
   Widget _buildVaultRow(BuildContext context, dynamic acc) {
+    final l = AppLocalizations.of(context);
     final balance =
         ((acc['current_balance'] ?? 0.0) as num).toDouble().abs();
     final sourceCurrency = (acc['currency'] ?? targetCurrency).toString();
-    final name =
-        (acc['name'] ?? AppLocalizations.of(context).pfVault).toString();
+    final name = (acc['name'] ?? l.pfVault).toString();
 
-    return InkWell(
+    // One labelled button node per nested sub-account row — the row's
+    // Texts alone weren't announced as an activatable unit (leftover c).
+    return Semantics(
+      button: true,
+      label: _accountRowSemanticsLabel(
+          l, name, formatCurrencyAmount(balance, sourceCurrency)),
+      hint: l.ovwOpensAccountDetails,
+      child: InkWell(
       onTap: () {
         showAccountTransactionsPanel(
           context,
@@ -948,6 +966,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
           onAlertsChanged: onAlertsChanged,
         );
       },
+      child: ExcludeSemantics(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(0, 6, 8, 6),
         child: Row(
@@ -984,6 +1003,8 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
             const SizedBox(width: _kTrailingSlotWidth),
           ],
         ),
+      ),
+      ),
       ),
     );
   }
@@ -1149,7 +1170,9 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
     Widget menuButton = PopupMenuButton<String>(
       icon: Icon(Icons.more_vert, size: 18, color: context.textFaint),
       padding: EdgeInsets.zero,
-      tooltip: l.pfAccountActions,
+      // Name-carrying tooltip doubles as the semantic label, so a screen
+      // reader hears WHICH account's menu this is (leftover c).
+      tooltip: l.ovwAccountActionsFor(name),
       onSelected: (value) {
         if (value == 'rename') {
           _showRenameDialog(context, acc);
@@ -1180,41 +1203,50 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
           );
         }
       },
+      // Each item's icon+text Row is merged into ONE semantics node so the
+      // platform announces the action name, not an unlabeled icon + text
+      // fragment pair (leftover c).
       itemBuilder: (context) => [
         if (onRenameAccount != null)
           PopupMenuItem(
             value: 'rename',
-            child: Row(
-              children: [
-                Icon(Icons.drive_file_rename_outline,
-                    size: 18, color: context.textMuted),
-                const SizedBox(width: 8),
-                Text(l.pfRename),
-              ],
+            child: MergeSemantics(
+              child: Row(
+                children: [
+                  Icon(Icons.drive_file_rename_outline,
+                      size: 18, color: context.textMuted),
+                  const SizedBox(width: 8),
+                  Text(l.pfRename),
+                ],
+              ),
             ),
           ),
         if (isManualAsset && onRevalueAccount != null)
           PopupMenuItem(
             value: 'revalue',
-            child: Row(
-              children: [
-                Icon(Icons.price_change_outlined,
-                    size: 18, color: context.textMuted),
-                const SizedBox(width: 8),
-                Text(l.pfRevalue),
-              ],
+            child: MergeSemantics(
+              child: Row(
+                children: [
+                  Icon(Icons.price_change_outlined,
+                      size: 18, color: context.textMuted),
+                  const SizedBox(width: 8),
+                  Text(l.pfRevalue),
+                ],
+              ),
             ),
           ),
         PopupMenuItem(
           value: 'delete',
-          child: Row(
-            children: [
-              const Icon(Icons.delete_outline,
-                  size: 18, color: Colors.redAccent),
-              const SizedBox(width: 8),
-              Text(l.pfDelete,
-                  style: const TextStyle(color: Colors.redAccent)),
-            ],
+          child: MergeSemantics(
+            child: Row(
+              children: [
+                const Icon(Icons.delete_outline,
+                    size: 18, color: Colors.redAccent),
+                const SizedBox(width: 8),
+                Text(l.pfDelete,
+                    style: const TextStyle(color: Colors.redAccent)),
+              ],
+            ),
           ),
         ),
       ],
@@ -1232,7 +1264,14 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
       child: Center(child: menuButton),
     );
 
-    return InkWell(
+    // One labelled button node per account row (name + balance), with the
+    // rendered Texts excluded below so nothing is announced twice; the
+    // actions menu stays its own focusable node (leftover c).
+    return Semantics(
+      button: true,
+      label: _accountRowSemanticsLabel(l, name, nativeText),
+      hint: l.ovwOpensAccountDetails,
+      child: InkWell(
       onTap: () {
         showAccountTransactionsPanel(
           context,
@@ -1261,18 +1300,20 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        primaryName,
-                        secondaryMeta,
-                        const SizedBox(height: 8),
-                        balanceText,
-                        if (subBalance != null) ...[
-                          const SizedBox(height: 2),
-                          subBalance,
+                    child: ExcludeSemantics(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          primaryName,
+                          secondaryMeta,
+                          const SizedBox(height: 8),
+                          balanceText,
+                          if (subBalance != null) ...[
+                            const SizedBox(height: 2),
+                            subBalance,
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                   menuButton,
@@ -1289,27 +1330,32 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [primaryName, secondaryMeta],
+                  child: ExcludeSemantics(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [primaryName, secondaryMeta],
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    balanceText,
-                    if (subBalance != null) ...[
-                      const SizedBox(height: 2),
-                      subBalance,
+                ExcludeSemantics(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      balanceText,
+                      if (subBalance != null) ...[
+                        const SizedBox(height: 2),
+                        subBalance,
+                      ],
                     ],
-                  ],
+                  ),
                 ),
                 menuButton,
               ],
             ),
           );
         },
+      ),
       ),
     );
   }

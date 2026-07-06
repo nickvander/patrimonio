@@ -3004,6 +3004,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         'Crypto': BrandPalette.purple(brightness),
         'Fixed Income': BrandPalette.positive(brightness),
         'Other': BrandPalette.negative(brightness),
+        // C-G: holdings-less investment accounts (balance only). Muted
+        // neutral, NOT a category hue — the heatmap renders this band
+        // inert/non-tappable (keyed off asset_class == 'unclassified').
+        'Unclassified': BrandPalette.neutral(brightness),
       };
 
       setState(() {
@@ -3035,6 +3039,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // Canonical asset-class key (C2). Defensive: older backends
           // don't send it — null makes the heatmap fall back to emitting
           // the legacy bare category as the filter value.
+          // C-G rows (asset_class == 'unclassified': investment accounts
+          // with a balance but no holdings rows) pass through here like
+          // every other entry; the heatmap renders them as the inert
+          // "Unclassified (account balance)" band.
           final assetClassRaw = e['asset_class'];
           final assetClass =
               assetClassRaw is String && assetClassRaw.isNotEmpty

@@ -98,6 +98,12 @@ class _Band {
   /// Account count (type / institution dimensions) — semantics only.
   final int? accountsCount;
 
+  /// C-G "Unclassified (account balance)" band: an investment account with
+  /// a balance but no holdings rows. Rendered muted and inert — no filter
+  /// value (nothing to filter to), no hover/pointer affordance, a tooltip
+  /// explaining what it is.
+  final bool isUnclassified;
+
   _Band({
     required this.label,
     required this.value,
@@ -107,6 +113,7 @@ class _Band {
     this.filterValue = '',
     this.holdingsCount,
     this.accountsCount,
+    this.isUnclassified = false,
   });
 }
 
@@ -306,14 +313,26 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
             break;
           }
         }
+        // C-G: holdings-less investment accounts surface as an inert
+        // "Unclassified (account balance)" band — muted neutral (not a
+        // category hue), NO filter value (empty ⇒ not tappable: there
+        // are no holdings rows behind it), and its items are accounts
+        // rather than holdings.
+        final isUnclassified = classKey == 'unclassified';
         return _Band(
-          label: _displayCategory(cat, l),
+          label: isUnclassified
+              ? l.alloc2UnclassifiedBand
+              : _displayCategory(cat, l),
           value: items.fold<double>(0, (s, i) => s + i.value),
-          color: colors[cat]!,
+          color: isUnclassified ? context.neutralAccent : colors[cat]!,
           items: items,
           rawCategory: cat,
-          filterValue: classKey != null ? 'asset:$classKey' : cat,
-          holdingsCount: items.length,
+          filterValue: isUnclassified
+              ? ''
+              : (classKey != null ? 'asset:$classKey' : cat),
+          holdingsCount: isUnclassified ? null : items.length,
+          accountsCount: isUnclassified ? items.length : null,
+          isUnclassified: isUnclassified,
         );
       }).toList();
     }
@@ -505,6 +524,16 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
     final isActive = b.filterValue.isNotEmpty && widget.activeCategory == b.filterValue;
     final canTap = b.filterValue.isNotEmpty && widget.onCategorySelected != null;
 
+    // C-G: the Unclassified band is visibly muted — greyed dot and washed
+    // bar fill — so it reads as inert next to the tappable category bands.
+    // Label + % keep the sibling styling (the % simply inherits the
+    // neutral band color).
+    final dotColor =
+        b.isUnclassified ? b.color.withValues(alpha: 0.55) : b.color;
+    final barGradient = b.isUnclassified
+        ? [b.color.withValues(alpha: 0.45), b.color.withValues(alpha: 0.30)]
+        : [b.color, b.color.withValues(alpha: 0.7)];
+
     final inner = Padding(
       padding: EdgeInsets.only(
           bottom: MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0),
@@ -521,7 +550,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
                       width: 12,
                       height: 12,
                       decoration:
-                          BoxDecoration(color: b.color, shape: BoxShape.circle),
+                          BoxDecoration(color: dotColor, shape: BoxShape.circle),
                     ),
                     const SizedBox(width: 12),
                     Flexible(
@@ -594,9 +623,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
                 child: Container(
                   height: 12,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [b.color, b.color.withValues(alpha: 0.7)],
-                    ),
+                    gradient: LinearGradient(colors: barGradient),
                     borderRadius: BorderRadius.circular(6),
                   ),
                 ),
@@ -641,6 +668,25 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
         canTap ? '$baseLabel, ${l.allocBandFiltersTable}' : baseLabel;
 
     if (!canTap) {
+      // The Unclassified band is deliberately inert: no InkWell (so no
+      // hover brightening and the cursor stays the plain arrow), just a
+      // tooltip + semantics explaining why tapping wouldn't do anything.
+      if (b.isUnclassified) {
+        return Tooltip(
+          message: l.alloc2UnclassifiedTooltip,
+          waitDuration: const Duration(milliseconds: 400),
+          // The Semantics label below already carries the explanation —
+          // don't let Tooltip add a duplicate node.
+          excludeFromSemantics: true,
+          child: MouseRegion(
+            cursor: MouseCursor.defer,
+            child: Semantics(
+              label: '$baseLabel. ${l.alloc2UnclassifiedTooltip}',
+              child: inner,
+            ),
+          ),
+        );
+      }
       return Semantics(label: semanticLabel, child: inner);
     }
     return Semantics(

@@ -2866,5 +2866,35 @@
   "pfCsvLots": "Purchase lots (CSV)",
   "@pfCsvLots": {
     "description": "Export-menu item: download the purchase lots as CSV."
+  },
+  "ovwOpensAccountDetails": "Opens account details",
+  "@ovwOpensAccountDetails": {
+    "description": "Screen-reader hint on an Overview account row: activating it opens the account detail panel."
+  },
+  "ovwEndingIn": "ending in {digits}",
+  "@ovwEndingIn": {
+    "description": "Screen-reader fragment for a masked account number (••1234) in an Overview row label.",
+    "placeholders": {
+      "digits": {
+        "type": "String"
+      }
+    }
+  },
+  "ovwAccountActionsFor": "Account actions for {name}",
+  "@ovwAccountActionsFor": {
+    "description": "Tooltip/screen-reader label of the per-account overflow menu on the Overview accounts list.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "alloc2UnclassifiedBand": "Unclassified (account balance)",
+  "@alloc2UnclassifiedBand": {
+    "description": "Label of the muted, non-tappable allocation band for investment accounts that carry a balance but no holdings rows (contract C-G)."
+  },
+  "alloc2UnclassifiedTooltip": "Account balance without holdings detail — open the account to see it",
+  "@alloc2UnclassifiedTooltip": {
+    "description": "Tooltip + screen-reader explanation on the Unclassified allocation band."
   }
 }

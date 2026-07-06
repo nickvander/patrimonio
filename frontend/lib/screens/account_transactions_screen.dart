@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import '../utils/theme_colors.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -136,13 +137,45 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   bool get _isManualAccount =>
       (widget.account['integration_type'] ?? '').toString() == 'manual';
 
-  Future<void> _fetchHoldings() async {
+  /// [syncBalance] is set on holding-mutation paths (add / delete): it
+  /// re-derives the header balance from the fresh holdings and clears a
+  /// stale dividend estimate when the last payer was removed. The plain
+  /// initState load must NOT sync — a holdings-less manual account (a
+  /// CETES-style balance-only position) would have its hand-set balance
+  /// zeroed just by opening the panel.
+  Future<void> _fetchHoldings({bool syncBalance = false}) async {
     if (!_isInvestment) return;
     try {
       final h = await _apiService.getAccountHoldings(_accountId);
-      if (mounted) setState(() => _holdings = h);
-      if (h.isNotEmpty) _fetchDividends();
+      if (!mounted) return;
+      setState(() => _holdings = h);
+      if (syncBalance) _syncBalanceFromHoldings(h);
+      if (h.isNotEmpty) {
+        _fetchDividends();
+      } else if (_dividends.isNotEmpty) {
+        // Deleting the last payer used to skip the dividends refresh,
+        // leaving a stale map (and a stale "Est. annual income" line)
+        // behind. No holdings → no dividend income, no fetch needed.
+        setState(() => _dividends = const {});
+      }
     } catch (_) {/* best-effort */}
+  }
+
+  /// Mirror the backend's `recompute_holding_balance` (manual investment
+  /// account balance := Σ holding values, native currency) so the panel
+  /// header and — via [AccountTransactionsScreen.onBalanceUpdate] — the
+  /// dashboard's accounts list reflect a holding add/remove immediately,
+  /// not on the next full app reload.
+  void _syncBalanceFromHoldings(List<dynamic> holdings) {
+    if (!_isManualAccount) return;
+    double total = 0;
+    for (final h in holdings) {
+      total += (h['value'] is num)
+          ? (h['value'] as num).toDouble()
+          : double.tryParse('${h['value'] ?? ''}') ?? 0;
+    }
+    setState(() => _currentBalance = total);
+    widget.onBalanceUpdate?.call(_accountId, total);
   }
 
   Future<void> _fetchDividends() async {
@@ -162,7 +195,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       builder: (_) => AddHoldingDialog(
         accountId: _accountId,
         onAdded: () {
-          _fetchHoldings();
+          _fetchHoldings(syncBalance: true);
           _fetchBalanceHistory();
         },
       ),
@@ -174,6 +207,9 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     try {
       final h = await _apiService.refreshHoldings(_accountId);
       if (mounted) setState(() => _holdings = h);
+      // Refreshed prices change the holdings' values — keep the header
+      // balance in step with the backend's recompute.
+      if (mounted) _syncBalanceFromHoldings(h);
       _fetchDividends();
       _fetchBalanceHistory();
     } catch (_) {
@@ -1004,7 +1040,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     if (confirmed != true) return; // cancel/dismiss → nothing is called
     try {
       await _apiService.deleteHolding(_accountId, (h['id'] ?? '').toString());
-      _fetchHoldings();
+      _fetchHoldings(syncBalance: true);
       _fetchBalanceHistory();
     } catch (_) {/* best-effort */}
   }
@@ -1087,8 +1123,22 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       // list line up with the account name/balance above (was 16 → an 8px
       // step-in that read as misaligned).
       padding: const EdgeInsets.fromLTRB(24, 8, 16, 16),
-      child: Column(
-        children: [
+      // The builder param is deliberately NOT named `context`: the
+      // TransactionsTab callbacks below capture the State's own context
+      // (guarded by this State's `mounted`), and shadowing it with the
+      // LayoutBuilder's would break that pairing.
+      child: LayoutBuilder(builder: (_, constraints) {
+        // Everything that sits ABOVE the transactions list (CLABE card,
+        // balance chart, holdings). These used to be fixed Column children:
+        // on an investment account with a screenful of holdings they
+        // consumed the whole panel, squeezing the Expanded transactions
+        // list to ~zero height — its rows became unreachable, and a mouse
+        // wheel anywhere over this content found no scrollable to act on
+        // (only the inner list's drag-scrollbar did anything). Capping the
+        // block and giving it its own scroll view guarantees the list
+        // keeps real height AND makes wheel/trackpad scrolling work over
+        // the holdings/chart region.
+        final preList = <Widget>[
           if ((widget.account['clabe'] ?? '').toString().isNotEmpty) ...[
             ClabeInfoCard(
               clabe: widget.account['clabe'].toString(),
@@ -1107,7 +1157,24 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             _buildHoldings('USD'),
             const SizedBox(height: 12),
           ],
-          Expanded(
+        ];
+        // Leave the transactions list at least ~300px whenever the panel
+        // is tall enough; on very short panels fall back to a 35/65 split
+        // (clamp bounds stay ordered because 0.35·h ≤ h always).
+        final bodyHeight = constraints.maxHeight;
+        final preListCap = bodyHeight.isFinite
+            ? (bodyHeight - 300.0).clamp(bodyHeight * 0.35, bodyHeight)
+            : double.infinity;
+        return Column(
+          children: [
+            if (preList.isNotEmpty)
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: preListCap),
+                child: SingleChildScrollView(
+                  child: Column(children: preList),
+                ),
+              ),
+            Expanded(
             child: TransactionsTab(
               transactions: _transactions!,
               accounts: widget.allAccounts,
@@ -1195,11 +1262,30 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                 await _refetchTransactionsInPlace();
               },
             ),
-          ),
-        ],
-      ),
+            ),
+          ],
+        );
+      }),
     );
   }
+}
+
+/// Desktop-friendly scroll behavior for the account panel ONLY: on top of
+/// wheel/trackpad scrolling (which scrollables get for free), allow
+/// click-drag scrolling with a mouse/trackpad — the panel is the one place
+/// the app stacks several scroll regions in a tight column, so every
+/// pointer gesture should move content. Scoped to the panel via the
+/// [ScrollConfiguration] below; the rest of the app keeps the default
+/// behavior.
+class _PanelScrollBehavior extends MaterialScrollBehavior {
+  const _PanelScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        ...super.dragDevices,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+      };
 }
 
 /// Slide-from-right side panel that shows transactions for one account.
@@ -1253,16 +1339,19 @@ Future<void> showAccountTransactionsPanel(
                 ),
               ],
             ),
-            child: AccountTransactionsScreen(
-              account: account,
-              allAccounts: allAccounts,
-              conversionFactor: conversionFactor,
-              currencyFormat: currencyFormat,
-              targetCurrency: targetCurrency,
-              usdMxnRate: usdMxnRate,
-              onBalanceUpdate: onBalanceUpdate,
-              onRenameAccount: onRenameAccount,
-              onAlertsChanged: onAlertsChanged,
+            child: ScrollConfiguration(
+              behavior: const _PanelScrollBehavior(),
+              child: AccountTransactionsScreen(
+                account: account,
+                allAccounts: allAccounts,
+                conversionFactor: conversionFactor,
+                currencyFormat: currencyFormat,
+                targetCurrency: targetCurrency,
+                usdMxnRate: usdMxnRate,
+                onBalanceUpdate: onBalanceUpdate,
+                onRenameAccount: onRenameAccount,
+                onAlertsChanged: onAlertsChanged,
+              ),
             ),
           ),
         ),

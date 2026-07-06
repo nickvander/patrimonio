@@ -2423,5 +2423,35 @@
   },
   "pfCsvExportTooltip": "Exportar CSV",
   "pfCsvHoldings": "Posiciones (CSV)",
-  "pfCsvLots": "Lotes de compra (CSV)"
+  "pfCsvLots": "Lotes de compra (CSV)",
+  "ovwOpensAccountDetails": "Abre los detalles de la cuenta",
+  "@ovwOpensAccountDetails": {
+    "description": "Screen-reader hint on an Overview account row: activating it opens the account detail panel."
+  },
+  "ovwEndingIn": "terminada en {digits}",
+  "@ovwEndingIn": {
+    "description": "Screen-reader fragment for a masked account number (••1234) in an Overview row label.",
+    "placeholders": {
+      "digits": {
+        "type": "String"
+      }
+    }
+  },
+  "ovwAccountActionsFor": "Acciones de la cuenta {name}",
+  "@ovwAccountActionsFor": {
+    "description": "Tooltip/screen-reader label of the per-account overflow menu on the Overview accounts list.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "alloc2UnclassifiedBand": "Sin clasificar (saldo de la cuenta)",
+  "@alloc2UnclassifiedBand": {
+    "description": "Label of the muted, non-tappable allocation band for investment accounts that carry a balance but no holdings rows (contract C-G)."
+  },
+  "alloc2UnclassifiedTooltip": "Saldo de la cuenta sin detalle de posiciones — abre la cuenta para verlo",
+  "@alloc2UnclassifiedTooltip": {
+    "description": "Tooltip + screen-reader explanation on the Unclassified allocation band."
+  }
 }
