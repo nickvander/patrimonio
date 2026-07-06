@@ -6,7 +6,9 @@ import '../services/preferences.dart';
 import '../utils/currency.dart';
 import '../utils/mask_aware_name.dart';
 import '../utils/theme_colors.dart';
+import '../utils/url_opener.dart';
 import 'dividend_detail_sheet.dart';
+import 'instrument_detail_sheet.dart';
 import 'skeleton.dart';
 
 /// True when holding [h] passes the allocation-band filter [filter].
@@ -124,6 +126,12 @@ class PortfolioCard extends StatefulWidget {
   /// seeded to it so a single holding can be deep-linked from the
   /// palette without user typing.
   final String? searchOverride;
+  /// Used by the holdings slice for the instrument detail sheet (contract
+  /// C-F) and the CSV export URLs (contract C-E). Optional so the existing
+  /// call sites keep compiling; when absent the card constructs its own —
+  /// ApiService instances are stateless (the HTTP client and response
+  /// cache are static and shared across every instance).
+  final ApiService? apiService;
 
   const PortfolioCard({
     super.key,
@@ -136,6 +144,7 @@ class PortfolioCard extends StatefulWidget {
     this.categoryFilter,
     this.onClearCategoryFilter,
     this.searchOverride,
+    this.apiService,
   });
 
   @override
@@ -143,8 +152,11 @@ class PortfolioCard extends StatefulWidget {
 }
 
 class _PortfolioCardState extends State<PortfolioCard> {
-  int? _sortColumnIndex = 3; // Default sort by Value
+  int? _sortColumnIndex = _kColIndexValue; // Default sort by Value
   bool _isAscending = false;
+  /// See [PortfolioCard.apiService] — falls back to a private instance so
+  /// call sites that don't pass one still get the sheet + CSV exports.
+  late final ApiService _apiService = widget.apiService ?? ApiService();
   late List<dynamic> _allHoldings;
   late List<dynamic> _holdings;
   String _searchQuery = '';
@@ -169,7 +181,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
     _groupByAccount = Preferences.getGroupByAccount();
     _allHoldings = List.from(widget.portfolioData['holdings'] ?? []);
     _holdings = List.from(_allHoldings);
-    _sort(3, false);
+    _sort(_kColIndexValue, false);
     if (widget.searchOverride != null && widget.searchOverride!.isNotEmpty) {
       _searchQuery = widget.searchOverride!;
       _searchController.text = widget.searchOverride!;
@@ -192,7 +204,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
         widget.categoryFilter != oldWidget.categoryFilter) {
       _allHoldings = List.from(widget.portfolioData['holdings'] ?? []);
       _applySearch();
-      _sort(_sortColumnIndex ?? 3, _isAscending);
+      _sort(_sortColumnIndex ?? _kColIndexValue, _isAscending);
     }
     // A new override (different from the last one we applied) seeds the
     // search field so the deep-link surfaces the row immediately.
@@ -203,7 +215,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
       _searchController.text = widget.searchOverride!;
       _appliedOverride = widget.searchOverride;
       _applySearch();
-      _sort(_sortColumnIndex ?? 3, _isAscending);
+      _sort(_sortColumnIndex ?? _kColIndexValue, _isAscending);
     }
   }
 
@@ -263,19 +275,26 @@ class _PortfolioCardState extends State<PortfolioCard> {
             valA = (a['price'] as num?)?.toDouble() ?? 0.0;
             valB = (b['price'] as num?)?.toDouble() ?? 0.0;
             break;
-          case 3:
+          case _kColIndexDay:
+            // Day change (contract C-B). Null for cash sleeves and opaque
+            // symbols with no stored closes — those sort last in either
+            // direction so the movers lead.
+            valA = unknownLast(a['day_change_pct'] as num?);
+            valB = unknownLast(b['day_change_pct'] as num?);
+            break;
+          case _kColIndexValue:
             valA = (a['value'] as num?)?.toDouble() ?? 0.0;
             valB = (b['value'] as num?)?.toDouble() ?? 0.0;
             break;
-          case 4:
+          case 5:
             valA = unknownLast(a['cost_basis'] as num?);
             valB = unknownLast(b['cost_basis'] as num?);
             break;
-          case 5:
+          case 6:
             valA = unknownLast(a['gain_loss'] as num?);
             valB = unknownLast(b['gain_loss'] as num?);
             break;
-          case 6:
+          case 7:
             valA = unknownLast(a['gain_loss_pct'] as num?);
             valB = unknownLast(b['gain_loss_pct'] as num?);
             break;
@@ -412,46 +431,20 @@ class _PortfolioCardState extends State<PortfolioCard> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color:
-                          (isPositive ? context.positive : context.negative)
-                              .withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isPositive
-                              ? Icons.arrow_upward
-                              : Icons.arrow_downward,
-                          color: isPositive ? context.positive : context.negative,
-                          size: 14,
-                        ),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(
+                  // All-time pill + (when the backend reports it, contract
+                  // C-B) a "today" pill with identical geometry. A Wrap so
+                  // a 400px-wide card stacks the two instead of overflowing.
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _heroChangePill(
+                        positive: isPositive,
+                        text:
                             '${isPositive ? '+' : ''}${widget.currencyFormat.format(totalGainLoss.abs())} (${totalGainLossPct.toStringAsFixed(2)}%)',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color:
-                                  isPositive ? context.positive : context.negative,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures()
-                              ],
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                      ?_buildTodayPill(l),
+                    ],
                   ),
                   if (showCoverage) ...[
                     const SizedBox(height: 6),
@@ -485,6 +478,95 @@ class _PortfolioCardState extends State<PortfolioCard> {
           ],
         ),
       ),
+    );
+  }
+
+  /// Change pill shared by the hero's all-time and "today" figures —
+  /// one construction so the two are geometrically identical (12% alpha
+  /// fill, 8px radius, 13px w700, tabular figures).
+  Widget _heroChangePill({required bool positive, required String text}) {
+    final color = positive ? context.positive : context.negative;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            positive ? Icons.arrow_upward : Icons.arrow_downward,
+            color: color,
+            size: 14,
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: color,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// "Today" pill: the portfolio's change since the last stored close
+  /// (contract C-B top-level fields). Null when the backend doesn't send
+  /// the fields (older server, or nothing is covered) — the pill simply
+  /// doesn't render. When coverage is partial or the closes are stale, a
+  /// tooltip discloses the as-of date and covered share honestly.
+  Widget? _buildTodayPill(AppLocalizations l) {
+    final dayUsd =
+        (widget.portfolioData['day_change_usd'] as num?)?.toDouble();
+    if (dayUsd == null) return null;
+    final dayPct =
+        (widget.portfolioData['day_change_pct'] as num?)?.toDouble();
+    final coverage =
+        (widget.portfolioData['day_change_coverage_pct'] as num?)?.toDouble();
+    final asOfRaw =
+        (widget.portfolioData['day_change_as_of'] ?? '').toString();
+    final asOf = DateTime.tryParse(asOfRaw);
+
+    final positive = dayUsd >= 0;
+    final sign = positive ? '+' : '';
+    final converted = dayUsd * widget.conversionFactor;
+    final amount = '$sign${widget.currencyFormat.format(converted.abs())}';
+    final change = dayPct == null
+        ? amount
+        : '$amount ($sign${dayPct.abs().toStringAsFixed(2)}%)';
+
+    final pill = _heroChangePill(
+      positive: positive,
+      text: l.pfDayPillToday(change),
+    );
+
+    // Qualify the figure when it doesn't cover the whole portfolio (401k
+    // trust funds without stored closes) or the latest close pre-dates
+    // today (weekend / after a refresh gap).
+    final today = DateTime.now();
+    final isStale = asOf != null &&
+        DateTime(asOf.year, asOf.month, asOf.day)
+            .isBefore(DateTime(today.year, today.month, today.day));
+    final partial = coverage != null && coverage < 99.5;
+    if (!isStale && !partial) return pill;
+    final dateLabel =
+        asOf != null ? DateFormat.yMMMd().format(asOf) : asOfRaw;
+    return Tooltip(
+      message: l.pfDayPillTooltip(
+        dateLabel,
+        (coverage ?? 100).toStringAsFixed(0),
+      ),
+      waitDuration: const Duration(milliseconds: 400),
+      child: pill,
     );
   }
 
@@ -1226,46 +1308,63 @@ class _PortfolioCardState extends State<PortfolioCard> {
             ),
             child: Column(
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            maskAwareNameText(
-                              acct,
-                              TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: context.textPrimary,
-                              ),
-                            ),
-                            if (inst.isNotEmpty)
-                              Text(
-                                l.pfInstPositions(inst, list.length),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: context.textSubtle,
+                // One header node per account section so screen readers can
+                // jump between accounts and hear the position count +
+                // subtotal in one announcement (round-1 leftover b).
+                Semantics(
+                  header: true,
+                  label: [
+                    acct,
+                    if (inst.isNotEmpty) inst,
+                    l.pfDaySemPositionsSubtotal(
+                      list.length,
+                      widget.currencyFormat.format(subtotal),
+                    ),
+                  ].join(', '),
+                  excludeSemantics: true,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              maskAwareNameText(
+                                acct,
+                                TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: context.textPrimary,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
                               ),
-                          ],
+                              if (inst.isNotEmpty)
+                                Text(
+                                  l.pfInstPositions(inst, list.length),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: context.textSubtle,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        widget.currencyFormat.format(subtotal),
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: context.textPrimary,
-                          fontFeatures: [const FontFeature.tabularFigures()],
+                        const SizedBox(width: 12),
+                        Text(
+                          widget.currencyFormat.format(subtotal),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: context.textPrimary,
+                            fontFeatures: [
+                              const FontFeature.tabularFigures()
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 Divider(color: context.hairline, height: 1),
@@ -1297,7 +1396,18 @@ class _PortfolioCardState extends State<PortfolioCard> {
         ? (rawName.isNotEmpty ? rawName : '—')
         : (rawSym.isEmpty ? (rawName.isNotEmpty ? rawName : '?') : rawSym);
 
-    return Padding(
+    // One merged, labelled node per row — "NVDA, 29.5 shares, $5,085.80,
+    // +64.06% return" (round-1 leftover b).
+    return MergeSemantics(
+      child: Semantics(
+        label: l.pfDaySemHoldingRow(
+          displaySymbol,
+          _formatQuantity(qty),
+          widget.currencyFormat.format(value),
+          pct == null ? '—' : '${isGain ? '+' : ''}${pct.toStringAsFixed(2)}%',
+        ),
+        excludeSemantics: true,
+        child: Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       child: Row(
         children: [
@@ -1373,6 +1483,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
           ),
         ],
       ),
+        ),
+      ),
     );
   }
 
@@ -1423,7 +1535,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 onChanged: (v) => setState(() {
                   _searchQuery = v;
                   _applySearch();
-                  _sort(_sortColumnIndex ?? 3, _isAscending);
+                  _sort(_sortColumnIndex ?? _kColIndexValue, _isAscending);
                 }),
                 decoration: InputDecoration(
                   hintText: l.pfSearchHint,
@@ -1482,6 +1594,32 @@ class _PortfolioCardState extends State<PortfolioCard> {
                   const TextStyle(fontSize: 12)),
             ),
           ),
+          // CSV export (contract C-E): browser-native downloads through the
+          // same-origin cookie-auth seam the transactions/tax exports use.
+          // Hidden when there's nothing to export.
+          if (_allHoldings.isNotEmpty) ...[
+            const SizedBox(width: 4),
+            PopupMenuButton<String>(
+              tooltip: l.pfCsvExportTooltip,
+              icon: Icon(
+                Icons.download_outlined,
+                size: 20,
+                color: context.textMuted,
+              ),
+              onSelected: (path) =>
+                  openUrlSameTab('${_apiService.baseUrl}$path'),
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: '/dashboard/holdings/export',
+                  child: Text(l.pfCsvHoldings),
+                ),
+                PopupMenuItem(
+                  value: '/dashboard/holdings/lots/export',
+                  child: Text(l.pfCsvLots),
+                ),
+              ],
+            ),
+          ],
             ],
           ),
         ],
@@ -1497,7 +1635,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
       _searchQuery = '';
       _searchController.clear();
       _applySearch();
-      _sort(_sortColumnIndex ?? 3, _isAscending);
+      _sort(_sortColumnIndex ?? _kColIndexValue, _isAscending);
     });
     widget.onClearCategoryFilter?.call();
   }
@@ -1601,7 +1739,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
         final Widget body;
         if (available < _kMobileBreakpoint) {
-          // Mobile: a 7-column table can't fit a phone without a sideways
+          // Mobile: an 8-column table can't fit a phone without a sideways
           // scroll the thumb can't reach. Collapse each row to the three
           // facts that matter at a glance — name, value, change — and let a
           // tap reveal shares/price/cost/gain (details-on-demand).
@@ -1640,6 +1778,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
                         format: widget.currencyFormat,
                         targetCurrency: widget.targetCurrency,
                         usdMxnRate: widget.usdMxnRate,
+                        apiService: _apiService,
+                        conversionFactor: widget.conversionFactor,
                       ),
                     )),
                 ?expander,
@@ -1649,11 +1789,11 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
           // Horizontal scroll only when the viewport is narrower than the
           // table's natural width (but still above the mobile breakpoint).
+          // Always-visible 6px thumb + 16px edge fade on the clipped side
+          // so cut-off columns visibly read as "more content" instead of
+          // silently clipping (round-1 leftover f).
           body = available < _kTableNaturalWidth
-              ? SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: table,
-                )
+              ? _EdgeFadedHScroll(child: table)
               : table;
         }
 
@@ -1720,10 +1860,11 @@ class _PortfolioCardState extends State<PortfolioCard> {
       asset: label(l.pfColAsset, 0, numeric: false),
       shares: label(l.pfColShares, 1),
       price: label(l.pfColPrice, 2),
-      value: label(l.pfColValue, 3),
-      costBasis: label(l.pfColCostBasis, 4),
-      gain: label(l.pfColGain, 5),
-      returnPct: label(l.pfColReturn, 6),
+      day: label(l.pfDayColHeader, _kColIndexDay),
+      value: label(l.pfColValue, _kColIndexValue),
+      costBasis: label(l.pfColCostBasis, 5),
+      gain: label(l.pfColGain, 6),
+      returnPct: label(l.pfColReturn, 7),
     );
   }
 
@@ -1750,20 +1891,26 @@ String _formatQuantity(double q) {
 
 // Layout constants for the virtualized holdings table. Header and body
 // share the same column widths so they line up visually as the user
-// scrolls. The natural width sits around 1080; below that the table
+// scrolls. The natural width sits around 1188; below that the table
 // scrolls horizontally instead of squeezing columns.
 const double _kRowHeight = 60.0;
-const double _kTableNaturalWidth = 1080.0;
-// Below this viewport width the wide 7-column table collapses to the
+const double _kTableNaturalWidth = 1188.0;
+// Below this viewport width the wide 8-column table collapses to the
 // tap-to-expand mobile row (name + value + change).
 const double _kMobileBreakpoint = 560.0;
 const double _kHMargin = 20.0;
 const double _kColShares = 100.0;
 const double _kColPrice = 124.0;
+const double _kColDay = 108.0;
 const double _kColValue = 152.0;
 const double _kColCost = 132.0;
 const double _kColGain = 140.0;
 const double _kColReturn = 108.0;
+// Sort indices for the columns whose position shifted when the Day column
+// landed between Price (2) and Value. Named so the default-sort call sites
+// and the comparator can't drift apart again.
+const int _kColIndexDay = 3;
+const int _kColIndexValue = 4;
 
 /// Shared row layout used by the header and every body row. Asset takes
 /// the remaining space; numeric columns are fixed width so values line
@@ -1772,6 +1919,7 @@ Widget _tableRow({
   required Widget asset,
   required Widget shares,
   required Widget price,
+  required Widget day,
   required Widget value,
   required Widget costBasis,
   required Widget gain,
@@ -1784,6 +1932,7 @@ Widget _tableRow({
         Expanded(child: asset),
         SizedBox(width: _kColShares, child: shares),
         SizedBox(width: _kColPrice, child: price),
+        SizedBox(width: _kColDay, child: day),
         SizedBox(width: _kColValue, child: value),
         SizedBox(width: _kColCost, child: costBasis),
         SizedBox(width: _kColGain, child: gain),
@@ -1793,6 +1942,110 @@ Widget _tableRow({
   );
 }
 
+/// Horizontal scroller for the too-narrow-for-the-table case: an
+/// always-visible 6px scrollbar thumb under the table plus a 16px alpha
+/// fade on whichever edge still has clipped content, so a 1024×768 user
+/// sees "there's more" instead of a silently cut-off Gain/Return column.
+/// Owns its ScrollController (the Scrollbar and the scroll view must share
+/// one that isn't the page's PrimaryScrollController).
+class _EdgeFadedHScroll extends StatefulWidget {
+  final Widget child;
+
+  const _EdgeFadedHScroll({required this.child});
+
+  @override
+  State<_EdgeFadedHScroll> createState() => _EdgeFadedHScrollState();
+}
+
+class _EdgeFadedHScrollState extends State<_EdgeFadedHScroll> {
+  final ScrollController _controller = ScrollController();
+  // Content starts scrolled to the leading edge, so before the first
+  // metrics arrive only the trailing side fades — this widget is only
+  // built when the table is wider than the viewport.
+  bool _atStart = true;
+  bool _atEnd = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onScroll);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_controller.hasClients) _apply(_controller.position);
+  }
+
+  void _apply(ScrollMetrics m) {
+    final atStart = m.pixels <= 1.0;
+    final atEnd = m.pixels >= m.maxScrollExtent - 1.0;
+    if (atStart == _atStart && atEnd == _atEnd) return;
+    // Metrics notifications can arrive during layout, where setState is
+    // illegal — defer to the frame's end (one frame of fade lag, invisible).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _atStart = atStart;
+        _atEnd = atEnd;
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const opaque = Color(0xFFFFFFFF);
+    const transparent = Color(0x00FFFFFF);
+    return NotificationListener<ScrollMetricsNotification>(
+      // Fires on layout-driven metric changes (resize, rows expanding)
+      // that never tick the controller listener.
+      onNotification: (n) {
+        _apply(n.metrics);
+        return false;
+      },
+      child: Scrollbar(
+        controller: _controller,
+        thumbVisibility: true,
+        thickness: 6,
+        child: ShaderMask(
+          // dstIn: the child keeps only the alpha of this gradient — a
+          // 16px fade-out on the side(s) with more content, theme-agnostic
+          // because it never paints a color of its own.
+          shaderCallback: (rect) {
+            final fade =
+                rect.width <= 0 ? 0.0 : (16.0 / rect.width).clamp(0.0, 0.45);
+            return LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [
+                _atStart ? opaque : transparent,
+                opaque,
+                opaque,
+                _atEnd ? opaque : transparent,
+              ],
+              stops: [0.0, fade, 1.0 - fade, 1.0],
+            ).createShader(rect);
+          },
+          blendMode: BlendMode.dstIn,
+          child: SingleChildScrollView(
+            controller: _controller,
+            scrollDirection: Axis.horizontal,
+            // Bottom lane for the always-visible thumb so it doesn't sit
+            // on the last row's figures.
+            padding: const EdgeInsets.only(bottom: 10),
+            child: widget.child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// A single holding row used inside the virtualized ListView. Stateful
 /// so that hover-over highlight doesn't have to rebuild the whole table.
 class _HoldingRowTile extends StatefulWidget {
@@ -1800,12 +2053,19 @@ class _HoldingRowTile extends StatefulWidget {
   final NumberFormat format;
   final String targetCurrency;
   final double usdMxnRate;
+  /// For the instrument detail sheet the row opens on tap (contract C-F).
+  final ApiService apiService;
+  /// USD → display-currency factor, forwarded to the sheet so its figures
+  /// follow the page's currency toggle.
+  final double conversionFactor;
 
   const _HoldingRowTile({
     required this.holding,
     required this.format,
     required this.targetCurrency,
     required this.usdMxnRate,
+    required this.apiService,
+    required this.conversionFactor,
   });
 
   @override
@@ -2001,6 +2261,64 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
       ],
     );
 
+    // Day change (contract C-B): % since the last stored close, with the
+    // absolute move as a muted sub-line. The backend sends the absolute in
+    // USD (value_usd × native pct), so it converts from USD — not from the
+    // holding's native currency like the other cells. Null (cash sleeve,
+    // opaque symbol, stale closes, older backend) renders a muted em dash.
+    final dayPct = (h['day_change_pct'] as num?)?.toDouble();
+    final dayUsd = (h['day_change_usd'] as num?)?.toDouble();
+    final dayConverted = dayUsd == null
+        ? null
+        : convertCurrency(
+            dayUsd,
+            from: 'USD',
+            to: widget.targetCurrency,
+            usdMxnRate: widget.usdMxnRate,
+          );
+    final dayPositive = (dayPct ?? dayUsd ?? 0) >= 0;
+    final daySign = dayPositive ? '+' : '';
+    final dayUnavailableMsg =
+        AppLocalizations.of(context).pfDayUnavailable;
+    final dayCell = Align(
+      alignment: Alignment.centerRight,
+      child: dayPct == null && dayConverted == null
+          ? Tooltip(
+              message: dayUnavailableMsg,
+              waitDuration: const Duration(milliseconds: 600),
+              child: Text(
+                '—',
+                style: TextStyle(fontSize: 14, color: context.textMuted),
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (dayPct != null)
+                  Text(
+                    '$daySign${dayPct.abs().toStringAsFixed(2)}%',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color:
+                          dayPositive ? context.positive : context.negative,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                if (dayConverted != null)
+                  Text(
+                    '$daySign${widget.format.format(dayConverted.abs())}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.textMuted,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+              ],
+            ),
+    );
+
     final costBasisCell = Align(
       alignment: Alignment.centerRight,
       child: costBasis == null
@@ -2078,26 +2396,30 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
             ),
     );
 
-    final lots = (h['lots'] as List?) ?? const [];
-    final hasLots = lots.isNotEmpty;
-    // Even without per-lot data, an investment holding that reports a flat
-    // cost basis can open the drill-down — it shows the flat basis plus a
-    // note that the institution didn't report acquisition dates. Cash-like
-    // rows (no lots, no basis) stay non-interactive.
-    final canDrillDown = hasLots || costBasisSource != null;
+    // Row tap opens the per-instrument sheet (contract C-F) for anything
+    // with a symbol — opaque security_ids included, since the endpoint
+    // degrades gracefully for them (stats + accounts, no chart). Only
+    // symbol-less rows stay non-interactive. The per-lot dialog is no
+    // longer the row-tap target; it stays reachable from the mobile
+    // expanded row's Lots button.
+    final canOpenSheet = rawSymbol.isNotEmpty;
 
     return MouseRegion(
-      cursor: canDrillDown ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      cursor:
+          canOpenSheet ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: InkWell(
-        // Tap-to-expand: fires when there's a lot breakdown OR a flat cost
-        // basis to show. Non-investment holdings with neither show no
-        // clickable affordance. InkWell (over GestureDetector) makes the
-        // row keyboard-focusable and Enter/Space-activatable for
-        // screen-reader users.
-        onTap: canDrillDown
-            ? () => showLotBreakdown(context, widget.holding)
+        // InkWell (over GestureDetector) makes the row keyboard-focusable
+        // and Enter/Space-activatable for screen-reader users.
+        onTap: canOpenSheet
+            ? () => showInstrumentSheet(
+                  context,
+                  apiService: widget.apiService,
+                  symbol: rawSymbol,
+                  conversionFactor: widget.conversionFactor,
+                  currencyFormat: widget.format,
+                )
             : null,
         child: Container(
           color:
@@ -2106,6 +2428,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
             asset: asset,
             shares: shares,
             price: priceCell,
+            day: dayCell,
             value: valueCell,
             costBasis: costBasisCell,
             gain: gainCell,
@@ -2845,28 +3168,35 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(Icons.payments_outlined,
-                    color: context.tealAccent, size: 18),
-                const SizedBox(width: 8),
-                Text(
-                  l.divCardTitle,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: context.textPrimary,
-                  ),
+            // MergeSemantics + header so screen readers announce one
+            // "Dividend income" heading for the card (round-1 leftover a).
+            MergeSemantics(
+              child: Semantics(
+                header: true,
+                child: Row(
+                  children: [
+                    Icon(Icons.payments_outlined,
+                        color: context.tealAccent, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      l.divCardTitle,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: context.textPrimary,
+                      ),
+                    ),
+                    if (fxStale) ...[
+                      const SizedBox(width: 8),
+                      Tooltip(
+                        message: l.divFxStaleHint,
+                        child: Icon(Icons.error_outline,
+                            size: 15, color: context.warning),
+                      ),
+                    ],
+                  ],
                 ),
-                if (fxStale) ...[
-                  const SizedBox(width: 8),
-                  Tooltip(
-                    message: l.divFxStaleHint,
-                    child: Icon(Icons.error_outline,
-                        size: 15, color: context.warning),
-                  ),
-                ],
-              ],
+              ),
             ),
             const SizedBox(height: 16),
             Row(
@@ -2893,13 +3223,16 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
             if (payers.isNotEmpty) ...[
               const SizedBox(height: 8),
               Divider(height: 24, color: context.hairline),
-              Text(
-                l.divTopPayers,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.4,
-                  color: context.textSubtle,
+              Semantics(
+                header: true,
+                child: Text(
+                  l.divTopPayers,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
+                    color: context.textSubtle,
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -2920,13 +3253,16 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
             if (upcoming.isNotEmpty) ...[
               const SizedBox(height: 8),
               Divider(height: 24, color: context.hairline),
-              Text(
-                l.divUpcomingExDates,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.4,
-                  color: context.textSubtle,
+              Semantics(
+                header: true,
+                child: Text(
+                  l.divUpcomingExDates,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
+                    color: context.textSubtle,
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -2942,30 +3278,39 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
   }
 
   Widget _summaryTile(String label, String value, Color valueColor) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.tint(0.04),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label,
-              style: TextStyle(color: context.textMuted, fontSize: 12)),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: valueColor,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+    // One merged, labelled node per tile ("Projected annual, $7,900") —
+    // without it screen readers read the label and figure as unrelated
+    // fragments (round-1 leftover a).
+    return MergeSemantics(
+      child: Semantics(
+        label: '$label, $value',
+        excludeSemantics: true,
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: context.tint(0.04),
+            borderRadius: BorderRadius.circular(12),
           ),
-        ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label,
+                  style: TextStyle(color: context.textMuted, fontSize: 12)),
+              const SizedBox(height: 6),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: valueColor,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2997,50 +3342,66 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
     final perYear = (c['per_year'] as num?)?.toInt() ?? 0;
 
     // InkWell (over GestureDetector) keeps the row keyboard-focusable and
-    // Enter/Space-activatable, matching the holdings-row pattern.
-    return InkWell(
-      onTap: symbol.isEmpty ? null : () => _openDividendDetail(symbol),
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    // Enter/Space-activatable, matching the holdings-row pattern. The
+    // explicit button label merges the fragments into one announcement
+    // ("SCHD, $1,200 per year, opens dividend details") while the InkWell
+    // keeps contributing the tap action (round-1 leftover a).
+    return MergeSemantics(
+      child: Semantics(
+        button: symbol.isNotEmpty,
+        label: l.pfDaySemPayerRow(
+          symbol.isNotEmpty ? symbol : '—',
+          _money(incomeUsd),
+        ),
+        child: InkWell(
+          onTap: symbol.isEmpty ? null : () => _openDividendDetail(symbol),
+          borderRadius: BorderRadius.circular(8),
+          child: ExcludeSemantics(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
                 children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          symbol.isNotEmpty ? symbol : '—',
+                          style: TextStyle(
+                            color: context.textPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          yieldPct == null
+                              ? l.divPaymentsPerYear(perYear)
+                              : '${yieldPct.toStringAsFixed(2)}% · ${l.divPaymentsPerYear(perYear)}',
+                          style: TextStyle(
+                              color: context.textFaint, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
                   Text(
-                    symbol.isNotEmpty ? symbol : '—',
+                    _money(incomeUsd),
                     style: TextStyle(
                       color: context.textPrimary,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.bold,
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    yieldPct == null
-                        ? l.divPaymentsPerYear(perYear)
-                        : '${yieldPct.toStringAsFixed(2)}% · ${l.divPaymentsPerYear(perYear)}',
-                    style: TextStyle(color: context.textFaint, fontSize: 11),
-                  ),
+                  if (symbol.isNotEmpty) ...[
+                    const SizedBox(width: 4),
+                    Icon(Icons.chevron_right,
+                        size: 16, color: context.textFaint),
+                  ],
                 ],
               ),
             ),
-            Text(
-              _money(incomeUsd),
-              style: TextStyle(
-                color: context.textPrimary,
-                fontWeight: FontWeight.bold,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-            if (symbol.isNotEmpty) ...[
-              const SizedBox(width: 4),
-              Icon(Icons.chevron_right, size: 16, color: context.textFaint),
-            ],
-          ],
+          ),
         ),
       ),
     );
@@ -3057,8 +3418,19 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
     final annualUsd = (e['annual_income_usd'] as num?)?.toDouble() ?? 0.0;
     final perYear = perYearBySymbol[symbol] ?? 0;
     final expectedUsd = perYear > 0 ? annualUsd / perYear : null;
+    final expectedLabel = expectedUsd == null ? '—' : _money(expectedUsd);
 
-    return Padding(
+    // One merged, labelled node per row — "SCHD, estimated ex-date
+    // Sep 12, 2026, expected $105.60" (round-1 leftover a).
+    return MergeSemantics(
+      child: Semantics(
+        label: AppLocalizations.of(context).pfDaySemExDateRow(
+          symbol.isNotEmpty ? symbol : '—',
+          dateLabel,
+          expectedLabel,
+        ),
+        excludeSemantics: true,
+        child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         children: [
@@ -3084,7 +3456,7 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
           ),
           const SizedBox(width: 12),
           Text(
-            expectedUsd == null ? '—' : _money(expectedUsd),
+            expectedLabel,
             style: TextStyle(
               color: context.textPrimary,
               fontSize: 12,
@@ -3093,6 +3465,8 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
             ),
           ),
         ],
+      ),
+        ),
       ),
     );
   }

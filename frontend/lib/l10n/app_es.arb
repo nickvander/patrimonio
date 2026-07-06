@@ -2346,5 +2346,82 @@
   "rgxTaxableCaptionPrefix": "Gravable",
   "rgxTaxableCaptionSuffix": "de {total} — el resto está en cuentas con ventajas fiscales",
   "rgxExportCsvTooltip": "Exportar CSV",
-  "rgxPerfPortfolioValue": "Valor del portafolio"
+  "rgxPerfPortfolioValue": "Valor del portafolio",
+  "pfDayPillToday": "{change} hoy",
+  "@pfDayPillToday": {
+    "placeholders": {
+      "change": {
+        "type": "String"
+      }
+    }
+  },
+  "pfDayPillTooltip": "Al cierre del {date} · cubre el {coverage}% del valor del portafolio",
+  "@pfDayPillTooltip": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "coverage": {
+        "type": "String"
+      }
+    }
+  },
+  "pfDayColHeader": "Día",
+  "pfDayUnavailable": "Sin precio de cierre reciente para esta posición",
+  "pfDaySemPayerRow": "{symbol}, {income} al año, abre el detalle de dividendos",
+  "@pfDaySemPayerRow": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      },
+      "income": {
+        "type": "String"
+      }
+    }
+  },
+  "pfDaySemExDateRow": "{symbol}, fecha ex-dividendo estimada {date}, pago esperado {amount}",
+  "@pfDaySemExDateRow": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      },
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "pfDaySemPositionsSubtotal": "{count, plural, =1{1 posición} other{{count} posiciones}}, subtotal {amount}",
+  "@pfDaySemPositionsSubtotal": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "pfDaySemHoldingRow": "{symbol}, {qty} acciones, {value}, rendimiento de {ret}",
+  "@pfDaySemHoldingRow": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      },
+      "qty": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      },
+      "ret": {
+        "type": "String"
+      }
+    }
+  },
+  "pfCsvExportTooltip": "Exportar CSV",
+  "pfCsvHoldings": "Posiciones (CSV)",
+  "pfCsvLots": "Lotes de compra (CSV)"
 }

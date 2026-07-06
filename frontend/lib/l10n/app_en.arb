@@ -2768,5 +2768,103 @@
   "rgxPerfPortfolioValue": "Portfolio value",
   "@rgxPerfPortfolioValue": {
     "description": "Caption over the performance card's headline dollar figure (the current portfolio value)."
+  },
+  "pfDayPillToday": "{change} today",
+  "@pfDayPillToday": {
+    "description": "Hero 'Today' pill next to the all-time gain pill. {change} is the pre-formatted day change, e.g. '+$4,321 (+0.29%)'.",
+    "placeholders": {
+      "change": {
+        "type": "String"
+      }
+    }
+  },
+  "pfDayPillTooltip": "As of {date} close · covers {coverage}% of portfolio value",
+  "@pfDayPillTooltip": {
+    "description": "Tooltip on the Today pill when day-change coverage is partial or the latest close pre-dates today.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "coverage": {
+        "type": "String"
+      }
+    }
+  },
+  "pfDayColHeader": "Day",
+  "@pfDayColHeader": {
+    "description": "Holdings-table column header for the change since the last stored close (contract C-B)."
+  },
+  "pfDayUnavailable": "No recent closing price for this holding",
+  "@pfDayUnavailable": {
+    "description": "Tooltip on the em dash in the Day column (cash sleeves, opaque symbols, or stale stored closes)."
+  },
+  "pfDaySemPayerRow": "{symbol}, {income} per year, opens dividend details",
+  "@pfDaySemPayerRow": {
+    "description": "Screen-reader label for a dividend-card payer row (WS4 a11y).",
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      },
+      "income": {
+        "type": "String"
+      }
+    }
+  },
+  "pfDaySemExDateRow": "{symbol}, estimated ex-date {date}, expected {amount}",
+  "@pfDaySemExDateRow": {
+    "description": "Screen-reader label for an upcoming ex-date row on the dividend card (WS4 a11y).",
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      },
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "pfDaySemPositionsSubtotal": "{count, plural, =1{1 position} other{{count} positions}}, subtotal {amount}",
+  "@pfDaySemPositionsSubtotal": {
+    "description": "Tail of the screen-reader label for a grouped-by-account section header; preceded by the account and institution names (WS4 a11y).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "pfDaySemHoldingRow": "{symbol}, {qty} shares, {value}, {ret} return",
+  "@pfDaySemHoldingRow": {
+    "description": "Screen-reader label for a compact holding row in the grouped-by-account view. {ret} is the pre-formatted return, e.g. '+12.34%', or an em dash (WS4 a11y).",
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      },
+      "qty": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      },
+      "ret": {
+        "type": "String"
+      }
+    }
+  },
+  "pfCsvExportTooltip": "Export CSV",
+  "@pfCsvExportTooltip": {
+    "description": "Tooltip on the holdings-toolbar download menu button (contract C-E)."
+  },
+  "pfCsvHoldings": "Holdings (CSV)",
+  "@pfCsvHoldings": {
+    "description": "Export-menu item: download the holdings table as CSV."
+  },
+  "pfCsvLots": "Purchase lots (CSV)",
+  "@pfCsvLots": {
+    "description": "Export-menu item: download the purchase lots as CSV."
   }
 }
