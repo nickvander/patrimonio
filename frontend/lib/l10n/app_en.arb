@@ -3293,5 +3293,141 @@
   "pfDivDetailRefresh": "Refresh dividend data",
   "@pfDivDetailRefresh": {
     "description": "Tooltip on the dividend detail sheet's refresh button — forces a live re-fetch past the server-side cache (C4-D)."
+  },
+  "rebCardTitle": "Target allocation",
+  "@rebCardTitle": {
+    "description": "WS2r4: header of the rebalancing card on the Portfolio tab."
+  },
+  "rebEditTargets": "Edit targets",
+  "@rebEditTargets": {
+    "description": "WS2r4: header button opening the targets editor sheet."
+  },
+  "rebSetTargetsCta": "Set target percentages per asset class to see drift and rebalancing hints",
+  "@rebSetTargetsCta": {
+    "description": "WS2r4: one-line setup CTA body shown when no targets are stored yet."
+  },
+  "rebSetTargetsButton": "Set targets",
+  "@rebSetTargetsButton": {
+    "description": "WS2r4: button on the setup CTA that opens the targets editor."
+  },
+  "rebRepairBanner": "Saved targets need attention — they don't add up to 100%.",
+  "@rebRepairBanner": {
+    "description": "WS2r4: warning banner when the stored allocation_targets setting violates the C4-A contract."
+  },
+  "rebRepairButton": "Fix targets",
+  "@rebRepairButton": {
+    "description": "WS2r4: button on the repair state that opens the targets editor."
+  },
+  "rebOnTargetChip": "on target",
+  "@rebOnTargetChip": {
+    "description": "WS2r4: delta chip text when a class is within 2 pp of its target."
+  },
+  "rebDeltaChip": "{delta} pp",
+  "@rebDeltaChip": {
+    "description": "WS2r4: delta chip text, e.g. '+8.3 pp' — pp = percentage points.",
+    "placeholders": {
+      "delta": {
+        "type": "String"
+      }
+    }
+  },
+  "rebRowSemantics": "{label}: actual {actual}%, target {target}%, {delta}",
+  "@rebRowSemantics": {
+    "description": "WS2r4 a11y: one-sentence label for a drift row.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "actual": {
+        "type": "String"
+      },
+      "target": {
+        "type": "String"
+      },
+      "delta": {
+        "type": "String"
+      }
+    }
+  },
+  "rebUnclassifiedFootnote": "Unclassified: {pct}% — classify these holdings to include them in targets",
+  "@rebUnclassifiedFootnote": {
+    "description": "WS2r4: muted footnote when unclassified balances are part of the denominator (decision #5).",
+    "placeholders": {
+      "pct": {
+        "type": "String"
+      }
+    }
+  },
+  "rebGuidanceTitle": "To reach targets",
+  "@rebGuidanceTitle": {
+    "description": "WS2r4: section header above the move-guidance lines (sentence case, matching the dividend card's section headers)."
+  },
+  "rebMoveLine": "Move {amount} from {from} to {to}",
+  "@rebMoveLine": {
+    "description": "WS2r4: one rebalancing suggestion line.",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "rebMoreAdjustments": "…and smaller adjustments",
+  "@rebMoreAdjustments": {
+    "description": "WS2r4: trailing line when move suggestions were truncated (3-line cap / $500 floor)."
+  },
+  "rebNoMoves": "Within 2 pp of every target — no moves needed.",
+  "@rebNoMoves": {
+    "description": "WS2r4: positive-toned line when every class drift is inside the ±2 pp band."
+  },
+  "rebBelowFloor": "Remaining drift is under the action floor — no moves suggested.",
+  "@rebBelowFloor": {
+    "description": "WS2r4: muted line when drift exists but every suggested move would be under the $500 floor."
+  },
+  "rebTaxCaption": "Guidance only — consider taxes and lot selection before selling.",
+  "@rebTaxCaption": {
+    "description": "WS2r4: mandatory tax caveat under the guidance block."
+  },
+  "rebEditorTitle": "Edit target allocation",
+  "@rebEditorTitle": {
+    "description": "WS2r4: header of the targets editor bottom sheet."
+  },
+  "rebEditorTotal": "Total: {total} / 100",
+  "@rebEditorTotal": {
+    "description": "WS2r4: live sum meter in the editor footer; valid only at exactly 100.",
+    "placeholders": {
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "rebDistributeRemainder": "Distribute remainder",
+  "@rebDistributeRemainder": {
+    "description": "WS2r4: helper button that dumps the residual to 100 into the largest field."
+  },
+  "rebRemoveTargets": "Remove targets",
+  "@rebRemoveTargets": {
+    "description": "WS2r4: destructive action clearing the stored targets (returns the card to its setup CTA)."
+  },
+  "rebRemoveConfirmTitle": "Remove targets?",
+  "@rebRemoveConfirmTitle": {
+    "description": "WS2r4: confirm-dialog title for removing targets."
+  },
+  "rebRemoveConfirmBody": "The card returns to its setup state. Your holdings are not affected.",
+  "@rebRemoveConfirmBody": {
+    "description": "WS2r4: confirm-dialog body for removing targets."
+  },
+  "rebSaveError": "Couldn't save targets — try again.",
+  "@rebSaveError": {
+    "description": "WS2r4: snackbar when the optimistic targets save fails and is reverted."
+  },
+  "rebRemoveError": "Couldn't remove targets — try again.",
+  "@rebRemoveError": {
+    "description": "WS2r4: snackbar when clearing the targets fails and is reverted."
   }
 }

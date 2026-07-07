@@ -18,6 +18,7 @@ import '../widgets/monthly_cash_flow_card.dart';
 import '../widgets/budgets_card.dart';
 import '../widgets/spending_by_category_card.dart';
 import '../widgets/realized_gains_card.dart';
+import '../widgets/rebalancing_card.dart';
 import '../widgets/performance_card.dart';
 import '../widgets/upcoming_bills_card.dart';
 import '../widgets/debt_payoff_card.dart';
@@ -4323,6 +4324,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     });
                   }
                 },
+              ),
+            ),
+            const SizedBox(height: 24),
+            // 3b · Rebalancing (WS2r4) — drift vs the owner's target
+            // percentages: the actionable conclusion OF the allocation view
+            // above. The setup-CTA / repair states live inside the widget,
+            // so the mount is unconditional whenever allocation data exists.
+            RepaintBoundary(
+              child: RebalancingCard(
+                apiService: _apiService,
+                allocationData: _allocationData!,
+                conversionFactor: conversionFactor,
+                currencyFormat: currencyFormat,
               ),
             ),
             const SizedBox(height: 24),
