@@ -15,19 +15,72 @@ import 'skeleton.dart';
 typedef InstrumentDetailFetcher = Future<Map<String, dynamic>> Function(
     String symbol, {String range});
 
+/// Test seam for the round-3 asset-class editor: matches the shape of
+/// [ApiService.setAssetClassOverride] (`assetClass == null` clears the
+/// override) so widget tests can drive the optimistic-update and
+/// error-revert paths without the network. Production callers never set it.
+typedef AssetClassMutator = Future<Map<String, dynamic>> Function(
+    String symbol, String? assetClass);
+
+// ---------- I3 pure helpers (time-proportional x-axis) ----------
+// Exposed for unit tests; no widget state involved.
+
+/// Collapses same-day duplicate closes — the LAST close for a calendar day
+/// wins — and normalizes each date to a UTC midnight so day-offset math is
+/// exact (local-midnight arithmetic can slip a day across DST changes).
+/// Output is sorted ascending regardless of input order.
+@visibleForTesting
+List<({DateTime date, double close})> dedupeDailyCloses(
+    List<({DateTime date, double close})> points) {
+  final byDay = <DateTime, double>{};
+  for (final p in points) {
+    byDay[DateTime.utc(p.date.year, p.date.month, p.date.day)] = p.close;
+  }
+  final days = byDay.keys.toList()..sort();
+  return [for (final d in days) (date: d, close: byDay[d]!)];
+}
+
+/// Maps (already-deduped) points to day-offset spots from the first date:
+/// `x = days since points.first.date`. This is what makes the x-axis
+/// time-proportional (decision #7) — a 3-month hole in the data occupies
+/// 3 months of x-range instead of one sample step.
+@visibleForTesting
+List<FlSpot> dayOffsetSpots(List<({DateTime date, double close})> points) {
+  if (points.isEmpty) return const [];
+  final x0 = points.first.date;
+  return [
+    for (final p in points)
+      FlSpot(p.date.difference(x0).inDays.toDouble(), p.close),
+  ];
+}
+
+/// Bottom-axis tick interval in days: ~4 labels across the span, never
+/// below one day (so a 2-point / 2-day series still gets valid ticks).
+@visibleForTesting
+double dayOffsetTickInterval(int spanDays) =>
+    (spanDays / 3).clamp(1, double.infinity).toDouble();
+
 /// Opens the per-holding instrument detail sheet (contract C-F — the
 /// holdings-table row tap imports and calls exactly this). Same modal
 /// chrome as the dividend detail sheet: scroll-controlled, ~90% max
 /// height, surface-colored, rounded top, dismissed by drag / Esc /
 /// tapping the barrier. Self-fetching — callers pass context only.
-Future<void> showInstrumentSheet(
+///
+/// Contract C3-C: resolves `true` iff the user changed the asset
+/// classification inside the sheet (set OR cleared an override), else
+/// `false` — callers refetch holdings/allocation on `true`. The flag is
+/// carried by a closure rather than pop-with-value so drag-dismiss, Esc
+/// and barrier taps (which pop `null`) still report an earlier change.
+/// Existing await-and-ignore call sites keep compiling.
+Future<bool> showInstrumentSheet(
   BuildContext context, {
   required ApiService apiService,
   required String symbol,
   required double conversionFactor,
   required NumberFormat currencyFormat,
-}) {
-  return showModalBottomSheet<void>(
+}) async {
+  var classificationChanged = false;
+  await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Theme.of(context).colorScheme.surface,
@@ -39,8 +92,10 @@ Future<void> showInstrumentSheet(
       symbol: symbol,
       conversionFactor: conversionFactor,
       currencyFormat: currencyFormat,
+      onClassificationChanged: () => classificationChanged = true,
     ),
   );
+  return classificationChanged;
 }
 
 /// Per-instrument drill-down, opened by tapping a holdings-table row.
@@ -69,6 +124,15 @@ class InstrumentDetailSheet extends StatefulWidget {
   @visibleForTesting
   final InstrumentDetailFetcher? fetchOverride;
 
+  /// Widget tests inject a canned asset-class mutator here; null in
+  /// production (which uses [ApiService.setAssetClassOverride]).
+  @visibleForTesting
+  final AssetClassMutator? mutateOverride;
+
+  /// Fired once per successful override set/clear — [showInstrumentSheet]
+  /// folds it into its `Future<bool>` result (contract C3-C).
+  final VoidCallback? onClassificationChanged;
+
   const InstrumentDetailSheet({
     super.key,
     required this.apiService,
@@ -76,6 +140,8 @@ class InstrumentDetailSheet extends StatefulWidget {
     required this.conversionFactor,
     required this.currencyFormat,
     this.fetchOverride,
+    this.mutateOverride,
+    this.onClassificationChanged,
   });
 
   @override
@@ -86,6 +152,22 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
   static const double _kChartHeight = 180.0;
   static const List<String> _kRanges = ['1m', '3m', '1y', 'max'];
 
+  /// Canonical asset-class keys, selector order — mirrors the backend's
+  /// `classify_asset` domain and the allocation bands.
+  static const List<String> _kAssetClassKeys = [
+    'equity',
+    'bonds',
+    'cash',
+    'crypto',
+    'real_estate',
+    'commodities',
+    'other',
+  ];
+
+  /// Selector result for the "Automatic" (clear-override) row — deliberately
+  /// not one of the seven canonical keys.
+  static const String _kAutomaticSentinel = '__automatic__';
+
   Map<String, dynamic> _data = {};
   bool _loading = true;
   String? _error;
@@ -95,6 +177,10 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
   /// of collapsing back to the skeleton so chips swap data without any
   /// layout shift.
   bool _rangeLoading = false;
+
+  /// True while an asset-class override PUT (plus its follow-up refetch) is
+  /// in flight; gates the tile so taps can't stack mutations.
+  bool _classMutationInFlight = false;
 
   @override
   void initState() {
@@ -525,7 +611,10 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
       final close = (p['close'] as num?)?.toDouble();
       if (date != null && close != null) points.add((date: date, close: close));
     }
-    return points;
+    // Deduped here (not in _priceChart) so the "< 2 points → empty state"
+    // guard counts unique DAYS: two same-day closes must not reach the
+    // chart as a single spot (minX == maxX would blow up fl_chart).
+    return dedupeDailyCloses(points);
   }
 
   Widget _buildChartSection(AppLocalizations l10n) {
@@ -587,10 +676,12 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
         ? context.positive
         : context.negative;
 
-    final spots = <FlSpot>[
-      for (var i = 0; i < points.length; i++)
-        FlSpot(i.toDouble(), points[i].close),
-    ];
+    // Time-proportional x-axis (I3, decision #7): x = days since the first
+    // sample, so gaps in the stored closes occupy their real width. Points
+    // arrive deduped from _pricePoints (one per UTC-midnight day).
+    final x0 = points.first.date;
+    final spots = dayOffsetSpots(points);
+    final maxDays = spots.last.x;
 
     var rawMin = points.first.close;
     var rawMax = points.first.close;
@@ -610,15 +701,14 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
     final spanDays = points.last.date.difference(points.first.date).inDays;
     final dateFmt =
         spanDays > 130 ? DateFormat('MMM yy') : DateFormat('MMM d');
-    final xInterval =
-        ((points.length - 1) / 3).clamp(1, double.infinity).toDouble();
+    final xInterval = dayOffsetTickInterval(spanDays);
 
     final compactAxis = NumberFormat.compactSimpleCurrency(name: currency);
 
     return LineChart(
       LineChartData(
         minX: 0,
-        maxX: (spots.length - 1).toDouble(),
+        maxX: maxDays,
         minY: minY,
         maxY: maxY,
         gridData: FlGridData(
@@ -641,14 +731,17 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
               reservedSize: 22,
               interval: xInterval,
               getTitlesWidget: (value, meta) {
-                final index = value.round();
-                if (index < 0 || index >= points.length) {
+                // Tick positions are day offsets now, not sample indexes —
+                // the label is the calendar day they land on, whether or
+                // not a sample exists there (that's the point: gaps show).
+                final day = value.round();
+                if (day < 0 || day > maxDays) {
                   return const SizedBox.shrink();
                 }
                 return Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
-                    dateFmt.format(points[index].date),
+                    dateFmt.format(x0.add(Duration(days: day))),
                     style: TextStyle(color: context.textSubtle, fontSize: 10),
                   ),
                 );
@@ -704,10 +797,12 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
             tooltipRoundedRadius: 12,
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {
-                final idx = spot.x.round().clamp(0, points.length - 1);
-                final p = points[idx];
+                // Spots are day-offset-keyed, so the date comes from the
+                // spot's own x (x0 + offset) — a points[index] lookup would
+                // be wrong the moment the series has a gap.
+                final date = x0.add(Duration(days: spot.x.round()));
                 return LineTooltipItem(
-                  '${DateFormat.yMMMd().format(p.date)}\n',
+                  '${DateFormat.yMMMd().format(date)}\n',
                   TextStyle(
                     color: context.tooltipOnSurfaceMuted,
                     fontSize: 11,
@@ -715,7 +810,7 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
                   ),
                   children: [
                     TextSpan(
-                      text: _nativeAmount(p.close),
+                      text: _nativeAmount(spot.y),
                       style: TextStyle(
                         color: context.tooltipOnSurface,
                         fontSize: 13,
@@ -898,55 +993,275 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
   }
 
   /// Same tile chrome as [_statTile] but the value renders as a chip, so
-  /// the asset class visually echoes the allocation bands.
+  /// the asset class visually echoes the allocation bands. Round 3 (I2):
+  /// the whole tile is tappable — a quiet 14px pencil after the chip is
+  /// the affordance — and opens the override selector; when the class is a
+  /// user override the label row carries a tiny "manual" caption. Two-line
+  /// height is unchanged so the stat grid stays aligned.
   Widget _assetClassTile(AppLocalizations l10n, String assetClass) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: context.tileSurface,
+    final isOverride =
+        (_data['asset_class_source'] ?? '').toString() == 'override';
+    return Tooltip(
+      message: l10n.ins3EditAssetClass,
+      waitDuration: const Duration(milliseconds: 500),
+      child: InkWell(
+        onTap: _classMutationInFlight ? null : _openAssetClassSelector,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.hairline),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            l10n.insStatAssetClass,
-            style: TextStyle(fontSize: 11, color: context.textSubtle),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: context.tileSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: context.hairline),
           ),
-          const SizedBox(height: 4),
-          if (assetClass.isEmpty)
-            Text(
-              '—',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: context.textPrimary,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      l10n.insStatAssetClass,
+                      style: TextStyle(fontSize: 11, color: context.textSubtle),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (isOverride)
+                    Text(
+                      l10n.ins3ManualCaption,
+                      style:
+                          TextStyle(fontSize: 10, color: context.textSubtle),
+                    ),
+                ],
               ),
-            )
-          else
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: context.tealAccent.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(6),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  if (assetClass.isEmpty)
+                    Text(
+                      '—',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: context.textPrimary,
+                      ),
+                    )
+                  else
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: context.tealAccent.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          _assetClassLabel(l10n, assetClass),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: context.tealAccent,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(width: 6),
+                  Icon(Icons.edit_outlined,
+                      size: 14, color: context.textSubtle),
+                ],
               ),
-              child: Text(
-                _assetClassLabel(l10n, assetClass),
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: context.tealAccent,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
+  }
+
+  // ---------- asset-class override editor (I2, contracts C3-A/C3-C) ----------
+
+  /// Bottom-sheet selector: radio-style rows for the seven canonical
+  /// classes, with an `Automatic — <heuristic>` revert row on top while an
+  /// override is active. Pops the picked class key (or the automatic
+  /// sentinel); the checked row pops null — selecting the selection is a
+  /// no-op, like a radio group.
+  Future<void> _openAssetClassSelector() async {
+    final l10n = AppLocalizations.of(context);
+    final currentClass = (_data['asset_class'] ?? '').toString();
+    final isOverride =
+        (_data['asset_class_source'] ?? '').toString() == 'override';
+    // C3-A guarantees only asset_class + asset_class_source; if the backend
+    // additionally volunteers the heuristic class while overridden, the
+    // Automatic row names what it reverts to.
+    final heuristicClass =
+        (_data['asset_class_heuristic'] ?? '').toString();
+
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  child: Text(
+                    l10n.insStatAssetClass.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.8,
+                      color: sheetCtx.textSubtle,
+                    ),
+                  ),
+                ),
+                if (isOverride)
+                  _assetClassRow(
+                    sheetCtx,
+                    label: heuristicClass.isEmpty
+                        ? l10n.ins3Automatic
+                        : l10n.ins3AutomaticWithClass(
+                            _assetClassLabel(l10n, heuristicClass)),
+                    selected: false,
+                    value: _kAutomaticSentinel,
+                  ),
+                for (final key in _kAssetClassKeys)
+                  _assetClassRow(
+                    sheetCtx,
+                    label: _assetClassLabel(l10n, key),
+                    selected: key == currentClass,
+                    value: key,
+                  ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (picked == null || !mounted) return;
+    await _applyAssetClass(picked == _kAutomaticSentinel ? null : picked);
+  }
+
+  /// One 44px-min selector row: label, check on the active row, explicit
+  /// button semantics (same rationale as the range chips).
+  Widget _assetClassRow(
+    BuildContext sheetCtx, {
+    required String label,
+    required bool selected,
+    required String value,
+  }) {
+    final accent = sheetCtx.tealAccent;
+    void pick() => Navigator.of(sheetCtx).pop(selected ? null : value);
+    return Semantics(
+      container: true,
+      button: true,
+      selected: selected,
+      label: label,
+      onTap: pick,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: pick,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          alignment: Alignment.centerLeft,
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: selected ? accent : sheetCtx.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (selected) Icon(Icons.check, size: 18, color: accent),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Optimistic set/clear of the override (`newClass == null` clears).
+  /// Chip flips immediately; success reconciles with the server's
+  /// authoritative response, reports the change up (C3-C) and refetches the
+  /// payload; failure reverts the chip and shows a snackbar.
+  Future<void> _applyAssetClass(String? newClass) async {
+    if (_classMutationInFlight) return;
+    final l10n = AppLocalizations.of(context);
+    final prevClass = (_data['asset_class'] ?? '').toString();
+    final prevSource = (_data['asset_class_source'] ?? '').toString();
+    final heuristicClass =
+        (_data['asset_class_heuristic'] ?? '').toString();
+
+    // Optimistic flip. Clearing without knowing the heuristic keeps the
+    // class text but drops the "manual" caption; the PUT response below
+    // (which names the heuristic result) reconciles the label.
+    setState(() {
+      _classMutationInFlight = true;
+      _data = {
+        ..._data,
+        'asset_class': newClass ??
+            (heuristicClass.isEmpty ? prevClass : heuristicClass),
+        'asset_class_source': newClass == null ? 'heuristic' : 'override',
+      };
+    });
+
+    final mutate =
+        widget.mutateOverride ?? widget.apiService.setAssetClassOverride;
+    try {
+      final res = await mutate(widget.symbol, newClass);
+      if (!mounted) return;
+      // Server truth for the chip — matters on clear, where the response
+      // carries the heuristic class the optimistic update couldn't know.
+      setState(() {
+        _data = {
+          ..._data,
+          if (res['asset_class'] != null)
+            'asset_class': res['asset_class'].toString(),
+          if (res['asset_class_source'] != null)
+            'asset_class_source': res['asset_class_source'].toString(),
+        };
+      });
+      widget.onClassificationChanged?.call(); // C3-C
+      // Full refetch so server-derived stats stay coherent. A failed
+      // refetch keeps the reconciled data — the change DID commit, so this
+      // must never revert the chip or nuke the sheet into the error state.
+      try {
+        final data = await _fetch(_range);
+        if (!mounted) return;
+        setState(() => _data = data);
+      } catch (_) {/* keep the reconciled payload */}
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _data = {
+          ..._data,
+          'asset_class': prevClass,
+          'asset_class_source': prevSource,
+        };
+      });
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: Text(l10n.ins3UpdateError)),
+      );
+    } finally {
+      if (mounted) setState(() => _classMutationInFlight = false);
+    }
   }
 
   // ---------- purchase lots ----------

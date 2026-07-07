@@ -2453,5 +2453,30 @@
   "alloc2UnclassifiedTooltip": "Saldo de la cuenta sin detalle de posiciones — abre la cuenta para verlo",
   "@alloc2UnclassifiedTooltip": {
     "description": "Tooltip + screen-reader explanation on the Unclassified allocation band."
+  },
+  "ins3EditAssetClass": "Editar clase de activo",
+  "@ins3EditAssetClass": {
+    "description": "Tooltip / screen-reader hint on the instrument sheet's tappable asset-class tile (round-3 override editor)."
+  },
+  "ins3Automatic": "Automática",
+  "@ins3Automatic": {
+    "description": "Selector row that clears a manual asset-class override, reverting to the heuristic classification (plain variant, used when the heuristic class is unknown)."
+  },
+  "ins3AutomaticWithClass": "Automática — {className}",
+  "@ins3AutomaticWithClass": {
+    "description": "Selector row that clears a manual asset-class override, naming the heuristic class it reverts to.",
+    "placeholders": {
+      "className": {
+        "type": "String"
+      }
+    }
+  },
+  "ins3ManualCaption": "manual",
+  "@ins3ManualCaption": {
+    "description": "Tiny caption on the asset-class stat tile when the shown class is a user override rather than the heuristic."
+  },
+  "ins3UpdateError": "No se pudo actualizar la clase de activo",
+  "@ins3UpdateError": {
+    "description": "Snackbar error when saving or clearing an asset-class override fails; the chip reverts to its previous value."
   }
 }

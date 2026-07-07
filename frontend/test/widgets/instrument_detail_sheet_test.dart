@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
@@ -107,6 +110,8 @@ void main() {
   InstrumentDetailSheet sheet(
     Map<String, dynamic> payload, {
     List<String>? rangeLog,
+    AssetClassMutator? mutate,
+    VoidCallback? onClassificationChanged,
   }) {
     return InstrumentDetailSheet(
       apiService: ApiService(),
@@ -117,6 +122,8 @@ void main() {
         rangeLog?.add(range);
         return Map<String, dynamic>.of(payload);
       },
+      mutateOverride: mutate,
+      onClassificationChanged: onClassificationChanged,
     );
   }
 
@@ -192,6 +199,225 @@ void main() {
       await tester.tap(find.text('3M'));
       await tester.pumpAndSettle();
       expect(ranges, ['1y', '3m']);
+    });
+  });
+
+  group('asset-class override editor (I2 / C3-C)', () {
+    Future<void> openSelector(WidgetTester tester) async {
+      await tester.tap(find.byIcon(Icons.edit_outlined));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+        'heuristic class: tile has pencil, selector lists 7 radio rows with '
+        'the current class checked and NO Automatic row', (tester) async {
+      useTallSurface(tester);
+      await tester.pumpWidget(_host(sheet(_nvdaPayload())));
+      await tester.pumpAndSettle();
+
+      // Quiet pencil affordance on the tile; no "manual" caption while the
+      // classification is the heuristic.
+      expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
+      expect(find.text('manual'), findsNothing);
+
+      await openSelector(tester);
+
+      // All seven classes; "Stocks & funds" appears twice (tile chip + row).
+      for (final label in [
+        'Bonds', 'Cash', 'Crypto', 'Real estate', 'Commodities', 'Other',
+      ]) {
+        expect(find.text(label), findsOneWidget);
+      }
+      expect(find.text('Stocks & funds'), findsNWidgets(2));
+      // Exactly one check — on the active (current heuristic) row — and no
+      // Automatic revert row while nothing is overridden.
+      expect(find.byIcon(Icons.check), findsOneWidget);
+      expect(find.textContaining('Automatic'), findsNothing);
+
+      // Selector rows meet the 44px touch target.
+      final bondsRowSize = tester.getSize(
+        find.ancestor(of: find.text('Bonds'), matching: find.byType(InkWell)).first,
+      );
+      expect(bondsRowSize.height, greaterThanOrEqualTo(44));
+
+      // Tapping the checked row is a radio no-op: selector closes, nothing
+      // mutates (mutate seam is null here — a call would throw).
+      await tester.tap(find.text('Stocks & funds').last);
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.check), findsNothing); // selector closed
+      expect(find.text('manual'), findsNothing);
+    });
+
+    testWidgets(
+        'override payload: "manual" caption on the tile and an '
+        '"Automatic — <heuristic>" revert row in the selector', (tester) async {
+      useTallSurface(tester);
+      final payload = _nvdaPayload()
+        ..['asset_class'] = 'bonds'
+        ..['asset_class_source'] = 'override'
+        ..['asset_class_heuristic'] = 'equity';
+      final calls = <String?>[];
+      await tester.pumpWidget(_host(sheet(
+        payload,
+        mutate: (symbol, assetClass) async {
+          calls.add(assetClass);
+          payload
+            ..['asset_class'] = 'equity'
+            ..['asset_class_source'] = 'heuristic'
+            ..remove('asset_class_heuristic');
+          return {
+            'symbol': symbol,
+            'asset_class': 'equity',
+            'asset_class_source': 'heuristic',
+          };
+        },
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.text('manual'), findsOneWidget);
+      expect(find.text('Bonds'), findsOneWidget); // overridden chip
+
+      await openSelector(tester);
+      expect(find.text('Automatic — Stocks & funds'), findsOneWidget);
+
+      // Revert: Automatic row → mutate(null) → chip back to the heuristic
+      // class, caption gone.
+      await tester.tap(find.text('Automatic — Stocks & funds'));
+      await tester.pumpAndSettle();
+      expect(calls, [null]);
+      expect(find.text('manual'), findsNothing);
+      expect(find.text('Stocks & funds'), findsOneWidget);
+      expect(find.text('Bonds'), findsNothing);
+    });
+
+    testWidgets(
+        'picking a class flips the chip optimistically, then reports the '
+        'change and refetches on success', (tester) async {
+      useTallSurface(tester);
+      final payload = _nvdaPayload();
+      final ranges = <String>[];
+      final completer = Completer<Map<String, dynamic>>();
+      var changed = false;
+      await tester.pumpWidget(_host(sheet(
+        payload,
+        rangeLog: ranges,
+        onClassificationChanged: () => changed = true,
+        mutate: (symbol, assetClass) {
+          expect(symbol, 'NVDA');
+          expect(assetClass, 'bonds');
+          // Keep the canned payload coherent for the follow-up refetch.
+          payload
+            ..['asset_class'] = 'bonds'
+            ..['asset_class_source'] = 'override';
+          return completer.future;
+        },
+      )));
+      await tester.pumpAndSettle();
+      expect(ranges, ['1y']);
+
+      await openSelector(tester);
+      await tester.tap(find.text('Bonds'));
+      await tester.pumpAndSettle();
+
+      // Mutation still in flight: chip + "manual" caption already flipped,
+      // nothing reported upward yet, no refetch yet.
+      expect(find.text('Bonds'), findsOneWidget);
+      expect(find.text('manual'), findsOneWidget);
+      expect(changed, isFalse);
+      expect(ranges, ['1y']);
+
+      completer.complete({
+        'symbol': 'NVDA',
+        'asset_class': 'bonds',
+        'asset_class_source': 'override',
+      });
+      await tester.pumpAndSettle();
+
+      expect(changed, isTrue); // C3-C: sheet resolves true
+      expect(ranges, ['1y', '1y']); // success refetches the current range
+      expect(find.text('Bonds'), findsOneWidget);
+      expect(find.text('manual'), findsOneWidget);
+    });
+
+    testWidgets('failed mutation reverts the chip and shows the error snackbar',
+        (tester) async {
+      useTallSurface(tester);
+      var changed = false;
+      await tester.pumpWidget(_host(sheet(
+        _nvdaPayload(),
+        onClassificationChanged: () => changed = true,
+        mutate: (symbol, assetClass) async =>
+            throw Exception('backend down'),
+      )));
+      await tester.pumpAndSettle();
+
+      await openSelector(tester);
+      await tester.tap(find.text('Bonds'));
+      await tester.pumpAndSettle();
+
+      // Revert: heuristic chip back, no "manual", nothing reported up.
+      expect(find.text('Stocks & funds'), findsOneWidget);
+      expect(find.text('Bonds'), findsNothing);
+      expect(find.text('manual'), findsNothing);
+      expect(changed, isFalse);
+      expect(find.text("Couldn't update the asset class"), findsOneWidget);
+
+      // Drain the snackbar's auto-dismiss timer.
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+    });
+  });
+
+  group('day-offset x-axis math (I3)', () {
+    ({DateTime date, double close}) pt(String iso, double close) =>
+        (date: DateTime.parse(iso), close: close);
+
+    test('dedupeDailyCloses keeps the LAST close per day and sorts by day', () {
+      final out = dedupeDailyCloses([
+        pt('2026-01-02', 11.0),
+        pt('2026-01-01 10:00:00', 10.0),
+        pt('2026-01-01 18:00:00', 10.5),
+      ]);
+      expect(out.length, 2);
+      expect(out[0].date, DateTime.utc(2026, 1, 1));
+      expect(out[0].close, 10.5);
+      expect(out[1].date, DateTime.utc(2026, 1, 2));
+      expect(out[1].close, 11.0);
+    });
+
+    test('dayOffsetSpots keeps real gaps: x is days since the first sample',
+        () {
+      final spots = dayOffsetSpots(dedupeDailyCloses([
+        pt('2026-01-01', 10.0),
+        pt('2026-01-02', 11.0),
+        pt('2026-03-03', 12.0), // 60-day hole
+      ]));
+      expect(spots, const [
+        FlSpot(0, 10.0),
+        FlSpot(1, 11.0),
+        FlSpot(61, 12.0),
+      ]);
+    });
+
+    test('dayOffsetTickInterval is span/3, floored at one day', () {
+      expect(dayOffsetTickInterval(366), 122.0);
+      expect(dayOffsetTickInterval(90), 30.0);
+      expect(dayOffsetTickInterval(2), 1.0); // 2-point series stays valid
+      expect(dayOffsetTickInterval(0), 1.0);
+    });
+
+    testWidgets(
+        'two same-day closes collapse to one point → graceful empty-chart '
+        'state, not an fl_chart crash', (tester) async {
+      useTallSurface(tester);
+      final payload = _nvdaPayload()
+        ..['prices'] = [
+          {'date': '2026-07-02', 'close': 171.0},
+          {'date': '2026-07-02', 'close': 172.4},
+        ];
+      await tester.pumpWidget(_host(sheet(payload)));
+      await tester.pumpAndSettle();
+      expect(find.text('No price history for this holding'), findsOneWidget);
     });
   });
 

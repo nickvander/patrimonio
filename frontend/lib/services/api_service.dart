@@ -36,6 +36,17 @@ class LoanTermsLockedException implements Exception {
   String toString() => message;
 }
 
+/// Thrown by [ApiService.restoreHolding] on a 404 — the soft-deleted row is
+/// gone (24 h retention elapsed, purged by a re-add/import, or never existed),
+/// so the deletion is permanent. Typed so the undo snackbar can tell "too
+/// late" apart from a transient failure (contract C3-B/C3-E).
+class HoldingRestoreGoneException implements Exception {
+  final String message;
+  HoldingRestoreGoneException(this.message);
+  @override
+  String toString() => message;
+}
+
 /// Thrown by [ApiService.linkDisbursement] on a 409 — the transaction the
 /// caller tried to designate as a loan's disbursement already funds another
 /// loan. Carries the server's human-readable reason.
@@ -2065,6 +2076,56 @@ class ApiService {
     }
     throw Exception(_t('Failed to load instrument detail',
         'No se pudo cargar el detalle del instrumento'));
+  }
+
+  /// Sets (or, with [assetClass] == null, clears) the user's per-symbol
+  /// asset-class override (contracts C3-A / C3-E). Returns the server's
+  /// authoritative `{symbol, asset_class, asset_class_source}` — after a
+  /// clear, `asset_class` is the heuristic result. Throws a localized error
+  /// on non-200 (same convention as [getInstrumentDetail]).
+  ///
+  /// Cache invalidation (C3-E): going through [_put] means a successful call
+  /// clears the whole `dash:` cache family via [_invalidateAfterMutation] —
+  /// `holdings`, `realized-gains-*`, and `allocation` included — so the next
+  /// dashboard read is fresh even without `forceRefresh`.
+  Future<Map<String, dynamic>> setAssetClassOverride(
+      String symbol, String? assetClass) async {
+    final res = await _put(
+      Uri.parse('$_baseUrl/dashboard/instruments/'
+          '${Uri.encodeComponent(symbol)}/asset-class'),
+      headers: _withCsrf({'Content-Type': 'application/json'}),
+      // json.encode keeps the explicit `"asset_class": null` clear-payload.
+      body: json.encode({'asset_class': assetClass}),
+    );
+    if (res.statusCode == 200) {
+      return json.decode(res.body) as Map<String, dynamic>;
+    }
+    throw Exception(_t('Failed to update asset class',
+        'No se pudo actualizar la clase de activo'));
+  }
+
+  /// Un-deletes a soft-deleted holding inside the undo window (contracts
+  /// C3-B / C3-E). 200 → the restored holding row (create-holding readback
+  /// shape). 404 → the ghost is already purged: throws the typed
+  /// [HoldingRestoreGoneException] so the undo snackbar can say "permanent"
+  /// instead of a generic failure. Any other non-200 throws a localized
+  /// error. Successful calls invalidate the dashboard cache via [_post]'s
+  /// [_invalidateAfterMutation], same as [deleteHolding] via [_delete].
+  Future<Map<String, dynamic>> restoreHolding(
+      String accountId, String holdingId) async {
+    final res = await _post(
+      Uri.parse('$_baseUrl/accounts/$accountId/holdings/$holdingId/restore'),
+      headers: _withCsrf({}),
+    );
+    if (res.statusCode == 200) {
+      return json.decode(res.body) as Map<String, dynamic>;
+    }
+    if (res.statusCode == 404) {
+      throw HoldingRestoreGoneException(_t('Nothing to restore',
+          'No hay nada que restaurar'));
+    }
+    throw Exception(_t('Failed to restore holding',
+        'No se pudo restaurar la posición'));
   }
 
   Future<Map<String, dynamic>> getWealthProjection({

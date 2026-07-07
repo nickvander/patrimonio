@@ -2896,5 +2896,30 @@
   "alloc2UnclassifiedTooltip": "Account balance without holdings detail — open the account to see it",
   "@alloc2UnclassifiedTooltip": {
     "description": "Tooltip + screen-reader explanation on the Unclassified allocation band."
+  },
+  "ins3EditAssetClass": "Edit asset class",
+  "@ins3EditAssetClass": {
+    "description": "Tooltip / screen-reader hint on the instrument sheet's tappable asset-class tile (round-3 override editor)."
+  },
+  "ins3Automatic": "Automatic",
+  "@ins3Automatic": {
+    "description": "Selector row that clears a manual asset-class override, reverting to the heuristic classification (plain variant, used when the heuristic class is unknown)."
+  },
+  "ins3AutomaticWithClass": "Automatic — {className}",
+  "@ins3AutomaticWithClass": {
+    "description": "Selector row that clears a manual asset-class override, naming the heuristic class it reverts to.",
+    "placeholders": {
+      "className": {
+        "type": "String"
+      }
+    }
+  },
+  "ins3ManualCaption": "manual",
+  "@ins3ManualCaption": {
+    "description": "Tiny caption on the asset-class stat tile when the shown class is a user override rather than the heuristic."
+  },
+  "ins3UpdateError": "Couldn't update the asset class",
+  "@ins3UpdateError": {
+    "description": "Snackbar error when saving or clearing an asset-class override fails; the chip reverts to its previous value."
   }
 }
