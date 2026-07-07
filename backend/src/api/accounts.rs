@@ -1938,7 +1938,7 @@ async fn holdings_dividends(
             .unwrap_or(0.0);
         let pf = price.and_then(|p| p.to_string().parse::<f64>().ok());
 
-        let info = benchmark_dividends(&symbol).await;
+        let info = benchmark_dividends(&state.redis, &symbol).await;
         let annual_rate = info.as_ref().map(|i| i.0).unwrap_or(0.0);
         let annual_income = ((annual_rate * qf) * 100.0).round() / 100.0;
         let yield_pct = pf
@@ -2016,11 +2016,14 @@ async fn refresh_all_holdings(
 }
 
 /// (annual_rate, last_ex_date, est_next_ex_date, per_year) for a symbol, or
-/// None on a fetch error. Non-payers come back as a zero-rate Some.
+/// None on a fetch error. Non-payers come back as a zero-rate Some. Round 4:
+/// served through the Redis envelope cache (C4-C) — Redis being down
+/// degrades to a live fetch inside `fetch_dividends_cached`.
 async fn benchmark_dividends(
+    redis: &redis::Client,
     symbol: &str,
 ) -> Option<(f64, Option<String>, Option<String>, i32)> {
-    match crate::services::dividends::fetch_dividends(symbol).await {
+    match crate::services::dividends::fetch_dividends_cached(redis, symbol, false).await {
         Ok(i) => Some((i.annual_rate, i.last_ex_date, i.est_next_ex_date, i.per_year)),
         Err(_) => None,
     }

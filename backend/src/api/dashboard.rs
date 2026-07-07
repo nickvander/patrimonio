@@ -3594,9 +3594,7 @@ async fn detected_subscriptions(
     for cluster in clusters.values_mut() {
         // Most-recent first; we already pulled rows ORDER BY date DESC
         // but sort again for safety.
-        cluster
-            .events
-            .sort_by(|a, b| b.0.cmp(&a.0));
+        cluster.events.sort_by_key(|e| std::cmp::Reverse(e.0));
 
         if cluster.events.len() < 3 {
             continue;
@@ -3622,7 +3620,7 @@ async fn detected_subscriptions(
             .collect();
         gaps.sort();
         let median_gap = gaps[gaps.len() / 2];
-        if median_gap < 5 || median_gap > 62 {
+        if !(5..=62).contains(&median_gap) {
             continue;
         }
         let total: f64 = cluster.events.iter().map(|(_, a)| a).sum();
@@ -4257,6 +4255,113 @@ struct PortfolioDividendsResponse {
     upcoming_ex_dates: Vec<UpcomingExDate>,
     /// True when an MXN position was converted with a missing/stale FX rate.
     fx_stale: bool,
+    /// Round 4 (contract C4-B): 12-month income calendar, starting at the
+    /// current month (UTC). Additive — everything above is byte-identical
+    /// to the round-3 response; consumers that don't know the field ignore
+    /// it.
+    calendar: Vec<DividendCalendarMonth>,
+}
+
+/// One month bucket of the projected dividend calendar (contract C4-B).
+#[derive(Serialize)]
+struct DividendCalendarMonth {
+    /// `YYYY-MM`, UTC; the 12 buckets are chronological from the current month.
+    month: String,
+    /// Sum of the month's entries, rounded to cents (USD).
+    total_usd: f64,
+    /// Per-symbol projected payments, sorted `amount_usd` descending.
+    entries: Vec<DividendCalendarEntry>,
+}
+
+/// One projected per-symbol payment inside a calendar month (contract C4-B).
+#[derive(Serialize)]
+struct DividendCalendarEntry {
+    symbol: String,
+    /// Estimated ex-date (YYYY-MM-DD).
+    est_date: String,
+    /// `annual_income_usd / per_year`, rounded to cents (USD — already
+    /// FX-converted per sleeve upstream).
+    amount_usd: f64,
+}
+
+/// The ONE date-stepping implementation shared by the detail endpoint's
+/// `schedule` (see `build_dividend_detail`) and the calendar (C4-B): up to
+/// `per_year` dates at `est_next + k*round(365/per_year)` days, pruned to
+/// those within `horizon_days` of `est_next`. Empty for non-payers
+/// (`per_year <= 0`) and missing/unparsable estimates.
+fn projected_ex_dates(
+    per_year: i32,
+    est_next: Option<&str>,
+    horizon_days: i64,
+) -> Vec<chrono::NaiveDate> {
+    if per_year <= 0 {
+        return Vec::new();
+    }
+    let Some(start) =
+        est_next.and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+    else {
+        return Vec::new();
+    };
+    let step = (365.0 / per_year as f64).round() as i64;
+    (0..per_year as i64)
+        .map(|k| start + chrono::Duration::days(step * k))
+        .filter(|d| (*d - start).num_days() < horizon_days)
+        .collect()
+}
+
+/// Contract C4-B: bucket every payer's projected payments into exactly 12
+/// chronological `YYYY-MM` months starting at `today`'s month (UTC). Pure so
+/// the bucketing, rounding, and ordering are unit-testable offline. Symbols
+/// with `per_year == 0` (non-payers, failed fetches, unresolvable) and
+/// zero-income payers contribute nothing; a projected date landing outside
+/// the window (an annual payer's next date > 12 months out) is dropped —
+/// the acknowledged small delta vs `projected_annual_income_usd`.
+fn build_dividend_calendar(
+    contributions: &[DividendSymbolContribution],
+    today: chrono::NaiveDate,
+) -> Vec<DividendCalendarMonth> {
+    use chrono::Datelike;
+    // 12 month keys from the current month; index for O(1) bucketing.
+    let month_keys: Vec<String> = (0..12)
+        .map(|i| {
+            let m0 = today.year() * 12 + today.month0() as i32 + i;
+            format!("{:04}-{:02}", m0.div_euclid(12), m0.rem_euclid(12) + 1)
+        })
+        .collect();
+    let index: HashMap<&str, usize> =
+        month_keys.iter().enumerate().map(|(i, k)| (k.as_str(), i)).collect();
+
+    let mut buckets: Vec<Vec<DividendCalendarEntry>> =
+        (0..12).map(|_| Vec::new()).collect();
+    for c in contributions {
+        if c.per_year <= 0 || c.annual_income_usd <= 0.0 {
+            continue;
+        }
+        let amount = ((c.annual_income_usd / c.per_year as f64) * 100.0).round() / 100.0;
+        for date in projected_ex_dates(c.per_year, c.est_next_ex_date.as_deref(), 365) {
+            let key = format!("{:04}-{:02}", date.year(), date.month());
+            if let Some(&i) = index.get(key.as_str()) {
+                buckets[i].push(DividendCalendarEntry {
+                    symbol: c.symbol.clone(),
+                    est_date: date.to_string(),
+                    amount_usd: amount,
+                });
+            }
+        }
+    }
+
+    month_keys
+        .into_iter()
+        .zip(buckets)
+        .map(|(month, mut entries)| {
+            entries.sort_by(|a, b| {
+                b.amount_usd.partial_cmp(&a.amount_usd).unwrap_or(std::cmp::Ordering::Equal)
+            });
+            let total_usd =
+                (entries.iter().map(|e| e.amount_usd).sum::<f64>() * 100.0).round() / 100.0;
+            DividendCalendarMonth { month, total_usd, entries }
+        })
+        .collect()
 }
 
 /// Every payer's upcoming estimated ex-date (est date >= `today`, ISO),
@@ -4287,11 +4392,12 @@ fn upcoming_ex_dates(
 
 /// Portfolio-wide dividend income: aggregates the per-symbol dividend engine
 /// across every active account the user holds, so the Portfolio tab can show
-/// projected annual income, a blended yield-on-value, the top payers, and the
-/// next estimated ex-dates. Reuses `dividends::fetch_dividends` verbatim (via
-/// `benchmark_dividends`) and fans the live Yahoo lookups out with bounded
-/// concurrency; a single symbol's fetch failure degrades only that symbol's
-/// income to zero, never the whole response.
+/// projected annual income, a blended yield-on-value, the top payers, the
+/// next estimated ex-dates, and (round 4, C4-B) the 12-month income calendar.
+/// Uses the Redis-cached fetch (`dividends::fetch_dividends_cached`, C4-C)
+/// and fans the lookups out with bounded concurrency; a single symbol's
+/// fetch failure degrades only that symbol's income to zero, never the
+/// whole response.
 async fn portfolio_dividends(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
@@ -4370,12 +4476,19 @@ async fn portfolio_dividends(
             .map(|p| p.symbol.clone())
             .collect()
     };
+    let redis = &state.redis;
     let fetched: HashMap<String, (f64, Option<String>, Option<String>, i32)> =
         futures_util::stream::iter(symbols.into_iter().map(|symbol| {
             async move {
-                // Same engine the per-account endpoint uses. Map a fetch error
-                // to None so it degrades to zero income for this symbol only.
-                let info = match crate::services::dividends::fetch_dividends(&symbol).await {
+                // Same engine the per-account endpoint uses, now behind the
+                // round-4 Redis envelope cache (C4-C) — the concurrency bound
+                // mostly gates cold-cache fills. Map a fetch error to None so
+                // it degrades to zero income for this symbol only.
+                let info = match crate::services::dividends::fetch_dividends_cached(
+                    redis, &symbol, false,
+                )
+                .await
+                {
                     Ok(i) => Some((
                         i.annual_rate,
                         i.last_ex_date,
@@ -4490,8 +4603,13 @@ async fn portfolio_dividends(
     // chronological; drop estimates already in the past (a payer whose last
     // dividend is older than one pay-interval estimates a date that has
     // already passed).
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let today_date = chrono::Utc::now().date_naive();
+    let today = today_date.format("%Y-%m-%d").to_string();
     let upcoming = upcoming_ex_dates(&contributions, &today);
+
+    // Round 4 (C4-B): 12-month projected income calendar, from the same
+    // contributions the upcoming list reads.
+    let calendar = build_dividend_calendar(&contributions, today_date);
 
     let total_income_usd = (total_income_usd * 100.0).round() / 100.0;
     let blended_yield_pct = if total_valued_usd > 0.0 && total_income_usd > 0.0 {
@@ -4506,6 +4624,7 @@ async fn portfolio_dividends(
         contributions,
         upcoming_ex_dates: upcoming,
         fx_stale: fx_stale_used,
+        calendar,
     })
 }
 
@@ -4764,23 +4883,17 @@ fn build_dividend_detail(
 
     // Projection: per_year payments from est_next_ex_date, one cadence step
     // apart, each the expected per-payment amount. Empty for non-payers and
-    // Yahoo-unresolvable symbols.
-    let mut schedule: Vec<DividendScheduleEntry> = Vec::new();
-    if info.per_year > 0 {
-        if let Some(start) = info
-            .est_next_ex_date
-            .as_deref()
-            .and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
-        {
-            let step = (365.0 / info.per_year as f64).round() as i64;
-            for k in 0..info.per_year as i64 {
-                schedule.push(DividendScheduleEntry {
-                    est_date: (start + chrono::Duration::days(step * k)).to_string(),
-                    est_amount_usd: per_payment_amount,
-                });
-            }
-        }
-    }
+    // Yahoo-unresolvable symbols. Round 4: the stepping is the shared
+    // `projected_ex_dates` — the SAME implementation the C4-B calendar uses,
+    // so the two can never drift.
+    let schedule: Vec<DividendScheduleEntry> =
+        projected_ex_dates(info.per_year, info.est_next_ex_date.as_deref(), 365)
+            .into_iter()
+            .map(|d| DividendScheduleEntry {
+                est_date: d.to_string(),
+                est_amount_usd: per_payment_amount,
+            })
+            .collect();
 
     DividendDetailResponse {
         symbol: first.symbol.clone(),
@@ -4813,6 +4926,14 @@ fn build_dividend_detail(
     }
 }
 
+/// Contract C4-D query: `?refresh=true` bypasses the cache's fresh windows
+/// (a live fetch happens even inside the 12 h window) while keeping the
+/// stale-on-failure fallback. Absent/false → cached behavior.
+#[derive(Deserialize)]
+struct DividendDetailQuery {
+    refresh: Option<bool>,
+}
+
 /// GET /dividends/{symbol} — dividend detail for one held symbol (contract
 /// C1). Matched case-insensitively against the caller's non-cash holdings;
 /// 404 when they hold no such symbol. A held symbol Yahoo can't resolve
@@ -4822,6 +4943,7 @@ async fn dividend_detail(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     axum::extract::Path(symbol): axum::extract::Path<String>,
+    Query(q): Query<DividendDetailQuery>,
 ) -> Response {
     let rows = sqlx::query(
         r#"
@@ -4879,11 +5001,16 @@ async fn dividend_detail(
 
     // Use the stored casing for the Yahoo lookup, not the caller's. A fetch
     // error degrades to the zeroed non-payer info — same policy as the
-    // portfolio fan-out.
+    // portfolio fan-out. Round 4: Redis-cached (C4-C); `?refresh=true`
+    // bypasses the fresh windows (C4-D).
     let canonical_symbol = positions[0].symbol.clone();
-    let info = crate::services::dividends::fetch_dividends(&canonical_symbol)
-        .await
-        .unwrap_or_else(|_| crate::services::dividends::DividendInfo::none(&canonical_symbol));
+    let info = crate::services::dividends::fetch_dividends_cached(
+        &state.redis,
+        &canonical_symbol,
+        q.refresh.unwrap_or(false),
+    )
+    .await
+    .unwrap_or_else(|_| crate::services::dividends::DividendInfo::none(&canonical_symbol));
 
     let fx_info = latest_usd_mxn_rate(&state.db).await;
 
@@ -5017,6 +5144,7 @@ fn instrument_range_start(range: Option<&str>, today: chrono::NaiveDate) -> chro
 /// non-empty, ordered by value descending — the first row donates the
 /// representative name/price/currency. `closes` is the symbol's last two
 /// stored closes (newest first), when available.
+#[allow(clippy::too_many_arguments)] // pure builder: the args ARE the contract inputs
 fn build_instrument_detail(
     positions: &[InstrumentPosition],
     lots: Vec<InstrumentLot>,
@@ -5976,5 +6104,298 @@ mod tests {
             .iter()
             .any(|u| u.est_next_ex_date.starts_with("2026-09")));
         assert!(upcoming.iter().all(|u| u.symbol != "PAST" && u.symbol != "NOPAY"));
+    }
+
+    // =================================================================
+    // Round 4 B4 — shared date-stepping + the C4-B calendar
+    // =================================================================
+
+    /// Builder for calendar-test contributions.
+    fn contribution(
+        symbol: &str,
+        annual_income_usd: f64,
+        per_year: i32,
+        est_next: Option<&str>,
+    ) -> DividendSymbolContribution {
+        DividendSymbolContribution {
+            symbol: symbol.to_string(),
+            quantity: 1.0,
+            annual_rate: annual_income_usd,
+            annual_income_usd,
+            yield_pct: None,
+            last_ex_date: None,
+            est_next_ex_date: est_next.map(str::to_string),
+            per_year,
+        }
+    }
+
+    /// The stepping fn: `per_year` dates one cadence step apart, empty for
+    /// non-payers and missing estimates, pruned by the horizon.
+    #[test]
+    fn projected_ex_dates_steps_and_prunes() {
+        // Quarterly: 4 dates, 91 days apart.
+        let dates = projected_ex_dates(4, Some("2026-09-10"), 365);
+        assert_eq!(
+            dates,
+            vec![day(2026, 9, 10), day(2026, 12, 10), day(2027, 3, 11), day(2027, 6, 10)]
+        );
+        // Non-payer / missing / unparsable estimate: empty.
+        assert!(projected_ex_dates(0, Some("2026-09-10"), 365).is_empty());
+        assert!(projected_ex_dates(4, None, 365).is_empty());
+        assert!(projected_ex_dates(4, Some("not-a-date"), 365).is_empty());
+        // A tighter horizon prunes the later steps.
+        assert_eq!(projected_ex_dates(4, Some("2026-09-10"), 100).len(), 2);
+    }
+
+    /// The detail endpoint's `schedule` and the calendar step through the
+    /// SAME fn — for identical inputs their dates agree exactly.
+    #[test]
+    fn detail_schedule_and_calendar_dates_agree() {
+        let info = DividendInfo {
+            symbol: "KO".to_string(),
+            annual_rate: 2.0,
+            last_amount: 0.5,
+            last_ex_date: Some("2026-06-12".to_string()),
+            est_next_ex_date: Some("2026-09-12".to_string()),
+            per_year: 4,
+            history: Vec::new(),
+        };
+        let positions = vec![DetailPosition {
+            symbol: "KO".to_string(),
+            name: "Coca-Cola".to_string(),
+            quantity: 10.0,
+            price: Some(70.0),
+            value: 700.0,
+            cost_basis: None,
+            currency: "USD".to_string(),
+            account_id: "a".to_string(),
+            account_name: "Broker".to_string(),
+            account_type: "brokerage".to_string(),
+        }];
+        let detail = build_dividend_detail(&positions, &info, 20.0, Vec::new());
+        let schedule_dates: Vec<String> =
+            detail.schedule.iter().map(|s| s.est_date.clone()).collect();
+
+        let contributions = vec![contribution("KO", 20.0, 4, Some("2026-09-12"))];
+        let calendar = build_dividend_calendar(&contributions, day(2026, 7, 6));
+        let calendar_dates: Vec<String> = calendar
+            .iter()
+            .flat_map(|m| m.entries.iter().map(|e| e.est_date.clone()))
+            .collect();
+        assert_eq!(schedule_dates, calendar_dates);
+    }
+
+    /// Quarterly payer: 4 entries in 4 distinct months, summing to the
+    /// annual income (±1¢ rounding); always exactly 12 chronological months.
+    #[test]
+    fn calendar_quarterly_payer_four_months_summing_to_annual() {
+        let contributions = vec![contribution("KO", 400.0, 4, Some("2026-07-14"))];
+        let calendar = build_dividend_calendar(&contributions, day(2026, 7, 6));
+
+        assert_eq!(calendar.len(), 12);
+        assert_eq!(calendar[0].month, "2026-07");
+        assert_eq!(calendar[11].month, "2027-06");
+        assert!(calendar.windows(2).all(|w| w[0].month < w[1].month));
+
+        let paying: Vec<&DividendCalendarMonth> =
+            calendar.iter().filter(|m| !m.entries.is_empty()).collect();
+        assert_eq!(paying.len(), 4);
+        assert_eq!(
+            paying.iter().map(|m| m.month.as_str()).collect::<Vec<_>>(),
+            vec!["2026-07", "2026-10", "2027-01", "2027-04"]
+        );
+        let total: f64 = calendar.iter().map(|m| m.total_usd).sum();
+        assert!((total - 400.0).abs() < 0.01 + 1e-9);
+        assert_eq!(paying[0].entries[0].amount_usd, 100.0);
+        assert_eq!(paying[0].entries[0].est_date, "2026-07-14");
+    }
+
+    /// Monthly payer fills all 12 buckets; annual payer fills exactly 1.
+    #[test]
+    fn calendar_monthly_fills_twelve_annual_fills_one() {
+        let contributions = vec![
+            contribution("O", 120.0, 12, Some("2026-07-10")),
+            contribution("ANN", 50.0, 1, Some("2027-03-01")),
+        ];
+        let calendar = build_dividend_calendar(&contributions, day(2026, 7, 6));
+        assert!(calendar.iter().all(|m| m.entries.iter().any(|e| e.symbol == "O")));
+        let ann_months: Vec<&str> = calendar
+            .iter()
+            .filter(|m| m.entries.iter().any(|e| e.symbol == "ANN"))
+            .map(|m| m.month.as_str())
+            .collect();
+        assert_eq!(ann_months, vec!["2027-03"]);
+        let total: f64 = calendar.iter().map(|m| m.total_usd).sum();
+        assert!((total - 170.0).abs() < 0.01 + 1e-9);
+    }
+
+    /// Non-payers (`per_year == 0` — failed fetches, unresolvable symbols)
+    /// contribute nothing; a payer-free portfolio still gets 12 empty months.
+    #[test]
+    fn calendar_zero_per_year_contributes_nothing() {
+        let contributions = vec![
+            contribution("VANG TARGET RET 2045", 0.0, 0, None),
+            contribution("CUR:USD", 0.0, 0, Some("2026-08-01")),
+        ];
+        let calendar = build_dividend_calendar(&contributions, day(2026, 7, 6));
+        assert_eq!(calendar.len(), 12);
+        assert!(calendar.iter().all(|m| m.entries.is_empty() && m.total_usd == 0.0));
+    }
+
+    /// The acknowledged delta vs `projected_annual_income_usd`: an annual
+    /// payer whose next date falls past the 12-month window contributes
+    /// nothing — every other payer's income lands in full.
+    #[test]
+    fn calendar_drops_only_payments_outside_the_window() {
+        let contributions = vec![
+            contribution("KO", 400.0, 4, Some("2026-07-14")),
+            // Window is 2026-07 .. 2027-06; this annual estimate is 2027-07.
+            contribution("FAR", 50.0, 1, Some("2027-07-01")),
+        ];
+        let calendar = build_dividend_calendar(&contributions, day(2026, 7, 6));
+        let total: f64 = calendar.iter().map(|m| m.total_usd).sum();
+        assert!((total - 400.0).abs() < 0.01 + 1e-9);
+        assert!(calendar.iter().all(|m| m.entries.iter().all(|e| e.symbol != "FAR")));
+    }
+
+    /// Entries within a month sort by amount descending; the December
+    /// year-rollover buckets correctly.
+    #[test]
+    fn calendar_entries_sorted_by_amount_descending() {
+        let contributions = vec![
+            contribution("SMALL", 40.0, 4, Some("2026-09-13")),
+            contribution("BIG", 400.0, 4, Some("2026-09-12")),
+        ];
+        let calendar = build_dividend_calendar(&contributions, day(2026, 7, 6));
+        let sept = calendar.iter().find(|m| m.month == "2026-09").unwrap();
+        assert_eq!(
+            sept.entries.iter().map(|e| e.symbol.as_str()).collect::<Vec<_>>(),
+            vec!["BIG", "SMALL"]
+        );
+        assert_eq!(sept.total_usd, 110.0);
+        // Quarterly from September crosses the year boundary: 2026-12 pays.
+        assert!(calendar.iter().any(|m| m.month == "2026-12" && !m.entries.is_empty()));
+    }
+
+    // =================================================================
+    // Round 4 B5 — shape-freeze: the full portfolio response snapshot
+    // =================================================================
+
+    /// The complete `PortfolioDividendsResponse` JSON from fixed inputs —
+    /// a quarterly + monthly + unresolvable mix. Every round-3 field is
+    /// byte-identical; the ONLY addition vs the round-3 shape is
+    /// `calendar` (asserted explicitly on the key set below).
+    #[test]
+    fn portfolio_dividends_response_shape_freeze() {
+        let contributions = vec![
+            contribution_full("O", 12.0, 3.0, 36.0, Some(5.0), Some("2026-07-01"), Some("2026-07-15"), 12),
+            contribution_full("KO", 10.0, 2.0, 20.0, Some(2.86), Some("2026-06-13"), Some("2026-09-12"), 4),
+            contribution_full("VANG TARGET RET 2045", 100.0, 0.0, 0.0, None, None, None, 0),
+        ];
+        let today = day(2026, 7, 6);
+        let response = PortfolioDividendsResponse {
+            projected_annual_income_usd: 56.0,
+            blended_yield_pct: Some(4.0),
+            upcoming_ex_dates: upcoming_ex_dates(&contributions, "2026-07-06"),
+            calendar: build_dividend_calendar(&contributions, today),
+            contributions,
+            fx_stale: false,
+        };
+        let got = serde_json::to_value(&response).unwrap();
+
+        // The no-behavior-change promise, key for key: round-3 top-level
+        // keys plus exactly ONE addition.
+        let round3_keys = [
+            "projected_annual_income_usd",
+            "blended_yield_pct",
+            "contributions",
+            "upcoming_ex_dates",
+            "fx_stale",
+        ];
+        let mut got_keys: Vec<&str> =
+            got.as_object().unwrap().keys().map(String::as_str).collect();
+        got_keys.sort_unstable();
+        let mut want_keys: Vec<&str> =
+            round3_keys.iter().copied().chain(std::iter::once("calendar")).collect();
+        want_keys.sort_unstable();
+        assert_eq!(got_keys, want_keys, "exactly one added key: `calendar`");
+
+        let want = serde_json::json!({
+            "projected_annual_income_usd": 56.0,
+            "blended_yield_pct": 4.0,
+            "contributions": [
+                {"symbol": "O", "quantity": 12.0, "annual_rate": 3.0,
+                 "annual_income_usd": 36.0, "yield_pct": 5.0,
+                 "last_ex_date": "2026-07-01", "est_next_ex_date": "2026-07-15",
+                 "per_year": 12},
+                {"symbol": "KO", "quantity": 10.0, "annual_rate": 2.0,
+                 "annual_income_usd": 20.0, "yield_pct": 2.86,
+                 "last_ex_date": "2026-06-13", "est_next_ex_date": "2026-09-12",
+                 "per_year": 4},
+                {"symbol": "VANG TARGET RET 2045", "quantity": 100.0,
+                 "annual_rate": 0.0, "annual_income_usd": 0.0, "yield_pct": null,
+                 "last_ex_date": null, "est_next_ex_date": null, "per_year": 0}
+            ],
+            "upcoming_ex_dates": [
+                {"symbol": "O", "est_next_ex_date": "2026-07-15", "annual_income_usd": 36.0},
+                {"symbol": "KO", "est_next_ex_date": "2026-09-12", "annual_income_usd": 20.0}
+            ],
+            "fx_stale": false,
+            "calendar": [
+                {"month": "2026-07", "total_usd": 3.0, "entries": [
+                    {"symbol": "O", "est_date": "2026-07-15", "amount_usd": 3.0}]},
+                {"month": "2026-08", "total_usd": 3.0, "entries": [
+                    {"symbol": "O", "est_date": "2026-08-14", "amount_usd": 3.0}]},
+                {"month": "2026-09", "total_usd": 8.0, "entries": [
+                    {"symbol": "KO", "est_date": "2026-09-12", "amount_usd": 5.0},
+                    {"symbol": "O", "est_date": "2026-09-13", "amount_usd": 3.0}]},
+                {"month": "2026-10", "total_usd": 3.0, "entries": [
+                    {"symbol": "O", "est_date": "2026-10-13", "amount_usd": 3.0}]},
+                {"month": "2026-11", "total_usd": 3.0, "entries": [
+                    {"symbol": "O", "est_date": "2026-11-12", "amount_usd": 3.0}]},
+                {"month": "2026-12", "total_usd": 8.0, "entries": [
+                    {"symbol": "KO", "est_date": "2026-12-12", "amount_usd": 5.0},
+                    {"symbol": "O", "est_date": "2026-12-12", "amount_usd": 3.0}]},
+                {"month": "2027-01", "total_usd": 3.0, "entries": [
+                    {"symbol": "O", "est_date": "2027-01-11", "amount_usd": 3.0}]},
+                {"month": "2027-02", "total_usd": 3.0, "entries": [
+                    {"symbol": "O", "est_date": "2027-02-10", "amount_usd": 3.0}]},
+                {"month": "2027-03", "total_usd": 8.0, "entries": [
+                    {"symbol": "KO", "est_date": "2027-03-13", "amount_usd": 5.0},
+                    {"symbol": "O", "est_date": "2027-03-12", "amount_usd": 3.0}]},
+                {"month": "2027-04", "total_usd": 3.0, "entries": [
+                    {"symbol": "O", "est_date": "2027-04-11", "amount_usd": 3.0}]},
+                {"month": "2027-05", "total_usd": 3.0, "entries": [
+                    {"symbol": "O", "est_date": "2027-05-11", "amount_usd": 3.0}]},
+                {"month": "2027-06", "total_usd": 8.0, "entries": [
+                    {"symbol": "KO", "est_date": "2027-06-12", "amount_usd": 5.0},
+                    {"symbol": "O", "est_date": "2027-06-10", "amount_usd": 3.0}]}
+            ]
+        });
+        assert_eq!(got, want);
+    }
+
+    /// Fully-specified contribution for the shape-freeze snapshot.
+    #[allow(clippy::too_many_arguments)]
+    fn contribution_full(
+        symbol: &str,
+        quantity: f64,
+        annual_rate: f64,
+        annual_income_usd: f64,
+        yield_pct: Option<f64>,
+        last_ex_date: Option<&str>,
+        est_next_ex_date: Option<&str>,
+        per_year: i32,
+    ) -> DividendSymbolContribution {
+        DividendSymbolContribution {
+            symbol: symbol.to_string(),
+            quantity,
+            annual_rate,
+            annual_income_usd,
+            yield_pct,
+            last_ex_date: last_ex_date.map(str::to_string),
+            est_next_ex_date: est_next_ex_date.map(str::to_string),
+            per_year,
+        }
     }
 }

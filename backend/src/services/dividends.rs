@@ -9,17 +9,19 @@
 use anyhow::{anyhow, Result};
 use chrono::{Duration, NaiveDate};
 use reqwest::Client;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// One historical dividend event (per-share amount on an ex-date).
-#[derive(Debug, Clone, Serialize)]
+/// `Deserialize` is additive (round-4 Redis cache envelope); the
+/// `Serialize` output is unchanged — asserted lossless in a test.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DividendEvent {
     /// ISO ex-dividend date.
     pub ex_date: String,
     pub amount_per_share: f64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DividendInfo {
     pub symbol: String,
     /// Forward annual dividend per share: cadence × average of the most
@@ -84,7 +86,7 @@ fn snap_per_year(median_interval_days: i64) -> i32 {
 }
 
 /// Median of an interval list, snapped to a cadence. None when empty.
-fn median_snap(intervals: &mut Vec<i64>) -> Option<i32> {
+fn median_snap(intervals: &mut [i64]) -> Option<i32> {
     if intervals.is_empty() {
         return None;
     }
@@ -214,6 +216,195 @@ pub async fn fetch_dividends(symbol: &str) -> Result<DividendInfo> {
             .map(|(d, a)| DividendEvent { ex_date: d.to_string(), amount_per_share: *a })
             .collect(),
     })
+}
+
+// =====================================================================
+// Round 4 (contract C4-C): Redis-backed per-symbol cache
+// =====================================================================
+
+/// Fresh window: a cached success younger than this is served without a
+/// live fetch. Dividends change quarterly — 12 h is generous.
+const CACHE_FRESH_SECS: i64 = 43_200;
+/// Negative window: a cached fetch *failure* younger than this short-
+/// circuits to `Err` without re-hitting Yahoo (stops the handful of
+/// unresolvable held symbols from being re-fetched on every request).
+const CACHE_NEGATIVE_SECS: i64 = 3_600;
+/// Redis retention (SETEX TTL): a stale success inside this window is
+/// still served when a live re-fetch fails — a whole weekend of Yahoo
+/// outage shows last-known income instead of zeros.
+const CACHE_RETENTION_SECS: i64 = 604_800;
+
+/// The JSON value stored per symbol: `{"fetched_at", "ok": true, "info"}`
+/// for a successful fetch (including zeroed non-payers), or
+/// `{"fetched_at", "ok": false}` for a network/shape failure.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CacheEnvelope {
+    /// Unix seconds of the live fetch that produced this envelope.
+    fetched_at: i64,
+    ok: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    info: Option<DividendInfo>,
+}
+
+/// What `decide` tells the caller to do with a (possibly absent) envelope.
+#[derive(Debug)]
+enum CacheAction {
+    /// Fresh success: serve it, no fetch.
+    ServeFresh(DividendInfo),
+    /// Fresh failure marker: return `Err` without a fetch.
+    ServeNegative,
+    /// Go live. `stale` carries the last-known success (any age within
+    /// retention) to serve if the live fetch fails.
+    Fetch { stale: Option<DividendInfo> },
+}
+
+/// The serve/fetch/stale policy, pure so freshness, negative-TTL, and
+/// bypass rules are unit-testable without Redis or Yahoo. Retention is
+/// enforced by the Redis TTL itself — any envelope we can still read is
+/// within the 7-day window. `bypass` skips both fresh-serve branches but
+/// keeps the stale-on-failure fallback.
+fn decide(envelope: Option<CacheEnvelope>, now: i64, bypass: bool) -> CacheAction {
+    let Some(env) = envelope else {
+        return CacheAction::Fetch { stale: None };
+    };
+    let age = now - env.fetched_at;
+    match (env.ok, env.info) {
+        (true, Some(info)) => {
+            if !bypass && age < CACHE_FRESH_SECS {
+                CacheAction::ServeFresh(info)
+            } else {
+                CacheAction::Fetch { stale: Some(info) }
+            }
+        }
+        (false, _) if !bypass && age < CACHE_NEGATIVE_SECS => CacheAction::ServeNegative,
+        // Expired failure marker, or a corrupt ok-without-info envelope.
+        _ => CacheAction::Fetch { stale: None },
+    }
+}
+
+fn cache_key(symbol: &str) -> String {
+    format!("div:v1:{}", symbol.trim().to_uppercase())
+}
+
+/// Best-effort envelope read. Redis being down/unreachable (or the value
+/// unparsable) reads as "no envelope" — the caller degrades to a live fetch.
+async fn read_envelope(redis: &redis::Client, key: &str) -> Option<CacheEnvelope> {
+    let mut conn = redis.get_multiplexed_async_connection().await.ok()?;
+    let raw: Option<String> = redis::cmd("GET").arg(key).query_async(&mut conn).await.ok()?;
+    raw.and_then(|s| serde_json::from_str(&s).ok())
+}
+
+/// Best-effort envelope write with the 7-day retention TTL.
+async fn write_envelope(redis: &redis::Client, key: &str, env: &CacheEnvelope) {
+    if let Ok(mut conn) = redis.get_multiplexed_async_connection().await {
+        if let Ok(json) = serde_json::to_string(env) {
+            let _: Result<(), _> = redis::cmd("SETEX")
+                .arg(key)
+                .arg(CACHE_RETENTION_SECS)
+                .arg(json)
+                .query_async(&mut conn)
+                .await;
+        }
+    }
+}
+
+/// Per-symbol in-process fill locks (round-4 B2): at cold cache the
+/// Overview tile and the Portfolio card fan out `/holdings/dividends`
+/// near-simultaneously — the lock makes the loser wait and re-read the
+/// cache instead of doubling every Yahoo call.
+static FETCH_LOCKS: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<String, std::sync::Arc<tokio::sync::Mutex<()>>>>,
+> = std::sync::LazyLock::new(Default::default);
+
+/// Same semantics as [`fetch_dividends`] (`Ok(info)` incl. zeroed
+/// non-payers; `Err` for network/shape failures) but Redis-backed per
+/// contract C4-C. Redis being down degrades to a live fetch, never to an
+/// error. `bypass_fresh` skips the fresh-serve branches (the detail
+/// endpoint's `?refresh=true`) but keeps the stale-on-failure fallback
+/// and always writes on success.
+pub async fn fetch_dividends_cached(
+    redis: &redis::Client,
+    symbol: &str,
+    bypass_fresh: bool,
+) -> Result<DividendInfo> {
+    fetch_dividends_cached_with(redis, symbol, bypass_fresh, |s: String| async move {
+        fetch_dividends(&s).await
+    })
+    .await
+}
+
+/// [`fetch_dividends_cached`] with the live fetcher injected, so the cache
+/// policy and coalescing are testable against Redis without Yahoo. The
+/// fetcher takes an owned `String` to sidestep HRTB inference on closures.
+async fn fetch_dividends_cached_with<F, Fut>(
+    redis: &redis::Client,
+    symbol: &str,
+    bypass_fresh: bool,
+    fetch: F,
+) -> Result<DividendInfo>
+where
+    F: Fn(String) -> Fut,
+    Fut: std::future::Future<Output = Result<DividendInfo>>,
+{
+    let key = cache_key(symbol);
+    let now = || chrono::Utc::now().timestamp();
+
+    // Fast path: no lock while the cache answers.
+    match decide(read_envelope(redis, &key).await, now(), bypass_fresh) {
+        CacheAction::ServeFresh(info) => return Ok(info),
+        CacheAction::ServeNegative => {
+            return Err(anyhow!("dividend fetch for {symbol} recently failed (negative cache)"))
+        }
+        CacheAction::Fetch { .. } => {}
+    }
+
+    let result = {
+        // Coalesce concurrent fills: take (or create) this symbol's lock —
+        // the map mutex is held only for the map op, never across an await.
+        let lock = FETCH_LOCKS.lock().unwrap().entry(key.clone()).or_default().clone();
+        let _guard = lock.lock().await;
+        // Re-read: the coalescing winner has usually filled the cache.
+        match decide(read_envelope(redis, &key).await, now(), bypass_fresh) {
+            CacheAction::ServeFresh(info) => Ok(info),
+            CacheAction::ServeNegative => {
+                Err(anyhow!("dividend fetch for {symbol} recently failed (negative cache)"))
+            }
+            CacheAction::Fetch { stale } => {
+                tracing::debug!("dividends: miss, fetching {symbol}");
+                match fetch(symbol.to_string()).await {
+                    Ok(info) => {
+                        let env =
+                            CacheEnvelope { fetched_at: now(), ok: true, info: Some(info.clone()) };
+                        write_envelope(redis, &key, &env).await;
+                        Ok(info)
+                    }
+                    Err(e) => match stale {
+                        // Keep the original envelope (and its TTL): retention
+                        // counts from the last successful fetch.
+                        Some(info) => {
+                            tracing::warn!(
+                                "dividends: live fetch failed for {symbol}, serving stale cache: {e}"
+                            );
+                            Ok(info)
+                        }
+                        None => {
+                            let env = CacheEnvelope { fetched_at: now(), ok: false, info: None };
+                            write_envelope(redis, &key, &env).await;
+                            Err(e)
+                        }
+                    },
+                }
+            }
+        }
+    };
+
+    // Opportunistically drop the lock entry once we're its last holder.
+    let mut locks = FETCH_LOCKS.lock().unwrap();
+    if locks.get(&key).is_some_and(|l| std::sync::Arc::strong_count(l) == 1) {
+        locks.remove(&key);
+    }
+    drop(locks);
+    result
 }
 
 #[cfg(test)]
@@ -370,5 +561,363 @@ mod tests {
         let est = stats.est_next_ex_date.unwrap();
         assert!(est >= today);
         assert_eq!(est, today - Duration::days(100) + Duration::days(182));
+    }
+
+    // =================================================================
+    // Round 4 B1 — cache envelope + `decide` policy matrix
+    // =================================================================
+
+    fn sample_info(symbol: &str) -> DividendInfo {
+        DividendInfo {
+            symbol: symbol.to_string(),
+            annual_rate: 1.0,
+            last_amount: 0.25,
+            last_ex_date: Some("2026-06-11".to_string()),
+            est_next_ex_date: Some("2026-09-10".to_string()),
+            per_year: 4,
+            history: vec![DividendEvent {
+                ex_date: "2026-06-11".to_string(),
+                amount_per_share: 0.25,
+            }],
+        }
+    }
+
+    fn ok_env(fetched_at: i64, symbol: &str) -> CacheEnvelope {
+        CacheEnvelope { fetched_at, ok: true, info: Some(sample_info(symbol)) }
+    }
+
+    fn err_env(fetched_at: i64) -> CacheEnvelope {
+        CacheEnvelope { fetched_at, ok: false, info: None }
+    }
+
+    /// The additive `Deserialize` derive must round-trip losslessly, and
+    /// the `Serialize` output stays exactly the round-3 shape (no new or
+    /// renamed fields).
+    #[test]
+    fn dividend_info_serde_round_trip_is_lossless() {
+        let info = sample_info("NVDA");
+        let json = serde_json::to_value(&info).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "symbol": "NVDA",
+                "annual_rate": 1.0,
+                "last_amount": 0.25,
+                "last_ex_date": "2026-06-11",
+                "est_next_ex_date": "2026-09-10",
+                "per_year": 4,
+                "history": [{"ex_date": "2026-06-11", "amount_per_share": 0.25}]
+            })
+        );
+        let back: DividendInfo = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&back).unwrap(), json);
+    }
+
+    /// The envelope serializes per C4-C: failure markers carry no `info`
+    /// key at all (not a null).
+    #[test]
+    fn cache_envelope_shapes_match_contract() {
+        let ok = serde_json::to_value(ok_env(100, "KO")).unwrap();
+        assert_eq!(ok["ok"], true);
+        assert_eq!(ok["fetched_at"], 100);
+        assert_eq!(ok["info"]["symbol"], "KO");
+        let err = serde_json::to_value(err_env(100)).unwrap();
+        assert_eq!(err, serde_json::json!({"fetched_at": 100, "ok": false}));
+    }
+
+    /// Fresh success (< 12 h) serves from cache.
+    #[test]
+    fn decide_fresh_hit_serves_cached() {
+        let now = 1_000_000_000;
+        let env = ok_env(now - CACHE_FRESH_SECS + 1, "KO");
+        match decide(Some(env), now, false) {
+            CacheAction::ServeFresh(info) => assert_eq!(info.symbol, "KO"),
+            other => panic!("expected ServeFresh, got {other:?}"),
+        }
+    }
+
+    /// A success at/past the 12 h window refetches, carrying itself as the
+    /// stale fallback.
+    #[test]
+    fn decide_expired_success_refetches_with_stale_fallback() {
+        let now = 1_000_000_000;
+        let env = ok_env(now - CACHE_FRESH_SECS, "KO");
+        match decide(Some(env), now, false) {
+            CacheAction::Fetch { stale: Some(info) } => assert_eq!(info.symbol, "KO"),
+            other => panic!("expected Fetch with stale fallback, got {other:?}"),
+        }
+    }
+
+    /// A fresh failure marker (< 1 h) is a negative hit: Err without fetch.
+    #[test]
+    fn decide_fresh_negative_errs_without_fetch() {
+        let now = 1_000_000_000;
+        let env = err_env(now - CACHE_NEGATIVE_SECS + 1);
+        assert!(matches!(decide(Some(env), now, false), CacheAction::ServeNegative));
+    }
+
+    /// An expired failure marker (>= 1 h) retries live, with nothing to
+    /// fall back on.
+    #[test]
+    fn decide_expired_negative_refetches_without_fallback() {
+        let now = 1_000_000_000;
+        let env = err_env(now - CACHE_NEGATIVE_SECS);
+        assert!(matches!(decide(Some(env), now, false), CacheAction::Fetch { stale: None }));
+    }
+
+    /// No envelope at all: plain miss.
+    #[test]
+    fn decide_missing_envelope_fetches() {
+        assert!(matches!(decide(None, 1_000, false), CacheAction::Fetch { stale: None }));
+    }
+
+    /// Bypass skips BOTH fresh-serve branches but keeps the stale
+    /// fallback from a fresh success.
+    #[test]
+    fn decide_bypass_skips_fresh_but_keeps_stale_fallback() {
+        let now = 1_000_000_000;
+        match decide(Some(ok_env(now - 10, "KO")), now, true) {
+            CacheAction::Fetch { stale: Some(info) } => assert_eq!(info.symbol, "KO"),
+            other => panic!("expected Fetch with stale fallback, got {other:?}"),
+        }
+        assert!(matches!(
+            decide(Some(err_env(now - 10)), now, true),
+            CacheAction::Fetch { stale: None }
+        ));
+    }
+
+    /// A corrupt ok-envelope with no payload degrades to a plain miss.
+    #[test]
+    fn decide_ok_envelope_without_info_fetches() {
+        let now = 1_000_000_000;
+        let env = CacheEnvelope { fetched_at: now - 10, ok: true, info: None };
+        assert!(matches!(decide(Some(env), now, false), CacheAction::Fetch { stale: None }));
+    }
+
+    // =================================================================
+    // Round 4 B1/B2 — Redis-backed integration (injected fetcher; skips
+    // when the dev Redis on :6380 is unreachable)
+    // =================================================================
+
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    const TEST_REDIS_URL: &str = "redis://:patrimonio_dev@127.0.0.1:6380/";
+
+    /// Dev Redis client, or None (→ the caller skips) when unreachable.
+    async fn test_redis() -> Option<redis::Client> {
+        let client = redis::Client::open(TEST_REDIS_URL).ok()?;
+        let mut conn = client.get_multiplexed_async_connection().await.ok()?;
+        let _: String = redis::cmd("PING").query_async(&mut conn).await.ok()?;
+        Some(client)
+    }
+
+    async fn del_key(client: &redis::Client, key: &str) {
+        if let Ok(mut conn) = client.get_multiplexed_async_connection().await {
+            let _: Result<(), _> = redis::cmd("DEL").arg(key).query_async(&mut conn).await;
+        }
+    }
+
+    async fn get_raw(client: &redis::Client, key: &str) -> Option<String> {
+        let mut conn = client.get_multiplexed_async_connection().await.ok()?;
+        redis::cmd("GET").arg(key).query_async(&mut conn).await.ok()?
+    }
+
+    /// Miss → one live fetch, envelope written with the retention TTL,
+    /// info served; an immediate second call is a fresh hit (no fetch).
+    #[tokio::test]
+    async fn cached_miss_fills_envelope_then_serves_fresh() {
+        let Some(client) = test_redis().await else {
+            eprintln!("skipping: dev Redis :6380 unreachable");
+            return;
+        };
+        let symbol = "ZZTEST-B1-MISS";
+        let key = cache_key(symbol);
+        del_key(&client, &key).await;
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let fetch = |s: String| {
+            let calls = calls.clone();
+            async move {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Ok(sample_info(&s))
+            }
+        };
+        let got = fetch_dividends_cached_with(&client, symbol, false, fetch).await.unwrap();
+        assert_eq!(got.per_year, 4);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        // Envelope landed with the 7-day retention TTL.
+        let raw = get_raw(&client, &key).await.expect("envelope written");
+        let env: CacheEnvelope = serde_json::from_str(&raw).unwrap();
+        assert!(env.ok);
+        assert_eq!(env.info.unwrap().per_year, 4);
+        let mut conn = client.get_multiplexed_async_connection().await.unwrap();
+        let ttl: i64 = redis::cmd("TTL").arg(&key).query_async(&mut conn).await.unwrap();
+        assert!(ttl > CACHE_RETENTION_SECS - 60 && ttl <= CACHE_RETENTION_SECS);
+
+        // Second call: fresh hit, no new fetch.
+        let again = fetch_dividends_cached_with(&client, symbol, false, |s: String| {
+            let calls = calls.clone();
+            async move {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Ok(sample_info(&s))
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(again.per_year, 4);
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "fresh hit must not re-fetch");
+
+        del_key(&client, &key).await;
+    }
+
+    /// Live failure with a stale success in retention serves the stale
+    /// info (Ok, not Err) and leaves the envelope untouched.
+    #[tokio::test]
+    async fn cached_error_serves_stale_success() {
+        let Some(client) = test_redis().await else {
+            eprintln!("skipping: dev Redis :6380 unreachable");
+            return;
+        };
+        let symbol = "ZZTEST-B1-STALE";
+        let key = cache_key(symbol);
+        // Seed an EXPIRED (but retained) success.
+        let fetched_at = chrono::Utc::now().timestamp() - CACHE_FRESH_SECS - 100;
+        write_envelope(&client, &key, &ok_env(fetched_at, symbol)).await;
+
+        let got = fetch_dividends_cached_with(&client, symbol, false, |_: String| async {
+            Err(anyhow!("yahoo down"))
+        })
+        .await
+        .unwrap();
+        assert_eq!(got.symbol, symbol);
+        assert_eq!(got.per_year, 4);
+        // The stale success was NOT overwritten by a failure marker.
+        let env: CacheEnvelope =
+            serde_json::from_str(&get_raw(&client, &key).await.unwrap()).unwrap();
+        assert!(env.ok);
+        assert_eq!(env.fetched_at, fetched_at);
+
+        del_key(&client, &key).await;
+    }
+
+    /// Live failure with nothing cached writes a negative marker and
+    /// errs; the next call inside the 1 h window errs WITHOUT fetching.
+    #[tokio::test]
+    async fn cached_error_without_cache_writes_negative_marker() {
+        let Some(client) = test_redis().await else {
+            eprintln!("skipping: dev Redis :6380 unreachable");
+            return;
+        };
+        let symbol = "ZZTEST-B1-NEG";
+        let key = cache_key(symbol);
+        del_key(&client, &key).await;
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let fetch = |_: String| {
+            let calls = calls.clone();
+            async move {
+                calls.fetch_add(1, Ordering::SeqCst);
+                Err(anyhow!("unresolvable"))
+            }
+        };
+        assert!(fetch_dividends_cached_with(&client, symbol, false, &fetch).await.is_err());
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        let env: CacheEnvelope =
+            serde_json::from_str(&get_raw(&client, &key).await.unwrap()).unwrap();
+        assert!(!env.ok);
+
+        // Negative-fresh: Err again, but with NO second live attempt.
+        assert!(fetch_dividends_cached_with(&client, symbol, false, &fetch).await.is_err());
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "negative cache must suppress the refetch");
+
+        del_key(&client, &key).await;
+    }
+
+    /// Bypass ignores a fresh envelope (live fetch happens) but still
+    /// falls back to the fresh-but-bypassed success when the fetch fails.
+    #[tokio::test]
+    async fn cached_bypass_fetches_live_but_keeps_stale_fallback() {
+        let Some(client) = test_redis().await else {
+            eprintln!("skipping: dev Redis :6380 unreachable");
+            return;
+        };
+        let symbol = "ZZTEST-B1-BYPASS";
+        let key = cache_key(symbol);
+        write_envelope(&client, &key, &ok_env(chrono::Utc::now().timestamp() - 10, symbol)).await;
+
+        // Success path: live info (different rate) replaces the envelope.
+        let mut live = sample_info(symbol);
+        live.annual_rate = 9.0;
+        let live_clone = live.clone();
+        let got = fetch_dividends_cached_with(&client, symbol, true, move |_: String| {
+            let live = live_clone.clone();
+            async move { Ok(live) }
+        })
+        .await
+        .unwrap();
+        assert_eq!(got.annual_rate, 9.0);
+        let env: CacheEnvelope =
+            serde_json::from_str(&get_raw(&client, &key).await.unwrap()).unwrap();
+        assert_eq!(env.info.unwrap().annual_rate, 9.0);
+
+        // Failure path: bypass still serves the (fresh) cached success.
+        let got = fetch_dividends_cached_with(&client, symbol, true, |_: String| async {
+            Err(anyhow!("yahoo down"))
+        })
+        .await
+        .unwrap();
+        assert_eq!(got.annual_rate, 9.0);
+
+        del_key(&client, &key).await;
+    }
+
+    /// B2 coalescing: two concurrent calls for one symbol at cold cache
+    /// produce exactly ONE fill — the loser waits on the per-symbol lock
+    /// and re-reads the winner's envelope.
+    #[tokio::test]
+    async fn concurrent_cold_calls_coalesce_to_one_fill() {
+        let Some(client) = test_redis().await else {
+            eprintln!("skipping: dev Redis :6380 unreachable");
+            return;
+        };
+        let symbol = "ZZTEST-B2-COALESCE";
+        let key = cache_key(symbol);
+        del_key(&client, &key).await;
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let slow_fetch = |s: String| {
+            let calls = calls.clone();
+            async move {
+                calls.fetch_add(1, Ordering::SeqCst);
+                tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                Ok(sample_info(&s))
+            }
+        };
+        let (a, b) = tokio::join!(
+            fetch_dividends_cached_with(&client, symbol, false, &slow_fetch),
+            fetch_dividends_cached_with(&client, symbol, false, &slow_fetch),
+        );
+        assert_eq!(a.unwrap().per_year, 4);
+        assert_eq!(b.unwrap().per_year, 4);
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "concurrent cold calls must coalesce");
+        // The lock-map entry was pruned once the last holder released it.
+        assert!(!FETCH_LOCKS.lock().unwrap().contains_key(&key));
+
+        del_key(&client, &key).await;
+    }
+
+    /// Redis unreachable degrades to a live fetch — never an error.
+    #[tokio::test]
+    async fn redis_down_degrades_to_live_fetch() {
+        // Nothing listens on this port.
+        let client = redis::Client::open("redis://127.0.0.1:1/").unwrap();
+        let got = fetch_dividends_cached_with(&client, "ZZTEST-B1-NOREDIS", false, |s: String| async move {
+            Ok(sample_info(&s))
+        })
+        .await
+        .unwrap();
+        assert_eq!(got.per_year, 4);
     }
 }
