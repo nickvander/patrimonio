@@ -6429,4 +6429,132 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get axInformational =>
       'Informativo: los dividendos ya forman parte del rendimiento total esperado y no se suman al crecimiento';
+
+  @override
+  String get calShowCalendar => 'Mostrar calendario de 12 meses';
+
+  @override
+  String get calHideCalendar => 'Ocultar calendario de 12 meses';
+
+  @override
+  String get calEstimateCaption =>
+      'Estimado con la tasa y cadencia actuales de cada pagador — no son fechas anunciadas.';
+
+  @override
+  String calMoreChip(int n) {
+    return '+$n más';
+  }
+
+  @override
+  String calEstExDate(String date) {
+    return 'Fecha ex estimada: $date';
+  }
+
+  @override
+  String calMonthSem(String month, String amount, String symbols) {
+    return '$month, $amount esperados, $symbols';
+  }
+
+  @override
+  String calMonthSemEmpty(String month) {
+    return '$month, sin dividendos esperados';
+  }
+
+  @override
+  String get pfDivDetailRefresh => 'Actualizar datos de dividendos';
+
+  @override
+  String get rebCardTitle => 'Asignación objetivo';
+
+  @override
+  String get rebEditTargets => 'Editar objetivos';
+
+  @override
+  String get rebSetTargetsCta =>
+      'Define porcentajes objetivo por clase de activo para ver la desviación y sugerencias de rebalanceo';
+
+  @override
+  String get rebSetTargetsButton => 'Definir objetivos';
+
+  @override
+  String get rebRepairBanner =>
+      'Los objetivos guardados necesitan atención: no suman 100 %.';
+
+  @override
+  String get rebRepairButton => 'Corregir objetivos';
+
+  @override
+  String get rebOnTargetChip => 'en objetivo';
+
+  @override
+  String rebDeltaChip(String delta) {
+    return '$delta pp';
+  }
+
+  @override
+  String rebRowSemantics(
+    String label,
+    String actual,
+    String target,
+    String delta,
+  ) {
+    return '$label: actual $actual %, objetivo $target %, $delta';
+  }
+
+  @override
+  String rebUnclassifiedFootnote(String pct) {
+    return 'Sin clasificar: $pct % — clasifica estas posiciones para incluirlas en los objetivos';
+  }
+
+  @override
+  String get rebGuidanceTitle => 'Para alcanzar los objetivos';
+
+  @override
+  String rebMoveLine(String amount, String from, String to) {
+    return 'Mueve $amount de $from a $to';
+  }
+
+  @override
+  String get rebMoreAdjustments => '…y ajustes menores';
+
+  @override
+  String get rebNoMoves =>
+      'A menos de 2 pp de cada objetivo: no se necesitan movimientos.';
+
+  @override
+  String get rebBelowFloor =>
+      'La desviación restante está por debajo del umbral de acción: sin movimientos sugeridos.';
+
+  @override
+  String get rebTaxCaption =>
+      'Solo orientativo: considera impuestos y selección de lotes antes de vender.';
+
+  @override
+  String get rebEditorTitle => 'Editar asignación objetivo';
+
+  @override
+  String rebEditorTotal(String total) {
+    return 'Total: $total / 100';
+  }
+
+  @override
+  String get rebDistributeRemainder => 'Repartir el resto';
+
+  @override
+  String get rebRemoveTargets => 'Quitar objetivos';
+
+  @override
+  String get rebRemoveConfirmTitle => '¿Quitar objetivos?';
+
+  @override
+  String get rebRemoveConfirmBody =>
+      'La tarjeta vuelve a su estado inicial. Tus posiciones no se ven afectadas.';
+
+  @override
+  String get rebSaveError =>
+      'No se pudieron guardar los objetivos. Inténtalo de nuevo.';
+
+  @override
+  String get rebRemoveError =>
+      'No se pudieron quitar los objetivos. Inténtalo de nuevo.';
 }

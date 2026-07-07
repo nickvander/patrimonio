@@ -10288,6 +10288,203 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Informational — dividends are already part of the expected total return and are not added to growth'**
   String get axInformational;
+
+  /// Expander label on the dividend-income card revealing the projected 12-month income calendar (C4-B).
+  ///
+  /// In en, this message translates to:
+  /// **'Show 12-month calendar'**
+  String get calShowCalendar;
+
+  /// Expander label collapsing the projected 12-month income calendar.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide 12-month calendar'**
+  String get calHideCalendar;
+
+  /// Mandatory honesty caption under the dividend calendar: projections, not declared dividends.
+  ///
+  /// In en, this message translates to:
+  /// **'Estimated from each payer\'s current rate and cadence — not announced dates.'**
+  String get calEstimateCaption;
+
+  /// Overflow chip in a calendar month cell when more payers exist than the visible chips; its tooltip lists the rest.
+  ///
+  /// In en, this message translates to:
+  /// **'+{n} more'**
+  String calMoreChip(int n);
+
+  /// Tooltip on a calendar payer chip: the estimated ex-dividend date, e.g. 'Est. ex-date Jul 14, 2026'.
+  ///
+  /// In en, this message translates to:
+  /// **'Est. ex-date {date}'**
+  String calEstExDate(String date);
+
+  /// A11y: one-sentence merged label per calendar month cell with income, e.g. 'July 2026, $310 expected, KO, ABBV'.
+  ///
+  /// In en, this message translates to:
+  /// **'{month}, {amount} expected, {symbols}'**
+  String calMonthSem(String month, String amount, String symbols);
+
+  /// A11y: merged label for a calendar month cell with zero projected income.
+  ///
+  /// In en, this message translates to:
+  /// **'{month}, no dividends expected'**
+  String calMonthSemEmpty(String month);
+
+  /// Tooltip on the dividend detail sheet's refresh button — forces a live re-fetch past the server-side cache (C4-D).
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh dividend data'**
+  String get pfDivDetailRefresh;
+
+  /// WS2r4: header of the rebalancing card on the Portfolio tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Target allocation'**
+  String get rebCardTitle;
+
+  /// WS2r4: header button opening the targets editor sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit targets'**
+  String get rebEditTargets;
+
+  /// WS2r4: one-line setup CTA body shown when no targets are stored yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Set target percentages per asset class to see drift and rebalancing hints'**
+  String get rebSetTargetsCta;
+
+  /// WS2r4: button on the setup CTA that opens the targets editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Set targets'**
+  String get rebSetTargetsButton;
+
+  /// WS2r4: warning banner when the stored allocation_targets setting violates the C4-A contract.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved targets need attention — they don\'t add up to 100%.'**
+  String get rebRepairBanner;
+
+  /// WS2r4: button on the repair state that opens the targets editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Fix targets'**
+  String get rebRepairButton;
+
+  /// WS2r4: delta chip text when a class is within 2 pp of its target.
+  ///
+  /// In en, this message translates to:
+  /// **'on target'**
+  String get rebOnTargetChip;
+
+  /// WS2r4: delta chip text, e.g. '+8.3 pp' — pp = percentage points.
+  ///
+  /// In en, this message translates to:
+  /// **'{delta} pp'**
+  String rebDeltaChip(String delta);
+
+  /// WS2r4 a11y: one-sentence label for a drift row.
+  ///
+  /// In en, this message translates to:
+  /// **'{label}: actual {actual}%, target {target}%, {delta}'**
+  String rebRowSemantics(
+    String label,
+    String actual,
+    String target,
+    String delta,
+  );
+
+  /// WS2r4: muted footnote when unclassified balances are part of the denominator (decision #5).
+  ///
+  /// In en, this message translates to:
+  /// **'Unclassified: {pct}% — classify these holdings to include them in targets'**
+  String rebUnclassifiedFootnote(String pct);
+
+  /// WS2r4: section header above the move-guidance lines (sentence case, matching the dividend card's section headers).
+  ///
+  /// In en, this message translates to:
+  /// **'To reach targets'**
+  String get rebGuidanceTitle;
+
+  /// WS2r4: one rebalancing suggestion line.
+  ///
+  /// In en, this message translates to:
+  /// **'Move {amount} from {from} to {to}'**
+  String rebMoveLine(String amount, String from, String to);
+
+  /// WS2r4: trailing line when move suggestions were truncated (3-line cap / $500 floor).
+  ///
+  /// In en, this message translates to:
+  /// **'…and smaller adjustments'**
+  String get rebMoreAdjustments;
+
+  /// WS2r4: positive-toned line when every class drift is inside the ±2 pp band.
+  ///
+  /// In en, this message translates to:
+  /// **'Within 2 pp of every target — no moves needed.'**
+  String get rebNoMoves;
+
+  /// WS2r4: muted line when drift exists but every suggested move would be under the $500 floor.
+  ///
+  /// In en, this message translates to:
+  /// **'Remaining drift is under the action floor — no moves suggested.'**
+  String get rebBelowFloor;
+
+  /// WS2r4: mandatory tax caveat under the guidance block.
+  ///
+  /// In en, this message translates to:
+  /// **'Guidance only — consider taxes and lot selection before selling.'**
+  String get rebTaxCaption;
+
+  /// WS2r4: header of the targets editor bottom sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit target allocation'**
+  String get rebEditorTitle;
+
+  /// WS2r4: live sum meter in the editor footer; valid only at exactly 100.
+  ///
+  /// In en, this message translates to:
+  /// **'Total: {total} / 100'**
+  String rebEditorTotal(String total);
+
+  /// WS2r4: helper button that dumps the residual to 100 into the largest field.
+  ///
+  /// In en, this message translates to:
+  /// **'Distribute remainder'**
+  String get rebDistributeRemainder;
+
+  /// WS2r4: destructive action clearing the stored targets (returns the card to its setup CTA).
+  ///
+  /// In en, this message translates to:
+  /// **'Remove targets'**
+  String get rebRemoveTargets;
+
+  /// WS2r4: confirm-dialog title for removing targets.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove targets?'**
+  String get rebRemoveConfirmTitle;
+
+  /// WS2r4: confirm-dialog body for removing targets.
+  ///
+  /// In en, this message translates to:
+  /// **'The card returns to its setup state. Your holdings are not affected.'**
+  String get rebRemoveConfirmBody;
+
+  /// WS2r4: snackbar when the optimistic targets save fails and is reverted.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save targets — try again.'**
+  String get rebSaveError;
+
+  /// WS2r4: snackbar when clearing the targets fails and is reverted.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t remove targets — try again.'**
+  String get rebRemoveError;
 }
 
 class _AppLocalizationsDelegate

@@ -6372,4 +6372,129 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get axInformational =>
       'Informational — dividends are already part of the expected total return and are not added to growth';
+
+  @override
+  String get calShowCalendar => 'Show 12-month calendar';
+
+  @override
+  String get calHideCalendar => 'Hide 12-month calendar';
+
+  @override
+  String get calEstimateCaption =>
+      'Estimated from each payer\'s current rate and cadence — not announced dates.';
+
+  @override
+  String calMoreChip(int n) {
+    return '+$n more';
+  }
+
+  @override
+  String calEstExDate(String date) {
+    return 'Est. ex-date $date';
+  }
+
+  @override
+  String calMonthSem(String month, String amount, String symbols) {
+    return '$month, $amount expected, $symbols';
+  }
+
+  @override
+  String calMonthSemEmpty(String month) {
+    return '$month, no dividends expected';
+  }
+
+  @override
+  String get pfDivDetailRefresh => 'Refresh dividend data';
+
+  @override
+  String get rebCardTitle => 'Target allocation';
+
+  @override
+  String get rebEditTargets => 'Edit targets';
+
+  @override
+  String get rebSetTargetsCta =>
+      'Set target percentages per asset class to see drift and rebalancing hints';
+
+  @override
+  String get rebSetTargetsButton => 'Set targets';
+
+  @override
+  String get rebRepairBanner =>
+      'Saved targets need attention — they don\'t add up to 100%.';
+
+  @override
+  String get rebRepairButton => 'Fix targets';
+
+  @override
+  String get rebOnTargetChip => 'on target';
+
+  @override
+  String rebDeltaChip(String delta) {
+    return '$delta pp';
+  }
+
+  @override
+  String rebRowSemantics(
+    String label,
+    String actual,
+    String target,
+    String delta,
+  ) {
+    return '$label: actual $actual%, target $target%, $delta';
+  }
+
+  @override
+  String rebUnclassifiedFootnote(String pct) {
+    return 'Unclassified: $pct% — classify these holdings to include them in targets';
+  }
+
+  @override
+  String get rebGuidanceTitle => 'To reach targets';
+
+  @override
+  String rebMoveLine(String amount, String from, String to) {
+    return 'Move $amount from $from to $to';
+  }
+
+  @override
+  String get rebMoreAdjustments => '…and smaller adjustments';
+
+  @override
+  String get rebNoMoves => 'Within 2 pp of every target — no moves needed.';
+
+  @override
+  String get rebBelowFloor =>
+      'Remaining drift is under the action floor — no moves suggested.';
+
+  @override
+  String get rebTaxCaption =>
+      'Guidance only — consider taxes and lot selection before selling.';
+
+  @override
+  String get rebEditorTitle => 'Edit target allocation';
+
+  @override
+  String rebEditorTotal(String total) {
+    return 'Total: $total / 100';
+  }
+
+  @override
+  String get rebDistributeRemainder => 'Distribute remainder';
+
+  @override
+  String get rebRemoveTargets => 'Remove targets';
+
+  @override
+  String get rebRemoveConfirmTitle => 'Remove targets?';
+
+  @override
+  String get rebRemoveConfirmBody =>
+      'The card returns to its setup state. Your holdings are not affected.';
+
+  @override
+  String get rebSaveError => 'Couldn\'t save targets — try again.';
+
+  @override
+  String get rebRemoveError => 'Couldn\'t remove targets — try again.';
 }
