@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../services/transaction_mutation_refresh.dart'
     show mergeRefetchedTransactions, txRefetchLimit;
+import '../utils/chart_touch.dart';
 import '../utils/currency.dart';
 import '../widgets/transactions_tab.dart';
 import '../widgets/account_balance_chart.dart';
@@ -600,6 +601,12 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     final isUp = points.last.y >= points.first.y;
     final color = isUp ? context.positive : context.pinkAccent;
 
+    // The sparkline is derived in the account's NATIVE currency (it walks
+    // back from `_currentBalance`), so the tooltip formats with the same
+    // helper as the panel header — not the dashboard's display currency.
+    final sparkCurrency =
+        (widget.account['currency'] ?? widget.targetCurrency).toString();
+
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: SizedBox(
@@ -611,7 +618,42 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             gridData: const FlGridData(show: false),
             titlesData: const FlTitlesData(show: false),
             borderData: FlBorderData(show: false),
-            lineTouchData: const LineTouchData(enabled: false),
+            // Index-spaced x: tooltip dates come from `orderedDays[idx]`.
+            lineTouchData: standardLineTouch(
+              context,
+              items: (ctx, touchedSpots) {
+                return touchedSpots.map((spot) {
+                  final idx =
+                      spot.x.toInt().clamp(0, orderedDays.length - 1);
+                  return LineTooltipItem(
+                    '',
+                    TextStyle(color: ctx.tooltipOnSurface),
+                    children: [
+                      TextSpan(
+                        text:
+                            '${DateFormat.yMMMd().format(orderedDays[idx])}\n',
+                        style: TextStyle(
+                          color: ctx.tooltipOnSurfaceMuted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.normal,
+                        ),
+                      ),
+                      TextSpan(
+                        text: formatCurrencyAmount(spot.y, sparkCurrency),
+                        style: TextStyle(
+                          color: ctx.tooltipOnSurface,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          fontFeatures: const [
+                            FontFeature.tabularFigures()
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList();
+              },
+            ),
             lineBarsData: [
               LineChartBarData(
                 spots: points,

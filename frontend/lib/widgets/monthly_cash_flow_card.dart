@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
+import '../utils/chart_touch.dart';
 import '../utils/theme_colors.dart';
 
 /// Compact "what hit my accounts this month" card pinned to the Overview.
@@ -196,6 +197,10 @@ class MonthlyCashFlowCard extends StatelessWidget {
                               ((m['spending'] as num?)?.toDouble() ?? 0.0)) *
                           conversionFactor)
                   .toList(growable: false),
+              labels: sparkSource
+                  .map((m) => (m['month'] as String?) ?? '')
+                  .toList(growable: false),
+              currencyFormat: currencyFormat,
               positive: net >= 0,
             );
 
@@ -461,9 +466,31 @@ class _StatBlock extends StatelessWidget {
 
 class _NetSparkline extends StatelessWidget {
   final List<double> points;
+
+  /// Month keys ('YYYY-MM'), same order/length as [points] — the hover
+  /// tooltip resolves the month label by index (index-spaced x axis).
+  final List<String> labels;
+  final NumberFormat currencyFormat;
   final bool positive;
 
-  const _NetSparkline({required this.points, required this.positive});
+  const _NetSparkline({
+    required this.points,
+    required this.labels,
+    required this.currencyFormat,
+    required this.positive,
+  });
+
+  /// 'YYYY-MM' → short month label ('Jul'); falls back to the raw key.
+  String _monthLabel(String raw) {
+    final parts = raw.split('-');
+    if (parts.length < 2) return raw;
+    try {
+      final dt = DateTime(int.parse(parts[0]), int.parse(parts[1]));
+      return DateFormat('MMM').format(dt);
+    } catch (_) {
+      return raw;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -494,7 +521,39 @@ class _NetSparkline extends StatelessWidget {
         gridData: const FlGridData(show: false),
         titlesData: const FlTitlesData(show: false),
         borderData: FlBorderData(show: false),
-        lineTouchData: const LineTouchData(enabled: false),
+        lineTouchData: standardLineTouch(
+          context,
+          items: (ctx, touchedSpots) {
+            return touchedSpots.map((spot) {
+              final idx = spot.x.toInt().clamp(0, labels.length - 1);
+              return LineTooltipItem(
+                '',
+                TextStyle(color: ctx.tooltipOnSurface),
+                children: [
+                  TextSpan(
+                    text: '${_monthLabel(labels[idx])}\n',
+                    style: TextStyle(
+                      color: ctx.tooltipOnSurfaceMuted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.normal,
+                    ),
+                  ),
+                  // spot.y is the month's net, already conversionFactor-
+                  // converted at the call site.
+                  TextSpan(
+                    text: currencyFormat.format(spot.y),
+                    style: TextStyle(
+                      color: ctx.tooltipOnSurface,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              );
+            }).toList();
+          },
+        ),
         lineBarsData: [
           LineChartBarData(
             spots: [

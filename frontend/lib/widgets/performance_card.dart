@@ -3,6 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../components/date_range_selector.dart';
 import '../services/api_service.dart';
+import '../utils/chart_touch.dart';
 import '../utils/theme_colors.dart';
 import '../l10n/app_localizations.dart';
 
@@ -387,7 +388,53 @@ class _PerformanceCardState extends State<PerformanceCard> {
                       gridData: const FlGridData(show: false),
                       titlesData: const FlTitlesData(show: false),
                       borderData: FlBorderData(show: false),
-                      lineTouchData: const LineTouchData(enabled: false),
+                      // The x-axis is INDEX-spaced (round-3 decision: samples
+                      // are near-daily, so index spacing avoids gap
+                      // artifacts). Tooltips therefore index into `filtered`
+                      // for the date — never treat x as a day offset.
+                      lineTouchData: standardLineTouch(
+                        context,
+                        items: (ctx, touchedSpots) {
+                          return touchedSpots.map((spot) {
+                            final idx = spot.x
+                                .toInt()
+                                .clamp(0, filtered.length - 1);
+                            final date = DateTime.tryParse(
+                                filtered[idx]['date']?.toString() ?? '');
+                            return LineTooltipItem(
+                              '',
+                              TextStyle(color: ctx.tooltipOnSurface),
+                              children: [
+                                if (date != null)
+                                  TextSpan(
+                                    text:
+                                        '${DateFormat('MMM d, y').format(date)}\n',
+                                    style: TextStyle(
+                                      color: ctx.tooltipOnSurfaceMuted,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.normal,
+                                    ),
+                                  ),
+                                // spot.y already carries conversionFactor
+                                // (applied when the spots were built above),
+                                // so format directly — _money would double-
+                                // convert.
+                                TextSpan(
+                                  text: widget.currencyFormat.format(spot.y),
+                                  style: TextStyle(
+                                    color: ctx.tooltipOnSurface,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures()
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            );
+                          }).toList();
+                        },
+                      ),
                       minX: 0,
                       maxX: (spots.length - 1).toDouble(),
                       lineBarsData: [
@@ -554,7 +601,68 @@ class _PerformanceCardState extends State<PerformanceCard> {
                 gridData: const FlGridData(show: false),
                 titlesData: const FlTitlesData(show: false),
                 borderData: FlBorderData(show: false),
-                lineTouchData: const LineTouchData(enabled: false),
+                // Index-spaced x (same convention as the value chart):
+                // tooltips index into `filtered` for the date. One merged
+                // tooltip body on the "you" bar (barIndex 1) carrying both
+                // series; the benchmark bar returns null (net-worth's
+                // only-one-body pattern).
+                lineTouchData: standardLineTouch(
+                  context,
+                  items: (ctx, touchedSpots) {
+                    String pct(double p) =>
+                        '${p >= 0 ? '+' : ''}${p.toStringAsFixed(1)}%';
+                    return touchedSpots.map((spot) {
+                      if (spot.barIndex != 1) return null;
+                      final idx =
+                          spot.x.toInt().clamp(0, filtered.length - 1);
+                      final date = DateTime.tryParse(
+                          filtered[idx]['date']?.toString() ?? '');
+                      final benchY =
+                          spSpots[spot.x.toInt().clamp(0, spSpots.length - 1)]
+                              .y;
+                      return LineTooltipItem(
+                        '',
+                        TextStyle(color: ctx.tooltipOnSurface),
+                        children: [
+                          if (date != null)
+                            TextSpan(
+                              text:
+                                  '${DateFormat('MMM d, y').format(date)}\n',
+                              style: TextStyle(
+                                color: ctx.tooltipOnSurfaceMuted,
+                                fontSize: 11,
+                                fontWeight: FontWeight.normal,
+                              ),
+                            ),
+                          TextSpan(
+                            text: '${l.lwPerfTwrYou} ${pct(spot.y)}\n',
+                            style: TextStyle(
+                              color: spot.y >= 0
+                                  ? ctx.tooltipPositive
+                                  : ctx.tooltipNegative,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ],
+                            ),
+                          ),
+                          TextSpan(
+                            text: '${_benchmarkLabel(l)} ${pct(benchY)}',
+                            style: TextStyle(
+                              color: ctx.tooltipOnSurfaceMuted,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList();
+                  },
+                ),
                 minX: 0,
                 maxX: (yourSpots.length - 1).toDouble(),
                 lineBarsData: [
