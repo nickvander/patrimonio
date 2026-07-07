@@ -4032,7 +4032,7 @@ async fn loan_partial_payment_tops_up_same_installment() {
         return;
     };
     let (token, user_id) = bootstrap(&app, &pool).await;
-    let (_inst, acct) = seed_account(&pool, user_id).await;
+    let (_inst, _acct) = seed_account(&pool, user_id).await;
 
     // Interest-free loan: $1,200 over 12 months → $100 principal/month,
     // each installment's scheduled_amount is exactly 100.
@@ -5640,4 +5640,652 @@ async fn allocation_unclassified_band_for_holdingsless_investment_account() {
     assert!(rows
         .iter()
         .any(|r| r["asset_class"] == "equity" && r["sub_category"] == "VTI"));
+}
+
+// =====================================================================
+// Round 3 — C3-A asset-class overrides + C3-B soft delete / restore
+// =====================================================================
+
+/// C3-A: the PUT matrix (200 set / 200 clear / 422 bad class / 404 unheld)
+/// and the read-side precedence — one override flips the holdings rows in
+/// EVERY account, the allocation band, the CSV export, and the instrument
+/// detail (with its `asset_class_source` flag); clearing reverts them all.
+#[tokio::test]
+#[serial_test::serial]
+async fn asset_class_override_matrix_and_precedence_everywhere() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (inst, _acct) = seed_account(&pool, user_id).await;
+    let brok = seed_typed_account(&pool, user_id, inst, "Brokerage", "brokerage", "6000.00").await;
+    let ira = seed_typed_account(&pool, user_id, inst, "IRA", "ira", "3000.00").await;
+
+    // Same instrument in TWO accounts — one edit must cover both.
+    seed_holding(&pool, user_id, brok, "VTI", "Vanguard Total Market", "etf", "10", Some("600"), "6000", None).await;
+    seed_holding(&pool, user_id, ira, "VTI", "Vanguard Total Market", "etf", "5", Some("600"), "3000", None).await;
+    // Fresh close so /instruments/VTI never reaches for Yahoo in the test.
+    seed_close(&pool, "VTI", 0, "600").await;
+
+    let alloc_total = |rows: &Value| -> f64 {
+        rows.as_array().unwrap().iter().map(|r| r["value"].as_f64().unwrap()).sum()
+    };
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/allocation", None, Some(&token)))
+        .await
+        .unwrap();
+    let total_before = alloc_total(&body_json(res.into_body()).await);
+
+    // ---- SET: case-insensitive path, normalized symbol echoed back. ----
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PUT,
+            "/api/dashboard/instruments/vti/asset-class",
+            Some(&serde_json::json!({"asset_class": "bonds"})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    assert_eq!(
+        body,
+        serde_json::json!({
+            "symbol": "VTI",
+            "asset_class": "bonds",
+            "asset_class_source": "override"
+        })
+    );
+
+    // Holdings: BOTH rows (brokerage + IRA) carry the override.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/holdings", None, Some(&token)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    let vti_rows: Vec<_> = body["holdings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|h| h["symbol"] == "VTI")
+        .collect();
+    assert_eq!(vti_rows.len(), 2);
+    assert!(vti_rows.iter().all(|h| h["asset_class"] == "bonds"), "{vti_rows:?}");
+
+    // Allocation: the VTI band moved to bonds wholesale; total unchanged.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/allocation", None, Some(&token)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    let rows = body.as_array().unwrap();
+    let vti_band = rows
+        .iter()
+        .find(|r| r["sub_category"] == "VTI")
+        .expect("VTI band");
+    assert_eq!(vti_band["asset_class"], "bonds");
+    assert!((vti_band["value"].as_f64().unwrap() - 9000.0).abs() < 0.01);
+    assert!(!rows.iter().any(|r| r["asset_class"] == "equity" && r["sub_category"] == "VTI"));
+    assert!((alloc_total(&body) - total_before).abs() < 0.01, "dimension total unchanged");
+
+    // CSV export classifies with the same precedence.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/holdings/export", None, Some(&token)))
+        .await
+        .unwrap();
+    let csv = body_text(res.into_body()).await;
+    let vti_line = csv.lines().find(|l| l.contains("\"VTI\"")).unwrap();
+    assert!(vti_line.contains("\"bonds\""), "csv: {vti_line}");
+
+    // Instrument detail: override + source flag.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/instruments/VTI", None, Some(&token)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["asset_class"], "bonds");
+    assert_eq!(body["asset_class_source"], "override");
+    // C3-A extension: the heuristic rides along so the sheet can label its
+    // "Automatic — Equity" revert row while the override is active.
+    assert_eq!(body["asset_class_heuristic"], "equity");
+
+    // ---- CLEAR: null body reverts everything to the heuristic. ----
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PUT,
+            "/api/dashboard/instruments/VTI/asset-class",
+            Some(&serde_json::json!({"asset_class": null})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    assert_eq!(
+        body,
+        serde_json::json!({
+            "symbol": "VTI",
+            "asset_class": "equity",
+            "asset_class_source": "heuristic"
+        })
+    );
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/holdings", None, Some(&token)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert!(body["holdings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|h| h["symbol"] == "VTI")
+        .all(|h| h["asset_class"] == "equity"));
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/instruments/VTI", None, Some(&token)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["asset_class"], "equity");
+    assert_eq!(body["asset_class_source"], "heuristic");
+    assert_eq!(body["asset_class_heuristic"], "equity");
+
+    // ---- 422: unknown class key. ----
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PUT,
+            "/api/dashboard/instruments/VTI/asset-class",
+            Some(&serde_json::json!({"asset_class": "stonks"})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["error"], "invalid asset class");
+
+    // ---- 404: symbol the caller doesn't hold. ----
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::PUT,
+            "/api/dashboard/instruments/TSLA/asset-class",
+            Some(&serde_json::json!({"asset_class": "bonds"})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["error"], "unknown symbol");
+}
+
+/// Seed the soft-delete lifecycle portfolio: NVDA (lot + two disposals across
+/// two years) and VTI (one disposal), fresh closes for both plus the S&P so
+/// no endpoint reaches for Yahoo. Returns (brokerage_id, nvda_holding_id).
+async fn seed_soft_delete_portfolio(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    inst: uuid::Uuid,
+) -> (uuid::Uuid, uuid::Uuid) {
+    let brok = seed_typed_account(pool, user_id, inst, "Brokerage", "brokerage", "1600.00").await;
+    let nvda = seed_holding(pool, user_id, brok, "NVDA", "NVIDIA Corp", "equity", "10", Some("100"), "1000", Some("800")).await;
+    seed_holding(pool, user_id, brok, "VTI", "Vanguard Total Market", "etf", "10", Some("60"), "600", Some("500")).await;
+
+    let nvda_lot: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) \
+         VALUES ($1, $2, $3, CURRENT_DATE - 60, 10, 80, 'USD', 1.0, 'nvda-lot') RETURNING id",
+    )
+    .bind(nvda)
+    .bind(brok)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    // This-year NVDA disposal (lot-linked, short-term) + a prior-year one so
+    // by_year gains a band only NVDA feeds.
+    sqlx::query(
+        "INSERT INTO lot_disposals \
+         (user_id, holding_id, account_id, lot_id, sell_source_id, qty_sold, sell_price_per_unit, \
+          sell_currency, sell_fx_rate, sell_date, cost_per_unit, cost_fx_rate, realized_pnl_usd) \
+         VALUES ($1, $2, $3, $4, 'nvda-s1', 5, 180, 'USD', 1.0, CURRENT_DATE - 30, 80, 1.0, 500), \
+                ($1, $2, $3, NULL, 'nvda-s2', 2, 180, 'USD', 1.0, CURRENT_DATE - 400, 80, 1.0, 200)",
+    )
+    .bind(user_id)
+    .bind(nvda)
+    .bind(brok)
+    .bind(nvda_lot)
+    .execute(pool)
+    .await
+    .unwrap();
+    // VTI keeps a this-year disposal so the surfaces stay non-empty while
+    // NVDA sits in the undo window.
+    let vti: uuid::Uuid = sqlx::query_scalar(
+        "SELECT id FROM holdings WHERE user_id = $1 AND symbol = 'VTI'",
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO lot_disposals \
+         (user_id, holding_id, account_id, lot_id, sell_source_id, qty_sold, sell_price_per_unit, \
+          sell_currency, sell_fx_rate, sell_date, cost_per_unit, cost_fx_rate, realized_pnl_usd) \
+         VALUES ($1, $2, $3, NULL, 'vti-s1', 5, 60, 'USD', 1.0, CURRENT_DATE - 20, 0, 1.0, 300)",
+    )
+    .bind(user_id)
+    .bind(vti)
+    .bind(brok)
+    .execute(pool)
+    .await
+    .unwrap();
+
+    // Fresh closes: no endpoint reaches for Yahoo; TWR + day-change stay
+    // deterministic across the delete → restore round-trip.
+    seed_close(pool, "NVDA", 1, "98").await;
+    seed_close(pool, "NVDA", 0, "100").await;
+    seed_close(pool, "VTI", 1, "59").await;
+    seed_close(pool, "VTI", 0, "60").await;
+    seed_close(pool, "SP500", 60, "1000").await;
+    seed_close(pool, "SP500", 0, "1100").await;
+    (brok, nvda)
+}
+
+/// C3-B lifecycle: soft delete hides the holding AND its lots/tax history
+/// from every surface (holdings, CSV/lots exports, allocation, realized
+/// gains incl. by_year/ytd, instrument + dividend detail, tax summary, TWR,
+/// account balance) while the row survives in the DB; restore brings every
+/// figure back byte-identical.
+#[tokio::test]
+#[serial_test::serial]
+async fn holding_soft_delete_excluded_everywhere_then_restore_byte_identical() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (inst, _acct) = seed_account(&pool, user_id).await;
+    let (brok, nvda) = seed_soft_delete_portfolio(&pool, user_id, inst).await;
+
+    let this_year = chrono::Utc::now().format("%Y").to_string();
+    let surfaces = [
+        "/api/dashboard/holdings".to_string(),
+        "/api/dashboard/allocation".to_string(),
+        "/api/dashboard/realized-gains".to_string(),
+        "/api/dashboard/portfolio-twr".to_string(),
+        format!("/api/tax/summary?year={this_year}&status=Single"),
+        format!("/api/accounts/{brok}/holdings"),
+    ];
+    async fn fetch_all(app: &Router, token: &str, surfaces: &[String]) -> Vec<Value> {
+        let mut out = Vec::new();
+        for uri in surfaces {
+            let res = app
+                .clone()
+                .oneshot(req(Method::GET, uri, None, Some(token)))
+                .await
+                .unwrap();
+            assert_eq!(res.status(), StatusCode::OK, "{uri}");
+            out.push(body_json(res.into_body()).await);
+        }
+        out
+    }
+    let before = fetch_all(&app, &token, &surfaces).await;
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/holdings/lots/export", None, Some(&token)))
+        .await
+        .unwrap();
+    let lots_csv_before = body_text(res.into_body()).await;
+    assert!(lots_csv_before.contains("NVDA"), "{lots_csv_before}");
+
+    // ---- DELETE: same status as the old hard delete; row survives. ----
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::DELETE,
+            &format!("/api/accounts/{brok}/holdings/{nvda}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    let deleted_at: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("SELECT deleted_at FROM holdings WHERE id = $1")
+            .bind(nvda)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(deleted_at.is_some(), "soft delete keeps the row");
+
+    // Holdings: row gone, totals down to VTI only.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/holdings", None, Some(&token)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert!(!body["holdings"].as_array().unwrap().iter().any(|h| h["symbol"] == "NVDA"));
+    assert!((body["total_value_usd"].as_f64().unwrap() - 600.0).abs() < 0.01, "{}", body["total_value_usd"]);
+
+    // Allocation: the NVDA equity band vanished; VTI (equity, still live)
+    // remains, so no unclassified band appears for this account.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/allocation", None, Some(&token)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert!(!body.as_array().unwrap().iter().any(|r| r["sub_category"] == "NVDA"));
+
+    // Realized gains: NVDA's disposals (both years) hidden — the list, the
+    // taxable subtotal, ytd, and by_year all shrink to VTI's 300.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/realized-gains", None, Some(&token)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["summary"]["count"].as_i64().unwrap(), 1);
+    assert!((body["summary"]["taxable_realized_usd"].as_f64().unwrap() - 300.0).abs() < 0.001);
+    assert!((body["summary"]["ytd_realized_usd"].as_f64().unwrap() - 300.0).abs() < 0.001);
+    assert!((body["summary"]["total_realized_usd"].as_f64().unwrap() - 300.0).abs() < 0.001);
+    let by_year = body["by_year"].as_array().unwrap();
+    assert_eq!(by_year.len(), 1, "prior-year band was NVDA-only: {by_year:?}");
+
+    // Realized-gains CSV: no NVDA rows either.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/realized-gains/export", None, Some(&token)))
+        .await
+        .unwrap();
+    let csv = body_text(res.into_body()).await;
+    assert!(!csv.contains("NVDA"), "{csv}");
+    // Lots CSV: the ghost's lot is invisible.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/holdings/lots/export", None, Some(&token)))
+        .await
+        .unwrap();
+    let csv = body_text(res.into_body()).await;
+    assert!(!csv.contains("NVDA"), "{csv}");
+
+    // Instrument + dividend detail: the symbol is no longer held → 404.
+    for uri in [
+        "/api/dashboard/instruments/NVDA",
+        "/api/dashboard/dividends/NVDA",
+    ] {
+        let res = app
+            .clone()
+            .oneshot(req(Method::GET, uri, None, Some(&token)))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND, "{uri}");
+    }
+
+    // Tax summary: only VTI's 300 short-term survives the window.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/tax/summary?year={this_year}&status=Single"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert!((body["short_term_gains"].as_f64().unwrap() - 300.0).abs() < 0.01, "{}", body["short_term_gains"]);
+
+    // Account panel + balance: recomputed without the ghost.
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, &format!("/api/accounts/{brok}/holdings"), None, Some(&token)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert!(!body.as_array().unwrap().iter().any(|h| h["symbol"] == "NVDA"));
+    let balance: Decimal = sqlx::query_scalar("SELECT current_balance FROM accounts WHERE id = $1")
+        .bind(brok)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(balance, Decimal::from_str("600.00").unwrap());
+
+    // ---- RESTORE: 200 with the HOLDING_COLS row shape. ----
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/accounts/{brok}/holdings/{nvda}/restore"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["id"].as_str().unwrap(), nvda.to_string());
+    assert_eq!(body["symbol"], "NVDA");
+    assert!((body["value"].as_f64().unwrap() - 1000.0).abs() < 0.01);
+
+    // Every captured surface is byte-identical to its pre-delete snapshot.
+    let after = fetch_all(&app, &token, &surfaces).await;
+    for (i, (b, a)) in before.iter().zip(after.iter()).enumerate() {
+        assert_eq!(b, a, "surface {} ({}) changed across delete→restore", i, surfaces[i]);
+    }
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/holdings/lots/export", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(body_text(res.into_body()).await, lots_csv_before);
+    let balance: Decimal = sqlx::query_scalar("SELECT current_balance FROM accounts WHERE id = $1")
+        .bind(brok)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(balance, Decimal::from_str("1600.00").unwrap());
+}
+
+/// B4 purge rules: re-adding the same symbol hard-purges the soft-deleted
+/// ghost (restore later must not resurrect a duplicate), and a ghost aged
+/// past 24 h disappears on the next holdings write (lazy sweep — no cron).
+#[tokio::test]
+#[serial_test::serial]
+async fn soft_delete_purge_on_readd_and_lazy_24h_sweep() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (inst, _acct) = seed_account(&pool, user_id).await;
+    let brok = seed_typed_account(&pool, user_id, inst, "Brokerage", "brokerage", "1000.00").await;
+    let voo = seed_holding(&pool, user_id, brok, "VOO", "Vanguard S&P 500", "etf", "2", Some("500"), "1000", None).await;
+    // Fresh close so create_holding's pricing path never reaches for Yahoo.
+    seed_close(&pool, "VOO", 0, "500").await;
+    seed_close(&pool, "ZZOLD", 0, "10").await;
+
+    // Soft-delete VOO, then re-add the same symbol: the ghost is purged and
+    // exactly ONE row (the new one) remains.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::DELETE,
+            &format!("/api/accounts/{brok}/holdings/{voo}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/accounts/{brok}/holdings"),
+            Some(&serde_json::json!({"symbol": "VOO", "quantity": 3})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM holdings WHERE account_id = $1 AND symbol = 'VOO'",
+    )
+    .bind(brok)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 1, "ghost purged on re-add");
+    // The purged ghost can no longer be restored.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/accounts/{brok}/holdings/{voo}/restore"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+    // Lazy sweep: a ghost older than 24 h is hard-deleted (cascade takes its
+    // lots) by the NEXT holdings write for this user.
+    let old = seed_holding(&pool, user_id, brok, "ZZOLD", "Old Ghost", "equity", "1", Some("10"), "10", None).await;
+    sqlx::query(
+        "UPDATE holdings SET deleted_at = now() - interval '25 hours' WHERE id = $1",
+    )
+    .bind(old)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/accounts/{brok}/holdings"),
+            Some(&serde_json::json!({"symbol": "MSFT", "quantity": 1})),
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let gone: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM holdings WHERE id = $1")
+        .bind(old)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(gone, 0, "expired ghost swept on the next holdings write");
+}
+
+/// C3-B 404 paths: another user can't restore my holding, a second restore
+/// is a no-op 404, and a never-existed id 404s — all with the contract's
+/// error body.
+#[tokio::test]
+#[serial_test::serial]
+async fn restore_holding_404s_for_wrong_user_and_double_restore() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token_a, user_a) = bootstrap(&app, &pool).await;
+    let (inst, _acct) = seed_account(&pool, user_a).await;
+    let brok = seed_typed_account(&pool, user_a, inst, "Brokerage", "brokerage", "1000.00").await;
+    let voo = seed_holding(&pool, user_a, brok, "VOO", "Vanguard S&P 500", "etf", "2", Some("500"), "1000", None).await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::DELETE,
+            &format!("/api/accounts/{brok}/holdings/{voo}"),
+            None,
+            Some(&token_a),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+
+    // Hand-rolled user B (same pattern as split_cross_user_is_404).
+    let user_b: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO users (username, email, password_hash) \
+         VALUES ('bob', 'bob@example.com', 'doesnt-matter-for-this-test') RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("seed user b");
+    let token_b = patrimonio::services::sessions::create_session(&pool, user_b, None, None)
+        .await
+        .expect("create user b session")
+        .token;
+
+    // B can't restore A's holding — and the ghost stays soft-deleted.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/accounts/{brok}/holdings/{voo}/restore"),
+            None,
+            Some(&token_b),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["error"], "nothing to restore");
+    let still_deleted: bool = sqlx::query_scalar(
+        "SELECT deleted_at IS NOT NULL FROM holdings WHERE id = $1",
+    )
+    .bind(voo)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(still_deleted);
+
+    // Owner restores fine; the SECOND restore finds nothing.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/accounts/{brok}/holdings/{voo}/restore"),
+            None,
+            Some(&token_a),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/accounts/{brok}/holdings/{voo}/restore"),
+            None,
+            Some(&token_a),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["error"], "nothing to restore");
+
+    // Never-existed id: same 404.
+    let bogus = uuid::Uuid::new_v4();
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            &format!("/api/accounts/{brok}/holdings/{bogus}/restore"),
+            None,
+            Some(&token_a),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }

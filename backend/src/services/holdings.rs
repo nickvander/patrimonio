@@ -76,6 +76,48 @@ pub(crate) fn classify_asset(holding_type: &str, symbol: &str, name: &str) -> &'
     }
 }
 
+/// The canonical asset-class keys `classify_asset` can return — also the only
+/// values the override endpoint (round 3) accepts, matching the CHECK
+/// constraint on `asset_class_overrides`.
+pub(crate) const ASSET_CLASSES: &[&str] = &[
+    "equity", "bonds", "cash", "crypto", "real_estate", "commodities", "other",
+];
+
+/// Round 3: the user's asset-class overrides, keyed `UPPER(symbol)` →
+/// canonical class. One indexed PK-range lookup; handlers fetch this ONCE per
+/// request and thread it through [`effective_asset_class`]. Empty on error —
+/// a failed fetch degrades to the heuristic, never a 500.
+pub(crate) async fn fetch_asset_class_overrides(
+    db: &PgPool,
+    user_id: uuid::Uuid,
+) -> std::collections::HashMap<String, String> {
+    sqlx::query_as::<_, (String, String)>(
+        "SELECT symbol, asset_class FROM asset_class_overrides WHERE user_id = $1",
+    )
+    .bind(user_id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .collect()
+}
+
+/// Round 3 precedence: a per-(user, symbol) override wins over the heuristic;
+/// otherwise fall through to [`classify_asset`] unchanged. Overrides are
+/// stored normalized `UPPER(TRIM(symbol))`, so the lookup normalizes the same
+/// way.
+pub(crate) fn effective_asset_class(
+    overrides: &std::collections::HashMap<String, String>,
+    holding_type: &str,
+    symbol: &str,
+    name: &str,
+) -> String {
+    overrides
+        .get(&symbol.trim().to_uppercase())
+        .cloned()
+        .unwrap_or_else(|| classify_asset(holding_type, symbol, name).to_string())
+}
+
 /// Latest cached close for a symbol, after a best-effort (4-day-gated) Yahoo
 /// refresh. Used by the on-demand handlers (add/refresh holding) where a stale
 /// cached price is fine.
@@ -101,8 +143,10 @@ pub(crate) async fn recompute_holding_balance(
     account_id: uuid::Uuid,
     user_id: uuid::Uuid,
 ) -> Result<(), sqlx::Error> {
+    // Soft-deleted rows (round 3 undo window) are excluded — this is what
+    // makes the account balance drop the moment a holding is deleted.
     let total: Option<rust_decimal::Decimal> = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(value), 0) FROM holdings WHERE account_id = $1 AND user_id = $2",
+        "SELECT COALESCE(SUM(value), 0) FROM holdings WHERE account_id = $1 AND user_id = $2 AND deleted_at IS NULL",
     )
     .bind(account_id)
     .bind(user_id)
@@ -184,6 +228,7 @@ pub async fn refresh_all_prices(db: &PgPool) -> RefreshSummary {
         JOIN institutions i ON i.id = a.institution_id
         WHERE i.integration_type = 'manual'
           AND COALESCE(h.holding_type, '') <> 'cash'
+          AND h.deleted_at IS NULL
         "#,
     )
     .fetch_all(db)
@@ -192,8 +237,9 @@ pub async fn refresh_all_prices(db: &PgPool) -> RefreshSummary {
 
     let mut summary = RefreshSummary::default();
     for (account_id, user_id) in &targets {
+        // Don't re-price soft-deleted ghosts.
         let symbols: Vec<String> = sqlx::query_scalar(
-            "SELECT DISTINCT symbol FROM holdings WHERE account_id = $1 AND user_id = $2 AND COALESCE(holding_type, '') <> 'cash'",
+            "SELECT DISTINCT symbol FROM holdings WHERE account_id = $1 AND user_id = $2 AND COALESCE(holding_type, '') <> 'cash' AND deleted_at IS NULL",
         )
         .bind(account_id)
         .bind(user_id)
@@ -236,7 +282,52 @@ pub async fn refresh_all_prices(db: &PgPool) -> RefreshSummary {
 
 #[cfg(test)]
 mod tests {
-    use super::classify_asset;
+    use super::{classify_asset, effective_asset_class};
+    use std::collections::HashMap;
+
+    /// Round 3: an override outranks the heuristic; a missing override falls
+    /// through to `classify_asset` unchanged (clearing = removing the map
+    /// entry, so the same call reverts); lookups normalize UPPER(TRIM).
+    #[test]
+    fn override_wins_and_clear_reverts_to_heuristic() {
+        let mut overrides: HashMap<String, String> = HashMap::new();
+        overrides.insert("VBTLX".to_string(), "other".to_string());
+
+        // Override wins even though the heuristic says bonds.
+        assert_eq!(
+            effective_asset_class(&overrides, "mutual fund", "VBTLX", "Vanguard Total Bond"),
+            "other"
+        );
+        // Lookup is UPPER(TRIM)-normalized like the write side.
+        assert_eq!(
+            effective_asset_class(&overrides, "mutual fund", " vbtlx ", "Vanguard Total Bond"),
+            "other"
+        );
+        // Non-overridden symbols are byte-identical to the heuristic (C2).
+        assert_eq!(
+            effective_asset_class(&overrides, "etf", "BND", "Vanguard Total Bond Market ETF"),
+            classify_asset("etf", "BND", "Vanguard Total Bond Market ETF")
+        );
+
+        // Clearing the override reverts to the heuristic.
+        overrides.remove("VBTLX");
+        assert_eq!(
+            effective_asset_class(&overrides, "mutual fund", "VBTLX", "Vanguard Total Bond"),
+            "bonds"
+        );
+    }
+
+    /// Every value the override endpoint may store is a canonical class key.
+    #[test]
+    fn asset_classes_list_matches_classifier_outputs() {
+        for class in super::ASSET_CLASSES {
+            assert!(matches!(
+                *class,
+                "equity" | "bonds" | "cash" | "crypto" | "real_estate" | "commodities" | "other"
+            ));
+        }
+        assert_eq!(super::ASSET_CLASSES.len(), 7);
+    }
 
     #[test]
     fn bond_funds_classify_as_bonds_regardless_of_holding_type() {

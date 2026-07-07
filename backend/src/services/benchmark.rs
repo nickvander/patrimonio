@@ -216,7 +216,7 @@ pub async fn contribution_comparison(
                h.value AS h_value, h.quantity AS h_qty
         FROM holding_lots l
         JOIN holdings h ON h.id = l.holding_id
-        WHERE l.user_id = $1 AND l.qty > 0
+        WHERE l.user_id = $1 AND l.qty > 0 AND h.deleted_at IS NULL
         "#,
     )
     .bind(user_id)

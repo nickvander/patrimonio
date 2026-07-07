@@ -62,11 +62,13 @@ async fn main() -> Result<()> {
         .connect(&config.database_url)
         .await?;
 
-    // Run database migrations
+    // Run database migrations. ignore_missing lets an older binary boot
+    // against a DB that a newer binary already migrated further (rollback
+    // path) — additive-only migrations make that safe here.
     tracing::info!("Running database migrations...");
-    sqlx::migrate!("./migrations")
-        .run(&db)
-        .await?;
+    let mut migrator = sqlx::migrate!("./migrations");
+    migrator.set_ignore_missing(true);
+    migrator.run(&db).await?;
     tracing::info!("Migrations complete");
 
     // Connect to Redis

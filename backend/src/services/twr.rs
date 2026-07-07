@@ -132,8 +132,9 @@ pub async fn portfolio_twr(db: &PgPool, user_id: Uuid, benchmark: Option<&str>) 
     //    holdings count toward the total (denominator) via the current FX
     //    rate but are treated as uncovered.
     let fx_usd_to_mxn = current_usd_mxn(db).await;
+    // Soft-deleted holdings (round 3 undo window) are invisible to TWR.
     let holdings = sqlx::query(
-        "SELECT symbol, currency, quantity, value FROM holdings WHERE user_id = $1",
+        "SELECT symbol, currency, quantity, value FROM holdings WHERE user_id = $1 AND deleted_at IS NULL",
     )
     .bind(user_id)
     .fetch_all(db)
@@ -208,7 +209,7 @@ pub async fn portfolio_twr(db: &PgPool, user_id: Uuid, benchmark: Option<&str>) 
     let lot_rows = sqlx::query(
         "SELECT h.symbol AS symbol, l.qty, l.cost_per_unit, l.usd_fx_rate, l.acquired_at \
          FROM holding_lots l JOIN holdings h ON h.id = l.holding_id \
-         WHERE l.user_id = $1 AND l.qty > 0",
+         WHERE l.user_id = $1 AND l.qty > 0 AND h.deleted_at IS NULL",
     )
     .bind(user_id)
     .fetch_all(db)
@@ -217,7 +218,7 @@ pub async fn portfolio_twr(db: &PgPool, user_id: Uuid, benchmark: Option<&str>) 
     let disp_rows = sqlx::query(
         "SELECT h.symbol AS symbol, d.qty_sold, d.sell_price_per_unit, d.sell_fx_rate, d.sell_date \
          FROM lot_disposals d JOIN holdings h ON h.id = d.holding_id \
-         WHERE d.user_id = $1",
+         WHERE d.user_id = $1 AND h.deleted_at IS NULL",
     )
     .bind(user_id)
     .fetch_all(db)

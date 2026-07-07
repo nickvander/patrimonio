@@ -1158,6 +1158,11 @@ impl TaxService {
             ) wash
             WHERE d.user_id = $1
               AND EXTRACT(YEAR FROM d.sell_date)::int = $2
+              -- Round 3 soft delete: disposals of a soft-deleted holding are
+              -- invisible while it sits in the undo window (no holdings join
+              -- here, so an EXISTS guard).
+              AND EXISTS (SELECT 1 FROM holdings h
+                          WHERE h.id = d.holding_id AND h.deleted_at IS NULL)
             "#,
         )
         .bind(user_id)
@@ -1374,6 +1379,10 @@ impl TaxService {
             LEFT JOIN holding_lots l ON l.id = d.lot_id
             WHERE d.user_id = $1
               AND EXTRACT(YEAR FROM d.sell_date)::int = $2
+              -- Round 3 soft delete: hide disposals of a holding in the undo
+              -- window (its wash-sale buys share the same holding, so the
+              -- outer guard covers the EXISTS subquery too).
+              AND h.deleted_at IS NULL
             ORDER BY d.sell_date ASC
             "#,
         )
@@ -1524,6 +1533,9 @@ impl TaxService {
             WHERE l.user_id = $1
               AND l.qty > 0
               AND NOT (LOWER(COALESCE(a.account_type, '')) = ANY($2))
+              -- Round 3 soft delete: lots of a soft-deleted holding are not
+              -- harvestable while it sits in the undo window.
+              AND h.deleted_at IS NULL
             ORDER BY l.acquired_at ASC, l.id ASC
             "#,
         )
@@ -1871,6 +1883,9 @@ impl TaxService {
                               WHERE l.user_id = $1 AND l.qty > 0
                                 AND l.acquired_at >= $2 AND l.acquired_at <= $3
                                 AND LOWER(COALESCE(a.account_type, '')) = ANY($4)
+                                -- Round 3 soft delete (no holdings join here).
+                                AND EXISTS (SELECT 1 FROM holdings h
+                                            WHERE h.id = l.holding_id AND h.deleted_at IS NULL)
                             ),
                             income AS (
                               SELECT COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END), 0) AS v
@@ -1899,7 +1914,10 @@ impl TaxService {
                                    FROM holding_lots l JOIN accounts a ON a.id = l.account_id
                                    WHERE l.user_id = $1 AND l.qty > 0
                                      AND l.acquired_at >= $2 AND l.acquired_at <= $3
-                                     AND LOWER(COALESCE(a.account_type, '')) = 'ira'"#,
+                                     AND LOWER(COALESCE(a.account_type, '')) = 'ira'
+                                     -- Round 3 soft delete (no holdings join here).
+                                     AND EXISTS (SELECT 1 FROM holdings h
+                                                 WHERE h.id = l.holding_id AND h.deleted_at IS NULL)"#,
                             )
                             .bind(user_id).bind(start_date).bind(end_date)
                             .fetch_one(db).await.unwrap_or(dec!(0));

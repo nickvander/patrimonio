@@ -24,6 +24,12 @@ pub fn router() -> Router<AppState> {
         .route("/holdings/dividends", get(portfolio_dividends))
         .route("/dividends/{symbol}", get(dividend_detail))
         .route("/instruments/{symbol}", get(instrument_detail))
+        // Round 3 (contract C3-A): pin/clear a per-(user, symbol) asset-class
+        // override. Same auth/CSRF conventions as the sibling mutations.
+        .route(
+            "/instruments/{symbol}/asset-class",
+            axum::routing::put(set_asset_class_override),
+        )
         .route("/allocation", get(asset_allocation))
         .route("/trends", get(cash_flow_trends))
         .route("/spending-by-category", get(spending_by_category))
@@ -474,7 +480,8 @@ async fn portfolio_value_history(
         FROM balance_snapshots bs
         JOIN accounts a ON bs.account_id = a.id
         WHERE bs.user_id = $1 AND a.archived_at IS NULL
-          AND EXISTS (SELECT 1 FROM holdings h WHERE h.account_id = a.id)
+          AND EXISTS (SELECT 1 FROM holdings h
+                      WHERE h.account_id = a.id AND h.deleted_at IS NULL)
         ORDER BY bs.as_of_date ASC, bs.id ASC
         "#,
     )
@@ -551,7 +558,7 @@ async fn fetch_holdings_details(
         FROM holdings h
         JOIN accounts a ON h.account_id = a.id
         JOIN institutions i ON a.institution_id = i.id
-        WHERE h.user_id = $1 AND a.archived_at IS NULL
+        WHERE h.user_id = $1 AND a.archived_at IS NULL AND h.deleted_at IS NULL
         ORDER BY h.value DESC NULLS LAST
         "#
     )
@@ -559,6 +566,10 @@ async fn fetch_holdings_details(
     .fetch_all(db)
     .await
     .unwrap_or_default();
+
+    // Round 3 (C3-A): the user's asset-class overrides, fetched ONCE per
+    // request and consulted per row below.
+    let overrides = crate::services::holdings::fetch_asset_class_overrides(db, user_id).await;
 
     // Pull any lots for this user in one query, group by holding.
     // Filter zero-qty rows here — those are FIFO-depletion markers
@@ -675,10 +686,14 @@ async fn fetch_holdings_details(
             let holding_type: String = r.try_get::<String, _>("holding_type").unwrap_or_default();
             // Canonical asset class (contract C2) — the allocation endpoint
             // classifies with the same function, so a band's key always
-            // matches the rows the band should filter to.
-            let asset_class =
-                crate::services::holdings::classify_asset(&holding_type, &symbol, &name)
-                    .to_string();
+            // matches the rows the band should filter to. A user override
+            // (C3-A) outranks the heuristic in BOTH places.
+            let asset_class = crate::services::holdings::effective_asset_class(
+                &overrides,
+                &holding_type,
+                &symbol,
+                &name,
+            );
 
             HoldingDetail {
                 symbol,
@@ -1368,6 +1383,7 @@ async fn export_lots_csv(
         JOIN holdings h ON h.id = l.holding_id
         JOIN accounts a ON a.id = h.account_id
         WHERE l.user_id = $1 AND l.qty > 0 AND a.archived_at IS NULL
+          AND h.deleted_at IS NULL
         ORDER BY h.symbol ASC, l.acquired_at ASC, l.id ASC
         "#,
     )
@@ -1591,6 +1607,7 @@ async fn asset_allocation(
                    COALESCE(quantity, 0)::numeric as qty
             FROM holdings h
             WHERE user_id = $2
+              AND h.deleted_at IS NULL
               AND EXISTS (SELECT 1 FROM accounts a
                           WHERE a.id = h.account_id AND a.archived_at IS NULL)
             UNION ALL
@@ -1644,7 +1661,10 @@ async fn asset_allocation(
                                    'roth 401k', 'hsa', '529', 'pension', 'investment', 'bonds')
               AND user_id = $2
               AND archived_at IS NULL
-              AND NOT EXISTS (SELECT 1 FROM holdings h WHERE h.account_id = accounts.id)
+              -- An account whose only holding is soft-deleted correctly
+              -- becomes an unclassified band for the undo window.
+              AND NOT EXISTS (SELECT 1 FROM holdings h
+                              WHERE h.account_id = accounts.id AND h.deleted_at IS NULL)
         ) sub
         "#
     )
@@ -1654,10 +1674,16 @@ async fn asset_allocation(
     .await
     .unwrap_or_default();
 
+    // Round 3 (C3-A): the user's overrides, fetched ONCE per request — the
+    // same precedence the holdings endpoint applies, so a band's key always
+    // matches the rows it filters to.
+    let overrides =
+        crate::services::holdings::fetch_asset_class_overrides(&state.db, ctx.user_id).await;
+
     // Classify each row, then group by (canonical class, sub-category). A
     // HashMap keyed on both keeps the same grouping the old SQL GROUP BY
     // gave, with the class computed in Rust.
-    let mut grouped: HashMap<(&'static str, String), (f64, f64)> = HashMap::new();
+    let mut grouped: HashMap<(String, String), (f64, f64)> = HashMap::new();
     for r in &rows {
         let kind: String = r.try_get("kind").unwrap_or_default();
         let value: f64 = r
@@ -1677,11 +1703,12 @@ async fn asset_allocation(
             .unwrap_or_else(|| "Unknown".to_string());
 
         // Accounts-union rows (bank cash, crypto-by-balance) carry their
-        // class in `kind`; holdings rows go through the shared classifier.
-        let asset_class = match kind.as_str() {
-            "cash" => "cash",
-            "crypto" => "crypto",
-            "unclassified" => "unclassified",
+        // class in `kind`; holdings rows go through the shared classifier
+        // (override-aware, C3-A).
+        let asset_class: String = match kind.as_str() {
+            "cash" => "cash".to_string(),
+            "crypto" => "crypto".to_string(),
+            "unclassified" => "unclassified".to_string(),
             _ => {
                 let holding_type: String = r
                     .try_get::<Option<String>, _>("holding_type")
@@ -1698,7 +1725,12 @@ async fn asset_allocation(
                     .ok()
                     .flatten()
                     .unwrap_or_default();
-                crate::services::holdings::classify_asset(&holding_type, &symbol, &name)
+                crate::services::holdings::effective_asset_class(
+                    &overrides,
+                    &holding_type,
+                    &symbol,
+                    &name,
+                )
             }
         };
 
@@ -1710,8 +1742,8 @@ async fn asset_allocation(
     let mut entries: Vec<AllocationEntry> = grouped
         .into_iter()
         .map(|((asset_class, sub_category), (value, quantity))| AllocationEntry {
-            category: asset_class_label(asset_class).to_string(),
-            asset_class: asset_class.to_string(),
+            category: asset_class_label(&asset_class).to_string(),
+            asset_class,
             sub_category,
             value,
             quantity,
@@ -2578,6 +2610,7 @@ const REALIZED_DISPOSALS_SQL: &str = r#"
         LEFT JOIN holding_lots l ON l.id = d.lot_id
         LEFT JOIN accounts a ON a.id = h.account_id
         WHERE d.user_id = $1
+          AND h.deleted_at IS NULL
           AND ($2::int IS NULL OR EXTRACT(YEAR FROM d.sell_date)::int = $2)
         ORDER BY d.sell_date DESC
 "#;
@@ -2653,6 +2686,9 @@ async fn realized_gains(
                COALESCE(SUM(realized_pnl_usd), 0) AS total
         FROM lot_disposals
         WHERE user_id = $1
+          -- Round 3 soft delete: no holdings join here, so an EXISTS guard.
+          AND EXISTS (SELECT 1 FROM holdings h
+                      WHERE h.id = lot_disposals.holding_id AND h.deleted_at IS NULL)
         GROUP BY year
         ORDER BY year ASC
         "#,
@@ -2678,6 +2714,9 @@ async fn realized_gains(
         FROM lot_disposals
         WHERE user_id = $1
           AND EXTRACT(YEAR FROM sell_date) = EXTRACT(YEAR FROM CURRENT_DATE)
+          -- Round 3 soft delete: no holdings join here, so an EXISTS guard.
+          AND EXISTS (SELECT 1 FROM holdings h
+                      WHERE h.id = lot_disposals.holding_id AND h.deleted_at IS NULL)
         "#,
     )
     .bind(ctx.user_id)
@@ -4278,6 +4317,7 @@ async fn portfolio_dividends(
         JOIN accounts a ON h.account_id = a.id
         WHERE h.user_id = $1
           AND a.archived_at IS NULL
+          AND h.deleted_at IS NULL
           AND COALESCE(h.holding_type, '') <> 'cash'
           AND h.symbol IS NOT NULL AND h.symbol <> ''
         GROUP BY h.symbol, h.currency
@@ -4792,6 +4832,7 @@ async fn dividend_detail(
         JOIN accounts a ON h.account_id = a.id
         WHERE h.user_id = $1
           AND a.archived_at IS NULL
+          AND h.deleted_at IS NULL
           AND COALESCE(h.holding_type, '') <> 'cash'
           AND UPPER(h.symbol) = UPPER($2)
         ORDER BY h.value DESC NULLS LAST
@@ -4907,8 +4948,17 @@ struct InstrumentDetailResponse {
     name: String,
     /// Native currency of the (dominant) position.
     currency: String,
-    /// Canonical asset class (contract C2), same classifier as holdings.
+    /// Canonical asset class (contract C2), same classifier as holdings —
+    /// reflects a user override (C3-A) when one exists.
     asset_class: String,
+    /// C3-A: `"override"` when `asset_class` comes from the user's pinned
+    /// classification, `"heuristic"` otherwise.
+    asset_class_source: &'static str,
+    /// C3-A extension: the `classify_asset` heuristic result regardless of
+    /// any override — lets the sheet label its "Automatic — <class>" revert
+    /// row while an override is active. Equals `asset_class` when
+    /// `asset_class_source == "heuristic"`.
+    asset_class_heuristic: &'static str,
     /// Shares held across all of the user's active accounts.
     quantity: f64,
     /// Latest per-share price (native currency); null when unpriced.
@@ -4972,6 +5022,7 @@ fn build_instrument_detail(
     lots: Vec<InstrumentLot>,
     prices: &[(chrono::NaiveDate, f64)],
     closes: Option<&[(chrono::NaiveDate, f64)]>,
+    asset_class_override: Option<&str>,
     total_portfolio_value_usd: f64,
     fx_usd_to_mxn: f64,
     today: chrono::NaiveDate,
@@ -5009,9 +5060,19 @@ fn build_instrument_detail(
         .filter(|cb| *cb > 0.0)
         .map(|cb| round2((value_usd - cb) / cb * 100.0));
 
-    let asset_class =
-        crate::services::holdings::classify_asset(&first.holding_type, &first.symbol, &first.name)
-            .to_string();
+    // C3-A precedence: the user's pinned class outranks the heuristic; the
+    // source field tells the sheet which one it is showing. The heuristic is
+    // always emitted too, so the sheet can label its "Automatic — <class>"
+    // revert row while an override is active.
+    let asset_class_heuristic = crate::services::holdings::classify_asset(
+        &first.holding_type,
+        &first.symbol,
+        &first.name,
+    );
+    let (asset_class, asset_class_source) = match asset_class_override {
+        Some(c) => (c.to_string(), "override"),
+        None => (asset_class_heuristic.to_string(), "heuristic"),
+    };
     let is_cash = first.holding_type == "cash" || asset_class == "cash";
     let day = day_change_for_row(value_usd, is_cash, closes, today);
 
@@ -5026,6 +5087,8 @@ fn build_instrument_detail(
         name: first.name.clone(),
         currency: first.currency.clone(),
         asset_class,
+        asset_class_source,
+        asset_class_heuristic,
         quantity,
         price: first.price,
         value_usd,
@@ -5093,6 +5156,7 @@ async fn instrument_detail(
         JOIN accounts a ON h.account_id = a.id
         WHERE h.user_id = $1
           AND a.archived_at IS NULL
+          AND h.deleted_at IS NULL
           AND UPPER(h.symbol) = UPPER($2)
         ORDER BY h.value DESC NULLS LAST
         "#,
@@ -5229,7 +5293,7 @@ async fn instrument_detail(
         ), 0) AS total
         FROM holdings h
         JOIN accounts a ON h.account_id = a.id
-        WHERE h.user_id = $2 AND a.archived_at IS NULL
+        WHERE h.user_id = $2 AND a.archived_at IS NULL AND h.deleted_at IS NULL
         "#,
     )
     .bind(fx_usd_to_mxn)
@@ -5241,6 +5305,17 @@ async fn instrument_detail(
     .and_then(|r| r.try_get::<rust_decimal::Decimal, _>("total").ok())
     .and_then(|d| d.to_string().parse::<f64>().ok())
     .unwrap_or(0.0);
+
+    // Round 3 (C3-A): the caller's override for this one symbol — a single
+    // indexed PK lookup, passed into the pure builder as Option<&str>.
+    let asset_class_override: Option<String> = sqlx::query_scalar(
+        "SELECT asset_class FROM asset_class_overrides WHERE user_id = $1 AND symbol = $2",
+    )
+    .bind(ctx.user_id)
+    .bind(positions[0].symbol.trim().to_uppercase())
+    .fetch_optional(&state.db)
+    .await
+    .unwrap_or(None);
 
     // Stored price series — ticker-shaped symbols only. `ensure_symbol_fresh`
     // is best-effort (4-day gate, tolerates network failure when cached data
@@ -5272,10 +5347,122 @@ async fn instrument_detail(
         lots,
         &prices,
         closes,
+        asset_class_override.as_deref(),
         total_portfolio_value_usd,
         fx_usd_to_mxn,
         today,
     ))
+    .into_response()
+}
+
+/// Contract C3-A request body: `{"asset_class": "bonds"}` sets an override,
+/// `{"asset_class": null}` clears it back to the heuristic.
+#[derive(Deserialize)]
+struct AssetClassOverrideRequest {
+    asset_class: Option<String>,
+}
+
+/// PUT /instruments/{symbol}/asset-class — pin (UPSERT) or clear (DELETE) the
+/// caller's asset-class override for a held symbol (contract C3-A). Keyed
+/// per (user, UPPER(TRIM(symbol))) in `asset_class_overrides`, NOT on the
+/// holdings row — import/sync churns holdings rows, and a classification is a
+/// property of the instrument, so one edit covers every account holding it.
+async fn set_asset_class_override(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    axum::extract::Path(symbol): axum::extract::Path<String>,
+    Json(payload): Json<AssetClassOverrideRequest>,
+) -> Response {
+    // Validate BEFORE the held check so a bogus class is always 422, even
+    // for a symbol the caller doesn't hold.
+    if let Some(ref class) = payload.asset_class {
+        if !crate::services::holdings::ASSET_CLASSES.contains(&class.as_str()) {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({"error": "invalid asset class"})),
+            )
+                .into_response();
+        }
+    }
+
+    // Same case-insensitive active-holdings match as `instrument_detail`; the
+    // top-value row donates the representative type/name for the heuristic
+    // fallback in the response.
+    let row = sqlx::query(
+        r#"
+        SELECT h.symbol, h.name, COALESCE(h.holding_type, '') AS holding_type
+        FROM holdings h
+        JOIN accounts a ON h.account_id = a.id
+        WHERE h.user_id = $1
+          AND a.archived_at IS NULL
+          AND h.deleted_at IS NULL
+          AND UPPER(h.symbol) = UPPER($2)
+        ORDER BY h.value DESC NULLS LAST
+        LIMIT 1
+        "#,
+    )
+    .bind(ctx.user_id)
+    .bind(&symbol)
+    .fetch_optional(&state.db)
+    .await
+    .unwrap_or(None);
+
+    let Some(row) = row else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "unknown symbol"})),
+        )
+            .into_response();
+    };
+    let held_symbol: String = row.get("symbol");
+    let held_name: String = row.try_get("name").unwrap_or_default();
+    let held_type: String = row.try_get("holding_type").unwrap_or_default();
+    // Overrides are stored normalized — the same UPPER(TRIM) key every
+    // classify site looks up.
+    let key = held_symbol.trim().to_uppercase();
+
+    let write = match payload.asset_class.as_deref() {
+        Some(class) => {
+            sqlx::query(
+                "INSERT INTO asset_class_overrides (user_id, symbol, asset_class, updated_at) \
+                 VALUES ($1, $2, $3, now()) \
+                 ON CONFLICT (user_id, symbol) \
+                 DO UPDATE SET asset_class = EXCLUDED.asset_class, updated_at = now()",
+            )
+            .bind(ctx.user_id)
+            .bind(&key)
+            .bind(class)
+            .execute(&state.db)
+            .await
+        }
+        None => {
+            sqlx::query("DELETE FROM asset_class_overrides WHERE user_id = $1 AND symbol = $2")
+                .bind(ctx.user_id)
+                .bind(&key)
+                .execute(&state.db)
+                .await
+        }
+    };
+    if let Err(e) = write {
+        error!("Failed to write asset-class override for {key}: {e}");
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    // Echo the now-effective classification: the override when set, the
+    // heuristic after a clear.
+    let (asset_class, source) = match payload.asset_class {
+        Some(class) => (class, "override"),
+        None => (
+            crate::services::holdings::classify_asset(&held_type, &held_symbol, &held_name)
+                .to_string(),
+            "heuristic",
+        ),
+    };
+    Json(serde_json::json!({
+        "symbol": key,
+        "asset_class": asset_class,
+        "asset_class_source": source,
+    }))
     .into_response()
 }
 
@@ -5558,6 +5745,7 @@ mod tests {
             lots,
             &prices,
             Some(&closes),
+            None,
             1_525_740.0,
             20.0,
             day(2026, 7, 6),
@@ -5568,6 +5756,8 @@ mod tests {
             "name": "NVIDIA Corp",
             "currency": "USD",
             "asset_class": "equity",
+            "asset_class_source": "heuristic",
+            "asset_class_heuristic": "equity",
             "quantity": 29.5,
             "price": 172.40,
             "value_usd": 5085.80,
@@ -5624,6 +5814,7 @@ mod tests {
             Vec::new(),
             &[],
             None,
+            None,
             24000.0,
             20.0,
             day(2026, 7, 6),
@@ -5632,6 +5823,8 @@ mod tests {
         assert_eq!(got["symbol"], "VANG TARGET RET 2045");
         // Name/type default classifies trust units as equity (round-1 C2).
         assert_eq!(got["asset_class"], "equity");
+        assert_eq!(got["asset_class_source"], "heuristic");
+        assert_eq!(got["asset_class_heuristic"], "equity");
         assert_eq!(got["value_usd"], 12000.0);
         assert_eq!(got["portfolio_weight_pct"], 50.0);
         // Nullables are real JSON nulls, not absent keys.
@@ -5645,6 +5838,41 @@ mod tests {
         assert_eq!(got["prices"], serde_json::json!([]));
         assert_eq!(got["lots"], serde_json::json!([]));
         assert_eq!(got["accounts"][0]["tax_advantaged"], true);
+    }
+
+    /// C3-A: a pre-fetched override outranks the heuristic in the pure
+    /// builder and flips the source field; None keeps round-2 output intact.
+    #[test]
+    fn instrument_detail_override_wins_and_flags_source() {
+        let positions = vec![InstrumentPosition {
+            symbol: "VBTLX".to_string(),
+            name: "Vanguard Total Bond Market Index Fund".to_string(),
+            holding_type: "mutual fund".to_string(),
+            quantity: 100.0,
+            price: Some(9.85),
+            value: 985.0,
+            cost_basis_usd: Some(1000.0),
+            currency: "USD".to_string(),
+            account_id: "6e9c1a4e-0000-0000-0000-000000000003".to_string(),
+            account_name: "IRA".to_string(),
+            account_type: "ira".to_string(),
+        }];
+        let got = serde_json::to_value(build_instrument_detail(
+            &positions,
+            Vec::new(),
+            &[],
+            None,
+            Some("other"),
+            985.0,
+            20.0,
+            day(2026, 7, 6),
+        ))
+        .unwrap();
+        assert_eq!(got["asset_class"], "other");
+        assert_eq!(got["asset_class_source"], "override");
+        // The heuristic is still reported so the sheet can offer
+        // "Automatic — Bonds" as the revert row (VBTLX is a known bond fund).
+        assert_eq!(got["asset_class_heuristic"], "bonds");
     }
 
     /// Range keys map to sensible window starts; unknown fails soft to 1y.

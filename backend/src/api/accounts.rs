@@ -39,6 +39,9 @@ pub fn router() -> Router<AppState> {
         .route("/{id}/holdings/refresh", post(refresh_holdings))
         .route("/{id}/holdings/dividends", get(holdings_dividends))
         .route("/{id}/holdings/{hid}", delete(delete_holding))
+        // Round 3 (contract C3-B): un-delete a soft-deleted holding inside
+        // the 24 h undo window. 404 once purged (or never existed).
+        .route("/{id}/holdings/{hid}/restore", post(restore_holding))
         .route("/{id}/transactions", get(get_account_transactions))
         // Static segment must precede the dynamic `/{tx_id}` route so
         // `/transactions/batch` isn't swallowed as a tx_id path param.
@@ -1574,6 +1577,23 @@ async fn account_is_manual(
 const HOLDING_COLS: &str =
     "id, account_id, symbol, name, quantity, price, value, cost_basis, currency, holding_type, updated_at";
 
+/// Round 3 lazy sweep: hard-purge this user's soft-deleted holdings older
+/// than the 24 h undo window. Runs at the top of every holdings write
+/// (create/delete) — no cron job; the FK ON DELETE CASCADE cleans the
+/// ghosts' lots and disposals. Best-effort: a sweep failure never blocks
+/// the write that triggered it.
+async fn sweep_expired_soft_deletes(db: &sqlx::PgPool, user_id: uuid::Uuid) {
+    if let Err(e) = sqlx::query(
+        "DELETE FROM holdings WHERE user_id = $1 AND deleted_at < now() - interval '24 hours'",
+    )
+    .bind(user_id)
+    .execute(db)
+    .await
+    {
+        error!("Failed to sweep expired soft-deleted holdings: {}", e);
+    }
+}
+
 async fn create_holding(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
@@ -1587,6 +1607,7 @@ async fn create_holding(
         )
             .into_response();
     }
+    sweep_expired_soft_deletes(&state.db, ctx.user_id).await;
     let symbol = payload.symbol.trim().to_uppercase();
     if symbol.is_empty() {
         return (StatusCode::BAD_REQUEST, "symbol required").into_response();
@@ -1600,6 +1621,18 @@ async fn create_holding(
 
     let price = latest_price(&state.db, &symbol).await;
     let value = price.map(|p| (p * payload.quantity).round_dp(2));
+
+    // Purge on re-add: a still-soft-deleted row for the same (account,
+    // symbol) must not survive — restoring it later would resurrect a
+    // duplicate position. A fresh add IS the hard event superseding undo.
+    let _ = sqlx::query(
+        "DELETE FROM holdings WHERE account_id = $1 AND user_id = $2 AND UPPER(symbol) = $3 AND deleted_at IS NOT NULL",
+    )
+    .bind(account_id)
+    .bind(ctx.user_id)
+    .bind(&symbol)
+    .execute(&state.db)
+    .await;
 
     let id = uuid::Uuid::new_v4();
     let insert = sqlx::query(
@@ -1740,7 +1773,7 @@ async fn list_holdings(
     Path(account_id): Path<uuid::Uuid>,
 ) -> impl IntoResponse {
     let rows = sqlx::query_as::<_, Holding>(&format!(
-        "SELECT {HOLDING_COLS} FROM holdings WHERE account_id = $1 AND user_id = $2 ORDER BY value DESC NULLS LAST"
+        "SELECT {HOLDING_COLS} FROM holdings WHERE account_id = $1 AND user_id = $2 AND deleted_at IS NULL ORDER BY value DESC NULLS LAST"
     ))
     .bind(account_id)
     .bind(ctx.user_id)
@@ -1750,6 +1783,10 @@ async fn list_holdings(
     Json(rows).into_response()
 }
 
+/// Round 3: delete is a SOFT delete (`deleted_at = now()`), reversible via
+/// the restore endpoint for 24 h. Status code and response shape are
+/// unchanged from the old hard delete (contract C3-B). Imports and account
+/// deletion still hard-delete — a fresh import supersedes any undo.
 async fn delete_holding(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
@@ -1758,8 +1795,9 @@ async fn delete_holding(
     if !account_is_manual(&state.db, account_id, ctx.user_id).await {
         return StatusCode::FORBIDDEN.into_response();
     }
+    sweep_expired_soft_deletes(&state.db, ctx.user_id).await;
     let res = sqlx::query(
-        "DELETE FROM holdings WHERE id = $1 AND account_id = $2 AND user_id = $3",
+        "UPDATE holdings SET deleted_at = now() WHERE id = $1 AND account_id = $2 AND user_id = $3 AND deleted_at IS NULL",
     )
     .bind(hid)
     .bind(account_id)
@@ -1779,6 +1817,54 @@ async fn delete_holding(
     }
 }
 
+/// Round 3 (contract C3-B): undo a soft delete by nulling `deleted_at`. The
+/// holding, its lots, and its realized-gain history all reappear atomically
+/// (they were only hidden behind the holding's flag). 404 when there is no
+/// soft-deleted row to restore — wrong user/account, double restore, or the
+/// ghost was already purged (24 h sweep / purge-on-re-add).
+async fn restore_holding(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path((account_id, hid)): Path<(uuid::Uuid, uuid::Uuid)>,
+) -> impl IntoResponse {
+    let res = sqlx::query(
+        "UPDATE holdings SET deleted_at = NULL WHERE id = $1 AND account_id = $2 AND user_id = $3 AND deleted_at IS NOT NULL",
+    )
+    .bind(hid)
+    .bind(account_id)
+    .bind(ctx.user_id)
+    .execute(&state.db)
+    .await;
+    match res {
+        Ok(r) if r.rows_affected() > 0 => {
+            let _ = recompute_holding_balance(&state.db, account_id, ctx.user_id).await;
+            // Same HOLDING_COLS shape as the create-holding readback.
+            match sqlx::query_as::<_, Holding>(&format!(
+                "SELECT {HOLDING_COLS} FROM holdings WHERE id = $1"
+            ))
+            .bind(hid)
+            .fetch_one(&state.db)
+            .await
+            {
+                Ok(h) => (StatusCode::OK, Json(h)).into_response(),
+                Err(e) => {
+                    error!("Failed to read back restored holding: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                }
+            }
+        }
+        Ok(_) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "nothing to restore"})),
+        )
+            .into_response(),
+        Err(e) => {
+            error!("Failed to restore holding: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 /// Re-price every holding in the account from the live Yahoo cache and
 /// recompute the account balance. Lets the user refresh on demand until the
 /// daily price job lands.
@@ -1791,7 +1877,7 @@ async fn refresh_holdings(
         return StatusCode::FORBIDDEN.into_response();
     }
     let symbols: Vec<String> = sqlx::query_scalar(
-        "SELECT DISTINCT symbol FROM holdings WHERE account_id = $1 AND user_id = $2",
+        "SELECT DISTINCT symbol FROM holdings WHERE account_id = $1 AND user_id = $2 AND deleted_at IS NULL",
     )
     .bind(account_id)
     .bind(ctx.user_id)
@@ -1834,7 +1920,7 @@ async fn holdings_dividends(
         // Skip cash-sleeve rows (mirrors the portfolio-wide endpoint) —
         // they're fixed at 1.00, never pay a dividend, and a Yahoo lookup
         // for them only wastes a request + logs a miss.
-        "SELECT symbol, quantity, price FROM holdings WHERE account_id = $1 AND user_id = $2 AND COALESCE(holding_type, '') <> 'cash'",
+        "SELECT symbol, quantity, price FROM holdings WHERE account_id = $1 AND user_id = $2 AND COALESCE(holding_type, '') <> 'cash' AND deleted_at IS NULL",
     )
     .bind(account_id)
     .bind(ctx.user_id)
@@ -1886,6 +1972,7 @@ async fn refresh_all_holdings(
         JOIN institutions i ON i.id = a.institution_id
         JOIN holdings h ON h.account_id = a.id
         WHERE a.user_id = $1 AND i.integration_type = 'manual'
+          AND h.deleted_at IS NULL
         "#,
     )
     .bind(ctx.user_id)
@@ -1898,7 +1985,7 @@ async fn refresh_all_holdings(
         let symbols: Vec<String> = sqlx::query_scalar(
             // Skip cash-sleeve positions — they're fixed at 1.00 and have no
             // Yahoo quote, so a lookup would only waste a request + log a miss.
-            "SELECT DISTINCT symbol FROM holdings WHERE account_id = $1 AND user_id = $2 AND COALESCE(holding_type, '') <> 'cash'",
+            "SELECT DISTINCT symbol FROM holdings WHERE account_id = $1 AND user_id = $2 AND COALESCE(holding_type, '') <> 'cash' AND deleted_at IS NULL",
         )
         .bind(account_id)
         .bind(ctx.user_id)
