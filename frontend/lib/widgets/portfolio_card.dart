@@ -1689,12 +1689,17 @@ class _PortfolioCardState extends State<PortfolioCard> {
             final counter = Text(
               // Filter-aware counter: with a category filter or a search
               // active it reads "N of M holdings"; unfiltered it reads the
-              // full "M holdings · K accounts". On the narrow two-row
-              // layout it truncates gracefully instead of pushing the
-              // toggle off-screen.
+              // full "M holdings · K accounts" — except on the narrow
+              // two-row layout, where a compact "M · K accts" keeps BOTH
+              // numbers readable at 390px instead of ellipsizing the
+              // accounts half mid-word.
               widget.categoryFilter != null || _searchQuery.isNotEmpty
                   ? l.pfFilterShownOfTotal(shownHoldings, totalHoldings)
-                  : l.pfHoldingsAccountsCount(totalHoldings, accountCount),
+                  : narrow
+                      ? l.fix3HoldingsAccountsCompact(
+                          totalHoldings, accountCount)
+                      : l.pfHoldingsAccountsCount(
+                          totalHoldings, accountCount),
               maxLines: narrow ? 1 : null,
               overflow: narrow ? TextOverflow.ellipsis : null,
               style: TextStyle(fontSize: 12, color: context.textSubtle),
@@ -2928,9 +2933,10 @@ void showLotBreakdown(BuildContext context, dynamic h) {
 /// One stacked lot row for the narrow (<480px) lot-breakdown layout (M1):
 ///   line 1 — `Mar 1, 2024 · 10 sh` (w600) with the LT/ST chip
 ///            right-aligned;
-///   line 2 — `@ $88.10 → $1,720.00 now · cost $881.00` (muted 12px):
+///   line 2 — `@ $88.10 → $1,720.00 · cost $881.00` (muted 11px):
 ///            native per-unit and current value, USD cost — the same
-///            figures and em-dash fallbacks as the wide 6-column grid.
+///            figures and em-dash fallbacks as the wide 6-column grid,
+///            compact enough to stay on one line at 390px.
 /// Rows keep a 12px vertical rhythm (6px padding each side of the
 /// hairline separator).
 Widget _narrowLotRow(
@@ -2956,8 +2962,11 @@ Widget _narrowLotRow(
   final qtyStr =
       qty.toStringAsFixed(qty == qty.roundToDouble() ? 0 : 4);
   final dateLabel = date != null ? dateFmt.format(date) : acquired;
+  // No "now" suffix on the current value and 11px below (round-3 polish):
+  // three amounts have to share one line at 390px without splitting the
+  // "cost $X" pair across rows.
   final line2 = '@ ${formatCurrencyAmount(cpu, ccy)} → '
-      '${currentPrice > 0 ? l.pf3LotCurrentNow(formatCurrencyAmount(currentVal, ccy)) : '—'}'
+      '${currentPrice > 0 ? formatCurrencyAmount(currentVal, ccy) : '—'}'
       ' · ${l.pf3LotCost(usdFmt.format(usdCost))}';
   // A1 (round 3, a11y): same one-sentence node as the wide grid's rows so
   // both layouts announce identically.
@@ -3007,7 +3016,7 @@ Widget _narrowLotRow(
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 11,
             color: context.textMuted,
             fontFeatures: const [FontFeature.tabularFigures()],
           ),

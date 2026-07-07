@@ -340,19 +340,30 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
   /// tax-advantaged account-type list Tax planning uses.
   Widget _taxableCaption(
       AppLocalizations l, double taxable, double periodTotal) {
-    return Text.rich(
-      TextSpan(
-        style: TextStyle(fontSize: 11.5, color: context.textMuted),
-        children: [
-          TextSpan(text: '${l.rgxTaxableCaptionPrefix} '),
+    // A2 follow-up (round 3): span-styled text was not surfacing as a
+    // readable node, so the caption is an explicit plain-label Semantics
+    // container (no button) with the visual spans excluded — screen
+    // readers get the whole sentence in one announcement.
+    return Semantics(
+      container: true,
+      label: '${l.rgxTaxableCaptionPrefix} ${_signedMoney(taxable)} '
+          '${l.rgxTaxableCaptionSuffix(_signedMoney(periodTotal))}',
+      child: ExcludeSemantics(
+        child: Text.rich(
           TextSpan(
-            text: _signedMoney(taxable),
-            style: const TextStyle(fontWeight: FontWeight.w600),
+            style: TextStyle(fontSize: 11.5, color: context.textMuted),
+            children: [
+              TextSpan(text: '${l.rgxTaxableCaptionPrefix} '),
+              TextSpan(
+                text: _signedMoney(taxable),
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              TextSpan(
+                  text:
+                      ' ${l.rgxTaxableCaptionSuffix(_signedMoney(periodTotal))}'),
+            ],
           ),
-          TextSpan(
-              text:
-                  ' ${l.rgxTaxableCaptionSuffix(_signedMoney(periodTotal))}'),
-        ],
+        ),
       ),
     );
   }
@@ -361,10 +372,18 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
   /// style (11.5px, textMuted) as [_taxableCaption], so the two captions
   /// have identical line metrics and swapping them is a zero-pixel shift.
   Widget _allTaxableCaption(AppLocalizations l) {
-    return Text.rich(
-      TextSpan(
-        style: TextStyle(fontSize: 11.5, color: context.textMuted),
-        text: l.rg3AllTaxable,
+    // Same explicit plain-label node as [_taxableCaption] — both variants
+    // must be equally readable to assistive tech.
+    return Semantics(
+      container: true,
+      label: l.rg3AllTaxable,
+      child: ExcludeSemantics(
+        child: Text.rich(
+          TextSpan(
+            style: TextStyle(fontSize: 11.5, color: context.textMuted),
+            text: l.rg3AllTaxable,
+          ),
+        ),
       ),
     );
   }

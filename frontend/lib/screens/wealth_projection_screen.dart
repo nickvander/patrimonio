@@ -12,16 +12,49 @@ import '../l10n/app_localizations.dart';
 /// projection math is identical for all three.
 enum _FireFocus { full, coast, barista }
 
+/// Test seams (same pattern as TaxPlanningScreen): the screen fetches through
+/// these typedefs so widget tests can inject fixtures without subclassing
+/// ApiService (which pulls package:web into the test VM). Each defaults to
+/// the real service in production.
+typedef WealthProjectionFetcher = Future<Map<String, dynamic>> Function({
+  required double startBalance,
+  required double monthlyContribution,
+  required double annualReturnRate,
+  required double annualExpenses,
+  required double withdrawalRate,
+  int years,
+  double annualInflationRate,
+  double returnVolatility,
+  int? yearsToRetirement,
+  int monteCarloTrials,
+  double baristaMonthlyIncome,
+  double annualTaxDrag,
+  bool withdrawalGuardrails,
+});
+typedef ProjectionDefaultsFetcher = Future<Map<String, dynamic>?> Function();
+typedef PortfolioDividendsFetcher = Future<Map<String, dynamic>?> Function();
+typedef ProjectionSettingReader = Future<dynamic> Function(String key);
+
 class WealthProjectionScreen extends StatefulWidget {
   final double currentNetWorth;
   final double conversionFactor;
   final NumberFormat currencyFormat;
+
+  /// Test seams — null in production (the real ApiService is used).
+  final WealthProjectionFetcher? projectionFetcher;
+  final ProjectionDefaultsFetcher? defaultsFetcher;
+  final PortfolioDividendsFetcher? dividendsFetcher;
+  final ProjectionSettingReader? settingReader;
 
   const WealthProjectionScreen({
     super.key,
     required this.currentNetWorth,
     required this.conversionFactor,
     required this.currencyFormat,
+    this.projectionFetcher,
+    this.defaultsFetcher,
+    this.dividendsFetcher,
+    this.settingReader,
   });
 
   @override
@@ -159,7 +192,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   // with a tooltip — for a dividend-less portfolio instead of snapping
   // back off after a tap.
   Future<void> _loadDividendData() async {
-    final data = await _apiService.getPortfolioDividends();
+    final fetch =
+        widget.dividendsFetcher ?? _apiService.getPortfolioDividends;
+    final data = await fetch();
     if (!mounted) return;
     setState(() {
       _dividendData = data;
@@ -178,7 +213,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
 
   Future<void> _hydrateGoalFromBackend() async {
     try {
-      final raw = await _apiService.getSetting('net_worth_goal');
+      final read = widget.settingReader ?? _apiService.getSetting;
+      final raw = await read('net_worth_goal');
       if (!mounted || raw is! Map) return;
       final amt = raw['amount_usd'];
       final yr = raw['year'];
@@ -201,7 +237,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   // effort — falls back to the static defaults, then always runs a projection.
   Future<void> _prefillFromTrackedData() async {
     try {
-      final defaults = await _apiService.getProjectionDefaults();
+      final fetch =
+          widget.defaultsFetcher ?? _apiService.getProjectionDefaults;
+      final defaults = await fetch();
       if (mounted && defaults != null) {
         final contrib = (defaults['monthly_contribution'] as num?)?.toDouble();
         final expenses = (defaults['annual_expenses'] as num?)?.toDouble();
@@ -229,7 +267,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   Future<void> _fetchProjection() async {
     setState(() => _isLoading = true);
     try {
-      final data = await _apiService.getWealthProjection(
+      final fetch = widget.projectionFetcher ?? _apiService.getWealthProjection;
+      final data = await fetch(
         // `currentNetWorth` is already USD (dashboard.rs net_worth is computed in
         // USD); `conversionFactor` only scales USD->display. Dividing here
         // double-converted it, so MXN-display users projected from ~1/fxRate of
@@ -310,23 +349,91 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 SizedBox(width: 320, child: _buildControls()),
                 const SizedBox(width: 24),
                 Expanded(
-                  child: Column(
-                    children: [
-                      Expanded(flex: 3, child: _buildChartCard()),
-                      // O2: informational dividend income outlook — sits
-                      // between the chart and the FIRE strip; never part of
-                      // the chart itself.
-                      if (_showDividendOutlook &&
-                          _dividendOutlookAvailable) ...[
-                        const SizedBox(height: 16),
-                        _buildDividendOutlookPanel(),
-                      ],
-                      const SizedBox(height: 16),
-                      _buildFireStatusStrip(),
-                      const SizedBox(height: 16),
-                      Expanded(flex: 1, child: _buildMilestonesRow()),
-                    ],
-                  ),
+                  child: LayoutBuilder(builder: (context, col) {
+                    final panelOn =
+                        _showDividendOutlook && _dividendOutlookAvailable;
+                    // The classic desktop look lets the chart (flex 3) and
+                    // the milestone tiles (flex 1) split whatever height the
+                    // fixed-size cards — the FIRE strip and, when toggled on,
+                    // the dividend outlook panel — leave over. On shorter
+                    // windows that fixed content eats the flex space and the
+                    // chart collapses to a sliver (round-3 defect: 1440x900
+                    // with the outlook panel on). Estimate whether the flex
+                    // layout still gives the chart a usable height; when it
+                    // can't, fall back to a scrollable column with fixed
+                    // heights — the same shape the narrow layout uses.
+                    //
+                    // Estimated fixed extents: FIRE strip ~210, outlook
+                    // panel ~230, plus the 16px gaps; the chart takes 3/4 of
+                    // the leftover and needs ~260px for a readable plot
+                    // (title + legend inside the card use ~70 of it).
+                    const chartMinH = 260.0;
+                    final fixedH =
+                        210.0 + 32.0 + (panelOn ? 230.0 + 16.0 : 0.0);
+                    final flexFits =
+                        (col.maxHeight - fixedH) * 0.75 >= chartMinH;
+                    if (flexFits) {
+                      return Column(
+                        children: [
+                          Expanded(flex: 3, child: _buildChartCard()),
+                          // O2: informational dividend income outlook — sits
+                          // between the chart and the FIRE strip; never part
+                          // of the chart itself.
+                          if (panelOn) ...[
+                            const SizedBox(height: 16),
+                            _buildDividendOutlookPanel(),
+                          ],
+                          const SizedBox(height: 16),
+                          _buildFireStatusStrip(),
+                          const SizedBox(height: 16),
+                          Expanded(
+                            flex: 1,
+                            child: LayoutBuilder(builder: (context, tiles) {
+                              // The 4-up tile row wants ~200px of height.
+                              // When its flex share comes up shorter, the
+                              // release build has always just painted past
+                              // the window edge; mirror that with an
+                              // OverflowBox instead of tripping the debug
+                              // RenderFlex overflow (which also fails widget
+                              // tests). At healthy heights min == max ==
+                              // share, i.e. a no-op.
+                              return OverflowBox(
+                                alignment: Alignment.topCenter,
+                                minHeight: tiles.maxHeight,
+                                maxHeight:
+                                    math.max(tiles.maxHeight, 220.0),
+                                child: _buildMilestonesRow(),
+                              );
+                            }),
+                          ),
+                        ],
+                      );
+                    }
+                    // Scroll fallback: same reading order (chart → outlook →
+                    // FIRE plan → milestone tiles) with the chart pinned to a
+                    // usable height instead of a flex share.
+                    return SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // 360 keeps the plot itself (card minus title +
+                          // legend chrome) comfortably above ~200px.
+                          SizedBox(height: 360, child: _buildChartCard()),
+                          if (panelOn) ...[
+                            const SizedBox(height: 16),
+                            _buildDividendOutlookPanel(),
+                          ],
+                          const SizedBox(height: 16),
+                          _buildFireStatusStrip(),
+                          const SizedBox(height: 16),
+                          // Intrinsic height (not a fixed box): inside a
+                          // scrollable there's no flex space to reclaim, and
+                          // it can't clip the tiles at any width.
+                          _buildMilestonesRow(),
+                        ],
+                      ),
+                    );
+                  }),
                 ),
               ],
             ),
@@ -1232,12 +1339,14 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               height: 3,
               child: dashed
                   ? Row(
+                      // 3 dashes of 4px + two 2px gaps = exactly the 16px box
+                      // (a trailing margin overflowed it by 2px).
                       children: List.generate(
                         3,
-                        (_) => Container(
+                        (i) => Container(
                           width: 4,
                           height: 3,
-                          margin: const EdgeInsets.only(right: 2),
+                          margin: EdgeInsets.only(right: i == 2 ? 0 : 2),
                           decoration: BoxDecoration(
                             color: c,
                             borderRadius: BorderRadius.circular(1),

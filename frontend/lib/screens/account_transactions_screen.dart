@@ -37,6 +37,21 @@ typedef AccountTransactionUpdater = Future<void> Function(
   String? accountId,
 });
 
+/// Signature of one fetch of an account's holdings
+/// (see [AccountTransactionsScreen.holdingsFetcher]).
+typedef AccountHoldingsFetcher = Future<List<dynamic>> Function(
+    String accountId);
+
+/// Signature of the (soft) DELETE behind the holding-row close button
+/// (see [AccountTransactionsScreen.holdingDeleter]).
+typedef AccountHoldingDeleter = Future<void> Function(
+    String accountId, String holdingId);
+
+/// Signature of the restore POST behind the delete-undo snackbar
+/// (see [AccountTransactionsScreen.holdingRestorer]).
+typedef AccountHoldingRestorer = Future<Map<String, dynamic>> Function(
+    String accountId, String holdingId);
+
 /// Per-account transaction history. Rendered as the body of a slide-from-
 /// right side panel via [showAccountTransactionsPanel] — no Scaffold/AppBar
 /// of its own. On narrow viewports the panel collapses to a bottom sheet.
@@ -67,6 +82,16 @@ class AccountTransactionsScreen extends StatefulWidget {
   /// Production leaves it null → `ApiService.updateTransaction`.
   @visibleForTesting
   final AccountTransactionUpdater? transactionUpdater;
+  /// Test seams for the holdings list + the delete-undo flow. Production
+  /// leaves them null → `ApiService.getAccountHoldings` /
+  /// `.deleteHolding` / `.restoreHolding` (same rationale as
+  /// [transactionsFetcher]: package:web won't compile on the test VM).
+  @visibleForTesting
+  final AccountHoldingsFetcher? holdingsFetcher;
+  @visibleForTesting
+  final AccountHoldingDeleter? holdingDeleter;
+  @visibleForTesting
+  final AccountHoldingRestorer? holdingRestorer;
 
   const AccountTransactionsScreen({
     super.key,
@@ -81,6 +106,9 @@ class AccountTransactionsScreen extends StatefulWidget {
     this.onAlertsChanged,
     this.transactionsFetcher,
     this.transactionUpdater,
+    this.holdingsFetcher,
+    this.holdingDeleter,
+    this.holdingRestorer,
   });
 
   @override
@@ -90,6 +118,15 @@ class AccountTransactionsScreen extends StatefulWidget {
 
 class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   final ApiService _apiService = ApiService();
+  /// The panel's own nested [ScaffoldMessenger] (see [build]): snackbars
+  /// shown through it paint above the panel route instead of being hidden
+  /// behind it on the root Scaffold.
+  final GlobalKey<ScaffoldMessengerState> _panelMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
+  /// The delete-undo currently counting down on the panel messenger, if
+  /// any. [dispose] hands it over to the root messenger so closing the
+  /// panel mid-countdown never strands the Undo affordance.
+  _PendingHoldingUndo? _pendingUndo;
   bool _isLoading = true;
   String? _error;
   List<dynamic>? _transactions;
@@ -128,6 +165,35 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     _hydrateAlerts();
   }
 
+  @override
+  void dispose() {
+    // Round 3 (undo-reachability, part b): a pending delete-undo lives on
+    // the panel's nested messenger, which dies with this State — re-show
+    // the remaining countdown on the ROOT messenger (captured before the
+    // delete's awaits) so the user can still undo after closing the
+    // panel. Deferred to a post-frame callback because the tree is locked
+    // during unmount: the root messenger's setState can't run here.
+    final pending = _pendingUndo;
+    _pendingUndo = null;
+    if (pending != null) {
+      final remaining = pending.expiresAt.difference(DateTime.now());
+      if (remaining > Duration.zero) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (pending.rootMessenger.mounted) {
+            _showUndoSnackBar(pending.rootMessenger, pending, remaining);
+          }
+        });
+      }
+    }
+    super.dispose();
+  }
+
+  /// Where in-panel notices go: the panel's own messenger while it is
+  /// mounted (renders above the panel content), the root messenger as a
+  /// fallback during teardown edges.
+  ScaffoldMessengerState get _messenger =>
+      _panelMessengerKey.currentState ?? ScaffoldMessenger.of(context);
+
   bool get _isInvestment =>
       categorizeAccount(widget.account['account_type']?.toString()) ==
       AccountCategory.investment;
@@ -146,7 +212,8 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   Future<void> _fetchHoldings({bool syncBalance = false}) async {
     if (!_isInvestment) return;
     try {
-      final h = await _apiService.getAccountHoldings(_accountId);
+      final h = await (widget.holdingsFetcher ??
+          _apiService.getAccountHoldings)(_accountId);
       if (!mounted) return;
       setState(() => _holdings = h);
       if (syncBalance) _syncBalanceFromHoldings(h);
@@ -313,7 +380,9 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     writeCachedAccountAlerts(next);
     _apiService.putSetting('account_balance_alerts', next).catchError((_) {});
     widget.onAlertsChanged?.call();
-    ScaffoldMessenger.of(context).showSnackBar(
+    // Panel messenger, not root: a root snackbar would be hidden behind
+    // this panel route (see build()).
+    _messenger.showSnackBar(
       SnackBar(
         content: Text(
             value == null ? l.acctxAlertRemoved : l.acctxAlertSaved),
@@ -614,13 +683,32 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildHeader(),
-        Divider(height: 1, color: context.hairline),
-        Expanded(child: _buildBody()),
-      ],
+    // Round 3 (undo-reachability): the panel is a showGeneralDialog route
+    // painted ABOVE the app's root Scaffold, so a snackbar shown on the
+    // root messenger is covered by the panel and its Undo action can't be
+    // reached (the modal barrier also hides it from the semantics tree).
+    // Nesting the panel's own ScaffoldMessenger + a transparent Scaffold
+    // makes in-panel snackbars (delete-undo, alert saved, edit failed)
+    // render INSIDE the panel, above its content. If the panel closes
+    // while a delete-undo countdown is still live, [dispose] re-shows the
+    // snackbar on the root messenger so the affordance survives.
+    return ScaffoldMessenger(
+      key: _panelMessengerKey,
+      child: Scaffold(
+        // Purely structural scaffolding for the messenger: transparent and
+        // inset-inert so the panel's visual chrome (rounded container in
+        // showAccountTransactionsPanel) is untouched.
+        backgroundColor: Colors.transparent,
+        resizeToAvoidBottomInset: false,
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(),
+            Divider(height: 1, color: context.hairline),
+            Expanded(child: _buildBody()),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1069,16 +1157,19 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   /// explicit, destructive-styled confirmation. Cancel / Esc / outside-tap
   /// all resolve to "keep it". Round 3 (contract C3-B/C3-E): the backend
   /// delete is now a soft delete, and a 10-second UNDO snackbar follows a
-  /// confirmed delete. The snackbar and its restore hold the ROOT
-  /// ScaffoldMessenger + the (stateless) ApiService — not this State — so
-  /// undo keeps working even if the panel is closed during the window.
+  /// confirmed delete. The snackbar shows on the panel's own nested
+  /// messenger (above the panel route — the root messenger is covered by
+  /// it); everything the undo needs is captured in a [_PendingHoldingUndo]
+  /// that never touches this State, so [dispose] can migrate a live
+  /// countdown to the root messenger and the restore keeps working after
+  /// the panel is closed.
   Future<void> _deleteHolding(dynamic h) async {
     final l = AppLocalizations.of(context);
-    // Captured BEFORE any await. The panel is a showGeneralDialog route
-    // whose subtree carries no Scaffold/ScaffoldMessenger of its own, so
-    // this lookup resolves to the app's root messenger — the snackbar
-    // renders on the dashboard's Scaffold and outlives the panel.
-    final messenger = ScaffoldMessenger.of(context);
+    // Both messengers are captured BEFORE any await: the panel messenger
+    // hosts the snackbar while the panel is open; the root messenger goes
+    // into the pending undo so [dispose] can re-home the countdown.
+    final rootMessenger = ScaffoldMessenger.of(context);
+    final panelMessenger = _panelMessengerKey.currentState ?? rootMessenger;
     final apiService = _apiService;
     final accountId = _accountId;
     final holdingId = (h['id'] ?? '').toString();
@@ -1112,7 +1203,8 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     );
     if (confirmed != true) return; // cancel/dismiss → nothing is called
     try {
-      await apiService.deleteHolding(accountId, holdingId);
+      await (widget.holdingDeleter ?? apiService.deleteHolding)(
+          accountId, holdingId);
     } catch (_) {
       return; // best-effort, same policy as before the undo flow
     }
@@ -1122,57 +1214,90 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       _fetchHoldings(syncBalance: true);
       _fetchBalanceHistory();
     }
+    final pending = _PendingHoldingUndo(
+      rootMessenger: rootMessenger,
+      restore: widget.holdingRestorer ?? apiService.restoreHolding,
+      fetchHoldings:
+          widget.holdingsFetcher ?? apiService.getAccountHoldings,
+      onBalanceUpdate: widget.onBalanceUpdate,
+      accountId: accountId,
+      holdingId: holdingId,
+      deletedText: l.acct3DeletedSnack(label),
+      undoText: l.acct3Undo,
+      restoreGoneText: l.acct3RestoreGone,
+      restoreFailedText: l.acct3RestoreFailed,
+      expiresAt: DateTime.now().add(_undoWindow),
+    );
+    _pendingUndo = pending;
+    _showUndoSnackBar(panelMessenger, pending, _undoWindow);
+  }
+
+  static const Duration _undoWindow = Duration(seconds: 10);
+
+  /// Shows (or, from [dispose], re-shows on the root messenger) the undo
+  /// snackbar for [pending] with [duration] left on its countdown.
+  void _showUndoSnackBar(ScaffoldMessengerState messenger,
+      _PendingHoldingUndo pending, Duration duration) {
     // One undo window at a time: a second delete replaces the previous
     // snackbar instead of queueing behind its 10-second run.
     messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
+    final controller = messenger.showSnackBar(
       SnackBar(
-        duration: const Duration(seconds: 10),
-        content: Text(l.acct3DeletedSnack(label)),
+        duration: duration,
+        content: Text(pending.deletedText),
         action: SnackBarAction(
-          label: l.acct3Undo,
-          onPressed: () => _undoDeleteHolding(
-            messenger: messenger,
-            apiService: apiService,
-            accountId: accountId,
-            holdingId: holdingId,
-            restoreGoneText: l.acct3RestoreGone,
-            restoreFailedText: l.acct3RestoreFailed,
-          ),
+          label: pending.undoText,
+          onPressed: () =>
+              _undoDeleteHolding(messenger: messenger, pending: pending),
         ),
       ),
     );
+    // Timeout/dismissal ends the undo window. When the panel is being
+    // torn down instead, [dispose] already took ownership of
+    // `_pendingUndo` (nulled it), so this identical-check is a no-op and
+    // the re-homed root snackbar keeps counting.
+    controller.closed.then((_) {
+      if (identical(_pendingUndo, pending)) _pendingUndo = null;
+    });
   }
 
   /// UNDO handler for [_deleteHolding]'s snackbar. Deliberately
-  /// parameterized on the captured messenger / service / ids / strings —
+  /// parameterized on the captured messenger + [_PendingHoldingUndo] —
   /// never on `context` — because the panel may already be closed when the
-  /// user taps UNDO on the root-scaffold snackbar; only the in-panel
-  /// refresh is `mounted`-gated. A 404 (typed
+  /// user taps UNDO (the snackbar then lives on the root messenger); only
+  /// the in-panel refresh is `mounted`-gated, and the dashboard refresh
+  /// runs off the captured callbacks either way. A 404 (typed
   /// [HoldingRestoreGoneException]) means the soft-deleted row was already
   /// purged — the deletion is permanent and the snackbar says so.
   Future<void> _undoDeleteHolding({
     required ScaffoldMessengerState messenger,
-    required ApiService apiService,
-    required String accountId,
-    required String holdingId,
-    required String restoreGoneText,
-    required String restoreFailedText,
+    required _PendingHoldingUndo pending,
   }) async {
     try {
-      await apiService.restoreHolding(accountId, holdingId);
+      await pending.restore(pending.accountId, pending.holdingId);
       // Tapping the SnackBarAction already dismissed the undo snackbar;
       // this is belt-and-braces for programmatic invocations.
       messenger.hideCurrentSnackBar();
       if (mounted) {
+        // Panel still open: full in-panel refresh — rows, header value,
+        // est. income; `syncBalance` also pushes `onBalanceUpdate` toward
+        // the dashboard.
         _fetchHoldings(syncBalance: true);
         _fetchBalanceHistory();
+      } else {
+        // Round 3 (stale-balance fix): the panel closed during the
+        // countdown, so no State is left to refresh — push the restored
+        // account balance straight to the dashboard (Overview accounts
+        // list + net worth) using only what the undo captured.
+        await pending.pushBalanceToDashboard();
       }
     } on HoldingRestoreGoneException {
       messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(SnackBar(content: Text(restoreGoneText)));
+      messenger
+          .showSnackBar(SnackBar(content: Text(pending.restoreGoneText)));
     } catch (_) {
-      messenger.showSnackBar(SnackBar(content: Text(restoreFailedText)));
+      messenger
+          .showSnackBar(SnackBar(content: Text(pending.restoreFailedText)));
     }
   }
 
@@ -1349,7 +1474,9 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                   await _refetchTransactionsInPlace();
                 } catch (e) {
                   if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  // Panel messenger, not root: a root snackbar would be
+                  // hidden behind this panel route (see build()).
+                  _messenger.showSnackBar(
                     SnackBar(content: Text(l.acctxUpdateFailed(e.toString()))),
                   );
                 }
@@ -1398,6 +1525,62 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         );
       }),
     );
+  }
+}
+
+/// Everything a delete-undo needs to keep working after the panel State is
+/// gone: the ROOT messenger (for [_AccountTransactionsScreenState.dispose]
+/// to re-home the countdown), the restore + holdings calls, the dashboard
+/// balance callback, and pre-localized snackbar strings. Holds NO
+/// BuildContext and nothing owned by the State.
+class _PendingHoldingUndo {
+  _PendingHoldingUndo({
+    required this.rootMessenger,
+    required this.restore,
+    required this.fetchHoldings,
+    required this.onBalanceUpdate,
+    required this.accountId,
+    required this.holdingId,
+    required this.deletedText,
+    required this.undoText,
+    required this.restoreGoneText,
+    required this.restoreFailedText,
+    required this.expiresAt,
+  });
+
+  final ScaffoldMessengerState rootMessenger;
+  final AccountHoldingRestorer restore;
+  final AccountHoldingsFetcher fetchHoldings;
+  final Function(String, double)? onBalanceUpdate;
+  final String accountId;
+  final String holdingId;
+  final String deletedText;
+  final String undoText;
+  final String restoreGoneText;
+  final String restoreFailedText;
+  /// End of the undo window — [dispose] only re-homes a countdown that
+  /// still has time left.
+  final DateTime expiresAt;
+
+  /// Post-restore dashboard refresh for the panel-already-closed case:
+  /// re-derives the account balance the way the backend's
+  /// `recompute_holding_balance` does (Σ holding values — deletes only
+  /// exist on manual investment accounts, cf. `_syncBalanceFromHoldings`)
+  /// and pushes it through the captured `onBalanceUpdate` so the Overview
+  /// accounts list and net worth reflect the restore immediately.
+  Future<void> pushBalanceToDashboard() async {
+    final notify = onBalanceUpdate;
+    if (notify == null) return;
+    try {
+      final holdings = await fetchHoldings(accountId);
+      double total = 0;
+      for (final h in holdings) {
+        total += (h['value'] is num)
+            ? (h['value'] as num).toDouble()
+            : double.tryParse('${h['value'] ?? ''}') ?? 0;
+      }
+      notify(accountId, total);
+    } catch (_) {/* best-effort, like every other balance sync */}
   }
 }
 

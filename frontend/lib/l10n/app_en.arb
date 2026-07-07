@@ -1430,6 +1430,18 @@
       }
     }
   },
+  "fix3HoldingsAccountsCompact": "{holdings} · {accounts, plural, =1{1 acct} other{{accounts} accts}}",
+  "@fix3HoldingsAccountsCompact": {
+    "description": "Narrow-toolbar variant of pfHoldingsAccountsCount: fits at 390px without ellipsizing either number. Same (holdings, accounts) parameter order.",
+    "placeholders": {
+      "holdings": {
+        "type": "int"
+      },
+      "accounts": {
+        "type": "int"
+      }
+    }
+  },
   "pfShownOfTotal": "{shown} of {total}",
   "pfFlat": "Flat",
   "pfByAccount": "By account",

@@ -1242,6 +1242,7 @@
   "pfCategoryFilter": "Categoría: {category}",
   "pfSearchHint": "Buscar símbolo, nombre, cuenta o institución…",
   "pfHoldingsAccountsCount": "{holdings, plural, =1{1 posición} other{{holdings} posiciones}} · {accounts, plural, =1{1 cuenta} other{{accounts} cuentas}}",
+  "fix3HoldingsAccountsCompact": "{holdings} · {accounts, plural, =1{1 cta.} other{{accounts} ctas.}}",
   "pfShownOfTotal": "{shown} de {total}",
   "pfFlat": "Lista",
   "pfByAccount": "Por cuenta",

@@ -376,9 +376,13 @@ void main() {
     // Line 1: date · qty, with fractional shares at full precision.
     expect(find.textContaining('Mar 1, 2024 · 10 sh'), findsOneWidget);
     expect(find.textContaining('0.1181 sh'), findsOneWidget);
-    // Line 2: per-unit → current value now · USD cost (10 × $508).
+    // Line 2: per-unit → current value · USD cost (10 × $508). Round-3
+    // polish dropped the "now" suffix and shrank to 11px so all three
+    // amounts share one line at 390px (the "cost $X" pair used to wrap).
+    // No pixel-width assertion here: the test font (Ahem) renders every
+    // glyph a full em wide, so real-font line fitting can't be measured.
     expect(
-        find.textContaining(r'@ $88.10 → $5,080.00 now · cost $881.00'),
+        find.textContaining(r'@ $88.10 → $5,080.00 · cost $881.00'),
         findsOneWidget);
     // Term chips render inline with line 1, not squashed away.
     expect(find.text('Long-term'), findsOneWidget);

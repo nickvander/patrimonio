@@ -6216,6 +6216,12 @@ abstract class AppLocalizations {
   /// **'{holdings, plural, =1{1 holding} other{{holdings} holdings}} · {accounts, plural, =1{1 account} other{{accounts} accounts}}'**
   String pfHoldingsAccountsCount(int holdings, int accounts);
 
+  /// Narrow-toolbar variant of pfHoldingsAccountsCount: fits at 390px without ellipsizing either number. Same (holdings, accounts) parameter order.
+  ///
+  /// In en, this message translates to:
+  /// **'{holdings} · {accounts, plural, =1{1 acct} other{{accounts} accts}}'**
+  String fix3HoldingsAccountsCompact(int holdings, int accounts);
+
   /// No description provided for @pfShownOfTotal.
   ///
   /// In en, this message translates to:

@@ -3801,6 +3801,17 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String fix3HoldingsAccountsCompact(int holdings, int accounts) {
+    String _temp0 = intl.Intl.pluralLogic(
+      accounts,
+      locale: localeName,
+      other: '$accounts ctas.',
+      one: '1 cta.',
+    );
+    return '$holdings · $_temp0';
+  }
+
+  @override
   String pfShownOfTotal(Object shown, Object total) {
     return '$shown de $total';
   }

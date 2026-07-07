@@ -66,6 +66,50 @@ const Map<String, dynamic> _account = {
   'integration_type': 'manual',
 };
 
+/// Manual investment account: the only kind whose holding rows carry the
+/// delete (X) button behind the round-3 soft-delete + undo flow.
+const Map<String, dynamic> _investmentAccount = {
+  'id': 'acct-inv',
+  'name': 'Brokerage',
+  'currency': 'USD',
+  'current_balance': 500.0,
+  'account_type': 'investment',
+  'integration_type': 'manual',
+};
+
+/// Fake holdings backend for the delete-undo flow (the panel's
+/// holdingsFetcher / holdingDeleter / holdingRestorer seams): one AAPL
+/// position that soft-delete removes and restore brings back.
+class _FakeHoldingsBackend {
+  bool deleted = false;
+  int deleteCalls = 0;
+  int restoreCalls = 0;
+
+  static const Map<String, dynamic> holding = {
+    'id': 'hold-1',
+    'symbol': 'AAPL',
+    'name': 'Apple Inc',
+    'quantity': 2,
+    'price': 250.0,
+    'value': 500.0,
+  };
+
+  Future<List<dynamic>> fetch(String accountId) async =>
+      deleted ? const [] : [Map<String, dynamic>.of(holding)];
+
+  Future<void> delete(String accountId, String holdingId) async {
+    deleteCalls++;
+    deleted = true;
+  }
+
+  Future<Map<String, dynamic>> restore(
+      String accountId, String holdingId) async {
+    restoreCalls++;
+    deleted = false;
+    return Map<String, dynamic>.of(holding);
+  }
+}
+
 Widget _host(Widget panel) => MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -196,6 +240,133 @@ void main() {
       // Single-account host: the meta line no longer repeats the
       // account name the panel header already shows.
       expect(find.text('Food & drink · Checking'), findsNothing);
+    });
+  });
+
+  group('Account panel — delete-undo snackbar (round 3)', () {
+    // The production panel is a showGeneralDialog route ABOVE the app's
+    // root Scaffold; these tests reproduce that stacking (right-aligned
+    // page + dismissible barrier) so they genuinely prove the snackbar's
+    // Undo is reachable through the modal layering, not just present in
+    // the tree.
+    Widget dialogHost({
+      required _FakeHoldingsBackend holdings,
+      required List<(String, double)> balanceUpdates,
+    }) {
+      final backend = _FakeBackend(_makeTable(0)); // no transactions
+      return MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => Center(
+              child: ElevatedButton(
+                onPressed: () => showGeneralDialog<void>(
+                  context: context,
+                  barrierDismissible: true,
+                  barrierLabel: 'Close',
+                  barrierColor: Colors.black38,
+                  pageBuilder: (_, _, _) => Align(
+                    alignment: Alignment.centerRight,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: SizedBox(
+                        width: 560,
+                        child: AccountTransactionsScreen(
+                          account: _investmentAccount,
+                          allAccounts: const [_investmentAccount],
+                          conversionFactor: 1.0,
+                          currencyFormat:
+                              NumberFormat.currency(symbol: r'$'),
+                          targetCurrency: 'USD',
+                          usdMxnRate: 0,
+                          transactionsFetcher: backend.fetch,
+                          holdingsFetcher: holdings.fetch,
+                          holdingDeleter: holdings.delete,
+                          holdingRestorer: holdings.restore,
+                          onBalanceUpdate: (id, bal) =>
+                              balanceUpdates.add((id, bal)),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                child: const Text('Open panel'),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    /// Open panel → delete AAPL through the confirm dialog → undo
+    /// snackbar showing.
+    Future<void> deleteThroughConfirm(WidgetTester tester) async {
+      await tester.tap(find.text('Open panel'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Remove AAPL'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete permanently'));
+      await tester.pumpAndSettle();
+      expect(find.text('Deleted AAPL'), findsOneWidget);
+    }
+
+    testWidgets(
+        'with the panel OPEN, the undo snackbar renders above the panel '
+        'route and its Undo is tappable (restores in place)',
+        (tester) async {
+      _setViewSize(tester, const Size(1000, 900));
+      final holdings = _FakeHoldingsBackend();
+      final balanceUpdates = <(String, double)>[];
+
+      await tester.pumpWidget(
+          dialogHost(holdings: holdings, balanceUpdates: balanceUpdates));
+      await deleteThroughConfirm(tester);
+      expect(holdings.deleteCalls, 1);
+
+      // The regression: pre-fix the snackbar sat on the ROOT messenger,
+      // underneath the panel route — this tap would land on the modal
+      // barrier (dismissing the panel) instead of the Undo button.
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+
+      expect(holdings.restoreCalls, 1);
+      // Panel never closed, and the restored row is back on screen.
+      expect(find.byType(AccountTransactionsScreen), findsOneWidget);
+      expect(find.byTooltip('Remove AAPL'), findsOneWidget);
+    });
+
+    testWidgets(
+        'closing the panel mid-countdown re-homes the snackbar on the root '
+        'messenger; Undo still restores AND pushes the fresh balance to '
+        'the dashboard (onBalanceUpdate) despite the disposed State',
+        (tester) async {
+      _setViewSize(tester, const Size(1000, 900));
+      final holdings = _FakeHoldingsBackend();
+      final balanceUpdates = <(String, double)>[];
+
+      await tester.pumpWidget(
+          dialogHost(holdings: holdings, balanceUpdates: balanceUpdates));
+      await deleteThroughConfirm(tester);
+      // In-panel post-delete sync already told the dashboard "0 left".
+      expect(balanceUpdates.last, ('acct-inv', 0.0));
+
+      // Dismiss the panel via its barrier while the countdown runs. The
+      // panel State (and its nested messenger + snackbar) is disposed…
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
+      expect(find.byType(AccountTransactionsScreen), findsNothing);
+
+      // …but the undo affordance survives on the root messenger.
+      expect(find.text('Deleted AAPL'), findsOneWidget);
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+
+      expect(holdings.restoreCalls, 1);
+      // Defect-2 regression: with no panel State left, the undo closure
+      // itself must refresh the dashboard — Σ holding values, like the
+      // backend's recompute.
+      expect(balanceUpdates.last, ('acct-inv', 500.0));
     });
   });
 
