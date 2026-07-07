@@ -524,20 +524,24 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
     final isActive = b.filterValue.isNotEmpty && widget.activeCategory == b.filterValue;
     final canTap = b.filterValue.isNotEmpty && widget.onCategorySelected != null;
 
-    // C-G: the Unclassified band is visibly muted — greyed dot and washed
-    // bar fill — so it reads as inert next to the tappable category bands.
-    // Label + % keep the sibling styling (the % simply inherits the
-    // neutral band color).
+    // C-G: the Unclassified band is visibly muted — greyed dot, washed bar
+    // fill, AND muted title/percent text — so the whole band reads as inert
+    // next to the tappable category bands (with only the dot/bar muted the
+    // bold title + colored % still looked tappable at rest).
     final dotColor =
         b.isUnclassified ? b.color.withValues(alpha: 0.55) : b.color;
     final barGradient = b.isUnclassified
         ? [b.color.withValues(alpha: 0.45), b.color.withValues(alpha: 0.30)]
         : [b.color, b.color.withValues(alpha: 0.7)];
+    final titleColor =
+        b.isUnclassified ? context.textMuted : context.textPrimary;
+    final pctColor = b.isUnclassified ? context.textMuted : b.color;
 
-    final inner = Padding(
-      padding: EdgeInsets.only(
-          bottom: MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0),
-      child: Column(
+    // The band "core" the tap target / semantics blob covers: header row +
+    // bar (+ filtering hint). The holdings preview and its "Show N more"
+    // expander live OUTSIDE this blob (appended below) so the band's
+    // filter action can never swallow the expander.
+    final inner = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -559,7 +563,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: context.textPrimary,
+                          color: titleColor,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -590,7 +594,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w800,
-                      color: b.color,
+                      color: pctColor,
                     ),
                   ),
                   Text(
@@ -641,13 +645,36 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
               ),
             ),
           ],
-          if (b.items.isNotEmpty && b.rawCategory != null) ...[
-            const SizedBox(height: 12),
-            _holdingsPreview(b.rawCategory!, b.items, b.value, b.color, l),
-          ],
         ],
-      ),
-    );
+      );
+
+    // Holdings preview + its "Show N more" expander: a SIBLING of the
+    // band's tap target / semantics node, never a descendant. Tapping the
+    // band filters the table, so if the preview lived inside the InkWell
+    // (as it used to), mid-row whitespace clicks and assistive-tech
+    // activation on the expander applied the filter instead of expanding.
+    // The 8px horizontal padding mirrors the tappable band's container
+    // padding so the preview rows keep their previous indentation.
+    final preview = (b.items.isNotEmpty && b.rawCategory != null)
+        ? Padding(
+            padding: const EdgeInsets.only(top: 12, left: 8, right: 8),
+            child:
+                _holdingsPreview(b.rawCategory!, b.items, b.value, b.color, l),
+          )
+        : null;
+
+    Widget withPreviewAndMargin(Widget core) {
+      return Padding(
+        padding: EdgeInsets.only(
+            bottom: MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0),
+        child: preview == null
+            ? core
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [core, preview],
+              ),
+      );
+    }
 
     // Real counts, never a hardcoded 0: asset-class bands carry their
     // holdings count (items.length); type/institution bands carry the
@@ -672,7 +699,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
       // hover brightening and the cursor stays the plain arrow), just a
       // tooltip + semantics explaining why tapping wouldn't do anything.
       if (b.isUnclassified) {
-        return Tooltip(
+        return withPreviewAndMargin(Tooltip(
           message: l.alloc2UnclassifiedTooltip,
           waitDuration: const Duration(milliseconds: 400),
           // The Semantics label below already carries the explanation —
@@ -685,11 +712,11 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
               child: inner,
             ),
           ),
-        );
+        ));
       }
-      return Semantics(label: semanticLabel, child: inner);
+      return withPreviewAndMargin(Semantics(label: semanticLabel, child: inner));
     }
-    return Semantics(
+    return withPreviewAndMargin(Semantics(
       button: true,
       label: semanticLabel,
       child: InkWell(
@@ -707,7 +734,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
           child: inner,
         ),
       ),
-    );
+    ));
   }
 
   Widget _concentrationBanner(
@@ -761,24 +788,42 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
       children: [
         ...visible.map((item) => _holdingRow(item, catTotal)),
         if (remaining > 0)
-          InkWell(
-            onTap: () => setState(() {
-              if (expanded) {
-                _expanded.remove(cat);
-              } else {
-                _expanded.add(cat);
-              }
-            }),
-            borderRadius: BorderRadius.circular(6),
-            child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
-              child: Text(
-                expanded ? l.lwAllocShowFewer : l.lwAllocShowMore(remaining),
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: color,
-                  fontWeight: FontWeight.w600,
+          // The expander is its OWN labelled button node (it used to be an
+          // unlabelled InkWell swallowed by the band's filter blob), and its
+          // tap target is the whole row — a mid-row whitespace click
+          // expands instead of falling through to the band.
+          MergeSemantics(
+            child: Semantics(
+              button: true,
+              label:
+                  expanded ? l.lwAllocShowFewer : l.lwAllocShowMore(remaining),
+              child: InkWell(
+                onTap: () => setState(() {
+                  if (expanded) {
+                    _expanded.remove(cat);
+                  } else {
+                    _expanded.add(cat);
+                  }
+                }),
+                borderRadius: BorderRadius.circular(6),
+                child: ExcludeSemantics(
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 6, horizontal: 12),
+                      child: Text(
+                        expanded
+                            ? l.lwAllocShowFewer
+                            : l.lwAllocShowMore(remaining),
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: color,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),

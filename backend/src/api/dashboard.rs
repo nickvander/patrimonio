@@ -458,16 +458,24 @@ async fn portfolio_value_history(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Json<Vec<PortfolioValuePoint>> {
+    // Per-account snapshot rows, NOT a naive per-date SUM. Accounts snapshot
+    // on different days (a partial sync refreshes one institution), so a
+    // date's raw sum only covers the accounts that happened to snapshot that
+    // day — the trailing point after a partial sync read as one account's
+    // balance and the performance headline showed e.g. $299k for a $380k
+    // portfolio. Instead we carry each account's last-known balance forward:
+    // every emitted point is the sum over all accounts seen so far, valuing
+    // each at its most recent snapshot on-or-before that date.
     let rows = sqlx::query(
         r#"
         SELECT bs.as_of_date AS d,
-               COALESCE(SUM(bs.balance_usd), 0)::float8 AS value_usd
+               bs.account_id AS account_id,
+               COALESCE(bs.balance_usd, 0)::float8 AS value_usd
         FROM balance_snapshots bs
         JOIN accounts a ON bs.account_id = a.id
         WHERE bs.user_id = $1 AND a.archived_at IS NULL
           AND EXISTS (SELECT 1 FROM holdings h WHERE h.account_id = a.id)
-        GROUP BY bs.as_of_date
-        ORDER BY bs.as_of_date ASC
+        ORDER BY bs.as_of_date ASC, bs.id ASC
         "#,
     )
     .bind(ctx.user_id)
@@ -475,17 +483,41 @@ async fn portfolio_value_history(
     .await
     .unwrap_or_default();
 
-    Json(
-        rows.iter()
-            .map(|r| PortfolioValuePoint {
-                date: r
-                    .try_get::<chrono::NaiveDate, _>("d")
-                    .map(|x| x.to_string())
-                    .unwrap_or_default(),
-                value_usd: r.try_get("value_usd").unwrap_or(0.0),
-            })
-            .collect(),
-    )
+    let mut latest: std::collections::HashMap<uuid::Uuid, f64> =
+        std::collections::HashMap::new();
+    let mut points: Vec<PortfolioValuePoint> = Vec::new();
+    let mut current_date: Option<chrono::NaiveDate> = None;
+
+    let flush = |date: Option<chrono::NaiveDate>,
+                     latest: &std::collections::HashMap<uuid::Uuid, f64>,
+                     points: &mut Vec<PortfolioValuePoint>| {
+        if let Some(d) = date {
+            points.push(PortfolioValuePoint {
+                date: d.to_string(),
+                value_usd: latest.values().sum(),
+            });
+        }
+    };
+
+    for r in &rows {
+        let Ok(d) = r.try_get::<chrono::NaiveDate, _>("d") else {
+            continue;
+        };
+        let Ok(account_id) = r.try_get::<uuid::Uuid, _>("account_id") else {
+            continue;
+        };
+        let value: f64 = r.try_get("value_usd").unwrap_or(0.0);
+        if current_date != Some(d) {
+            flush(current_date, &latest, &mut points);
+            current_date = Some(d);
+        }
+        // Duplicate snapshots for the same account+date: last row wins
+        // (rows are id-ordered), rather than double-counting a SUM.
+        latest.insert(account_id, value);
+    }
+    flush(current_date, &latest, &mut points);
+
+    Json(points)
 }
 
 /// All investment holdings for this user across their accounts.
@@ -1291,7 +1323,11 @@ async fn export_holdings_csv(
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     let filename = format!("patrimonio_holdings_{}.csv", today);
 
-    let opt = |v: Option<f64>| v.map(|x| x.to_string()).unwrap_or_default();
+    // Money (and %) fields serialize at 2dp: the raw f64 Display leaked
+    // float noise like `3679.9999999999995` into spreadsheets. CSV-only —
+    // the JSON endpoint keeps full precision.
+    let money = |v: f64| format!("{v:.2}");
+    let opt = |v: Option<f64>| v.map(|x| format!("{x:.2}")).unwrap_or_default();
     let mut csv = String::from(
         "symbol,name,account,institution,account_type,asset_class,quantity,price,currency,value,value_usd,cost_basis_usd,gain_loss_usd,gain_loss_pct\n",
     );
@@ -1305,10 +1341,10 @@ async fn export_holdings_csv(
             csv_field(&h.account_type),
             csv_field(&h.asset_class),
             h.quantity,
-            h.price,
+            money(h.price),
             h.currency,
-            h.value,
-            h.value_usd,
+            money(h.value),
+            money(h.value_usd),
             opt(h.cost_basis_usd),
             opt(h.gain_loss_usd),
             opt(h.gain_loss_pct),
@@ -1373,7 +1409,10 @@ async fn export_lots_csv(
             .map(|d| d.to_string())
             .unwrap_or_default();
         csv.push_str(&format!(
-            "{},{},{},{},{},{},{}\n",
+            // Money fields at 2dp — the qty*cpu/fx float math leaked
+            // `.9999999999995`-style noise into the export. Quantity stays
+            // full precision (fractional crypto/fund lots are meaningful).
+            "{},{},{},{},{:.2},{},{:.2}\n",
             csv_field(&r.try_get::<String, _>("symbol").unwrap_or_default()),
             csv_field(&r.try_get::<String, _>("account_name").unwrap_or_default()),
             acquired_at,
@@ -2713,7 +2752,10 @@ async fn export_realized_gains_csv(
             };
             let d = disposal_from_row(&row);
             let line = format!(
-                "{},{},{},{},{},{},{},{},{},{},{},{}\n",
+                // Money fields at 2dp (proceeds/cost/PnL are qty×price float
+                // products that otherwise leak `.9999999999995` noise);
+                // qty_sold keeps full precision for fractional lots.
+                "{},{},{},{},{},{},{},{:.2},{:.2},{:.2},{},{}\n",
                 d.sell_date,
                 csv_field(&d.symbol),
                 csv_field(&d.name),

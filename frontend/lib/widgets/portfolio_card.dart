@@ -440,8 +440,11 @@ class _PortfolioCardState extends State<PortfolioCard> {
                     children: [
                       _heroChangePill(
                         positive: isPositive,
+                        // Explicit sign on the amount: losses must read
+                        // "-$500.00", not a red "$500.00" (the abs() strips
+                        // the minus, so it's re-applied here).
                         text:
-                            '${isPositive ? '+' : ''}${widget.currencyFormat.format(totalGainLoss.abs())} (${totalGainLossPct.toStringAsFixed(2)}%)',
+                            '${totalGainLoss > 0 ? '+' : totalGainLoss < 0 ? '-' : ''}${widget.currencyFormat.format(totalGainLoss.abs())} (${totalGainLossPct.toStringAsFixed(2)}%)',
                       ),
                       ?_buildTodayPill(l),
                     ],
@@ -483,9 +486,19 @@ class _PortfolioCardState extends State<PortfolioCard> {
 
   /// Change pill shared by the hero's all-time and "today" figures —
   /// one construction so the two are geometrically identical (12% alpha
-  /// fill, 8px radius, 13px w700, tabular figures).
-  Widget _heroChangePill({required bool positive, required String text}) {
-    final color = positive ? context.positive : context.negative;
+  /// fill, 8px radius, 13px w700, tabular figures). [neutral] renders the
+  /// flat/zero case honestly: muted color and NO up/down arrow, instead of
+  /// a fake green "▲ +0.00%".
+  Widget _heroChangePill({
+    required bool positive,
+    required String text,
+    bool neutral = false,
+  }) {
+    final color = neutral
+        ? context.textMuted
+        : positive
+            ? context.positive
+            : context.negative;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -495,12 +508,14 @@ class _PortfolioCardState extends State<PortfolioCard> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            positive ? Icons.arrow_upward : Icons.arrow_downward,
-            color: color,
-            size: 14,
-          ),
-          const SizedBox(width: 4),
+          if (!neutral) ...[
+            Icon(
+              positive ? Icons.arrow_upward : Icons.arrow_downward,
+              color: color,
+              size: 14,
+            ),
+            const SizedBox(width: 4),
+          ],
           Flexible(
             child: Text(
               text,
@@ -536,16 +551,22 @@ class _PortfolioCardState extends State<PortfolioCard> {
         (widget.portfolioData['day_change_as_of'] ?? '').toString();
     final asOf = DateTime.tryParse(asOfRaw);
 
-    final positive = dayUsd >= 0;
-    final sign = positive ? '+' : '';
+    final positive = dayUsd > 0;
+    // Flat day: nothing moved (both the amount and the % are zero) — the
+    // pill renders neutral (muted, no arrow) instead of a green "+$0.00".
+    final flat = dayUsd == 0 && (dayPct ?? 0) == 0;
+    // Explicit sign per figure: negatives must keep their minus ("-$731.53
+    // (-1.41%)"), which the .abs() calls below would otherwise strip.
+    final sign = dayUsd > 0 ? '+' : dayUsd < 0 ? '-' : '';
     final converted = dayUsd * widget.conversionFactor;
     final amount = '$sign${widget.currencyFormat.format(converted.abs())}';
     final change = dayPct == null
         ? amount
-        : '$amount ($sign${dayPct.abs().toStringAsFixed(2)}%)';
+        : '$amount (${dayPct > 0 ? '+' : dayPct < 0 ? '-' : ''}${dayPct.abs().toStringAsFixed(2)}%)';
 
     final pill = _heroChangePill(
       positive: positive,
+      neutral: flat,
       text: l.pfDayPillToday(change),
     );
 
@@ -1311,7 +1332,13 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 // One header node per account section so screen readers can
                 // jump between accounts and hear the position count +
                 // subtotal in one announcement (round-1 leftover b).
+                // `container: true` forces an explicit semantics boundary
+                // so the heading can never be absorbed into a neighboring
+                // node on any platform/engine (round-2 web QA saw the
+                // headers missing from the semantics tree while the row
+                // nodes landed).
                 Semantics(
+                  container: true,
                   header: true,
                   label: [
                     acct,
@@ -1396,18 +1423,36 @@ class _PortfolioCardState extends State<PortfolioCard> {
         ? (rawName.isNotEmpty ? rawName : '—')
         : (rawSym.isEmpty ? (rawName.isNotEmpty ? rawName : '?') : rawSym);
 
-    // One merged, labelled node per row — "NVDA, 29.5 shares, $5,085.80,
-    // +64.06% return" (round-1 leftover b).
+    // Grouped rows are tappable like their flat-table siblings: anything
+    // with a real symbol opens the instrument detail sheet (contract C-F).
+    final canOpenSheet = rawSym.isNotEmpty;
+
+    // One merged, labelled BUTTON node per row — "NVDA, 29.5 shares,
+    // $5,085.80, +64.06% return" (round-1 leftover b). Same pattern as the
+    // dividend payer rows: the Semantics carries button+label, the InkWell
+    // contributes the tap action, and ExcludeSemantics keeps the inner
+    // Texts from being announced twice.
     return MergeSemantics(
       child: Semantics(
+        button: canOpenSheet,
         label: l.pfDaySemHoldingRow(
           displaySymbol,
           _formatQuantity(qty),
           widget.currencyFormat.format(value),
           pct == null ? '—' : '${isGain ? '+' : ''}${pct.toStringAsFixed(2)}%',
         ),
-        excludeSemantics: true,
-        child: Padding(
+        child: InkWell(
+          onTap: canOpenSheet
+              ? () => showInstrumentSheet(
+                    context,
+                    apiService: _apiService,
+                    symbol: rawSym,
+                    conversionFactor: widget.conversionFactor,
+                    currencyFormat: widget.currencyFormat,
+                  )
+              : null,
+          child: ExcludeSemantics(
+            child: Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       child: Row(
         children: [
@@ -1483,6 +1528,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
           ),
         ],
       ),
+            ),
+          ),
         ),
       ),
     );
@@ -1833,12 +1880,19 @@ class _PortfolioCardState extends State<PortfolioCard> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  text,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: active ? context.textPrimary : context.textMuted,
+                // Flexible+ellipsis so a long header can never overflow its
+                // fixed column (locales/fonts vary; the columns are sized
+                // for the values, not the widest possible header).
+                Flexible(
+                  child: Text(
+                    text,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: active ? context.textPrimary : context.textMuted,
+                    ),
                   ),
                 ),
                 if (active) ...[
@@ -1891,20 +1945,23 @@ String _formatQuantity(double q) {
 
 // Layout constants for the virtualized holdings table. Header and body
 // share the same column widths so they line up visually as the user
-// scrolls. The natural width sits around 1188; below that the table
-// scrolls horizontally instead of squeezing columns.
+// scrolls. The natural width must fit the card's content width at a
+// 1440×900 viewport (~1147px) — when the Day column landed it pushed the
+// natural width to 1188 and the Return column half-clipped in the default
+// view. Below the natural width the table scrolls horizontally instead of
+// squeezing columns.
 const double _kRowHeight = 60.0;
-const double _kTableNaturalWidth = 1188.0;
+const double _kTableNaturalWidth = 1144.0;
 // Below this viewport width the wide 8-column table collapses to the
 // tap-to-expand mobile row (name + value + change).
 const double _kMobileBreakpoint = 560.0;
 const double _kHMargin = 20.0;
 const double _kColShares = 100.0;
 const double _kColPrice = 124.0;
-const double _kColDay = 108.0;
-const double _kColValue = 152.0;
-const double _kColCost = 132.0;
-const double _kColGain = 140.0;
+const double _kColDay = 86.0;
+const double _kColValue = 144.0;
+const double _kColCost = 126.0;
+const double _kColGain = 132.0;
 const double _kColReturn = 108.0;
 // Sort indices for the columns whose position shifted when the Day column
 // landed between Price (2) and Value. Named so the default-sort call sites
@@ -2276,8 +2333,18 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
             to: widget.targetCurrency,
             usdMxnRate: widget.usdMxnRate,
           );
-    final dayPositive = (dayPct ?? dayUsd ?? 0) >= 0;
-    final daySign = dayPositive ? '+' : '';
+    // Sign per figure: a loss must render "-1.41% / -$731.53" — the shared
+    // sign used to come from `dayPositive` alone ('' for negatives) while
+    // the values were .abs()'d, which silently dropped every minus sign.
+    // A flat (exactly zero) day renders neutral: muted text, no fake green.
+    final dayPositive = (dayPct ?? dayUsd ?? 0) > 0;
+    final dayFlat = (dayPct ?? 0) == 0 && (dayUsd ?? 0) == 0;
+    String signOf(double v) => v > 0 ? '+' : v < 0 ? '-' : '';
+    final dayColor = dayFlat
+        ? context.textMuted
+        : dayPositive
+            ? context.positive
+            : context.negative;
     final dayUnavailableMsg =
         AppLocalizations.of(context).pfDayUnavailable;
     final dayCell = Align(
@@ -2297,18 +2364,17 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
               children: [
                 if (dayPct != null)
                   Text(
-                    '$daySign${dayPct.abs().toStringAsFixed(2)}%',
+                    '${signOf(dayPct)}${dayPct.abs().toStringAsFixed(2)}%',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color:
-                          dayPositive ? context.positive : context.negative,
+                      color: dayColor,
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
                 if (dayConverted != null)
                   Text(
-                    '$daySign${widget.format.format(dayConverted.abs())}',
+                    '${signOf(dayConverted)}${widget.format.format(dayConverted.abs())}',
                     style: TextStyle(
                       fontSize: 11,
                       color: context.textMuted,

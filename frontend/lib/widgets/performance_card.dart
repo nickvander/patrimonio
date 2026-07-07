@@ -27,11 +27,21 @@ class PerformanceCard extends StatefulWidget {
   final double conversionFactor;
   final NumberFormat currencyFormat;
 
+  /// The CURRENT total portfolio value in USD — same source as the
+  /// portfolio hero (`/dashboard/holdings` `total_value_usd`). The headline
+  /// dollar figure prefers this over the last portfolio-history point: after
+  /// a partial account sync the trailing history point can cover only the
+  /// account(s) that snapshotted that day, so "Portfolio value" showed one
+  /// account's balance instead of the true total. Null (parent hasn't
+  /// loaded holdings yet / older call sites) falls back to the series.
+  final double? totalValueUsd;
+
   const PerformanceCard({
     super.key,
     required this.apiService,
     required this.conversionFactor,
     required this.currencyFormat,
+    this.totalValueUsd,
   });
 
   @override
@@ -308,11 +318,14 @@ class _PerformanceCardState extends State<PerformanceCard> {
   }
 
   Widget _valueSection(BuildContext context, AppLocalizations l) {
-    // Headline dollar value: the current portfolio value (last point of the
-    // value history; falls back to the TWR total when history is sparse).
-    final headlineValue = _history.isNotEmpty
-        ? (_history.last['value_usd'] as num?)?.toDouble() ?? 0.0
-        : (_twr?['total_value_usd'] as num?)?.toDouble() ?? 0.0;
+    // Headline dollar value: the CURRENT total portfolio value pushed in by
+    // the parent (same source as the portfolio hero / holdings total).
+    // Falling back to the last history point is a last resort only — after
+    // a partial sync that trailing point can cover a subset of accounts.
+    final headlineValue = widget.totalValueUsd ??
+        (_history.isNotEmpty
+            ? (_history.last['value_usd'] as num?)?.toDouble() ?? 0.0
+            : (_twr?['total_value_usd'] as num?)?.toDouble() ?? 0.0);
 
     // Preferred: an honest time-weighted return (cashflows divided out) plotted
     // against the S&P 500, both indexed to the range start. This is what lets
@@ -359,7 +372,10 @@ class _PerformanceCardState extends State<PerformanceCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _headline(context, lastV, l.lwPerfValueSubtitle),
+        // Same partial-sync guard as the TWR branch: prefer the parent's
+        // current total over the (possibly incomplete) last series point.
+        _headline(context, widget.totalValueUsd ?? lastV,
+            l.lwPerfValueSubtitle),
         const SizedBox(height: 14),
         RepaintBoundary(
           child: SizedBox(

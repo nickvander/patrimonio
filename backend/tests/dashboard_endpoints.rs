@@ -2850,6 +2850,83 @@ async fn portfolio_value_history_sums_only_investment_accounts() {
         "May should be 6000, got {}", pts[1]["value_usd"]);
 }
 
+/// Partial-sync regression: accounts snapshot on different days, so a date's
+/// naive per-date SUM only covered the accounts that snapshotted that day —
+/// the trailing point after a one-institution refresh read as ONE account's
+/// balance (the performance headline showed $299k for a $380k portfolio).
+/// The series must carry each account's last-known balance forward instead.
+#[tokio::test]
+#[serial_test::serial]
+async fn portfolio_value_history_carries_unsynced_accounts_forward() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (inst, _acct) = seed_account(&pool, user_id).await;
+
+    // Two investment accounts (both hold something).
+    let mut accounts = Vec::new();
+    for (name, sym) in [("Brokerage A", "VTI"), ("Brokerage B", "AAPL")] {
+        let id: uuid::Uuid = sqlx::query_scalar(
+            "INSERT INTO accounts (institution_id, name, account_type, currency, current_balance, user_id) \
+             VALUES ($1, $2, 'brokerage', 'USD', 1000.00, $3) RETURNING id",
+        )
+        .bind(inst)
+        .bind(name)
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO holdings (account_id, symbol, name, currency, holding_type, quantity, value, user_id) \
+             VALUES ($1,$2,$2,'USD','equity',10,1000,$3)",
+        )
+        .bind(id)
+        .bind(sym)
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+        accounts.push(id);
+    }
+    let (a, b) = (accounts[0], accounts[1]);
+
+    // Day 1: both accounts snapshot. Day 2: only account A resynced.
+    for (acct, d, usd) in [
+        (a, "2026-06-01", "298000"),
+        (b, "2026-06-01", "81000"),
+        (a, "2026-06-02", "298993.70"),
+    ] {
+        sqlx::query(
+            "INSERT INTO balance_snapshots (account_id, balance, balance_usd, as_of_date, currency, user_id) \
+             VALUES ($1, $2, $2, $3::date, 'USD', $4)",
+        )
+        .bind(acct)
+        .bind(Decimal::from_str(usd).unwrap())
+        .bind(d)
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/portfolio-value-history", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    let pts = body.as_array().unwrap();
+    assert_eq!(pts.len(), 2, "two snapshot dates, got {pts:#?}");
+    assert!((pts[0]["value_usd"].as_f64().unwrap() - 379_000.0).abs() < 0.01,
+        "day 1 sums both accounts, got {}", pts[0]["value_usd"]);
+    // The trailing point must include B's carried-forward $81,000 — not
+    // just A's fresh snapshot.
+    assert!((pts[1]["value_usd"].as_f64().unwrap() - 379_993.70).abs() < 0.01,
+        "trailing point must carry account B forward, got {}", pts[1]["value_usd"]);
+}
+
 #[tokio::test]
 #[serial_test::serial]
 async fn allocation_merges_cash_holdings_with_cash_accounts() {
@@ -5420,8 +5497,10 @@ async fn holdings_and_lots_csv_exports() {
         "quoting: {}",
         lines[1]
     );
-    // Lots-preferred basis (800) surfaces in the row.
-    assert!(lines[1].contains(",800,"), "basis: {}", lines[1]);
+    // Lots-preferred basis (800) surfaces in the row — money fields are
+    // serialized at 2dp so spreadsheets never see float noise like
+    // `3679.9999999999995`.
+    assert!(lines[1].contains(",800.00,"), "basis: {}", lines[1]);
 
     let res = app
         .clone()
@@ -5443,7 +5522,7 @@ async fn holdings_and_lots_csv_exports() {
     // The qty-0 depletion marker is filtered — one active lot only.
     assert_eq!(lines.len(), 2, "header + one active lot: {body}");
     assert!(lines[1].contains("2024-01-15"), "{}", lines[1]);
-    assert!(lines[1].ends_with(",800"), "usd_cost: {}", lines[1]);
+    assert!(lines[1].ends_with(",800.00"), "usd_cost (2dp money): {}", lines[1]);
 }
 
 /// C-E: realized-gains CSV honors the year filter, carries the C-C account

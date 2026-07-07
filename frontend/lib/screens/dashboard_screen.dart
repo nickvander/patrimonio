@@ -4149,6 +4149,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               apiService: _apiService,
               conversionFactor: conversionFactor,
               currencyFormat: currencyFormat,
+              // Current total (same source as the hero above) so the
+              // headline never tracks a partial trailing history point.
+              totalValueUsd:
+                  (portfolioData['total_value_usd'] as num?)?.toDouble(),
             ),
           ),
           const SizedBox(height: 24),

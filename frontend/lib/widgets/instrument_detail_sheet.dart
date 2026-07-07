@@ -346,10 +346,26 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
         const SizedBox(height: 12),
         Align(
           alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: _openDividendDetail,
-            icon: const Icon(Icons.payments_outlined, size: 18),
-            label: Text('${l10n.insDividendsLink} →'),
+          // One explicit button node sized to the link itself: the Align
+          // sits in a ListView (tight full-sheet width), and the link's
+          // implicit semantics ended up spanning the whole ~600px row while
+          // the visible link is ~180px. The Semantics wrapper lives INSIDE
+          // the Align, so its node (and AT tap target) is the button's own
+          // intrinsic rect.
+          child: Semantics(
+            // container is load-bearing: without it this annotation is not
+            // a semantics boundary and the label merges into the full-width
+            // ListView-item node — exactly the "600px link target" bug.
+            container: true,
+            button: true,
+            label: l10n.insDividendsLink,
+            onTap: _openDividendDetail,
+            excludeSemantics: true,
+            child: TextButton.icon(
+              onPressed: _openDividendDetail,
+              icon: const Icon(Icons.payments_outlined, size: 18),
+              label: Text('${l10n.insDividendsLink} →'),
+            ),
           ),
         ),
       ],
@@ -766,23 +782,37 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
   Widget _rangeChip(String key, String label) {
     final selected = _range == key;
     final accent = context.tealAccent;
-    return InkWell(
+    // Every chip gets an explicit button node. Without it the SELECTED
+    // chip vanished from the semantics tree: its InkWell is disabled
+    // (`onTap: null`), so it contributed no tappable node and the bare
+    // Text got flattened away — with '1y' the default range, "1Y" was the
+    // chip screen readers never heard.
+    return Semantics(
+      container: true,
+      button: true,
+      selected: selected,
+      label: label,
       onTap: selected || _rangeLoading ? null : () => _setRange(key),
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        height: 28,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? accent.withValues(alpha: 0.12) : context.tint(0.04),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: selected ? accent : context.textMuted,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: selected || _rangeLoading ? null : () => _setRange(key),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          height: 28,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color:
+                selected ? accent.withValues(alpha: 0.12) : context.tint(0.04),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: selected ? accent : context.textMuted,
+            ),
           ),
         ),
       ),
