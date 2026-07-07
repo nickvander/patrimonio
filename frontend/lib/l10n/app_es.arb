@@ -2478,5 +2478,43 @@
   "ins3UpdateError": "No se pudo actualizar la clase de activo",
   "@ins3UpdateError": {
     "description": "Snackbar error when saving or clearing an asset-class override fails; the chip reverts to its previous value."
-  }
+  },
+  "pf3LotQtyShares": "{qty} títulos",
+  "@pf3LotQtyShares": {
+    "placeholders": {
+      "qty": {
+        "type": "String"
+      }
+    }
+  },
+  "pf3LotCurrentNow": "{value} ahora",
+  "@pf3LotCurrentNow": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "pf3LotCost": "costo {cost}",
+  "@pf3LotCost": {
+    "placeholders": {
+      "cost": {
+        "type": "String"
+      }
+    }
+  },
+  "rg3AllTaxable": "Todas las ganancias realizadas de este período son gravables.",
+  "acct3DeleteHoldingBody": "Esto elimina la posición, todos sus lotes de compra y sus registros fiscales de ganancias realizadas.",
+  "acct3UndoHint": "Puedes deshacer durante unos segundos después de eliminar.",
+  "acct3DeletedSnack": "Se eliminó {symbol}",
+  "@acct3DeletedSnack": {
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
+  "acct3Undo": "Deshacer",
+  "acct3RestoreGone": "No se pudo restaurar — la eliminación ya es permanente.",
+  "acct3RestoreFailed": "No se pudo restaurar la posición. Inténtalo de nuevo."
 }

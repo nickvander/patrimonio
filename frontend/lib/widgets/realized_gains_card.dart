@@ -210,9 +210,18 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
                       Expanded(child: _summaryTile(l.rgAllTime, total)),
                     ],
                   ),
-                  if (hasAdvantaged && taxable != null) ...[
+                  // C1 (round 3): the caption row is RESERVED whenever the
+                  // backend sent the taxable subtotal and the period has
+                  // disposals — an all-taxable year renders a fixed line at
+                  // the exact same height instead of dropping the row, so
+                  // flipping year chips never shifts the layout below the
+                  // tiles. Absent only when `taxable == null` (older
+                  // backend) or the shown list is empty.
+                  if (taxable != null && disposals.isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    _taxableCaption(l, taxable, periodTotal),
+                    hasAdvantaged
+                        ? _taxableCaption(l, taxable, periodTotal)
+                        : _allTaxableCaption(l),
                   ],
                   const SizedBox(height: 8),
                   Divider(height: 24, color: context.hairline),
@@ -322,6 +331,18 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
               text:
                   ' ${l.rgxTaxableCaptionSuffix(_signedMoney(periodTotal))}'),
         ],
+      ),
+    );
+  }
+
+  /// C1 variant for an all-taxable period: same Text.rich shape and base
+  /// style (11.5px, textMuted) as [_taxableCaption], so the two captions
+  /// have identical line metrics and swapping them is a zero-pixel shift.
+  Widget _allTaxableCaption(AppLocalizations l) {
+    return Text.rich(
+      TextSpan(
+        style: TextStyle(fontSize: 11.5, color: context.textMuted),
+        text: l.rg3AllTaxable,
       ),
     );
   }

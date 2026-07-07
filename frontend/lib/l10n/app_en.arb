@@ -2921,5 +2921,65 @@
   "ins3UpdateError": "Couldn't update the asset class",
   "@ins3UpdateError": {
     "description": "Snackbar error when saving or clearing an asset-class override fails; the chip reverts to its previous value."
+  },
+  "pf3LotQtyShares": "{qty} sh",
+  "@pf3LotQtyShares": {
+    "description": "Compact share count on line 1 of the narrow (two-line) lot-breakdown row, e.g. '0.1181 sh'. Fractional quantities keep 4 decimals.",
+    "placeholders": {
+      "qty": {
+        "type": "String"
+      }
+    }
+  },
+  "pf3LotCurrentNow": "{value} now",
+  "@pf3LotCurrentNow": {
+    "description": "Current-value fragment on line 2 of the narrow lot row ('@ $88.10 → $1,720.00 now · cost $881.00'). Replaced by an em dash when the holding has no current price.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "pf3LotCost": "cost {cost}",
+  "@pf3LotCost": {
+    "description": "USD-cost fragment on line 2 of the narrow lot row ('@ $88.10 → $1,720.00 now · cost $881.00').",
+    "placeholders": {
+      "cost": {
+        "type": "String"
+      }
+    }
+  },
+  "rg3AllTaxable": "All realized gains in this period are taxable.",
+  "@rg3AllTaxable": {
+    "description": "Reserved caption under the realized-gains summary tiles when the selected period has disposals but none in tax-advantaged accounts — same style and height as the mixed 'Taxable +$X of +$Y…' caption so flipping year chips never shifts the layout."
+  },
+  "acct3DeleteHoldingBody": "This deletes the holding, all of its purchase lots, and its realized-gain (tax) records.",
+  "@acct3DeleteHoldingBody": {
+    "description": "Softened round-3 confirm-dialog body for deleting a holding (delete is now undoable for a few seconds, so the round-1 'cannot be undone' copy no longer applies). The undo hint is appended after it."
+  },
+  "acct3UndoHint": "You can undo for a few seconds after deleting.",
+  "@acct3UndoHint": {
+    "description": "Appended to the delete-holding confirm dialog body, announcing the undo snackbar window."
+  },
+  "acct3DeletedSnack": "Deleted {symbol}",
+  "@acct3DeletedSnack": {
+    "description": "Snackbar text shown for ~10 seconds after a holding delete, next to the UNDO action.",
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
+  "acct3Undo": "Undo",
+  "@acct3Undo": {
+    "description": "Action label on the delete-holding snackbar that restores the holding, its lots and its realized-gain records."
+  },
+  "acct3RestoreGone": "Couldn't restore — the deletion is already permanent.",
+  "@acct3RestoreGone": {
+    "description": "Error snackbar when UNDO hits a 404: the soft-deleted holding was already purged (24 h window elapsed or the symbol was re-added), so the deletion can no longer be reversed."
+  },
+  "acct3RestoreFailed": "Couldn't restore the holding. Try again.",
+  "@acct3RestoreFailed": {
+    "description": "Error snackbar for a transient (non-404) failure of the UNDO restore call."
   }
 }

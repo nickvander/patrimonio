@@ -1006,12 +1006,24 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     );
   }
 
-  /// Deleting a holding cascade-deletes its `holding_lots` and
-  /// `lot_disposals` (realized-gain tax records) on the backend, so it must
-  /// NEVER fire without an explicit, destructive-styled confirmation.
-  /// Cancel / Esc / outside-tap all resolve to "keep it".
+  /// Deleting a holding takes its `holding_lots` and `lot_disposals`
+  /// (realized-gain tax records) with it, so it must NEVER fire without an
+  /// explicit, destructive-styled confirmation. Cancel / Esc / outside-tap
+  /// all resolve to "keep it". Round 3 (contract C3-B/C3-E): the backend
+  /// delete is now a soft delete, and a 10-second UNDO snackbar follows a
+  /// confirmed delete. The snackbar and its restore hold the ROOT
+  /// ScaffoldMessenger + the (stateless) ApiService — not this State — so
+  /// undo keeps working even if the panel is closed during the window.
   Future<void> _deleteHolding(dynamic h) async {
     final l = AppLocalizations.of(context);
+    // Captured BEFORE any await. The panel is a showGeneralDialog route
+    // whose subtree carries no Scaffold/ScaffoldMessenger of its own, so
+    // this lookup resolves to the app's root messenger — the snackbar
+    // renders on the dashboard's Scaffold and outlives the panel.
+    final messenger = ScaffoldMessenger.of(context);
+    final apiService = _apiService;
+    final accountId = _accountId;
+    final holdingId = (h['id'] ?? '').toString();
     final symbol = (h['symbol'] ?? '').toString().trim();
     final name = (h['name'] ?? '').toString().trim();
     final label = symbol.isNotEmpty ? symbol : name;
@@ -1021,7 +1033,10 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         backgroundColor: Theme.of(context).colorScheme.surface,
         title: Text(l.acctDeleteHoldingTitle(label)),
         content: Text(
-          l.acctDeleteHoldingBody,
+          // Softened round-3 copy: still spells out what goes (holding,
+          // lots, tax records) but announces the undo window instead of
+          // the old "cannot be undone".
+          '${l.acct3DeleteHoldingBody} ${l.acct3UndoHint}',
           style: TextStyle(color: context.textMuted, fontSize: 13),
         ),
         actions: [
@@ -1039,10 +1054,68 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     );
     if (confirmed != true) return; // cancel/dismiss → nothing is called
     try {
-      await _apiService.deleteHolding(_accountId, (h['id'] ?? '').toString());
+      await apiService.deleteHolding(accountId, holdingId);
+    } catch (_) {
+      return; // best-effort, same policy as before the undo flow
+    }
+    if (mounted) {
+      // Round-2 A1 plumbing: refreshes rows, header value, est-income and
+      // `onBalanceUpdate` toward the dashboard.
       _fetchHoldings(syncBalance: true);
       _fetchBalanceHistory();
-    } catch (_) {/* best-effort */}
+    }
+    // One undo window at a time: a second delete replaces the previous
+    // snackbar instead of queueing behind its 10-second run.
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 10),
+        content: Text(l.acct3DeletedSnack(label)),
+        action: SnackBarAction(
+          label: l.acct3Undo,
+          onPressed: () => _undoDeleteHolding(
+            messenger: messenger,
+            apiService: apiService,
+            accountId: accountId,
+            holdingId: holdingId,
+            restoreGoneText: l.acct3RestoreGone,
+            restoreFailedText: l.acct3RestoreFailed,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// UNDO handler for [_deleteHolding]'s snackbar. Deliberately
+  /// parameterized on the captured messenger / service / ids / strings —
+  /// never on `context` — because the panel may already be closed when the
+  /// user taps UNDO on the root-scaffold snackbar; only the in-panel
+  /// refresh is `mounted`-gated. A 404 (typed
+  /// [HoldingRestoreGoneException]) means the soft-deleted row was already
+  /// purged — the deletion is permanent and the snackbar says so.
+  Future<void> _undoDeleteHolding({
+    required ScaffoldMessengerState messenger,
+    required ApiService apiService,
+    required String accountId,
+    required String holdingId,
+    required String restoreGoneText,
+    required String restoreFailedText,
+  }) async {
+    try {
+      await apiService.restoreHolding(accountId, holdingId);
+      // Tapping the SnackBarAction already dismissed the undo snackbar;
+      // this is belt-and-braces for programmatic invocations.
+      messenger.hideCurrentSnackBar();
+      if (mounted) {
+        _fetchHoldings(syncBalance: true);
+        _fetchBalanceHistory();
+      }
+    } on HoldingRestoreGoneException {
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(content: Text(restoreGoneText)));
+    } catch (_) {
+      messenger.showSnackBar(SnackBar(content: Text(restoreFailedText)));
+    }
   }
 
   Widget _buildBody() {

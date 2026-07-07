@@ -7,6 +7,7 @@ import 'package:patrimonio/services/api_service.dart';
 import 'package:patrimonio/widgets/accounts_list_widget.dart';
 import 'package:patrimonio/widgets/instrument_detail_sheet.dart';
 import 'package:patrimonio/widgets/portfolio_card.dart';
+import 'package:patrimonio/widgets/realized_gains_card.dart';
 
 /// Round-2 QA regression guards:
 ///  1. Negative day changes keep their minus sign (Day column + Today pill)
@@ -309,4 +310,252 @@ void main() {
 
     semantics.dispose();
   });
+
+  // ── Round-3 guards (WS4): M1 lot-dialog narrow rows, M2 two-row
+  //    toolbar, C1 reserved taxable caption. ──────────────────────────
+
+  Map<String, dynamic> lotHolding() => {
+        'symbol': 'VOO',
+        'name': 'Vanguard S&P 500 ETF',
+        'currency': 'USD',
+        'quantity': 10.1181,
+        'price': 508.0,
+        'value': 5140.0,
+        'cost_basis_usd': 936.51,
+        'lots': [
+          {
+            // Fixed past date: long-term forever (today only moves forward).
+            'acquired_at': '2024-03-01',
+            'qty': 10,
+            'cost_per_unit': 88.10,
+            'currency': 'USD',
+            'usd_cost': 881.0,
+          },
+          {
+            // Relative recent date: short-term regardless of when the
+            // suite runs. Fractional shares must render in full precision.
+            'acquired_at': DateTime.now()
+                .subtract(const Duration(days: 30))
+                .toIso8601String()
+                .substring(0, 10),
+            'qty': 0.1181,
+            'cost_per_unit': 470.0,
+            'currency': 'USD',
+            'usd_cost': 55.51,
+          },
+        ],
+      };
+
+  Widget lotDialogHost() => MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showLotBreakdown(context, lotHolding()),
+              child: const Text('open lots'),
+            ),
+          ),
+        ),
+      );
+
+  testWidgets(
+      'lot dialog collapses to two-line rows on narrow screens '
+      '(no headers, fractional shares, inline term chips)', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(lotDialogHost());
+    await tester.tap(find.text('open lots'));
+    await tester.pumpAndSettle();
+
+    // The 6-column headers are gone (they used to wrap as "Acquire d").
+    expect(find.text('Acquired'), findsNothing);
+    expect(find.text('USD cost'), findsNothing);
+    // Line 1: date · qty, with fractional shares at full precision.
+    expect(find.textContaining('Mar 1, 2024 · 10 sh'), findsOneWidget);
+    expect(find.textContaining('0.1181 sh'), findsOneWidget);
+    // Line 2: per-unit → current value now · USD cost (10 × $508).
+    expect(
+        find.textContaining(r'@ $88.10 → $5,080.00 now · cost $881.00'),
+        findsOneWidget);
+    // Term chips render inline with line 1, not squashed away.
+    expect(find.text('Long-term'), findsOneWidget);
+    expect(find.text('Short-term'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('lot dialog keeps the 6-column grid at desktop width',
+      (tester) async {
+    tester.view.physicalSize = const Size(1300, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(lotDialogHost());
+    await tester.tap(find.text('open lots'));
+    await tester.pumpAndSettle();
+
+    // Headers present, and quantities live in their own column (no
+    // narrow-layout "sh" composite strings).
+    expect(find.text('Acquired'), findsOneWidget);
+    expect(find.text('USD cost'), findsOneWidget);
+    expect(find.text('0.1181'), findsOneWidget);
+    expect(find.textContaining('0.1181 sh'), findsNothing);
+    expect(find.text('Long-term'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'holdings toolbar becomes two rows under the mobile breakpoint '
+      'with the By-account toggle fully visible', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_host(PortfolioCard(
+      section: PortfolioSection.holdings,
+      portfolioData: {
+        'holdings': [
+          _holding(symbol: 'VTI', account: 'Brokerage A', value: 6000),
+          _holding(symbol: 'AAPL', account: 'Brokerage B', value: 4000),
+        ],
+      },
+      conversionFactor: 1.0,
+      currencyFormat: _usd,
+      targetCurrency: 'USD',
+      usdMxnRate: 17.0,
+    )));
+    await tester.pumpAndSettle();
+
+    // No RenderFlex overflow at 390px…
+    expect(tester.takeException(), isNull);
+    // …both toggle segments visible and inside the viewport…
+    expect(find.text('Flat'), findsOneWidget);
+    expect(find.text('By account'), findsOneWidget);
+    final toggleRect =
+        tester.getRect(find.byType(SegmentedButton<bool>));
+    expect(toggleRect.right, lessThanOrEqualTo(390));
+    expect(toggleRect.left, greaterThanOrEqualTo(0));
+    // …and the search field sits on its own row above the toggle.
+    final searchRect = tester.getRect(find.byType(TextField).first);
+    expect(searchRect.bottom, lessThanOrEqualTo(toggleRect.top));
+  });
+
+  testWidgets(
+      'holdings toolbar stays a single row at desktop width',
+      (tester) async {
+    tester.view.physicalSize = const Size(1300, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_host(PortfolioCard(
+      section: PortfolioSection.holdings,
+      portfolioData: {
+        'holdings': [
+          _holding(symbol: 'VTI', account: 'Brokerage A', value: 6000),
+        ],
+      },
+      conversionFactor: 1.0,
+      currencyFormat: _usd,
+      targetCurrency: 'USD',
+      usdMxnRate: 17.0,
+    )));
+    await tester.pumpAndSettle();
+
+    // Search field and toggle share one baseline row on desktop.
+    final searchRect = tester.getRect(find.byType(TextField).first);
+    final toggleRect =
+        tester.getRect(find.byType(SegmentedButton<bool>));
+    expect(searchRect.center.dy, closeTo(toggleRect.center.dy, 8));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'realized-gains caption row is reserved: the all-taxable variant '
+      'keeps the exact height of the mixed caption', (tester) async {
+    // Wide enough that the mixed caption stays on one line under the test
+    // font (Ahem glyphs are square, ~2× wider than production text) — the
+    // guarded behavior is the one-line row being reserved, not wrapping.
+    tester.view.physicalSize = const Size(1600, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    Map<String, dynamic> gains({required bool mixed}) => {
+          'summary': {
+            'ytd_realized_usd': 500.0,
+            'total_realized_usd': 1500.0,
+            'taxable_realized_usd': mixed ? 300.0 : 500.0,
+          },
+          'by_year': [
+            {'year': DateTime.now().year, 'realized_usd': 500.0},
+          ],
+          'disposals': [
+            {
+              'symbol': 'VOO',
+              'sell_date': '2026-03-10',
+              'realized_pnl_usd': 200.0,
+              'proceeds_usd': 1000.0,
+              'long_term': true,
+              'tax_advantaged': false,
+              'account_name': 'Brokerage',
+            },
+            {
+              'symbol': 'VTI',
+              'sell_date': '2026-02-01',
+              'realized_pnl_usd': 300.0,
+              'proceeds_usd': 900.0,
+              'long_term': false,
+              'tax_advantaged': mixed,
+              'account_name': 'IRA',
+            },
+          ],
+        };
+
+    // Mixed period: the round-2 "Taxable +$X of +$Y…" caption. Distinct
+    // keys per pump: the card fetches in initState, so swapping the data
+    // must swap the State too.
+    await tester.pumpWidget(_host(RealizedGainsCard(
+      key: const ValueKey('mixed'),
+      apiService: _GainsApi(gains(mixed: true)),
+      conversionFactor: 1.0,
+      currencyFormat: _usd,
+    )));
+    await tester.pumpAndSettle();
+    final mixedCaption = find.textContaining('Taxable');
+    expect(mixedCaption, findsOneWidget);
+    final mixedHeight = tester.getSize(mixedCaption).height;
+    final mixedDividerTop =
+        tester.getTopLeft(find.byType(Divider).first).dy;
+
+    // All-taxable period: the reserved caption replaces the row at the
+    // same height — the content below the tiles must not shift.
+    await tester.pumpWidget(_host(RealizedGainsCard(
+      key: const ValueKey('all-taxable'),
+      apiService: _GainsApi(gains(mixed: false)),
+      conversionFactor: 1.0,
+      currencyFormat: _usd,
+    )));
+    await tester.pumpAndSettle();
+    final allCaption =
+        find.text('All realized gains in this period are taxable.');
+    expect(allCaption, findsOneWidget);
+    expect(tester.getSize(allCaption).height, mixedHeight);
+    expect(tester.getTopLeft(find.byType(Divider).first).dy,
+        mixedDividerTop);
+  });
+}
+
+/// Canned realized-gains payload without touching the network (same
+/// subclass seam as lending_tab_layout_test's _FakeApiService).
+class _GainsApi extends ApiService {
+  final Map<String, dynamic> data;
+  _GainsApi(this.data);
+
+  @override
+  Future<Map<String, dynamic>> getRealizedGains({
+    int? year,
+    bool forceRefresh = false,
+  }) async =>
+      data;
 }

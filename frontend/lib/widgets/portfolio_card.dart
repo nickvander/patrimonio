@@ -132,6 +132,12 @@ class PortfolioCard extends StatefulWidget {
   /// ApiService instances are stateless (the HTTP client and response
   /// cache are static and shared across every instance).
   final ApiService? apiService;
+  /// Contract C3-D: awaited after the instrument sheet resolves `true`
+  /// (the user set or cleared an asset-class override inside it), so the
+  /// owner can re-fetch holdings + allocation and the table/bands reflect
+  /// the new class without a reload. Null (the default) = no live refresh;
+  /// the card compiles and runs standalone.
+  final Future<void> Function()? onDataRefreshRequested;
 
   const PortfolioCard({
     super.key,
@@ -145,6 +151,7 @@ class PortfolioCard extends StatefulWidget {
     this.onClearCategoryFilter,
     this.searchOverride,
     this.apiService,
+    this.onDataRefreshRequested,
   });
 
   @override
@@ -1443,13 +1450,21 @@ class _PortfolioCardState extends State<PortfolioCard> {
         ),
         child: InkWell(
           onTap: canOpenSheet
-              ? () => showInstrumentSheet(
+              ? () async {
+                  final changed = await showInstrumentSheet(
                     context,
                     apiService: _apiService,
                     symbol: rawSym,
                     conversionFactor: widget.conversionFactor,
                     currencyFormat: widget.currencyFormat,
-                  )
+                  );
+                  // C3-D: a classification change inside the sheet stales
+                  // the holdings + allocation data — hand the refetch to
+                  // the owner (round-3 U2).
+                  if (changed && mounted) {
+                    await widget.onDataRefreshRequested?.call();
+                  }
+                }
               : null,
           child: ExcludeSemantics(
             child: Padding(
@@ -1572,12 +1587,17 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 ),
               ),
             ),
-          Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 36,
-                  child: TextField(
+          // M2 (round 3): below the mobile breakpoint the single toolbar
+          // row clipped the Flat/By-account SegmentedButton at the screen
+          // edge. Narrow viewports get TWO rows — a full-width search
+          // field, then counter + toggle + CSV — while the desktop
+          // single-row layout is built from the exact same pieces and
+          // stays pixel-identical.
+          LayoutBuilder(builder: (context, constraints) {
+            final narrow = constraints.maxWidth < _kMobileBreakpoint;
+            final searchField = SizedBox(
+              height: 36,
+              child: TextField(
                 controller: _searchController,
                 onChanged: (v) => setState(() {
                   _searchQuery = v;
@@ -1604,71 +1624,115 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 ),
                 style: const TextStyle(fontSize: 13),
               ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            // Filter-aware counter: with a category filter or a search
-            // active it reads "N of M holdings"; unfiltered it reads the
-            // full "M holdings · K accounts".
-            widget.categoryFilter != null || _searchQuery.isNotEmpty
-                ? l.pfFilterShownOfTotal(shownHoldings, totalHoldings)
-                : l.pfHoldingsAccountsCount(totalHoldings, accountCount),
-            style: TextStyle(fontSize: 12, color: context.textSubtle),
-          ),
-          const SizedBox(width: 12),
-          SegmentedButton<bool>(
-            segments: [
-              ButtonSegment(
-                value: false,
-                icon: const Icon(Icons.list_alt, size: 14),
-                label: Text(l.pfFlat),
-              ),
-              ButtonSegment(
-                value: true,
-                icon: const Icon(Icons.account_tree_outlined, size: 14),
-                label: Text(l.pfByAccount),
-              ),
-            ],
-            selected: {_groupByAccount},
-            onSelectionChanged: (s) {
-              setState(() => _groupByAccount = s.first);
-              Preferences.setGroupByAccount(s.first);
-            },
-            style: ButtonStyle(
-              visualDensity: VisualDensity.compact,
-              textStyle: WidgetStateProperty.all(
-                  const TextStyle(fontSize: 12)),
-            ),
-          ),
-          // CSV export (contract C-E): browser-native downloads through the
-          // same-origin cookie-auth seam the transactions/tax exports use.
-          // Hidden when there's nothing to export.
-          if (_allHoldings.isNotEmpty) ...[
-            const SizedBox(width: 4),
-            PopupMenuButton<String>(
-              tooltip: l.pfCsvExportTooltip,
-              icon: Icon(
-                Icons.download_outlined,
-                size: 20,
-                color: context.textMuted,
-              ),
-              onSelected: (path) =>
-                  openUrlSameTab('${_apiService.baseUrl}$path'),
-              itemBuilder: (_) => [
-                PopupMenuItem(
-                  value: '/dashboard/holdings/export',
-                  child: Text(l.pfCsvHoldings),
+            );
+            final counter = Text(
+              // Filter-aware counter: with a category filter or a search
+              // active it reads "N of M holdings"; unfiltered it reads the
+              // full "M holdings · K accounts". On the narrow two-row
+              // layout it truncates gracefully instead of pushing the
+              // toggle off-screen.
+              widget.categoryFilter != null || _searchQuery.isNotEmpty
+                  ? l.pfFilterShownOfTotal(shownHoldings, totalHoldings)
+                  : l.pfHoldingsAccountsCount(totalHoldings, accountCount),
+              maxLines: narrow ? 1 : null,
+              overflow: narrow ? TextOverflow.ellipsis : null,
+              style: TextStyle(fontSize: 12, color: context.textSubtle),
+            );
+            final segmented = SegmentedButton<bool>(
+              segments: [
+                ButtonSegment(
+                  value: false,
+                  // Narrow: the label alone is the affordance — dropping
+                  // the leading icons (plus tighter padding below) is what
+                  // keeps both segments fully on-screen at 320–390px.
+                  icon: narrow
+                      ? null
+                      : const Icon(Icons.list_alt, size: 14),
+                  label: Text(l.pfFlat),
                 ),
-                PopupMenuItem(
-                  value: '/dashboard/holdings/lots/export',
-                  child: Text(l.pfCsvLots),
+                ButtonSegment(
+                  value: true,
+                  icon: narrow
+                      ? null
+                      : const Icon(Icons.account_tree_outlined, size: 14),
+                  label: Text(l.pfByAccount),
                 ),
               ],
-            ),
-          ],
-            ],
-          ),
+              selected: {_groupByAccount},
+              onSelectionChanged: (s) {
+                setState(() => _groupByAccount = s.first);
+                Preferences.setGroupByAccount(s.first);
+              },
+              style: ButtonStyle(
+                visualDensity: VisualDensity.compact,
+                padding: narrow
+                    ? WidgetStateProperty.all(
+                        const EdgeInsets.symmetric(horizontal: 8))
+                    : null,
+                textStyle: WidgetStateProperty.all(
+                    const TextStyle(fontSize: 12)),
+              ),
+            );
+            // CSV export (contract C-E): browser-native downloads through
+            // the same-origin cookie-auth seam the transactions/tax exports
+            // use. Hidden when there's nothing to export.
+            final csvMenu = _allHoldings.isNotEmpty
+                ? PopupMenuButton<String>(
+                    tooltip: l.pfCsvExportTooltip,
+                    icon: Icon(
+                      Icons.download_outlined,
+                      size: 20,
+                      color: context.textMuted,
+                    ),
+                    onSelected: (path) =>
+                        openUrlSameTab('${_apiService.baseUrl}$path'),
+                    itemBuilder: (_) => [
+                      PopupMenuItem(
+                        value: '/dashboard/holdings/export',
+                        child: Text(l.pfCsvHoldings),
+                      ),
+                      PopupMenuItem(
+                        value: '/dashboard/holdings/lots/export',
+                        child: Text(l.pfCsvLots),
+                      ),
+                    ],
+                  )
+                : null;
+
+            if (!narrow) {
+              return Row(
+                children: [
+                  Expanded(child: searchField),
+                  const SizedBox(width: 12),
+                  counter,
+                  const SizedBox(width: 12),
+                  segmented,
+                  if (csvMenu != null) ...[
+                    const SizedBox(width: 4),
+                    csvMenu,
+                  ],
+                ],
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                searchField,
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(child: counter),
+                    const SizedBox(width: 8),
+                    segmented,
+                    if (csvMenu != null) ...[
+                      const SizedBox(width: 4),
+                      csvMenu,
+                    ],
+                  ],
+                ),
+              ],
+            );
+          }),
         ],
       ),
     );
@@ -1827,6 +1891,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
                         usdMxnRate: widget.usdMxnRate,
                         apiService: _apiService,
                         conversionFactor: widget.conversionFactor,
+                        onDataRefreshRequested:
+                            widget.onDataRefreshRequested,
                       ),
                     )),
                 ?expander,
@@ -2115,6 +2181,9 @@ class _HoldingRowTile extends StatefulWidget {
   /// USD → display-currency factor, forwarded to the sheet so its figures
   /// follow the page's currency toggle.
   final double conversionFactor;
+  /// See [PortfolioCard.onDataRefreshRequested] (contract C3-D) — awaited
+  /// when the sheet reports a classification change.
+  final Future<void> Function()? onDataRefreshRequested;
 
   const _HoldingRowTile({
     required this.holding,
@@ -2123,6 +2192,7 @@ class _HoldingRowTile extends StatefulWidget {
     required this.usdMxnRate,
     required this.apiService,
     required this.conversionFactor,
+    this.onDataRefreshRequested,
   });
 
   @override
@@ -2479,13 +2549,20 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
         // InkWell (over GestureDetector) makes the row keyboard-focusable
         // and Enter/Space-activatable for screen-reader users.
         onTap: canOpenSheet
-            ? () => showInstrumentSheet(
+            ? () async {
+                final changed = await showInstrumentSheet(
                   context,
                   apiService: widget.apiService,
                   symbol: rawSymbol,
                   conversionFactor: widget.conversionFactor,
                   currencyFormat: widget.format,
-                )
+                );
+                // C3-D: bubble the sheet's classification change to the
+                // owner so holdings + allocation refetch live (round-3 U2).
+                if (changed && mounted) {
+                  await widget.onDataRefreshRequested?.call();
+                }
+              }
             : null,
         child: Container(
           color:
@@ -2549,7 +2626,13 @@ void showLotBreakdown(BuildContext context, dynamic h) {
             constraints: const BoxConstraints(maxWidth: 720, maxHeight: 560),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 22, 16, 16),
-              child: Column(
+              // M1 (round 3): below ~480px of inner width the 6-column
+              // grid wraps its headers ("Acquire d"), ellipsizes dollar
+              // values and squashes the LT/ST chips — swap it for stacked
+              // two-line rows. The ≥480px grid is untouched.
+              child: LayoutBuilder(builder: (_, box) {
+              final narrowLots = box.maxWidth < 480;
+              return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -2611,6 +2694,30 @@ void showLotBreakdown(BuildContext context, dynamic h) {
                             ),
                           ),
                         ],
+                      ),
+                    )
+                  else if (narrowLots)
+                    // Two-line stacked rows (no column headers): line 1 =
+                    // "Mar 1, 2024 · 10 sh" + term chip, line 2 = per-unit
+                    // → current value · USD cost. Same figures and
+                    // fallbacks as the wide grid.
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: lots.length,
+                        separatorBuilder: (_, _) => Divider(
+                            height: 1,
+                            color:
+                                context.hairline.withValues(alpha: 0.5)),
+                        itemBuilder: (_, i) => _narrowLotRow(
+                          context,
+                          l,
+                          lots[i] as Map,
+                          currentPrice: currentPrice,
+                          dateFmt: dateFmt,
+                          usdFmt: usdFmt,
+                          now: now,
+                        ),
                       ),
                     )
                   else ...[
@@ -2723,13 +2830,95 @@ void showLotBreakdown(BuildContext context, dynamic h) {
                   ),
                   ],
                 ],
-              ),
+              );
+              }),
             ),
           ),
         );
       },
     );
   }
+
+/// One stacked lot row for the narrow (<480px) lot-breakdown layout (M1):
+///   line 1 — `Mar 1, 2024 · 10 sh` (w600) with the LT/ST chip
+///            right-aligned;
+///   line 2 — `@ $88.10 → $1,720.00 now · cost $881.00` (muted 12px):
+///            native per-unit and current value, USD cost — the same
+///            figures and em-dash fallbacks as the wide 6-column grid.
+/// Rows keep a 12px vertical rhythm (6px padding each side of the
+/// hairline separator).
+Widget _narrowLotRow(
+  BuildContext context,
+  AppLocalizations l,
+  Map lot, {
+  required double currentPrice,
+  required DateFormat dateFmt,
+  required NumberFormat usdFmt,
+  required DateTime now,
+}) {
+  final acquired = (lot['acquired_at'] ?? '').toString();
+  final date = acquired.isEmpty ? null : DateTime.tryParse(acquired);
+  final qty = (lot['qty'] as num?)?.toDouble() ?? 0.0;
+  final cpu = (lot['cost_per_unit'] as num?)?.toDouble() ?? 0.0;
+  final ccy = (lot['currency'] ?? 'USD').toString();
+  final usdCost = (lot['usd_cost'] as num?)?.toDouble() ?? 0.0;
+  final currentVal = qty * currentPrice;
+  // Same calendar long-term rule as the wide grid (leap-year safe).
+  final isLongTerm = date != null &&
+      !now.isBefore(DateTime(date.year + 1, date.month, date.day));
+  // Fractional lots keep their 4-decimal precision ("0.1181 sh").
+  final qtyStr =
+      qty.toStringAsFixed(qty == qty.roundToDouble() ? 0 : 4);
+  final dateLabel = date != null ? dateFmt.format(date) : acquired;
+  final line2 = '@ ${formatCurrencyAmount(cpu, ccy)} → '
+      '${currentPrice > 0 ? l.pf3LotCurrentNow(formatCurrencyAmount(currentVal, ccy)) : '—'}'
+      ' · ${l.pf3LotCost(usdFmt.format(usdCost))}';
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '$dateLabel · ${l.pf3LotQtyShares(qtyStr)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: context.textPrimary,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (date == null)
+              Text(
+                '—',
+                style:
+                    TextStyle(fontSize: 13, color: context.textFaint),
+              )
+            else
+              _lotTermBadge(context, isLongTerm),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          line2,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 12,
+            color: context.textMuted,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _lotHeader(BuildContext context, String text,
       {int flex = 1, bool alignRight = false}) {
