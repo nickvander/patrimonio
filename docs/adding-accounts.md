@@ -76,3 +76,30 @@ Many Mexican institutions do not support standard API aggregators. For these, Pa
 If you have a cash wallet, physical real estate, or a bank not supported by any automated tools, you can track it manually.
 - In the **Management** tab, click **Add Manual Account**.
 - You can manually update the balance over time directly from the **Overview** list by clicking the "Update Balance" icon.
+
+---
+
+## 5. Recommended: give accounts short nicknames
+
+Imported account names come from the institution verbatim and are often
+long legal strings ("GOOGLE LLC 401(K) SAVINGS PLAN - 093926",
+"… - Roth IRA Brokerage Account - ****9215"). Those names appear in every
+holdings-row subtitle, account list, drawer header, tax view, and CSV
+export — and on narrow screens even truncation-priority logic can only do
+so much with them.
+
+Set a **nickname** right after connecting an account: **Overview →
+account row → ⋮ → Rename account** (or `PATCH /api/accounts/{id}/nickname`).
+Nicknames take display priority over the imported name everywhere
+(`COALESCE(NULLIF(nickname,''), name)`), while the original name is kept
+for sync matching. Aim for 2–3 words that answer "which account is this?"
+at a glance:
+
+| Imported name                                        | Nickname            |
+|------------------------------------------------------|---------------------|
+| GOOGLE LLC 401(K) SAVINGS PLAN - 093926              | Google 401(k)       |
+| … - Roth IRA Brokerage Account - ****9215            | Roth IRA            |
+| Alphabet, Inc. (Morgan Stanley StockPlan)            | Alphabet GSUs       |
+| Individual (Fidelity)                                | Fidelity Individual |
+
+An empty nickname clears the override and falls back to the imported name.

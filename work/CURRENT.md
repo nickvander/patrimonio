@@ -1,7 +1,72 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-05-30 (personal-lending feature complete — MVP + P2 + P3 + interest income)
-> **Branch:** feature branch with the latest sprint awaiting fast-forward merge to `main`.
+> **Last updated:** 2026-07-07 (Portfolio-tab overhaul, three rounds — all on `main`, deployed to thelab)
+> **Branch:** `main` (everything merged and deployed).
+
+## 2026-07-06/07 sprint — Portfolio ("Invest") tab overhaul
+
+Three multi-agent rounds (walkthrough → PM backlog → parallel dev
+workstreams → browser verification → deploy), all shipped to prod:
+
+**Round 1 — the four user-reported issues.**
+* Dividend frequency fix: `per_year` counted ex-dates in a trailing 365d
+  window → quarterly payers intermittently read 5×/yr and annual income
+  ran ~25% hot. Now: median-interval snap (12/4/2/1), rate = cadence ×
+  last cycle avg, stale payers decay (window anchored at *today*).
+* Bonds filter: predicate OR'd all dimensions (`'bonds'` is also an
+  account type → match-everything) + zero in-viewport feedback. Now:
+  `asset:`/`account_type:`/`institution:`-prefixed filter values, a
+  canonical `asset_class` classifier (VBTLX-style bond *funds* land in
+  Bonds), band tap auto-scrolls to the table with a "Filtered: X ✕" pill.
+* Realized gains: `_maxRows = 8` with a dead "+N more" label → "Show all"
+  toggle; Tax planning's year dropdown was circularly derived from
+  year-filtered data → now fed from `by_year` (2025 reachable).
+* NEW dividend detail sheet: payer rows tappable → schedule, 2y history,
+  per-payment amounts, accounts w/ tax-advantaged badges
+  (`GET /api/dashboard/dividends/{symbol}`).
+* Critical fix found during walkthrough: holding delete cascaded
+  lots + realized-gain tax records with NO confirmation → confirm dialog.
+
+**Round 2 — deferred backlog.**
+* Instrument detail sheet (chart from `benchmark_prices`, stats, lots,
+  accounts; `GET /api/dashboard/instruments/{symbol}?range=`).
+* Day change (stored-close based, coverage-aware) on rows + header pill.
+* CSV exports: holdings / lots / realized gains (`?year=`).
+* Realized gains: year chips, account context + `taxable_realized_usd`
+  (badge + reconciliation caption vs Tax planning), Roth marker.
+* Upcoming ex-dates uncapped (server truncated to 5 → Sep dates missing).
+* Unclassified allocation band for holdings-less investment accounts.
+* Real data bug: `portfolio_value_history` summed per-date snapshots →
+  partial syncs collapsed the series to one account; now carries each
+  account's last-known balance forward.
+
+**Round 3 — everything else.**
+* Per-symbol asset-class overrides (table `asset_class_overrides`,
+  editable chip in the instrument sheet, wins at all classify sites).
+* Holding soft delete + 10s undo snackbar + restore endpoint; 24h lazy
+  purge; `deleted_at IS NULL` audited across every read surface.
+* Dividends surfaced on Overview (stat tile → tap-through) and
+  Projections ("income outlook" panel — informational only, provably
+  never touches the projection request/curve).
+* App-wide a11y sweep (filter chip announced as bare "Delete" checkbox →
+  labeled; one-sentence rows; header landmarks; zero unlabeled controls).
+* Mobile polish: two-line lot rows at 390px, unclipped toolbar,
+  time-proportional chart ticks, holding-subtitle truncation priority
+  (account survives; fund legal name gives way) + Account/Institution in
+  the expanded row.
+* `sqlx` migrator now `ignore_missing` (old binary can boot a newer DB).
+
+**Ops/process notes.**
+* Dev services relocated into the repo: `pgdata/` + `redisdata/`
+  (gitignored), ports 5442/6380 unchanged. `$HOME` is clean.
+* Dev DB has a seeded ~$385k test portfolio under user `claude_dev`
+  (kept intentionally for future UI testing; incl. VBTLX typed
+  'mutual fund' and a holdings-less CETES account for classifier tests).
+* Browser-driving harness for the Flutter web build (semantics tree via
+  Playwright) documented in the session memory; `scripts/set-nicknames.sh`
+  one-shot for prod account nicknames (run manually — prod auth writes
+  are permission-gated in agent auto mode).
+* Docs: `docs/adding-accounts.md` §5 now recommends nicknaming accounts.
 
 ## Where we are
 
