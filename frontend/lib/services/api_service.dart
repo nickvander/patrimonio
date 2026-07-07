@@ -2050,9 +2050,16 @@ class ApiService {
   /// (rate, frequency, income, yields), per-account quantities, the parsed
   /// ~2y payment history, and a next-12-months schedule projection. Throws
   /// on failure so the sheet can render its own error + retry state.
-  Future<Map<String, dynamic>> getDividendDetail(String symbol) async {
-    final response = await _get(
-        Uri.parse('$_baseUrl/dashboard/dividends/${Uri.encodeComponent(symbol)}'));
+  ///
+  /// [refresh] appends `?refresh=true` (contract C4-D), telling the server
+  /// to bypass its fresh-cache window and re-fetch live — for when the owner
+  /// knows a dividend just changed. No client-side cache interaction: this
+  /// call is uncached by design either way.
+  Future<Map<String, dynamic>> getDividendDetail(String symbol,
+      {bool refresh = false}) async {
+    final response = await _get(Uri.parse(
+        '$_baseUrl/dashboard/dividends/${Uri.encodeComponent(symbol)}'
+        '${refresh ? '?refresh=true' : ''}'));
     if (response.statusCode == 200) {
       return json.decode(response.body) as Map<String, dynamic>;
     }

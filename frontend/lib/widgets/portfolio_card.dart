@@ -9,6 +9,7 @@ import '../utils/currency.dart';
 import '../utils/mask_aware_name.dart';
 import '../utils/theme_colors.dart';
 import '../utils/url_opener.dart';
+import 'dividend_calendar.dart';
 import 'dividend_detail_sheet.dart';
 import 'instrument_detail_sheet.dart';
 import 'skeleton.dart';
@@ -3612,11 +3613,18 @@ class DividendIncomeCard extends StatefulWidget {
   final double conversionFactor;
   final NumberFormat currencyFormat;
 
+  /// Test seam: widget tests inject a canned-payload fetcher here (the
+  /// test VM can't subclass ApiService); null in production. Same
+  /// convention as [DividendDetailSheet.fetchOverride].
+  @visibleForTesting
+  final Future<Map<String, dynamic>?> Function()? fetchOverride;
+
   const DividendIncomeCard({
     super.key,
     required this.apiService,
     required this.conversionFactor,
     required this.currencyFormat,
+    this.fetchOverride,
   });
 
   @override
@@ -3631,6 +3639,10 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
   // remaining payers' income isn't invisible.
   static const _maxPayers = 5;
   bool _showAllPayers = false;
+  // 12-month income calendar expander (contract C4-B). Collapsed by
+  // default so the card's resting footprint is unchanged; the toggle
+  // itself only exists when the backend sends a non-empty `calendar`.
+  bool _showCalendar = false;
 
   @override
   void initState() {
@@ -3643,7 +3655,8 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
     // getPortfolioDividends is best-effort and returns null on failure —
     // a null after loading is the card's error state (with retry), not a
     // silent vanish.
-    final data = await widget.apiService.getPortfolioDividends();
+    final data = await (widget.fetchOverride ??
+        widget.apiService.getPortfolioDividends)();
     if (!mounted) return;
     setState(() {
       _data = data;
@@ -3683,6 +3696,11 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
         .toList();
     final upcoming =
         (data['upcoming_ex_dates'] as List<dynamic>?) ?? const [];
+    // 12-month projected income calendar (additive C4-B field). Absent or
+    // empty — an older backend, or nothing projected — renders NOTHING
+    // (no toggle): the card must stay pixel-identical against a round-3
+    // backend during a staggered deploy.
+    final calendar = (data['calendar'] as List<dynamic>?) ?? const [];
     // Payment frequency per symbol, for deriving each upcoming ex-date's
     // expected payment amount (annual income ÷ payments/yr).
     final perYearBySymbol = <String, int>{
@@ -3803,6 +3821,35 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
               // payment amount (per-symbol annual income ÷ payments/yr).
               ...upcoming.map((e) =>
                   _exDateRow(e as Map<String, dynamic>, perYearBySymbol)),
+            ],
+            if (calendar.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Divider(height: 24, color: context.hairline),
+              // Same expander pattern as the payers "Show all" toggle
+              // above — a plain TextButton and a plain conditional, no
+              // bespoke animation.
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () =>
+                      setState(() => _showCalendar = !_showCalendar),
+                  icon: Icon(
+                    _showCalendar ? Icons.expand_less : Icons.expand_more,
+                    size: 18,
+                  ),
+                  label: Text(_showCalendar
+                      ? l.calHideCalendar
+                      : l.calShowCalendar),
+                ),
+              ),
+              if (_showCalendar) ...[
+                const SizedBox(height: 8),
+                DividendCalendar(
+                  calendar: calendar,
+                  conversionFactor: widget.conversionFactor,
+                  currencyFormat: widget.currencyFormat,
+                ),
+              ],
             ],
           ],
         ),

@@ -58,14 +58,19 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
     _load();
   }
 
-  Future<void> _load() async {
+  /// [refresh] forces a live server-side re-fetch past the dividend cache
+  /// (contract C4-D). When a test's [DividendDetailSheet.fetchOverride] is
+  /// set the flag is ignored — the override has no cache to bypass.
+  Future<void> _load({bool refresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final data = await (widget.fetchOverride ??
-          widget.apiService.getDividendDetail)(widget.symbol);
+      final data = widget.fetchOverride != null
+          ? await widget.fetchOverride!(widget.symbol)
+          : await widget.apiService
+              .getDividendDetail(widget.symbol, refresh: refresh);
       if (!mounted) return;
       setState(() {
         _data = data;
@@ -206,6 +211,15 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
                   ),
               ],
             ),
+          ),
+          // Force-refresh (contract C4-D): bypasses the server's 12 h
+          // dividend cache for a just-announced change. Disabled while a
+          // load is already in flight; the existing skeleton/error states
+          // are reused untouched.
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: l10n.pfDivDetailRefresh,
+            onPressed: _loading ? null : () => _load(refresh: true),
           ),
           IconButton(
             icon: const Icon(Icons.close),

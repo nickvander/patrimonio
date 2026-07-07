@@ -2624,5 +2624,13 @@
   "axAccountActionsFor": "Acciones de la cuenta {name}",
   "axDividendPerYear": "dividendo de {amount} al año",
   "axProjectionChart": "Saldo proyectado de {start} a {end}, mediana final {value}",
-  "axInformational": "Informativo: los dividendos ya forman parte del rendimiento total esperado y no se suman al crecimiento"
+  "axInformational": "Informativo: los dividendos ya forman parte del rendimiento total esperado y no se suman al crecimiento",
+  "calShowCalendar": "Mostrar calendario de 12 meses",
+  "calHideCalendar": "Ocultar calendario de 12 meses",
+  "calEstimateCaption": "Estimado con la tasa y cadencia actuales de cada pagador — no son fechas anunciadas.",
+  "calMoreChip": "+{n} más",
+  "calEstExDate": "Fecha ex estimada: {date}",
+  "calMonthSem": "{month}, {amount} esperados, {symbols}",
+  "calMonthSemEmpty": "{month}, sin dividendos esperados",
+  "pfDivDetailRefresh": "Actualizar datos de dividendos"
 }

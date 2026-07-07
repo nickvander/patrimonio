@@ -3235,5 +3235,63 @@
   "axInformational": "Informational — dividends are already part of the expected total return and are not added to growth",
   "@axInformational": {
     "description": "A11y: hint on the dividend-outlook panel marking it as informational."
+  },
+  "calShowCalendar": "Show 12-month calendar",
+  "@calShowCalendar": {
+    "description": "Expander label on the dividend-income card revealing the projected 12-month income calendar (C4-B)."
+  },
+  "calHideCalendar": "Hide 12-month calendar",
+  "@calHideCalendar": {
+    "description": "Expander label collapsing the projected 12-month income calendar."
+  },
+  "calEstimateCaption": "Estimated from each payer's current rate and cadence — not announced dates.",
+  "@calEstimateCaption": {
+    "description": "Mandatory honesty caption under the dividend calendar: projections, not declared dividends."
+  },
+  "calMoreChip": "+{n} more",
+  "@calMoreChip": {
+    "description": "Overflow chip in a calendar month cell when more payers exist than the visible chips; its tooltip lists the rest.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "calEstExDate": "Est. ex-date {date}",
+  "@calEstExDate": {
+    "description": "Tooltip on a calendar payer chip: the estimated ex-dividend date, e.g. 'Est. ex-date Jul 14, 2026'.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "calMonthSem": "{month}, {amount} expected, {symbols}",
+  "@calMonthSem": {
+    "description": "A11y: one-sentence merged label per calendar month cell with income, e.g. 'July 2026, $310 expected, KO, ABBV'.",
+    "placeholders": {
+      "month": {
+        "type": "String"
+      },
+      "amount": {
+        "type": "String"
+      },
+      "symbols": {
+        "type": "String"
+      }
+    }
+  },
+  "calMonthSemEmpty": "{month}, no dividends expected",
+  "@calMonthSemEmpty": {
+    "description": "A11y: merged label for a calendar month cell with zero projected income.",
+    "placeholders": {
+      "month": {
+        "type": "String"
+      }
+    }
+  },
+  "pfDivDetailRefresh": "Refresh dividend data",
+  "@pfDivDetailRefresh": {
+    "description": "Tooltip on the dividend detail sheet's refresh button — forces a live re-fetch past the server-side cache (C4-D)."
   }
 }
