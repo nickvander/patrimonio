@@ -49,7 +49,12 @@ The companion lint `prefer_const_literals_to_create_immutables` covers the *chil
 
 ## Color palette overhaul (dark + light) and chart hover polish
 
-**Status:** Open. The May 2026 light-theme sweep got the wiring right (every widget reads through `ThemeColorsExt`) but the actual colors still have visible problems in both modes. Worth a dedicated session.
+**Status:** Partially shipped; the remaining palette pass is **IN PROGRESS as of the 2026-07-07 session** (owner top priority, see NEXT.md).
+Already fixed since this was written — don't redo:
+- The net-worth tooltip contrast bug below (`net_worth_card.dart`) — shipped in `f3dfd97` (brightness-aware `tooltipSurface`/`tooltipOnSurface` tokens + WCAG-AA unit tests) and `dda5e3c`; the projections tooltip (`wealth_projection_screen.dart`) uses the same tokens.
+- The "hover feels mechanical" point — shipped 2026-05-27 (`touchSpotThreshold: 100000` + `getTouchedSpotIndicator` vertical guide on the net-worth + projection charts).
+- Cash-flow chart tooltips enriched + currency-corrected (`2453a33`, 2026-06-19).
+Still open (= this pass): light-mode contrast on the `#EDEFF3` scaffold, brand accents washing out on white, replacing scattered `Color(0xFF...)` literals with a brightness-aware accents map (`palette.dart` plan below), M3 `surfaceContainer*` layering.
 
 **Tracking:** This file.
 
@@ -133,13 +138,26 @@ promissory-note agreement, and full interest-income accounting
 below-market flag). Now-DONE items that were once deferred: compound
 interest, interest_only, agreement export, below-market flag.
 
+Shipped since (2026-06/07): expected repayment date incl. no-interest
+loans (`809bcf4`); accrued-interest row + loan aging report (`1841091`);
+interest-income drill-down sheet + due/overdue/paid-ahead pills
+(`6ffcf2b`); **custom irregular payment schedules + off-bank
+reconciliation** (`14110dc`, 2026-07-03 — explicit-row schedules,
+attach-tx for off-bank payments); full Lending-tab localization
+(2026-07-06); data-safety hardening (unreconcile reverts instead of
+deleting; principal-portion accounting; reconcile currency guard —
+`f475ead`/`0d5c3c6`); interest summary `totals_by_currency` (`060dbb2`).
+
 **Remaining deferred follow-ups:**
 
 * **Multi-currency loan reporting-currency conversion** — loans store
   their native currency; a reporting-currency rollup across
-  mixed-currency loans isn't converted yet.
+  mixed-currency loans isn't converted yet (`totals_by_currency` labels
+  per currency, but doesn't convert).
 * **Mid-stream re-amortization** after a partial/irregular payment —
-  regenerate the remaining schedule from the new balance.
+  regenerate the remaining schedule from the new balance. (Partially
+  mitigated: a custom explicit-row schedule can now be entered by hand,
+  `14110dc`.)
 * **Schedule-B-formatted** (vs raw CSV) year-end document.
 
 ---
@@ -213,14 +231,12 @@ haven't been re-synced since the lot code shipped.
   `gain_loss` (native). A bi-national display would show both
   sides of the P&L when the holdings list mixes USD + MXN
   securities.
-* Optional: a "lot breakdown" expansion per holding row showing
-  per-lot acquisition date + qty + native cost + historical FX.
-  Useful for power users debugging "why does my MXN P&L differ
-  from a naive conversion?".
-* Optional: persist realized gains on sell to a parallel
-  `lot_disposals` table for full audit trail. The current sync
-  just FIFO-depletes; the realized P&L is computable but
-  transient.
+* ~~Optional: a "lot breakdown" expansion per holding row~~ ✅ shipped
+  2026-05-27 (click-to-expand lot modal with historical FX column).
+* ~~Optional: persist realized gains on sell to a parallel
+  `lot_disposals` table~~ ✅ shipped 2026-05-28 (migration
+  `2026052801_lot_disposals.sql`); it now feeds realized-gains,
+  tax planning, and the July CSV exports.
 
 ---
 
@@ -232,13 +248,13 @@ haven't been re-synced since the lot code shipped.
 /api/dashboard/fx-transfers/{id}`). Auto-detection runs after every
 sync — see `services::sync` end-of-function loop.
 
-**Remaining (low-priority follow-up):**
+**Remaining (low-priority follow-up):** — ✅ both shipped:
 
-* "Cross-currency transfers" line on the cash-flow tab, showing
-  each link's implied rate next to the day's spot rate.
-* A "Manage links" view (Settings page or Management tab) so the
-  user can see + unlink all detected pairs without having to find
-  one of the legs in the transaction list.
+* ~~"Cross-currency transfers" line on the cash-flow tab~~ ✅ 2026-05-27
+  (`cross_currency_transfers_card.dart`, implied vs spot rate + delta
+  pill; currency formatting fixed `2453a33`).
+* ~~A "Manage links" view~~ ✅ the HiddenItemsScreen FX-pair section
+  (2026-05-19) covers unlink/restore of detected pairs.
 
 ----
 
@@ -384,7 +400,7 @@ Finder/Explorer should work too — same code path.
 
 ## 4. Real-estate and other manual assets
 
-**Status:** Open. **Effort:** half day. **Impact:** medium — affluent users always have these.
+**Status:** ✅ shipped 2026-05-26 — `2026052601_valuation_notes.sql`, per-row "Revalue" dialog with notes for manual-asset types, snapshots feed the net-worth chart. See CURRENT.md's 2026-05-26 sprint entry.
 
 ### Plan
 
@@ -423,9 +439,16 @@ only.
 
 ---
 
-## 6. Production Plaid readiness  — partially shipped
+## 6. Production Plaid readiness  — ✅ effectively done
 
-**Status:** Production credentials are live. Webhook receiver +
+**Status (2026-07-07):** Deployed. Prod runs on the homelab host
+`thelab` (docker compose at `/mnt/data/docker/stacks/patrimonio`, api
+`:8085`) — the "public HTTPS endpoint" gap below is closed; see
+`docs/migration.md` for the runbook that moved it. The sandbox-vs-prod
+indicator chip also shipped (reads `plaid_environment` in
+`dashboard_screen.dart`). Original status kept below for history.
+
+Production credentials are live. Webhook receiver +
 ES256 verification + per-item scoped sync are all on `main`. The
 gap that remains is purely deployment: nobody's actually told Plaid
 where to deliver webhooks.
@@ -608,7 +631,7 @@ the handler ran).
 ### HIBP / breached-password check
 
 **Tracking:** This section. **Audit ID:** L3.
-**Status:** Password policy enforces length only (12+ chars, ≤256). A user who picks `correcthorse123` passes today.
+**Status:** ✅ shipped 2026-05-26 — `password::check_hibp_breached` (k-anonymity range API, fail-open, `HIBP_API_BASE` config) wired into bootstrap/register/change-password/recover. See CURRENT.md's 2026-05-26 sprint entry.
 
 **Plan:** Either ship an embedded top-100k bloom (~80 KB) loaded at startup, or call HIBP's k-anonymity range API on signup + change-password. The bloom is simpler and avoids the network round-trip on the hot path.
 
@@ -628,9 +651,7 @@ row_size × ~5 CSV overhead). Added `bytes`, `tokio-stream`,
 ### Net-worth aggregation in SQL
 
 **Tracking:** This section. **Audit ID:** P5.
-**Status:** `net_worth_history` walks a `BTreeMap` in Rust to bucket per-institution. Fine at today's scale; will dominate at >1 year × dozens of institutions.
-
-**Plan:** Replace with a single `jsonb_object_agg` query in the DB.
+**Status:** ✅ shipped 2026-05-18 — single `jsonb_object_agg` query; see section H below (this entry was a duplicate).
 
 ### Connection-pool size  ✅ shipped
 
@@ -647,9 +668,7 @@ default for the API container is now 20.
 ### Encrypt webauthn-rs flow state at rest in Redis
 
 **Tracking:** This section. **Audit ID:** Dependency observation.
-**Status:** The `danger-allow-state-serialisation` feature is enabled to round-trip the per-flow `PasskeyRegistration` / `PasskeyAuthentication` state through Redis. A Redis dump (e.g. from the bind-to-0.0.0.0 misconfiguration we just plugged, or a snapshot leak) would let an attacker replay an in-flight registration.
-
-**Plan:** AEAD-encrypt the state with `ENCRYPTION_KEY` before `SETEX`. The challenge is short-TTL (5 min) so the blast radius is small; this is hardening, not urgent.
+**Status:** ✅ shipped 2026-05-27 — `store_state`/`take_state` AES-GCM round-trip with `ENCRYPTION_KEY`, `v2:` prefix, `v1:` plaintext fallback when no key is configured. See CURRENT.md's 2026-05-27 sprint entry.
 
 
 ---
@@ -772,7 +791,9 @@ item is linked. The button triggers
 updated/failed dialog. The card's bottom-line recap is also
 dynamic now (no more hard-coded "configure live exchange rates").
 
-## F. Sandbox vs Production indicator chip  ⏱️ ~30 min
+## F. Sandbox vs Production indicator chip  — ✅ shipped
+
+(Chip renders from `plaid_environment` in `dashboard_screen.dart`.)
 
 `/api/setup/status` already exposes `plaid_env` (`sandbox` /
 `development` / `production`). The frontend should render a tiny
@@ -832,18 +853,17 @@ is unchanged. Liability sign continues to be respected via the
   press still triggers selection mode — those two gestures
   don't compete now.
 
-Remaining:
+Remaining: — ✅ both shipped 2026-05-28 (backlog-cleanup bundle, see
+CURRENT.md): true inline rename via double-click TextField, and the `R`
+shortcut on the hovered row (no-ops inside EditableText).
 
-* **`R` keyboard shortcut** when a row is focused → rename
-  dialog. Requires Flutter focus management around each row +
-  a top-level RawKeyboardListener; deferred since right-click
-  already cuts the click count by ~50%.
-* **True inline rename** (replace the description text with an
-  editable TextField on the row itself instead of popping a
-  dialog). Would feel more native but the dialog flow is fine
-  for now.
+## J. Flutter canvaskit responsiveness  ⏱️ unknown — still open (2026-07)
 
-## J. Flutter canvaskit responsiveness  ⏱️ unknown
+> 2026-07-07 note: still biting under browser automation (screenshot
+> freezes on heavy Portfolio scrolling); the known workarounds — filter
+> the holdings list to one ticker, or use a shorter window (1280x900) —
+> are documented in HANDOFF.md's "Known quirks". No user-facing
+> complaint yet.
 
 Observed during walkthrough: rapid taps + screenshots occasionally
 freeze the renderer for 30+ seconds. Recovers on next interaction.
@@ -892,15 +912,14 @@ contributors without a Postgres on hand.
 
 Open follow-ups:
 
-* **Tests must run serially** — both `auth_endpoints.rs` and
-  `dashboard_endpoints.rs` share a single Postgres and TRUNCATE
-  in `try_setup`. Running with cargo's default parallelism leads
-  to random 500s as one test's TRUNCATE wipes another's data
-  mid-flight. Use `./scripts/test.sh` (wrapper that pins
-  `--test-threads=1`, dockerises the toolchain, and creates the
-  test DB on first run) or pass the flag manually. A proper fix
-  would be a Postgres advisory lock around TRUNCATE, or the
-  `serial_test` crate.
+* ~~**Tests must run serially**~~ ✅ shipped 2026-05-28 — `serial_test`
+  annotations on every integration test + a Postgres advisory-lock
+  `TestLockGuard`; plain `cargo test` Just Works. **2026-06-20 addendum
+  (`4af62e3`):** the suite had been *silently skipping* for weeks
+  (wrong default POSTGRES_PASSWORD → DB auth failure → vacuous pass);
+  it now sources the password from `.env` and PANICS on a
+  configured-but-unreachable DB. CI runs it on every push/PR
+  (`8690433`).
 * `scripts/smoke.cjs` — ✅ extended 2026-05-18. New
   `smokeRecentFeatures` step covers split / PUT-edit-split /
   unsplit roundtrip, subscription ignore/unignore, FX-transfer

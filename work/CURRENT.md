@@ -45,6 +45,11 @@ workstreams → browser verification → deploy), all shipped to prod:
   editable chip in the instrument sheet, wins at all classify sites).
 * Holding soft delete + 10s undo snackbar + restore endpoint; 24h lazy
   purge; `deleted_at IS NULL` audited across every read surface.
+  **Rollback caveat:** `ignore_missing` lets an older binary *boot*
+  against this DB, but a pre-overhaul binary neither filters
+  `deleted_at` nor runs the purge — soft-deleted-but-unpurged holdings
+  reappear in every figure (and DELETE is hard again) until the new
+  binary is back.
 * Dividends surfaced on Overview (stat tile → tap-through) and
   Projections ("income outlook" panel — informational only, provably
   never touches the projection request/curve).
@@ -66,7 +71,14 @@ workstreams → browser verification → deploy), all shipped to prod:
   Playwright) documented in the session memory; `scripts/set-nicknames.sh`
   one-shot for prod account nicknames (run manually — prod auth writes
   are permission-gated in agent auto mode).
-* Docs: `docs/adding-accounts.md` §5 now recommends nicknaming accounts.
+* Docs: `docs/adding-accounts.md` §5 now recommends nicknaming accounts
+  (imported legal names dominate every subtitle/export; the five
+  suggested prod nicknames apply via `scripts/set-nicknames.sh`).
+* Same day, pre-overhaul (separate session, `0efba89`..`04f7754`):
+  mask-aware account names app-wide + the `..mask` suffix survives
+  truncation, accounts-list row alignment + type-aware sub-group labels
+  + same-named-card disambiguation, and the Lending tab localized
+  end-to-end (status pill, Add/Edit-loan dialog). Logged in HANDOFF.md.
 
 ## Where we are
 
@@ -619,6 +631,12 @@ data:
 | Frontend console | no errors |
 
 ## How to run locally
+
+> **Stale on the dev VM (2026-07-07):** docker is unavailable there —
+> Postgres (`:5442`) + Redis (`:6380`) run natively with data dirs
+> inside the repo, and cargo/flutter run from the native toolchain. See
+> the repo-root `CLAUDE.md` + HANDOFF.md "How to verify / ship". The
+> compose instructions below apply to prod on thelab.
 
 ```bash
 cd ~/patrimonio

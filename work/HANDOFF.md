@@ -1,6 +1,6 @@
 # Handoff — start here
 
-> **Last updated:** 2026-06-06 (Portfolio restructure + signals strip + mobile holdings + true TWR)
+> **Last updated:** 2026-07-07 (Portfolio-tab overhaul deployed; June sprints back-logged)
 > **Purpose:** The single "where are we, what's next" doc to pick up cold.
 > For the full import architecture see [work/STATEMENT_IMPORT.md](STATEMENT_IMPORT.md);
 > for the older broader backlog see [work/NEXT.md](NEXT.md) and
@@ -8,12 +8,26 @@
 
 ## TL;DR — current state
 
-Everything below is **on `main` and pushed** (`origin/main` @ `53e16e2`),
-tree clean. All verified green: backend `./scripts/test.sh` (full suite,
-incl. 84 dashboard integration), `flutter analyze` clean, `flutter test`
-(170). Flutter MUST run via docker — see the gotchas at the bottom.
+**As of 2026-07-07:** `main` @ `2f17431`, tree clean, pushed. **Prod runs
+on the homelab host `thelab`** (`ssh nickvander@thelab`; docker compose
+stack at `/mnt/data/docker/stacks/patrimonio`, api on `:8085`) — the
+2026-07-06/07 Portfolio overhaul is deployed there. **Dev on this VM is
+native (no docker):** rust/cargo + flutter (`~/flutter`) are installed;
+Postgres runs on `127.0.0.1:5442` and Redis on `:6380` with data dirs
+inside the repo (`pgdata/`, `redisdata/`, gitignored) — see the repo-root
+`CLAUDE.md`. Any older note in this file saying cargo/flutter "must run
+via docker" is obsolete on this VM — see the rewritten "How to verify /
+ship" section at the bottom.
 
-**Shipped this sprint (newest first):**
+**Read next:** [work/CURRENT.md](CURRENT.md) for the detailed
+2026-07-06/07 Portfolio-tab overhaul log; [work/NEXT.md](NEXT.md) for the
+current priorities (dividend fan-out caching, target-allocation/
+rebalancing view, dark-mode tooltip + palette pass, dividend income
+calendar — in progress as of 2026-07-07). The dated "Latest" sections
+below log every sprint since 2026-06-06, newest first.
+
+**Shipped the 2026-06-06 sprint (newest first)** *(historical — later
+sprints are in the dated sections below)*:
 - **True time-weighted return (TWR)** on the Performance card — the value
   line finally carries an honest return + a legitimate S&P overlay (live-
   browser-verified: "Your portfolio +100.2%" vs "S&P 500 +26.5%", and the
@@ -135,7 +149,8 @@ incl. 84 dashboard integration), `flutter analyze` clean, `flutter test`
   Carlo success rate + percentile fan, Coast/Barista FIRE, tax drag +
   Guyton-Klinger guardrails, retirement-income, data-derived defaults.
 
-**Next up (Tier C / QA):**
+**Still-open QA items from that sprint** *(current top priorities live in
+[work/NEXT.md](NEXT.md))*:
 - **TWR follow-ups** (raise coverage above ~68%): map non-USD holdings via a
   per-day USDMXN series (USDMXN=X is already fetchable through the same Yahoo
   path) so MXN-priced securities can be priced; map opaque Plaid security_ids
@@ -190,6 +205,244 @@ incl. 84 dashboard integration), `flutter analyze` clean, `flutter test`
 - Adding a row to `dashboard_endpoints.rs` integration tests: remember the
   TRUNCATE list at the top + that a new table must be added to it (S&P
   `benchmark_prices` leak bug was exactly this).
+
+## Latest (2026-07-06/07) — Portfolio ("Invest") tab overhaul → deployed
+
+On `main` @ `2f17431`, deployed to thelab. ~17 commits (`f930c8b` →
+`2f17431`), three multi-agent rounds (walkthrough → PM backlog → parallel
+dev workstreams → browser verification → deploy). **The detailed log
+lives in [work/CURRENT.md](CURRENT.md) — read that, not this.**
+One-paragraph map: dividend-frequency inference fix (quarterly payers
+were reading 5×/yr) + dividend detail / instrument sheets
+(`GET /dashboard/dividends/{symbol}`,
+`GET /dashboard/instruments/{symbol}`); prefixed allocation filter
+dimensions + canonical asset-class classifier + per-symbol overrides
+(new `asset_class_overrides` table); day change (stored-close,
+coverage-aware); CSV exports for holdings/lots/realized gains;
+realized-gains year chips + tax-advantaged context; **holding delete was
+silently cascading lots + realized-gain tax records → confirm dialog +
+soft delete with undo/restore**; dividends surfaced on Overview +
+Projections; app-wide a11y sweep; mobile polish; `sqlx` migrator now
+`ignore_missing`. Same day, pre-overhaul (separate session): mask-aware
+account names app-wide (+ `..mask` suffix survives truncation),
+accounts-list row alignment + type-aware sub-group labels, and the
+Lending tab fully localized (status pill + Add/Edit dialog flow)
+(`0efba89`, `263a4f0`, `187b561`, `077f448`, `7facd22`, `04f7754`).
+
+## Latest (2026-06-29 → 2026-07-05) — FX override, dividend income + benchmark picker, CUJ sweep, custom loan schedules
+
+All on `main`.
+
+- **Manual USD/MXN rate override** (`90d7ece`): `POST /fx/manual`, new
+  `exchange_rates.source` column; `get_latest_rate` short-circuits to the
+  freshest manual row before cache + live fetch, so a pinned rate wins on
+  every read path. Entry UI landed in the CUJ commit's FX widget.
+- **Tax bracket/LTCG headroom** (`c78c4ed`): `compute_bracket_headroom`
+  (ordinary-bracket room + next-dollar rate, LTCG 0%/15% room) +
+  `net_capital_buckets` feeding the harvest summary footer.
+- **Portfolio-wide dividend income + selectable benchmark** (`daf7ffe`):
+  `GET /dashboard/holdings/dividends` — projected annual income, blended
+  yield, per-symbol contributions, future-only ex-dates, bounded-parallel
+  Yahoo fetches (NO caching yet — that's the current top priority in
+  NEXT.md); optional `?benchmark=` (default SP500, fails soft) threaded
+  through portfolio-twr + benchmark-comparison.
+- **CUJ + competitive features across all tabs** (`6ffcf2b`, one big
+  commit, 64 new EN/ES strings): Overview tappable stat-tile drilldowns +
+  goal projected-completion date + catch-up contribution; Portfolio
+  dividend income card + benchmark picker; Tax headroom card + harvest
+  footer; Lending interest-income drill-down sheet +
+  due/overdue/paid-ahead pills + accrued interest on loan cards; Cash
+  flow savings-rate KPI + day-of-month budget pacing + period selector
+  now drives budgets & spending-by-category; Transactions filtered-set
+  net/in/out totals; Management data-export + import-batch cleanup
+  surfacing; FX widget manual-rate entry.
+- **Custom irregular loan schedules + off-bank reconciliation**
+  (`14110dc`, 2026-07-03): `interest_type='custom'` +
+  `POST /loans/{id}/schedule/custom` (explicit rows or first-N/then-Y
+  pattern; running balance must close to exactly 0);
+  `POST /loans/{id}/payments/{payment_id}/attach-tx` links a
+  later-imported bank tx to an already-off-bank-paid installment without
+  double-counting; next_due/overdue now keyed on `paid_amount`, not
+  `actual_tx_id` (cash repayments stop showing as overdue).
+  Paste-from-spreadsheet dialog with live must-close-to-0 preview,
+  "Create loan from transaction", "Copy for Google Sheets". EN + es-MX.
+  Verified live with a 37-row 0% / 130,000 MXN case.
+- **Dev-services doc** (`92bb504`): repo-root `CLAUDE.md` documents the
+  native Postgres/Redis setup (docker unavailable on the dev VM).
+
+## Latest (2026-06-19 → 2026-06-24) — under-reviewed-tabs sweep, forensic accounting audit, tax constants verified, CI
+
+All on `main` (part merged via `feat/under-reviewed-tabs-pass`).
+
+- **Under-reviewed-tabs sweep** (`b06913f`..`74fb09f`, 06-19/20):
+  meaningful disambiguated Plaid account names; institution shown in
+  activity rows; cash-flow period selector (This/Last month, 3M, YTD) +
+  native currency on recurring + richer chart tooltips; transactions
+  undo-delete, sort, full-history select-all, filtered CSV; notifications
+  readable on mobile + net-worth-change-since-last-sync + account-archived
+  alerts; **auto-archive accounts Plaid stops returning** (their
+  transactions stay in spending history); per-bank statement-coverage
+  panel (`a270b70`); Overview momentum + lending glance; portfolio top
+  movers by $ P&L + lot-level cost-basis drill-down; lending
+  accrued-interest row + loan aging report; projections nominal-vs-real
+  toggle; Settings sync-health summary row. EN+ES strings throughout.
+- **Forensic accounting-accuracy audit** (`060dbb2`, `f68d598`): shared
+  trailing-12mo-spend exclusion SQL fragment (emergency-fund vs
+  projections figures can no longer drift); the silent 20.0 MXN/USD
+  fallback replaced with `fx_rate_used`/`fx_stale` on overview + holdings
+  so the UI flags approximate conversions; long-term flag now calendar
+  arithmetic (acquired + 12 months) matching the tax module; lending
+  interest summary gained `totals_by_currency`.
+- **⚠️ The integration suite had been silently skipping** (`4af62e3`):
+  `scripts/test.sh` defaulted the pre-rotation `POSTGRES_PASSWORD`, DB
+  auth failed, `skip_if_no_db` early-returned, and every DB-backed test
+  vacuously passed — which is exactly how the FBAR 500 (`024da0c`) and
+  statement-continuity 500 (`dcd8acf`) shipped past existing tests. Fix:
+  password sourced from `.env`; a configured-but-unreachable DB now
+  PANICS instead of skipping; continuity regression test added. The
+  resurrected suite surfaced 3 hidden tax_endpoints failures, fixed in
+  `99c9252`.
+- **CI** (`8690433`, `fe188a6`): integration suite + `flutter analyze` +
+  `flutter test` now run on every push & PR (local golden screenshots
+  excluded from the frontend job).
+- **Tax**: corrected retirement-contribution detection + mega-backdoor /
+  backdoor-Roth + §415(c)/family limits UI + segmented filing toggle
+  (`b1843f1`, `515db08`, `93bc25a`); 401k elective-deferral input for the
+  mega-backdoor split (`3a8a5e2`, `dc6008d`); **constants verified against
+  primary sources** (IRS Rev. Proc. 2025-32 / Notice 2025-67; SAT Anexo 8)
+  — the MX ISR annual tarifa was WRONG (missing 17.92% bracket →
+  overtaxing MX income); replaced with the official 11-bracket 2025+2026
+  tarifas and `TAX_CONSTANTS_VERIFIED` flipped to true (`290cca4`);
+  `fx_stale` surfaced on spending-by-category + insights (`85d86b3`);
+  detail-panel Material fix so autocomplete ListTiles render (`b7df459`).
+
+## Latest (2026-06-13 → 2026-06-16) — mobile pass, security, sync concurrency, audit sprints
+
+- **Mobile-calm pass across every tab** (`488be78`..`403c44b`,
+  `05e3da7`, `5aa241f`): Glance/Details disclosure on Overview;
+  denser-free Invest; calmer Cash flow / Projections / Tax / Settings /
+  Lending on small screens; unsquished net-worth/projection charts;
+  brand tokens for sync/FX status colors.
+- **Sync**: institutions sync concurrently with per-institution isolation
+  (`6122693`) + live "updating X of N" progress (`72b78e0`).
+- **Security screen**: username + email on an Account card (`525029d`);
+  passkey step-up to set a password without knowing the current one
+  (`7831174`).
+- **Audit sprints** (`f475ead` sprints 1–2, `0d5c3c6` sprint 3): currency
+  correctness (projections stopped dividing already-USD net worth by the
+  fx factor; budgets / portfolio hero / credit utilization / debt payoff
+  all USD-normalised; the FX-transfer delta no longer compares USD/MXN
+  against MXN/USD → fake +29,000% deltas gone); lending data-safety
+  (unreconcile reverts a schedule row instead of DELETEing it;
+  outstanding/payoff sum `principal_portion` not `paid_amount`; currency
+  guard on reconcile); TOTP hard-failure counter revokes the pending
+  session after 5 bad codes; **the one real security finding: Plaid
+  link-token now uses the authenticated user's UUID as `client_user_id`
+  instead of a shared constant** — restores Plaid's per-user item/consent
+  isolation in multi-user deploys.
+- **Revolut (MX) statement parser** (`babac2a`; peso section routed to
+  its own account `f6c900d`).
+- Accounts list: multi-account banks collapse into one compact summary
+  row, nested accounts indent, redundant bank sub-labels dropped
+  (`89b90fc`, `67cfbc2`, `d6681c5`); net-worth y-axis fits data in simple
+  mode (`41e1f19`).
+- Categorizer fixes (SoFi vault moves are transfers + RENTA anchored
+  `823a098`; a negative amount is never income `d5fb1d6`; Loop = fuel
+  `1182093`); keyword-less FX-transfer pairs need a shared counterparty
+  (`d01342b`); June-2026 one-time-backfills migration doc (`4ec7b63`);
+  personal worktree path scrubbed for open-sourcing (`2d773ee`).
+
+## Latest (2026-06-09 → 2026-06-12) — FIRE/projections UX, transactions revamp, tax-planning overhaul
+
+- **Projections/FIRE UX** (06-09, `72882e4`..`dd27e35`): FIRE glossary +
+  control help + clearer labels; interactive focus selector + lifestyle
+  presets; lifestyle + goal unified into one FIRE plan card; chart legend
+  for the dashed lines; neutral Coast-FIRE wording; surplus income no
+  longer inflates the portfolio + Fat preset un-clamped. Also: Settings
+  decluttered + account-list filters + overview sync bar (`aa5419d`);
+  compose services get `restart: unless-stopped` (`fa3050d`).
+- **Transactions revamp** (PM-vetted 16-task backlog in
+  `work/ux` — `b421db0`; milestones M1→M4): filter/search spans the whole
+  history, not just the loaded page (`c03b0a9`); look-&-feel revamp —
+  category colors, transfers, grouping, search, empty states (`ad1a5eb`);
+  filter cascade pages at the backend cap (`dfe70db`); account panel gets
+  full tx actions + in-place refresh + paged loading + a running balance
+  per row (`b16b498`, `cd627c8`); **amount sign convention corrected
+  across the UI (neg=outflow, pos=inflow)** (`25621ca`); M4 polish —
+  touch-reachable command palette + batch-delete endpoint (`d32b9e2`);
+  split-dialog keystroke-focus fix (`f57becb`); tx edits refresh 3 reads
+  instead of a re-price + 18-endpoint reload (`4145f4a`); locale-aware
+  dates (`2d53a15`).
+- **Tax-planning overhaul** (15-task audit backlog `06834ce`; T-tasks):
+  income predicates match stored categories + tax-advantaged disposals
+  excluded (`790daef`); per-row FX normalization — USD base for US
+  brackets, MXN base for the ISR tarifa (`7c67dea`); year-keyed bracket
+  tables + standard deduction + loss netting, gated
+  `TAX_CONSTANTS_VERIFIED=false` (`3168ca5`; verified + flipped 06-24);
+  Plaid dividends/interest persisted at sync + income decomposed into
+  wages/dividends/interest (`0630da5`); trustworthy responsive tax screen
+  with disposals + scenario framing + persisted controls (`4f6832c`,
+  `ada0117`); unrealized per-lot view + harvest candidates + wash-sale
+  detection (`a7539cb`); FBAR monitor + CETES interest income +
+  retirement-contribution tracking (`f2fb66c`, `1a31012`);
+  `category_detailed` persisted through import, CETES interest itemizes,
+  ISR-retenido totalled + shown on the MX card (`8e5448e`, `54c5c8b`).
+- Lending: expected repayment date incl. no-interest loans (`809bcf4`);
+  add/edit-loan dialog overflow fix (`b918d97`). Holdings: unknown cost
+  basis renders as em dash, not a fake +0.00% (`a174d1a`).
+
+## Latest (2026-06-06 → 2026-06-08, after the TWR handoff) — real-statement import sprint, manual holdings, HSA/NetBenefits
+
+The sessions right after the last logged handoff (`53e16e2`) — previously
+unlogged.
+
+- **Ops**: break-glass admin CLI (`backend/src/bin/admin_reset.rs` —
+  offline list / reset-password / disable-totp / recovery-codes /
+  reactivate / revoke-sessions against Postgres directly; every mutation
+  confirms and logs to auth_audit) + homelab migration runbook
+  (`docs/migration.md`, `scripts/migrate-secrets.sh`) (`ad26fae`). This
+  is the runbook the thelab deployment followed — tokens are NOT
+  machine-bound; carrying ENCRYPTION_KEY/PLAID_* keeps linked accounts
+  working.
+- **Real-statement import deepening** (~25 commits): real Nu México
+  support with cajitas as sub-accounts (`d90611d`; Nu balance = total
+  incl. cajitas `a4fc00a`); real cetesdirecto support (`5d2496a`); drop a
+  whole folder onto the import zone (`606389b`); account-identity capture
+  (CLABE) + suggested real balance/name + auto-match cue + editable
+  identity + Spanish type labels (`f97314e`, `46f24c5`, `580f807`);
+  grouped review panel + pinned Import action bar + summary strip +
+  dense preview rows matching the main UI (`9ef8eba`, `9e756db`,
+  `9985837`, `c437dc1`, `5ed6833`); prominent callout for bundled cajitas
+  (`bea3e01`); imported accounts file under their real bank, not "Manual"
+  (`7ea6af1`); **net-worth history back-filled from statement running
+  balances + per-statement totals** (`bf06e3f`, `0ad5d91`); continuity
+  flags only skipped months, not per-statement noise (`c207f35`), with
+  dismissible unobtainable gaps (`243a503`) and a compact scrollable
+  report (`dd620e8`); Banamex year derived from "Fecha de Corte"
+  (`782f96f`); localized continuity warnings + word-boundary auto-match
+  (`786568a`); CetesDirecto classified as Bonds, not cash (`afb69a4`);
+  MXN balances FX-converted in the daily snapshot cron (`e93f710`).
+- **Manual equity holdings by ticker, live-priced** (`8fa3078`) + a
+  dividend view (annual rate, yield, est. next ex-date, income)
+  (`ae8283e`) + global stock-price refresh with editing locked to manual
+  accounts (`f16bc1b`) + nightly auto price refresh (`c45da35`) — the
+  foundation the July Portfolio overhaul builds on.
+- **HealthEquity HSA + Fidelity Stock Plan ("NetBenefits") parsers**
+  (`c2b8da0`, `b8d27e6`, `3fadc25`; `c5ee3d1`, `d7e4460`): HSA invested
+  fund + cash mapped as live holdings, tagged "mutual fund" for
+  allocation; HSA offered in the add-account picker (`62305ee`);
+  full-institution-name match before the first-word key (`8bc75ff`).
+- **Accounts/dashboard UX**: vaults nest under their bank + collapsible
+  (`29cc02f`, `23b9a6c`); vault total folded into Savings (`3c30488`);
+  unified net-worth hero with self-labelling currency composition
+  (`8c49310`, `7901f58`); per-group currency split + onboarding-inflated
+  NW% suppressed (`f8f05fe`, `e2b6eef`, `d4006f0`); friendly Plaid
+  account names (`46566c3`); Plaid credit limit captured + no-limit cards
+  handled (`df97f50`, `f2cf240`); native-currency stat-tile conversion
+  fix (`a00dcf6`); account detail panel theme-surface fix (`150ae59`).
+- Sync progress shown inline on the button instead of a 30s snackbar
+  (`dab21cc`, `4101231`); **offline service worker disabled — it was the
+  stale-bundle cause** (`ac1879a`).
 
 ## Latest (2026-06-06) (2) — tax export ST/LT + budget-suggest hardening
 
@@ -494,11 +747,29 @@ This sprint was a deep pass on **statement import**. Shipped, in order:
 
 ## How to verify / ship (environment gotchas)
 
-- Backend tests: `./scripts/test.sh` (dockerised toolchain; `cargo` isn't on
-  the host). Migrations auto-apply to the test DB via `sqlx::migrate!`.
-- **Flutter must run via docker** — host `flutter` fails writing a root-owned
-  `frontend/.flutter-plugins-dependencies`:
-  - analyze: `./scripts/check.sh --skip-backend`
-  - test: `docker run --rm -v "$PWD/frontend":/app -w /app ghcr.io/cirruslabs/flutter:stable bash -lc 'flutter pub get >/dev/null 2>&1 && flutter test 2>&1'`
+**Rewritten 2026-07-07 — the old "everything via docker" instructions no
+longer apply on this dev VM (docker is unavailable here; the toolchain is
+native).**
+
+- **Dev services** (native, no docker): Postgres on `127.0.0.1:5442`,
+  Redis on `127.0.0.1:6380` (password `patrimonio_dev`), data dirs inside
+  the repo (`pgdata/`, `redisdata/`, gitignored). `backend/.env` points at
+  them. See the repo-root `CLAUDE.md`.
+- **Backend**: `cargo` is on PATH — run `cargo test` in `backend/`
+  natively. Integration tests need `PATRIMONIO_TEST_DATABASE_URL` pointed
+  at a test DB on the local 5442 Postgres (a configured-but-unreachable
+  DB PANICS loudly instead of silently skipping, since `4af62e3`; unset =
+  skipped). Migrations auto-apply via `sqlx::migrate!`.
+  `scripts/test.sh` / the backend half of `scripts/check.sh` are still
+  docker-based — they only work where docker exists (CI, thelab).
+- **Frontend**: flutter lives at `~/flutter` (`~/flutter/bin/flutter`)
+  and runs natively — `flutter analyze`, `flutter test`,
+  `flutter build web`. No docker wrapper needed on this VM.
+- Kill a locally-running backend with `pkill -x patrimonio`.
+- **CI** (`8690433`): every push/PR runs the integration suite +
+  `flutter analyze`/`test` — that's the real gate now.
+- **Prod**: host `thelab` (`ssh nickvander@thelab`), docker compose stack
+  at `/mnt/data/docker/stacks/patrimonio`, api on `:8085`. See
+  `docs/migration.md` + `docs/deployment.md`.
 - Direct-push to `main` is gated by the Claude Code classifier; do the local
   `git merge --ff-only` + `git push origin main` (the user authorizes pushes).

@@ -1,24 +1,104 @@
 # Next session — handoff
 
-> **⇒ START HERE: [work/HANDOFF.md](HANDOFF.md)** has the current (2026-06-03)
-> state after the statement-import deepening sprint — what shipped, caveats,
-> and the suggested next steps. This file (NEXT.md) is the older broader
-> backlog; read HANDOFF.md first.
+> **⇒ START HERE: [work/HANDOFF.md](HANDOFF.md)** has the current
+> (2026-07-07) state — every sprint since 2026-06-06 is logged there,
+> and [work/CURRENT.md](CURRENT.md) has the detailed 2026-07-06/07
+> Portfolio-overhaul log. This file is the "what to actually do next"
+> filter.
 >
-> **Last updated:** 2026-05-30 (after the personal-lending feature shipped)
-> **Purpose:** Pickup-ready priorities for the next agent. Each item
-> has a why, scope sketch, and where to look in code. Ordered by
+> **Last updated:** 2026-07-07 (after the Portfolio-tab overhaul deployed)
+> **Purpose:** Pickup-ready priorities for the next agent. Ordered by
 > impact-per-effort.
 
-`work/FUTURE.md` has the full backlog with detailed plans. This file
-is the "what to actually do next" filter — top three by impact +
-small wins.
+`work/FUTURE.md` has the full backlog with detailed plans.
+
+## In progress right now (2026-07-07) — owner-chosen priorities
+
+1. **Dividend fan-out caching.** `GET /dashboard/holdings/dividends`
+   (`daf7ffe`) does bounded-parallel Yahoo fetches per held symbol on
+   every request — slow and rate-limit-prone as holdings grow. Cache the
+   per-symbol dividend data (the `benchmark_prices`-style
+   table + freshness-gate pattern is the house precedent).
+2. **Target-allocation / rebalancing view.** Let the user set target %
+   per asset class and show drift + the trades that would rebalance.
+   Builds on the canonical `asset_class` classifier + per-symbol
+   overrides that shipped in the July overhaul.
+3. **Dark-mode chart tooltip + palette pass.** See FUTURE.md "Color
+   palette overhaul" — the net-worth/projections tooltips + hover guide
+   are already fixed; this pass is the remaining palette-wide work
+   (light-mode contrast on the scaffold, brand accents that wash out on
+   white, an accents map instead of scattered hex literals).
+4. **Dividend income calendar.** Month-by-month view of expected
+   dividend payments, from the per-symbol schedule data behind the
+   dividend detail sheet (`/dashboard/dividends/{symbol}`).
+
+## Open backlog (next up after those)
+
+- **Statement-import validation with real PDFs + more MX banks.**
+  BBVA/Santander parsers are still on reconstructed fixtures — run real
+  personal PDFs through `cargo run --bin parse_check <bank> <file>`
+  before advertising; HSBC needs a clean PDF (parser exists,
+  unadvertised). New banks: Banorte/Scotiabank/HSBC parsers already
+  exist (don't redo) — next are Banregio, Inbursa, Banco Azteca via the
+  same `parser/column_table.rs` pattern.
+- **Balance-over-time chart from `balance_after`.** A per-account chart
+  shipped 2026-06-03 (`AccountBalanceChart`, statement-imported accounts
+  only) — remaining scope: extend beyond statement-backed accounts /
+  surface it more broadly.
+- **Per-word OCR confidence** (tesseract TSV) to flag only genuinely
+  low-confidence rows instead of the whole OCR'd file.
+- **Balance-anchored dedup hash** (date+amount+balance_after) so a
+  description that parses slightly differently across parser versions
+  doesn't re-import.
+- **Performance-card time-proportional ticks.** The instrument sheet got
+  time-proportional chart ticks in the overhaul (`ca4ca8d`); port the
+  same treatment to `performance_card.dart`.
+- **ES percent locale consistency.** Percent formatting isn't uniformly
+  locale-aware in the Spanish UI; sweep the `%` call sites.
+- **`prefer_const_literals_to_create_immutables` sweep** — see FUTURE.md
+  for the staged plan; lint still off in `analysis_options.yaml`.
 
 ## Recently shipped (do NOT re-do)
 
-This file has been refreshed; the previous Top-3 (SQL net-worth,
+**June–July 2026** (full detail in HANDOFF.md's dated sections +
+CURRENT.md):
+
+* **Portfolio-tab overhaul (2026-07-06/07, deployed):** dividend
+  frequency fix, dividend/instrument detail sheets, prefixed allocation
+  filters + asset-class classifier + per-symbol overrides, day change,
+  CSV exports, realized-gains year chips + tax context, holding soft
+  delete + undo, dividends on Overview/Projections, a11y sweep, mobile
+  polish.
+* **Custom irregular loan schedules + off-bank reconciliation**
+  (`14110dc`) and full Lending-tab localization (07-06).
+* **CUJ/competitive sweep across all tabs** (`6ffcf2b`) + dividend
+  income endpoint + selectable benchmark (`daf7ffe`) + manual USD/MXN
+  rate override (`90d7ece`) + tax bracket/LTCG headroom (`c78c4ed`).
+* **Tax constants verified** (MX ISR tarifa was wrong; fixed +
+  `TAX_CONSTANTS_VERIFIED` flipped, `290cca4`); mega-backdoor/backdoor
+  Roth + §415(c) limits; 401k elective-deferral split.
+* **CI on push/PR** (integration suite + flutter analyze/test) and the
+  silently-skipping integration suite resurrected (`4af62e3`).
+* **Forensic accounting-accuracy audit** (`060dbb2`) + June audit
+  sprints (`f475ead`, `0d5c3c6` — incl. the Plaid per-user isolation
+  fix).
+* **Under-reviewed-tabs sweep** (06-19/20): auto-archive, statement
+  coverage, top movers, loan aging, nominal/real toggle, sync health,
+  undo delete, filtered CSV, period selector.
+* **Mobile-calm pass across every tab**; concurrent sync with live
+  progress; passkey step-up password set; Revolut (MX) parser.
+* **Transactions revamp M1–M4** (sign convention fixed, command
+  palette, full-history search) + **tax-planning overhaul T1–T15**
+  (disposals, wash-sale, FBAR, ISR retenido) + FIRE/projections UX.
+* **Real-statement import sprint** (Nu cajitas, cetesdirecto, CLABE
+  identity + auto-match, net-worth backfill from running balances),
+  manual holdings by ticker + nightly price refresh, HealthEquity HSA +
+  Fidelity NetBenefits parsers, break-glass admin CLI + migration
+  runbook (→ prod now lives on thelab).
+
+**May 2026 and earlier** — the previous Top-3 (SQL net-worth,
 integration tests, Manage hidden things) all shipped. Highlights
-from the trailing 4–5 sprints (all on `main`):
+from those trailing sprints (all on `main`):
 
 * **Personal lending (opt-in module):** complete — MVP + Phase 2 +
   Phase 3 + interest-income accounting. Loans + reusable people
@@ -81,7 +161,13 @@ from the trailing 4–5 sprints (all on `main`):
 * **README auth section:** documents TOTP enroll / recovery
   codes / passkey register flows + the hardening defaults.
 
-## Top priorities for the next session (2026-06-02)
+## Top priorities for the next session (2026-06-02) — ALL SHIPPED
+
+> 2026-07-07 note: the Top 3 below all shipped — secondary/Pagaré
+> accounts import as their own accounts (and cajitas as sub-accounts,
+> `d90611d`), auto-categorization shipped with learn-from-edits, and
+> statement continuity/gap detection shipped incl. the coverage panel.
+> Kept for history.
 
 **Statement import was overhauled this sprint** (Banamex multi-format —
 text PDFs, Firefox-print-to-image, scanned — + OCR, multi-account handling,
@@ -138,19 +224,17 @@ by the dashboard integration suite.
 
 ## Quick wins (≤ 2 hours each)
 
-Pick one as a warm-up:
+> 2026-07-07 status: most of these shipped —
 
-- **`prefer_const_literals_to_create_immutables` sweep** — lint
-  cleanup; cosmetic.
-- **Manual sync trigger UI** — Management tab has the per-row
-  retry buttons; a top-level "sync everything now" button next to
-  the FX widget would make manual refresh discoverable.
-- **Inline-rename `R` keyboard shortcut** (FUTURE.md I follow-up).
-  Right-click works; `R` on a focused row would help power users.
-- **Per-file upload result table** — the streaming progress shows
-  "Last: foo.pdf" but doesn't keep the full list. A small
-  expandable section under the spinner could surface every
-  per-file outcome (especially useful when 2 of 12 failed).
+- **`prefer_const_literals_to_create_immutables` sweep** — still open
+  (also listed in the backlog above).
+- ~~**Manual sync trigger UI**~~ ✅ shipped — overview sync bar
+  (`aa5419d`) + live "updating X of N" progress (`72b78e0`).
+- ~~**Inline-rename `R` keyboard shortcut**~~ ✅ shipped 2026-05-28
+  (backlog-cleanup bundle, see CURRENT.md).
+- ~~**Per-file upload result table**~~ ✅ effectively shipped via the
+  grouped review panel + statement summary strip + determinate progress
+  bar + honest folder-read counter (`9ef8eba`, `c437dc1`, `5d2496a`).
 
 ## Deferred — explicitly NOT next
 
@@ -168,13 +252,15 @@ Pick one as a warm-up:
 1. Read `work/CURRENT.md` for the snapshot.
 2. Read this file (`work/NEXT.md`) — top 3 + quick wins.
 3. For Tier-1: open the linked `work/FUTURE.md` section.
-4. Verify the stack: `docker compose ps` shows all four containers
-   Up / Healthy.
+4. Verify the stack — **on the dev VM docker is unavailable**: Postgres
+   on `127.0.0.1:5442` + Redis on `:6380` run natively with data dirs in
+   the repo (see `CLAUDE.md`); the compose stack only applies to prod on
+   thelab.
 5. Verify auth: `curl http://127.0.0.1:8080/api/health` →
    `{"status":"ok","database":"connected"}`.
-6. Run the test suite: `./scripts/test.sh` (wrapper handles the
-   dockerised toolchain, idempotent test-DB creation, and the
-   `--test-threads=1` flag).
+6. Run the test suite: on the dev VM, `cargo test` natively in
+   `backend/` with `PATRIMONIO_TEST_DATABASE_URL` set (see HANDOFF.md
+   "How to verify / ship"); `./scripts/test.sh` is docker-only.
 7. Ship → commit → push branch (direct-push to main is blocked by
    the Claude Code auto-classifier; do the fast-forward merge dance
    yourself).
