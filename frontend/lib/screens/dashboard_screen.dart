@@ -227,6 +227,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Anchors the holdings-table card on the Portfolio tab so a heatmap
   // band tap can scroll the (below-the-fold) filtered table into view.
   final GlobalKey _holdingsTableKey = GlobalKey();
+  // Anchors the Portfolio tab's DividendIncomeCard so the Overview
+  // "Dividends/yr" tile tap can section-switch + ensureVisible it (O1;
+  // same pattern as _holdingsTableKey above).
+  final GlobalKey _dividendCardKey = GlobalKey();
+  // Portfolio-wide dividend summary (projected annual income + blended
+  // yield), fetched best-effort alongside the other overview loads. null
+  // (failure) or zero income simply hides the Overview dividends tile.
+  Map<String, dynamic>? _portfolioDividends;
   // Cmd-K deep-link search overrides — set by the palette callbacks so
   // the target tab pre-filters to the picked row. They're cleared on
   // any user-driven search change in the target widget.
@@ -1253,6 +1261,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final assets = netWorth + liabilities;
 
+    // Dividends/yr tile inputs (O1): the SAME response fields the Portfolio
+    // tab's DividendIncomeCard reads, so the two figures always match to the
+    // cent. USD income is converted with the strip's conversionFactor below.
+    final dividendIncome =
+        (_portfolioDividends?['projected_annual_income_usd'] as num?)
+                ?.toDouble() ??
+            0.0;
+    final dividendYield =
+        (_portfolioDividends?['blended_yield_pct'] as num?)?.toDouble();
+
     // Net worth is no longer a tile here — it's the dedicated hero block
     // (_buildNetWorthHero) directly above this row, with the native-currency
     // composition bound to it. These tiles are the secondary stats that
@@ -1330,6 +1348,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   usdMxnRate: usdMxnRate,
                 ),
       ),
+      // Dividends/yr tile (O1): projected annual dividend income across the
+      // whole portfolio, with the blended yield in the tooltip. Present only
+      // when the best-effort fetch succeeded, income is positive, and there
+      // are actual holdings — never a dash tile. Tap = jump to the Portfolio
+      // tab's Dividend income card (section switch + ensureVisible, same
+      // pattern as the allocation band-tap scroll).
+      if (dividendIncome > 0 &&
+          ((_portfolioData?['holdings'] as List?) ?? const []).isNotEmpty)
+        _StatTile(
+          label: l.ovw3DividendsPerYear,
+          value: currencyFormat.format(dividendIncome * conversionFactor),
+          // Income accent — same styling family as the Investments tile's
+          // category cue, but in the "money coming in" green.
+          accent: context.positive,
+          tooltip: dividendYield == null
+              ? l.ovw3DividendsTooltipNoYield
+              : l.ovw3DividendsTooltip(dividendYield.toStringAsFixed(2)),
+          onTap: () {
+            _goToNav(NavId.portfolio);
+            _scrollToDividendCard();
+          },
+        ),
       // Real assets tile shows up only when the user actually has any —
       // a typical brand-new account has none and an empty $0 tile would
       // waste the row's horizontal budget.
@@ -2981,34 +3021,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // Loans for the Overview "Lending" glance card. Best-effort — a
         // failure (or lending being off) just hides the card.
         _apiService.getLoans().catchError((_) => <dynamic>[]),
+        // Portfolio-wide dividend income for the Overview "Dividends/yr"
+        // tile (O1). Already best-effort (returns null on failure) and
+        // served from the backend's cached dividend fan-out — one request,
+        // no per-tile quote storm.
+        _apiService.getPortfolioDividends(),
       ]);
 
       debugPrint("All data loaded successfully");
 
       final allocationRaw = results[8] as List<dynamic>;
       final trendsRaw = results[9] as List<dynamic>;
-
-      // Allocation slice colours. Pulled through brand tokens so the
-      // pie reads against a white card in light mode without each slice
-      // having to be hand-tuned. The 6 categories map 1:1 to the
-      // semantic accents already exposed by BrandPalette.
-      // Keys are the Title-Cased categories the allocation endpoint emits
-      // (INITCAP'd holding_type + the Cash/Crypto union literals). Keep
-      // Equity/Mutual Fund here too or those bands fall back to grey.
-      final categoryColors = {
-        'Cash': BrandPalette.info(brightness),
-        'Stocks/ETFs': BrandPalette.teal(brightness),
-        'Equity': BrandPalette.teal(brightness),
-        'Mutual Fund': BrandPalette.yellow(brightness),
-        'Investment': BrandPalette.positive(brightness),
-        'Crypto': BrandPalette.purple(brightness),
-        'Fixed Income': BrandPalette.positive(brightness),
-        'Other': BrandPalette.negative(brightness),
-        // C-G: holdings-less investment accounts (balance only). Muted
-        // neutral, NOT a category hue — the heatmap renders this band
-        // inert/non-tappable (keyed off asset_class == 'unclassified').
-        'Unclassified': BrandPalette.neutral(brightness),
-      };
 
       setState(() {
         _overview = results[0] as Map<String, dynamic>;
@@ -3031,33 +3054,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _transactionsHasMore = false;
         }
 
-        _allocationData = allocationRaw.map((e) {
-          final category = e['category'] as String;
-          final subCategory = e['sub_category'] as String;
-          final value = (e['value'] as num).toDouble();
-          final quantity = (e['quantity'] as num?)?.toDouble() ?? 0.0;
-          // Canonical asset-class key (C2). Defensive: older backends
-          // don't send it — null makes the heatmap fall back to emitting
-          // the legacy bare category as the filter value.
-          // C-G rows (asset_class == 'unclassified': investment accounts
-          // with a balance but no holdings rows) pass through here like
-          // every other entry; the heatmap renders them as the inert
-          // "Unclassified (account balance)" band.
-          final assetClassRaw = e['asset_class'];
-          final assetClass =
-              assetClassRaw is String && assetClassRaw.isNotEmpty
-                  ? assetClassRaw
-                  : null;
-
-          return AllocationData(
-            category,
-            subCategory,
-            value,
-            categoryColors[category] ?? Colors.blueGrey,
-            quantity: quantity,
-            assetClassKey: assetClass,
-          );
-        }).toList();
+        _allocationData = _mapAllocationData(allocationRaw, brightness);
 
         _trendData = trendsRaw.map((e) => e as Map<String, dynamic>).toList();
         _sinceLastLogin = results[10] as Map<String, dynamic>?;
@@ -3084,6 +3081,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _spendingInsights = insightsRaw is Map<String, dynamic> ? insightsRaw : null;
         _archivedAccounts = results[18] as List<dynamic>;
         _loans = results[19] as List<dynamic>;
+        _portfolioDividends = results[20] as Map<String, dynamic>?;
         _isLoading = false;
       });
 
@@ -3108,6 +3106,116 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  /// Maps the raw /allocation rows into [AllocationData], resolving each
+  /// category's colour for the given theme [brightness]. Shared by
+  /// [_loadAllData] and [_refreshPortfolioData] so a targeted portfolio
+  /// refresh keeps the exact same colour + asset-class semantics.
+  List<AllocationData> _mapAllocationData(
+      List<dynamic> raw, Brightness brightness) {
+    // Allocation slice colours. Pulled through brand tokens so the
+    // pie reads against a white card in light mode without each slice
+    // having to be hand-tuned. The 6 categories map 1:1 to the
+    // semantic accents already exposed by BrandPalette.
+    // Keys are the Title-Cased categories the allocation endpoint emits
+    // (INITCAP'd holding_type + the Cash/Crypto union literals). Keep
+    // Equity/Mutual Fund here too or those bands fall back to grey.
+    final categoryColors = {
+      'Cash': BrandPalette.info(brightness),
+      'Stocks/ETFs': BrandPalette.teal(brightness),
+      'Equity': BrandPalette.teal(brightness),
+      'Mutual Fund': BrandPalette.yellow(brightness),
+      'Investment': BrandPalette.positive(brightness),
+      'Crypto': BrandPalette.purple(brightness),
+      'Fixed Income': BrandPalette.positive(brightness),
+      'Other': BrandPalette.negative(brightness),
+      // C-G: holdings-less investment accounts (balance only). Muted
+      // neutral, NOT a category hue — the heatmap renders this band
+      // inert/non-tappable (keyed off asset_class == 'unclassified').
+      'Unclassified': BrandPalette.neutral(brightness),
+    };
+
+    return raw.map((e) {
+      final category = e['category'] as String;
+      final subCategory = e['sub_category'] as String;
+      final value = (e['value'] as num).toDouble();
+      final quantity = (e['quantity'] as num?)?.toDouble() ?? 0.0;
+      // Canonical asset-class key (C2). Defensive: older backends
+      // don't send it — null makes the heatmap fall back to emitting
+      // the legacy bare category as the filter value.
+      // C-G rows (asset_class == 'unclassified': investment accounts
+      // with a balance but no holdings rows) pass through here like
+      // every other entry; the heatmap renders them as the inert
+      // "Unclassified (account balance)" band.
+      final assetClassRaw = e['asset_class'];
+      final assetClass = assetClassRaw is String && assetClassRaw.isNotEmpty
+          ? assetClassRaw
+          : null;
+
+      return AllocationData(
+        category,
+        subCategory,
+        value,
+        categoryColors[category] ?? Colors.blueGrey,
+        quantity: quantity,
+        assetClassKey: assetClass,
+      );
+    }).toList();
+  }
+
+  /// Scrolls the Portfolio tab's DividendIncomeCard into view (O1 tile
+  /// tap-through). Post-frame so a just-mounted Portfolio section has laid
+  /// out first; a second corrective pass follows because the self-fetching
+  /// cards above (benchmark chart, dividend skeleton → content) can shift
+  /// layout right after the first scroll on a cold mount.
+  void _scrollToDividendCard({int attempt = 0}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _dividendCardKey.currentContext;
+      if (!mounted || ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeInOutCubic,
+        // Land the card near the top of the viewport so its header +
+        // summary tiles are visible.
+        alignment: 0.05,
+      );
+      if (attempt == 0) {
+        Future.delayed(const Duration(milliseconds: 700), () {
+          if (mounted) _scrollToDividendCard(attempt: 1);
+        });
+      }
+    });
+  }
+
+  /// O3 (contract C3-D): targeted refresh of the holdings table +
+  /// allocation heatmap after an in-sheet mutation (asset-class override,
+  /// delete/undo) — no full-dashboard reload. forceRefresh bypasses the
+  /// ApiService response cache so the re-fetch reflects the mutation
+  /// immediately. Best-effort: a transient failure keeps the current data.
+  //
+  // C3-D: wired to PortfolioCard.onDataRefreshRequested by the merge
+  // coordinator once WS4 lands the param; unused until then.
+  // ignore: unused_element
+  Future<void> _refreshPortfolioData() async {
+    // Snapshot brightness before the await (use_build_context_synchronously),
+    // same as _loadAllData.
+    final brightness = Theme.of(context).brightness;
+    try {
+      final results = await Future.wait([
+        _apiService.getHoldings(forceRefresh: true),
+        _apiService.getAllocationData(forceRefresh: true),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _portfolioData = results[0] as Map<String, dynamic>;
+        _allocationData =
+            _mapAllocationData(results[1] as List<dynamic>, brightness);
+      });
+    } catch (e) {
+      debugPrint('Portfolio refresh error: $e');
     }
   }
 
@@ -4216,6 +4324,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 24),
           // 5 · Holdings — searchable table, drill-down filter from above.
           // Keyed so the allocation band-tap can ensureVisible it.
+          // C3-D: pass onDataRefreshRequested: _refreshPortfolioData once WS4 merges.
           PortfolioCard(
             key: _holdingsTableKey,
             section: PortfolioSection.holdings,
@@ -4232,7 +4341,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 24),
           // 6 · Income — projected dividend income, blended yield, top payers,
           // upcoming ex-dates. Self-fetching; hides for non-paying portfolios.
+          // Keyed so the Overview Dividends/yr tile tap can ensureVisible it.
           DividendIncomeCard(
+            key: _dividendCardKey,
             apiService: _apiService,
             conversionFactor: conversionFactor,
             currencyFormat: currencyFormat,

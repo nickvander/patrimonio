@@ -105,6 +105,18 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   // explore, answering "why Coast?" by making it one option among peers.
   _FireFocus _fireFocus = _FireFocus.full;
 
+  // O2 · Dividend income outlook. Advanced toggle revealing a purely
+  // informational panel under the chart: today's blended yield applied to
+  // the median projected balances. It NEVER touches the projection request
+  // or the balance curve — dividends are already inside the total-return
+  // assumption, so adding them to growth would double-count.
+  bool _showDividendOutlook = false;
+  // Portfolio dividend summary (projected annual income + blended yield),
+  // fetched once, best-effort. null after the fetch = no dividend data →
+  // the toggle renders disabled with an explanatory tooltip.
+  Map<String, dynamic>? _dividendData;
+  bool _dividendFetchDone = false;
+
   // Lean / Standard / Fat are lifestyle *levels* relative to the user's own
   // baseline spending (Standard = their tracked/real expenses), so the
   // presets always make sense instead of snapping to arbitrary dollar
@@ -138,7 +150,31 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     _goalYear = Preferences.getGoalYear();
     _hydrateGoalFromBackend();
     _prefillFromTrackedData();
+    _loadDividendData();
   }
+
+  // One-shot, best-effort fetch backing the dividend outlook toggle (O2).
+  // Fetched up front (getPortfolioDividends is served from the backend's
+  // cached dividend fan-out) so the toggle can correctly render disabled —
+  // with a tooltip — for a dividend-less portfolio instead of snapping
+  // back off after a tap.
+  Future<void> _loadDividendData() async {
+    final data = await _apiService.getPortfolioDividends();
+    if (!mounted) return;
+    setState(() {
+      _dividendData = data;
+      _dividendFetchDone = true;
+    });
+  }
+
+  // Projected annual dividend income (USD) from the portfolio summary; 0
+  // when unavailable. The outlook is offered only when this is positive.
+  double get _dividendIncomeUsd =>
+      (_dividendData?['projected_annual_income_usd'] as num?)?.toDouble() ??
+      0.0;
+
+  bool get _dividendOutlookAvailable =>
+      _dividendFetchDone && _dividendIncomeUsd > 0;
 
   Future<void> _hydrateGoalFromBackend() async {
     try {
@@ -242,6 +278,12 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                   // title row + legend above an Expanded chart, so a shorter
                   // box squishes the plot to a sliver.
                   height: isPhone ? 320 : 320, child: _buildChartCard()),
+              // O2: informational dividend income outlook — sits between the
+              // chart and the FIRE strip; never part of the chart itself.
+              if (_showDividendOutlook && _dividendOutlookAvailable) ...[
+                const SizedBox(height: 16),
+                _buildDividendOutlookPanel(),
+              ],
               const SizedBox(height: 16),
               _buildFireStatusStrip(),
               const SizedBox(height: 16),
@@ -271,6 +313,14 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                   child: Column(
                     children: [
                       Expanded(flex: 3, child: _buildChartCard()),
+                      // O2: informational dividend income outlook — sits
+                      // between the chart and the FIRE strip; never part of
+                      // the chart itself.
+                      if (_showDividendOutlook &&
+                          _dividendOutlookAvailable) ...[
+                        const SizedBox(height: 16),
+                        _buildDividendOutlookPanel(),
+                      ],
                       const SizedBox(height: 16),
                       _buildFireStatusStrip(),
                       const SizedBox(height: 16),
@@ -549,6 +599,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       div(),
       _buildGuardrailsToggle(),
       div(),
+      _buildDividendOutlookToggle(),
+      div(),
       _buildSliderControl(
         label: l.projProjectionYears,
         value: _projectionYears.toDouble(),
@@ -754,6 +806,230 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           },
         ),
       ],
+    );
+  }
+
+  // O2: "Show dividend income outlook" advanced toggle (same row pattern as
+  // the guardrails toggle above). Purely presentational — flipping it only
+  // reveals/hides the informational panel under the chart; it never triggers
+  // a projection re-fetch, so the request params and the balance curve are
+  // byte-identical with the toggle on or off. Disabled (with a tooltip) when
+  // the portfolio has no projected dividend income.
+  Widget _buildDividendOutlookToggle() {
+    final l = AppLocalizations.of(context);
+    final available = _dividendOutlookAvailable;
+    final toggle = Switch(
+      value: _showDividendOutlook && available,
+      activeThumbColor: context.positive,
+      onChanged: available
+          ? (v) => setState(() => _showDividendOutlook = v)
+          : null,
+    );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l.proj3ShowDividends,
+                style: TextStyle(color: context.textMuted, fontSize: 14),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                l.proj3ShowDividendsHelp,
+                style: TextStyle(color: context.textFaint, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+        if (available)
+          toggle
+        else
+          Tooltip(
+            message: l.proj3ShowDividendsUnavailable,
+            triggerMode: TooltipTriggerMode.tap,
+            child: toggle,
+          ),
+      ],
+    );
+  }
+
+  // Median (p50) projected balance at `year`, in real USD — straight from
+  // the Monte Carlo fan the screen has ALREADY fetched; falls back to the
+  // deterministic expected path when the fan is unavailable. Read-only over
+  // existing data: computing the outlook never issues a request.
+  double? _medianBalanceAtYear(int year) {
+    final data = _projectionData;
+    if (data == null) return null;
+    final mc = data['monte_carlo'] as Map<String, dynamic>?;
+    final pcts = (mc?['percentiles'] as List<dynamic>?) ?? const [];
+    for (final p in pcts) {
+      if (p is Map && ((p['year'] as num?)?.round() ?? -1) == year) {
+        final v = (p['p50'] as num?)?.toDouble();
+        if (v != null) return v;
+      }
+    }
+    // Fallback: last expected-path sample at or before the requested year.
+    final points = (data['points'] as List<dynamic>?) ?? const [];
+    double? best;
+    var bestX = double.negativeInfinity;
+    for (final p in points) {
+      if (p is! Map) continue;
+      final x = ((p['year'] as num?)?.toDouble() ?? 0) +
+          ((p['month'] as num?)?.toDouble() ?? 0) / 12.0;
+      if (x <= year + 1e-6 && x > bestX) {
+        bestX = x;
+        best = (p['balance'] as num?)?.toDouble();
+      }
+    }
+    return best;
+  }
+
+  // O2: the dividend income outlook panel — glossary-card chrome, three
+  // stat rows (today / at retirement / at horizon), each = the CURRENT
+  // blended yield × the median projected balance at that point, plus the
+  // mandatory "already part of total return" disclaimer. Derived entirely
+  // client-side from data the screen already holds; it respects the
+  // real-vs-nominal switch exactly like the chart does (_nominalFactor).
+  Widget _buildDividendOutlookPanel() {
+    final l = AppLocalizations.of(context);
+    final data = _dividendData;
+    if (data == null || _projectionData == null) {
+      return const SizedBox.shrink();
+    }
+    final incomeUsd = _dividendIncomeUsd;
+    final yieldPct = (data['blended_yield_pct'] as num?)?.toDouble();
+    // Yield as a fraction. When the backend didn't emit a blended yield,
+    // derive it from income ÷ starting balance — the projection starts at
+    // currentNetWorth, so this keeps the three rows internally consistent.
+    final yieldFrac = yieldPct != null
+        ? yieldPct / 100.0
+        : (widget.currentNetWorth > 0
+            ? incomeUsd / widget.currentNetWorth
+            : null);
+
+    final yearsToRet = _yearsToRetirement.clamp(0, _projectionYears);
+    final nowYear = DateTime.now().year;
+    // Income at a horizon = yield × median projected balance there. Balances
+    // are real USD; conversionFactor + _nominalFactor mirror the chart's
+    // display transform so the panel rescales with the nominal toggle.
+    String? incomeAt(int years) {
+      if (yieldFrac == null) return null;
+      final balance = _medianBalanceAtYear(years);
+      if (balance == null) return null;
+      final display = balance *
+          yieldFrac *
+          widget.conversionFactor *
+          _nominalFactor(years.toDouble());
+      return widget.currencyFormat.format(display);
+    }
+
+    final todayIncome =
+        widget.currencyFormat.format(incomeUsd * widget.conversionFactor);
+    final retIncome = incomeAt(yearsToRet);
+    final horizonIncome = incomeAt(_projectionYears);
+
+    final valueStyle = TextStyle(
+      color: context.textPrimary,
+      fontWeight: FontWeight.w700,
+      fontSize: 13.5,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    Widget row(String label, String value, {String? sub}) => Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style:
+                          TextStyle(color: context.textMuted, fontSize: 13),
+                    ),
+                    if (sub != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 1),
+                        child: Text(
+                          sub,
+                          style: TextStyle(
+                            color: context.textFaint,
+                            fontSize: 11,
+                            fontFeatures: const [
+                              FontFeature.tabularFigures()
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(value, style: valueStyle),
+            ],
+          ),
+        );
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.payments_outlined,
+                    size: 18, color: context.positive),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    l.proj3OutlookTitle,
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                // Dollar-basis caption, consistent with the header badge:
+                // "in today's dollars" in real mode, the nominal note when
+                // the nominal toggle rescales the figures.
+                Text(
+                  _showNominal ? l.projNominalNote : l.proj3InTodaysDollars,
+                  style: TextStyle(color: context.textFaint, fontSize: 11),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Divider(color: context.hairline, height: 1),
+            row(
+              l.proj3RowToday,
+              l.proj3PerYear(todayIncome),
+              sub: yieldPct != null
+                  ? l.proj3BlendedYieldNote(yieldPct.toStringAsFixed(2))
+                  : null,
+            ),
+            if (retIncome != null)
+              row(
+                l.proj3RowRetirement('${nowYear + yearsToRet}'),
+                l.proj3PerYearApprox(retIncome),
+              ),
+            if (horizonIncome != null)
+              row(
+                l.proj3RowHorizon('${nowYear + _projectionYears}'),
+                l.proj3PerYearApprox(horizonIncome),
+              ),
+            const SizedBox(height: 12),
+            Text(
+              l.proj3DisclaimerBody,
+              style: TextStyle(
+                  color: context.textMuted, fontSize: 11.5, height: 1.35),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

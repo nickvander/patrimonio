@@ -2516,5 +2516,95 @@
   },
   "acct3Undo": "Deshacer",
   "acct3RestoreGone": "No se pudo restaurar — la eliminación ya es permanente.",
-  "acct3RestoreFailed": "No se pudo restaurar la posición. Inténtalo de nuevo."
+  "acct3RestoreFailed": "No se pudo restaurar la posición. Inténtalo de nuevo.",
+  "ovw3DividendsPerYear": "Dividendos/año",
+  "@ovw3DividendsPerYear": {
+    "description": "Overview stat-strip tile label: projected annual dividend income (round 3, O1)."
+  },
+  "ovw3DividendsTooltip": "Ingreso anual proyectado por dividendos · rendimiento combinado de {yieldPct}% — toca para ver los pagadores",
+  "@ovw3DividendsTooltip": {
+    "description": "Tooltip on the Overview Dividends/yr stat tile, including the blended yield.",
+    "placeholders": {
+      "yieldPct": {
+        "type": "String"
+      }
+    }
+  },
+  "ovw3DividendsTooltipNoYield": "Ingreso anual proyectado por dividendos — toca para ver los pagadores",
+  "@ovw3DividendsTooltipNoYield": {
+    "description": "Tooltip on the Overview Dividends/yr stat tile when the blended yield is unavailable."
+  },
+  "proj3ShowDividends": "Mostrar panorama de ingresos por dividendos",
+  "@proj3ShowDividends": {
+    "description": "Projections advanced toggle: reveals the informational dividend income panel under the chart."
+  },
+  "proj3ShowDividendsHelp": "Añade un panel informativo de ingresos bajo la gráfica — nunca modifica la proyección.",
+  "@proj3ShowDividendsHelp": {
+    "description": "Help caption under the dividend income outlook toggle."
+  },
+  "proj3ShowDividendsUnavailable": "Tu portafolio no tiene ingreso proyectado por dividendos",
+  "@proj3ShowDividendsUnavailable": {
+    "description": "Tooltip on the disabled dividend outlook toggle when the portfolio pays no dividends."
+  },
+  "proj3OutlookTitle": "Panorama de ingresos por dividendos",
+  "@proj3OutlookTitle": {
+    "description": "Title of the informational dividend income panel on the Projections tab."
+  },
+  "proj3RowToday": "Hoy",
+  "@proj3RowToday": {
+    "description": "First row label of the dividend outlook panel: income at today's balance."
+  },
+  "proj3RowRetirement": "Al retiro (~{year})",
+  "@proj3RowRetirement": {
+    "description": "Second row label of the dividend outlook panel: income at the retirement-year median balance.",
+    "placeholders": {
+      "year": {
+        "type": "String"
+      }
+    }
+  },
+  "proj3RowHorizon": "Al horizonte ({year})",
+  "@proj3RowHorizon": {
+    "description": "Third row label of the dividend outlook panel: income at the final projected year's median balance.",
+    "placeholders": {
+      "year": {
+        "type": "String"
+      }
+    }
+  },
+  "proj3PerYear": "{amount}/año",
+  "@proj3PerYear": {
+    "description": "Dividend outlook value: exact annual income figure (today row).",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "proj3PerYearApprox": "≈{amount}/año",
+  "@proj3PerYearApprox": {
+    "description": "Dividend outlook value: approximate annual income figure (projected rows).",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "proj3BlendedYieldNote": "rendimiento combinado de {pct}%",
+  "@proj3BlendedYieldNote": {
+    "description": "Sub-caption on the dividend outlook Today row stating the blended yield used.",
+    "placeholders": {
+      "pct": {
+        "type": "String"
+      }
+    }
+  },
+  "proj3InTodaysDollars": "en dólares de hoy",
+  "@proj3InTodaysDollars": {
+    "description": "Basis caption on the dividend outlook panel when the real-dollars view is active."
+  },
+  "proj3DisclaimerBody": "Supone que el rendimiento combinado actual se mantiene. Los dividendos ya forman parte del rendimiento total esperado de arriba: es informativo y no se suma al crecimiento.",
+  "@proj3DisclaimerBody": {
+    "description": "Mandatory honesty disclaimer under the dividend outlook panel."
+  }
 }
