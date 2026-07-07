@@ -49,7 +49,11 @@ class DividendCalendar extends StatelessWidget {
 
     final l10n = AppLocalizations.of(context);
     final isWide = MediaQuery.sizeOf(context).width >= 720;
-    final currentKey = DateFormat('yyyy-MM').format(DateTime.now());
+    // The backend builds the 12 buckets starting at the UTC current month, so
+    // the first bucket's key IS "now" server-side. Deriving the accent from it
+    // (rather than local DateTime.now()) keeps the highlight correct near a
+    // month boundary when the client's local month differs from UTC.
+    final currentKey = months.first.key;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

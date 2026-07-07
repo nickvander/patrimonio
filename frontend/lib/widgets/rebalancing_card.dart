@@ -303,7 +303,11 @@ class _RebalancingCardState extends State<RebalancingCard> {
     var total = 0.0;
     for (final item in widget.allocationData) {
       final rawKey = item.assetClassKey;
-      final key = (rawKey != null && rawKey.isNotEmpty) ? rawKey : 'other';
+      // A missing class means the holding is unclassified (a legacy backend
+      // that omits asset_class) — bucket it as 'unclassified' so it stays in
+      // the denominator and surfaces in the footnote, not silently folded
+      // into 'other' where it would inflate a targetable class.
+      final key = (rawKey != null && rawKey.isNotEmpty) ? rawKey : 'unclassified';
       byClass[key] = (byClass[key] ?? 0) + item.value;
       total += item.value;
     }

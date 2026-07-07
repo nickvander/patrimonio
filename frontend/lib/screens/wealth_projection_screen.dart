@@ -1637,9 +1637,12 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 final isMain = spot.bar.barWidth >= 4;
                 if (!isMain) return null;
                 return LineTooltipItem(
+                  // gen-l10n orders placeholders alphabetically (amount, year)
+                  // regardless of their order in the template string, so pass
+                  // amount first — otherwise the two render swapped.
                   l.projTooltipYearAmount(
-                    spot.x.toStringAsFixed(1),
                     widget.currencyFormat.format(spot.y),
+                    spot.x.toStringAsFixed(1),
                   ),
                   TextStyle(
                     color: context.tooltipOnSurface,

@@ -65,6 +65,11 @@ LineTouchData standardLineTouch(
       // spans inside `items` must use the tooltipOnSurface family.
       getTooltipColor: (touchedSpot) => context.tooltipSurface,
       tooltipRoundedRadius: 12,
+      // Keep the popover on-screen. Charts flush against the viewport edge
+      // (e.g. the account-panel balance sparkline) would otherwise clip the
+      // tooltip mid-word at the right edge.
+      fitInsideHorizontally: true,
+      fitInsideVertically: true,
       getTooltipItems: (touchedSpots) => items(context, touchedSpots),
     ),
   );
