@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
@@ -2237,6 +2239,149 @@ class _EdgeFadedHScrollState extends State<_EdgeFadedHScroll> {
   }
 }
 
+/// Secondary line under a holding's ticker — "fund name · institution ·
+/// account" — truncating the LEAST identifying segment first.
+///
+/// The old pre-joined single Text ellipsized end-first, which on phone
+/// widths always cut the ACCOUNT — the only part that disambiguates the
+/// same fund held in two accounts ("Oracle Corporation · Fidelity NetBen…").
+/// Here each segment is its own Text so truncation follows identification
+/// value instead of word order:
+///
+///   1. the fund legal name is the flexible segment — it ellipsizes first;
+///   2. the institution ellipsizes second, once the name is fully spent;
+///   3. the account is laid out at natural width and only ellipsizes when
+///      it ALONE exceeds the row — and a trailing "••1234" mask stays
+///      visible even then, via [maskAwareNameText] (same seam as the
+///      accounts panel).
+///
+/// A segment squeezed below a few legible characters is dropped together
+/// with its " · " separator rather than rendering orphan "…" noise. The
+/// semantics node always carries the full untruncated string, so screen
+/// readers (and the web semantics tree) are unaffected by visual clipping.
+class _HoldingSubtitle extends StatelessWidget {
+  final String name;
+  final String institution;
+  final String account;
+  final TextStyle style;
+
+  const _HoldingSubtitle({
+    required this.name,
+    required this.institution,
+    required this.account,
+    required this.style,
+  });
+
+  static const String _sep = ' · ';
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = [name, institution, account].where((s) => s.isNotEmpty);
+    if (parts.isEmpty) return const SizedBox.shrink();
+    final full = parts.join(_sep);
+    return Semantics(
+      label: full,
+      excludeSemantics: true,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final maxW = constraints.maxWidth;
+          if (!maxW.isFinite) {
+            // Unbounded width (shouldn't happen in the table/mobile rows):
+            // fall back to the legacy single-string rendering.
+            return Text(
+              full,
+              style: style,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            );
+          }
+          // Text merges its style with the ambient DefaultTextStyle and the
+          // MediaQuery text scale — the measuring painter must do the same
+          // or the caps would be computed for a different font.
+          final effective = DefaultTextStyle.of(context).style.merge(style);
+          final scaler = MediaQuery.textScalerOf(context);
+          final direction = Directionality.of(context);
+          double measure(String s) {
+            final painter = TextPainter(
+              text: TextSpan(text: s, style: effective),
+              textDirection: direction,
+              textScaler: scaler,
+              maxLines: 1,
+            )..layout();
+            // Ceil so a segment capped at its own natural width never
+            // ellipsizes from sub-pixel rounding.
+            final w = painter.width.ceilToDouble();
+            painter.dispose();
+            return w;
+          }
+
+          final sepW = measure(_sep);
+          // Below this a segment would show only "…"-noise — drop it.
+          final minSeg = measure('MM…');
+
+          // Assign widths in protection order: account > institution >
+          // name. Each kept segment also reserves the separator toward the
+          // segment after it, so the inflexible children can never sum past
+          // maxW (which would paint an overflow instead of ellipsizing).
+          var showName = name.isNotEmpty;
+          var showInst = institution.isNotEmpty;
+          final showAcct = account.isNotEmpty;
+          var budget = maxW;
+          var acctCap = 0.0;
+          var instCap = 0.0;
+          if (showAcct) {
+            acctCap = math.min(measure(account), budget);
+            budget -= acctCap;
+          }
+          if (showInst) {
+            final avail = budget - (showAcct ? sepW : 0.0);
+            if (avail >= minSeg || !showAcct) {
+              instCap = math.min(measure(institution), math.max(0.0, avail));
+              budget = avail - instCap;
+            } else {
+              showInst = false;
+            }
+          }
+          if (showName && (showInst || showAcct)) {
+            // The name is Flexible (it simply absorbs whatever is left);
+            // only decide whether that leftover is worth rendering at all.
+            if (budget - sepW < minSeg) showName = false;
+          }
+
+          Text segment(String text) => Text(
+                text,
+                style: style,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+              );
+          Text separator() => Text(_sep, style: style, maxLines: 1);
+
+          final children = <Widget>[];
+          if (showName) {
+            children.add(Flexible(child: segment(name)));
+          }
+          if (showInst) {
+            if (children.isNotEmpty) children.add(separator());
+            children.add(ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: instCap),
+              child: segment(institution),
+            ));
+          }
+          if (showAcct) {
+            if (children.isNotEmpty) children.add(separator());
+            children.add(ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: acctCap),
+              child: maskAwareNameText(account, style),
+            ));
+          }
+          return Row(children: children);
+        },
+      ),
+    );
+  }
+}
+
 /// A single holding row used inside the virtualized ListView. Stateful
 /// so that hover-over highlight doesn't have to rebuild the whole table.
 class _HoldingRowTile extends StatefulWidget {
@@ -2331,15 +2476,14 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
             ? (rawName.isNotEmpty ? rawName : '?')
             : rawSymbol);
     // Secondary line: security name (when it isn't already the display
-    // symbol), institution, and account — joined with bullets. Surfacing
+    // symbol), institution, and account — bullet-separated. Surfacing
     // `account_name` lets users with positions split across several
-    // brokerages tell them apart at a glance.
-    final secondaryParts = <String>[
-      if (!isOpaqueSecurityId && rawName.isNotEmpty) rawName,
-      if (instName.isNotEmpty) instName,
-      if (acctName.isNotEmpty && acctName != instName) acctName,
-    ];
-    final secondaryLabel = secondaryParts.join(' · ');
+    // brokerages tell them apart at a glance, so [_HoldingSubtitle] keeps
+    // it visible by truncating the fund name / institution first.
+    final subtitleName =
+        (!isOpaqueSecurityId && rawName.isNotEmpty) ? rawName : '';
+    final subtitleAccount =
+        (acctName.isNotEmpty && acctName != instName) ? acctName : '';
     final avatarChar = displaySymbol.isEmpty
         ? '?'
         : displaySymbol.substring(0, 1).toUpperCase();
@@ -2375,11 +2519,11 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                Text(
-                  secondaryLabel,
+                _HoldingSubtitle(
+                  name: subtitleName,
+                  institution: instName,
+                  account: subtitleAccount,
                   style: const TextStyle(fontSize: 11, color: Colors.grey),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -3156,12 +3300,16 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
         : (rawSymbol.isEmpty
             ? (rawName.isNotEmpty ? rawName : '?')
             : rawSymbol);
-    final secondaryParts = <String>[
-      if (!isOpaqueSecurityId && rawName.isNotEmpty) rawName,
-      if (instName.isNotEmpty) instName,
-      if (acctName.isNotEmpty && acctName != instName) acctName,
-    ];
-    final secondaryLabel = secondaryParts.join(' · ');
+    // Same segment split as the desktop table subtitle: the account is the
+    // most-protected segment (see [_HoldingSubtitle]) — on a 390px phone it
+    // used to be exactly the part the end-first ellipsis cut off.
+    final subtitleName =
+        (!isOpaqueSecurityId && rawName.isNotEmpty) ? rawName : '';
+    final subtitleAccount =
+        (acctName.isNotEmpty && acctName != instName) ? acctName : '';
+    final hasSubtitle = subtitleName.isNotEmpty ||
+        instName.isNotEmpty ||
+        subtitleAccount.isNotEmpty;
 
     final lots = (h['lots'] as List?) ?? const [];
     final hasLots = lots.isNotEmpty;
@@ -3207,13 +3355,13 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      if (secondaryLabel.isNotEmpty)
-                        Text(
-                          secondaryLabel,
+                      if (hasSubtitle)
+                        _HoldingSubtitle(
+                          name: subtitleName,
+                          institution: instName,
+                          account: subtitleAccount,
                           style: const TextStyle(
                               fontSize: 11, color: Colors.grey),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                     ],
                   ),
@@ -3272,6 +3420,14 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Account + institution in FULL (wrapping, never ellipsized):
+                // the compact subtitle above can still truncate long names,
+                // and this panel is the only place a phone can read them.
+                if (acctName.isNotEmpty)
+                  _detailRow(l.txAccount, acctName, wrapValue: true),
+                if (instName.isNotEmpty && instName != acctName)
+                  _detailRow(l.lwNotifInstitutionFallback, instName,
+                      wrapValue: true),
                 _detailRow(l.pfColShares, _formatQuantity(quantity)),
                 _detailRow(l.pfColPrice, widget.format.format(price)),
                 _detailRow(
@@ -3312,10 +3468,15 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
     );
   }
 
+  /// [wrapValue]: the value is prose (account / institution name) rather
+  /// than a figure — render it in full, soft-wrapping across lines, instead
+  /// of the single unconstrained line the numeric rows use.
   Widget _detailRow(String label, String value,
-      {Color? color, String? tooltip}) {
+      {Color? color, String? tooltip, bool wrapValue = false}) {
     Widget valueText = Text(
       value,
+      softWrap: true,
+      textAlign: wrapValue ? TextAlign.end : null,
       style: TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w600,
@@ -3334,12 +3495,22 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment:
+            wrapValue ? CrossAxisAlignment.start : CrossAxisAlignment.center,
         children: [
           Text(
             label,
             style: TextStyle(fontSize: 12, color: context.textSubtle),
           ),
-          valueText,
+          if (wrapValue)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(left: 16),
+                child: valueText,
+              ),
+            )
+          else
+            valueText,
         ],
       ),
     );
