@@ -6161,4 +6161,204 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get alloc2UnclassifiedTooltip =>
       'Account balance without holdings detail — open the account to see it';
+
+  @override
+  String get ins3EditAssetClass => 'Edit asset class';
+
+  @override
+  String get ins3Automatic => 'Automatic';
+
+  @override
+  String ins3AutomaticWithClass(String className) {
+    return 'Automatic — $className';
+  }
+
+  @override
+  String get ins3ManualCaption => 'manual';
+
+  @override
+  String get ins3UpdateError => 'Couldn\'t update the asset class';
+
+  @override
+  String pf3LotQtyShares(String qty) {
+    return '$qty sh';
+  }
+
+  @override
+  String pf3LotCurrentNow(String value) {
+    return '$value now';
+  }
+
+  @override
+  String pf3LotCost(String cost) {
+    return 'cost $cost';
+  }
+
+  @override
+  String get rg3AllTaxable => 'All realized gains in this period are taxable.';
+
+  @override
+  String get acct3DeleteHoldingBody =>
+      'This deletes the holding, all of its purchase lots, and its realized-gain (tax) records.';
+
+  @override
+  String get acct3UndoHint => 'You can undo for a few seconds after deleting.';
+
+  @override
+  String acct3DeletedSnack(String symbol) {
+    return 'Deleted $symbol';
+  }
+
+  @override
+  String get acct3Undo => 'Undo';
+
+  @override
+  String get acct3RestoreGone =>
+      'Couldn\'t restore — the deletion is already permanent.';
+
+  @override
+  String get acct3RestoreFailed => 'Couldn\'t restore the holding. Try again.';
+
+  @override
+  String get ovw3DividendsPerYear => 'Dividends/yr';
+
+  @override
+  String ovw3DividendsTooltip(String yieldPct) {
+    return 'Projected annual dividend income · blended yield $yieldPct% — tap to see payers';
+  }
+
+  @override
+  String get ovw3DividendsTooltipNoYield =>
+      'Projected annual dividend income — tap to see payers';
+
+  @override
+  String get proj3ShowDividends => 'Show dividend income outlook';
+
+  @override
+  String get proj3ShowDividendsHelp =>
+      'Adds an informational income panel below the chart — it never changes the projection.';
+
+  @override
+  String get proj3ShowDividendsUnavailable =>
+      'Your portfolio has no projected dividend income';
+
+  @override
+  String get proj3OutlookTitle => 'Dividend income outlook';
+
+  @override
+  String get proj3RowToday => 'Today';
+
+  @override
+  String proj3RowRetirement(String year) {
+    return 'At retirement (~$year)';
+  }
+
+  @override
+  String proj3RowHorizon(String year) {
+    return 'At horizon ($year)';
+  }
+
+  @override
+  String proj3PerYear(String amount) {
+    return '$amount/yr';
+  }
+
+  @override
+  String proj3PerYearApprox(String amount) {
+    return '≈$amount/yr';
+  }
+
+  @override
+  String proj3BlendedYieldNote(String pct) {
+    return '$pct% blended yield';
+  }
+
+  @override
+  String get proj3InTodaysDollars => 'in today\'s dollars';
+
+  @override
+  String get proj3DisclaimerBody =>
+      'Assumes today\'s blended yield holds. Dividends are already part of the expected total return above — this is informational and is not added to growth.';
+
+  @override
+  String axPortfolioHero(String value, String allTime) {
+    return 'Portfolio value $value, all-time $allTime';
+  }
+
+  @override
+  String axHeroToday(String change) {
+    return 'today $change';
+  }
+
+  @override
+  String axActiveFilter(String label) {
+    return 'Active filter: $label';
+  }
+
+  @override
+  String get axClearFilter => 'Clear filter';
+
+  @override
+  String axLotRow(String date, String qty, String cost, String term) {
+    return 'Acquired $date, $qty shares at $cost, $term';
+  }
+
+  @override
+  String axYearChip(String year) {
+    return 'Year $year';
+  }
+
+  @override
+  String get axAllYears => 'All years';
+
+  @override
+  String axSoldOn(String date) {
+    return 'sold $date';
+  }
+
+  @override
+  String axGroupBy(String dimension) {
+    return 'Group by $dimension';
+  }
+
+  @override
+  String axGroupAccounts(String name, int count, String total) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count accounts',
+      one: '1 account',
+    );
+    return '$name, $_temp0, $total';
+  }
+
+  @override
+  String get axTapToExpand => 'Tap to expand';
+
+  @override
+  String get axTapToCollapse => 'Tap to collapse';
+
+  @override
+  String axRemoveHolding(String symbol) {
+    return 'Remove $symbol';
+  }
+
+  @override
+  String axAccountActionsFor(String name) {
+    return 'Account actions for $name';
+  }
+
+  @override
+  String axDividendPerYear(String amount) {
+    return 'dividend $amount per year';
+  }
+
+  @override
+  String axProjectionChart(String start, String end, String value) {
+    return 'Projected balance from $start to $end, median ending $value';
+  }
+
+  @override
+  String get axInformational =>
+      'Informational — dividends are already part of the expected total return and are not added to growth';
 }

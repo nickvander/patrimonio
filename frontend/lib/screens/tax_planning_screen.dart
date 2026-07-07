@@ -539,9 +539,15 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   // ---------------------------------------------------------------------------
 
   Widget _buildHeader(AppLocalizations l, bool stackControls) {
-    final title = Text(
-      l.taxTitle,
-      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+    // A7 (round 3, a11y): screen title as a header landmark. container:
+    // forces the boundary so the flag can't absorb neighboring content.
+    final title = Semantics(
+      container: true,
+      header: true,
+      child: Text(
+        l.taxTitle,
+        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+      ),
     );
 
     final controls = _buildControls(l);
@@ -2169,20 +2175,27 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
             // The 401k syncs holdings only (no elective/after-tax split), so the
             // user supplies their elective deferral; the rest of the total is
             // employer match + after-tax (mega-backdoor).
-            InkWell(
-              onTap: () => _editElective401k(l, baseLimit),
-              child: Text(
-                _elective401kUsd != null
-                    ? l.tax401kElectiveSplit(
-                        _money(_elective401kUsd!),
-                        _money(baseLimit),
-                        _money((ytd - _elective401kUsd!)
-                            .clamp(0, double.infinity)))
-                    : l.tax401kElectiveSet,
-                style: TextStyle(
-                  color: context.info,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
+            // A7 (round 3, a11y): announce the tappable text as a button
+            // (its visible text merges in as the label).
+            MergeSemantics(
+              child: Semantics(
+                button: true,
+                child: InkWell(
+                  onTap: () => _editElective401k(l, baseLimit),
+                  child: Text(
+                    _elective401kUsd != null
+                        ? l.tax401kElectiveSplit(
+                            _money(_elective401kUsd!),
+                            _money(baseLimit),
+                            _money((ytd - _elective401kUsd!)
+                                .clamp(0, double.infinity)))
+                        : l.tax401kElectiveSet,
+                    style: TextStyle(
+                      color: context.info,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -2415,9 +2428,15 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   // Shared small widgets
   // ---------------------------------------------------------------------------
 
-  Widget _sectionTitle(String text) => Text(
-        text,
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+  // A7 (round 3, a11y): every section title is a header landmark, so a
+  // screen-reader user can jump between the tab's sections.
+  Widget _sectionTitle(String text) => Semantics(
+        container: true,
+        header: true,
+        child: Text(
+          text,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
       );
 
   /// On phones (`collapse` true) wrap a secondary section behind a tappable,

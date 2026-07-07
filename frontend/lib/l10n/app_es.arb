@@ -2606,5 +2606,22 @@
   "proj3DisclaimerBody": "Supone que el rendimiento combinado actual se mantiene. Los dividendos ya forman parte del rendimiento total esperado de arriba: es informativo y no se suma al crecimiento.",
   "@proj3DisclaimerBody": {
     "description": "Mandatory honesty disclaimer under the dividend outlook panel."
-  }
+  },
+  "axPortfolioHero": "Valor del portafolio {value}, histórico {allTime}",
+  "axHeroToday": "hoy {change}",
+  "axActiveFilter": "Filtro activo: {label}",
+  "axClearFilter": "Quitar filtro",
+  "axLotRow": "Adquirido el {date}, {qty} acciones a {cost}, {term}",
+  "axYearChip": "Año {year}",
+  "axAllYears": "Todos los años",
+  "axSoldOn": "vendido el {date}",
+  "axGroupBy": "Agrupar por {dimension}",
+  "axGroupAccounts": "{name}, {count, plural, =1{1 cuenta} other{{count} cuentas}}, {total}",
+  "axTapToExpand": "Toca para expandir",
+  "axTapToCollapse": "Toca para contraer",
+  "axRemoveHolding": "Eliminar {symbol}",
+  "axAccountActionsFor": "Acciones de la cuenta {name}",
+  "axDividendPerYear": "dividendo de {amount} al año",
+  "axProjectionChart": "Saldo proyectado de {start} a {end}, mediana final {value}",
+  "axInformational": "Informativo: los dividendos ya forman parte del rendimiento total esperado y no se suman al crecimiento"
 }

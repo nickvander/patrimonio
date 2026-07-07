@@ -239,21 +239,28 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
                   if (disposals.length > _maxRows)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
-                      child: InkWell(
-                        onTap: () =>
-                            setState(() => _expanded = !_expanded),
-                        borderRadius: BorderRadius.circular(6),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 6, horizontal: 4),
-                          child: Text(
-                            _expanded
-                                ? l.rgShowFewer
-                                : l.rgShowAll(disposals.length),
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: context.tealAccent,
-                              fontWeight: FontWeight.w600,
+                      // A2 (round 3, a11y): announce the expander as a
+                      // button (its visible text merges in as the label).
+                      child: MergeSemantics(
+                        child: Semantics(
+                          button: true,
+                          child: InkWell(
+                            onTap: () =>
+                                setState(() => _expanded = !_expanded),
+                            borderRadius: BorderRadius.circular(6),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 6, horizontal: 4),
+                              child: Text(
+                                _expanded
+                                    ? l.rgShowFewer
+                                    : l.rgShowAll(disposals.length),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.tealAccent,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -276,36 +283,51 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
       child: Row(
         children: [
           _yearChip(l.rgxAllYears, _selectedYear == null,
-              () => _selectYear(null)),
+              () => _selectYear(null),
+              semanticsLabel: l.axAllYears),
           for (final y in years) ...[
             const SizedBox(width: 8),
-            _yearChip('$y', _selectedYear == y, () => _selectYear(y)),
+            _yearChip('$y', _selectedYear == y, () => _selectYear(y),
+                semanticsLabel: l.axYearChip('$y')),
           ],
         ],
       ),
     );
   }
 
-  Widget _yearChip(String label, bool selected, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        height: 32,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected
-              ? context.tealAccent.withValues(alpha: 0.12)
-              : context.tint(0.04),
+  // A2 (round 3, a11y): the custom InkWell pill announces as a selectable
+  // button ("Year 2025" / "All years") with its selected state; the inner
+  // visual Text is excluded so it isn't read twice.
+  Widget _yearChip(String label, bool selected, VoidCallback onTap,
+      {required String semanticsLabel}) {
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: semanticsLabel,
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(16),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: selected ? context.tealAccent : context.textMuted,
+          child: ExcludeSemantics(
+            child: Container(
+              height: 32,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: selected
+                    ? context.tealAccent.withValues(alpha: 0.12)
+                    : context.tint(0.04),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: selected ? context.tealAccent : context.textMuted,
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -363,16 +385,31 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
   Widget _titleRow(AppLocalizations l, {bool showExport = false}) {
     return Row(
       children: [
-        Icon(Icons.trending_up_rounded, color: context.tealAccent, size: 18),
-        const SizedBox(width: 8),
+        // A2 (round 3, a11y): icon + title announce as ONE header landmark
+        // (dividend-card pattern); the CSV IconButton stays its own
+        // tooltip-labelled button outside the merge.
         Expanded(
-          child: Text(
-            l.rgTitle,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: context.textPrimary,
+          child: MergeSemantics(
+            child: Semantics(
+              header: true,
+              child: Row(
+                children: [
+                  Icon(Icons.trending_up_rounded,
+                      color: context.tealAccent, size: 18),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      l.rgTitle,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: context.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -480,7 +517,13 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
   }
 
   Widget _summaryTile(String label, double usd) {
-    return Container(
+    // A2 (round 3, a11y): one merged node — "2026, +$1,234.00" — instead of
+    // a detached label and value.
+    return Semantics(
+      container: true,
+      label: '$label, ${_signedMoney(usd)}',
+      excludeSemantics: true,
+      child: Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: context.tint(0.04),
@@ -501,6 +544,7 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -525,7 +569,23 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
         ? '$dateLabel · ${l.rgProceeds} ${_money(proceeds)}'
         : '$dateLabel · $account · ${l.rgProceeds} ${_money(proceeds)}';
 
-    return Padding(
+    // A2 (round 3, a11y): the whole disposal reads as ONE sentence —
+    // "VOO, sold Mar 3, 2026, Brokerage, +$512.00, Long-term" — with the
+    // chip visuals excluded (the term/badge info rides in the label).
+    final semanticsLabel = [
+      symbol.isNotEmpty ? symbol : name,
+      l.axSoldOn(dateLabel),
+      if (account.isNotEmpty) account,
+      _signedMoney(pnl),
+      if (longTerm is bool) longTerm ? l.pfLotLongTerm : l.pfLotShortTerm,
+      if (taxAdvantaged) l.rgxTaxAdvBadge,
+    ].join(', ');
+
+    return Semantics(
+      container: true,
+      label: semanticsLabel,
+      excludeSemantics: true,
+      child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
@@ -578,6 +638,7 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

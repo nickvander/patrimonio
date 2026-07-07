@@ -238,12 +238,18 @@ class _LendingTabState extends State<LendingTab> {
               children: [
                 Icon(Icons.monetization_on, color: context.tealAccent),
                 const SizedBox(width: 8),
-                Text(
-                  AppLocalizations.of(context).lendingTitle,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: context.textPrimary,
+                // A7 (round 3, a11y): card header landmark. container:
+                // forces the boundary so the flag can't absorb the card.
+                Semantics(
+                  container: true,
+                  header: true,
+                  child: Text(
+                    AppLocalizations.of(context).lendingTitle,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: context.textPrimary,
+                    ),
                   ),
                 ),
                 const Spacer(),
@@ -346,7 +352,9 @@ class _LendingTabState extends State<LendingTab> {
   }
 
   Widget _stat(String label, String value, Color color) {
-    return Column(
+    // A7 (round 3, a11y): label + value announce as one node.
+    return MergeSemantics(
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
@@ -360,6 +368,7 @@ class _LendingTabState extends State<LendingTab> {
               fontFeatures: const [FontFeature.tabularFigures()],
             )),
       ],
+      ),
     );
   }
 
@@ -458,7 +467,13 @@ class _LendingTabState extends State<LendingTab> {
         : until <= 0
             ? bandLabel
             : '${l10n.lendingAgingDaysUntil(until)} · $bandLabel';
-    return InkWell(
+    // A7 (round 3, a11y): the aging row is one tappable sentence —
+    // "Ana, 12 days overdue · Overdue, $500.00" — instead of a label-less
+    // InkWell plus loose text fragments.
+    return MergeSemantics(
+      child: Semantics(
+      button: true,
+      child: InkWell(
       onTap: () => _openLoanForReminder(r),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -501,6 +516,8 @@ class _LendingTabState extends State<LendingTab> {
             ),
           ],
         ),
+      ),
+      ),
       ),
     );
   }
@@ -565,7 +582,13 @@ class _LendingTabState extends State<LendingTab> {
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(color: context.hairline),
       ),
-      child: InkWell(
+      // A7 (round 3, a11y): the whole loan card is one tappable sentence
+      // (borrower, status, lent meta, repaid/outstanding merge in) instead
+      // of a label-less InkWell over a dozen text fragments.
+      child: MergeSemantics(
+        child: Semantics(
+        button: true,
+        child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: () => _openLoanDetail(loan),
         child: Padding(
@@ -653,6 +676,8 @@ class _LendingTabState extends State<LendingTab> {
             ],
           ),
         ),
+        ),
+        ),
       ),
     );
   }
@@ -675,9 +700,9 @@ class _LendingTabState extends State<LendingTab> {
     final l10n = AppLocalizations.of(context);
     return Text.rich(
       TextSpan(
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 11,
-          fontFeatures: const [FontFeature.tabularFigures()],
+          fontFeatures: [FontFeature.tabularFigures()],
         ),
         children: [
           if (earned > 0)

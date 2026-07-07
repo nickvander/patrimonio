@@ -3071,5 +3071,157 @@
   "proj3DisclaimerBody": "Assumes today's blended yield holds. Dividends are already part of the expected total return above — this is informational and is not added to growth.",
   "@proj3DisclaimerBody": {
     "description": "Mandatory honesty disclaimer under the dividend outlook panel."
+  },
+  "axPortfolioHero": "Portfolio value {value}, all-time {allTime}",
+  "@axPortfolioHero": {
+    "description": "A11y: merged label for the portfolio hero (total value + all-time change pill).",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      },
+      "allTime": {
+        "type": "String"
+      }
+    }
+  },
+  "axHeroToday": "today {change}",
+  "@axHeroToday": {
+    "description": "A11y: optional day-change fragment appended to the portfolio hero label.",
+    "placeholders": {
+      "change": {
+        "type": "String"
+      }
+    }
+  },
+  "axActiveFilter": "Active filter: {label}",
+  "@axActiveFilter": {
+    "description": "A11y: label announced for the holdings toolbar's active category-filter chip.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "axClearFilter": "Clear filter",
+  "@axClearFilter": {
+    "description": "A11y: delete-affordance tooltip on the active-filter chip (replaces the bare 'Delete')."
+  },
+  "axLotRow": "Acquired {date}, {qty} shares at {cost}, {term}",
+  "@axLotRow": {
+    "description": "A11y: one-sentence label per lot row in the lot-breakdown dialog.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "qty": {
+        "type": "String"
+      },
+      "cost": {
+        "type": "String"
+      },
+      "term": {
+        "type": "String"
+      }
+    }
+  },
+  "axYearChip": "Year {year}",
+  "@axYearChip": {
+    "description": "A11y: label for a realized-gains year filter chip.",
+    "placeholders": {
+      "year": {
+        "type": "String"
+      }
+    }
+  },
+  "axAllYears": "All years",
+  "@axAllYears": {
+    "description": "A11y: label for the realized-gains 'All' year chip."
+  },
+  "axSoldOn": "sold {date}",
+  "@axSoldOn": {
+    "description": "A11y: sold-date fragment inside a disposal row's one-sentence label.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "axGroupBy": "Group by {dimension}",
+  "@axGroupBy": {
+    "description": "A11y: label for the allocation card's dimension-switcher chips.",
+    "placeholders": {
+      "dimension": {
+        "type": "String"
+      }
+    }
+  },
+  "axGroupAccounts": "{name}, {count, plural, =1{1 account} other{{count} accounts}}, {total}",
+  "@axGroupAccounts": {
+    "description": "A11y: label for a collapsible account-group header (name, count, converted total).",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "axTapToExpand": "Tap to expand",
+  "@axTapToExpand": {
+    "description": "A11y: hint on a collapsed group/section toggle."
+  },
+  "axTapToCollapse": "Tap to collapse",
+  "@axTapToCollapse": {
+    "description": "A11y: hint on an expanded group/section toggle."
+  },
+  "axRemoveHolding": "Remove {symbol}",
+  "@axRemoveHolding": {
+    "description": "A11y: tooltip/label for the per-holding delete button in the account panel.",
+    "placeholders": {
+      "symbol": {
+        "type": "String"
+      }
+    }
+  },
+  "axAccountActionsFor": "Account actions for {name}",
+  "@axAccountActionsFor": {
+    "description": "A11y: tooltip for the account panel's kebab menu, naming the account.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "axDividendPerYear": "dividend {amount} per year",
+  "@axDividendPerYear": {
+    "description": "A11y: dividend-income fragment inside a holding row's one-sentence label.",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "axProjectionChart": "Projected balance from {start} to {end}, median ending {value}",
+  "@axProjectionChart": {
+    "description": "A11y: summary label for the wealth-projection line chart (internals excluded).",
+    "placeholders": {
+      "start": {
+        "type": "String"
+      },
+      "end": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "axInformational": "Informational — dividends are already part of the expected total return and are not added to growth",
+  "@axInformational": {
+    "description": "A11y: hint on the dividend-outlook panel marking it as informational."
   }
 }

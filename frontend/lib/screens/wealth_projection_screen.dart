@@ -372,20 +372,23 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                     fontWeight: FontWeight.w600),
               ),
             ),
-            // "Show nominal amounts" toggle.
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Switch(
-                  value: _showNominal,
-                  activeThumbColor: context.positive,
-                  onChanged: (v) => setState(() => _showNominal = v),
-                ),
-                Text(
-                  l.projShowNominal,
-                  style: TextStyle(color: context.textMuted, fontSize: 13),
-                ),
-              ],
+            // "Show nominal amounts" toggle. A6 (round 3, a11y): the label
+            // merges into the switch node so it isn't an anonymous on/off.
+            MergeSemantics(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Switch(
+                    value: _showNominal,
+                    activeThumbColor: context.positive,
+                    onChanged: (v) => setState(() => _showNominal = v),
+                  ),
+                  Text(
+                    l.projShowNominal,
+                    style: TextStyle(color: context.textMuted, fontSize: 13),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -703,7 +706,11 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       displayValue = value.toInt().toString();
     }
 
-    return Column(
+    // A6 (round 3, a11y): the aria dump showed anonymous sliders — merge
+    // label + help + value + slider into one node so each slider announces
+    // its purpose and current value.
+    return MergeSemantics(
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
@@ -769,6 +776,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           onChangeEnd: onChangeEnd,
         ),
       ],
+      ),
     );
   }
 
@@ -776,36 +784,40 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   // retirement spending with the market, which lifts the success rate.
   Widget _buildGuardrailsToggle() {
     final l = AppLocalizations.of(context);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l.projGuardrails,
-                style: TextStyle(color: context.textMuted, fontSize: 14),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                _withdrawalGuardrails
-                    ? l.projGuardrailsOn
-                    : l.projGuardrailsOff,
-                style: TextStyle(color: context.textFaint, fontSize: 11),
-              ),
-            ],
+    // A6 (round 3, a11y): label + status text merge into the switch node
+    // (the aria dump showed an anonymous switch here).
+    return MergeSemantics(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l.projGuardrails,
+                  style: TextStyle(color: context.textMuted, fontSize: 14),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _withdrawalGuardrails
+                      ? l.projGuardrailsOn
+                      : l.projGuardrailsOff,
+                  style: TextStyle(color: context.textFaint, fontSize: 11),
+                ),
+              ],
+            ),
           ),
-        ),
-        Switch(
-          value: _withdrawalGuardrails,
-          activeThumbColor: context.positive,
-          onChanged: (v) {
-            setState(() => _withdrawalGuardrails = v);
-            _fetchProjection();
-          },
-        ),
-      ],
+          Switch(
+            value: _withdrawalGuardrails,
+            activeThumbColor: context.positive,
+            onChanged: (v) {
+              setState(() => _withdrawalGuardrails = v);
+              _fetchProjection();
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -825,34 +837,38 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           ? (v) => setState(() => _showDividendOutlook = v)
           : null,
     );
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l.proj3ShowDividends,
-                style: TextStyle(color: context.textMuted, fontSize: 14),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                l.proj3ShowDividendsHelp,
-                style: TextStyle(color: context.textFaint, fontSize: 11),
-              ),
-            ],
+    // A6 (round 3, a11y): label + help text + switch merge into one
+    // toggleable node so the switch isn't an anonymous on/off control.
+    return MergeSemantics(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l.proj3ShowDividends,
+                  style: TextStyle(color: context.textMuted, fontSize: 14),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  l.proj3ShowDividendsHelp,
+                  style: TextStyle(color: context.textFaint, fontSize: 11),
+                ),
+              ],
+            ),
           ),
-        ),
-        if (available)
-          toggle
-        else
-          Tooltip(
-            message: l.proj3ShowDividendsUnavailable,
-            triggerMode: TooltipTriggerMode.tap,
-            child: toggle,
-          ),
-      ],
+          if (available)
+            toggle
+          else
+            Tooltip(
+              message: l.proj3ShowDividendsUnavailable,
+              triggerMode: TooltipTriggerMode.tap,
+              child: toggle,
+            ),
+        ],
+      ),
     );
   }
 
@@ -974,7 +990,13 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           ),
         );
 
-    return Card(
+    // A6 (round 3, a11y): the panel node carries an "informational" hint so
+    // assistive tech hears its honesty caveat up front; the rows inside stay
+    // individually readable.
+    return Semantics(
+      container: true,
+      hint: l.axInformational,
+      child: Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
@@ -1029,6 +1051,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -1365,7 +1388,29 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       );
     }
 
-    return LineChart(
+    // A6 (round 3, a11y): the canvas chart is opaque to screen readers —
+    // announce one summary sentence ("Projected balance from 2026 to 2056,
+    // median ending $2.4M") and exclude the chart internals. The median
+    // comes from the same fan/fallback the dividend outlook uses; the
+    // display transform (currency + nominal toggle) mirrors the plot.
+    final endBalanceUsd = _medianBalanceAtYear(_projectionYears);
+    final endDisplay = endBalanceUsd != null
+        ? endBalanceUsd *
+            widget.conversionFactor *
+            _nominalFactor(_projectionYears.toDouble())
+        : (spots.isNotEmpty ? spots.last.y : 0.0);
+    final nowYear = DateTime.now().year;
+    final chartSummary = l.axProjectionChart(
+      '$nowYear',
+      '${nowYear + _projectionYears}',
+      widget.currencyFormat.format(endDisplay),
+    );
+
+    return Semantics(
+      container: true,
+      label: chartSummary,
+      child: ExcludeSemantics(
+        child: LineChart(
       LineChartData(
         gridData: FlGridData(
           show: true,
@@ -1495,6 +1540,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               }).toList();
             },
           ),
+        ),
+      ),
         ),
       ),
     );

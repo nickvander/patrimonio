@@ -676,7 +676,9 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                 ),
               ),
               PopupMenuButton<String>(
-                tooltip: l.acctxAccountActions,
+                // A5 (round 3, a11y): the kebab names its account so several
+                // open panels / rows can't announce identically.
+                tooltip: l.axAccountActionsFor(name),
                 onSelected: (v) {
                   switch (v) {
                     case 'balance':
@@ -687,34 +689,43 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                       _showThresholdDialog();
                   }
                 },
+                // A5 (round 3, a11y): MergeSemantics per item so icon +
+                // title read as one node (accounts_list pattern).
                 itemBuilder: (_) => [
                   PopupMenuItem(
                     value: 'balance',
-                    child: ListTile(
-                      dense: true,
-                      leading: const Icon(Icons.edit_outlined),
-                      title: Text(l.acctxUpdateBalance),
+                    child: MergeSemantics(
+                      child: ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.edit_outlined),
+                        title: Text(l.acctxUpdateBalance),
+                      ),
                     ),
                   ),
                   if (widget.onRenameAccount != null)
                     PopupMenuItem(
                       value: 'rename',
-                      child: ListTile(
-                        dense: true,
-                        leading: const Icon(Icons.drive_file_rename_outline),
-                        title: Text(l.acctxRenameAccount),
+                      child: MergeSemantics(
+                        child: ListTile(
+                          dense: true,
+                          leading:
+                              const Icon(Icons.drive_file_rename_outline),
+                          title: Text(l.acctxRenameAccount),
+                        ),
                       ),
                     ),
                   if (_alertEligible)
                     PopupMenuItem(
                       value: 'alert',
-                      child: ListTile(
-                        dense: true,
-                        leading:
-                            const Icon(Icons.notifications_active_outlined),
-                        title: Text(_accountAlerts.containsKey(_accountId)
-                            ? l.acctxEditLowBalanceAlert
-                            : l.acctxSetLowBalanceAlert),
+                      child: MergeSemantics(
+                        child: ListTile(
+                          dense: true,
+                          leading:
+                              const Icon(Icons.notifications_active_outlined),
+                          title: Text(_accountAlerts.containsKey(_accountId)
+                              ? l.acctxEditLowBalanceAlert
+                              : l.acctxSetLowBalanceAlert),
+                        ),
                       ),
                     ),
                 ],
@@ -828,13 +839,19 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         children: [
           Row(
             children: [
-              Text(
-                es ? 'POSICIONES' : 'HOLDINGS',
-                style: TextStyle(
-                    fontSize: 11,
-                    letterSpacing: 1.2,
-                    fontWeight: FontWeight.w700,
-                    color: context.textSubtle),
+              // A5 (round 3, a11y): section header landmark. container:
+              // forces the boundary so the flag can't absorb the card.
+              Semantics(
+                container: true,
+                header: true,
+                child: Text(
+                  es ? 'POSICIONES' : 'HOLDINGS',
+                  style: TextStyle(
+                      fontSize: 11,
+                      letterSpacing: 1.2,
+                      fontWeight: FontWeight.w700,
+                      color: context.textSubtle),
+                ),
               ),
               const Spacer(),
               if (_holdings.isNotEmpty && _isManualAccount)
@@ -875,41 +892,49 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
               padding: const EdgeInsets.only(right: 8),
               child: Column(children: [
                 const Divider(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(es ? 'Total' : 'Total',
-                        style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: context.textSubtle)),
-                    Text(fmt.format(total),
-                        style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: context.textPrimary,
-                            fontFeatures: const [FontFeature.tabularFigures()])),
-                  ],
+                // A5 (round 3, a11y): totals announce as one node each
+                // ("Total $X" / "Est. annual income (dividends) $Y").
+                MergeSemantics(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(es ? 'Total' : 'Total',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: context.textSubtle)),
+                      Text(fmt.format(total),
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: context.textPrimary,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ])),
+                    ],
+                  ),
                 ),
                 if (_totalDividendIncome() > 0)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                            es
-                                ? 'Ingreso anual estimado (dividendos)'
-                                : 'Est. annual income (dividends)',
-                            style: TextStyle(
-                                fontSize: 11.5, color: context.tealAccent)),
-                        Text(fmt.format(_totalDividendIncome()),
-                            style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                color: context.tealAccent,
-                                fontFeatures: const [
-                                  FontFeature.tabularFigures()
-                                ])),
-                      ],
+                    child: MergeSemantics(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                              es
+                                  ? 'Ingreso anual estimado (dividendos)'
+                                  : 'Est. annual income (dividends)',
+                              style: TextStyle(
+                                  fontSize: 11.5, color: context.tealAccent)),
+                          Text(fmt.format(_totalDividendIncome()),
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: context.tealAccent,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures()
+                                  ])),
+                        ],
+                      ),
                     ),
                   ),
               ]),
@@ -952,6 +977,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   }
 
   Widget _holdingRow(dynamic h, NumberFormat fmt, bool es) {
+    final l = AppLocalizations.of(context);
     final symbol = (h['symbol'] ?? '').toString();
     final qty = (h['quantity'] is num)
         ? (h['quantity'] as num).toDouble()
@@ -964,41 +990,73 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
         : double.tryParse('${h['value'] ?? ''}');
     final qtyStr =
         qty == qty.roundToDouble() ? qty.toStringAsFixed(0) : qty.toStringAsFixed(2);
+    // A5 (round 3, a11y): the row's facts read as ONE sentence — "VOO, 10
+    // shares, $5,085.80, dividend $66.00 per year" — while the delete X
+    // stays its own "Remove VOO" button node OUTSIDE the merge.
+    final divIncome =
+        ((_dividends[symbol]?['annual_income']) as num?)?.toDouble() ?? 0.0;
+    final rowLabel = [
+      symbol,
+      '$qtyStr ${es ? 'acciones' : 'shares'}',
+      value != null ? fmt.format(value) : (es ? 'sin precio' : 'no price'),
+      if (divIncome > 0) l.axDividendPerYear(fmt.format(divIncome)),
+    ].join(', ');
     return Padding(
       padding: const EdgeInsets.only(top: 8, right: 0),
       child: Row(
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(symbol,
+            child: Semantics(
+              container: true,
+              label: rowLabel,
+              excludeSemantics: true,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(symbol,
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: context.textPrimary)),
+                        Text(
+                          '$qtyStr ${es ? 'acciones' : 'shares'}'
+                          '${price != null ? ' · ${fmt.format(price)}' : ''}',
+                          style: TextStyle(
+                              fontSize: 11.5,
+                              color: context.textSubtle,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ]),
+                        ),
+                        _dividendLine(symbol, fmt, es),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    value != null
+                        ? fmt.format(value)
+                        : (es ? 'sin precio' : 'no price'),
                     style: TextStyle(
-                        fontWeight: FontWeight.w700, color: context.textPrimary)),
-                Text(
-                  '$qtyStr ${es ? 'acciones' : 'shares'}'
-                  '${price != null ? ' · ${fmt.format(price)}' : ''}',
-                  style: TextStyle(
-                      fontSize: 11.5,
-                      color: context.textSubtle,
-                      fontFeatures: const [FontFeature.tabularFigures()]),
-                ),
-                _dividendLine(symbol, fmt, es),
-              ],
+                        fontWeight: FontWeight.w700,
+                        color: value != null
+                            ? context.textPrimary
+                            : context.warning,
+                        fontFeatures: const [FontFeature.tabularFigures()]),
+                  ),
+                ],
+              ),
             ),
-          ),
-          Text(
-            value != null ? fmt.format(value) : (es ? 'sin precio' : 'no price'),
-            style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: value != null ? context.textPrimary : context.warning,
-                fontFeatures: const [FontFeature.tabularFigures()]),
           ),
           if (_isManualAccount)
             IconButton(
               icon: Icon(Icons.close, size: 15, color: context.textFaint),
               visualDensity: VisualDensity.compact,
-              tooltip: es ? 'Eliminar' : 'Remove',
+              // A5 (round 3, a11y): names its holding — the tooltip is the
+              // button's accessible label on web, and a bare "Remove" is
+              // ambiguous in a list of rows.
+              tooltip: l.axRemoveHolding(symbol),
               onPressed: () => _deleteHolding(h),
             ),
         ],

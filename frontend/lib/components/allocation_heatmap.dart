@@ -219,38 +219,46 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  child: Text(
-                    l.lwAllocTitle,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5,
+            // A4 (round 3, a11y): title + total announce as ONE header
+            // landmark ("Asset distribution, Total $X") so screen readers
+            // can jump to the card and hear its headline figure at once.
+            MergeSemantics(
+              child: Semantics(
+                header: true,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        l.lwAllocTitle,
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Flexible(
-                  child: Text(
-                    l.lwAllocTotal(widget.currencyFormat
-                        .format(activeTotal * widget.conversionFactor)),
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey,
-                      fontWeight: FontWeight.w600,
-                      fontFeatures: [FontFeature.tabularFigures()],
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Text(
+                        l.lwAllocTotal(widget.currencyFormat
+                            .format(activeTotal * widget.conversionFactor)),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey,
+                          fontWeight: FontWeight.w600,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                        textAlign: TextAlign.right,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    textAlign: TextAlign.right,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
             if (hasToggle) ...[
               const SizedBox(height: 16),
@@ -380,7 +388,15 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
   Widget _dimensionToggle(int dim, bool hasType, bool hasInst, AppLocalizations l) {
     Widget chip(String label, int idx) {
       final active = dim == idx;
-      return InkWell(
+      // A4 (round 3, a11y): the plain InkWell+Text pill announces as a
+      // selectable button ("Group by Asset class"); the visual Text is
+      // excluded so it isn't read twice.
+      return MergeSemantics(
+        child: Semantics(
+        button: true,
+        selected: active,
+        label: l.axGroupBy(label),
+        child: InkWell(
         onTap: () {
           // Switching dimension must not leave an invisible
           // cross-dimension filter applied — if the active filter
@@ -398,28 +414,32 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
           setState(() => _dim = idx);
         },
         borderRadius: BorderRadius.circular(20),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-          decoration: BoxDecoration(
-            color: active
-                ? context.tealAccent.withValues(alpha: 0.15)
-                : context.tileSurface,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
+        child: ExcludeSemantics(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            decoration: BoxDecoration(
               color: active
-                  ? context.tealAccent.withValues(alpha: 0.5)
-                  : Colors.transparent,
+                  ? context.tealAccent.withValues(alpha: 0.15)
+                  : context.tileSurface,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: active
+                    ? context.tealAccent.withValues(alpha: 0.5)
+                    : Colors.transparent,
+              ),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                color: active ? context.tealAccent : context.textMuted,
+              ),
             ),
           ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-              color: active ? context.tealAccent : context.textMuted,
-            ),
-          ),
+        ),
+        ),
         ),
       );
     }
@@ -452,7 +472,11 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
     if (match == null) {
       return Row(
         children: [
-          Icon(Icons.touch_app_outlined, size: 14, color: context.textFaint),
+          // A4 (round 3, a11y): decorative glyph — explicitly excluded.
+          ExcludeSemantics(
+            child: Icon(Icons.touch_app_outlined,
+                size: 14, color: context.textFaint),
+          ),
           const SizedBox(width: 6),
           Flexible(
             child: Text(
@@ -744,7 +768,10 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
     double share,
   ) {
     final color = context.warning;
-    return Container(
+    // A4 (round 3, a11y): the banner is one labelled node; the warning
+    // glyph is decorative (the text carries the message).
+    return MergeSemantics(
+      child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
@@ -753,7 +780,9 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
       ),
       child: Row(
         children: [
-          Icon(Icons.warning_amber_rounded, color: color, size: 18),
+          ExcludeSemantics(
+            child: Icon(Icons.warning_amber_rounded, color: color, size: 18),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -767,6 +796,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

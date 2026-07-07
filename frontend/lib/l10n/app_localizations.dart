@@ -10000,6 +10000,288 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Account balance without holdings detail — open the account to see it'**
   String get alloc2UnclassifiedTooltip;
+
+  /// Tooltip / screen-reader hint on the instrument sheet's tappable asset-class tile (round-3 override editor).
+  ///
+  /// In en, this message translates to:
+  /// **'Edit asset class'**
+  String get ins3EditAssetClass;
+
+  /// Selector row that clears a manual asset-class override, reverting to the heuristic classification (plain variant, used when the heuristic class is unknown).
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic'**
+  String get ins3Automatic;
+
+  /// Selector row that clears a manual asset-class override, naming the heuristic class it reverts to.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic — {className}'**
+  String ins3AutomaticWithClass(String className);
+
+  /// Tiny caption on the asset-class stat tile when the shown class is a user override rather than the heuristic.
+  ///
+  /// In en, this message translates to:
+  /// **'manual'**
+  String get ins3ManualCaption;
+
+  /// Snackbar error when saving or clearing an asset-class override fails; the chip reverts to its previous value.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t update the asset class'**
+  String get ins3UpdateError;
+
+  /// Compact share count on line 1 of the narrow (two-line) lot-breakdown row, e.g. '0.1181 sh'. Fractional quantities keep 4 decimals.
+  ///
+  /// In en, this message translates to:
+  /// **'{qty} sh'**
+  String pf3LotQtyShares(String qty);
+
+  /// Current-value fragment on line 2 of the narrow lot row ('@ $88.10 → $1,720.00 now · cost $881.00'). Replaced by an em dash when the holding has no current price.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} now'**
+  String pf3LotCurrentNow(String value);
+
+  /// USD-cost fragment on line 2 of the narrow lot row ('@ $88.10 → $1,720.00 now · cost $881.00').
+  ///
+  /// In en, this message translates to:
+  /// **'cost {cost}'**
+  String pf3LotCost(String cost);
+
+  /// Reserved caption under the realized-gains summary tiles when the selected period has disposals but none in tax-advantaged accounts — same style and height as the mixed 'Taxable +$X of +$Y…' caption so flipping year chips never shifts the layout.
+  ///
+  /// In en, this message translates to:
+  /// **'All realized gains in this period are taxable.'**
+  String get rg3AllTaxable;
+
+  /// Softened round-3 confirm-dialog body for deleting a holding (delete is now undoable for a few seconds, so the round-1 'cannot be undone' copy no longer applies). The undo hint is appended after it.
+  ///
+  /// In en, this message translates to:
+  /// **'This deletes the holding, all of its purchase lots, and its realized-gain (tax) records.'**
+  String get acct3DeleteHoldingBody;
+
+  /// Appended to the delete-holding confirm dialog body, announcing the undo snackbar window.
+  ///
+  /// In en, this message translates to:
+  /// **'You can undo for a few seconds after deleting.'**
+  String get acct3UndoHint;
+
+  /// Snackbar text shown for ~10 seconds after a holding delete, next to the UNDO action.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted {symbol}'**
+  String acct3DeletedSnack(String symbol);
+
+  /// Action label on the delete-holding snackbar that restores the holding, its lots and its realized-gain records.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get acct3Undo;
+
+  /// Error snackbar when UNDO hits a 404: the soft-deleted holding was already purged (24 h window elapsed or the symbol was re-added), so the deletion can no longer be reversed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t restore — the deletion is already permanent.'**
+  String get acct3RestoreGone;
+
+  /// Error snackbar for a transient (non-404) failure of the UNDO restore call.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t restore the holding. Try again.'**
+  String get acct3RestoreFailed;
+
+  /// Overview stat-strip tile label: projected annual dividend income (round 3, O1).
+  ///
+  /// In en, this message translates to:
+  /// **'Dividends/yr'**
+  String get ovw3DividendsPerYear;
+
+  /// Tooltip on the Overview Dividends/yr stat tile, including the blended yield.
+  ///
+  /// In en, this message translates to:
+  /// **'Projected annual dividend income · blended yield {yieldPct}% — tap to see payers'**
+  String ovw3DividendsTooltip(String yieldPct);
+
+  /// Tooltip on the Overview Dividends/yr stat tile when the blended yield is unavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Projected annual dividend income — tap to see payers'**
+  String get ovw3DividendsTooltipNoYield;
+
+  /// Projections advanced toggle: reveals the informational dividend income panel under the chart.
+  ///
+  /// In en, this message translates to:
+  /// **'Show dividend income outlook'**
+  String get proj3ShowDividends;
+
+  /// Help caption under the dividend income outlook toggle.
+  ///
+  /// In en, this message translates to:
+  /// **'Adds an informational income panel below the chart — it never changes the projection.'**
+  String get proj3ShowDividendsHelp;
+
+  /// Tooltip on the disabled dividend outlook toggle when the portfolio pays no dividends.
+  ///
+  /// In en, this message translates to:
+  /// **'Your portfolio has no projected dividend income'**
+  String get proj3ShowDividendsUnavailable;
+
+  /// Title of the informational dividend income panel on the Projections tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Dividend income outlook'**
+  String get proj3OutlookTitle;
+
+  /// First row label of the dividend outlook panel: income at today's balance.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get proj3RowToday;
+
+  /// Second row label of the dividend outlook panel: income at the retirement-year median balance.
+  ///
+  /// In en, this message translates to:
+  /// **'At retirement (~{year})'**
+  String proj3RowRetirement(String year);
+
+  /// Third row label of the dividend outlook panel: income at the final projected year's median balance.
+  ///
+  /// In en, this message translates to:
+  /// **'At horizon ({year})'**
+  String proj3RowHorizon(String year);
+
+  /// Dividend outlook value: exact annual income figure (today row).
+  ///
+  /// In en, this message translates to:
+  /// **'{amount}/yr'**
+  String proj3PerYear(String amount);
+
+  /// Dividend outlook value: approximate annual income figure (projected rows).
+  ///
+  /// In en, this message translates to:
+  /// **'≈{amount}/yr'**
+  String proj3PerYearApprox(String amount);
+
+  /// Sub-caption on the dividend outlook Today row stating the blended yield used.
+  ///
+  /// In en, this message translates to:
+  /// **'{pct}% blended yield'**
+  String proj3BlendedYieldNote(String pct);
+
+  /// Basis caption on the dividend outlook panel when the real-dollars view is active.
+  ///
+  /// In en, this message translates to:
+  /// **'in today\'s dollars'**
+  String get proj3InTodaysDollars;
+
+  /// Mandatory honesty disclaimer under the dividend outlook panel.
+  ///
+  /// In en, this message translates to:
+  /// **'Assumes today\'s blended yield holds. Dividends are already part of the expected total return above — this is informational and is not added to growth.'**
+  String get proj3DisclaimerBody;
+
+  /// A11y: merged label for the portfolio hero (total value + all-time change pill).
+  ///
+  /// In en, this message translates to:
+  /// **'Portfolio value {value}, all-time {allTime}'**
+  String axPortfolioHero(String value, String allTime);
+
+  /// A11y: optional day-change fragment appended to the portfolio hero label.
+  ///
+  /// In en, this message translates to:
+  /// **'today {change}'**
+  String axHeroToday(String change);
+
+  /// A11y: label announced for the holdings toolbar's active category-filter chip.
+  ///
+  /// In en, this message translates to:
+  /// **'Active filter: {label}'**
+  String axActiveFilter(String label);
+
+  /// A11y: delete-affordance tooltip on the active-filter chip (replaces the bare 'Delete').
+  ///
+  /// In en, this message translates to:
+  /// **'Clear filter'**
+  String get axClearFilter;
+
+  /// A11y: one-sentence label per lot row in the lot-breakdown dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Acquired {date}, {qty} shares at {cost}, {term}'**
+  String axLotRow(String date, String qty, String cost, String term);
+
+  /// A11y: label for a realized-gains year filter chip.
+  ///
+  /// In en, this message translates to:
+  /// **'Year {year}'**
+  String axYearChip(String year);
+
+  /// A11y: label for the realized-gains 'All' year chip.
+  ///
+  /// In en, this message translates to:
+  /// **'All years'**
+  String get axAllYears;
+
+  /// A11y: sold-date fragment inside a disposal row's one-sentence label.
+  ///
+  /// In en, this message translates to:
+  /// **'sold {date}'**
+  String axSoldOn(String date);
+
+  /// A11y: label for the allocation card's dimension-switcher chips.
+  ///
+  /// In en, this message translates to:
+  /// **'Group by {dimension}'**
+  String axGroupBy(String dimension);
+
+  /// A11y: label for a collapsible account-group header (name, count, converted total).
+  ///
+  /// In en, this message translates to:
+  /// **'{name}, {count, plural, =1{1 account} other{{count} accounts}}, {total}'**
+  String axGroupAccounts(String name, int count, String total);
+
+  /// A11y: hint on a collapsed group/section toggle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to expand'**
+  String get axTapToExpand;
+
+  /// A11y: hint on an expanded group/section toggle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to collapse'**
+  String get axTapToCollapse;
+
+  /// A11y: tooltip/label for the per-holding delete button in the account panel.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {symbol}'**
+  String axRemoveHolding(String symbol);
+
+  /// A11y: tooltip for the account panel's kebab menu, naming the account.
+  ///
+  /// In en, this message translates to:
+  /// **'Account actions for {name}'**
+  String axAccountActionsFor(String name);
+
+  /// A11y: dividend-income fragment inside a holding row's one-sentence label.
+  ///
+  /// In en, this message translates to:
+  /// **'dividend {amount} per year'**
+  String axDividendPerYear(String amount);
+
+  /// A11y: summary label for the wealth-projection line chart (internals excluded).
+  ///
+  /// In en, this message translates to:
+  /// **'Projected balance from {start} to {end}, median ending {value}'**
+  String axProjectionChart(String start, String end, String value);
+
+  /// A11y: hint on the dividend-outlook panel marking it as informational.
+  ///
+  /// In en, this message translates to:
+  /// **'Informational — dividends are already part of the expected total return and are not added to growth'**
+  String get axInformational;
 }
 
 class _AppLocalizationsDelegate

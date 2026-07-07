@@ -396,65 +396,99 @@ class _PortfolioCardState extends State<PortfolioCard> {
                   : c.maxWidth < 520
                       ? 36.0
                       : 42.0;
+              // A1 (round 3, a11y): the value caption, hero figure and
+              // change pills read as ONE labelled node — "Portfolio value
+              // $X, all-time +$Y (+Z%), today +$W (+V%)" — instead of four
+              // fragments. excludeSemantics folds the inner Texts away;
+              // the pills' visual tooltips (overlay-based) are unaffected.
+              final allTimeText =
+                  '${totalGainLoss > 0 ? '+' : totalGainLoss < 0 ? '-' : ''}${widget.currencyFormat.format(totalGainLoss.abs())} (${totalGainLossPct.toStringAsFixed(2)}%)';
+              final dayText = _dayChangeText();
+              final heroLabel = [
+                l.axPortfolioHero(
+                    widget.currencyFormat.format(totalValue), allTimeText),
+                if (dayText != null) l.axHeroToday(dayText),
+              ].join(', ');
               final summary = Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    l.pfInvestmentPortfolio,
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.3,
-                      color: context.textPrimary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    l.pfTotalValue,
-                    style: TextStyle(
-                      color: context.textSubtle,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: 0.4,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
+                  // Header landmark so screen readers can jump to the card.
+                  // `container: true` per the round-2 lesson at the grouped
+                  // account header: without an explicit boundary the header
+                  // flag is absorbed by the CARD-level node and the whole
+                  // card announces as one giant heading.
+                  Semantics(
+                    container: true,
+                    header: true,
                     child: Text(
-                      widget.currencyFormat.format(totalValue),
+                      l.pfInvestmentPortfolio,
                       style: TextStyle(
-                        fontSize: heroFontSize,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -1.0,
-                        height: 1.1,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.3,
                         color: context.textPrimary,
-                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                       maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  // All-time pill + (when the backend reports it, contract
-                  // C-B) a "today" pill with identical geometry. A Wrap so
-                  // a 400px-wide card stacks the two instead of overflowing.
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _heroChangePill(
-                        positive: isPositive,
-                        // Explicit sign on the amount: losses must read
-                        // "-$500.00", not a red "$500.00" (the abs() strips
-                        // the minus, so it's re-applied here).
-                        text:
-                            '${totalGainLoss > 0 ? '+' : totalGainLoss < 0 ? '-' : ''}${widget.currencyFormat.format(totalGainLoss.abs())} (${totalGainLossPct.toStringAsFixed(2)}%)',
-                      ),
-                      ?_buildTodayPill(l),
-                    ],
+                  const SizedBox(height: 20),
+                  Semantics(
+                    container: true,
+                    label: heroLabel,
+                    excludeSemantics: true,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l.pfTotalValue,
+                          style: TextStyle(
+                            color: context.textSubtle,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            widget.currencyFormat.format(totalValue),
+                            style: TextStyle(
+                              fontSize: heroFontSize,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -1.0,
+                              height: 1.1,
+                              color: context.textPrimary,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ],
+                            ),
+                            maxLines: 1,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        // All-time pill + (when the backend reports it,
+                        // contract C-B) a "today" pill with identical
+                        // geometry. A Wrap so a 400px-wide card stacks the
+                        // two instead of overflowing.
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _heroChangePill(
+                              positive: isPositive,
+                              // Explicit sign on the amount: losses must read
+                              // "-$500.00", not a red "$500.00" (the abs()
+                              // strips the minus, so it's re-applied here).
+                              text: allTimeText,
+                            ),
+                            ?_buildTodayPill(l),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                   if (showCoverage) ...[
                     const SizedBox(height: 6),
@@ -541,6 +575,26 @@ class _PortfolioCardState extends State<PortfolioCard> {
     );
   }
 
+  /// Signed day-change text ("-$731.53 (-1.41%)") from the contract C-B
+  /// top-level fields, or null when the backend doesn't send them. Shared
+  /// by the "today" pill and the hero's merged a11y label (A1) so the two
+  /// can never drift apart.
+  String? _dayChangeText() {
+    final dayUsd =
+        (widget.portfolioData['day_change_usd'] as num?)?.toDouble();
+    if (dayUsd == null) return null;
+    final dayPct =
+        (widget.portfolioData['day_change_pct'] as num?)?.toDouble();
+    // Explicit sign per figure: negatives must keep their minus ("-$731.53
+    // (-1.41%)"), which the .abs() calls below would otherwise strip.
+    final sign = dayUsd > 0 ? '+' : dayUsd < 0 ? '-' : '';
+    final converted = dayUsd * widget.conversionFactor;
+    final amount = '$sign${widget.currencyFormat.format(converted.abs())}';
+    return dayPct == null
+        ? amount
+        : '$amount (${dayPct > 0 ? '+' : dayPct < 0 ? '-' : ''}${dayPct.abs().toStringAsFixed(2)}%)';
+  }
+
   /// "Today" pill: the portfolio's change since the last stored close
   /// (contract C-B top-level fields). Null when the backend doesn't send
   /// the fields (older server, or nothing is covered) — the pill simply
@@ -562,14 +616,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
     // Flat day: nothing moved (both the amount and the % are zero) — the
     // pill renders neutral (muted, no arrow) instead of a green "+$0.00".
     final flat = dayUsd == 0 && (dayPct ?? 0) == 0;
-    // Explicit sign per figure: negatives must keep their minus ("-$731.53
-    // (-1.41%)"), which the .abs() calls below would otherwise strip.
-    final sign = dayUsd > 0 ? '+' : dayUsd < 0 ? '-' : '';
-    final converted = dayUsd * widget.conversionFactor;
-    final amount = '$sign${widget.currencyFormat.format(converted.abs())}';
-    final change = dayPct == null
-        ? amount
-        : '$amount (${dayPct > 0 ? '+' : dayPct < 0 ? '-' : ''}${dayPct.abs().toStringAsFixed(2)}%)';
+    final change = _dayChangeText()!;
 
     final pill = _heroChangePill(
       positive: positive,
@@ -1571,19 +1618,33 @@ class _PortfolioCardState extends State<PortfolioCard> {
               padding: const EdgeInsets.only(bottom: 8),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: InputChip(
-                  avatar: const Icon(Icons.filter_alt, size: 16),
-                  label: Text(
-                      // Prefix-stripped display value: the raw filter string
-                      // is a dimension-scoped key like "asset:bonds"
-                      // (contract C3), not a label. `l` maps asset: keys to
-                      // the allocation band's display names.
-                      l.pfCategoryFilter(
-                          categoryFilterLabel(widget.categoryFilter ?? '', l)),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                  onDeleted: widget.onClearCategoryFilter,
-                  backgroundColor: context.tint(0.06),
+                // A1 (round 3, a11y): without the wrapper the chip's only
+                // actionable semantics was the delete icon's bare "Delete"
+                // checkbox. The chip now announces "Active filter: Bonds"
+                // (inner Text excluded so it isn't read twice) and the
+                // delete affordance announces "Clear filter".
+                child: Semantics(
+                  container: true,
+                  label: l.axActiveFilter(
+                      categoryFilterLabel(widget.categoryFilter ?? '', l)),
+                  child: InputChip(
+                    avatar: const Icon(Icons.filter_alt, size: 16),
+                    label: ExcludeSemantics(
+                      child: Text(
+                          // Prefix-stripped display value: the raw filter
+                          // string is a dimension-scoped key like
+                          // "asset:bonds" (contract C3), not a label. `l`
+                          // maps asset: keys to the allocation band's
+                          // display names.
+                          l.pfCategoryFilter(categoryFilterLabel(
+                              widget.categoryFilter ?? '', l)),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                    onDeleted: widget.onClearCategoryFilter,
+                    deleteButtonTooltipMessage: l.axClearFilter,
+                    backgroundColor: context.tint(0.06),
+                  ),
                 ),
               ),
             ),
@@ -1686,14 +1747,16 @@ class _PortfolioCardState extends State<PortfolioCard> {
                     ),
                     onSelected: (path) =>
                         openUrlSameTab('${_apiService.baseUrl}$path'),
+                    // A1 (round 3, a11y): MergeSemantics per item so each
+                    // menu entry reads as one node (accounts_list pattern).
                     itemBuilder: (_) => [
                       PopupMenuItem(
                         value: '/dashboard/holdings/export',
-                        child: Text(l.pfCsvHoldings),
+                        child: MergeSemantics(child: Text(l.pfCsvHoldings)),
                       ),
                       PopupMenuItem(
                         value: '/dashboard/holdings/lots/export',
-                        child: Text(l.pfCsvLots),
+                        child: MergeSemantics(child: Text(l.pfCsvLots)),
                       ),
                     ],
                   )
@@ -2642,12 +2705,17 @@ void showLotBreakdown(BuildContext context, dynamic h) {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              l.pfLotBreakdownTitle(title),
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w700,
-                                color: context.textPrimary,
+                            // A1 (round 3, a11y): dialog title as a header
+                            // landmark.
+                            Semantics(
+                              header: true,
+                              child: Text(
+                                l.pfLotBreakdownTitle(title),
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                  color: context.textPrimary,
+                                ),
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -2770,7 +2838,24 @@ void showLotBreakdown(BuildContext context, dynamic h) {
                               date.month,
                               date.day,
                             ));
-                        return Padding(
+                        // A1 (round 3, a11y): each lot reads as ONE
+                        // sentence — "Acquired Mar 1, 2024, 10 shares at
+                        // $88.10 USD, Long-term" — instead of six cells.
+                        return Semantics(
+                          container: true,
+                          label: l.axLotRow(
+                            date != null ? dateFmt.format(date) : acquired,
+                            qty.toStringAsFixed(
+                                qty == qty.roundToDouble() ? 0 : 4),
+                            '${formatCurrencyAmount(cpu, ccy)} $ccy',
+                            date == null
+                                ? '—'
+                                : (isLongTerm
+                                    ? l.pfLotLongTerm
+                                    : l.pfLotShortTerm),
+                          ),
+                          excludeSemantics: true,
+                          child: Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Row(
                             children: [
@@ -2824,6 +2909,7 @@ void showLotBreakdown(BuildContext context, dynamic h) {
                               ),
                             ],
                           ),
+                          ),
                         );
                       },
                     ),
@@ -2873,7 +2959,18 @@ Widget _narrowLotRow(
   final line2 = '@ ${formatCurrencyAmount(cpu, ccy)} → '
       '${currentPrice > 0 ? l.pf3LotCurrentNow(formatCurrencyAmount(currentVal, ccy)) : '—'}'
       ' · ${l.pf3LotCost(usdFmt.format(usdCost))}';
-  return Padding(
+  // A1 (round 3, a11y): same one-sentence node as the wide grid's rows so
+  // both layouts announce identically.
+  return Semantics(
+    container: true,
+    label: l.axLotRow(
+      dateLabel,
+      qtyStr,
+      '${formatCurrencyAmount(cpu, ccy)} $ccy',
+      date == null ? '—' : (isLongTerm ? l.pfLotLongTerm : l.pfLotShortTerm),
+    ),
+    excludeSemantics: true,
+    child: Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2916,6 +3013,7 @@ Widget _narrowLotRow(
           ),
         ),
       ],
+    ),
     ),
   );
 }

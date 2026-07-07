@@ -496,9 +496,26 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          InkWell(
+          // A4 (round 3, a11y): the collapse header announces as ONE
+          // button — "Cash, 3 accounts, $12,345.00" with an
+          // expand/collapse hint — instead of a label-less tappable
+          // followed by loose text fragments (canonical row shape:
+          // MergeSemantics + Semantics(button) > InkWell > Exclude).
+          MergeSemantics(
+            child: Semantics(
+            button: true,
+            label: AppLocalizations.of(context).axGroupAccounts(
+              title,
+              groupAccounts.length,
+              currencyFormat.format(total),
+            ),
+            hint: collapsed
+                ? AppLocalizations.of(context).axTapToExpand
+                : AppLocalizations.of(context).axTapToCollapse,
+            child: InkWell(
             onTap: toggle,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            child: ExcludeSemantics(
             child: LayoutBuilder(
             builder: (context, constraints) {
               final isNarrow = constraints.maxWidth < 380;
@@ -689,6 +706,9 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                 ),
               );
             },
+            ),
+            ),
+            ),
             ),
           ),
           AnimatedCrossFade(
@@ -1544,7 +1564,16 @@ class _CollapsibleVaultsState extends State<_CollapsibleVaults> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          InkWell(
+          // A4 (round 3, a11y): the toggle is a button whose visible text
+          // ("Vaults · 3") merges in as its label, with an expand/collapse
+          // hint; the chevron carries no semantics.
+          MergeSemantics(
+            child: Semantics(
+            button: true,
+            hint: _open
+                ? AppLocalizations.of(context).axTapToCollapse
+                : AppLocalizations.of(context).axTapToExpand,
+            child: InkWell(
             onTap: () => setState(() => _open = !_open),
             borderRadius: BorderRadius.circular(8),
             child: Padding(
@@ -1578,6 +1607,8 @@ class _CollapsibleVaultsState extends State<_CollapsibleVaults> {
                   ),
                 ],
               ),
+            ),
+            ),
             ),
           ),
           AnimatedCrossFade(
@@ -1630,7 +1661,14 @@ class _CollapsibleInstitutionState extends State<_CollapsibleInstitution> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        InkWell(
+        // A4 (round 3, a11y): one button node — "Chase, 3 accounts,
+        // $5,000.00" (name/count/total texts merge in) — with an
+        // expand/collapse hint; the chevron carries no semantics.
+        MergeSemantics(
+          child: Semantics(
+          button: true,
+          hint: _open ? l.axTapToCollapse : l.axTapToExpand,
+          child: InkWell(
           onTap: () => setState(() => _open = !_open),
           child: Padding(
             // Same L/R padding as _buildAccountRow so the bank name shares
@@ -1692,6 +1730,8 @@ class _CollapsibleInstitutionState extends State<_CollapsibleInstitution> {
                 ],
               ),
             ),
+          ),
+          ),
           ),
         ),
         AnimatedCrossFade(

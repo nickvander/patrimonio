@@ -852,7 +852,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 6),
-          Wrap(
+          // A3 (round 3, a11y): the composition pills group into one node
+          // ("USD 1,234.00 MXN 500.00 ≈ $25.00") instead of one node per
+          // pill fragment.
+          MergeSemantics(
+            child: Wrap(
             spacing: 8,
             runSpacing: 6,
             children: entries.map((e) {
@@ -894,6 +898,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               );
             }).toList(),
+            ),
           ),
         ],
       );
@@ -910,30 +915,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            l.statNetWorth.toUpperCase(),
-            style: TextStyle(
-              fontSize: 10,
-              letterSpacing: 1.2,
-              fontWeight: FontWeight.w700,
-              color: accent,
+          // A3 (round 3, a11y): label + value + monthly-delta badge merge
+          // into one announcement ("Net worth $X, +$Y · +1.2% vs 30d ago")
+          // instead of four fragments. The badge's arrow icon carries no
+          // semantics, so nothing is double-read.
+          MergeSemantics(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l.statNetWorth.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 10,
+                    letterSpacing: 1.2,
+                    fontWeight: FontWeight.w700,
+                    color: accent,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  currencyFormat.format(netWorth),
+                  style: TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.w800,
+                    color: context.textPrimary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                ?_buildNetWorthDeltaBadge(
+                  currencyFormat: currencyFormat,
+                  conversionFactor: conversionFactor,
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            currencyFormat.format(netWorth),
-            style: TextStyle(
-              fontSize: 30,
-              fontWeight: FontWeight.w800,
-              color: context.textPrimary,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          ?_buildNetWorthDeltaBadge(
-            currencyFormat: currencyFormat,
-            conversionFactor: conversionFactor,
           ),
           ?composition,
         ],
@@ -5348,13 +5364,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             for (final d in secondary)
-              ListTile(
-                leading: Icon(d.icon, color: d.accent),
-                title: Text(_navLabel(l, d.id)),
-                onTap: () {
-                  Navigator.of(sheetCtx).pop();
-                  _goToNav(d.id);
-                },
+              // A3 (round 3, a11y): each More-sheet row is one button node
+              // (icon + title merged) instead of a label-less tappable.
+              MergeSemantics(
+                child: Semantics(
+                  button: true,
+                  child: ListTile(
+                    leading: Icon(d.icon, color: d.accent),
+                    title: Text(_navLabel(l, d.id)),
+                    onTap: () {
+                      Navigator.of(sheetCtx).pop();
+                      _goToNav(d.id);
+                    },
+                  ),
+                ),
               ),
           ],
         ),
@@ -5495,18 +5518,38 @@ class _StatTile extends StatelessWidget {
       ),
     );
 
+    // A3 (round 3, a11y): each tile is ONE labelled node — "Assets,
+    // $1,234.00" — and tappable tiles announce as buttons. The label uses
+    // the un-uppercased text (screen readers spell out all-caps strings on
+    // some engines); the inner Texts/tooltip icon are excluded so nothing
+    // is read twice.
+    final semanticsLabel = '$label, $value';
+
     // Display-only when there's nothing to drill into — identical to the
     // tile's historical behaviour. Otherwise make the whole tile a tap
     // target with a matching ink ripple (the AppBar currency-swap toggle is
     // a separate widget, so this never swallows that gesture).
-    if (onTap == null) return tile;
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
+    if (onTap == null) {
+      return Semantics(
+        container: true,
+        label: semanticsLabel,
+        excludeSemantics: true,
         child: tile,
+      );
+    }
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        label: semanticsLabel,
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: onTap,
+            child: ExcludeSemantics(child: tile),
+          ),
+        ),
       ),
     );
   }
