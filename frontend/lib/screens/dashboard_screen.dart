@@ -3196,9 +3196,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// ApiService response cache so the re-fetch reflects the mutation
   /// immediately. Best-effort: a transient failure keeps the current data.
   //
-  // C3-D: wired to PortfolioCard.onDataRefreshRequested by the merge
-  // coordinator once WS4 lands the param; unused until then.
-  // ignore: unused_element
+  // Re-fetches holdings + allocation after an instrument-sheet change
+  // (asset-class override) so the table and bands agree without a reload.
   Future<void> _refreshPortfolioData() async {
     // Snapshot brightness before the await (use_build_context_synchronously),
     // same as _loadAllData.
@@ -4324,7 +4323,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 24),
           // 5 · Holdings — searchable table, drill-down filter from above.
           // Keyed so the allocation band-tap can ensureVisible it.
-          // C3-D: pass onDataRefreshRequested: _refreshPortfolioData once WS4 merges.
           PortfolioCard(
             key: _holdingsTableKey,
             section: PortfolioSection.holdings,
@@ -4333,6 +4331,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             currencyFormat: currencyFormat,
             targetCurrency: _targetCurrency,
             usdMxnRate: fxRate,
+            onDataRefreshRequested: _refreshPortfolioData,
             categoryFilter: _portfolioCategoryFilter,
             onClearCategoryFilter: () =>
                 setState(() => _portfolioCategoryFilter = null),
