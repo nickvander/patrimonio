@@ -1,7 +1,44 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-07 (Portfolio-tab overhaul, three rounds — all on `main`, deployed to thelab)
+> **Last updated:** 2026-07-07 (Portfolio overhaul rounds 1-3 + round-4 features — all on `main`, deployed to thelab)
 > **Branch:** `main` (everything merged and deployed).
+
+## 2026-07-07 sprint — Round 4 (dividend infra + rebalancing + charts)
+
+Four parallel workstreams + Opus 4.8 adversarial code review + two browser
+verifiers; all shipped to prod. No new migrations.
+
+* **Dividend fan-out caching (backend).** Per-symbol Redis envelope
+  (`div:v1:{SYMBOL}`, 7d retention): serve <12h fresh, refetch stale with
+  stale-served-on-Yahoo-failure fallback, 1h negative marker, in-process
+  per-symbol coalescing, `?refresh=true` bypass on the detail endpoint.
+  All three dividend call sites cache-backed; Redis-down degrades to live
+  fetch. Warm portfolio fan-out ~14ms vs ~337ms cold. Cache key is
+  user-agnostic (dividend data is market-public — no per-user leak).
+* **12-month dividend income calendar.** Additive `calendar` field on
+  `/dashboard/holdings/dividends` (shares the detail endpoint's
+  `projected_ex_dates` stepping; response shape frozen by snapshot test);
+  UI is a "Show 12-month calendar" expander in the dividend card (3×4 grid
+  / mobile list, per-month totals, payer chips). Detail sheet got a manual
+  refresh button.
+* **Target allocation & rebalancing card.** New card between the
+  allocation heatmap and Signals. Targets per canonical asset class stored
+  in `app_settings` (`allocation_targets`, no migration); drift bars +
+  "move $X from A to B" guidance (greedy pairing, $500 floor, mandatory
+  tax caption); sum-to-100 editor; unclassified kept in the denominator.
+  Owner's dev targets left at equity 85 / bonds 10 / cash 5.
+* **Chart hover completion.** Shared `utils/chart_touch.dart` gives the
+  four previously hover-dead charts (performance value + TWR, cash-flow
+  net sparkline, account-panel balance sparkline) the standard
+  guide+dot+token-tooltip treatment. (The palette/tooltip overhaul from
+  FUTURE.md had mostly shipped earlier in `f3dfd97`/`1a33bbf`.)
+* **Fix-up (verifier + Opus findings):** tooltip fit-inside so the
+  account-panel sparkline stops clipping at the viewport edge; projections
+  tooltip placeholder order (gen-l10n alphabetized `amount,year` vs the
+  call site — same class as the round-1 transposed counter); calendar
+  current-month accent derived from the server's UTC first bucket, not
+  local `DateTime.now()`; rebalance missing-class → `unclassified` not
+  `other`. Opus review found no blocker/high; verifiers all-PASS.
 
 ## 2026-07-06/07 sprint — Portfolio ("Invest") tab overhaul
 
