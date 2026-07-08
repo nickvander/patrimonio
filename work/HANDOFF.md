@@ -208,6 +208,23 @@ sprints are in the dated sections below)*:
   TRUNCATE list at the top + that a new table must be added to it (S&P
   `benchmark_prices` leak bug was exactly this).
 
+## Latest (2026-07-08) (2) — round 5: debt strip, net-worth movers, quick wins, CI fix, branch cleanup → deployed
+
+On `main`, deployed to thelab. Detail in [work/CURRENT.md](CURRENT.md). Map:
+**CI** — round-4 Redis cache tests were silently skipping in CI (hardcoded
+dev :6380 vs CI :6379); harness now reads `PATRIMONIO_TEST_REDIS_URL` +
+panics when set-but-unreachable, CI wired to its service (green). **Branch**
+— `claude/adoring-merkle-da8ff6` evaluated (all superseded, un-mergeable)
+and deleted. **Debt** — summary strip on `debt_payoff_card.dart` (total
+owed, weighted APR, monthly interest, credit/loan split). **Movers** —
+top-3 institution movers on `net_worth_card.dart` from the existing
+`by_institution` payload. **Quick wins** — ES `lwRangeAll` "TODO"→"Todo",
+locale-aware percent helper (`utils/percent_format.dart`) swept ~36 sites
+incl. rebalancing card (en byte-identical, es comma+NBSP), perf-card
+time-proportional ticks (`utils/chart_time_axis.dart`). Opus review found
+no blockers; percent helper reworked to keep en byte-identical. Debt strip
++ movers self-hide in the investment-only dev DB — they render on prod.
+
 ## Latest (2026-07-08) — round 4: dividend cache + income calendar + rebalancing + chart hovers → deployed
 
 On `main` @ `1d552f9`, deployed to thelab. Four parallel dev workstreams +

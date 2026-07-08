@@ -1,7 +1,47 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-07 (Portfolio overhaul rounds 1-3 + round-4 features — all on `main`, deployed to thelab)
+> **Last updated:** 2026-07-08 (round-5 debt/movers/quick-wins + CI + branch cleanup — all on `main`, deployed)
 > **Branch:** `main` (everything merged and deployed).
+
+## 2026-07-08 sprint — round 5 (debt, movers, quick wins, CI, cleanup)
+
+Investigation-first (much already existed) → 3 parallel workstreams +
+Opus 4.8 adversarial review + browser verify.
+
+* **CI silent-skip fixed.** The round-4 Redis dividend-cache integration
+  tests hardcoded dev Redis (:6380, auth) → unreachable in CI (:6379, no
+  auth) → all 5 vacuously skipped-and-passed (the exact silent-skip class
+  test.yml exists to prevent). Harness now reads `PATRIMONIO_TEST_REDIS_URL`
+  (falls back to dev :6380 locally) and PANICS when set-but-unreachable;
+  CI wired to its service. Verified running green.
+* **Stale branch deleted.** `claude/adoring-merkle-da8ff6` (2 months / 459
+  commits divergent) evaluated commit-by-commit → every change already
+  superseded on main (same `_KeepAliveTab`, same parent-map-mutation fix,
+  byte-identical transaction_description.dart, larger palette-contrast
+  test), un-mergeable. Deleted. (Other merged remote branches remain,
+  prunable.)
+* **Debt summary strip** (enhanced `debt_payoff_card.dart` — the card
+  already had APR/avalanche/snowball/utilization): total owed, weighted
+  APR, and monthly interest cost (Σ bal·apr/12, warning-colored) + a
+  credit-vs-loan split. Client-derived, no backend.
+* **Net-worth "since baseline" movers** (enhanced `net_worth_card.dart` —
+  MoM/YoY deltas already existed): top-3 institution movers attributed
+  from the `by_institution` map already in the history payload. No backend.
+* **Quick wins:** ES `lwRangeAll` was the literal placeholder "TODO" →
+  "Todo"; new locale-aware percent helpers (`utils/percent_format.dart`)
+  swept across ~36 sites incl. the rebalancing card (es now comma-decimal
+  + NBSP before %; en byte-identical by construction); performance-card
+  charts ported to time-proportional day-offset x-ticks
+  (`utils/chart_time_axis.dart`, matching the instrument sheet).
+* **Opus review:** no blockers/high; brute-forced the percent helper vs
+  old output (no 100×/%%/sign error). Follow-ups applied: helper switched
+  off decimalPercentPattern (its ×100 round-trip shifted .5 boundaries)
+  to toStringAsFixed so en is truly byte-identical; applied to the 3
+  chip sites the feature workstreams had left. Debt strip + movers weren't
+  exercisable in the investment-only dev DB (unit-tested; render on prod
+  where the 8 cards + full history live).
+
+## 2026-07-07 sprint — round 4 (dividend infra + rebalancing + charts)
 
 ## 2026-07-07 sprint — Round 4 (dividend infra + rebalancing + charts)
 
