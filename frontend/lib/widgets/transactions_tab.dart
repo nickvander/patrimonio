@@ -3162,7 +3162,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                         style: TextStyle(
                           fontSize: 10,
                           color: context.textFaint,
-                          fontFeatures: [const FontFeature.tabularFigures()],
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

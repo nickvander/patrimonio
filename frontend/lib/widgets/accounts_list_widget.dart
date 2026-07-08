@@ -1015,7 +1015,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: context.textMuted,
-                fontFeatures: [const FontFeature.tabularFigures()],
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
             // Mirrors the account rows' menu-button slot so vault
@@ -1126,7 +1126,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
         fontSize: 15,
         fontWeight: FontWeight.w700,
         color: context.textPrimary,
-        fontFeatures: [const FontFeature.tabularFigures()],
+        fontFeatures: const [FontFeature.tabularFigures()],
       ),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
@@ -1164,7 +1164,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
         style: TextStyle(
           fontSize: 11,
           color: context.textFaint,
-          fontFeatures: [const FontFeature.tabularFigures()],
+          fontFeatures: const [FontFeature.tabularFigures()],
         ),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,

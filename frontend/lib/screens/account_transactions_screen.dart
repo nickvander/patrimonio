@@ -896,7 +896,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                     style: TextStyle(
                       fontSize: 12.5,
                       color: context.textSubtle,
-                      fontFeatures: [const FontFeature.tabularFigures()],
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
                 ),

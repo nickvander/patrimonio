@@ -1443,8 +1443,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
                             fontSize: 15,
                             fontWeight: FontWeight.w800,
                             color: context.textPrimary,
-                            fontFeatures: [
-                              const FontFeature.tabularFigures()
+                            fontFeatures: const [
+                              FontFeature.tabularFigures()
                             ],
                           ),
                         ),
@@ -1547,7 +1547,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
               style: TextStyle(
                 fontSize: 12,
                 color: context.textMuted,
-                fontFeatures: [const FontFeature.tabularFigures()],
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
           ),
@@ -1560,7 +1560,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
                 color: context.textPrimary,
-                fontFeatures: [const FontFeature.tabularFigures()],
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
           ),
@@ -2572,7 +2572,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
             style: TextStyle(
               fontSize: 10,
               color: context.textFaint,
-              fontFeatures: [const FontFeature.tabularFigures()],
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
       ],
@@ -2596,7 +2596,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
             style: TextStyle(
               fontSize: 10,
               color: context.textFaint,
-              fontFeatures: [const FontFeature.tabularFigures()],
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
       ],
