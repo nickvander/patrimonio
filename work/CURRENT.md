@@ -1,7 +1,7 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-08 (round-8 enforce-the-skills: lints + clippy gate — staged, about to commit/push/deploy)
-> **Branch:** `main` (round-7 committed + deployed; round-8 in working tree).
+> **Last updated:** 2026-07-08 (round-8 enforce-the-skills: lints + clippy gate — committed `cc5c680`, pushed, deployed to thelab)
+> **Branch:** `main` (rounds 7 & 8 committed + deployed; api :8085 + frontend :3004 healthy).
 
 ## 2026-07-08 sprint — round 7 (best-practice skills + skill-driven fixes)
 
