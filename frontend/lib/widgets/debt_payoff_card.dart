@@ -9,6 +9,45 @@ import '../utils/mask_aware_name.dart';
 import '../utils/theme_colors.dart';
 import '../l10n/app_localizations.dart';
 
+/// Pure summary math over a list of debts, powering the summary strip above the
+/// debt rows: total balance owed, the balance-weighted average APR, and the
+/// monthly interest cost (Σ balance·apr/12 — how much interest the debts accrue
+/// this month). Extracted as a top-level value type so the math is unit-testable
+/// without pumping the widget.
+class DebtSummary {
+  /// Sum of all debt balances (USD-normalised, same units as [Debt.balance]).
+  final double totalOwed;
+
+  /// Balance-weighted average annual rate, as a fraction (e.g. 0.2299 = 22.99%).
+  /// Zero when there is nothing owed.
+  final double weightedApr;
+
+  /// Monthly interest cost: Σ balance·apr/12.
+  final double monthlyInterest;
+
+  const DebtSummary({
+    required this.totalOwed,
+    required this.weightedApr,
+    required this.monthlyInterest,
+  });
+
+  factory DebtSummary.from(List<Debt> debts) {
+    var total = 0.0;
+    var weighted = 0.0;
+    var monthly = 0.0;
+    for (final d in debts) {
+      total += d.balance;
+      weighted += d.balance * d.aprAnnual;
+      monthly += d.balance * d.aprAnnual / 12;
+    }
+    return DebtSummary(
+      totalOwed: total,
+      weightedApr: total > 0 ? weighted / total : 0.0,
+      monthlyInterest: monthly,
+    );
+  }
+}
+
 /// Debt-payoff simulator: compares the avalanche (highest-APR-first) and
 /// snowball (smallest-balance-first) strategies for the user's credit/loan
 /// balances at a chosen monthly payment, and recommends the one that pays the
@@ -99,6 +138,44 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
     }
     out.sort((a, b) => b.balance.compareTo(a.balance));
     return out;
+  }
+
+  // Credit-vs-loan split for the summary strip. Recomputed from the raw
+  // accounts (the Debt model carries no category); mirrors _debts' filter +
+  // USD-normalisation so the counts/amounts line up with the visible rows.
+  ({int creditCount, double creditOwed, int loanCount, double loanOwed})
+      get _split {
+    var creditCount = 0;
+    var loanCount = 0;
+    var creditOwed = 0.0;
+    var loanOwed = 0.0;
+    for (final raw in widget.accounts) {
+      if (raw is! Map) continue;
+      final cat = categorizeAccount(raw['account_type']?.toString());
+      if (cat != AccountCategory.credit && cat != AccountCategory.loan) {
+        continue;
+      }
+      final bal = convertCurrency(
+        ((raw['current_balance'] as num?)?.toDouble() ?? 0).abs(),
+        from: (raw['currency'] ?? 'USD').toString(),
+        to: 'USD',
+        usdMxnRate: widget.usdMxnRate,
+      );
+      if (bal <= 0) continue;
+      if (cat == AccountCategory.credit) {
+        creditCount++;
+        creditOwed += bal;
+      } else {
+        loanCount++;
+        loanOwed += bal;
+      }
+    }
+    return (
+      creditCount: creditCount,
+      creditOwed: creditOwed,
+      loanCount: loanCount,
+      loanOwed: loanOwed,
+    );
   }
 
   double _minTotal(List<Debt> debts) => debts.fold(
@@ -238,6 +315,10 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
               ],
             ),
             const SizedBox(height: 16),
+            _summaryStrip(debts, l),
+            const SizedBox(height: 16),
+            Divider(height: 1, color: context.hairline),
+            const SizedBox(height: 12),
             ...debts.map(_debtRow),
             const SizedBox(height: 8),
             Divider(height: 24, color: context.hairline),
@@ -301,6 +382,92 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
           ],
         ),
       ),
+    );
+  }
+
+  // The debt headline: a compact 3-up metric row (total owed · weighted APR ·
+  // monthly interest) plus a muted credit-vs-loan split. All client-derived
+  // from the already-built debt list; no backend. Monthly interest is the
+  // headline cost, tinted `warning` when the debts are bleeding interest.
+  Widget _summaryStrip(List<Debt> debts, AppLocalizations l) {
+    final s = DebtSummary.from(debts);
+    final split = _split;
+    final splitParts = <String>[];
+    // gen-l10n orders these placeholder params alphabetically → (amount, count).
+    if (split.creditCount > 0) {
+      splitParts.add(
+          l.dpSplitCredit(_money(split.creditOwed), '${split.creditCount}'));
+    }
+    if (split.loanCount > 0) {
+      splitParts
+          .add(l.dpSplitLoan(_money(split.loanOwed), '${split.loanCount}'));
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _metric(l.dpTotalOwed, _money(s.totalOwed))),
+            Expanded(
+              child: _metric(
+                l.dpWeightedApr,
+                '${(s.weightedApr * 100).toStringAsFixed(2)}%',
+              ),
+            ),
+            Expanded(
+              child: _metric(
+                l.dpMonthlyInterest,
+                _money(s.monthlyInterest),
+                valueColor: s.monthlyInterest > 0 ? context.warning : null,
+              ),
+            ),
+          ],
+        ),
+        if (splitParts.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Text(
+            splitParts.join('      '),
+            style: TextStyle(fontSize: 11, color: context.textFaint),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // One label-over-value metric cell in the summary strip. Label muted 11px
+  // (matching credit_utilization_card's header), value bold with tabular
+  // figures so the 3-up row aligns; scales down rather than overflowing.
+  Widget _metric(String label, String value, {Color? valueColor}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: context.textSubtle,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 3),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: valueColor ?? context.textPrimary,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
