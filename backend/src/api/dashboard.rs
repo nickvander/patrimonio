@@ -2446,10 +2446,16 @@ struct BalancePoint {
     balance: f64,
 }
 
-/// Monthly closing balance for one account, derived from the persisted
-/// `balance_after` (the statement SALDO captured at import). Returns the latest
-/// in-month balance per month, in the account's native currency. Only accounts
-/// with statement-imported rows have this data; Plaid-only accounts return [].
+/// Monthly closing balance for one account, in the account's native currency.
+///
+/// Primary source is the persisted `balance_after` (the statement SALDO captured
+/// at import) — the latest in-month balance per month. Accounts imported from
+/// statements keep this path unchanged. When an account has **no** `balance_after`
+/// history (Plaid-only / manual accounts), we fall back to `balance_snapshots`
+/// (the daily historisation net-worth already reads), taking the latest snapshot
+/// in each month. Both branches yield the same `{month, balance}` shape, so the
+/// chart broadens to snapshot-backed accounts with no client change. Statement
+/// accounts never hit the fallback, so nothing double-counts.
 async fn account_balance_history(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
@@ -2460,7 +2466,22 @@ async fn account_balance_history(
         Err(_) => return Json(Vec::new()),
     };
 
-    let rows = sqlx::query(
+    // Map a `(month TEXT, balance NUMERIC)` row set into the response shape.
+    let to_points = |rows: Vec<sqlx::postgres::PgRow>| -> Vec<BalancePoint> {
+        rows.iter()
+            .map(|r| BalancePoint {
+                month: r.get("month"),
+                balance: r
+                    .try_get::<rust_decimal::Decimal, _>("balance")
+                    .ok()
+                    .map(|d| d.to_string().parse().unwrap_or(0.0))
+                    .unwrap_or(0.0),
+            })
+            .collect()
+    };
+
+    // Primary: statement `balance_after` (unchanged).
+    let statement_rows = sqlx::query(
         r#"
         SELECT DISTINCT ON (TO_CHAR(t.date, 'YYYY-MM'))
                TO_CHAR(t.date, 'YYYY-MM') AS month,
@@ -2478,18 +2499,29 @@ async fn account_balance_history(
     .await
     .unwrap_or_default();
 
-    Json(
-        rows.iter()
-            .map(|r| BalancePoint {
-                month: r.get("month"),
-                balance: r
-                    .try_get::<rust_decimal::Decimal, _>("balance")
-                    .ok()
-                    .map(|d| d.to_string().parse().unwrap_or(0.0))
-                    .unwrap_or(0.0),
-            })
-            .collect(),
+    if !statement_rows.is_empty() {
+        return Json(to_points(statement_rows));
+    }
+
+    // Fallback: latest daily snapshot per month, native `bs.balance`.
+    let snapshot_rows = sqlx::query(
+        r#"
+        SELECT DISTINCT ON (TO_CHAR(bs.as_of_date, 'YYYY-MM'))
+               TO_CHAR(bs.as_of_date, 'YYYY-MM') AS month,
+               bs.balance                        AS balance
+        FROM balance_snapshots bs
+        WHERE bs.account_id = $1
+          AND bs.user_id    = $2
+        ORDER BY TO_CHAR(bs.as_of_date, 'YYYY-MM') ASC, bs.as_of_date DESC
+        "#,
     )
+    .bind(account_id)
+    .bind(ctx.user_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    Json(to_points(snapshot_rows))
 }
 
 #[derive(Deserialize)]

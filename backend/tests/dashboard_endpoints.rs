@@ -3473,6 +3473,93 @@ async fn account_balance_history_returns_monthly_closing() {
     assert_eq!(body.as_array().unwrap().len(), 0);
 }
 
+/// An account with NO `balance_after` transactions but >=2 daily
+/// `balance_snapshots` (the Plaid / manual case) now returns a
+/// snapshot-derived monthly series — the latest snapshot in each month.
+/// A statement account (with `balance_after`) is unaffected: its snapshots
+/// are ignored so nothing double-counts.
+#[tokio::test]
+#[serial_test::serial]
+async fn account_balance_history_falls_back_to_snapshots() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+
+    // Account A: snapshot-only (no balance_after rows).
+    let (_inst, snap_acct) = seed_account(&pool, user_id).await;
+    let insert_snap = |acct: uuid::Uuid, date: &'static str, bal: &'static str| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query(
+                "INSERT INTO balance_snapshots (account_id, balance, balance_usd, as_of_date, currency, user_id) \
+                 VALUES ($1, $2, $2, $3::date, 'USD', $4)",
+            )
+            .bind(acct)
+            .bind(Decimal::from_str(bal).unwrap())
+            .bind(date)
+            .bind(user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+    };
+    insert_snap(snap_acct, "2026-05-03", "500.00").await;
+    insert_snap(snap_acct, "2026-05-28", "550.00").await; // latest in May
+    insert_snap(snap_acct, "2026-06-15", "600.00").await; // latest in June
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/dashboard/account-balance-history?account_id={snap_acct}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    let arr = body.as_array().unwrap();
+    assert_eq!(arr.len(), 2, "two snapshot-derived months expected");
+    assert_eq!(arr[0]["month"], "2026-05");
+    assert!((arr[0]["balance"].as_f64().unwrap() - 550.0).abs() < 0.01);
+    assert_eq!(arr[1]["month"], "2026-06");
+    assert!((arr[1]["balance"].as_f64().unwrap() - 600.0).abs() < 0.01);
+
+    // Account B: statement account WITH balance_after — snapshots must be
+    // ignored (statement path wins, no double count / no regression).
+    let (_inst2, stmt_acct) = seed_account(&pool, user_id).await;
+    sqlx::query(
+        "INSERT INTO transactions (account_id, date, description, amount, currency, balance_after, source, user_id) \
+         VALUES ($1, '2026-05-10'::date, 'row', '-20.00', 'USD', '980.00', 'manual', $2)",
+    )
+    .bind(stmt_acct)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    // A stray snapshot on the same account that must NOT surface.
+    insert_snap(stmt_acct, "2026-06-01", "1234.56").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            &format!("/api/dashboard/account-balance-history?account_id={stmt_acct}"),
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    let arr = body.as_array().unwrap();
+    assert_eq!(arr.len(), 1, "statement account: only its balance_after month");
+    assert_eq!(arr[0]["month"], "2026-05");
+    assert!((arr[0]["balance"].as_f64().unwrap() - 980.0).abs() < 0.01);
+}
+
 #[tokio::test]
 #[serial_test::serial]
 async fn realized_gains_summary_and_long_term_flag() {
