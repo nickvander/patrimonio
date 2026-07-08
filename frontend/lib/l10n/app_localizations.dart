@@ -10429,7 +10429,7 @@ abstract class AppLocalizations {
   /// WS2r4: muted footnote when unclassified balances are part of the denominator (decision #5).
   ///
   /// In en, this message translates to:
-  /// **'Unclassified: {pct}% — classify these holdings to include them in targets'**
+  /// **'Unclassified: {pct} — classify these holdings to include them in targets'**
   String rebUnclassifiedFootnote(String pct);
 
   /// WS2r4: section header above the move-guidance lines (sentence case, matching the dividend card's section headers).

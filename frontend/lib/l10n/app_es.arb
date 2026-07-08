@@ -2647,7 +2647,7 @@
   "rebOnTargetChip": "en objetivo",
   "rebDeltaChip": "{delta} pp",
   "rebRowSemantics": "{label}: actual {actual} %, objetivo {target} %, {delta}",
-  "rebUnclassifiedFootnote": "Sin clasificar: {pct} % — clasifica estas posiciones para incluirlas en los objetivos",
+  "rebUnclassifiedFootnote": "Sin clasificar: {pct} — clasifica estas posiciones para incluirlas en los objetivos",
   "rebGuidanceTitle": "Para alcanzar los objetivos",
   "rebMoveLine": "Mueve {amount} de {from} a {to}",
   "rebMoreAdjustments": "…y ajustes menores",

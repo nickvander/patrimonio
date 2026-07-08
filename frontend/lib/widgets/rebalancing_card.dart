@@ -1,3 +1,4 @@
+import '../utils/percent_format.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -552,8 +553,8 @@ class _RebalancingCardState extends State<RebalancingCard> {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    l.rebUnclassifiedFootnote(
-                        unclassifiedPct.toStringAsFixed(1)),
+                    l.rebUnclassifiedFootnote(localizePercentString(
+                        context, unclassifiedPct.toStringAsFixed(1))),
                     style:
                         TextStyle(fontSize: 11.5, color: context.textFaint),
                   ),
@@ -675,8 +676,8 @@ class _RebalancingCardState extends State<RebalancingCard> {
     final delta = actualPct - targetPct;
     final within = delta.abs() <= kRebalanceBandPp;
     final accent = within ? context.positive : context.warning;
-    final deltaStr =
-        '${delta >= 0 ? '+' : '-'}${delta.abs().toStringAsFixed(1)}';
+    final deltaStr = localizeNumberString(context,
+        '${delta >= 0 ? '+' : '-'}${delta.abs().toStringAsFixed(1)}');
     final chipText = within ? l.rebOnTargetChip : l.rebDeltaChip(deltaStr);
     final actualStr = actualPct.toStringAsFixed(1);
     final targetStr = _fmtPct(targetPct);
@@ -707,7 +708,8 @@ class _RebalancingCardState extends State<RebalancingCard> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      '$actualStr% / $targetStr%',
+                      '${localizePercentString(context, actualStr)} / '
+                      '${localizePercentString(context, targetStr)}',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,

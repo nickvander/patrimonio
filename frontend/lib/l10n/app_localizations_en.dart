@@ -6465,7 +6465,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String rebUnclassifiedFootnote(String pct) {
-    return 'Unclassified: $pct% — classify these holdings to include them in targets';
+    return 'Unclassified: $pct — classify these holdings to include them in targets';
   }
 
   @override

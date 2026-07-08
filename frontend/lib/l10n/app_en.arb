@@ -3354,7 +3354,7 @@
       }
     }
   },
-  "rebUnclassifiedFootnote": "Unclassified: {pct}% — classify these holdings to include them in targets",
+  "rebUnclassifiedFootnote": "Unclassified: {pct} — classify these holdings to include them in targets",
   "@rebUnclassifiedFootnote": {
     "description": "WS2r4: muted footnote when unclassified balances are part of the denominator (decision #5).",
     "placeholders": {

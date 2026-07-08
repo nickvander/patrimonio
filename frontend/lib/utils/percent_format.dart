@@ -33,8 +33,28 @@ String formatPercent(BuildContext context, double value, {int digits = 1}) =>
 String formatPercentLocale(String locale, double value, {int digits = 1}) {
   // toStringAsFixed IS the old en behavior — reuse it verbatim so en can't drift.
   final fixed = value.toStringAsFixed(digits);
-  if (!locale.toLowerCase().startsWith('es')) return '$fixed%';
+  if (!_isEs(locale)) return '$fixed%';
   // es: comma decimal + non-breaking space before %. Grouping is off (a bare
   // toStringAsFixed has none), so the only '.' is the decimal point.
-  return '${fixed.replaceAll('.', ',')}\u00A0%';
+  return '${fixed.replaceAll('.', ',')} %';
 }
+
+/// Wraps an already-formatted percentage *number* string (e.g. `"88.6"`, `"85"`)
+/// with the locale's decimal separator + percent spacing — for the
+/// variable-precision callers (whole-number-or-one-decimal, like the
+/// rebalancing card) that don't fit [formatPercent]'s fixed `digits`.
+/// en → `"85%"` (unchanged); es → `"85 %"` (NBSP before %).
+String localizePercentString(BuildContext context, String number) =>
+    _isEs(Localizations.localeOf(context).toString())
+        ? '${number.replaceAll('.', ',')} %'
+        : '$number%';
+
+/// Localizes just the decimal separator of an already-formatted number string
+/// (no percent sign) — e.g. a `"+3.6"` percentage-point delta becomes `"+3,6"`
+/// in es while en is unchanged.
+String localizeNumberString(BuildContext context, String number) =>
+    _isEs(Localizations.localeOf(context).toString())
+        ? number.replaceAll('.', ',')
+        : number;
+
+bool _isEs(String locale) => locale.toLowerCase().startsWith('es');

@@ -6522,7 +6522,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String rebUnclassifiedFootnote(String pct) {
-    return 'Sin clasificar: $pct % — clasifica estas posiciones para incluirlas en los objetivos';
+    return 'Sin clasificar: $pct — clasifica estas posiciones para incluirlas en los objetivos';
   }
 
   @override
