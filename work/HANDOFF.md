@@ -1,6 +1,6 @@
 # Handoff — start here
 
-> **Last updated:** 2026-07-07 (Portfolio-tab overhaul deployed; June sprints back-logged)
+> **Last updated:** 2026-07-08 (round-4 dividend infra + rebalancing + charts deployed)
 > **Purpose:** The single "where are we, what's next" doc to pick up cold.
 > For the full import architecture see [work/STATEMENT_IMPORT.md](STATEMENT_IMPORT.md);
 > for the older broader backlog see [work/NEXT.md](NEXT.md) and
@@ -8,10 +8,12 @@
 
 ## TL;DR — current state
 
-**As of 2026-07-07:** `main` @ `2f17431`, tree clean, pushed. **Prod runs
+**As of 2026-07-08:** `main` @ `1d552f9`, tree clean, pushed. **Prod runs
 on the homelab host `thelab`** (`ssh nickvander@thelab`; docker compose
 stack at `/mnt/data/docker/stacks/patrimonio`, api on `:8085`) — the
-2026-07-06/07 Portfolio overhaul is deployed there. **Dev on this VM is
+2026-07-06/07 Portfolio overhaul AND the 2026-07-08 round-4 sprint
+(dividend Redis cache, income calendar, rebalancing card, chart hovers)
+are deployed there. **Dev on this VM is
 native (no docker):** rust/cargo + flutter (`~/flutter`) are installed;
 Postgres runs on `127.0.0.1:5442` and Redis on `:6380` with data dirs
 inside the repo (`pgdata/`, `redisdata/`, gitignored) — see the repo-root
@@ -205,6 +207,30 @@ sprints are in the dated sections below)*:
 - Adding a row to `dashboard_endpoints.rs` integration tests: remember the
   TRUNCATE list at the top + that a new table must be added to it (S&P
   `benchmark_prices` leak bug was exactly this).
+
+## Latest (2026-07-08) — round 4: dividend cache + income calendar + rebalancing + chart hovers → deployed
+
+On `main` @ `1d552f9`, deployed to thelab. Four parallel dev workstreams +
+an Opus 4.8 adversarial code review + two browser verifiers; **no new
+migrations. Detailed log in [work/CURRENT.md](CURRENT.md).** Map:
+per-symbol Redis dividend cache (`div:v1:{SYMBOL}`, 12h fresh / 7d stale
+retention / 1h negative marker, coalescing, `?refresh=true` bypass; warm
+fan-out ~14ms vs ~337ms cold; degrades to live fetch if Redis is down) →
+all three dividend call sites cache-backed; additive `calendar` field on
+`/dashboard/holdings/dividends` powering a 12-month income calendar in the
+dividend card (shares the detail endpoint's `projected_ex_dates`
+stepping; response shape frozen by snapshot test); a rebalancing card
+(target % per asset class in `app_settings.allocation_targets` — no
+migration — with drift bars + "move $X from A to B" guidance); and the
+standard guide+dot+tooltip hover on the four previously hover-dead charts
+via new `utils/chart_touch.dart`. Fix-up round (verifier + Opus findings,
+none blocking): sparkline tooltip fit-inside, projections tooltip
+placeholder order (gen-l10n alphabetized args — same trap as the round-1
+counter), calendar current-month accent from the server's UTC bucket,
+rebalance missing-class → `unclassified`. Also this session: prod account
+nicknames set via the app's rename API; `docs/adding-accounts.md` §5
+recommends nicknaming; `work/` back-logged against all 230 commits since
+2026-06-06.
 
 ## Latest (2026-07-06/07) — Portfolio ("Invest") tab overhaul → deployed
 
