@@ -2582,6 +2582,36 @@ abstract class AppLocalizations {
   /// **'{name} rate'**
   String dpEditApr(Object name);
 
+  /// No description provided for @dpTotalOwed.
+  ///
+  /// In en, this message translates to:
+  /// **'Total owed'**
+  String get dpTotalOwed;
+
+  /// No description provided for @dpWeightedApr.
+  ///
+  /// In en, this message translates to:
+  /// **'Avg APR'**
+  String get dpWeightedApr;
+
+  /// No description provided for @dpMonthlyInterest.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest / mo'**
+  String get dpMonthlyInterest;
+
+  /// No description provided for @dpSplitCredit.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} credit · {amount}'**
+  String dpSplitCredit(Object amount, Object count);
+
+  /// No description provided for @dpSplitLoan.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} loans · {amount}'**
+  String dpSplitLoan(Object amount, Object count);
+
   /// No description provided for @efTitle.
   ///
   /// In en, this message translates to:
@@ -10485,6 +10515,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t remove targets — try again.'**
   String get rebRemoveError;
+
+  /// WS-B: label for the since-baseline net-worth movers section under the delta chips; {date} is the baseline snapshot date (e.g. 'Jun 8').
+  ///
+  /// In en, this message translates to:
+  /// **'Since {date}'**
+  String nwMoversSince(String date);
+
+  /// WS-B: tooltip / accessibility label on the expandable movers row that reveals the top institution movers.
+  ///
+  /// In en, this message translates to:
+  /// **'What drove this change'**
+  String get nwMoversToggleTooltip;
 }
 
 class _AppLocalizationsDelegate

@@ -1504,6 +1504,25 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get dpTotalOwed => 'Total owed';
+
+  @override
+  String get dpWeightedApr => 'Avg APR';
+
+  @override
+  String get dpMonthlyInterest => 'Interest / mo';
+
+  @override
+  String dpSplitCredit(Object amount, Object count) {
+    return '$count credit · $amount';
+  }
+
+  @override
+  String dpSplitLoan(Object amount, Object count) {
+    return '$count loans · $amount';
+  }
+
+  @override
   String get efTitle => 'Emergency fund';
 
   @override
@@ -6497,4 +6516,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get rebRemoveError => 'Couldn\'t remove targets — try again.';
+
+  @override
+  String nwMoversSince(String date) {
+    return 'Since $date';
+  }
+
+  @override
+  String get nwMoversToggleTooltip => 'What drove this change';
 }

@@ -1524,6 +1524,25 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get dpTotalOwed => 'Total adeudado';
+
+  @override
+  String get dpWeightedApr => 'TAE prom.';
+
+  @override
+  String get dpMonthlyInterest => 'Interés / mes';
+
+  @override
+  String dpSplitCredit(Object amount, Object count) {
+    return '$count crédito · $amount';
+  }
+
+  @override
+  String dpSplitLoan(Object amount, Object count) {
+    return '$count préstamos · $amount';
+  }
+
+  @override
   String get efTitle => 'Fondo de emergencia';
 
   @override
@@ -4674,7 +4693,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get lwRangeFiveYears => '5A';
 
   @override
-  String get lwRangeAll => 'TODO';
+  String get lwRangeAll => 'Todo';
 
   @override
   String get lwPerfTitle => 'Rendimiento';
@@ -6557,4 +6576,12 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get rebRemoveError =>
       'No se pudieron quitar los objetivos. Inténtalo de nuevo.';
+
+  @override
+  String nwMoversSince(String date) {
+    return 'Desde $date';
+  }
+
+  @override
+  String get nwMoversToggleTooltip => 'Qué impulsó este cambio';
 }
