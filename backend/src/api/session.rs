@@ -1254,6 +1254,8 @@ async fn user_count(db: &PgPool) -> anyhow::Result<i64> {
 }
 
 pub(crate) async fn load_user_view(db: &PgPool, user_id: Uuid) -> anyhow::Result<UserView> {
+    // one-off sqlx row tuple, materialized once at this query_as call site
+    #[allow(clippy::type_complexity)]
     let row: (
         Uuid,
         String,

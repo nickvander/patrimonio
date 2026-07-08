@@ -1,7 +1,7 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-08 (round-7 skills authored + skill-driven bug sweep — committed + pushed to `main`, NOT yet deployed)
-> **Branch:** `main` (round-7 committed; earlier rounds merged + deployed).
+> **Last updated:** 2026-07-08 (round-8 enforce-the-skills: lints + clippy gate — staged, about to commit/push/deploy)
+> **Branch:** `main` (round-7 committed + deployed; round-8 in working tree).
 
 ## 2026-07-08 sprint — round 7 (best-practice skills + skill-driven fixes)
 
@@ -63,7 +63,32 @@
   allocation-heatmap + trends hard JSON casts hardened (null → no crash). Both
   DoS fixes have regression tests. Full suites green: backend 246 lib + 152
   integration (0 warnings), frontend 393.
-* **Committed + pushed to `main`; not yet deployed** — awaiting deploy go-ahead.
+* **Committed + pushed to `main` (`ddc19a1`); deployed to thelab** (api :8085
+  + frontend :3004 healthy).
+
+## 2026-07-08 sprint — round 8 (enforce the skills: lints + clippy)
+
+Turned the convention docs into enforced guardrails so the fixed bug classes
+can't recur:
+* **Frontend:** swept the ~12 deferred dialog-local `TextEditingController`
+  leaks across 7 files (add_crypto already fixed in round 7); enabled
+  `cancel_subscriptions` + `close_sinks` (**promoted to `error`** in
+  `analyzer.errors:` — zero backlog, so a future leak breaks the build) plus
+  `use_rethrow_when_possible` + `prefer_final_locals`. Fixed one real
+  `use_build_context_synchronously` (security_screen invite flow: unguarded
+  `context` after a `Clipboard.setData` await). Deferred the large-backlog
+  lints (`avoid_catches_without_on_clauses` ~186, `directives_ordering` ~108).
+* **Backend:** made the tree **clippy-clean** (36→0 warnings) — auto-fixed the
+  safe ones; real fixes incl. a regex compiled inside a parser loop (hoisted),
+  a `.replace("month","month")` no-op, two collapsible identical-if branches,
+  `sort_by_key(Reverse(..))`, a nested `format!`; scoped `#[allow]` + rationale
+  for the intentional ones (a `TAX_CONSTANTS_VERIFIED` tripwire assert,
+  needless_range_loop false positive, complex sqlx row-tuple types,
+  builder/test-helper arg counts). Added a **CI clippy gate**
+  (`cargo clippy --all-targets -- -D warnings`) so warnings now fail the build.
+* Conventions companion files updated to record what's now enabled/gated vs
+  still deferred. Tests: backend 246 lib + 152 integration (0 warnings, clippy
+  clean), frontend 393. All green.
 
 ## 2026-07-08 sprint — round 6 (card terms, balance chart, net-worth carry-forward fix)
 

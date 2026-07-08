@@ -559,6 +559,8 @@ class _SecurityScreenState extends State<SecurityScreen> {
       final invite = await _api.createInvite(role: role);
       if (!mounted) return;
       await Clipboard.setData(ClipboardData(text: invite.url));
+      // Clipboard.setData is another async gap; re-check before using context.
+      if (!mounted) return;
       final expires = DateFormat.yMMMd().add_jm().format(invite.expiresAt.toLocal());
       final isReadOnly = role == 'read_only';
       await showDialog<void>(

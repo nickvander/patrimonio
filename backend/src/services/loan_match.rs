@@ -284,7 +284,7 @@ pub async fn suggest_disbursements(
             name_matched: name_hit,
         });
     }
-    out.sort_by(|a, b| b.confidence.cmp(&a.confidence));
+    out.sort_by_key(|c| std::cmp::Reverse(c.confidence));
     Ok(out)
 }
 
@@ -373,7 +373,7 @@ pub async fn suggest_repayments(
             name_matched: name_hit,
         });
     }
-    out.sort_by(|a, b| b.confidence.cmp(&a.confidence));
+    out.sort_by_key(|c| std::cmp::Reverse(c.confidence));
     out.truncate(20);
     Ok(out)
 }

@@ -1081,7 +1081,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
     // One line keeps every row the same height so the name and balance
     // columns stay aligned; the Tooltip reveals the full name, and a
     // trailing ••mask survives truncation via maskAwareNameText.
-    Widget primaryName = Tooltip(
+    final Widget primaryName = Tooltip(
       message: name,
       waitDuration: const Duration(milliseconds: 600),
       child: maskAwareNameText(
@@ -1103,7 +1103,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
         (nameLc == instLc ||
             (instLc.length >= 3 && nameLc.contains(instLc)) ||
             (nameLc.length >= 3 && instLc.contains(nameLc)));
-    Widget secondaryMeta = (inst.isEmpty || nested || nameConveysInst)
+    final Widget secondaryMeta = (inst.isEmpty || nested || nameConveysInst)
         ? const SizedBox.shrink()
         : Padding(
             padding: const EdgeInsets.only(top: 2),
@@ -1121,7 +1121,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
 
     // Primary line is the NATIVE-currency value (what the bank actually
     // reports). The estimated conversion only appears when needed.
-    Widget balanceText = Text(
+    final Widget balanceText = Text(
       nativeText,
       style: TextStyle(
         fontSize: 15,
@@ -1390,6 +1390,8 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
     final l = AppLocalizations.of(context);
     final currentBalance =
         ((acc['current_balance'] ?? 0.0) as num).toDouble();
+    // dispose: local controllers, else the dialog leaks them (disposed in
+    // whenComplete once the route is fully popped, after the last .text read).
     final balanceCtrl =
         TextEditingController(text: currentBalance.toStringAsFixed(2));
     final notesCtrl = TextEditingController();
@@ -1472,7 +1474,10 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
           ),
         ],
       ),
-    );
+    ).whenComplete(() {
+      balanceCtrl.dispose();
+      notesCtrl.dispose();
+    });
   }
 
   /// Modal for setting a user-defined nickname on an account. Empty input
@@ -1480,6 +1485,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
   void _showRenameDialog(BuildContext context, dynamic acc) {
     final l = AppLocalizations.of(context);
     final currentNickname = (acc['nickname'] ?? '').toString();
+    // dispose: local controller, else the dialog leaks it.
     final controller = TextEditingController(text: currentNickname);
     final rawName = (acc['name'] ?? '').toString();
 
@@ -1531,7 +1537,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
           ),
         ],
       ),
-    );
+    ).whenComplete(controller.dispose);
   }
 }
 

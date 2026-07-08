@@ -1263,9 +1263,13 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         ],
       ),
     );
-    if (saved != true) return;
     final reported = double.tryParse(amountCtrl.text);
     final yr = int.tryParse(yearCtrl.text);
+    // dispose: local controllers, else the dialog leaks them. Read .text first,
+    // then dispose on every exit path below.
+    amountCtrl.dispose();
+    yearCtrl.dispose();
+    if (saved != true) return;
     if (reported == null || yr == null) return;
     final usd = widget.conversionFactor == 0
         ? reported

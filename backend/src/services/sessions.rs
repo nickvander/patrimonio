@@ -121,6 +121,8 @@ pub async fn validate_and_touch(db: &PgPool, raw_token: &str) -> Result<Option<V
     // Join to users to pull the role out in the same round-trip.
     // The role is needed by `require_owner` on every mutating
     // request — fetching it here avoids a per-request lookup.
+    // one-off sqlx row tuple, materialized once at this query_as call site
+    #[allow(clippy::type_complexity)]
     let row: Option<(Uuid, Uuid, DateTime<Utc>, Option<DateTime<Utc>>, bool, String)> =
         sqlx::query_as(
             r#"
@@ -209,6 +211,8 @@ pub struct ActiveSessionRow {
 /// user, newest-active first. Pending-TOTP sessions are excluded —
 /// they're throwaway and would clutter the list during a login flow.
 pub async fn list_active(db: &PgPool, user_id: Uuid) -> Result<Vec<ActiveSessionRow>> {
+    // one-off sqlx row tuple, materialized once at this query_as call site
+    #[allow(clippy::type_complexity)]
     let rows: Vec<(
         Uuid,
         DateTime<Utc>,

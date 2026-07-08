@@ -1351,6 +1351,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
         ],
       ),
     );
+    // dispose: local controller, else the dialog leaks it. controller.text was
+    // already captured into `name` inside the dialog.
+    controller.dispose();
     if (name == null || name.isEmpty) return;
     await _applyBulkUpdate(userDescription: name);
   }
@@ -1871,6 +1874,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
         });
       },
     );
+    // dispose: local controller, else the dialog leaks it. controller.text was
+    // already captured into `result` inside the dialog.
+    controller.dispose();
     if (result == null || !mounted) return;
     // Close the detail modal so the rename takes effect on the
     // refreshed list rather than the stale copy this dialog opened on.

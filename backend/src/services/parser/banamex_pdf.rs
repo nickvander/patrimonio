@@ -98,7 +98,8 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
     // $4,000.00). The parser still normalizes both into the same
     // Decimal downstream.
     let amount_re = Regex::new(r"^[\$]?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)$")?;
-    
+    let plain_amount_re = Regex::new(r"^(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)$")?;
+
     // First pass: identify record boundaries (indices where a new record starts)
     let mut record_starts: Vec<(usize, u32, u32)> = Vec::new(); // (line_idx, day, month)
     
@@ -164,7 +165,6 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
                     continue;
                 }
             }
-            let plain_amount_re = Regex::new(r"^(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)$").unwrap();
             if let Some(cap) = plain_amount_re.captures(&cleaned) {
                 let amount_str = cap[1].replace(",", "");
                 if let Ok(amt) = Decimal::from_str(&amount_str) {

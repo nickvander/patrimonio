@@ -879,8 +879,11 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
         ],
       ),
     );
-    if (saved != true) return;
     final pct = double.tryParse(controller.text);
+    // dispose: local controller, else the dialog leaks it. Read .text first,
+    // then dispose on every exit path below.
+    controller.dispose();
+    if (saved != true) return;
     if (pct == null || pct < 0) return;
     final next = Map<String, double>.from(_aprs);
     next[d.id] = pct / 100.0;
@@ -964,10 +967,13 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
         ),
       ),
     );
-    if (saved != true) return;
-
     final stmt = double.tryParse(stmtCtrl.text.trim());
     final minPay = double.tryParse(minCtrl.text.trim());
+    // dispose: local controllers, else the dialog leaks them. Read .text first.
+    stmtCtrl.dispose();
+    minCtrl.dispose();
+    if (saved != true) return;
+
     final entry = <String, dynamic>{};
     if (stmt != null && stmt > 0) entry['statement_balance'] = stmt;
     if (minPay != null && minPay > 0) entry['minimum_payment'] = minPay;

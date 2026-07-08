@@ -417,7 +417,7 @@ fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
     let effective_annual = if rate_period == "monthly" { rate * 12.0 } else { rate };
     let origination: chrono::NaiveDate = r
         .try_get("origination_date")
-        .unwrap_or_else(|_| today);
+        .unwrap_or(today);
     let status: String = r.try_get("status").unwrap_or_else(|_| "active".to_string());
     let total_repaid = dec_to_f64(r.try_get("total_repaid").ok());
     let total_scheduled = dec_to_f64(r.try_get("total_scheduled").ok());
@@ -2698,7 +2698,7 @@ async fn loan_agreement(
     let money = |x: f64| format!("{sym}{x:.2}");
     let interest_desc = match v.interest_type.as_str() {
         "none" => "no interest".to_string(),
-        "simple" => format!("simple interest at {:.3}% per {}", v.interest_rate * 100.0, v.rate_period.trim_end_matches("ly").replace("annual", "year").replace("month", "month")),
+        "simple" => format!("simple interest at {:.3}% per {}", v.interest_rate * 100.0, v.rate_period.trim_end_matches("ly").replace("annual", "year")),
         "amortized" => format!("amortized at {:.3}% per {}", v.interest_rate * 100.0, if v.rate_period == "monthly" { "month" } else { "year" }),
         "interest_only" => format!("interest-only at {:.3}% per {} (principal due at maturity)", v.interest_rate * 100.0, if v.rate_period == "monthly" { "month" } else { "year" }),
         "compound" => format!("compound interest at {:.3}% per {} (due at maturity)", v.interest_rate * 100.0, if v.rate_period == "monthly" { "month" } else { "year" }),
@@ -2848,6 +2848,9 @@ fn running_balances(
 /// would — so the export works even before the user clicks "Generate".
 /// Err mirrors `loan_schedule::generate`'s open-ended / bad-frequency
 /// guards.
+// builder-style fn: each loan term is a distinct scalar arg, grouping them into
+// a struct would just move the argument list elsewhere for no clarity gain
+#[allow(clippy::too_many_arguments)]
 async fn build_plan_rows(
     db: &sqlx::PgPool,
     loan_id: uuid::Uuid,
@@ -3195,7 +3198,7 @@ async fn loan_payment_plan(
 <h1>Payment plan</h1>
 <p class="sub">for {borrower}, from {lender}</p>
 <div class="intro">
-  You borrowed <strong>{principal} {currency}</strong> on <strong>{origination}</strong>.
+  You borrowed <strong>{principal:.2} {currency}</strong> on <strong>{origination}</strong>.
   Terms: {interest_desc}. Schedule: {term_line}.
   Below is each payment, what it covers, and how much is left to pay afterward.
 </div>
@@ -3205,7 +3208,7 @@ Figures are computed from the loan's terms; minor rounding lands on the final pa
 </body></html>"#,
         borrower = esc_html(&v.borrower_name),
         lender = esc_html(&lender),
-        principal = format!("{:.2}", v.principal),
+        principal = v.principal,
         currency = esc_html(&v.currency),
         origination = v.origination_date,
         interest_desc = esc_html(&interest_desc),

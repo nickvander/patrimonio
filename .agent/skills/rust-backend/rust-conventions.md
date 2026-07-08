@@ -108,7 +108,20 @@ ones to actually enforce.
   `clippy::missing_safety_doc`. This dovetails with SKILL.md §7 (the project's
   "why-not-what" comment density).
 
-## Suggested clippy starter set for this app
+## Clippy in CI
+
+**Default clippy is gated in CI** (`.github/workflows/test.yml`:
+`cargo clippy --all-targets -- -D warnings`) — the tree is clippy-clean, so any
+new warning in the `correctness`/`suspicious`/`style`/`complexity`/`perf` groups
+fails the build. Keep it clean; where a lint is a false positive, add a scoped
+`#[allow(clippy::x)]` with a one-line rationale rather than leaving a warning.
+
+The stricter `restriction` lints below (no-unwrap/panic, etc.) are **documented
+guidance, not yet CI-gated** — the existing codebase carries too much
+pre-existing debt (hundreds of `.unwrap()` on the approved sqlx patterns) to
+`-D` them wholesale. Treat them as review rules for new code.
+
+## Suggested restriction/pedantic set to grow into
 
 Cherry-pick (do **not** blanket-enable the whole `restriction` group — Clippy's
 own `blanket_clippy_restriction_lints` warns against it):

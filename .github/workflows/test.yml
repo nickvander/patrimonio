@@ -55,11 +55,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: backend
       - name: Install system deps
         run: sudo apt-get update -qq && sudo apt-get install -y -qq pkg-config libssl-dev
+      # Lint gate: the tree is clippy-clean, so any new warning fails the build.
+      # The stricter panic/unwrap restriction lints are documented guidance in
+      # .agent/skills/rust-backend/rust-conventions.md rather than gated here
+      # (the existing codebase carries too much pre-existing debt to deny them).
+      - name: cargo clippy (warnings are errors)
+        working-directory: backend
+        run: cargo clippy --all-targets -- -D warnings
       - name: cargo test (unit + integration; serial via the shared test DB)
         working-directory: backend
         run: cargo test -- --test-threads=1

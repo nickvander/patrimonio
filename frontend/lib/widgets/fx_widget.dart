@@ -235,6 +235,9 @@ class _FxWidgetState extends State<FxWidget> {
       },
     );
 
+    // dispose: local controller, else the dialog leaks it. controller.text was
+    // already captured into `entered` inside the dialog.
+    controller.dispose();
     if (entered == null) return;
     final parsed = double.tryParse(entered.trim());
     if (parsed == null || parsed <= 0) {

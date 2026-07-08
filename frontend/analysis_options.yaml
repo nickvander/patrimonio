@@ -28,6 +28,25 @@ linter:
     # are OK), but it gives us a working list of strip-and-restore
     # cleanup candidates.
     prefer_const_constructors: true
+    # Resource-safety guardrails (see .agent/skills/flutter-frontend/
+    # dart-flutter-conventions.md "Lifecycle & resources"). Both had a ZERO
+    # backlog when added, and are promoted to `error` below so a future
+    # undisposed stream/sink fails the build rather than leaking silently.
+    cancel_subscriptions: true
+    close_sinks: true
+    # Cheap error-hygiene wins (also zero backlog): keep stack traces on
+    # rethrow, and prefer immutable locals.
+    use_rethrow_when_possible: true
+    prefer_final_locals: true
+    # NOT enabled yet (large backlogs — add incrementally per the conventions
+    # file): avoid_catches_without_on_clauses (~186), directives_ordering (~108).
+
+analyzer:
+  errors:
+    # Promote the resource-safety lints to build-breaking so leaks can't
+    # accumulate again. Safe because the current tree has zero of either.
+    cancel_subscriptions: error
+    close_sinks: error
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options

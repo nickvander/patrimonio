@@ -97,7 +97,7 @@ pub fn validate_password_policy(password: &str) -> Result<()> {
 ///
 /// `api_base` empty → check skipped, returns `Ok(0)`. This lets tests
 /// + air-gapped deployments bypass the network call without code
-/// changes (the config-level `HIBP_API_BASE` is the off-switch).
+///   changes (the config-level `HIBP_API_BASE` is the off-switch).
 ///
 /// On any network error we return `Ok(0)` (fail-open) and log a
 /// warning. The decision is deliberate: HIBP being down should NOT

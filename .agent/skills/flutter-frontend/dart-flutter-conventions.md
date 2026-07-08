@@ -130,10 +130,14 @@ Already active: base `lints` recommended + `flutter_lints` (10 rules:
 `use_build_context_synchronously`, `use_full_hex_values_for_flutter_colors`,
 `use_key_in_widget_constructors`) + `prefer_const_constructors`.
 
-High-value additions to consider in `analysis_options.yaml`:
-`prefer_final_locals`, `prefer_final_fields`, `cancel_subscriptions`,
-`close_sinks`, `use_rethrow_when_possible`, `avoid_catches_without_on_clauses`,
-`directives_ordering`. (Add incrementally — each surfaces a cleanup backlog.)
+Also enabled (2026-07-08, all had a zero backlog when added):
+`cancel_subscriptions` and `close_sinks` — **promoted to `error`** in the
+`analyzer.errors:` block so an undisposed stream/sink breaks the build, not just
+warns — plus `use_rethrow_when_possible` and `prefer_final_locals`.
+
+Still deferred (large backlogs — add incrementally): `avoid_catches_without_on_clauses`
+(~186 sites), `directives_ordering` (~108). `prefer_final_fields` is already in
+the recommended base set.
 
 ## Sources
 

@@ -189,8 +189,8 @@ async fn list_users(pool: &PgPool) -> Result<()> {
         return Ok(());
     }
     println!(
-        "{:<38}  {:<20}  {:<6}  {:<7}  {}",
-        "id", "username", "totp", "active", "recovery_codes_left"
+        "{:<38}  {:<20}  {:<6}  {:<7}  recovery_codes_left",
+        "id", "username", "totp", "active"
     );
     for r in &rows {
         let id: Uuid = r.get("id");

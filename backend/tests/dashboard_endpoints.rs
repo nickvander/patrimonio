@@ -5160,6 +5160,8 @@ async fn seed_typed_account(
 }
 
 /// Seed one holding row; returns its id.
+// test seed helper: each holding column is a distinct arg by design
+#[allow(clippy::too_many_arguments)]
 async fn seed_holding(
     pool: &PgPool,
     user_id: uuid::Uuid,

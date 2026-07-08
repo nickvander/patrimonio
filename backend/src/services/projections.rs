@@ -352,6 +352,8 @@ fn run_monte_carlo(req: &ProjectionRequest, real: f64) -> MonteCarloResult {
         // the initial withdrawal rate captured at the start of retirement.
         let mut withdrawal = annual_spend;
         let mut initial_rate: Option<f64> = None;
+        // y is used as a value (retire_year comparison), not just an index
+        #[allow(clippy::needless_range_loop)]
         for y in 1..=horizon {
             let z = standard_normal(&mut rng);
             let growth = (drift + sigma * z).exp();

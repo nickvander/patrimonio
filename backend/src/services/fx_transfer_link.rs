@@ -497,7 +497,7 @@ fn identity_tokens(tx: &TxCandidate) -> std::collections::HashSet<String> {
             if IDENTITY_STOPWORDS.contains(&raw) {
                 continue;
             }
-            if REMITTANCE_KEYWORDS.iter().any(|kw| raw == *kw) {
+            if REMITTANCE_KEYWORDS.contains(&raw) {
                 continue;
             }
             out.insert(raw.to_string());
@@ -534,7 +534,7 @@ mod tests {
     fn scoring_no_keyword_still_passable_when_tight() {
         // 0% deviation, same day, no keyword/identity → 50 + 25 = 75.
         let score = score_match(0.0, 0, false, false);
-        assert!(score >= 70 && score <= 80);
+        assert!((70..=80).contains(&score));
     }
 
     #[test]

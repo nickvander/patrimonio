@@ -139,14 +139,13 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
         let upper = trimmed.to_uppercase();
 
         // Learn / refresh the column geometry from each header.
-        if upper.contains("DEPOSITOS") || upper.contains("DEPÓSITOS") {
-            if upper.contains("RETIROS") {
+        if (upper.contains("DEPOSITOS") || upper.contains("DEPÓSITOS"))
+            && upper.contains("RETIROS") {
                 if let Some(c) = detect_columns(line) {
                     cols = Some(c);
                 }
                 continue;
             }
-        }
 
         if let Some(c) = row_re.captures(line) {
             flush(cur.take(), &mut txs);

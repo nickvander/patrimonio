@@ -62,7 +62,7 @@ pub fn amounts_with_pos(line: &str) -> Vec<Amt> {
     let re = amount_re();
     re.find_iter(line)
         .filter(|m| {
-            if line[m.end()..].chars().next() == Some('%') {
+            if line[m.end()..].starts_with('%') {
                 return false;
             }
             let before = line[..m.start()].chars().last();

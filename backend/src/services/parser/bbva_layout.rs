@@ -75,9 +75,7 @@ fn year_resolver(upper: &str) -> Box<dyn Fn(u32) -> i32> {
         let sy: i32 = c[2].parse().unwrap_or(fallback);
         let ey: i32 = c[4].parse().unwrap_or(sy);
         Box::new(move |m: u32| {
-            if sy == ey {
-                sy
-            } else if m >= sm {
+            if sy == ey || m >= sm {
                 sy
             } else {
                 ey

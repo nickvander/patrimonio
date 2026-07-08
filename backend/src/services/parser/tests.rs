@@ -252,7 +252,7 @@ fn test_parse_banamex_pdf_whole_numbers() {
 #[test]
 fn test_detect_and_parse_filename_fallback() {
     // If data is empty and couldn't be parsed, it should still identify via filename as last resort
-    let _empty_data = vec![0, 0, 0];
+    let _empty_data = [0, 0, 0];
     // This will fail loading PDF (Document::load_mem) and bypass content scan
     // But the routing should still catch the filename keyword if we called it with a specific flow
     // Actually, detect_and_parse will fail at Document::load_mem.

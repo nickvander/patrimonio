@@ -315,6 +315,8 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     final currency =
         (widget.account['currency'] ?? 'USD').toString().toUpperCase();
     final existing = _accountAlerts[_accountId];
+    // dispose: local controller, else the dialog leaks it. whenComplete fires
+    // once the dialog route is fully popped — after every read of controller.text.
     final controller = TextEditingController(
       text: existing == null ? '' : existing.toStringAsFixed(0),
     );
@@ -367,7 +369,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
           ),
         ],
       ),
-    );
+    ).whenComplete(controller.dispose);
   }
 
   void _saveThreshold(double? value) {
@@ -515,6 +517,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
 
   void _showRenameDialog() {
     final l = AppLocalizations.of(context);
+    // dispose: local controller, else the dialog leaks it.
     final controller = TextEditingController(text: _nickname);
     showDialog<void>(
       context: context,
@@ -552,7 +555,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
           ),
         ],
       ),
-    );
+    ).whenComplete(controller.dispose);
   }
 
   // Derive a small balance-history sparkline from the loaded transactions
@@ -721,7 +724,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
           ),
         ],
       ),
-    );
+    ).whenComplete(controller.dispose);
   }
 
   @override

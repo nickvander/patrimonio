@@ -276,6 +276,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
         ],
       ),
     );
+    // dispose: local controller, else the dialog leaks it. controller.text was
+    // already read into `result` inside the dialog, so it's safe to drop here.
+    controller.dispose();
     if (result == null) return; // dismissed / cancelled → no change
     setState(() => _elective401kUsd = result > 0 ? result : null);
     _writeSetting(k401kElectiveSettingKey, result > 0 ? result : 0)

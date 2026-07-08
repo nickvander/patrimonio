@@ -133,7 +133,7 @@ fn year_resolver(upper: &str) -> Box<dyn Fn(u32) -> i32> {
         let sm = month_full(&c[1]).unwrap_or(1);
         let sy: i32 = c[2].parse().unwrap_or(2025);
         let ey: i32 = c[4].parse().unwrap_or(sy);
-        return Box::new(move |m: u32| if sy == ey { sy } else if m >= sm { sy } else { ey });
+        return Box::new(move |m: u32| if sy == ey || m >= sm { sy } else { ey });
     }
 
     // Single-year período ("… al 24 de mayo del 2026").
@@ -314,7 +314,7 @@ fn parse_section(lines: &[&str], resolve_year: &dyn Fn(u32) -> i32) -> Vec<Parse
             .filter(|m| {
                 // A number directly followed by '%' is a rate (the "0.50%"
                 // in "INTERESES AL 0.50%"), not money.
-                if trimmed[m.end()..].chars().next() == Some('%') {
+                if trimmed[m.end()..].starts_with('%') {
                     return false;
                 }
                 // A real amount stands alone — reject matches embedded in a

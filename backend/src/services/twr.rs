@@ -19,8 +19,8 @@
 //!   * Instead we treat the CURRENT quantity as ground truth and walk
 //!     backward: `shares(t) = current_qty − Σ(lots acquired after t)
 //!     + Σ(disposals after t)`. Everything before the first lot is the
-//!     "opening position", valued at the start-date price — a real opening
-//!     market value, not a ramp from zero.
+//!       "opening position", valued at the start-date price — a real opening
+//!       market value, not a ramp from zero.
 //!   * Flows are then only the incremental lot buys/sells, dated. The opening
 //!     position is the starting value, NOT a flow.
 //!

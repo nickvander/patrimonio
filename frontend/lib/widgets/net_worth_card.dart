@@ -633,7 +633,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
     // line's BarArea down to the X axis layers the bands such that the
     // strip between cumulative[i] and cumulative[i+1] gets institution i's
     // colour. A trailing "Other" line catches whatever isn't in the top N.
-    List<FlSpot> totalSpots = [];
+    final List<FlSpot> totalSpots = [];
     // cumulativeSpots[level] is the line at cumulativeFromTop level. Level 0
     // is the total, level 1 is total minus inst[0]'s value, etc. The last
     // level is the residual ("Other") which we fill in grey.
@@ -895,7 +895,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
               reservedSize: 22,
               interval: (data.length / 5).clamp(1, 100).toDouble(),
               getTitlesWidget: (value, meta) {
-                int index = value.toInt();
+                final int index = value.toInt();
                 if (index >= 0 && index < data.length) {
                   final dateStr = data[index]['date'].toString();
                   if (dateStr.length >= 10) {

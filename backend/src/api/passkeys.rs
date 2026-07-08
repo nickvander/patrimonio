@@ -763,6 +763,8 @@ async fn list_passkeys(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Result<Json<Vec<PasskeySummary>>, ApiError> {
+    // one-off sqlx row tuple, materialized once at this query_as call site
+    #[allow(clippy::type_complexity)]
     let rows: Vec<(
         Uuid,
         Option<String>,

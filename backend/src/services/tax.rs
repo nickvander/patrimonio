@@ -31,7 +31,7 @@ pub struct TaxEstimation {
     /// Decomposition (T6): `ordinary_income = wage_income + dividend_income
     /// + interest_income` — three disjoint buckets split on
     /// `category_detailed`, so nothing is double-counted. The bracket math
-    /// still runs over this total; the parts are reporting lines.
+    ///   still runs over this total; the parts are reporting lines.
     #[serde(with = "rust_decimal::serde::float")]
     pub ordinary_income: Decimal,
     /// Cash dividends (income rows with `category_detailed =
@@ -501,8 +501,8 @@ fn contribution_limit(group: RetirementGroup, year: i32) -> (i32, ContributionLi
 ///   2026 update factor 1.1321, DOF 28-Dec-2025). The prior in-file tarifa was
 ///   wrong (missing the 17.92% bracket); replaced with the published 11-bracket
 ///   tables.
-/// When `true`, `/tax/summary` reports `"constants_verified": true` and the UI
-/// drops the "pending verification" badges.
+///   When `true`, `/tax/summary` reports `"constants_verified": true` and the UI
+///   drops the "pending verification" badges.
 pub const TAX_CONSTANTS_VERIFIED: bool = true;
 
 /// Bracket years with populated tables. A requested year without a table
@@ -2326,6 +2326,8 @@ mod tests {
         assert_eq!(TaxYearTables::for_year(2030).bracket_year, 2026);
     }
 
+    // deliberate tripwire: fails if the human-verified tax-constants flag is ever unset
+    #[allow(clippy::assertions_on_constants)]
     #[test]
     fn constants_are_verified() {
         // Flipped to true 2026-06-25 after verifying every table against its

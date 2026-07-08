@@ -1427,6 +1427,8 @@ async fn plaid_investment_income_events_persist_idempotently() {
         }
     }
 
+    // one-off sqlx row tuple, materialized once at this query_as call site
+    #[allow(clippy::type_complexity)]
     let rows: Vec<(String, rust_decimal::Decimal, Option<String>, Option<String>, String)> =
         sqlx::query_as(
             "SELECT external_id, amount, category, category_detailed, source \
