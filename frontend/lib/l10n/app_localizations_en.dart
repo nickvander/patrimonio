@@ -1523,6 +1523,58 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get dpCardTermsTitle => 'Card terms';
+
+  @override
+  String dpEditCardTerms(Object name) {
+    return '$name terms';
+  }
+
+  @override
+  String get dpStatementBalance => 'Statement balance';
+
+  @override
+  String get dpMinPayment => 'Minimum payment';
+
+  @override
+  String get dpDueDate => 'Due date';
+
+  @override
+  String get dpDueDateNone => 'No date';
+
+  @override
+  String get dpAddTerms => 'Terms';
+
+  @override
+  String get dpDueSoonTitle => 'Due soon';
+
+  @override
+  String dpDueInDays(int n) {
+    return 'Due in ${n}d';
+  }
+
+  @override
+  String get dpDueToday => 'Due today';
+
+  @override
+  String get dpOverdue => 'Overdue';
+
+  @override
+  String dpDueOn(Object date) {
+    return 'Due $date';
+  }
+
+  @override
+  String dpInDays(int n) {
+    return 'in ${n}d';
+  }
+
+  @override
+  String dpMinAmount(Object amount) {
+    return 'min $amount';
+  }
+
+  @override
   String get efTitle => 'Emergency fund';
 
   @override

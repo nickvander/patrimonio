@@ -1543,6 +1543,58 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get dpCardTermsTitle => 'Términos de tarjeta';
+
+  @override
+  String dpEditCardTerms(Object name) {
+    return 'Términos de $name';
+  }
+
+  @override
+  String get dpStatementBalance => 'Saldo del estado';
+
+  @override
+  String get dpMinPayment => 'Pago mínimo';
+
+  @override
+  String get dpDueDate => 'Fecha de vencimiento';
+
+  @override
+  String get dpDueDateNone => 'Sin fecha';
+
+  @override
+  String get dpAddTerms => 'Términos';
+
+  @override
+  String get dpDueSoonTitle => 'Próximos vencimientos';
+
+  @override
+  String dpDueInDays(int n) {
+    return 'Vence en $n d';
+  }
+
+  @override
+  String get dpDueToday => 'Vence hoy';
+
+  @override
+  String get dpOverdue => 'Vencido';
+
+  @override
+  String dpDueOn(Object date) {
+    return 'Vence $date';
+  }
+
+  @override
+  String dpInDays(int n) {
+    return 'en $n d';
+  }
+
+  @override
+  String dpMinAmount(Object amount) {
+    return 'mín $amount';
+  }
+
+  @override
   String get efTitle => 'Fondo de emergencia';
 
   @override

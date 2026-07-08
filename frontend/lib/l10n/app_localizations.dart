@@ -2612,6 +2612,90 @@ abstract class AppLocalizations {
   /// **'{count} loans · {amount}'**
   String dpSplitLoan(Object amount, Object count);
 
+  /// No description provided for @dpCardTermsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Card terms'**
+  String get dpCardTermsTitle;
+
+  /// No description provided for @dpEditCardTerms.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} terms'**
+  String dpEditCardTerms(Object name);
+
+  /// No description provided for @dpStatementBalance.
+  ///
+  /// In en, this message translates to:
+  /// **'Statement balance'**
+  String get dpStatementBalance;
+
+  /// No description provided for @dpMinPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimum payment'**
+  String get dpMinPayment;
+
+  /// No description provided for @dpDueDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Due date'**
+  String get dpDueDate;
+
+  /// No description provided for @dpDueDateNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No date'**
+  String get dpDueDateNone;
+
+  /// No description provided for @dpAddTerms.
+  ///
+  /// In en, this message translates to:
+  /// **'Terms'**
+  String get dpAddTerms;
+
+  /// No description provided for @dpDueSoonTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Due soon'**
+  String get dpDueSoonTitle;
+
+  /// No description provided for @dpDueInDays.
+  ///
+  /// In en, this message translates to:
+  /// **'Due in {n}d'**
+  String dpDueInDays(int n);
+
+  /// No description provided for @dpDueToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Due today'**
+  String get dpDueToday;
+
+  /// No description provided for @dpOverdue.
+  ///
+  /// In en, this message translates to:
+  /// **'Overdue'**
+  String get dpOverdue;
+
+  /// No description provided for @dpDueOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Due {date}'**
+  String dpDueOn(Object date);
+
+  /// No description provided for @dpInDays.
+  ///
+  /// In en, this message translates to:
+  /// **'in {n}d'**
+  String dpInDays(int n);
+
+  /// No description provided for @dpMinAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'min {amount}'**
+  String dpMinAmount(Object amount);
+
   /// No description provided for @efTitle.
   ///
   /// In en, this message translates to:
