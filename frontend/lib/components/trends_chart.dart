@@ -38,6 +38,14 @@ class CashFlowTrendsChart extends StatelessWidget {
           final isPhone = outer.maxWidth < 420;
           final chartHeight = isPhone ? 200.0 : 250.0;
           final barWidth = isPhone ? 14.0 : 22.0;
+          // Thin the x-axis month labels so they don't overlap on narrow
+          // screens: roughly one label per ~46px (phone) / ~62px (wide) of
+          // chart width. With many months this shows every Nth label instead
+          // of cramming all of them into the same strip.
+          final approxPerLabel = isPhone ? 46.0 : 62.0;
+          final count = trends.isEmpty ? 1 : trends.length;
+          final maxLabels = (outer.maxWidth / approxPerLabel).floor().clamp(2, count);
+          final bottomLabelStep = (count / maxLabels).ceil().clamp(1, count);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -164,12 +172,18 @@ class CashFlowTrendsChart extends StatelessWidget {
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
+                        interval: bottomLabelStep.toDouble(),
                         getTitlesWidget: (value, meta) {
-                          if (value.toInt() >= 0 &&
-                              value.toInt() < trends.length) {
+                          final idx = value.toInt();
+                          if (idx >= 0 && idx < trends.length) {
+                            // Only render every Nth label (plus the last), so
+                            // labels never overlap on narrow screens.
+                            final isLast = idx == trends.length - 1;
+                            if (idx % bottomLabelStep != 0 && !isLast) {
+                              return const SizedBox.shrink();
+                            }
                             final monthStr =
-                                trends[value.toInt()]['month']
-                                    as String; // e.g. "2026-03"
+                                trends[idx]['month'] as String; // e.g. "2026-03"
                             final parts = monthStr.split('-');
                             String label;
                             try {
@@ -177,12 +191,12 @@ class CashFlowTrendsChart extends StatelessWidget {
                                 int.parse(parts[0]),
                                 int.parse(parts[1]),
                               );
-                              // Show "Mar" for most, "Mar '26" for Jan or first/last entry
-                              final isFirst = value.toInt() == 0;
-                              final isLast = value.toInt() == trends.length - 1;
+                              // "Mar" for most; "Mar '26" (compact 2-digit year)
+                              // for January, the first, or the last group.
+                              final isFirst = idx == 0;
                               final isJan = parts[1] == '01';
                               label = (isFirst || isLast || isJan)
-                                  ? DateFormat('MMM y').format(date)
+                                  ? DateFormat("MMM ''yy").format(date)
                                   : DateFormat('MMM').format(date);
                             } catch (_) {
                               label = parts.length > 1 ? parts[1] : monthStr;
