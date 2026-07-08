@@ -1898,7 +1898,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
                   : l.txRenameFailedShort)
               : (failed == 0
                   ? l.txRenamedN(ids.length)
-                  : l.txRenamedNFailed(ids.length - failed, failed)),
+                  // gen-l10n orders these alphabetically → (failed, ok); pass failed first.
+                  : l.txRenamedNFailed(failed, ids.length - failed)),
         ),
       ),
     );
@@ -1958,7 +1959,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
         content: Text(
           failed == 0
               ? l.txUpdatedN(updated)
-              : l.txUpdatedNFailed(updated, failed),
+              // gen-l10n orders these alphabetically → (failed, ok); pass failed first.
+              : l.txUpdatedNFailed(failed, updated),
         ),
       ),
     );
@@ -3455,11 +3457,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
             ),
             const SizedBox(height: 4),
             Text(
+              // gen-l10n orders these alphabetically → (dstAmount, dstCurrency, rate, srcAmount, srcCurrency).
               l.txTransferImpliedRate(
-                _formatNative(srcAmt, srcCcy),
                 _formatNative(dstAmt, dstCcy),
-                implied.toStringAsFixed(2),
                 dstCcy,
+                implied.toStringAsFixed(2),
+                _formatNative(srcAmt, srcCcy),
                 srcCcy,
               ),
               style: TextStyle(

@@ -44,7 +44,13 @@ class CashFlowTrendsChart extends StatelessWidget {
           // of cramming all of them into the same strip.
           final approxPerLabel = isPhone ? 46.0 : 62.0;
           final count = trends.isEmpty ? 1 : trends.length;
-          final maxLabels = (outer.maxWidth / approxPerLabel).floor().clamp(2, count);
+          // Aim for >=2 labels, but a single-month chart only has room for 1 —
+          // and int.clamp throws if lowerLimit > upperLimit, so the floor must
+          // not exceed `count` (a one-month portfolio would otherwise crash the
+          // whole card with "Invalid argument(s): 2").
+          final minLabels = count < 2 ? count : 2;
+          final maxLabels =
+              (outer.maxWidth / approxPerLabel).floor().clamp(minLabels, count);
           final bottomLabelStep = (count / maxLabels).ceil().clamp(1, count);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -82,26 +88,35 @@ class CashFlowTrendsChart extends StatelessWidget {
                 return Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          l.lwTrendsTitle,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                    // Flexible + ellipsis: the longer es-MX title
+                    // ("Tendencias de flujo de efectivo") plus the legend
+                    // otherwise overflow the row by a few px at mid widths
+                    // (~520–760). Let the title shrink rather than overflow.
+                    Flexible(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              l.lwTrendsTitle,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 6),
-                        Tooltip(
-                          message: l.lwTrendsInfoTooltip,
-                          child: Icon(
-                            Icons.info_outline,
-                            size: 14,
-                            color: context.textFaint,
+                          const SizedBox(width: 6),
+                          Tooltip(
+                            message: l.lwTrendsInfoTooltip,
+                            child: Icon(
+                              Icons.info_outline,
+                              size: 14,
+                              color: context.textFaint,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                     legend,
                   ],
@@ -182,8 +197,11 @@ class CashFlowTrendsChart extends StatelessWidget {
                             if (idx % bottomLabelStep != 0 && !isLast) {
                               return const SizedBox.shrink();
                             }
+                            // as String? ?? '': a null month would otherwise
+                            // throw and crash the axis builder; the empty
+                            // string falls through the try/catch below safely.
                             final monthStr =
-                                trends[idx]['month'] as String; // e.g. "2026-03"
+                                (trends[idx]['month'] as String?) ?? '';
                             final parts = monthStr.split('-');
                             String label;
                             try {
@@ -258,7 +276,11 @@ class CashFlowTrendsChart extends StatelessWidget {
                       x: e.key,
                       barRods: [
                         BarChartRodData(
-                          toY: e.value['income'],
+                          // Coerce via num: a whole-number amount arrives from
+                          // JSON as an int, and fl_chart's toY wants a double —
+                          // passing the raw dynamic throws "int is not a subtype
+                          // of double".
+                          toY: (e.value['income'] as num? ?? 0).toDouble(),
                           // Teal gradient → darker variant at the top so the
                           // bar gives the eye somewhere to land. Reads
                           // correctly on white in light mode because
@@ -280,7 +302,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                           ),
                         ),
                         BarChartRodData(
-                          toY: e.value['spending'],
+                          toY: (e.value['spending'] as num? ?? 0).toDouble(),
                           gradient: LinearGradient(
                             colors: [
                               context.pinkAccent,
@@ -343,10 +365,14 @@ class CashFlowTrendsChart extends StatelessWidget {
     final month = (last['month'] ?? '').toString();
     final income = (last['income'] as num?) ?? 0;
     final spending = (last['spending'] as num?) ?? 0;
+    // gen-l10n derives positional params by ALPHABETIZING placeholder names,
+    // ignoring template order, so the signature is (count, income, month,
+    // spending) — pass income before month or the screen-reader summary reads
+    // them swapped ("income <month>, ...").
     return l.lwTrendsSemanticSummary(
       trends.length,
-      _monthLabel(month),
       _money(income),
+      _monthLabel(month),
       _money(spending),
     );
   }
@@ -367,8 +393,9 @@ class CashFlowTrendsChart extends StatelessWidget {
             final income = (t['income'] as num?) ?? 0;
             final spending = (t['spending'] as num?) ?? 0;
             return Semantics(
+              // gen-l10n orders these alphabetically → (income, month, spending); pass income first.
               label: l.lwTrendsSemanticMonth(
-                  _monthLabel(month), _money(income), _money(spending)),
+                  _money(income), _monthLabel(month), _money(spending)),
               child: const SizedBox(height: 1, width: 1),
             );
           }).toList(),
@@ -380,8 +407,12 @@ class CashFlowTrendsChart extends StatelessWidget {
   double _getMaxValue() {
     double max = 0;
     for (var t in trends) {
-      if (t['income'] > max) max = t['income'];
-      if (t['spending'] > max) max = t['spending'];
+      // num-coerce: JSON whole numbers decode as int, which can't be assigned
+      // to a double var and won't compare cleanly against one.
+      final income = (t['income'] as num? ?? 0).toDouble();
+      final spending = (t['spending'] as num? ?? 0).toDouble();
+      if (income > max) max = income;
+      if (spending > max) max = spending;
     }
     return max == 0 ? 100 : max * 1.2;
   }

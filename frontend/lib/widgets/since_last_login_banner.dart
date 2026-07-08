@@ -104,9 +104,10 @@ class _SinceLastLoginBannerState extends State<SinceLastLoginBanner> {
       final name = (largestMove['account_name'] ?? '').toString();
       final sign = delta >= 0 ? '+' : '−';
       pieces.add(
+        // gen-l10n orders these alphabetically → (account, amount); pass account (name) first.
         l.lwSinceLargestMove(
-          '$sign${widget.currencyFormat.format(delta.abs())}',
           name,
+          '$sign${widget.currencyFormat.format(delta.abs())}',
         ),
       );
     }

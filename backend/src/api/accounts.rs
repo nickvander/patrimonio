@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use tracing::{error, info};
 
+use crate::api::dashboard::latest_usd_mxn_rate;
 use crate::api::session::AuthContext;
 use crate::models::holding::Holding;
 use crate::AppState;
@@ -269,19 +270,32 @@ async fn accounts_summary(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Json<AccountsSummary> {
+    // Convert every balance to USD before summing. Without this, a MXN
+    // balance (e.g. MX$100,000 ≈ US$5,000) is added to the USD total as
+    // 100,000 — the ~18x cross-currency overstatement class. MXN divides by
+    // the USD→MXN rate; all other currencies are trusted 1:1, matching
+    // dashboard_overview (the sibling endpoint this had drifted from).
+    let fx_rate = latest_usd_mxn_rate(&state.db).await.rate;
     let row = sqlx::query(
         r#"
         SELECT
             COALESCE(SUM(CASE WHEN NOT is_liability_account_type(account_type)
-                              THEN current_balance ELSE 0 END), 0) as total_assets,
+                              THEN CASE WHEN currency = 'MXN'
+                                        THEN current_balance / $2::numeric
+                                        ELSE current_balance END
+                              ELSE 0 END), 0) as total_assets,
             COALESCE(SUM(CASE WHEN is_liability_account_type(account_type)
-                              THEN ABS(current_balance) ELSE 0 END), 0) as total_liabilities,
+                              THEN ABS(CASE WHEN currency = 'MXN'
+                                            THEN current_balance / $2::numeric
+                                            ELSE current_balance END)
+                              ELSE 0 END), 0) as total_liabilities,
             COUNT(*) as account_count
         FROM accounts
         WHERE user_id = $1 AND archived_at IS NULL
         "#
     )
     .bind(ctx.user_id)
+    .bind(fx_rate)
     .fetch_one(&state.db)
     .await;
 

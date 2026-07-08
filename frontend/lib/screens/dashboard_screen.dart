@@ -2885,7 +2885,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         builder: (ctx) => AlertDialog(
           title: Text(failed == 0
               ? l.dashWebhookPushed(updated)
-              : l.dashWebhookPartial(updated, failed)),
+              // gen-l10n orders these alphabetically → (failed, updated); pass failed first.
+              : l.dashWebhookPartial(failed, updated)),
           content: SizedBox(
             width: 420,
             child: SingleChildScrollView(
@@ -3156,9 +3157,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     };
 
     return raw.map((e) {
-      final category = e['category'] as String;
-      final subCategory = e['sub_category'] as String;
-      final value = (e['value'] as num).toDouble();
+      // Coerce defensively: a null/omitted sub_category or value (JSON
+      // whole numbers also decode as int) would otherwise throw here and
+      // crash the allocation-heatmap build — the same class as the
+      // trends_chart int-vs-double crash.
+      final category = e['category'] as String? ?? '';
+      final subCategory = e['sub_category'] as String? ?? '';
+      final value = (e['value'] as num? ?? 0).toDouble();
       final quantity = (e['quantity'] as num?)?.toDouble() ?? 0.0;
       // Canonical asset-class key (C2). Defensive: older backends
       // don't send it — null makes the heatmap fall back to emitting
@@ -4454,9 +4459,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               SnackBar(
                 content: Text(
                   (r['inserted'] as num? ?? 0) > 0
+                      // gen-l10n orders these alphabetically → (checked, inserted); pass checked first.
                       ? l.dashTransfersLinked(
-                          (r['inserted'] as num? ?? 0).toInt(),
-                          (r['checked'] as num? ?? 0).toInt())
+                          (r['checked'] as num? ?? 0).toInt(),
+                          (r['inserted'] as num? ?? 0).toInt())
                       : l.dashNoNewTransfers,
                 ),
               ),

@@ -86,12 +86,13 @@ class NetWorthGoalTile extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
+              // gen-l10n orders these alphabetically → (amount, remaining, year).
               l.pfGoalHitBy(
                 currencyFormat.format(goalUsd * conversionFactor),
-                goalYear,
                 yearsRemaining <= 0
                     ? l.pfGoalDueNow
                     : l.pfGoalYearsLeft(yearsRemaining),
+                goalYear,
               ),
               style: TextStyle(color: context.textMuted, fontSize: 12),
               maxLines: 1,

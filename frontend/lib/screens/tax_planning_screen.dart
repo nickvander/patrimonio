@@ -1646,12 +1646,13 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           if (netBuckets != null) ...[
             const SizedBox(height: 8),
             Text(
+              // gen-l10n orders these alphabetically → (carryforward, gains, ordinary).
               l.taxHarvestFooterFlow(
+                _money(carryforward),
                 _money(taxableGainsRemaining),
                 ordinaryCap == null
                     ? _money(ordinaryOffset)
                     : '${_money(ordinaryOffset)} / ${_money(ordinaryCap)}',
-                _money(carryforward),
               ),
               style: TextStyle(fontSize: 11, color: context.textSubtle),
             ),

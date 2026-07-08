@@ -234,7 +234,9 @@ async fn register_start(
             display_name.as_deref().unwrap_or(&username),
             exclude_opt,
         )
-        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, &format!("webauthn start: {e}")))?;
+        // Route through internal(): logs the real webauthn error server-side
+        // and returns a generic 500 rather than leaking library internals.
+        .map_err(internal)?;
 
     let nonce = random_nonce();
     let key = format!("{REG_KEY_PREFIX}{}:{}", ctx.user_id, nonce);

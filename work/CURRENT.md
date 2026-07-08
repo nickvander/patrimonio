@@ -1,7 +1,69 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-08 (round-6 card-terms/balance-chart/net-worth-fix — all on `main`, deployed)
-> **Branch:** `main` (everything merged and deployed).
+> **Last updated:** 2026-07-08 (round-7 skills authored + skill-driven bug sweep — committed + pushed to `main`, NOT yet deployed)
+> **Branch:** `main` (round-7 committed; earlier rounds merged + deployed).
+
+## 2026-07-08 sprint — round 7 (best-practice skills + skill-driven fixes)
+
+* **Authored two project skills** in `.agent/skills/` (the repo's existing
+  cross-tool skills dir, alongside `backend-dev`/`dev-workflow`/`work-tracking`):
+  `.agent/skills/rust-backend/SKILL.md` and
+  `.agent/skills/flutter-frontend/SKILL.md`. Each is grounded
+  in this codebase's real conventions and the bug classes it has hit
+  (carry-forward aggregation, FX/USD money invariants, per-user scoping,
+  loud-skip tests; gen-l10n placeholder alphabetization, locale-aware
+  formatting, responsive width-awareness). Each ends with a "Definition of
+  done" review checklist. Built from two Explore-agent codebase analyses.
+* **Applying the skills surfaced real defects** (found via two audit agents):
+  * **gen-l10n placeholder transposition (§2 trap): 16 sites fixed.** The
+    generated method params are ALPHABETICAL, but call sites passed
+    template order — silently swapping same-typed (money/date/string) args.
+    First found in `trends_chart.dart` (`lwTrendsSemanticSummary`); an
+    exhaustive audit found 15 more across notifications, tax-harvest,
+    transfers, goals, imports, webhooks, since-login banner. All reordered
+    to alphabetical + `// gen-l10n orders …` comments.
+  * **`trends_chart.dart` two edge-case crashes** the regression test caught:
+    `clamp(2, count)` threw `ArgumentError` on a single-month portfolio;
+    passing an int `toY` to fl_chart threw on whole-number JSON amounts.
+    Both now num-coerce / guard the clamp floor. Plus an es-locale header
+    Row overflow (title now `Flexible` + ellipsis).
+  * **Backend cross-currency bug (HIGH):** `GET /accounts/summary` summed
+    balances across currencies with no FX — the ~18x overstatement class
+    (a $1k USD + MX$20k portfolio reported ~$21k assets). Now converts per
+    row via `latest_usd_mxn_rate`, mirroring `dashboard_overview`. New
+    regression test `accounts_summary_converts_mxn_to_usd_not_raw_sum`.
+  * **Backend error leakage (§1):** raw internal error strings returned to
+    clients on 500s in `passkeys.rs`, `institutions.rs` (`details` field),
+    and 8 `tax.rs` arms. All now log server-side + return a generic message.
+* **Tests added:** `test/components/trends_semantic_summary_test.dart`
+  (bilingual, also guards both crashes), `test/l10n/placeholder_order_test.dart`
+  (5-method contract guard), backend FX regression. **All green:** frontend
+  393 tests + analyze clean; backend `cargo test` exit 0 (244 lib + 107
+  dashboard + 31 + 7 + 4 + 3, 0 failed, no warnings).
+* **Skills follow-up:** verified the Agent Skills spec (docs.claude.com) — a
+  skill = a dir with `SKILL.md` (frontmatter `name`+`description` only); a
+  container-root `README.md` is NOT recognized (none added). Added
+  general-language-conventions companion files per skill (progressive
+  disclosure, linked from SKILL.md): `rust-conventions.md` (Fuchsia rubric +
+  Rust API Guidelines + clippy) and `dart-flutter-conventions.md` (Effective
+  Dart + Flutter style guide + lints).
+* **Skill discovery (cross-tool):** canonical skills live in committed
+  `.agent/skills/`; Claude Code only auto-discovers `.claude/skills/`, but a
+  `.claude/skills` entry can be a symlink and CC follows it — so
+  `.claude/skills -> ../.agent/skills` (local, since `.claude/` is gitignored)
+  makes CC discover all 5 skills. Recreate on fresh checkout:
+  `ln -s ../.agent/skills .claude/skills`.
+* **Second improvement pass (language-convention audits):** two more real
+  request-triggerable backend DoS bugs fixed — `clamp_day` day-of-month=0
+  underflow (release: ~4.3B-iteration spin on the async worker;
+  `loan_schedule.rs`) and unbounded `years` (multi-GB `vec!` → process OOM
+  abort + `years*12` i32 overflow; `projections.rs`, now clamped to 120 via a
+  `years()` accessor). Frontend: `add_crypto_dialog` leaked 4 controllers (no
+  `dispose()`); `budgets_card` editor leaked per-category controllers;
+  allocation-heatmap + trends hard JSON casts hardened (null → no crash). Both
+  DoS fixes have regression tests. Full suites green: backend 246 lib + 152
+  integration (0 warnings), frontend 393.
+* **Committed + pushed to `main`; not yet deployed** — awaiting deploy go-ahead.
 
 ## 2026-07-08 sprint — round 6 (card terms, balance chart, net-worth carry-forward fix)
 

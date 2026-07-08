@@ -6445,3 +6445,58 @@ async fn restore_holding_404s_for_wrong_user_and_double_restore() {
         .unwrap();
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }
+
+/// Regression: GET /api/accounts/summary must convert each balance to USD
+/// before summing. A MXN balance was previously added to the USD total at its
+/// raw peso value (the ~18x cross-currency overstatement class), so a $1,000
+/// USD + MX$20,000 (≈$1,000) portfolio reported total_assets ≈ 21,000 instead
+/// of ≈ 2,000. This pins the FX conversion.
+#[tokio::test]
+#[serial_test::serial]
+async fn accounts_summary_converts_mxn_to_usd_not_raw_sum() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    // seed_account gives one USD depository account with 1000.00 balance.
+    let (inst_id, _usd_acct) = seed_account(&pool, user_id).await;
+
+    // A second account in pesos: MX$20,000. At 20 USD→MXN that is $1,000 USD.
+    sqlx::query(
+        "INSERT INTO accounts (institution_id, name, account_type, currency, current_balance, user_id) \
+         VALUES ($1, 'Nu MXN', 'depository', 'MXN', 20000.00, $2)",
+    )
+    .bind(inst_id)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .expect("seed MXN account");
+
+    // USD→MXN = 20.0 so the peso balance converts to exactly $1,000 USD.
+    sqlx::query(
+        "INSERT INTO exchange_rates (base_currency, target_currency, rate, recorded_at) \
+         VALUES ('USD', 'MXN', 20.00, NOW())",
+    )
+    .execute(&pool)
+    .await
+    .expect("seed fx rate");
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/accounts/summary", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    let total_assets = body["total_assets"].as_f64().expect("total_assets f64");
+    // $1,000 USD + $1,000 USD-equivalent = ~$2,000, NOT the raw 21,000 sum.
+    assert!(
+        (total_assets - 2000.0).abs() < 0.5,
+        "expected ~2000 USD, got {total_assets} (raw cross-currency sum would be ~21000)"
+    );
+    assert!(
+        total_assets < 5000.0,
+        "total_assets {total_assets} looks like an un-converted peso sum"
+    );
+    assert_eq!(body["account_count"], 2);
+}

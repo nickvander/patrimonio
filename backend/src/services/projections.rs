@@ -70,9 +70,18 @@ impl ProjectionRequest {
     fn trials(&self) -> usize {
         self.monte_carlo_trials.unwrap_or(1000).clamp(1, 50_000) as usize
     }
+    /// Projection horizon in years, clamped to a sane 0..=120. Bounding this
+    /// is a safety guardrail, not just tidiness: `years` comes straight off
+    /// an authenticated query param, and an unbounded value blows up both the
+    /// deterministic loop (`years * 12` overflows i32) and the Monte Carlo
+    /// allocation (`vec![_; years + 1]` → multi-GB → process-wide OOM abort).
+    /// Mirrors the `trials()` clamp.
+    fn years(&self) -> i32 {
+        self.years.clamp(0, 120)
+    }
     /// Year at which the accumulation phase ends. Clamped to the horizon.
     fn retire_year(&self) -> i32 {
-        self.years_to_retirement.unwrap_or(self.years).clamp(0, self.years)
+        self.years_to_retirement.unwrap_or(self.years()).clamp(0, self.years())
     }
     /// Real (inflation-adjusted) annual return via the Fisher relation.
     fn real_return(&self) -> f64 {
@@ -173,7 +182,7 @@ pub fn calculate_projection(req: &ProjectionRequest) -> ProjectionResponse {
     // Deterministic median path: accumulate up to the retirement month, then
     // draw down inflation-adjusted spending (constant in real terms).
     let mut balance_at_retirement = balance;
-    for m in 1..=(req.years * 12) {
+    for m in 1..=(req.years() * 12) {
         let growth = balance * monthly_rate;
         total_growth += growth;
         if m <= retire_month {
@@ -199,7 +208,7 @@ pub fn calculate_projection(req: &ProjectionRequest) -> ProjectionResponse {
     // If retirement == 0 (or horizon), anchor the income figure sensibly.
     if retire_month == 0 {
         balance_at_retirement = req.start_balance;
-    } else if retire_month >= req.years * 12 {
+    } else if retire_month >= req.years() * 12 {
         balance_at_retirement = balance;
     }
 
@@ -314,7 +323,7 @@ fn standard_normal(rng: &mut StdRng) -> f64 {
 /// stayed positive through the whole horizon.
 fn run_monte_carlo(req: &ProjectionRequest, real: f64) -> MonteCarloResult {
     let trials = req.trials();
-    let horizon = req.years.max(0) as usize;
+    let horizon = req.years() as usize;
     let retire_year = req.retire_year();
     let sigma = req.volatility();
     let annual_contribution = req.monthly_contribution * 12.0;
@@ -464,6 +473,20 @@ mod tests {
         let res = calculate_projection(&base_req());
         assert_eq!(res.points.len() as i32, base_req().years * 12 + 1);
         assert!(res.real_dollars);
+    }
+
+    #[test]
+    fn absurd_years_is_clamped_not_ooming() {
+        // Regression: `years` is an unvalidated query param. A huge value
+        // overflowed `years * 12` (deterministic loop) and allocated
+        // `vec![_; years + 1]` (~tens of GB → process-wide OOM abort) in the
+        // Monte Carlo. It must clamp to the 120-year cap and return promptly.
+        let mut req = base_req();
+        req.years = 1_000_000_000;
+        let res = calculate_projection(&req);
+        // Horizon clamped to 120 years → 120*12 + 1 monthly points.
+        assert_eq!(res.points.len(), 120 * 12 + 1);
+        assert_eq!(res.monte_carlo.percentiles.len(), 121);
     }
 
     #[test]

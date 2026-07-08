@@ -565,18 +565,29 @@ async fn link_crypto_institution(
         }
     };
     
+    // Log the underlying crypto error server-side but never return it to the
+    // client — a raw encryption/library error string on a 500 is an info leak.
     let key_enc = match encryption::encrypt(enc_key, &req.api_key) {
         Ok(value) => value,
-        Err(e) => return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to encrypt API key", Some(&e.to_string())),
+        Err(e) => {
+            error!("Failed to encrypt API key: {}", e);
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to encrypt API key", None);
+        }
     };
     let secret_enc = match encryption::encrypt(enc_key, &req.api_secret) {
         Ok(value) => value,
-        Err(e) => return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to encrypt API secret", Some(&e.to_string())),
+        Err(e) => {
+            error!("Failed to encrypt API secret: {}", e);
+            return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to encrypt API secret", None);
+        }
     };
     let pass_enc = match req.api_pass {
         Some(pass) => match encryption::encrypt(enc_key, &pass) {
             Ok(value) => Some(value),
-            Err(e) => return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to encrypt API passphrase", Some(&e.to_string())),
+            Err(e) => {
+                error!("Failed to encrypt API passphrase: {}", e);
+                return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to encrypt API passphrase", None);
+            }
         },
         None => None,
     };
@@ -831,7 +842,7 @@ async fn delete_institution(
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => {
             error!("Failed to delete institution: {}", e);
-            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete institution", Some(&e.to_string()))
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete institution", None)
         }
     }
 }

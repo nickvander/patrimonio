@@ -336,7 +336,13 @@ pub fn expand_pattern(
 /// Build a date on `day` of `month`'s year/month, clamped to the last
 /// valid day of that month (day 31 in a 30-day month → the 30th).
 fn clamp_day(month: NaiveDate, day: u32) -> NaiveDate {
-    let mut d = day;
+    // Clamp into 1..=31 first: day 1 always exists, so the loop is
+    // guaranteed to terminate. Without this, `day == 0` (a caller can pass
+    // `day_of_month: 0`) makes `from_ymd_opt(.., 0)` return None and then
+    // `d -= 1` underflows — a subtract-overflow panic in debug, and in
+    // release it wraps to u32::MAX and spins ~4.3 billion iterations on the
+    // request's async worker (a DoS).
+    let mut d = day.clamp(1, 31);
     loop {
         if let Some(date) = NaiveDate::from_ymd_opt(month.year(), month.month(), d) {
             return date;
@@ -685,5 +691,23 @@ mod tests {
         assert_eq!(sum_principal(&rows), d("1000.00"));
         assert_eq!(sum_interest(&rows), d("120.00"));
         assert_eq!(rows[0].interest, d("20.00"));
+    }
+
+    #[test]
+    fn expand_pattern_day_zero_does_not_underflow_or_hang() {
+        // Regression: a custom pattern with day_of_month = 0 reached
+        // clamp_day(month, 0), which underflowed (debug panic) or wrapped to
+        // u32::MAX and spun ~4.3B iterations (release DoS). It must instead
+        // clamp to day 1 and return promptly.
+        let start = NaiveDate::from_ymd_opt(2026, 1, 10).unwrap();
+        let end = NaiveDate::from_ymd_opt(2026, 4, 30).unwrap();
+        let rows = expand_pattern(
+            d("1000"), start, end, Some(0), 0, d("0"), d("250"),
+        );
+        assert!(!rows.is_empty(), "should still produce rows");
+        // Day 0 clamped to the 1st of each month.
+        for r in &rows {
+            assert_eq!(r.due_date.day(), 1, "day 0 must clamp to the 1st");
+        }
     }
 }

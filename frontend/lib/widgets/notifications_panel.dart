@@ -98,8 +98,9 @@ List<AppNotification> deriveNotifications({
         icon: Icons.event_busy,
         accent: Colors.redAccent,
         title: l.lwNotifRepaymentOverdueTitle(borrower),
+        // gen-l10n orders these alphabetically → (amount, daysOverdue, dueDate, number).
         detail: l.lwNotifRepaymentOverdueDetail(
-            n, money(amount, cur), dueStr, overdue),
+            money(amount, cur), overdue, dueStr, n),
         onTap: onJumpToLending,
       ));
     } else if (until > 0) {
@@ -108,7 +109,8 @@ List<AppNotification> deriveNotifications({
         icon: Icons.event,
         accent: Colors.amber,
         title: l.lwNotifRepaymentDueTitle(borrower, until),
-        detail: l.lwNotifRepaymentDueDetail(n, money(amount, cur), dueStr),
+        // gen-l10n orders these alphabetically → (amount, dueDate, number).
+        detail: l.lwNotifRepaymentDueDetail(money(amount, cur), dueStr, n),
         onTap: onJumpToLending,
       ));
     } else {
@@ -121,7 +123,8 @@ List<AppNotification> deriveNotifications({
         icon: Icons.event_available,
         accent: Colors.amber,
         title: l.lwNotifRepaymentDueTodayTitle(borrower),
-        detail: l.lwNotifRepaymentDueTodayDetail(n, money(amount, cur)),
+        // gen-l10n orders these alphabetically → (amount, number); pass amount first.
+        detail: l.lwNotifRepaymentDueTodayDetail(money(amount, cur), n),
         onTap: onJumpToLending,
       ));
     }
@@ -195,7 +198,8 @@ List<AppNotification> deriveNotifications({
               id: 'sync_stale:$name',
               icon: Icons.access_time,
               accent: Colors.amber,
-              title: l.lwNotifStaleSyncTitle(name, days),
+              // gen-l10n orders these alphabetically → (days, name); pass days first.
+              title: l.lwNotifStaleSyncTitle(days, name),
               detail: l.lwNotifStaleSyncDetail,
               onTap: onJumpToManagement,
             ));

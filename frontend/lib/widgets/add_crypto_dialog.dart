@@ -69,6 +69,17 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
     _nameController.text = _info.label;
   }
 
+  @override
+  void dispose() {
+    // This State owns these four controllers; dispose them or every
+    // open/close of the add-crypto dialog leaks them.
+    _nameController.dispose();
+    _apiKeyController.dispose();
+    _apiSecretController.dispose();
+    _apiPassController.dispose();
+    super.dispose();
+  }
+
   Future<void> _openApiDocs() async {
     final url = _info.apiDocsUrl;
     // launchUrl can throw if no handler is registered; surface a hint with

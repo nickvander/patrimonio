@@ -720,10 +720,20 @@ class _BudgetsCardState extends State<BudgetsCard> {
       },
     );
 
+    // Snapshot the entered text, then dispose the per-category controllers
+    // on BOTH the save and cancel paths — this method owns them, so without
+    // this they leak (categories × number of times the editor is opened).
+    final entered = {
+      for (final entry in controllers.entries) entry.key: entry.value.text
+    };
+    for (final ctrl in controllers.values) {
+      ctrl.dispose();
+    }
+
     if (saved != true) return;
     final next = <String, double>{};
-    controllers.forEach((cat, ctrl) {
-      final reported = double.tryParse(ctrl.text);
+    entered.forEach((cat, text) {
+      final reported = double.tryParse(text);
       if (reported != null && reported > 0) {
         // Store in USD (backend storage unit); divide out the conversion
         // factor used in display.

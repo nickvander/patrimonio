@@ -425,7 +425,8 @@ class _ImportScreenState extends State<ImportScreen> {
           SnackBar(
             content: Text(
               autoDeselected > 0
-                  ? l.impFoundWithAutoDeselected(msg, autoDeselected)
+                  // gen-l10n orders these alphabetically → (count, message); pass count first.
+                  ? l.impFoundWithAutoDeselected(autoDeselected, msg)
                   : msg,
             ),
           ),

@@ -913,7 +913,8 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
               child: Text(
                 inst.isEmpty
                     ? descriptor
-                    : l.pfInstDescriptor(inst, descriptor),
+                    // gen-l10n orders these alphabetically → (descriptor, inst); pass descriptor first.
+                    : l.pfInstDescriptor(descriptor, inst),
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,

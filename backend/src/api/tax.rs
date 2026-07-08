@@ -91,7 +91,9 @@ async fn get_tax_summary(
             tracing::error!("Failed to calculate tax estimation: {}", e);
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": e.to_string() })),
+                // Generic message to the client; the real error is logged
+                // via tracing::error! above (§1: never leak internals on a 500).
+                Json(serde_json::json!({ "error": "Internal server error" })),
             )
                 .into_response()
         }
@@ -113,7 +115,9 @@ async fn get_tax_transactions(
              tracing::error!("Failed to fetch taxable transactions: {}", e);
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": e.to_string() })),
+                // Generic message to the client; the real error is logged
+                // via tracing::error! above (§1: never leak internals on a 500).
+                Json(serde_json::json!({ "error": "Internal server error" })),
             )
                 .into_response()
         }
@@ -142,7 +146,9 @@ async fn get_tax_disposals(
             tracing::error!("Failed to fetch lot disposals: {}", e);
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": e.to_string() })),
+                // Generic message to the client; the real error is logged
+                // via tracing::error! above (§1: never leak internals on a 500).
+                Json(serde_json::json!({ "error": "Internal server error" })),
             )
                 .into_response()
         }
@@ -175,7 +181,9 @@ async fn get_tax_unrealized(
             tracing::error!("Failed to compute unrealized lots: {}", e);
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": e.to_string() })),
+                // Generic message to the client; the real error is logged
+                // via tracing::error! above (§1: never leak internals on a 500).
+                Json(serde_json::json!({ "error": "Internal server error" })),
             )
                 .into_response()
         }
@@ -204,7 +212,9 @@ async fn get_fbar_status(
             tracing::error!("Failed to compute FBAR status: {}", e);
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": e.to_string() })),
+                // Generic message to the client; the real error is logged
+                // via tracing::error! above (§1: never leak internals on a 500).
+                Json(serde_json::json!({ "error": "Internal server error" })),
             )
                 .into_response()
         }
@@ -234,7 +244,9 @@ async fn get_retirement_contributions(
             tracing::error!("Failed to compute retirement contributions: {}", e);
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": e.to_string() })),
+                // Generic message to the client; the real error is logged
+                // via tracing::error! above (§1: never leak internals on a 500).
+                Json(serde_json::json!({ "error": "Internal server error" })),
             )
                 .into_response()
         }
@@ -252,9 +264,12 @@ async fn export_tax_csv(
     let transactions = match TaxService::get_taxable_transactions(&state.db, year, ctx.user_id).await {
         Ok(t) => t,
         Err(e) => {
+            tracing::error!("Failed to fetch taxable transactions (export): {}", e);
             return (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": e.to_string() })),
+                // Generic message to the client; the real error is logged
+                // via tracing::error! above (§1: never leak internals on a 500).
+                Json(serde_json::json!({ "error": "Internal server error" })),
             )
                 .into_response();
         }
@@ -492,9 +507,12 @@ async fn export_tax_pdf(
     let estimation = match TaxService::calculate_yearly_tax(&state.db, year, &status, ctx.user_id).await {
         Ok(est) => est,
         Err(e) => {
+            tracing::error!("Failed to calculate tax estimation (export): {}", e);
             return (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": e.to_string() })),
+                // Generic message to the client; the real error is logged
+                // via tracing::error! above (§1: never leak internals on a 500).
+                Json(serde_json::json!({ "error": "Internal server error" })),
             ).into_response();
         }
     };
