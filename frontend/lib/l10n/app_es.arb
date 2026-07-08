@@ -2661,5 +2661,7 @@
   "rebRemoveConfirmTitle": "¿Quitar objetivos?",
   "rebRemoveConfirmBody": "La tarjeta vuelve a su estado inicial. Tus posiciones no se ven afectadas.",
   "rebSaveError": "No se pudieron guardar los objetivos. Inténtalo de nuevo.",
-  "rebRemoveError": "No se pudieron quitar los objetivos. Inténtalo de nuevo."
+  "rebRemoveError": "No se pudieron quitar los objetivos. Inténtalo de nuevo.",
+  "nwMoversSince": "Desde {date}",
+  "nwMoversToggleTooltip": "Qué impulsó este cambio"
 }

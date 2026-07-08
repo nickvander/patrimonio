@@ -3434,5 +3434,18 @@
   "rebRemoveError": "Couldn't remove targets — try again.",
   "@rebRemoveError": {
     "description": "WS2r4: snackbar when clearing the targets fails and is reverted."
+  },
+  "nwMoversSince": "Since {date}",
+  "@nwMoversSince": {
+    "description": "WS-B: label for the since-baseline net-worth movers section under the delta chips; {date} is the baseline snapshot date (e.g. 'Jun 8').",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "nwMoversToggleTooltip": "What drove this change",
+  "@nwMoversToggleTooltip": {
+    "description": "WS-B: tooltip / accessibility label on the expandable movers row that reveals the top institution movers."
   }
 }

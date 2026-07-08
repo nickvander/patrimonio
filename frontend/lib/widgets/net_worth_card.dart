@@ -44,6 +44,11 @@ class _NetWorthCardState extends State<NetWorthCard> {
   // prefer the detailed view don't have to flip it every refresh.
   late bool _detailed = Preferences.getNetWorthDetailed();
 
+  // The "since <baseline>: what drove the change" movers section sits under
+  // the delta chips and is collapsed by default — it's attribution detail the
+  // hero → delta reading order shouldn't be forced through.
+  bool _moversExpanded = false;
+
   // The widget body below used to live on the StatelessWidget. To avoid
   // touching every `xxx` → `widget.xxx` access, expose passthroughs.
   double get netWorth => widget.netWorth;
@@ -288,6 +293,10 @@ class _NetWorthCardState extends State<NetWorthCard> {
             child: Wrap(spacing: 8, runSpacing: 6, children: chips),
           );
         }),
+        // "Since <baseline>: <total Δ> · <top institution movers>" — the
+        // attribution for the MoM delta above. Reuses the same baseline and
+        // guards as the chip; collapsed by default.
+        _buildMoversSection(),
         if (_breakdownEntries.length >= 2) ...[
           const SizedBox(height: 8),
           Wrap(
@@ -378,6 +387,154 @@ class _NetWorthCardState extends State<NetWorthCard> {
         const SizedBox(width: 16),
         Flexible(child: rightSide),
       ],
+    );
+  }
+
+  /// Expandable "what drove the change" section under the delta chips. Reuses
+  /// the MoM baseline (one month before the latest snapshot — the same one the
+  /// MoM chip picks) so the reading order stays hero → delta → movers. Diffs
+  /// each institution latest-vs-baseline and shows the top 3 by absolute
+  /// change. Hidden when there's no plausible MoM delta (which already covers
+  /// < 2 snapshots, no comparable point, negative/onboarding-inflated baselines
+  /// via `_computeMomYoyDeltas` + `_plausiblePct`) or no `by_institution` data.
+  Widget _buildMoversSection() {
+    final mom = _computeMomYoyDeltas(history).mom;
+    if (mom == null) return const SizedBox.shrink();
+    final latestDate = _latestSnapshotDate(history);
+    if (latestDate == null) return const SizedBox.shrink();
+    // Same target the MoM chip diffs against; the movers helper snaps to the
+    // nearest snapshot within +/-5 days, matching `_computeMomYoyDeltas`.
+    final baselineDate =
+        DateTime(latestDate.year, latestDate.month - 1, latestDate.day);
+    final movers = topInstitutionMovers(history, baselineDate);
+    if (movers.isEmpty) return const SizedBox.shrink();
+
+    final l = AppLocalizations.of(context);
+    final totalAmount = mom.amount * conversionFactor;
+    final totalUp = totalAmount >= 0;
+    final totalColor = totalUp ? context.positive : context.negative;
+    final sinceLabel =
+        l.nwMoversSince(DateFormat('MMM d').format(baselineDate));
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Tappable summary row: "Since <date>  ↑ +$X" + expand chevron.
+          Tooltip(
+            message: l.nwMoversToggleTooltip,
+            child: Semantics(
+              button: true,
+              expanded: _moversExpanded,
+              label: l.nwMoversToggleTooltip,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () =>
+                    setState(() => _moversExpanded = !_moversExpanded),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        sinceLabel,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: context.textMuted,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        totalUp ? Icons.arrow_upward : Icons.arrow_downward,
+                        color: totalColor,
+                        size: 13,
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        '${totalUp ? '+' : '−'}'
+                        '${currencyFormat.format(totalAmount.abs())}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: totalColor,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        _moversExpanded
+                            ? Icons.expand_less
+                            : Icons.expand_more,
+                        color: context.textMuted,
+                        size: 16,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (_moversExpanded) ...[
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: movers.map(_moverChip).toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// A single institution mover: `↑ Institution +$Y`. Up = positive hue,
+  /// down = negative. The delta is base-unit and scaled to reporting currency
+  /// here, matching the tooltip/hero math elsewhere in the card.
+  Widget _moverChip(({String name, double delta}) mover) {
+    final up = mover.delta >= 0;
+    final color = up ? context.positive : context.negative;
+    final amount = mover.delta.abs() * conversionFactor;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(up ? Icons.arrow_upward : Icons.arrow_downward,
+              color: color, size: 11),
+          const SizedBox(width: 3),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 120),
+            child: Text(
+              mover.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: context.textSubtle,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '${up ? '+' : '−'}${currencyFormat.format(amount)}',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: color,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -957,6 +1114,79 @@ _NetWorthDelta? _computeDelta(List<dynamic> history) {
     mom: deltaTo(DateTime(d.year, d.month - 1, d.day), 'MoM'),
     yoy: deltaTo(DateTime(d.year - 1, d.month, d.day), 'YoY'),
   );
+}
+
+/// Latest snapshot date in `history`, or null when none parse. Used to anchor
+/// the movers baseline (one month back) the same way `_computeMomYoyDeltas`
+/// anchors the MoM chip.
+DateTime? _latestSnapshotDate(List<dynamic> history) {
+  DateTime? latest;
+  for (final raw in history) {
+    if (raw is! Map) continue;
+    final ds = raw['date']?.toString();
+    if (ds == null) continue;
+    final dt = DateTime.tryParse(ds);
+    if (dt == null) continue;
+    if (latest == null || dt.isAfter(latest)) latest = dt;
+  }
+  return latest;
+}
+
+/// Per-institution net-worth movers between the baseline snapshot (the one
+/// nearest [baselineDate] within +/-5 days — the same selection
+/// `_computeMomYoyDeltas` uses) and the latest snapshot. Each institution's
+/// `by_institution` value is diffed latest-vs-baseline, sorted by absolute
+/// change (largest first), and the top 3 are returned. Deltas are in the
+/// history's base units (the caller scales to reporting currency).
+///
+/// Returns an empty list when there are < 2 parseable snapshots, no baseline
+/// point within tolerance, or neither endpoint carries `by_institution` data —
+/// so the caller can hide the section.
+List<({String name, double delta})> topInstitutionMovers(
+    List<dynamic> history, DateTime baselineDate) {
+  final points = <({DateTime date, Map<String, dynamic> byInst})>[];
+  for (final raw in history) {
+    if (raw is! Map<String, dynamic>) continue;
+    final ds = raw['date']?.toString();
+    if (ds == null) continue;
+    final dt = DateTime.tryParse(ds);
+    if (dt == null) continue;
+    final byInst =
+        (raw['by_institution'] as Map?)?.cast<String, dynamic>() ?? {};
+    points.add((date: dt, byInst: byInst));
+  }
+  if (points.length < 2) return const [];
+  points.sort((a, b) => a.date.compareTo(b.date));
+  final latest = points.last;
+
+  // Nearest baseline point within +/-5 days (matches _computeMomYoyDeltas).
+  // Records are value types, so skip the latest by index rather than identity.
+  ({DateTime date, Map<String, dynamic> byInst})? baseline;
+  int? bestDist;
+  for (int i = 0; i < points.length - 1; i++) {
+    final p = points[i];
+    final dist = p.date.difference(baselineDate).inDays.abs();
+    if (dist <= 5 && (bestDist == null || dist < bestDist)) {
+      baseline = p;
+      bestDist = dist;
+    }
+  }
+  if (baseline == null) return const [];
+
+  // No institution data on either endpoint → nothing to attribute.
+  if (latest.byInst.isEmpty && baseline.byInst.isEmpty) return const [];
+
+  final names = <String>{...latest.byInst.keys, ...baseline.byInst.keys};
+  final movers = <({String name, double delta})>[];
+  for (final name in names) {
+    final latestVal = (latest.byInst[name] as num?)?.toDouble() ?? 0.0;
+    final baseVal = (baseline.byInst[name] as num?)?.toDouble() ?? 0.0;
+    final delta = latestVal - baseVal;
+    if (delta == 0) continue;
+    movers.add((name: name, delta: delta));
+  }
+  movers.sort((a, b) => b.delta.abs().compareTo(a.delta.abs()));
+  return movers.take(3).toList();
 }
 
 class _DeltaPoint {
