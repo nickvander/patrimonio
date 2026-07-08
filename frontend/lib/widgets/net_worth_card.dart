@@ -1,3 +1,4 @@
+import '../utils/percent_format.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
@@ -1277,7 +1278,7 @@ class _DeltaChip extends StatelessWidget {
                 final pctStr = pct == null
                     ? ''
                     : ' (${isUp ? '+' : ''}'
-                        '${pct.toStringAsFixed(periodTag != null ? 1 : 2)}%)';
+                        '${formatPercent(context, pct, digits: periodTag != null ? 1 : 2)})';
                 final amt =
                     '${isUp ? '+' : '−'}${currencyFormat.format(amount.abs())}';
                 return periodTag != null

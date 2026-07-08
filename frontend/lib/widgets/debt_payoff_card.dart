@@ -1,3 +1,4 @@
+import '../utils/percent_format.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/api_service.dart';
@@ -412,7 +413,7 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
             Expanded(
               child: _metric(
                 l.dpWeightedApr,
-                '${(s.weightedApr * 100).toStringAsFixed(2)}%',
+                formatPercent(context, s.weightedApr * 100, digits: 2),
               ),
             ),
             Expanded(
@@ -508,7 +509,7 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '${(d.aprAnnual * 100).toStringAsFixed(2)}%',
+                    formatPercent(context, d.aprAnnual * 100, digits: 2),
                     style: TextStyle(
                       color: context.pinkAccent,
                       fontSize: 12,

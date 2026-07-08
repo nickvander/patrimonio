@@ -1,5 +1,4 @@
 import 'package:flutter/widgets.dart';
-import 'package:intl/intl.dart';
 
 /// Locale-aware percentage formatter.
 ///
@@ -12,13 +11,15 @@ import 'package:intl/intl.dart';
 /// - `es` → `"12,5 %"` (comma decimal, non-breaking space before `%`), the
 ///   Spanish convention.
 ///
-/// The sign is whatever `NumberFormat` produces for the locale (a bare `-` for
-/// negatives, nothing for positives). Call sites that want an explicit leading
-/// `+` keep prepending it themselves and pass the raw value — since positives
-/// carry no sign here, the two never collide.
+/// Negatives keep their bare `-`; positives carry no sign, so call sites that
+/// want an explicit leading `+` keep prepending it and the two never collide.
 ///
-/// Grouping is turned off so a value like `1234.5` stays `"1234.5%"` in en
-/// (matching `toStringAsFixed`) rather than gaining a thousands separator.
+/// The app ships exactly two locales (en, es), so rather than route through
+/// `NumberFormat` — whose `decimalPercentPattern` multiplies by 100 and
+/// round-trips the value, shifting exact `.5` boundaries by one digit vs the
+/// old `toStringAsFixed` — this formats the number directly. That keeps the en
+/// output *byte-identical* to the previous `'${value.toStringAsFixed(digits)}%'`
+/// and gives es the comma decimal + non-breaking space it expects.
 String formatPercent(BuildContext context, double value, {int digits = 1}) =>
     formatPercentLocale(
       Localizations.localeOf(context).toString(),
@@ -30,10 +31,10 @@ String formatPercent(BuildContext context, double value, {int digits = 1}) =>
 /// [BuildContext] in scope (e.g. the pure `deriveNotifications` builder, which
 /// only carries an `AppLocalizations` — pass its `localeName`).
 String formatPercentLocale(String locale, double value, {int digits = 1}) {
-  final fmt = NumberFormat.decimalPercentPattern(
-    locale: locale,
-    decimalDigits: digits,
-  )..turnOffGrouping();
-  // decimalPercentPattern multiplies by 100, so feed it the ratio.
-  return fmt.format(value / 100);
+  // toStringAsFixed IS the old en behavior — reuse it verbatim so en can't drift.
+  final fixed = value.toStringAsFixed(digits);
+  if (!locale.toLowerCase().startsWith('es')) return '$fixed%';
+  // es: comma decimal + non-breaking space before %. Grouping is off (a bare
+  // toStringAsFixed has none), so the only '.' is the decimal point.
+  return '${fixed.replaceAll('.', ',')}\u00A0%';
 }
