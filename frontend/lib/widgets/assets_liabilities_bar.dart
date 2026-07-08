@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
+import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 
 /// Thin horizontal split-bar showing the ratio of assets to liabilities
@@ -134,7 +135,7 @@ class _LegendDot extends StatelessWidget {
         ),
         const SizedBox(width: 6),
         Text(
-          '$label ${(pct * 100).toStringAsFixed(0)}%',
+          '$label ${formatPercent(context, pct * 100, digits: 0)}',
           style: TextStyle(
             color: Theme.of(context).colorScheme.outline,
             fontSize: 11,

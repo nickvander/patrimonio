@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/currency.dart';
 import '../utils/mask_aware_name.dart';
+import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 
@@ -87,7 +88,9 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
                   ),
                 ),
                 Text(
-                  hasLimits ? '${totalUtilization.toStringAsFixed(1)}%' : '—',
+                  hasLimits
+                      ? formatPercent(context, totalUtilization, digits: 1)
+                      : '—',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,

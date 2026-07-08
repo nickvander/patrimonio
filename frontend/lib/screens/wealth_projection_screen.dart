@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
@@ -805,7 +806,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   }) {
     String displayValue;
     if (isPercent) {
-      displayValue = '${(value * 100).toStringAsFixed(1)}%';
+      displayValue = formatPercent(context, value * 100, digits: 1);
     } else if (isCurrency) {
       final reported = value * widget.conversionFactor;
       displayValue = widget.currencyFormat.format(reported);
@@ -1884,7 +1885,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     final cards = <Widget>[
       _buildMilestoneCard(
         title: l.projSuccessRate,
-        value: '${(successRate * 100).toStringAsFixed(0)}%',
+        value: formatPercent(context, successRate * 100, digits: 0),
         subtitle: l.projSuccessRateSub,
         icon: Icons.verified_rounded,
         color: _successColor(successRate),

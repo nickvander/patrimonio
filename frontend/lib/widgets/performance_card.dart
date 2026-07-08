@@ -3,7 +3,9 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../components/date_range_selector.dart';
 import '../services/api_service.dart';
+import '../utils/chart_time_axis.dart';
 import '../utils/chart_touch.dart';
+import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 import '../l10n/app_localizations.dart';
 
@@ -357,11 +359,23 @@ class _PerformanceCardState extends State<PerformanceCard> {
     // contributions with market gains. The honest return is the TWR (above,
     // when priceable) or the contribution-weighted block below.
     final filtered = _filterByRange(_history);
-    final spots = <FlSpot>[];
-    for (var i = 0; i < filtered.length; i++) {
-      final v = (filtered[i]['value_usd'] as num?)?.toDouble() ?? 0.0;
-      spots.add(FlSpot(i.toDouble(), v * widget.conversionFactor));
+    // Time-proportional x-axis (decision ported from the instrument sheet): x
+    // is the day-offset from the first sample, so a multi-week data gap shows
+    // as a wide flat span instead of a single step. `close` carries the
+    // already-currency-converted value, so the tooltip reads y directly.
+    final valuePoints = <({DateTime date, double close})>[];
+    for (final p in filtered) {
+      final d = DateTime.tryParse(p['date']?.toString() ?? '');
+      if (d == null) continue;
+      final v = (p['value_usd'] as num?)?.toDouble() ?? 0.0;
+      valuePoints.add((date: d, close: v * widget.conversionFactor));
     }
+    final dailyValues = dedupeDailyCloses(valuePoints);
+    final spots = dayOffsetSpots(dailyValues);
+    final valueX0 = dailyValues.isNotEmpty
+        ? dailyValues.first.date
+        : DateTime.now().toUtc();
+    final valueMaxX = spots.isNotEmpty ? spots.last.x : 0.0;
     final firstV = filtered.isNotEmpty
         ? (filtered.first['value_usd'] as num?)?.toDouble() ?? 0.0
         : 0.0;
@@ -388,33 +402,29 @@ class _PerformanceCardState extends State<PerformanceCard> {
                       gridData: const FlGridData(show: false),
                       titlesData: const FlTitlesData(show: false),
                       borderData: FlBorderData(show: false),
-                      // The x-axis is INDEX-spaced (round-3 decision: samples
-                      // are near-daily, so index spacing avoids gap
-                      // artifacts). Tooltips therefore index into `filtered`
-                      // for the date — never treat x as a day offset.
+                      // The x-axis is now DAY-OFFSET-spaced (ported from the
+                      // instrument sheet): the touched spot's own x is days
+                      // since `valueX0`, so the date comes from that offset —
+                      // an index into `filtered` would be wrong across a gap.
                       lineTouchData: standardLineTouch(
                         context,
                         items: (ctx, touchedSpots) {
                           return touchedSpots.map((spot) {
-                            final idx = spot.x
-                                .toInt()
-                                .clamp(0, filtered.length - 1);
-                            final date = DateTime.tryParse(
-                                filtered[idx]['date']?.toString() ?? '');
+                            final date = valueX0
+                                .add(Duration(days: spot.x.round()));
                             return LineTooltipItem(
                               '',
                               TextStyle(color: ctx.tooltipOnSurface),
                               children: [
-                                if (date != null)
-                                  TextSpan(
-                                    text:
-                                        '${DateFormat('MMM d, y').format(date)}\n',
-                                    style: TextStyle(
-                                      color: ctx.tooltipOnSurfaceMuted,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.normal,
-                                    ),
+                                TextSpan(
+                                  text:
+                                      '${DateFormat('MMM d, y').format(date)}\n',
+                                  style: TextStyle(
+                                    color: ctx.tooltipOnSurfaceMuted,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.normal,
                                   ),
+                                ),
                                 // spot.y already carries conversionFactor
                                 // (applied when the spots were built above),
                                 // so format directly — _money would double-
@@ -436,7 +446,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
                         },
                       ),
                       minX: 0,
-                      maxX: (spots.length - 1).toDouble(),
+                      maxX: valueMaxX,
                       lineBarsData: [
                         LineChartBarData(
                           spots: spots,
@@ -566,13 +576,30 @@ class _PerformanceCardState extends State<PerformanceCard> {
     // selected window: TWR[a,b] = index(b)/index(a) − 1.
     final baseT = (filtered.first['twr'] as num?)?.toDouble() ?? 1.0;
     final baseS = (filtered.first['sp'] as num?)?.toDouble() ?? 1.0;
+    // Time-proportional x-axis: x is the day-offset from the first sample so a
+    // gap in the series occupies proportional x-range (ported from the
+    // instrument sheet). `spByDay` lets the tooltip recover the benchmark value
+    // for the hovered day — an index into `spSpots` breaks once x is an offset.
+    DateTime dayOf(dynamic p) {
+      final d = DateTime.tryParse(p['date']?.toString() ?? '');
+      return d == null ? DateTime.utc(2000) : DateTime.utc(d.year, d.month, d.day);
+    }
+
+    final twrX0 = dayOf(filtered.first);
     final yourSpots = <FlSpot>[];
     final spSpots = <FlSpot>[];
+    final spByDay = <int, double>{};
+    var twrMaxX = 0.0;
     for (var i = 0; i < filtered.length; i++) {
+      final xOff =
+          dayOf(filtered[i]).difference(twrX0).inDays.toDouble();
       final t = (filtered[i]['twr'] as num?)?.toDouble() ?? baseT;
       final s = (filtered[i]['sp'] as num?)?.toDouble() ?? baseS;
-      yourSpots.add(FlSpot(i.toDouble(), baseT != 0 ? (t / baseT - 1) * 100 : 0));
-      spSpots.add(FlSpot(i.toDouble(), baseS != 0 ? (s / baseS - 1) * 100 : 0));
+      final sy = baseS != 0 ? (s / baseS - 1) * 100 : 0.0;
+      yourSpots.add(FlSpot(xOff, baseT != 0 ? (t / baseT - 1) * 100 : 0));
+      spSpots.add(FlSpot(xOff, sy));
+      spByDay[xOff.round()] = sy;
+      if (xOff > twrMaxX) twrMaxX = xOff;
     }
     final yourPct = yourSpots.last.y;
     final spPct = spSpots.last.y;
@@ -601,39 +628,36 @@ class _PerformanceCardState extends State<PerformanceCard> {
                 gridData: const FlGridData(show: false),
                 titlesData: const FlTitlesData(show: false),
                 borderData: FlBorderData(show: false),
-                // Index-spaced x (same convention as the value chart):
-                // tooltips index into `filtered` for the date. One merged
-                // tooltip body on the "you" bar (barIndex 1) carrying both
-                // series; the benchmark bar returns null (net-worth's
+                // Day-offset x (same convention as the value chart): the
+                // hovered spot's x is days since `twrX0`, so the date comes
+                // from that offset and the benchmark value from `spByDay` —
+                // indexing into `filtered`/`spSpots` breaks across a gap. One
+                // merged tooltip body on the "you" bar (barIndex 1) carrying
+                // both series; the benchmark bar returns null (net-worth's
                 // only-one-body pattern).
                 lineTouchData: standardLineTouch(
                   context,
                   items: (ctx, touchedSpots) {
                     String pct(double p) =>
-                        '${p >= 0 ? '+' : ''}${p.toStringAsFixed(1)}%';
+                        '${p >= 0 ? '+' : ''}${formatPercent(context, p, digits: 1)}';
                     return touchedSpots.map((spot) {
                       if (spot.barIndex != 1) return null;
-                      final idx =
-                          spot.x.toInt().clamp(0, filtered.length - 1);
-                      final date = DateTime.tryParse(
-                          filtered[idx]['date']?.toString() ?? '');
-                      final benchY =
-                          spSpots[spot.x.toInt().clamp(0, spSpots.length - 1)]
-                              .y;
+                      final day = spot.x.round();
+                      final date = twrX0.add(Duration(days: day));
+                      final benchY = spByDay[day] ?? 0.0;
                       return LineTooltipItem(
                         '',
                         TextStyle(color: ctx.tooltipOnSurface),
                         children: [
-                          if (date != null)
-                            TextSpan(
-                              text:
-                                  '${DateFormat('MMM d, y').format(date)}\n',
-                              style: TextStyle(
-                                color: ctx.tooltipOnSurfaceMuted,
-                                fontSize: 11,
-                                fontWeight: FontWeight.normal,
-                              ),
+                          TextSpan(
+                            text:
+                                '${DateFormat('MMM d, y').format(date)}\n',
+                            style: TextStyle(
+                              color: ctx.tooltipOnSurfaceMuted,
+                              fontSize: 11,
+                              fontWeight: FontWeight.normal,
                             ),
+                          ),
                           TextSpan(
                             text: '${l.lwPerfTwrYou} ${pct(spot.y)}\n',
                             style: TextStyle(
@@ -664,7 +688,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
                   },
                 ),
                 minX: 0,
-                maxX: (yourSpots.length - 1).toDouble(),
+                maxX: twrMaxX,
                 lineBarsData: [
                   // S&P first (drawn under), dashed + muted.
                   LineChartBarData(
@@ -734,7 +758,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
           Text(label, style: TextStyle(color: context.textSubtle, fontSize: 11)),
           const SizedBox(height: 4),
           Text(
-            '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(1)}%',
+            '${pct >= 0 ? '+' : ''}${formatPercent(context, pct, digits: 1)}',
             style: TextStyle(
               color: color,
               fontSize: 20,
@@ -779,7 +803,8 @@ class _PerformanceCardState extends State<PerformanceCard> {
     final maxVal =
         (yourVal > benchVal ? yourVal : benchVal).clamp(1, double.infinity);
     final benchLabel = _benchmarkLabel(l);
-    String pct(double p) => '${p >= 0 ? '+' : ''}${p.toStringAsFixed(1)}%';
+    String pct(double p) =>
+        '${p >= 0 ? '+' : ''}${formatPercent(context, p, digits: 1)}';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

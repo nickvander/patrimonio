@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
+import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
@@ -1095,7 +1096,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       child: Text(
         [
           'Div: ${fmt.format(income)}${es ? '/año' : '/yr'}',
-          if (yieldPct != null) '${yieldPct.toStringAsFixed(2)}%',
+          if (yieldPct != null) formatPercent(context, yieldPct, digits: 2),
           if (next != null && next.isNotEmpty) '${es ? 'próx.' : 'next'} ~$next',
         ].join('  ·  '),
         style: TextStyle(

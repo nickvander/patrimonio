@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import '../services/preferences.dart';
 import '../utils/currency.dart';
 import '../utils/mask_aware_name.dart';
+import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 import '../utils/url_opener.dart';
 import 'dividend_calendar.dart';
@@ -405,7 +406,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
               // fragments. excludeSemantics folds the inner Texts away;
               // the pills' visual tooltips (overlay-based) are unaffected.
               final allTimeText =
-                  '${totalGainLoss > 0 ? '+' : totalGainLoss < 0 ? '-' : ''}${widget.currencyFormat.format(totalGainLoss.abs())} (${totalGainLossPct.toStringAsFixed(2)}%)';
+                  '${totalGainLoss > 0 ? '+' : totalGainLoss < 0 ? '-' : ''}${widget.currencyFormat.format(totalGainLoss.abs())} (${formatPercent(context, totalGainLossPct, digits: 2)})';
               final dayText = _dayChangeText();
               final heroLabel = [
                 l.axPortfolioHero(
@@ -595,7 +596,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
     final amount = '$sign${widget.currencyFormat.format(converted.abs())}';
     return dayPct == null
         ? amount
-        : '$amount (${dayPct > 0 ? '+' : dayPct < 0 ? '-' : ''}${dayPct.abs().toStringAsFixed(2)}%)';
+        : '$amount (${dayPct > 0 ? '+' : dayPct < 0 ? '-' : ''}${formatPercent(context, dayPct.abs(), digits: 2)})';
   }
 
   /// "Today" pill: the portfolio's change since the last stored close
@@ -825,7 +826,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                   const SizedBox(width: 2),
                   Flexible(
                     child: Text(
-                      '${positive ? '+' : ''}$gainLossStr (${gainLossPct.toStringAsFixed(2)}%)',
+                      '${positive ? '+' : ''}$gainLossStr (${formatPercent(context, gainLossPct, digits: 2)})',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -1048,7 +1049,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
           color: context.positive,
           label: l.pfBiggestGainer,
           value: _displayTicker(gainer),
-          trailing: '+${gainerPct.toStringAsFixed(2)}%',
+          trailing: '+${formatPercent(context, gainerPct, digits: 2)}',
         ),
       if (loser != null && loserPct < 0)
         _signalChip(
@@ -1056,7 +1057,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
           color: context.negative,
           label: l.pfBiggestLoser,
           value: _displayTicker(loser),
-          trailing: '${loserPct.toStringAsFixed(2)}%',
+          trailing: formatPercent(context, loserPct, digits: 2),
         ),
       if (concentrated)
         _signalChip(
@@ -1064,7 +1065,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
           color: context.warning,
           label: l.pfConcentrated,
           value: _displayTicker(top),
-          trailing: '${(topShare * 100).toStringAsFixed(0)}%',
+          trailing: formatPercent(context, topShare * 100, digits: 0),
         ),
     ];
 
@@ -1496,7 +1497,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
           displaySymbol,
           _formatQuantity(qty),
           widget.currencyFormat.format(value),
-          pct == null ? '—' : '${isGain ? '+' : ''}${pct.toStringAsFixed(2)}%',
+          pct == null ? '—' : '${isGain ? '+' : ''}${formatPercent(context, pct, digits: 2)}',
         ),
         child: InkWell(
           onTap: canOpenSheet
@@ -1581,7 +1582,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                     ),
                   )
                 : Text(
-                    '${isGain ? '+' : ''}${pct.toStringAsFixed(2)}%',
+                    '${isGain ? '+' : ''}${formatPercent(context, pct, digits: 2)}',
                     textAlign: TextAlign.right,
                     style: TextStyle(
                       fontSize: 12,
@@ -2647,7 +2648,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
               children: [
                 if (dayPct != null)
                   Text(
-                    '${signOf(dayPct)}${dayPct.abs().toStringAsFixed(2)}%',
+                    '${signOf(dayPct)}${formatPercent(context, dayPct.abs(), digits: 2)}',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -2735,7 +2736,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                '${isGain ? '+' : ''}${gainPct.toStringAsFixed(2)}%',
+                '${isGain ? '+' : ''}${formatPercent(context, gainPct, digits: 2)}',
                 style: TextStyle(
                   color: isGain ? context.positive : context.negative,
                   fontWeight: FontWeight.bold,
@@ -3396,7 +3397,7 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
                       )
                     else
                       Text(
-                        '${isGain ? '+' : ''}${gainPct.toStringAsFixed(2)}%',
+                        '${isGain ? '+' : ''}${formatPercent(context, gainPct, digits: 2)}',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -3765,7 +3766,7 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
                     l.divBlendedYield,
                     blendedYield == null
                         ? '—'
-                        : '${blendedYield.toStringAsFixed(2)}%',
+                        : formatPercent(context, blendedYield, digits: 2),
                     context.textPrimary,
                   ),
                 ),
@@ -3958,7 +3959,7 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
                         Text(
                           yieldPct == null
                               ? l.divPaymentsPerYear(perYear)
-                              : '${yieldPct.toStringAsFixed(2)}% · ${l.divPaymentsPerYear(perYear)}',
+                              : '${formatPercent(context, yieldPct, digits: 2)} · ${l.divPaymentsPerYear(perYear)}',
                           style: TextStyle(
                               color: context.textFaint, fontSize: 11),
                         ),

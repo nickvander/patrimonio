@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 import '../utils/account_category.dart';
 import '../utils/category.dart';
@@ -240,7 +241,7 @@ List<AppNotification> deriveNotifications({
         // Stay quiet on a flat day — a sub-0.25% wobble isn't worth a badge.
         if (pct.abs() >= 0.25) {
           final amount = money(delta.abs(), 'USD');
-          final pctStr = '${pct.abs().toStringAsFixed(1)}%';
+          final pctStr = formatPercentLocale(l.localeName, pct.abs(), digits: 1);
           final detail =
               l.lwNotifNetWorthSinceSyncDetail(DateFormat('MMM d').format(latestDt));
           final up = delta >= 0;

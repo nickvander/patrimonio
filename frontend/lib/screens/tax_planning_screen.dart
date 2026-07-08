@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
 import '../utils/url_opener.dart';
@@ -1546,10 +1547,10 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
                 '${[
                   if (ordinaryMarginalRate != null)
                     '${l.taxHarvestMarginalOrdinary} '
-                        '${(ordinaryMarginalRate * 100).toStringAsFixed(1)}%',
+                        '${formatPercent(context, ordinaryMarginalRate * 100, digits: 1)}',
                   if (ltcgMarginalRate != null)
                     '${l.taxHarvestMarginalLtcg} '
-                        '${(ltcgMarginalRate * 100).toStringAsFixed(1)}%',
+                        '${formatPercent(context, ltcgMarginalRate * 100, digits: 1)}',
                 ].join(' · ')}',
                 style: TextStyle(fontSize: 11, color: context.textSubtle),
               ),

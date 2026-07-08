@@ -3,6 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/chart_touch.dart';
+import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 
 /// Compact "what hit my accounts this month" card pinned to the Overview.
@@ -374,7 +375,7 @@ class _SavingsRateLine extends StatelessWidget {
     final l = AppLocalizations.of(context);
     final positive = rate >= 0;
     final color = positive ? context.positive : context.pinkAccent;
-    final pctLabel = '${(rate * 100).toStringAsFixed(1)}%';
+    final pctLabel = formatPercent(context, rate * 100, digits: 1);
 
     // Delta in percentage points vs the prior month. Omitted on aggregate
     // windows / when there's no comparable prior month (priorRate null).

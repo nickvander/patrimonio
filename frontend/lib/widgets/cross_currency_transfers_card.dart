@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/currency.dart';
+import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 
 /// Lists every detected (or user-confirmed) cross-currency cash
@@ -282,7 +283,7 @@ class CrossCurrencyTransfersCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        '$sign${pct.toStringAsFixed(1)}%',
+        '$sign${formatPercent(context, pct, digits: 1)}',
         style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w700,

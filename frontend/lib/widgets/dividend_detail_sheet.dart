@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 
 /// Per-symbol dividend drill-down, opened by tapping a payer row on the
@@ -333,9 +334,12 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
       if (annualIncomeUsd != null)
         (l10n.pfDivDetailAnnualIncome, _money(annualIncomeUsd)),
       if (yieldPct != null)
-        (l10n.pfDivDetailYield, '${yieldPct.toStringAsFixed(2)}%'),
+        (l10n.pfDivDetailYield, formatPercent(context, yieldPct, digits: 2)),
       if (yieldOnCostPct != null)
-        (l10n.pfDivDetailYieldOnCost, '${yieldOnCostPct.toStringAsFixed(2)}%'),
+        (
+          l10n.pfDivDetailYieldOnCost,
+          formatPercent(context, yieldOnCostPct, digits: 2)
+        ),
       (l10n.pfDivDetailLastExDate, lastExDate ?? '—'),
       (l10n.pfDivDetailNextExDate, nextExDate ?? '—'),
     ];

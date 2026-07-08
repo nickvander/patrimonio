@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 import '../l10n/app_localizations.dart';
 import 'package:intl/intl.dart';
@@ -614,7 +615,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '${(pct * 100).toStringAsFixed(1)}%',
+                    formatPercent(context, pct * 100, digits: 1),
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w800,
@@ -704,7 +705,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
     // holdings count (items.length); type/institution bands carry the
     // breakdown rows' account count. Bands with neither omit the count.
     final valueLabel =
-        '${(pct * 100).toStringAsFixed(1)}% · ${widget.currencyFormat.format(b.value * widget.conversionFactor)}';
+        '${formatPercent(context, pct * 100, digits: 1)} · ${widget.currencyFormat.format(b.value * widget.conversionFactor)}';
     final String baseLabel;
     if (b.holdingsCount != null) {
       baseLabel =
@@ -787,7 +788,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
           Expanded(
             child: Text(
               l.lwAllocConcentration(
-                  holding, '${(share * 100).toStringAsFixed(0)}%'),
+                  holding, formatPercent(context, share * 100, digits: 0)),
               style: TextStyle(
                 color: color,
                 fontWeight: FontWeight.w600,
@@ -903,7 +904,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
           SizedBox(
             width: 40,
             child: Text(
-              '${(weight * 100).toStringAsFixed(0)}%',
+              formatPercent(context, weight * 100, digits: 0),
               textAlign: TextAlign.right,
               style: TextStyle(
                 fontSize: 11,

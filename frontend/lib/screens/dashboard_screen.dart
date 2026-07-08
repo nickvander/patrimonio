@@ -47,6 +47,7 @@ import '../utils/currency.dart';
 import '../utils/lending_summary.dart' show sumLoansConverted;
 import '../utils/sync_progress.dart';
 import '../utils/supported_banks.dart';
+import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 import '../utils/transaction_display.dart';
 import '../utils/url_opener.dart';
@@ -1016,7 +1017,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Percent move relative to the anchor. Guard a zero/negative-magnitude
     // base so we never divide by zero or print a nonsensical percent.
     final pctLabel = anchorNet.abs() > 0
-        ? ' · ${up ? '+' : '−'}${(deltaUsd.abs() / anchorNet.abs() * 100).toStringAsFixed(1)}%'
+        ? ' · ${up ? '+' : '−'}${formatPercent(context, deltaUsd.abs() / anchorNet.abs() * 100, digits: 1)}'
         : '';
     final sign = up ? '+' : '−';
     return Padding(
