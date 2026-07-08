@@ -47,6 +47,10 @@ jobs:
       # panics (it no longer silently skips), so a green run means the suite
       # genuinely ran.
       PATRIMONIO_TEST_DATABASE_URL: postgres://patrimonio:patrimonio@localhost:5432/patrimonio_test
+      # The round-4 dividend-cache integration tests read this; setting it means
+      # they RUN in CI (and panic loudly if Redis is unreachable, rather than
+      # silently skipping — same policy as the DB harness above).
+      PATRIMONIO_TEST_REDIS_URL: redis://localhost:6379
       SQLX_OFFLINE: "true"
     steps:
       - uses: actions/checkout@v4

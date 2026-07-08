@@ -702,14 +702,41 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
-    const TEST_REDIS_URL: &str = "redis://:patrimonio_dev@127.0.0.1:6380/";
+    // Local dev Redis (project convention: :6380, requirepass patrimonio_dev).
+    // CI and any explicit override set PATRIMONIO_TEST_REDIS_URL (e.g. the
+    // GitHub Actions redis service on :6379, no auth).
+    const DEV_REDIS_URL: &str = "redis://:patrimonio_dev@127.0.0.1:6380/";
 
-    /// Dev Redis client, or None (→ the caller skips) when unreachable.
+    fn test_redis_url() -> Option<String> {
+        std::env::var("PATRIMONIO_TEST_REDIS_URL").ok()
+    }
+
+    /// A pingable Redis client, or None → the caller skips.
+    ///
+    /// Skipping is only allowed when NO url is configured (a bare local
+    /// `cargo test` without the dev Redis running). When a url IS configured
+    /// (CI, or an explicit override) but the server can't be reached, this
+    /// PANICS instead of skipping — otherwise these integration tests would
+    /// silently vacuous-pass in CI, which is the exact failure mode the CI
+    /// workflow was created to prevent (see .github/workflows/test.yml).
     async fn test_redis() -> Option<redis::Client> {
-        let client = redis::Client::open(TEST_REDIS_URL).ok()?;
-        let mut conn = client.get_multiplexed_async_connection().await.ok()?;
-        let _: String = redis::cmd("PING").query_async(&mut conn).await.ok()?;
-        Some(client)
+        let configured = test_redis_url();
+        let url = configured.clone().unwrap_or_else(|| DEV_REDIS_URL.to_string());
+        let reachable = async {
+            let client = redis::Client::open(url.clone()).ok()?;
+            let mut conn = client.get_multiplexed_async_connection().await.ok()?;
+            let _: String = redis::cmd("PING").query_async(&mut conn).await.ok()?;
+            Some(client)
+        }
+        .await;
+        match (reachable, configured) {
+            (Some(client), _) => Some(client),
+            (None, Some(url)) => panic!(
+                "PATRIMONIO_TEST_REDIS_URL is set ({url}) but Redis is unreachable — \
+                 refusing to silently skip the dividend-cache integration tests"
+            ),
+            (None, None) => None,
+        }
     }
 
     async fn del_key(client: &redis::Client, key: &str) {
