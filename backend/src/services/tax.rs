@@ -1690,45 +1690,66 @@ impl TaxService {
 
         // Daily aggregate of foreign accounts' USD balances. We only sum days
         // that actually have snapshots (no forward-fill), and pick the day
-        // with the largest aggregate. COALESCE(balance_usd, 0) so a missing
-        // USD conversion doesn't NULL the whole day's sum.
-        let peak = sqlx::query(
+        // Peak DATE: the day the foreign aggregate was highest, carrying each
+        // account's last-known balance forward. Foreign accounts snapshot on
+        // different days (an HSA weekly, a Plaid card daily), so a same-day-only
+        // SUM understates the aggregate and can miss the true peak day — same
+        // carry-forward reasoning as net_worth_history / portfolio_value_history.
+        // The reported peak_aggregate itself is the sum of each account's YTD max
+        // (computed below), which is the FBAR aggregate that drives `exceeded`.
+        let snap_rows = sqlx::query(
             r#"
-            WITH foreign_snaps AS (
-                SELECT b.as_of_date,
-                       COALESCE(b.balance_usd, 0) AS bal
-                FROM balance_snapshots b
-                JOIN accounts a ON a.id = b.account_id
-                JOIN institutions i ON i.id = a.institution_id
-                WHERE b.user_id = $1
-                  AND b.as_of_date >= $2 AND b.as_of_date <= $3
-                  AND (UPPER(COALESCE(i.country, '')) NOT IN ('US', '')
-                       OR UPPER(COALESCE(a.currency, '')) = 'MXN')
-            ),
-            daily AS (
-                SELECT as_of_date, SUM(bal) AS agg
-                FROM foreign_snaps
-                GROUP BY as_of_date
-            )
-            SELECT as_of_date, agg
-            FROM daily
-            ORDER BY agg DESC, as_of_date DESC
-            LIMIT 1
+            SELECT b.as_of_date AS d, b.account_id AS account_id, b.id AS id,
+                   COALESCE(b.balance_usd, 0) AS bal
+            FROM balance_snapshots b
+            JOIN accounts a ON a.id = b.account_id
+            JOIN institutions i ON i.id = a.institution_id
+            WHERE b.user_id = $1
+              AND b.as_of_date >= $2 AND b.as_of_date <= $3
+              AND (UPPER(COALESCE(i.country, '')) NOT IN ('US', '')
+                   OR UPPER(COALESCE(a.currency, '')) = 'MXN')
+            ORDER BY b.as_of_date ASC, b.id ASC
             "#,
         )
         .bind(user_id)
         .bind(start_date)
         .bind(end_date)
-        .fetch_optional(db)
+        .fetch_all(db)
         .await?;
 
-        let (peak_aggregate_usd, peak_date): (Decimal, Option<chrono::NaiveDate>) = match peak {
-            Some(row) => (
-                row.try_get::<Decimal, _>("agg").unwrap_or_default(),
-                row.try_get::<chrono::NaiveDate, _>("as_of_date").ok(),
-            ),
-            None => (dec!(0), None),
+        let mut carried: std::collections::HashMap<uuid::Uuid, Decimal> =
+            std::collections::HashMap::new();
+        let mut cur: Option<chrono::NaiveDate> = None;
+        let mut peak_date: Option<chrono::NaiveDate> = None;
+        let mut peak_carried_agg = dec!(0);
+        // Evaluate the carried aggregate for the day we're leaving.
+        let close_day = |day: Option<chrono::NaiveDate>,
+                             carried: &std::collections::HashMap<uuid::Uuid, Decimal>,
+                             peak_date: &mut Option<chrono::NaiveDate>,
+                             peak_agg: &mut Decimal| {
+            if let Some(d) = day {
+                let agg: Decimal = carried.values().copied().sum();
+                if peak_date.is_none() || agg > *peak_agg {
+                    *peak_agg = agg;
+                    *peak_date = Some(d);
+                }
+            }
         };
+        for r in &snap_rows {
+            let Ok(d) = r.try_get::<chrono::NaiveDate, _>("d") else {
+                continue;
+            };
+            let Ok(aid) = r.try_get::<uuid::Uuid, _>("account_id") else {
+                continue;
+            };
+            if cur != Some(d) {
+                close_day(cur, &carried, &mut peak_date, &mut peak_carried_agg);
+                cur = Some(d);
+            }
+            // Duplicate rows for the same account+day: last (highest id) wins.
+            carried.insert(aid, r.try_get::<Decimal, _>("bal").unwrap_or_default());
+        }
+        close_day(cur, &carried, &mut peak_date, &mut peak_carried_agg);
 
         // Per foreign account: its balance on the peak date (its contribution
         // to the peak aggregate; 0 if it had no snapshot that exact day) and
@@ -1785,6 +1806,14 @@ impl TaxService {
                 ytd_max_usd: r.try_get("ytd_max_usd").unwrap_or_default(),
             })
             .collect();
+
+        // FBAR aggregate = sum of each foreign account's YTD maximum (FinCEN
+        // 114 asks for the maximum value of each account; the $10k threshold is
+        // their aggregate). This is the compliance-safe measure: it never
+        // under-reports, unlike a same-day sum that misses accounts snapshotted
+        // on other days.
+        let peak_aggregate_usd: Decimal =
+            foreign_accounts.iter().map(|a| a.ytd_max_usd).sum();
 
         Ok(FbarStatus {
             year,

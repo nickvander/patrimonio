@@ -2235,6 +2235,50 @@ async fn fbar_flags_aggregate_foreign_balance_crossing_10k() {
 
 #[tokio::test]
 #[serial_test::serial]
+async fn fbar_uses_sum_of_per_account_maxes_not_same_day_aggregate() {
+    // The carry-forward fix: two foreign accounts that NEVER snapshot on the
+    // same day, each peaking at 6,000 → FBAR aggregate = sum of per-account
+    // maxes = 12,000 (> 10k, must file). The old same-day-sum logic saw at most
+    // 6,000 on any single day and wrongly reported exceeded=false.
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let a = seed_account_with_country_currency(
+        &pool, user_id, "Banamex", "MX", "Cuenta A", "MXN",
+    )
+    .await;
+    let b = seed_account_with_country_currency(
+        &pool, user_id, "Nu Mexico", "MX", "Cuenta B", "MXN",
+    )
+    .await;
+    // Disjoint snapshot days — no single day holds both.
+    seed_snapshot(&pool, user_id, a, "2026-03-01", "MXN", "6000").await;
+    seed_snapshot(&pool, user_id, b, "2026-06-01", "MXN", "6000").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/tax/fbar?year=2026", None, Some(&token)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(
+        body["exceeded"],
+        serde_json::json!(true),
+        "sum of per-account maxes (12k) crosses the threshold even though no single day does: {body}"
+    );
+    assert!(
+        (body["peak_aggregate_usd"].as_f64().unwrap() - 12000.0).abs() < 0.01,
+        "aggregate is the 6k + 6k sum of maxes: {body}"
+    );
+    // Peak DATE is the carried-forward peak day: on Jun 1, A ($6k, carried) +
+    // B ($6k) = $12k, the highest the foreign aggregate ever was.
+    assert_eq!(body["peak_date"], serde_json::json!("2026-06-01"), "{body}");
+    assert_eq!(body["foreign_accounts"].as_array().unwrap().len(), 2);
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn fbar_below_threshold_and_empty_case() {
     let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
         return;
