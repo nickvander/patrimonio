@@ -1927,6 +1927,75 @@ async fn net_worth_history_aggregates_per_date_and_institution() {
 
 #[tokio::test]
 #[serial_test::serial]
+async fn net_worth_history_carries_infrequently_snapshotted_accounts_forward() {
+    // The HealthEquity bug: an account that snapshots on day 1 but NOT day 2
+    // (a weekly-syncing HSA next to daily-syncing Plaid accounts) must still
+    // be valued on day 2 at its last-known balance — otherwise it vanishes
+    // from that date's net worth AND by_institution, and the movers
+    // attribution reads its full balance as "growth from zero".
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst1, account1) = seed_account(&pool, user_id).await; // "Test Bank"
+    let inst2: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO institutions (name, institution_type, country, integration_type, sync_status, user_id) \
+         VALUES ('HealthEquity', 'brokerage', 'US', 'manual', 'ok', $1) RETURNING id",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let account2: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO accounts (institution_id, name, account_type, currency, current_balance, user_id) \
+         VALUES ($1, 'HSA', 'investment', 'USD', 48000.00, $2) RETURNING id",
+    )
+    .bind(inst2)
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let insert_snap = |acct: uuid::Uuid, balance: &'static str, day: &'static str| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query(
+                "INSERT INTO balance_snapshots (account_id, balance, balance_usd, as_of_date, currency, user_id) \
+                 VALUES ($1, $2::numeric, $2::numeric, $3::date, 'USD', $4)",
+            )
+            .bind(acct).bind(balance).bind(day).bind(user_id)
+            .execute(&pool).await.unwrap();
+        }
+    };
+    // account1 snapshots both days; the HSA only on day 1.
+    insert_snap(account1, "1000.00", "2026-05-01").await;
+    insert_snap(account2, "48000.00", "2026-05-01").await;
+    insert_snap(account1, "1100.00", "2026-05-02").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/net-worth-history", None, Some(&token)))
+        .await
+        .unwrap();
+    let body = body_json(res.into_body()).await;
+    let rows = body.as_array().unwrap();
+    assert_eq!(rows.len(), 2, "two distinct as_of_dates");
+    // Day 2 must still include the HSA's carried-forward $48k:
+    // 1100 + 48000 = 49100 (before the fix this was just 1100).
+    assert!(
+        (rows[1]["net_worth"].as_f64().unwrap() - 49100.0).abs() < 0.01,
+        "day-2 net worth carries the HSA forward, got {}",
+        rows[1]["net_worth"]
+    );
+    let by_inst = rows[1]["by_institution"].as_object().unwrap();
+    assert!(
+        (by_inst["HealthEquity"].as_f64().unwrap() - 48000.0).abs() < 0.01,
+        "HealthEquity present on day 2 via carry-forward, not missing"
+    );
+    assert!((by_inst["Test Bank"].as_f64().unwrap() - 1100.0).abs() < 0.01);
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn net_worth_history_handles_liabilities() {
     // A credit-card liability should show up as a NEGATIVE in
     // by_institution AND reduce net_worth. Tests the is_liability

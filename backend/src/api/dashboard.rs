@@ -374,37 +374,28 @@ async fn net_worth_history(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Json<Vec<NetWorthPoint>> {
-    // `COALESCE(name, 'Unknown')` matches the previous Rust fallback for
-    // the rare case where institutions.name is somehow blank (the column
-    // is NOT NULL today but a defensive default keeps the public JSON
-    // contract stable).
+    // Per-account snapshot rows, carried forward — NOT a naive per-date
+    // aggregate. Accounts snapshot on different days (an HSA that syncs
+    // weekly, a Plaid card that syncs daily), so a date's raw GROUP BY only
+    // covers the accounts that happened to snapshot that day. That dropped
+    // an infrequently-synced institution out of `by_institution` on most
+    // dates, and the movers attribution then read its full balance as
+    // "growth from zero" at the baseline. Same fix as portfolio_value_history
+    // above: carry each account's most recent snapshot forward, so every
+    // emitted point values every account seen so far at its last-known
+    // balance. `COALESCE(name, 'Unknown')` keeps the JSON contract stable.
     let rows = sqlx::query(
         r#"
-        WITH per_inst AS (
-            SELECT bs.as_of_date,
-                   COALESCE(NULLIF(i.name, ''), 'Unknown') AS institution_name,
-                   COALESCE(SUM(CASE WHEN NOT is_liability_account_type(a.account_type)
-                                      THEN bs.balance_usd ELSE 0 END), 0) AS inst_assets_usd,
-                   COALESCE(SUM(CASE WHEN is_liability_account_type(a.account_type)
-                                      THEN ABS(bs.balance_usd) ELSE 0 END), 0) AS inst_liabilities_usd
-            FROM balance_snapshots bs
-            JOIN accounts a ON bs.account_id = a.id
-            JOIN institutions i ON a.institution_id = i.id
-            WHERE bs.user_id = $1 AND a.archived_at IS NULL
-            GROUP BY bs.as_of_date, COALESCE(NULLIF(i.name, ''), 'Unknown')
-        )
-        SELECT as_of_date,
-               COALESCE(SUM(inst_assets_usd), 0)::float8                    AS total_assets,
-               COALESCE(SUM(inst_liabilities_usd), 0)::float8               AS total_liabilities,
-               COALESCE(SUM(inst_assets_usd) - SUM(inst_liabilities_usd), 0)::float8
-                                                                            AS net_worth,
-               jsonb_object_agg(
-                   institution_name,
-                   (inst_assets_usd - inst_liabilities_usd)::float8
-               )                                                             AS by_institution
-        FROM per_inst
-        GROUP BY as_of_date
-        ORDER BY as_of_date ASC
+        SELECT bs.as_of_date AS d,
+               bs.account_id AS account_id,
+               COALESCE(bs.balance_usd, 0)::float8 AS balance_usd,
+               is_liability_account_type(a.account_type) AS is_liability,
+               COALESCE(NULLIF(i.name, ''), 'Unknown') AS institution_name
+        FROM balance_snapshots bs
+        JOIN accounts a ON bs.account_id = a.id
+        JOIN institutions i ON a.institution_id = i.id
+        WHERE bs.user_id = $1 AND a.archived_at IS NULL
+        ORDER BY bs.as_of_date ASC, bs.id ASC
         "#,
     )
     .bind(ctx.user_id)
@@ -412,39 +403,72 @@ async fn net_worth_history(
     .await
     .unwrap_or_default();
 
-    Json(
-        rows.into_iter()
-            .filter_map(|r| {
-                let date: chrono::NaiveDate = r.try_get("as_of_date").ok()?;
-                let total_assets: f64 = r.try_get("total_assets").unwrap_or(0.0);
-                let total_liabilities: f64 = r.try_get("total_liabilities").unwrap_or(0.0);
-                let net_worth: f64 = r.try_get("net_worth").unwrap_or(0.0);
-                // `by_institution` is a jsonb object {institution -> f64}.
-                // Read as serde_json::Value, then convert to HashMap so
-                // the response shape exactly matches what the BTreeMap-
-                // based code used to emit. A malformed payload (shouldn't
-                // happen) degrades to an empty map rather than failing
-                // the whole request.
-                let by_institution: HashMap<String, f64> = r
-                    .try_get::<serde_json::Value, _>("by_institution")
-                    .ok()
-                    .and_then(|v| v.as_object().cloned())
-                    .map(|m| {
-                        m.into_iter()
-                            .filter_map(|(k, v)| v.as_f64().map(|f| (k, f)))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                Some(NetWorthPoint {
-                    date: date.to_string(),
-                    total_assets,
-                    total_liabilities,
-                    net_worth,
-                    by_institution,
-                })
-            })
-            .collect(),
-    )
+    // account_id -> its last-known (balance_usd, is_liability, institution).
+    struct AcctState {
+        balance_usd: f64,
+        is_liability: bool,
+        institution: String,
+    }
+    let mut latest: HashMap<uuid::Uuid, AcctState> = HashMap::new();
+    let mut points: Vec<NetWorthPoint> = Vec::new();
+    let mut current_date: Option<chrono::NaiveDate> = None;
+
+    // Aggregate the carried-forward account states into one point.
+    let flush = |date: Option<chrono::NaiveDate>,
+                 latest: &HashMap<uuid::Uuid, AcctState>,
+                 points: &mut Vec<NetWorthPoint>| {
+        let Some(d) = date else { return };
+        let mut total_assets = 0.0;
+        let mut total_liabilities = 0.0;
+        let mut by_institution: HashMap<String, f64> = HashMap::new();
+        for st in latest.values() {
+            // Institution net = assets − liabilities (matches the previous
+            // per-inst aggregation: liabilities counted as ABS).
+            let contribution = if st.is_liability {
+                total_liabilities += st.balance_usd.abs();
+                -st.balance_usd.abs()
+            } else {
+                total_assets += st.balance_usd;
+                st.balance_usd
+            };
+            *by_institution.entry(st.institution.clone()).or_insert(0.0) += contribution;
+        }
+        points.push(NetWorthPoint {
+            date: d.to_string(),
+            total_assets,
+            total_liabilities,
+            net_worth: total_assets - total_liabilities,
+            by_institution,
+        });
+    };
+
+    for r in &rows {
+        let Ok(d) = r.try_get::<chrono::NaiveDate, _>("d") else {
+            continue;
+        };
+        let Ok(account_id) = r.try_get::<uuid::Uuid, _>("account_id") else {
+            continue;
+        };
+        if current_date != Some(d) {
+            flush(current_date, &latest, &mut points);
+            current_date = Some(d);
+        }
+        // Duplicate snapshots for the same account+date: last row wins
+        // (rows are id-ordered), rather than double-counting.
+        latest.insert(
+            account_id,
+            AcctState {
+                balance_usd: r.try_get("balance_usd").unwrap_or(0.0),
+                is_liability: r.try_get("is_liability").unwrap_or(false),
+                institution: r
+                    .try_get::<String, _>("institution_name")
+                    .unwrap_or_else(|_| "Unknown".to_string()),
+            },
+        );
+    }
+    flush(current_date, &latest, &mut points);
+
+    Json(points)
 }
 
 #[derive(Serialize)]
