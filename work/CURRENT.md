@@ -25,6 +25,18 @@
   accounts too.
 * **Housekeeping:** 5 merged remote branches pruned (remote = main +
   gh-pages only). const-literals lint sweep (10 fontFeatures sites).
+* **Audit follow-ups** (all `balance_snapshots` per-date consumers reviewed):
+  the only other same-class bug was FBAR — `fbar_status.exceeded` used the
+  largest same-day foreign-account sum, so accounts snapshotting on
+  different days never aggregated and could under-report the $10k filing
+  threshold. Now `exceeded`/`peak_aggregate_usd` = SUM(per-account annual
+  max) (FinCEN 114's measure, never under-reports); peak_date is the
+  carried-forward peak day. Verified on prod: aggregate $51.8k→$65.3k
+  (exceeded already true via CetesDirecto). The other consumers
+  (account_balance_history per-account, since-last-login before/after
+  intersection) are safe by design. Also fixed the cash-flow Trends chart
+  x-axis month labels overlapping on mobile (width-thinned + compact
+  2-digit year).
 
 ## 2026-07-08 sprint — round 5 (debt, movers, quick wins, CI, cleanup)
 
