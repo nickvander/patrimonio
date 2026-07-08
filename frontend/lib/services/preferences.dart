@@ -3,6 +3,8 @@
 // VM — importing Preferences in a widget test no longer drags package:web in
 // (mirrors account_alerts_cache). The web impl already swallows localStorage
 // exceptions (private-browsing), so _read/_write don't re-wrap.
+import 'dart:convert';
+
 import 'preferences_storage_stub.dart'
     if (dart.library.js_interop) 'preferences_storage_web.dart';
 
@@ -248,4 +250,22 @@ class Preferences {
         .join(', ');
     _write('account_aprs', '{$parts}');
   }
+
+  /// Per-account manual card terms (statement balance / minimum payment / due
+  /// date), keyed by account id. Same `app_settings` pattern as account_aprs,
+  /// but the value is a nested object `{statement_balance, minimum_payment,
+  /// due_date}` so this uses jsonDecode/jsonEncode rather than the flat parser.
+  static Map<String, dynamic> getCardTerms() {
+    final raw = _read('card_terms');
+    if (raw == null || raw.isEmpty) return const {};
+    try {
+      final v = jsonDecode(raw);
+      return v is Map ? Map<String, dynamic>.from(v) : const {};
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  static void setCardTerms(Map<String, dynamic> terms) =>
+      _write('card_terms', jsonEncode(terms));
 }

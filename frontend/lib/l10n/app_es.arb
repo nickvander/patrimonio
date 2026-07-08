@@ -425,6 +425,34 @@
   "dpMonthlyInterest": "Interés / mes",
   "dpSplitCredit": "{count} crédito · {amount}",
   "dpSplitLoan": "{count} préstamos · {amount}",
+  "dpCardTermsTitle": "Términos de tarjeta",
+  "dpEditCardTerms": "Términos de {name}",
+  "dpStatementBalance": "Saldo del estado",
+  "dpMinPayment": "Pago mínimo",
+  "dpDueDate": "Fecha de vencimiento",
+  "dpDueDateNone": "Sin fecha",
+  "dpAddTerms": "Términos",
+  "dpDueSoonTitle": "Próximos vencimientos",
+  "dpDueInDays": "Vence en {n} d",
+  "@dpDueInDays": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "dpDueToday": "Vence hoy",
+  "dpOverdue": "Vencido",
+  "dpDueOn": "Vence {date}",
+  "dpInDays": "en {n} d",
+  "@dpInDays": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "dpMinAmount": "mín {amount}",
   "efTitle": "Fondo de emergencia",
   "efMonthsUnit": "meses de gastos",
   "efStatusHealthy": "Totalmente fondeado",

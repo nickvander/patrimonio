@@ -10,6 +10,33 @@ import '../utils/mask_aware_name.dart';
 import '../utils/theme_colors.dart';
 import '../l10n/app_localizations.dart';
 
+/// Rolls a monthly due-date [anchor] forward to its next occurrence on or after
+/// [today]. The comparison is date-only, so a due date that lands on today
+/// counts as due *today* rather than rolling to next month. The day-of-month is
+/// clamped to the length of the target month, so a 31st anchor lands on the last
+/// day of shorter months instead of overflowing into the next one. Pure and
+/// top-level so the roll-forward logic is unit-testable without the widget.
+DateTime rollDueForward(DateTime anchor, DateTime today) {
+  var y = today.year;
+  var m = today.month;
+  final todayDate = DateTime(today.year, today.month, today.day);
+  DateTime candidate() {
+    final lastDay = DateTime(y, m + 1, 0).day; // day 0 of next month = last day
+    return DateTime(y, m, anchor.day.clamp(1, lastDay));
+  }
+
+  var d = candidate();
+  while (d.isBefore(todayDate)) {
+    m++;
+    if (m > 12) {
+      m = 1;
+      y++;
+    }
+    d = candidate();
+  }
+  return d;
+}
+
 /// Pure summary math over a list of debts, powering the summary strip above the
 /// debt rows: total balance owed, the balance-weighted average APR, and the
 /// monthly interest cost (Σ balance·apr/12 — how much interest the debts accrue
@@ -78,6 +105,9 @@ class DebtPayoffCard extends StatefulWidget {
 
 class _DebtPayoffCardState extends State<DebtPayoffCard> {
   Map<String, double> _aprs = const {};
+  // Per-account manual card terms (statement balance / min payment / due date),
+  // keyed by account id. Value is a nested object; see Preferences.getCardTerms.
+  Map<String, dynamic> _cardTerms = const {};
   double? _monthlyPayment; // null until initialized from the debts
   // Phone-only: the what-if simulator (slider + strategy tiles) collapses
   // behind a tap-to-expand header so the debt list stays the focus. In-memory.
@@ -87,7 +117,9 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
   void initState() {
     super.initState();
     _aprs = Preferences.getAccountAprs();
+    _cardTerms = Preferences.getCardTerms();
     _hydrateAprs();
+    _hydrateCardTerms();
   }
 
   Future<void> _hydrateAprs() async {
@@ -106,6 +138,61 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
       // localStorage seed stands.
     }
   }
+
+  // Mirror of _hydrateAprs for the nested card_terms object: seed from
+  // localStorage in initState, then refresh from the server settings store.
+  Future<void> _hydrateCardTerms() async {
+    try {
+      final raw = await widget.apiService.getSetting('card_terms');
+      if (mounted && raw is Map) {
+        final next = Map<String, dynamic>.from(raw);
+        setState(() => _cardTerms = next);
+        Preferences.setCardTerms(next);
+      }
+    } catch (_) {
+      // localStorage seed stands.
+    }
+  }
+
+  // --- card_terms accessors (opt-in per account) -----------------------------
+
+  Map<String, dynamic>? _termsFor(String id) {
+    final t = _cardTerms[id];
+    return t is Map ? Map<String, dynamic>.from(t) : null;
+  }
+
+  // The stored monthly due-date anchor for [id], or null when none entered.
+  DateTime? _dueAnchor(String id) {
+    final raw = _termsFor(id)?['due_date'];
+    if (raw is! String || raw.isEmpty) return null;
+    return DateTime.tryParse(raw);
+  }
+
+  // A numeric term (statement_balance / minimum_payment) in NATIVE currency.
+  double? _termAmount(String id, String key) {
+    final v = _termsFor(id)?[key];
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v);
+    return null;
+  }
+
+  String _currencyFor(String id) {
+    for (final raw in widget.accounts) {
+      if (raw is Map && raw['id'].toString() == id) {
+        return (raw['currency'] ?? 'USD').toString();
+      }
+    }
+    return 'USD';
+  }
+
+  // Convert a native-currency term amount to USD, matching how _debts
+  // normalises balances, so due-soon amounts line up with the debt rows.
+  double _termToUsd(double native, String id) => convertCurrency(
+        native,
+        from: _currencyFor(id),
+        to: 'USD',
+        usdMxnRate: widget.usdMxnRate,
+      );
 
   // Credit/loan accounts with a positive balance owed.
   List<Debt> get _debts {
@@ -316,6 +403,7 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
               ],
             ),
             const SizedBox(height: 16),
+            _dueSoonStrip(debts, l),
             _summaryStrip(debts, l),
             const SizedBox(height: 16),
             Divider(height: 1, color: context.hairline),
@@ -522,8 +610,150 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
               ),
             ),
           ),
+          const SizedBox(width: 8),
+          _termsChip(d),
         ],
       ),
+    );
+  }
+
+  // Second per-row chip (teal, to read distinctly from the pink APR chip).
+  // With a due date it shows the rolled-forward countdown ("Due in Nd" / "Due
+  // today"); with no terms it's a neutral "＋ terms" affordance — either way it
+  // opens the 3-field terms editor. Fully opt-in: no terms = no due-soon row.
+  Widget _termsChip(Debt d) {
+    final l = AppLocalizations.of(context);
+    final accent = context.tealAccent;
+    final anchor = _dueAnchor(d.id);
+    final String label;
+    final IconData icon;
+    if (anchor != null) {
+      final today = DateTime.now();
+      final todayDate = DateTime(today.year, today.month, today.day);
+      final due = rollDueForward(anchor, today);
+      final days = due.difference(todayDate).inDays;
+      label = days <= 0 ? l.dpDueToday : l.dpDueInDays(days);
+      icon = Icons.event_available_rounded;
+    } else {
+      label = l.dpAddTerms;
+      icon = Icons.add_rounded;
+    }
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => _editCardTerms(d),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 11, color: accent),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: accent,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // "Due soon": every debt with a due date, rolled forward to its next monthly
+  // occurrence, sorted ascending, at most four rows. Renders nothing (and adds
+  // no spacing) until at least one card has a due date, keeping the feature
+  // invisible until opted into. Amounts convert native→USD via _money.
+  Widget _dueSoonStrip(List<Debt> debts, AppLocalizations l) {
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    final entries = <({Debt debt, DateTime due, int days})>[];
+    for (final d in debts) {
+      final anchor = _dueAnchor(d.id);
+      if (anchor == null) continue;
+      final due = rollDueForward(anchor, today);
+      entries.add((
+        debt: d,
+        due: due,
+        days: due.difference(todayDate).inDays,
+      ));
+    }
+    if (entries.isEmpty) return const SizedBox.shrink();
+    entries.sort((a, b) => a.due.compareTo(b.due));
+    final df = DateFormat.MMMEd(Localizations.localeOf(context).toString());
+
+    final rows = entries.take(4).map((e) {
+      // Urgency colour on the countdown token only: today/overdue → negative,
+      // within five days → amber warning, otherwise a subtle muted tone.
+      final Color urgency = e.days <= 0
+          ? context.negative
+          : (e.days <= 5 ? context.warning : context.textSubtle);
+      final daysLabel =
+          e.days < 0 ? l.dpOverdue : (e.days == 0 ? l.dpDueToday : l.dpInDays(e.days));
+      final min = _termAmount(e.debt.id, 'minimum_payment');
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Text.rich(
+          TextSpan(
+            style: TextStyle(
+              fontSize: 12,
+              color: context.textSubtle,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+            children: [
+              TextSpan(
+                text: e.debt.name,
+                style: TextStyle(
+                  color: context.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              TextSpan(text: '  ·  ${l.dpDueOn(df.format(e.due))}  ·  '),
+              TextSpan(
+                text: daysLabel,
+                style: TextStyle(color: urgency, fontWeight: FontWeight.w700),
+              ),
+              if (min != null && min > 0)
+                TextSpan(
+                  text: '  ·  '
+                      '${l.dpMinAmount(_money(_termToUsd(min, e.debt.id)))}',
+                ),
+            ],
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      );
+    }).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.event_rounded, color: context.tealAccent, size: 16),
+            const SizedBox(width: 6),
+            Text(
+              l.dpDueSoonTitle,
+              style: TextStyle(
+                fontSize: 11,
+                color: context.textSubtle,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ...rows,
+        const SizedBox(height: 16),
+      ],
     );
   }
 
@@ -657,5 +887,102 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
     setState(() => _aprs = next);
     Preferences.setAccountAprs(next);
     widget.apiService.putSetting('account_aprs', next).catchError((_) {});
+  }
+
+  // Per-card terms editor: three optional fields (statement balance, minimum
+  // payment — both in the account's native currency — and a monthly due-date
+  // anchor via showDatePicker). Modeled on _editApr, persisted to the nested
+  // card_terms object. Clearing all three removes the card's entry entirely.
+  Future<void> _editCardTerms(Debt d) async {
+    final l = AppLocalizations.of(context);
+    final stmtCtrl = TextEditingController(
+      text: _termAmount(d.id, 'statement_balance')?.toString() ?? '',
+    );
+    final minCtrl = TextEditingController(
+      text: _termAmount(d.id, 'minimum_payment')?.toString() ?? '',
+    );
+    var dueDate = _dueAnchor(d.id);
+    final locale = Localizations.localeOf(context).toString();
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (dctx, setLocal) => AlertDialog(
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          title: Text(l.dpEditCardTerms(d.name)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: stmtCtrl,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(labelText: l.dpStatementBalance),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: minCtrl,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(labelText: l.dpMinPayment),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${l.dpDueDate}: '
+                      '${dueDate != null ? DateFormat.yMMMd(locale).format(dueDate!) : l.dpDueDateNone}',
+                      style:
+                          TextStyle(color: context.textSubtle, fontSize: 13),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: dctx,
+                        initialDate: dueDate ?? DateTime.now(),
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                      );
+                      if (picked != null) setLocal(() => dueDate = picked);
+                    },
+                    child: Text(l.dpDueDate),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dctx, false),
+                child: Text(l.actionCancel)),
+            FilledButton(
+                onPressed: () => Navigator.pop(dctx, true),
+                child: Text(l.actionSave)),
+          ],
+        ),
+      ),
+    );
+    if (saved != true) return;
+
+    final stmt = double.tryParse(stmtCtrl.text.trim());
+    final minPay = double.tryParse(minCtrl.text.trim());
+    final entry = <String, dynamic>{};
+    if (stmt != null && stmt > 0) entry['statement_balance'] = stmt;
+    if (minPay != null && minPay > 0) entry['minimum_payment'] = minPay;
+    if (dueDate != null) {
+      entry['due_date'] = DateFormat('yyyy-MM-dd').format(dueDate!);
+    }
+
+    final next = Map<String, dynamic>.from(_cardTerms);
+    if (entry.isEmpty) {
+      next.remove(d.id);
+    } else {
+      next[d.id] = entry;
+    }
+    setState(() => _cardTerms = next);
+    Preferences.setCardTerms(next);
+    widget.apiService.putSetting('card_terms', next).catchError((_) {});
   }
 }

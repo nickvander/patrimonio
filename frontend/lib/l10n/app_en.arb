@@ -483,6 +483,34 @@
   "dpMonthlyInterest": "Interest / mo",
   "dpSplitCredit": "{count} credit · {amount}",
   "dpSplitLoan": "{count} loans · {amount}",
+  "dpCardTermsTitle": "Card terms",
+  "dpEditCardTerms": "{name} terms",
+  "dpStatementBalance": "Statement balance",
+  "dpMinPayment": "Minimum payment",
+  "dpDueDate": "Due date",
+  "dpDueDateNone": "No date",
+  "dpAddTerms": "Terms",
+  "dpDueSoonTitle": "Due soon",
+  "dpDueInDays": "Due in {n}d",
+  "@dpDueInDays": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "dpDueToday": "Due today",
+  "dpOverdue": "Overdue",
+  "dpDueOn": "Due {date}",
+  "dpInDays": "in {n}d",
+  "@dpInDays": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "dpMinAmount": "min {amount}",
   "efTitle": "Emergency fund",
   "efMonthsUnit": "months of expenses",
   "efStatusHealthy": "Fully funded",
