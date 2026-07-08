@@ -1,7 +1,30 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-08 (round-5 debt/movers/quick-wins + CI + branch cleanup — all on `main`, deployed)
+> **Last updated:** 2026-07-08 (round-6 card-terms/balance-chart/net-worth-fix — all on `main`, deployed)
 > **Branch:** `main` (everything merged and deployed).
+
+## 2026-07-08 sprint — round 6 (card terms, balance chart, net-worth carry-forward fix)
+
+* **net_worth_history carry-forward bug (user-reported).** The Overview
+  net-worth movers showed a HealthEquity HSA "+$49k since June" — but the
+  HSA syncs weekly and had no snapshot on the exact baseline date, so
+  `net_worth_history` (which aggregated per exact `as_of_date` with no
+  carry-forward) dropped it from that date's `by_institution` + total, and
+  the movers read its full balance as growth-from-zero. Same class as the
+  round-2 `portfolio_value_history` fix; applied the identical per-account
+  carry-forward (last snapshot on-or-before each date) to totals + the
+  institution map. Verified on prod: mover dropped $49,000 → $1,360 (real
+  HSA growth). New regression test reproduces the missing-at-baseline case.
+* **Per-card statement balance + due date + "due soon"** (enhanced
+  `debt_payoff_card.dart`, rides `app_settings` key `card_terms`, no
+  migration): per-row terms editor next to the APR chip + a due-soon strip
+  (monthly due dates rolled forward, sorted, min-payment shown).
+* **Balance-over-time chart for all accounts** (`account_balance_history`
+  backend fallback to `balance_snapshots` when a statement account has no
+  `balance_after` history) — the chart now appears for Plaid/manual
+  accounts too.
+* **Housekeeping:** 5 merged remote branches pruned (remote = main +
+  gh-pages only). const-literals lint sweep (10 fontFeatures sites).
 
 ## 2026-07-08 sprint — round 5 (debt, movers, quick wins, CI, cleanup)
 
