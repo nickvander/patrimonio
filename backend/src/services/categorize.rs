@@ -239,6 +239,27 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
         });
     }
 
+    // 6c. Cross-account moves of the user's OWN funds — not household income
+    //     or spending, so tag them as internal transfers (direction from the
+    //     sign):
+    //       - Wise (formerly TransferWise) self-remittances moving money
+    //         between the user's own USD and MXN accounts. Counting the MXN
+    //         leg as income would double-count salary already booked on the
+    //         USD side.
+    //       - Employee/employer contributions into a benefit/savings vehicle
+    //         (HSA, 401k): payroll money moving into a locked account, not
+    //         spendable household income.
+    if has(&[
+        "WISE PAYMENTS", "TRANSFERWISE",
+        "EMPLOYEE CONTRIBUTION", "EMPLOYER CONTRIBUTION",
+    ]) {
+        return Some(if amount >= Decimal::ZERO {
+            "TRANSFER_IN".to_string()
+        } else {
+            "TRANSFER_OUT".to_string()
+        });
+    }
+
     // 7. Generic transfers / SPEI / interbank — direction from the sign.
     if has(&[
         "SPEI", "TRASPASO", "TRANSFERENCIA", "INTERBANCARIO", "DEPOSITO DE TERCERO",
@@ -631,5 +652,16 @@ mod tests {
         // counted as income in the cash-flow trends view.)
         assert_eq!(categorize("de Cajita: Ahorro", pos("27000.00")).as_deref(), Some("TRANSFER_IN"));
         assert_eq!(categorize("a Cajita: Ahorro", neg("5000.00")).as_deref(), Some("TRANSFER_OUT"));
+    }
+
+    #[test]
+    fn wise_and_hsa_contributions_are_transfers() {
+        // Own-money cross-account moves, not income/spending.
+        assert_eq!(
+            categorize("WISE PAYMENTS LIMITED Remittance transaction", pos("30000.00")).as_deref(),
+            Some("TRANSFER_IN"));
+        assert_eq!(
+            categorize("Employee Contribution for 2026", pos("500.00")).as_deref(),
+            Some("TRANSFER_IN"));
     }
 }
