@@ -192,10 +192,11 @@ UnrealizedBuckets bucketUnrealizedLots(List<dynamic>? lots) {
 }
 
 /// Loss lots that are tax-loss-harvest candidates: a negative
-/// `unrealized_gain_usd` AND a present `estimated_tax_savings_usd`. The backend
-/// only populates the savings on loss lots, but we guard on both so a row
-/// without an estimate never shows a phantom "$0 saved" candidate. Ordered by
-/// the largest estimated saving first.
+/// `unrealized_gain_usd` AND a POSITIVE `estimated_tax_savings_usd`. The backend
+/// only populates the savings on loss lots, but we require a strictly positive
+/// estimate so a row with a null OR zero estimate (marginal/LTCG rate makes the
+/// saving $0.00) never shows a phantom "$0 saved" non-beneficial candidate
+/// (TAX-3). Ordered by the largest estimated saving first.
 List<Map<String, dynamic>> harvestCandidates(List<dynamic>? lots) {
   final out = <Map<String, dynamic>>[];
   if (lots != null) {
@@ -203,7 +204,7 @@ List<Map<String, dynamic>> harvestCandidates(List<dynamic>? lots) {
       if (r is! Map) continue;
       final gain = (r['unrealized_gain_usd'] as num?)?.toDouble() ?? 0;
       final savings = (r['estimated_tax_savings_usd'] as num?)?.toDouble();
-      if (gain < 0 && savings != null) {
+      if (gain < 0 && savings != null && savings > 0) {
         out.add(Map<String, dynamic>.from(r));
       }
     }

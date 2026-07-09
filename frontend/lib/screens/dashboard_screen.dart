@@ -2275,6 +2275,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildFxBadge({bool compact = false}) {
     final l = AppLocalizations.of(context);
     final rate = (_fxRate?['rate'] as num?)?.toDouble();
+    // The pair codes are dynamic (backend sends `base`/`target`); don't hardcode
+    // USD/MXN so the pill stays correct if the base/target currency ever changes.
+    final base =
+        (_fxRate?['base'] ?? _fxRate?['base_currency'] ?? 'USD').toString();
+    final target =
+        (_fxRate?['target'] ?? _fxRate?['target_currency'] ?? 'MXN').toString();
     final recordedAtRaw = _fxRate?['recorded_at'] as String?;
     final recordedLocal = recordedAtRaw == null
         ? null
@@ -2282,16 +2288,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final isStale = recordedLocal != null &&
         DateTime.now().difference(recordedLocal).inHours > 24;
 
-    // Compact mode drops the "1 USD = " / " MXN" framing so a phone-width
-    // AppBar can still show the live rate alongside the currency toggle.
-    final label = rate == null
-        ? (compact ? '— MXN' : '1 USD = — MXN')
-        : compact
-            ? NumberFormat('0.00').format(rate)
-            : '1 USD = ${NumberFormat('0.00').format(rate)} MXN';
+    // Bare, locale-aware rate number (comma decimal in es) for the compact pill,
+    // e.g. "17.58" / "17,58" — no currency code, since the pair is already shown.
+    final rateBare = rate == null
+        ? '—'
+        : localizeNumberString(context, rate.toStringAsFixed(2));
+    // Money-coded target amount ("MXN 17.58") reused via the currency helper for
+    // the spelled-out equation + tooltip, where the code disambiguates.
+    final rateMoney = rate == null ? null : formatCurrencyAmount(rate, target);
+
+    // LABEL-1: three designers found the bare "⇄ 17.58" pill cryptic. Compact
+    // now labels the pair — "USD/MXN 17.58"; non-compact spells the equation.
+    //
+    // ⚠ gen-l10n orders placeholders ALPHABETICALLY, not in template order.
+    // dashFxPill template is "{base}/{target} {rate}" but its generated
+    // signature is dashFxPill(base, RATE, target) — alphabetical (base, rate,
+    // target). So `rate` MUST be passed BEFORE `target`; passing template order
+    // (base, target, rate) would silently render "USD/17.58 MXN".
+    final label = compact || rateMoney == null
+        ? l.dashFxPill(base, rateBare, target)
+        // dashFxRateEquation is (base, rate) — alphabetical == template order.
+        : l.dashFxRateEquation(base, rateMoney);
     final accent = isStale ? context.warning : context.tealAccent;
 
-    final tooltip = rate == null
+    final freshness = rate == null
         ? l.dashFxLoading
         : recordedLocal == null
             ? l.dashFxLive
@@ -2302,30 +2322,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 : l.dashFxUpdatedAt(
                     '${DateFormat('MMM d, y · h:mm a').format(recordedLocal)} '
                     '${recordedLocal.timeZoneName}'));
+    // Tooltip / screen-reader label: lead with the full equation
+    // ("1 USD = MXN 17.58"), then the freshness/source line the badge already had.
+    final tooltip = rateMoney == null
+        ? freshness
+        : '${l.dashFxRateEquation(base, rateMoney)}\n$freshness';
 
     return Tooltip(
       message: tooltip,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: context.tint(0.06),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: context.accentBorder(accent)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.swap_horiz, size: 14, color: accent),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: accent,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
+      // Mirror the fuller equation into the semantics tree so a screen reader
+      // announces "1 USD = MXN 17.58 …" rather than the terse visible pill.
+      child: Semantics(
+        container: true,
+        label: tooltip,
+        child: ExcludeSemantics(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: context.tint(0.06),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: context.accentBorder(accent)),
             ),
-          ],
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.swap_horiz, size: 14, color: accent),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

@@ -633,6 +633,8 @@
   "dashFxLive": "Tipo de cambio USD/MXN en vivo",
   "dashFxStaleAt": "Tipo de cambio desactualizado — {timestamp}",
   "dashFxUpdatedAt": "Actualizado {timestamp}",
+  "dashFxPill": "{base}/{target} {rate}",
+  "dashFxRateEquation": "1 {base} = {rate}",
   "dashLinkUsBank": "Vincular un banco de EE. UU.",
   "dashLinkUsBankSubtitle": "Conéctalo de forma segura con Plaid: los saldos y las transacciones se sincronizan automáticamente.",
   "dashLinkUsBankDisabledHint": "Aún no se configuran las credenciales de Plaid: por ahora usa CSV o manual.",

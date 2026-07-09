@@ -305,15 +305,23 @@ class _NetLine extends StatelessWidget {
     final color = positive ? context.positive : context.pinkAccent;
     final delta = priorNet == null ? null : net - priorNet!;
 
-    // Savings rate = net / income, only meaningful when income is positive.
-    // (A month with no income can't have a savings *rate* — dividing by zero
-    // or a negative would print nonsense, so we omit the chip entirely.)
-    final double? rate = income > 0 ? net / income : null;
-    // Prior month's rate, used for the vs-prior delta in basis-point terms.
-    // Only available on single-month windows where priorIncome > 0.
-    final double? priorRate = (priorIncome != null && priorIncome! > 0)
-        ? priorNet! / priorIncome!
-        : null;
+    // Savings rate = net / income, only meaningful when income is positive
+    // AND the result lands in a sane band. On sparse/degenerate data (near-zero
+    // income with a large one-off outflow) net/income explodes to values like
+    // −20.8 (−2082%), which is noise, not signal. We treat only rates within
+    // [-1.0, 1.0] (i.e. −100%…100%) as meaningful and omit the chip otherwise —
+    // both when income isn't positive and when the rate falls outside the band.
+    final double? rawRate = income > 0 ? net / income : null;
+    final double? rate =
+        (rawRate != null && rawRate.abs() <= 1.0) ? rawRate : null;
+    // Prior month's rate, used for the vs-prior delta in percentage points.
+    // Only available on single-month windows where priorIncome > 0 and the
+    // prior rate is itself within the sane band (else the "pts" delta is noise).
+    final double? priorRate =
+        (priorIncome != null && priorIncome! > 0 &&
+                (priorNet! / priorIncome!).abs() <= 1.0)
+            ? priorNet! / priorIncome!
+            : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

@@ -762,7 +762,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     final usCard = _kpiCard(
       label: l.taxUsEstimatedLiability,
       value: liabUs,
-      valueColor: context.info,
+      // Owed tax is not "good news": render neutral (primary text), reserving
+      // green/teal strictly for savings/refunds (TAX-2).
+      valueColor: context.textPrimary,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -778,7 +780,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           const SizedBox(height: 6),
           Text(
             l.taxScenarioUsCaveat,
-            style: TextStyle(fontSize: 11, color: context.textFaint),
+            style: TextStyle(fontSize: 11, color: context.textSubtle),
           ),
           const SizedBox(height: 10),
           Text(
@@ -796,7 +798,9 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     final mxCard = _kpiCard(
       label: l.taxMxEstimatedLiability,
       value: liabMx,
-      valueColor: context.tealAccent,
+      // Owed tax is not "good news": render neutral (primary text), reserving
+      // green/teal strictly for savings/refunds (TAX-2).
+      valueColor: context.textPrimary,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -812,7 +816,7 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
           const SizedBox(height: 6),
           Text(
             l.taxScenarioMxCaveat,
-            style: TextStyle(fontSize: 11, color: context.textFaint),
+            style: TextStyle(fontSize: 11, color: context.textSubtle),
           ),
           const SizedBox(height: 10),
           Text(

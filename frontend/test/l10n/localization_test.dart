@@ -100,6 +100,22 @@ void main() {
         'Proyección de patrimonio|Tipo de cambio|Portafolio de inversión|Planeación fiscal');
   });
 
+  // LABEL-1 fix + gen-l10n transposition guard. dashFxPill's template is
+  // "{base}/{target} {rate}" but gen-l10n orders params alphabetically
+  // (base, rate, target). Distinct values ('USD','17.58','MXN') make any swap
+  // visible: a correct mapping renders "USD/MXN 17.58"; a transposed call site
+  // (base, target, rate) would render "USD/17.58 MXN" and fail here.
+  testWidgets('dashFxPill labels the pair without transposing base/target/rate',
+      (tester) async {
+    String pill(AppLocalizations l) => l.dashFxPill('USD', '17.58', 'MXN');
+    expect(await readKeys(tester, const Locale('en'), pill), 'USD/MXN 17.58');
+    expect(await readKeys(tester, const Locale('es'), pill), 'USD/MXN 17.58');
+    // The spelled-out equation reused in the tooltip / a11y label.
+    String eq(AppLocalizations l) => l.dashFxRateEquation('USD', 'MXN 17.58');
+    expect(await readKeys(tester, const Locale('en'), eq), '1 USD = MXN 17.58');
+    expect(await readKeys(tester, const Locale('es'), eq), '1 USD = MXN 17.58');
+  });
+
   test('both locales are supported', () {
     final codes =
         AppLocalizations.supportedLocales.map((l) => l.languageCode).toSet();

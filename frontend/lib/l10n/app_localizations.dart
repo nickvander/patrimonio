@@ -3776,6 +3776,18 @@ abstract class AppLocalizations {
   /// **'Updated {timestamp}'**
   String dashFxUpdatedAt(Object timestamp);
 
+  /// No description provided for @dashFxPill.
+  ///
+  /// In en, this message translates to:
+  /// **'{base}/{target} {rate}'**
+  String dashFxPill(Object base, Object rate, Object target);
+
+  /// No description provided for @dashFxRateEquation.
+  ///
+  /// In en, this message translates to:
+  /// **'1 {base} = {rate}'**
+  String dashFxRateEquation(Object base, Object rate);
+
   /// No description provided for @dashLinkUsBank.
   ///
   /// In en, this message translates to:

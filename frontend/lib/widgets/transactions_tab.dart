@@ -2071,7 +2071,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
       children: [
         Flexible(
           child: Text(
-            l.txRecentTransactions,
+            l.navTransactions,
             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -2111,8 +2111,8 @@ class _TransactionsTabState extends State<TransactionsTab> {
             _buildSortMenu(l),
             // On narrow widths the secondary actions (select-multiple, CSV
             // export, FX-transfer scan) collapse into an overflow menu so
-            // the "Recent transactions" title keeps enough room and no
-            // longer ellipsizes to "Re...". Add + filter + search stay
+            // the "Transactions" title keeps enough room and no
+            // longer ellipsizes to "Tr...". Add + filter + search stay
             // inline as the primary actions.
             if (!isNarrow)
               IconButton(

@@ -2269,6 +2269,16 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String dashFxPill(Object base, Object rate, Object target) {
+    return '$base/$target $rate';
+  }
+
+  @override
+  String dashFxRateEquation(Object base, Object rate) {
+    return '1 $base = $rate';
+  }
+
+  @override
   String get dashLinkUsBank => 'Vincular un banco de EE. UU.';
 
   @override
