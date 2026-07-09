@@ -90,10 +90,12 @@ fn test_parse_cetes_pdf_text() {
     assert!(result[0].description.contains("CETES"));
     // Sell → Abono, positive.
     assert_eq!(result[1].amount, Decimal::from_str("5500.25").unwrap());
-    // T14: a buy is principal-out, a generic sell is principal+yield combined;
-    // neither is tagged income (only explicit yield rows are — see below).
-    assert_eq!(result[0].category, None);
-    assert_eq!(result[1].category, None);
+    // A buy is principal-out and a generic sell is principal (+combined yield);
+    // neither is income — they're internal transfers between cash and the
+    // holding (direction from the sign), so they're excluded from the
+    // cash-flow view rather than left NULL (which would count as income).
+    assert_eq!(result[0].category.as_deref(), Some("TRANSFER_OUT"));
+    assert_eq!(result[1].category.as_deref(), Some("TRANSFER_IN"));
 }
 
 #[test]
@@ -101,7 +103,7 @@ fn test_cetes_pdf_maturity_premium_is_income() {
     // T14: a cetesdirecto maturity-PREMIO credit (the CETES yield: discount
     // instrument redeemed above its purchase price) must be tagged INCOME
     // with a POSITIVE (inflow) amount, so it reaches the income predicate and
-    // the MX tax base — while the COMPRA principal buy stays uncategorized.
+    // the MX tax base — while the COMPRA principal buy is an internal transfer.
     let text = "Movimientos del período\n\
         15/03/24   15/03/24   SVD111COMPRA   CETES   240725   1,000   9.74100300   86   11.30   9,741.00   0.00   -9,740.10\n\
         25/07/24   25/07/24   SVD222PREMIO   CETES   240725   0       0            0    0.00    0.00      258.74     258.64\n\
@@ -117,26 +119,26 @@ fn test_cetes_pdf_maturity_premium_is_income() {
     assert!(premio.amount > Decimal::ZERO, "yield must be a positive inflow");
     assert_eq!(premio.amount, Decimal::from_str("258.74").unwrap());
     assert_eq!(premio.category.as_deref(), Some("INCOME"));
-    // The COMPRA principal buy is NOT income.
+    // The COMPRA principal buy is NOT income — it's an internal transfer out.
     let compra = result
         .iter()
         .find(|t| t.description.contains("COMPRA"))
         .expect("compra row present");
     assert!(compra.amount < Decimal::ZERO);
-    assert_eq!(compra.category, None);
+    assert_eq!(compra.category.as_deref(), Some("TRANSFER_OUT"));
 }
 
 #[test]
 fn test_cetes_csv_interest_is_income() {
     // T14 via the CSV path: an explicit interest credit is income (positive);
-    // a generic principal buy is not.
+    // a principal buy is an internal transfer out (not income, not NULL).
     let data = "Fecha,Descripción,Monto\n\
         2024-03-15,COMPRA CETES 28D,-1000.00\n\
         2024-07-25,INTERESES CETES,18.42"
         .as_bytes();
     let result = cetes::parse_csv(data).unwrap();
     assert_eq!(result.len(), 2);
-    assert_eq!(result[0].category, None);
+    assert_eq!(result[0].category.as_deref(), Some("TRANSFER_OUT"));
     assert_eq!(result[1].amount, Decimal::from_str("18.42").unwrap());
     assert_eq!(result[1].category.as_deref(), Some("INCOME"));
 }

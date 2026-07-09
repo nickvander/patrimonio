@@ -65,7 +65,9 @@ mod tests {
     #[test]
     fn csv_tags_yield_interest_and_isr_withholding() {
         // Yield credit → interest income; ISR retention → withheld (non-income
-        // category + detail); principal buy → uncategorized.
+        // category + detail); principal buy → an outgoing transfer (excluded
+        // from income/spending), NOT uncategorized (a NULL row would count as
+        // income in the cash-flow view).
         let csv = "Fecha,Operacion,Monto\n\
             2026-06-01,PREMIO CETES 260601,2000.00\n\
             2026-06-01,RETENCION ISR CETES,-200.00\n\
@@ -79,7 +81,24 @@ mod tests {
         assert_eq!(txs[1].category.as_deref(), Some("GOVERNMENT_AND_NON_PROFIT"));
         assert_eq!(txs[1].category_detailed.as_deref(), Some("TAX_ISR_WITHHELD"));
 
-        assert_eq!(txs[2].category, None);
+        assert_eq!(txs[2].category.as_deref(), Some("TRANSFER_OUT"));
         assert_eq!(txs[2].category_detailed, None);
+    }
+
+    #[test]
+    fn csv_tags_principal_redemptions_as_incoming_transfers() {
+        // Fund redemption, principal amortization, and contract funding are all
+        // principal movements → TRANSFER_IN (inflow), never income.
+        let csv = "Fecha,Operacion,Monto\n\
+            2026-06-03,VTASI BONDDIA,27000.00\n\
+            2026-06-04,AMORTIZACION CETES 260604,29460.00\n\
+            2026-06-05,INGEFVO,15000.00\n";
+        let txs = parse_csv(csv.as_bytes()).unwrap();
+        assert_eq!(txs.len(), 3);
+        for t in &txs {
+            assert_eq!(t.category.as_deref(), Some("TRANSFER_IN"),
+                "principal inflow {:?} should be TRANSFER_IN", t.description);
+            assert_eq!(t.category_detailed, None);
+        }
     }
 }

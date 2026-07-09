@@ -227,6 +227,18 @@ pub fn categorize(description: &str, amount: Decimal) -> Option<String> {
         return cat("TRANSFER_OUT");
     }
 
+    // 6b. Nu (Nubank MX) "Cajitas" are savings pockets *inside* the user's
+    //     own Nu account — moving money to/from a Cajita is an internal
+    //     transfer, not income or spending. "CAJITA" is Nu-specific enough to
+    //     be high-precision; direction from the sign.
+    if has(&["CAJITA"]) {
+        return Some(if amount >= Decimal::ZERO {
+            "TRANSFER_IN".to_string()
+        } else {
+            "TRANSFER_OUT".to_string()
+        });
+    }
+
     // 7. Generic transfers / SPEI / interbank — direction from the sign.
     if has(&[
         "SPEI", "TRASPASO", "TRANSFERENCIA", "INTERBANCARIO", "DEPOSITO DE TERCERO",
@@ -317,8 +329,11 @@ pub const TAX_WITHHELD_ISR_CATEGORY: &str = "GOVERNMENT_AND_NON_PROFIT";
 ///   - ISR-retenido row (an outflow)     → `Some(("GOVERNMENT_AND_NON_PROFIT",
 ///     Some("TAX_ISR_WITHHELD")))` — a NON-income category so it is excluded
 ///     from income, with a detail the tax summary sums into `isr_withheld_*`;
-///   - principal movement / unrecognised → `None` (stays honestly
-///     uncategorized — INGEFVO funding, COMPRA buys, VENTA redemptions).
+///   - principal movement (INGEFVO funding, COMPRA buys, VENTA/VTASI/
+///     AMORTIZACION redemptions) → `Some(("TRANSFER_IN"|"TRANSFER_OUT",
+///     None))` by sign — excluded from income/spending instead of silently
+///     counting as income (a NULL principal row does count as income in the
+///     cash-flow trends view). The separate yield rows above carry the income.
 pub fn classify_cetes_movement(
     description: &str,
     amount: Decimal,
@@ -338,22 +353,42 @@ pub fn classify_cetes_movement(
 
     // Income is an INFLOW → positive. A negative amount here is a Cargo
     // (buy / withholding / fee); never income regardless of wording.
-    if amount <= Decimal::ZERO {
-        return None;
+    // Platform fee lines stay fees, not transfers.
+    if has(&["COMISION", "COMISIÓN"]) {
+        return Some(("BANK_FEES".to_string(), None));
     }
-    // Explicit yield / interest / maturity-premium credits. "PREMIO" is the
-    // CETES maturity premium (discount instrument redeemed at par). The
-    // accented and unaccented spellings both appear depending on the export.
-    if has(&[
-        "INTERES", "INTERÉS", "RENDIMIENTO", "PREMIO",
-        "VENCIMIENTO", "LIQUIDA",
-    ]) {
+    // Explicit yield / interest / maturity-premium credits (an inflow).
+    // "PREMIO" is the CETES maturity premium (discount instrument redeemed at
+    // par). The accented and unaccented spellings both appear per export.
+    if amount > Decimal::ZERO
+        && has(&[
+            "INTERES", "INTERÉS", "RENDIMIENTO", "PREMIO",
+            "VENCIMIENTO", "LIQUIDA",
+        ])
+    {
         return Some((
             "INCOME".to_string(),
             Some(INCOME_INTEREST_DETAIL.to_string()),
         ));
     }
-    None
+    // Everything else in the cetesdirecto cash sub-ledger is a PRINCIPAL
+    // movement between the user's cash and their holdings — funding the
+    // contract (INGEFVO), buying an instrument (COMPRA/COMPSI, a Cargo), or
+    // redeeming principal (VENTA/VTASI/AMORTIZACION, an Abono). It is neither
+    // household income nor spending, so tag it as an internal transfer
+    // (direction from the sign) instead of leaving it NULL: a NULL principal
+    // row silently counts as income in the cash-flow trends view — the exact
+    // overcount this function set out to avoid — while the separately booked
+    // yield rows above still carry the real interest income.
+    Some((
+        if amount > Decimal::ZERO {
+            "TRANSFER_IN"
+        } else {
+            "TRANSFER_OUT"
+        }
+        .to_string(),
+        None,
+    ))
 }
 
 /// True when a cetesdirecto movement description denotes an ISR withholding
@@ -473,11 +508,17 @@ mod tests {
     }
 
     #[test]
-    fn cetes_principal_is_not_classified() {
+    fn cetes_principal_is_an_internal_transfer() {
         // Principal movements are NOT income, even though they share the ledger.
-        assert_eq!(cls("COMPRA CETES 241003", neg("23995.12")), None);
-        assert_eq!(cls("VTASI BONDDIA PF2", pos("23995.82")), None);
-        assert_eq!(cls("INGEFVO", pos("24000.00")), None);
+        // They're internal transfers between cash and the holding (direction
+        // from the sign) — tagged so, NOT left NULL (a NULL inflow counts as
+        // income in the cash-flow view). Yield rows above still carry income.
+        assert_eq!(cls("COMPRA CETES 241003", neg("23995.12")),
+            Some(("TRANSFER_OUT".to_string(), None)));
+        assert_eq!(cls("VTASI BONDDIA PF2", pos("23995.82")),
+            Some(("TRANSFER_IN".to_string(), None)));
+        assert_eq!(cls("INGEFVO", pos("24000.00")),
+            Some(("TRANSFER_IN".to_string(), None)));
     }
 
     #[test]
@@ -581,5 +622,14 @@ mod tests {
     #[test]
     fn bare_compra_is_merchandise() {
         assert_eq!(categorize("COMPRA CON TARJETA DE DEBITO REF 7766", neg("532.68")).as_deref(), Some("GENERAL_MERCHANDISE"));
+    }
+
+    #[test]
+    fn nu_cajita_is_an_internal_transfer() {
+        // Nu savings-pocket moves are internal transfers, not income/spending —
+        // direction from the sign. (Regression: these landed NULL and were
+        // counted as income in the cash-flow trends view.)
+        assert_eq!(categorize("de Cajita: Ahorro", pos("27000.00")).as_deref(), Some("TRANSFER_IN"));
+        assert_eq!(categorize("a Cajita: Ahorro", neg("5000.00")).as_deref(), Some("TRANSFER_OUT"));
     }
 }
