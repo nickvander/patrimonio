@@ -2243,8 +2243,38 @@ abstract class AppLocalizations {
   /// No description provided for @cfMonthlyExcludesTooltip.
   ///
   /// In en, this message translates to:
-  /// **'Excludes internal transfers between your accounts and credit-card payments — those move money around your own balance sheet without changing your spending.'**
+  /// **'Excludes securities trades and internal transfers between your own accounts, plus credit-card payments — that money moves around your balance sheet without changing your income or spending. The amounts are shown below.'**
   String get cfMonthlyExcludesTooltip;
+
+  /// No description provided for @cfAlsoThisPeriod.
+  ///
+  /// In en, this message translates to:
+  /// **'Also this period —'**
+  String get cfAlsoThisPeriod;
+
+  /// No description provided for @cfInvestedContext.
+  ///
+  /// In en, this message translates to:
+  /// **'Invested {amount}'**
+  String cfInvestedContext(Object amount);
+
+  /// No description provided for @cfWithdrawnContext.
+  ///
+  /// In en, this message translates to:
+  /// **'Withdrawn {amount}'**
+  String cfWithdrawnContext(Object amount);
+
+  /// No description provided for @cfTransferredInContext.
+  ///
+  /// In en, this message translates to:
+  /// **'Transferred in {amount}'**
+  String cfTransferredInContext(Object amount);
+
+  /// No description provided for @cfTransferredOutContext.
+  ///
+  /// In en, this message translates to:
+  /// **'Transferred out {amount}'**
+  String cfTransferredOutContext(Object amount);
 
   /// No description provided for @cfIncome.
   ///

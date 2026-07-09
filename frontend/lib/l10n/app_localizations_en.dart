@@ -1272,7 +1272,30 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get cfMonthlyExcludesTooltip =>
-      'Excludes internal transfers between your accounts and credit-card payments — those move money around your own balance sheet without changing your spending.';
+      'Excludes securities trades and internal transfers between your own accounts, plus credit-card payments — that money moves around your balance sheet without changing your income or spending. The amounts are shown below.';
+
+  @override
+  String get cfAlsoThisPeriod => 'Also this period —';
+
+  @override
+  String cfInvestedContext(Object amount) {
+    return 'Invested $amount';
+  }
+
+  @override
+  String cfWithdrawnContext(Object amount) {
+    return 'Withdrawn $amount';
+  }
+
+  @override
+  String cfTransferredInContext(Object amount) {
+    return 'Transferred in $amount';
+  }
+
+  @override
+  String cfTransferredOutContext(Object amount) {
+    return 'Transferred out $amount';
+  }
 
   @override
   String get cfIncome => 'Income';

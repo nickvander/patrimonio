@@ -2733,6 +2733,13 @@ async fn cash_flow_excludes_investment_trades_and_transfers() {
         "March income should exclude the $10k transfer, leaving the $46.80 dividend, got {}", march["income"]);
     assert!((march["spending"].as_f64().unwrap() - 200.0).abs() < 0.01,
         "March spending should exclude the $3,326 VOO buy, leaving the $200 grocery, got {}", march["spending"]);
+
+    // The peeled-off money is still visible as context: the VOO buy shows as
+    // net invested (+3326) and the ACH deposit as net transferred in (+10000).
+    assert!((march["invested"].as_f64().unwrap() - 3326.0).abs() < 0.01,
+        "March invested should surface the VOO buy (3326), got {}", march["invested"]);
+    assert!((march["transferred"].as_f64().unwrap() - 10000.0).abs() < 0.01,
+        "March transferred should surface the ACH deposit (10000), got {}", march["transferred"]);
 }
 
 // Insert an expense with an explicit PFC category at a date relative to

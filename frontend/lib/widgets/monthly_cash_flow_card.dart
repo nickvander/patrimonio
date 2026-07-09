@@ -62,6 +62,10 @@ class MonthlyCashFlowCard extends StatelessWidget {
 
     double income;
     double spending;
+    // Money peeled out of income/spending on the backend (securities trades
+    // and internal transfers), surfaced as context so it isn't invisible.
+    double invested = 0.0;
+    double transferred = 0.0;
     double? priorNet;
     // Prior month's income, kept alongside priorNet so the savings-rate
     // delta can be computed (prior rate = priorNet / priorIncome). Null
@@ -72,12 +76,18 @@ class MonthlyCashFlowCard extends StatelessWidget {
       // Sum every month in the fetched window.
       double inc = 0.0;
       double spend = 0.0;
+      double inv = 0.0;
+      double tran = 0.0;
       for (final m in trends) {
         inc += (m['income'] as num?)?.toDouble() ?? 0.0;
         spend += (m['spending'] as num?)?.toDouble() ?? 0.0;
+        inv += (m['invested'] as num?)?.toDouble() ?? 0.0;
+        tran += (m['transferred'] as num?)?.toDouble() ?? 0.0;
       }
       income = inc * conversionFactor;
       spending = spend * conversionFactor;
+      invested = inv * conversionFactor;
+      transferred = tran * conversionFactor;
       // No single "prior period" to compare an aggregate against — omit the
       // vs-prior delta rather than show a misleading month-over-month number.
       priorNet = null;
@@ -89,6 +99,11 @@ class MonthlyCashFlowCard extends StatelessWidget {
           ((current['income'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
       spending =
           ((current['spending'] as num?)?.toDouble() ?? 0.0) *
+              conversionFactor;
+      invested =
+          ((current['invested'] as num?)?.toDouble() ?? 0.0) * conversionFactor;
+      transferred =
+          ((current['transferred'] as num?)?.toDouble() ?? 0.0) *
               conversionFactor;
       if (prior != null) {
         final pi =
@@ -192,6 +207,32 @@ class MonthlyCashFlowCard extends StatelessWidget {
               ],
             );
 
+            // Context line: the investment/transfer money peeled out of
+            // income/spending on the backend, shown (not hidden) so the user
+            // can see where e.g. a paycheck-as-transfer or a stock buy went.
+            final contextParts = <String>[];
+            if (invested.abs() >= 0.005) {
+              contextParts.add(invested >= 0
+                  ? l.cfInvestedContext(currencyFormat.format(invested.abs()))
+                  : l.cfWithdrawnContext(currencyFormat.format(invested.abs())));
+            }
+            if (transferred.abs() >= 0.005) {
+              contextParts.add(transferred >= 0
+                  ? l.cfTransferredInContext(
+                      currencyFormat.format(transferred.abs()))
+                  : l.cfTransferredOutContext(
+                      currencyFormat.format(transferred.abs())));
+            }
+            final Widget? contextLine = contextParts.isEmpty
+                ? null
+                : Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      '${l.cfAlsoThisPeriod}  ${contextParts.join('  ·  ')}',
+                      style: TextStyle(fontSize: 12, color: context.textSubtle),
+                    ),
+                  );
+
             final spark = _NetSparkline(
               points: sparkSource
                   .map((m) =>
@@ -215,6 +256,7 @@ class MonthlyCashFlowCard extends StatelessWidget {
                   netLine,
                   const SizedBox(height: 12),
                   stats,
+                  ?contextLine,
                   const SizedBox(height: 12),
                   SizedBox(height: 48, child: spark),
                 ],
@@ -237,6 +279,7 @@ class MonthlyCashFlowCard extends StatelessWidget {
                           netLine,
                           const SizedBox(height: 12),
                           stats,
+                          ?contextLine,
                         ],
                       ),
                     ),

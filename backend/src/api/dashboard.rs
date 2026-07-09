@@ -1811,22 +1811,41 @@ async fn cash_flow_trends(
             LIMIT 1
         )
         SELECT TO_CHAR(t.date, 'YYYY-MM') as month,
-               -- Convert every amount to USD before summing.
-               -- Without this, a MX$20,000 paycheck would be counted
-               -- as 20,000 alongside USD amounts, making the income
-               -- and spending bars look 15-20x too large for users
-               -- with MXN accounts. Fallback rate 20.0 matches the
-               -- convention used throughout the dashboard.
-               SUM(CASE WHEN t.amount > 0 THEN
+               -- Convert every amount to USD before summing (a MX$20,000
+               -- paycheck must not count as 20,000 next to USD amounts).
+               -- Fallback rate 20.0 matches the dashboard convention.
+               --
+               -- income/spending are genuine household cash flow only:
+               -- securities trades (Investment) and internal Transfers are
+               -- peeled off into their own `invested` / `transferred` buckets
+               -- so the headline isn't distorted but the money stays visible.
+               SUM(CASE WHEN t.amount > 0
+                        AND UPPER(COALESCE(t.category, '')) NOT IN
+                            ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT') THEN
                        CASE WHEN a.currency = 'MXN'
                             THEN t.amount / COALESCE((SELECT rate FROM latest_fx), 20.0)
                             ELSE t.amount END
                    ELSE 0 END) as income,
-               SUM(CASE WHEN t.amount < 0 THEN
+               SUM(CASE WHEN t.amount < 0
+                        AND UPPER(COALESCE(t.category, '')) NOT IN
+                            ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT') THEN
                        CASE WHEN a.currency = 'MXN'
                             THEN ABS(t.amount) / COALESCE((SELECT rate FROM latest_fx), 20.0)
                             ELSE ABS(t.amount) END
-                   ELSE 0 END) as spending
+                   ELSE 0 END) as spending,
+               -- Net cash moved into investments (buys +, sells -): -amount, USD.
+               SUM(CASE WHEN UPPER(COALESCE(t.category, '')) = 'INVESTMENT' THEN
+                       CASE WHEN a.currency = 'MXN'
+                            THEN -t.amount / COALESCE((SELECT rate FROM latest_fx), 20.0)
+                            ELSE -t.amount END
+                   ELSE 0 END) as invested,
+               -- Net internal transfer flow (in +, out -), USD.
+               SUM(CASE WHEN UPPER(COALESCE(t.category, '')) IN
+                            ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER') THEN
+                       CASE WHEN a.currency = 'MXN'
+                            THEN t.amount / COALESCE((SELECT rate FROM latest_fx), 20.0)
+                            ELSE t.amount END
+                   ELSE 0 END) as transferred
         FROM transactions t
         JOIN accounts a ON a.id = t.account_id
         -- Calendar-month-aligned trailing window: months=1 yields the
@@ -1837,30 +1856,15 @@ async fn cash_flow_trends(
         WHERE t.date >= (DATE_TRUNC('month', CURRENT_DATE) - make_interval(months => ($2::int - 1)))
           AND t.user_id = $1
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
-          -- Exclude internal-transfer noise from the cash-flow view:
-          --
-          --   TRANSFER_IN_*  / TRANSFER_OUT_* (PFC) — money moving
-          --     between the user's own accounts. Counting these as
-          --     income or spending double-counts the same dollars on
-          --     both sides and makes the monthly card / bar chart
-          --     useless right after a bulk import.
-          --
-          --   LOAN_PAYMENTS_CREDIT_CARD_PAYMENT — paying off a credit
-          --     card the app is already tracking. The original purchase
-          --     was already counted as spending on the CC; counting
-          --     the payment-from-checking again doubles it. Other
-          --     LOAN_PAYMENTS_* (mortgage, student, auto) stay
-          --     in-scope because the destination account isn't
-          --     necessarily tracked.
-          -- Case-insensitive so both taxonomies are covered at once: Plaid's
-          -- uppercase PFC (TRANSFER_IN/OUT) and the app's manual categories
-          -- (Transfer / Investment). A securities trade ("Buy VOO") is not
-          -- spending — the cash is still yours as holdings — and an internal
-          -- ACH "Transfer" between the user's own accounts is neither income
-          -- nor spend; counting either distorts the cash-flow view (and the
-          -- savings rate / emergency-fund runway / projection contribution
-          -- that read this same predicate). Dividends stay in scope (Income).
-          AND UPPER(COALESCE(t.category, '')) NOT IN ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')
+          -- Investment trades and internal transfers are NOT filtered out
+          -- here — they're peeled into the `invested` / `transferred` buckets
+          -- in the SELECT above so income/spending stay clean while the money
+          -- stays visible. The rows below belong in NO bucket and are excluded
+          -- entirely:
+          --   LOAN_PAYMENTS_CREDIT_CARD_PAYMENT — paying off a tracked CC; the
+          --     original purchase was already counted as spending on the CC,
+          --     so counting the payment again would double it. Other
+          --     LOAN_PAYMENTS_* (mortgage, student, auto) stay in scope.
           AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
           -- Exclude personal-lending legs: a loan disbursement isn't
           -- spending (it's a receivable) and a repayment isn't income
@@ -1894,10 +1898,16 @@ async fn cash_flow_trends(
                     .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
                 let spending: f64 = r.try_get::<rust_decimal::Decimal, _>("spending")
                     .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+                let invested: f64 = r.try_get::<rust_decimal::Decimal, _>("invested")
+                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
+                let transferred: f64 = r.try_get::<rust_decimal::Decimal, _>("transferred")
+                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
                 CashFlowPoint {
                     month: r.get("month"),
                     income,
                     spending,
+                    invested,
+                    transferred,
                 }
             })
             .collect(),
@@ -3215,6 +3225,13 @@ struct CashFlowPoint {
     month: String,
     income: f64,
     spending: f64,
+    /// Net cash moved into investments this period (buys positive, sells
+    /// negative), USD. Peeled out of income/spending so the headline is
+    /// clean, but surfaced as context so the money isn't invisible.
+    invested: f64,
+    /// Net internal transfer flow (money in positive, out negative), USD.
+    /// Surfaced as context for the same reason.
+    transferred: f64,
 }
 
 #[derive(Serialize)]

@@ -1290,7 +1290,30 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get cfMonthlyExcludesTooltip =>
-      'No incluye transferencias internas entre tus cuentas ni pagos de tarjeta de crédito: ese dinero se mueve dentro de tu propio balance sin cambiar tus gastos.';
+      'No incluye operaciones de inversión ni transferencias internas entre tus cuentas, ni pagos de tarjeta de crédito: ese dinero se mueve dentro de tu balance sin cambiar tus ingresos ni gastos. Los montos se muestran abajo.';
+
+  @override
+  String get cfAlsoThisPeriod => 'También este periodo —';
+
+  @override
+  String cfInvestedContext(Object amount) {
+    return 'Invertido $amount';
+  }
+
+  @override
+  String cfWithdrawnContext(Object amount) {
+    return 'Retirado $amount';
+  }
+
+  @override
+  String cfTransferredInContext(Object amount) {
+    return 'Transferencia recibida $amount';
+  }
+
+  @override
+  String cfTransferredOutContext(Object amount) {
+    return 'Transferencia enviada $amount';
+  }
 
   @override
   String get cfIncome => 'Ingresos';
