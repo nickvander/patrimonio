@@ -148,7 +148,7 @@ class _AddCryptoDialogState extends State<AddCryptoDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(l.dlgCryptoLinkError(e.toString())),
-            backgroundColor: Colors.red,
+            backgroundColor: context.negative,
           ),
         );
       }

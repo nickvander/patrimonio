@@ -542,7 +542,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.black12,
+          color: context.tileSurface,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(

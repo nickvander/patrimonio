@@ -55,7 +55,7 @@ class _AddHoldingDialogState extends State<AddHoldingDialog> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(e.toString().replaceFirst('Exception: ', '')),
-        backgroundColor: Colors.red,
+        backgroundColor: context.negative,
       ));
     } finally {
       if (mounted) setState(() => _submitting = false);

@@ -24,7 +24,7 @@ class DateRangeSelector extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: Colors.black12,
+        color: context.tileSurface,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(

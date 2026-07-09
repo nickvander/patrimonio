@@ -121,7 +121,7 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(AppLocalizations.of(context).cbConnected),
-              backgroundColor: Colors.green,
+              backgroundColor: context.positive,
             ),
           );
           Navigator.pop(context);
@@ -171,7 +171,7 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
   void _showError(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: Colors.red),
+        SnackBar(content: Text(message), backgroundColor: context.negative),
       );
     }
   }
@@ -194,10 +194,10 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
                   const SizedBox(height: 24),
                 ],
                 if (_setupStatus?['ready_for_plaid_linking'] == false) ...[
-                  const Icon(
+                  Icon(
                     Icons.warning_amber_rounded,
                     size: 42,
-                    color: Colors.orangeAccent,
+                    color: context.warning,
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -245,22 +245,22 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
 
     switch (env) {
       case 'sandbox':
-        color = Colors.blueGrey;
+        color = context.neutralAccent;
         text = l.cbEnvSandbox;
         icon = Icons.science;
         break;
       case 'development':
-        color = Colors.indigo;
+        color = context.info;
         text = l.cbEnvDevelopment;
         icon = Icons.developer_mode;
         break;
       case 'production':
-        color = Colors.teal;
+        color = context.tealAccent;
         text = l.cbEnvProduction;
         icon = Icons.verified_user;
         break;
       default:
-        color = Colors.grey;
+        color = context.textSubtle;
         text = l.cbEnvUnknown(env);
         icon = Icons.info_outline;
     }

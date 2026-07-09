@@ -1422,7 +1422,7 @@ class _ImportScreenState extends State<ImportScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(l.impSelectAccountFirst,
-                  style: const TextStyle(color: Colors.redAccent)),
+                  style: TextStyle(color: context.negative)),
             ),
           );
           return;
@@ -1658,20 +1658,22 @@ class _ImportScreenState extends State<ImportScreen> {
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: context.positive,
-                    foregroundColor: Colors.white,
+                    foregroundColor: context.onAccent(context.positive),
                     disabledBackgroundColor:
                         context.positive.withValues(alpha: 0.4),
-                    disabledForegroundColor: Colors.white70,
+                    disabledForegroundColor:
+                        context.onAccent(context.positive).withValues(alpha: 0.7),
                     padding: const EdgeInsets.symmetric(
                         horizontal: 24, vertical: 14),
                   ),
                   onPressed: (_isUploading || n == 0) ? null : _confirmImport,
                   icon: _isUploading
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
+                              strokeWidth: 2,
+                              color: context.onAccent(context.positive)),
                         )
                       : const Icon(Icons.download_done, size: 18),
                   label: Text(
@@ -1724,7 +1726,7 @@ class _ImportScreenState extends State<ImportScreen> {
             const SizedBox(height: 8),
             Text(
               l.impUploadSubtitle(supportedMxBanksSentence()),
-              style: const TextStyle(color: Colors.grey),
+              style: TextStyle(color: context.textSubtle),
             ),
             const SizedBox(height: 32),
             // "Statement coverage" — a quick per-account "here's what I
@@ -1983,7 +1985,7 @@ class _ImportScreenState extends State<ImportScreen> {
                             },
                             child: Text(
                               l.impDeselectAll,
-                              style: const TextStyle(color: Colors.grey),
+                              style: TextStyle(color: context.textSubtle),
                             ),
                           ),
                         ],
@@ -2220,12 +2222,13 @@ class _ImportScreenState extends State<ImportScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: context.positive,
-                        foregroundColor: Colors.white,
+                        foregroundColor: context.onAccent(context.positive),
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
                       onPressed: (_isUploading || _isReadingFiles) ? null : _uploadFile,
                       child: _isUploading
-                          ? const CircularProgressIndicator(color: Colors.white)
+                          ? CircularProgressIndicator(
+                              color: context.onAccent(context.positive))
                           : Text(
                               l.impProcessStatement,
                               style: const TextStyle(fontWeight: FontWeight.bold),

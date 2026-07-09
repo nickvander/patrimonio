@@ -1,9 +1,33 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-08 (round-8 enforce-the-skills: lints + clippy gate — committed `cc5c680`, pushed, deployed to thelab)
-> **Branch:** `main` (rounds 7 & 8 committed + deployed; api :8085 + frontend :3004 healthy).
+> **Last updated:** 2026-07-09 (round-9 AGENTS.md + palette contrast pass + lint cleanup)
+> **Branch:** `main` (rounds 7 & 8 committed + deployed; round-9 in progress).
 
-## 2026-07-08 sprint — round 7 (best-practice skills + skill-driven fixes)
+## 2026-07-09 sprint — round 9 (cross-tool AGENTS.md, palette contrast, lint cleanup)
+
+* **Cross-tool agent guide:** new canonical `AGENTS.md` (skills pointer up top +
+  project orientation + run/test/enforcement summary). Claude Code reads it via a
+  `@AGENTS.md` import in `CLAUDE.md` (documented cross-platform pattern — CC does
+  NOT read AGENTS.md natively); `GEMINI.md` is now a symlink to it. One source of
+  truth for all agent tools. (Committed `24394cb`.)
+* **Lint cleanup:** enabled `directives_ordering` and cleaned the tree via
+  `dart fix` (39 files). Deferred `avoid_catches_without_on_clauses` (~186) — the
+  mechanical fix is behaviour-identical lint-theater; doing it right is per-site
+  work. (Committed `24394cb`.)
+* **Palette light/dark contrast pass** (17 files): found + fixed a real
+  light-mode contrast **bug** — accent buttons hardcoded their label color
+  (`Colors.black`/`white`), correct in only one theme, since `context.positive`
+  is dark `#0C6A56` on white / bright `#3FD3AE` on dark. New luminance-aware
+  `context.onAccent(accent)` token (picks the AA-clearing black/white) + a
+  contrast test on both theme fills. Nav-rail accents refactored from const neon
+  hexes to brightness-resolved `BrandPalette` tearoffs. ~50 hardcoded
+  `Colors.X`/hex swaps → the `context.*` extension (notifications, snackbars,
+  empty-state greys → `textFaint/textSubtle`, `Colors.black12` pills →
+  `tileSurface`). Left intentional colors alone (QR black-on-white, Coinbase
+  brand blue, transparents, scrims). 395 frontend tests pass; analyze clean.
+  **Recommend a human visual check in both themes** for the accent buttons, nav
+  rail, and notification-bell rows (they now render the deeper AA shades in
+  light mode).
 
 * **Authored two project skills** in `.agent/skills/` (the repo's existing
   cross-tool skills dir, alongside `backend-dev`/`dev-workflow`/`work-tracking`):

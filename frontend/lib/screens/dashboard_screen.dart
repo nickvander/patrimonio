@@ -91,7 +91,10 @@ class _NavDest {
   final String label; // full label (rail, palette, More sheet)
   final String shortLabel; // compact label for the bottom bar
   final IconData icon;
-  final Color accent;
+  // Brightness-resolved accent: a static `BrandPalette` tearoff, so the
+  // selected icon/label picks the AA-passing shade for the active theme
+  // (the const neon hexes failed contrast on the light rail surface).
+  final Color Function(Brightness) accent;
   final NavTier tier;
   const _NavDest(
     this.id,
@@ -363,22 +366,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// the same brand hues the old tab list + palette used.
   static const List<_NavDest> _allDestinations = [
     _NavDest(NavId.overview, 'Overview', 'Home', Icons.dashboard_outlined,
-        Color(0xFF00E676), NavTier.primary),
+        BrandPalette.positive, NavTier.primary),
     _NavDest(NavId.portfolio, 'Portfolio', 'Invest', Icons.pie_chart_outline,
-        Color(0xFF1DE9B6), NavTier.primary),
+        BrandPalette.teal, NavTier.primary),
     _NavDest(NavId.transactions, 'Transactions', 'Activity',
-        Icons.receipt_long_outlined, Color(0xFF00B0FF), NavTier.primary),
+        Icons.receipt_long_outlined, BrandPalette.info, NavTier.primary),
     _NavDest(NavId.cashFlow, 'Cash flow', 'Cash',
-        Icons.account_balance_wallet_outlined, Color(0xFF1DE9B6),
+        Icons.account_balance_wallet_outlined, BrandPalette.teal,
         NavTier.primary),
     _NavDest(NavId.projections, 'Projections', 'Proj.',
-        Icons.trending_up_outlined, Color(0xFFFFB300), NavTier.secondary),
+        Icons.trending_up_outlined, BrandPalette.warning, NavTier.secondary),
     _NavDest(NavId.tax, 'Tax planning', 'Tax', Icons.account_balance_outlined,
-        Color(0xFFAB47BC), NavTier.secondary),
+        BrandPalette.purple, NavTier.secondary),
     _NavDest(NavId.lending, 'Lending', 'Loans', Icons.monetization_on,
-        Color(0xFF1DE9B6), NavTier.secondary),
+        BrandPalette.teal, NavTier.secondary),
     _NavDest(NavId.settings, 'Settings', 'Settings', Icons.settings_outlined,
-        Color(0xFF90A4AE), NavTier.secondary),
+        BrandPalette.neutral, NavTier.secondary),
   ];
 
   /// The currently-visible sections. Lending is filtered out unless the
@@ -665,7 +668,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ? l10n.dashPaletteSectionLending
             : l10n.dashPaletteSection,
         icon: d.icon,
-        accent: d.accent,
+        accent: d.accent(Theme.of(context).brightness),
         onSelected: () => _goToNav(d.id),
       ));
     }
@@ -3183,7 +3186,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         category,
         subCategory,
         value,
-        categoryColors[category] ?? Colors.blueGrey,
+        categoryColors[category] ?? context.neutralAccent,
         quantity: quantity,
         assetClassKey: assetClass,
       );
@@ -3340,6 +3343,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 },
                 notifications: deriveNotifications(
                   l: AppLocalizations.of(context),
+                  brightness: Theme.of(context).brightness,
                   syncData: _syncData ?? const [],
                   netWorthHistory: _netWorthHistory ?? const [],
                   onJumpToManagement: () => _goToNav(NavId.settings),
@@ -3539,7 +3543,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            Icon(Icons.error_outline, size: 64, color: context.negative),
             const SizedBox(height: 16),
             Text(
               l.dashErrorLoading(_error ?? ''),
@@ -5295,6 +5299,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _railTile(_NavDest d, bool selected) {
     final scheme = Theme.of(context).colorScheme;
+    final accent = d.accent(Theme.of(context).brightness);
     final label = _navLabel(AppLocalizations.of(context), d.id);
     // Expose selection to assistive tech — color/weight alone don't tell a
     // screen-reader user which section is current (the NavigationBar path
@@ -5307,7 +5312,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         child: Material(
           color: selected
-              ? d.accent.withValues(alpha: 0.14)
+              ? accent.withValues(alpha: 0.14)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
           child: InkWell(
@@ -5320,7 +5325,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   Icon(d.icon,
                       size: 20,
-                      color: selected ? d.accent : scheme.onSurfaceVariant),
+                      color: selected ? accent : scheme.onSurfaceVariant),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -5393,7 +5398,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Semantics(
                   button: true,
                   child: ListTile(
-                    leading: Icon(d.icon, color: d.accent),
+                    leading:
+                        Icon(d.icon, color: d.accent(Theme.of(context).brightness)),
                     title: Text(_navLabel(l, d.id)),
                     onTap: () {
                       Navigator.of(sheetCtx).pop();

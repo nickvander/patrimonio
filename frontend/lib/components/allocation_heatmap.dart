@@ -247,11 +247,11 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
                       child: Text(
                         l.lwAllocTotal(widget.currencyFormat
                             .format(activeTotal * widget.conversionFactor)),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
-                          color: Colors.grey,
+                          color: context.textSubtle,
                           fontWeight: FontWeight.w600,
-                          fontFeatures: [FontFeature.tabularFigures()],
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                         textAlign: TextAlign.right,
                         maxLines: 1,
@@ -874,7 +874,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
             width: 4,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.grey.withValues(alpha: 0.5),
+              color: context.textSubtle,
               shape: BoxShape.circle,
             ),
           ),

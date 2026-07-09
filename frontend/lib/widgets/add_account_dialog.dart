@@ -365,7 +365,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
       if (!mounted) return;
       final l = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.dlgAccountCreateError(e.toString().replaceFirst('Exception: ', ''))), backgroundColor: Colors.red),
+        SnackBar(content: Text(l.dlgAccountCreateError(e.toString().replaceFirst('Exception: ', ''))), backgroundColor: context.negative),
       );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);

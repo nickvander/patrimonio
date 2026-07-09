@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../utils/mask_aware_name.dart';
+import '../utils/theme_colors.dart';
 
 /// Dialog for manually entering a transaction — for cash spend, gifts,
 /// reimbursements, anything Plaid never sees. Default sign convention
@@ -163,7 +164,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Text(
                     l.dlgTxNoAccounts,
-                    style: const TextStyle(color: Colors.orangeAccent),
+                    style: TextStyle(color: context.warning),
                   ),
                 ),
               DropdownButtonFormField<String>(

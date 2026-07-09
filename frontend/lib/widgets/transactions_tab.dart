@@ -998,7 +998,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
               label: Text(l.txAddAccount),
               style: FilledButton.styleFrom(
                 backgroundColor: context.positive,
-                foregroundColor: Colors.black,
+                foregroundColor: context.onAccent(context.positive),
               ),
             ),
           ],

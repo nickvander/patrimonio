@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../l10n/app_localizations.dart';
+import '../utils/theme_colors.dart';
 
 /// One-time display of recovery codes. Shown after bootstrap and when
 /// the user regenerates codes from the Security page. The dialog is
@@ -33,7 +34,7 @@ class _RecoveryCodesDialogState extends State<RecoveryCodesDialog> {
     return AlertDialog(
       title: Row(
         children: [
-          const Icon(Icons.lock_outline, color: Color(0xFFFFB300)),
+          Icon(Icons.lock_outline, color: context.warning),
           const SizedBox(width: 12),
           Expanded(
             child: Text(

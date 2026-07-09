@@ -135,7 +135,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.account_balance_wallet_outlined,
-                    size: 56, color: Colors.grey.shade700),
+                    size: 56, color: context.textFaint),
                 const SizedBox(height: 14),
                 Text(
                   l.pfNoAccountsYet,
@@ -150,7 +150,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                   l.pfNoAccountsBody,
                   textAlign: TextAlign.center,
                   style:
-                      TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                      TextStyle(color: context.textSubtle, fontSize: 12),
                 ),
                 const SizedBox(height: 18),
                 FilledButton.icon(
@@ -159,7 +159,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                   label: Text(l.pfAddAnAccount),
                   style: FilledButton.styleFrom(
                     backgroundColor: context.positive,
-                    foregroundColor: Colors.black,
+                    foregroundColor: context.onAccent(context.positive),
                   ),
                 ),
               ],
@@ -1216,7 +1216,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                     onDeleteAccount?.call(acc['id']);
                   },
                   style: TextButton.styleFrom(
-                      foregroundColor: Colors.redAccent),
+                      foregroundColor: context.negative),
                   child: Text(l.pfDelete),
                 ),
               ],
@@ -1261,11 +1261,11 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
           child: MergeSemantics(
             child: Row(
               children: [
-                const Icon(Icons.delete_outline,
-                    size: 18, color: Colors.redAccent),
+                Icon(Icons.delete_outline,
+                    size: 18, color: context.negative),
                 const SizedBox(width: 8),
                 Text(l.pfDelete,
-                    style: const TextStyle(color: Colors.redAccent)),
+                    style: TextStyle(color: context.negative)),
               ],
             ),
           ),

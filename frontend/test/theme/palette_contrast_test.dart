@@ -113,6 +113,26 @@ void main() {
     });
   });
 
+  group('onAccent label picks the AA-clearing foreground', () {
+    // Mirrors ThemeColorsExt.onAccent: whichever of black/white has the
+    // higher contrast against the accent fill. The accent-button bug was a
+    // hard-coded label that only cleared AA in one theme.
+    Color onAccent(Color accent) =>
+        contrastRatio(Colors.white, accent) >= contrastRatio(Colors.black, accent)
+            ? Colors.white
+            : Colors.black;
+
+    test('onAccent clears AA on positive(light) fill', () {
+      final accent = BrandPalette.positive(Brightness.light);
+      expect(contrastRatio(onAccent(accent), accent), greaterThan(4.5));
+    });
+
+    test('onAccent clears AA on positive(dark) fill', () {
+      final accent = BrandPalette.positive(Brightness.dark);
+      expect(contrastRatio(onAccent(accent), accent), greaterThan(4.5));
+    });
+  });
+
   group('Tooltip text on inverseSurface', () {
     // The tooltip background is `inverseSurface` (M3): dark in light
     // mode, light in dark mode. Tooltip accents must therefore use the

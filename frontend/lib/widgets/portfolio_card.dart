@@ -1854,7 +1854,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                   Icon(
                     isFiltered ? Icons.filter_alt_off : Icons.show_chart,
                     size: 56,
-                    color: Colors.grey.shade700,
+                    color: context.textFaint,
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -1881,7 +1881,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                       l.pfNoHoldingsBody,
                       textAlign: TextAlign.center,
                       style:
-                          TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                          TextStyle(fontSize: 12, color: context.textSubtle),
                     ),
                   ],
                 ],
@@ -2525,7 +2525,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
                   name: subtitleName,
                   institution: instName,
                   account: subtitleAccount,
-                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  style: TextStyle(fontSize: 11, color: context.textSubtle),
                 ),
               ],
             ),
@@ -3362,8 +3362,8 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
                           name: subtitleName,
                           institution: instName,
                           account: subtitleAccount,
-                          style: const TextStyle(
-                              fontSize: 11, color: Colors.grey),
+                          style: TextStyle(
+                              fontSize: 11, color: context.textSubtle),
                         ),
                     ],
                   ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
+import '../theme/palette.dart';
 import '../utils/account_category.dart';
 import '../utils/category.dart';
 import '../utils/percent_format.dart';
@@ -36,6 +37,11 @@ class AppNotification {
 /// in memory client-side.
 List<AppNotification> deriveNotifications({
   required AppLocalizations l,
+  /// Active theme brightness — resolves each row's accent to its
+  /// AA-passing shade for the current theme (via `BrandPalette`). Defaults
+  /// to dark (the historical neon look) so context-less callers/tests keep
+  /// working; the live bell passes `Theme.of(context).brightness`.
+  Brightness brightness = Brightness.dark,
   required List<dynamic> syncData,
   required List<dynamic> netWorthHistory,
   required VoidCallback onJumpToManagement,
@@ -96,7 +102,7 @@ List<AppNotification> deriveNotifications({
       out.add(AppNotification(
         id: 'loan_overdue:$borrower:$n',
         icon: Icons.event_busy,
-        accent: Colors.redAccent,
+        accent: BrandPalette.negative(brightness),
         title: l.lwNotifRepaymentOverdueTitle(borrower),
         // gen-l10n orders these alphabetically → (amount, daysOverdue, dueDate, number).
         detail: l.lwNotifRepaymentOverdueDetail(
@@ -107,7 +113,7 @@ List<AppNotification> deriveNotifications({
       out.add(AppNotification(
         id: 'loan_due:$borrower:$n',
         icon: Icons.event,
-        accent: Colors.amber,
+        accent: BrandPalette.warning(brightness),
         title: l.lwNotifRepaymentDueTitle(borrower, until),
         // gen-l10n orders these alphabetically → (amount, dueDate, number).
         detail: l.lwNotifRepaymentDueDetail(money(amount, cur), dueStr, n),
@@ -121,7 +127,7 @@ List<AppNotification> deriveNotifications({
       out.add(AppNotification(
         id: 'loan_due_today:$borrower:$n',
         icon: Icons.event_available,
-        accent: Colors.amber,
+        accent: BrandPalette.warning(brightness),
         title: l.lwNotifRepaymentDueTodayTitle(borrower),
         // gen-l10n orders these alphabetically → (amount, number); pass amount first.
         detail: l.lwNotifRepaymentDueTodayDetail(money(amount, cur), n),
@@ -153,7 +159,7 @@ List<AppNotification> deriveNotifications({
       out.add(AppNotification(
         id: 'low_balance:$id',
         icon: Icons.account_balance_wallet_outlined,
-        accent: Colors.amber,
+        accent: BrandPalette.warning(brightness),
         title: l.lwNotifLowBalanceTitle(name),
         detail: l.lwNotifLowBalanceDetail(money(bal, cur), money(threshold, cur)),
         onTap: onJumpToAccount == null
@@ -172,7 +178,7 @@ List<AppNotification> deriveNotifications({
       out.add(AppNotification(
         id: 'sync_reconnect:$name',
         icon: Icons.link_off,
-        accent: Colors.orangeAccent,
+        accent: BrandPalette.warning(brightness),
         title: l.lwNotifNeedsReconnectTitle(name),
         detail: l.lwNotifNeedsReconnectDetail,
         onTap: onJumpToManagement,
@@ -181,7 +187,7 @@ List<AppNotification> deriveNotifications({
       out.add(AppNotification(
         id: 'sync_failed:$name',
         icon: Icons.error_outline,
-        accent: Colors.redAccent,
+        accent: BrandPalette.negative(brightness),
         title: l.lwNotifSyncFailedTitle(name),
         detail: (raw['last_sync_error'] ?? l.lwNotifUnknownSyncError).toString(),
         onTap: onJumpToManagement,
@@ -197,7 +203,7 @@ List<AppNotification> deriveNotifications({
             out.add(AppNotification(
               id: 'sync_stale:$name',
               icon: Icons.access_time,
-              accent: Colors.amber,
+              accent: BrandPalette.warning(brightness),
               // gen-l10n orders these alphabetically → (days, name); pass days first.
               title: l.lwNotifStaleSyncTitle(days, name),
               detail: l.lwNotifStaleSyncDetail,
@@ -253,8 +259,10 @@ List<AppNotification> deriveNotifications({
             id: 'net_worth_since_sync:$latestDateStr',
             icon: up ? Icons.trending_up : Icons.trending_down,
             accent: up
-                ? Colors.teal
-                : (pct.abs() >= 5 ? Colors.redAccent : Colors.amber),
+                ? BrandPalette.teal(brightness)
+                : (pct.abs() >= 5
+                    ? BrandPalette.negative(brightness)
+                    : BrandPalette.warning(brightness)),
             title: up
                 ? l.lwNotifNetWorthUpTitle(amount, pctStr)
                 : l.lwNotifNetWorthDownTitle(amount, pctStr),
@@ -305,7 +313,7 @@ List<AppNotification> deriveNotifications({
       out.add(AppNotification(
         id: 'spending_up:${s.code}:$recentMonth',
         icon: Icons.trending_up,
-        accent: Colors.orangeAccent,
+        accent: BrandPalette.warning(brightness),
         title: l.lwNotifSpendingUpTitle(
             s.label, '${(s.pct * 100).round()}%'),
         detail: l.lwNotifSpendingUpDetail(lookback, money(s.avg, 'USD')),
@@ -380,7 +388,7 @@ List<AppNotification> deriveNotifications({
       out.add(AppNotification(
         id: 'sub_price_up:${h.merchant.toLowerCase()}:${h.now.toStringAsFixed(2)}',
         icon: Icons.price_change_outlined,
-        accent: Colors.amber,
+        accent: BrandPalette.warning(brightness),
         title: l.lwNotifSubPriceUpTitle(h.merchant),
         detail: l.lwNotifSubPriceUpDetail(
             money(h.now, h.cur), money(h.was, h.cur)),
@@ -410,7 +418,7 @@ List<AppNotification> deriveNotifications({
     out.add(AppNotification(
       id: 'account_archived:$id',
       icon: Icons.link_off,
-      accent: Colors.blueGrey,
+      accent: BrandPalette.neutral(brightness),
       title: l.lwNotifAccountArchivedTitle(institution),
       detail: l.lwNotifAccountArchivedDetail(name, institution),
       onTap: onJumpToClosedAccounts,
@@ -518,7 +526,7 @@ class NotificationsBell extends StatelessWidget {
               width: 10,
               height: 10,
               decoration: BoxDecoration(
-                color: Colors.orangeAccent,
+                color: context.warning,
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: Theme.of(context).colorScheme.surface,
@@ -676,8 +684,8 @@ class NotificationsBell extends StatelessWidget {
               margin: const EdgeInsets.only(top: 5),
               width: 8,
               height: 8,
-              decoration: const BoxDecoration(
-                color: Colors.orangeAccent,
+              decoration: BoxDecoration(
+                color: context.warning,
                 shape: BoxShape.circle,
               ),
             ),

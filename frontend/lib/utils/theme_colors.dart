@@ -81,6 +81,21 @@ extension ThemeColorsExt on BuildContext {
       ? accent.withValues(alpha: 0.35)
       : accent.withValues(alpha: 0.55);
 
+  /// Foreground (label/icon) colour to place *on top of* a filled accent
+  /// background — returns whichever of black/white has the HIGHER WCAG
+  /// contrast against [accent].
+  ///
+  /// Fixes the accent-button bug: a hard-coded `Colors.black` (or white)
+  /// label is only correct in one theme, because a semantic accent like
+  /// `context.positive` is a deep shade in light mode (#0C6A56 → needs a
+  /// white label) but a bright shade in dark mode (#3FD3AE → needs a black
+  /// label). Call `context.onAccent(context.positive)` so the label flips
+  /// with the theme and always clears AA against the button fill.
+  Color onAccent(Color accent) =>
+      contrastRatio(Colors.white, accent) >= contrastRatio(Colors.black, accent)
+          ? Colors.white
+          : Colors.black;
+
   // ---------------------------------------------------------------------------
   // Semantic accents (delegate to BrandPalette).
   //
