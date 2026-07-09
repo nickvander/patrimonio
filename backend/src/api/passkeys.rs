@@ -90,7 +90,7 @@ pub fn reauth_protected_router() -> Router<AppState> {
 // ---------------------------------------------------------------------------
 pub fn build_webauthn(frontend_base_url: &str) -> anyhow::Result<Webauthn> {
     let parsed = Url::parse(frontend_base_url)
-        .map_err(|e| anyhow::anyhow!("invalid FRONTEND_BASE_URL '{}': {}", frontend_base_url, e))?;
+        .map_err(|e| anyhow::anyhow!("invalid FRONTEND_BASE_URL '{frontend_base_url}': {e}"))?;
     let host = parsed
         .host_str()
         .ok_or_else(|| anyhow::anyhow!("FRONTEND_BASE_URL has no host"))?;
@@ -107,7 +107,7 @@ pub fn build_webauthn(frontend_base_url: &str) -> anyhow::Result<Webauthn> {
     if rp_id == "localhost" && host != "localhost" {
         origin
             .set_host(Some("localhost"))
-            .map_err(|e| anyhow::anyhow!("failed to override origin host: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("failed to override origin host: {e}"))?;
     }
     let builder = WebauthnBuilder::new(rp_id, &origin)?
         .rp_name("Patrimonio")
@@ -865,7 +865,7 @@ async fn store_state<T: Serialize>(state: &AppState, key: &str, value: &T) -> Re
                  stored in Redis as plaintext JSON. Set ENCRYPTION_KEY in \
                  production to harden against a Redis snapshot leak."
             );
-            format!("v1:{}", json)
+            format!("v1:{json}")
         }
     };
     let mut conn = state

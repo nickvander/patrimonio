@@ -104,9 +104,7 @@ pub async fn verify_plaid_webhook(
     }
     if age > IAT_MAX_AGE_SECONDS {
         bail!(
-            "Plaid-Verification JWT is stale (iat age {}s > {}s)",
-            age,
-            IAT_MAX_AGE_SECONDS
+            "Plaid-Verification JWT is stale (iat age {age}s > {IAT_MAX_AGE_SECONDS}s)"
         );
     }
 

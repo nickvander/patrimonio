@@ -38,7 +38,7 @@ fn build_totp(secret_bytes: Vec<u8>, account: &str) -> Result<TOTP> {
         Some(ISSUER.to_string()),
         account.to_string(),
     )
-    .map_err(|e| anyhow!("totp build: {}", e))
+    .map_err(|e| anyhow!("totp build: {e}"))
 }
 
 /// Result of starting enrollment — secret is plaintext base32 (so
@@ -69,7 +69,7 @@ pub async fn begin_enrollment(
 
     // Store encrypted, but DON'T enable yet — confirm() does that.
     let encrypted = encryption::encrypt(enc_key, &secret_base32)
-        .map_err(|e| anyhow!("encrypt totp secret: {}", e))?;
+        .map_err(|e| anyhow!("encrypt totp secret: {e}"))?;
 
     sqlx::query(
         "UPDATE users SET totp_secret_enc = $1, totp_enabled = false WHERE id = $2",
@@ -78,7 +78,7 @@ pub async fn begin_enrollment(
     .bind(user_id)
     .execute(db)
     .await
-    .map_err(|e| anyhow!("store enrollment: {}", e))?;
+    .map_err(|e| anyhow!("store enrollment: {e}"))?;
 
     Ok(EnrollmentChallenge {
         secret_base32,
@@ -133,7 +133,7 @@ async fn verify_inner(
     .bind(user_id)
     .fetch_optional(db)
     .await
-    .map_err(|e| anyhow!("load secret: {}", e))?;
+    .map_err(|e| anyhow!("load secret: {e}"))?;
 
     let (encrypted, username, last_used_step) = match row {
         Some((Some(enc), u, last)) => (enc, u, last),
@@ -141,10 +141,10 @@ async fn verify_inner(
     };
 
     let secret_b32 = encryption::decrypt(enc_key, &encrypted)
-        .map_err(|e| anyhow!("decrypt totp secret: {}", e))?;
+        .map_err(|e| anyhow!("decrypt totp secret: {e}"))?;
     let secret = Secret::Encoded(secret_b32)
         .to_bytes()
-        .map_err(|e| anyhow!("decode totp secret: {}", e))?;
+        .map_err(|e| anyhow!("decode totp secret: {e}"))?;
     let totp = build_totp(secret, &username)?;
 
     // Strip whitespace and any leading "0" pads the user might type.
@@ -154,7 +154,7 @@ async fn verify_inner(
     }
     let ok = totp
         .check_current(&normalized)
-        .map_err(|e| anyhow!("check totp: {}", e))?;
+        .map_err(|e| anyhow!("check totp: {e}"))?;
     if !ok {
         return Ok(false);
     }
@@ -171,7 +171,7 @@ async fn verify_inner(
     // closest match and is good enough as a replay marker.
     let current_step = (std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| anyhow!("clock: {}", e))?
+        .map_err(|e| anyhow!("clock: {e}"))?
         .as_secs()
         / STEP_SECS) as i64;
 
@@ -191,7 +191,7 @@ async fn verify_inner(
         .bind(user_id)
         .execute(db)
         .await
-        .map_err(|e| anyhow!("advance totp step: {}", e))?;
+        .map_err(|e| anyhow!("advance totp step: {e}"))?;
 
     Ok(true)
 }
@@ -205,7 +205,7 @@ pub async fn mark_enabled(db: &PgPool, user_id: Uuid) -> Result<bool> {
     .bind(user_id)
     .execute(db)
     .await
-    .map_err(|e| anyhow!("mark enabled: {}", e))?;
+    .map_err(|e| anyhow!("mark enabled: {e}"))?;
     Ok(result.rows_affected() > 0)
 }
 
@@ -214,7 +214,7 @@ pub async fn disable(db: &PgPool, user_id: Uuid) -> Result<()> {
         .bind(user_id)
         .execute(db)
         .await
-        .map_err(|e| anyhow!("disable totp: {}", e))?;
+        .map_err(|e| anyhow!("disable totp: {e}"))?;
     Ok(())
 }
 
@@ -223,6 +223,6 @@ pub async fn is_enabled(db: &PgPool, user_id: Uuid) -> Result<bool> {
         .bind(user_id)
         .fetch_optional(db)
         .await
-        .map_err(|e| anyhow!("totp is_enabled: {}", e))?;
+        .map_err(|e| anyhow!("totp is_enabled: {e}"))?;
     Ok(row.map(|r| r.0).unwrap_or(false))
 }

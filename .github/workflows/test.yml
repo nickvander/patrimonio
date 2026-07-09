@@ -54,6 +54,11 @@ jobs:
       SQLX_OFFLINE: "true"
     steps:
       - uses: actions/checkout@v4
+      # 1.88.0 must match backend/rust-toolchain.toml and backend/Dockerfile
+      # (FROM rust:1.88-slim). Pinning all three keeps `cargo clippy` results
+      # identical locally, in CI, and in the prod build — clippy lints drift
+      # between Rust versions (e.g. uninlined_format_args moved to `pedantic`
+      # after 1.88), so an unpinned local toolchain would miss what CI flags.
       - uses: dtolnay/rust-toolchain@1.88.0
         with:
           components: clippy

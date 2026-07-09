@@ -87,7 +87,7 @@ impl CryptoService {
                 
                 if amount > Decimal::ZERO {
                     let external_id = acc["id"].as_str().unwrap_or("");
-                    let acc_name = format!("{} ({})", name, currency);
+                    let acc_name = format!("{name} ({currency})");
                     
                     // Estimate value in USD
                     let price = CryptoPriceService::get_spot_price(currency, "USD").await.unwrap_or(Decimal::ZERO);
@@ -147,14 +147,14 @@ impl CryptoService {
         let method = "GET";
         let path = "/v3/balances/";
         
-        let message = format!("{}{}{}", timestamp, method, path);
+        let message = format!("{timestamp}{method}{path}");
         let mut mac = HmacSha256::new_from_slice(api_secret.as_bytes())?;
         mac.update(message.as_bytes());
         let signature = hex::encode(mac.finalize().into_bytes());
 
-        let auth_header = format!("Bitso {}:{}:{}", api_key, timestamp, signature);
+        let auth_header = format!("Bitso {api_key}:{timestamp}:{signature}");
 
-        let res = client.get(format!("https://api.bitso.com{}", path))
+        let res = client.get(format!("https://api.bitso.com{path}"))
             .header("Authorization", auth_header)
             .send().await?.json::<serde_json::Value>().await?;
 
@@ -165,7 +165,7 @@ impl CryptoService {
                 let total = Decimal::from_str(total_str).unwrap_or(Decimal::ZERO);
                 
                 if total > Decimal::ZERO {
-                    let external_id = format!("bitso_{}_{}", inst_id, currency);
+                    let external_id = format!("bitso_{inst_id}_{currency}");
                     let acc_name = format!("{} ({})", name, currency.to_uppercase());
                     
                     // Estimate value in MXN

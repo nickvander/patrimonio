@@ -1968,7 +1968,7 @@ impl TaxService {
             // IRA & HSA: prior-year window — tax day (~Apr 15) of year+1.
             // 401k-family: calendar-year end (Dec 31 of the contribution year).
             let (deadline, prior_year_window) = match group {
-                RetirementGroup::Plan401k => (format!("{}-12-31", year), false),
+                RetirementGroup::Plan401k => (format!("{year}-12-31"), false),
                 RetirementGroup::Ira | RetirementGroup::Hsa => {
                     (format!("{}-04-15", year + 1), true)
                 }

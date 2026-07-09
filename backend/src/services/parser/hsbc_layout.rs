@@ -214,7 +214,7 @@ Emitido por HSBC MEXICO SA RFC HMI950125KG8
     #[test]
     fn parses_hsbc_reversed_columns() {
         let txs = parse_text(SAMPLE).unwrap();
-        assert_eq!(txs.len(), 3, "got {:#?}", txs);
+        assert_eq!(txs.len(), 3, "got {txs:#?}");
 
         // Deposit (Abono) — sits in the RIGHT money column on HSBC, nearest the
         // Depósito/Abono header → positive.

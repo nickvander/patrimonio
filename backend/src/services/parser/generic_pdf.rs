@@ -243,7 +243,7 @@ PAGINA 1 OF 11
 99
 ";
         let txs = parse_text(text).unwrap();
-        assert!(txs.is_empty(), "no decimal amounts → no rows, got {:?}", txs);
+        assert!(txs.is_empty(), "no decimal amounts → no rows, got {txs:?}");
     }
 
     #[test]

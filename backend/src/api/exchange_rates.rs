@@ -261,7 +261,7 @@ async fn post_manual_rate(
     // Refresh the Redis cache so the "current" rate read by /latest reflects the
     // override immediately instead of serving the prior cached API value.
     if let Ok(mut conn) = state.redis.get_multiplexed_async_connection().await {
-        let cache_key = format!("fx:{}:{}", base, target);
+        let cache_key = format!("fx:{base}:{target}");
         let _: Result<(), _> = redis::cmd("SETEX")
             .arg(&cache_key)
             .arg(3600)

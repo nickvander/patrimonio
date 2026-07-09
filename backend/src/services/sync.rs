@@ -1283,7 +1283,7 @@ pub async fn process_investment_event(
     }
     let date_str = ev["date"].as_str().unwrap_or("");
     let acquired_at = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
-        .map_err(|e| anyhow::anyhow!("bad date {}: {}", date_str, e))?;
+        .map_err(|e| anyhow::anyhow!("bad date {date_str}: {e}"))?;
     let quantity = ev["quantity"].as_f64().unwrap_or(0.0);
     let amount = ev["amount"].as_f64().unwrap_or(0.0);
     let price = ev["price"].as_f64().unwrap_or_else(|| {
@@ -1561,7 +1561,7 @@ pub async fn upsert_investment_income_event(
     }
     let date_str = ev["date"].as_str().unwrap_or("");
     let date = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
-        .map_err(|e| anyhow::anyhow!("bad date {}: {}", date_str, e))?;
+        .map_err(|e| anyhow::anyhow!("bad date {date_str}: {e}"))?;
     // Negate per the sign convention in the doc comment above.
     let amount = -ev["amount"].as_f64().unwrap_or(0.0);
     let currency = ev["iso_currency_code"]

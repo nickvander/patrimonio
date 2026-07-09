@@ -8,7 +8,7 @@ use rust_decimal::Decimal;
 use std::str::FromStr;
 
 pub fn parse(data: &[u8]) -> Result<Vec<ParsedTransaction>> {
-    let doc = Document::load_mem(data).map_err(|e| anyhow!("Failed to load PDF: {}", e))?;
+    let doc = Document::load_mem(data).map_err(|e| anyhow!("Failed to load PDF: {e}"))?;
     let mut full_text = String::new();
     
     let pages = doc.get_pages();
@@ -158,7 +158,7 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
             // emits the currency marker alone) collapses to empty
             // here and would otherwise pollute the description.
             if cleaned.is_empty() { continue; }
-            if let Some(cap) = amount_re.captures(&format!("${}", cleaned)) {
+            if let Some(cap) = amount_re.captures(&format!("${cleaned}")) {
                 let amount_str = cap[1].replace(",", "");
                 if let Ok(amt) = Decimal::from_str(&amount_str) {
                     amounts.push(amt);

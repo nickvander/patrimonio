@@ -13,7 +13,7 @@ pub fn parse_csv(data: &[u8]) -> Result<Vec<ParsedTransaction>> {
     let mut transactions = Vec::new();
     
     for result in rdr.records() {
-        let record = result.map_err(|e| anyhow!("CSV parse error: {}", e))?;
+        let record = result.map_err(|e| anyhow!("CSV parse error: {e}"))?;
         
         // Cetesdirecto format (Mock): Fecha, Operación, Monto
         // 2024-03-15, COMPRA CETES 28D, 1000.00
@@ -22,10 +22,10 @@ pub fn parse_csv(data: &[u8]) -> Result<Vec<ParsedTransaction>> {
         let amount_str = record.get(2).ok_or_else(|| anyhow!("Missing amount"))?.trim();
         
         let date = NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
-            .map_err(|_| anyhow!("Invalid date format: {}", date_str))?;
+            .map_err(|_| anyhow!("Invalid date format: {date_str}"))?;
             
         let amount = amount_str.parse::<Decimal>()
-            .map_err(|_| anyhow!("Invalid amount: {}", amount_str))?;
+            .map_err(|_| anyhow!("Invalid amount: {amount_str}"))?;
 
         // T14: tag explicit interest/maturity-premium credits as interest
         // income so CETES yield reaches the tax base AND itemizes in the

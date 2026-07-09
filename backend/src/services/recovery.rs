@@ -53,7 +53,7 @@ pub async fn regenerate(db: &PgPool, user_id: Uuid) -> Result<Vec<String>> {
         .bind(user_id)
         .execute(&mut *tx)
         .await
-        .map_err(|e| anyhow!("regenerate clear: {}", e))?;
+        .map_err(|e| anyhow!("regenerate clear: {e}"))?;
 
     let mut codes = Vec::with_capacity(CODES_PER_BATCH);
     for _ in 0..CODES_PER_BATCH {
@@ -64,7 +64,7 @@ pub async fn regenerate(db: &PgPool, user_id: Uuid) -> Result<Vec<String>> {
             .bind(&hash)
             .execute(&mut *tx)
             .await
-            .map_err(|e| anyhow!("regenerate insert: {}", e))?;
+            .map_err(|e| anyhow!("regenerate insert: {e}"))?;
         codes.push(code);
     }
     tx.commit().await?;
@@ -85,7 +85,7 @@ pub async fn lookup_owner(db: &PgPool, raw_code: &str) -> Result<Option<Uuid>> {
     .bind(&hash)
     .fetch_optional(db)
     .await
-    .map_err(|e| anyhow!("lookup_owner: {}", e))?;
+    .map_err(|e| anyhow!("lookup_owner: {e}"))?;
     Ok(row.map(|r| r.0))
 }
 
@@ -106,7 +106,7 @@ pub async fn consume(db: &PgPool, raw_code: &str, ip: Option<&str>) -> Result<bo
     .bind(&hash)
     .execute(db)
     .await
-    .map_err(|e| anyhow!("consume: {}", e))?;
+    .map_err(|e| anyhow!("consume: {e}"))?;
     Ok(result.rows_affected() > 0)
 }
 

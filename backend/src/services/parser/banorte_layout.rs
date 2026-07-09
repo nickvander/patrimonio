@@ -194,7 +194,7 @@ Banco Mercantil del Norte S.A. R.F.C. BMN930209927
     #[test]
     fn parses_banorte_columns_and_signs() {
         let txs = parse_text(SAMPLE).unwrap();
-        assert_eq!(txs.len(), 4, "got {:#?}", txs);
+        assert_eq!(txs.len(), 4, "got {txs:#?}");
 
         // Deposit row: year 2021 from the two-digit token, balance captured.
         assert_eq!(txs[0].date, NaiveDate::from_ymd_opt(2021, 2, 1).unwrap());

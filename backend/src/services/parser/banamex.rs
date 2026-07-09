@@ -13,7 +13,7 @@ pub fn parse_csv(data: &[u8]) -> Result<Vec<ParsedTransaction>> {
     let mut transactions = Vec::new();
     
     for result in rdr.records() {
-        let record = result.map_err(|e| anyhow!("CSV parse error: {}", e))?;
+        let record = result.map_err(|e| anyhow!("CSV parse error: {e}"))?;
         
         // Banamex format (Mock): Date, Concept, Amount
         // 15/03/2024, COMPRA OXXO, -50.00
@@ -23,10 +23,10 @@ pub fn parse_csv(data: &[u8]) -> Result<Vec<ParsedTransaction>> {
         
         let date = NaiveDate::parse_from_str(date_str, "%d/%m/%Y")
             .or_else(|_| NaiveDate::parse_from_str(date_str, "%Y-%m-%d"))
-            .map_err(|_| anyhow!("Invalid date format: {}", date_str))?;
+            .map_err(|_| anyhow!("Invalid date format: {date_str}"))?;
             
         let amount = amount_str.parse::<Decimal>()
-            .map_err(|_| anyhow!("Invalid amount: {}", amount_str))?;
+            .map_err(|_| anyhow!("Invalid amount: {amount_str}"))?;
             
         transactions.push(ParsedTransaction {
             date,

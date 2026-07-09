@@ -53,7 +53,7 @@ fn try_decrypt_with_qpdf(data: &[u8], password: &str) -> Result<Vec<u8>> {
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| anyhow!("Failed to spawn qpdf: {}", e))?;
+        .map_err(|e| anyhow!("Failed to spawn qpdf: {e}"))?;
 
     if let Some(mut stdin) = child.stdin.take() {
         // Best effort: a write failure here usually means qpdf already
@@ -63,7 +63,7 @@ fn try_decrypt_with_qpdf(data: &[u8], password: &str) -> Result<Vec<u8>> {
 
     let output = child
         .wait_with_output()
-        .map_err(|e| anyhow!("Failed to wait on qpdf: {}", e))?;
+        .map_err(|e| anyhow!("Failed to wait on qpdf: {e}"))?;
 
     let _ = fs::remove_file(&in_path);
 
@@ -426,7 +426,7 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
     // 2. PDF Detection & Parsing
     if lower_name.ends_with(".pdf") {
         // First check if it is encrypted and we don't have a password
-        let doc = Document::load_mem(data).map_err(|e| anyhow!("Failed to load PDF for detection: {}", e))?;
+        let doc = Document::load_mem(data).map_err(|e| anyhow!("Failed to load PDF for detection: {e}"))?;
         if doc.trailer.get(b"Encrypt").is_ok() {
             return Err(anyhow!("PASSWORD_REQUIRED"));
         }
@@ -709,15 +709,14 @@ pub fn detect_and_parse(file_name: &str, original_data: &[u8], password: Option<
         // most likely an unsupported layout. Ask for a sample rather than
         // blaming the file.
         return Err(anyhow!(
-            "Couldn't find any transactions in '{}'. If this is a real statement, its layout \
+            "Couldn't find any transactions in '{file_name}'. If this is a real statement, its layout \
              isn't supported yet — share a sample and we can add it. (Built-in support: Nu, \
              Banamex, BBVA, Santander, CetesDirecto, HealthEquity, Fidelity Stock Plan, plus \
-             CSV exports.)",
-            file_name
+             CSV exports.)"
         ));
     }
 
-    Err(anyhow!("Could not identify institution for file: {}. Please ensure the file is a supported PDF or CSV from Nu, Banamex, BBVA, Santander, or CetesDirecto.", file_name))
+    Err(anyhow!("Could not identify institution for file: {file_name}. Please ensure the file is a supported PDF or CSV from Nu, Banamex, BBVA, Santander, or CetesDirecto."))
 }
 
 /// Account-level metadata lifted from a statement's header/summary so the

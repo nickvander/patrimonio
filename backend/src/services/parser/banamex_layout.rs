@@ -212,7 +212,7 @@ fn section_label(sec_idx: usize) -> Option<String> {
     match sec_idx {
         0 => None,
         1 => Some("Cuenta secundaria".to_string()),
-        n => Some(format!("Cuenta secundaria {}", n)),
+        n => Some(format!("Cuenta secundaria {n}")),
     }
 }
 
@@ -411,7 +411,7 @@ FECHA        CONCEPTO                                    RETIROS     DEPÓSITOS 
     #[test]
     fn parses_deposits_and_withdrawals_with_signs() {
         let txs = parse_text(SAMPLE).unwrap();
-        assert_eq!(txs.len(), 3, "got {:?}", txs);
+        assert_eq!(txs.len(), 3, "got {txs:?}");
 
         // Deposit on 29 Dec 2025 (year resolved from the período).
         assert_eq!(txs[0].date, NaiveDate::from_ymd_opt(2025, 12, 29).unwrap());
@@ -453,7 +453,7 @@ Detalle de operaciones
     fn parses_both_accounts_and_labels_the_secondary() {
         let txs = parse_text(MULTI).unwrap();
         // Both account sections are now parsed: 2 primary + 2 secondary.
-        assert_eq!(txs.len(), 4, "got {:#?}", txs);
+        assert_eq!(txs.len(), 4, "got {txs:#?}");
 
         // --- Primary section (account_label None) ---
         // The deposit's balance is 8,000 — the "0624.01" inside the footer

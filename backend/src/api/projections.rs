@@ -80,9 +80,8 @@ async fn projection_defaults(
         FROM transactions t
         JOIN accounts a ON a.id = t.account_id
         WHERE TRUE
-        {exclusions}
+        {TRAILING_CASHFLOW_EXCLUSIONS_SQL}
         "#,
-        exclusions = TRAILING_CASHFLOW_EXCLUSIONS_SQL,
     );
     let row = sqlx::query(&sql)
         .bind(ctx.user_id)

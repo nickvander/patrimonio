@@ -230,7 +230,7 @@ mod tests {
     #[test]
     fn parses_cash_ledger_with_signs() {
         let txs = parse_text(SAMPLE).unwrap();
-        assert_eq!(txs.len(), 5, "got {:#?}", txs);
+        assert_eq!(txs.len(), 5, "got {txs:#?}");
 
         assert_eq!(txs[0].date, NaiveDate::from_ymd_opt(2026, 1, 2).unwrap());
         assert_eq!(txs[0].amount, Decimal::from_str("2000.00").unwrap());

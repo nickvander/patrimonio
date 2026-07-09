@@ -74,7 +74,7 @@ async fn setup_status(State(state): State<AppState>) -> Json<SetupStatus> {
             // unconfigured `optional` checks once they're actually set).
             severity: "optional".to_string(),
             detail: match &config.plaid_webhook_url {
-                Some(url) => format!("Configured → {}", url),
+                Some(url) => format!("Configured → {url}"),
                 None => "Optional — set PLAID_WEBHOOK_URL for real-time syncs; otherwise Plaid polls every ~4h (see docs/deployment.md)".to_string(),
             },
         },
@@ -151,6 +151,6 @@ fn cors_check_detail(config: &crate::config::AppConfig) -> String {
             origins_str, config.frontend_base_url
         )
     } else {
-        format!("Allow-list: {}", origins_str)
+        format!("Allow-list: {origins_str}")
     }
 }

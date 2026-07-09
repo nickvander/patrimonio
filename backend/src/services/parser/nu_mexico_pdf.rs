@@ -41,7 +41,7 @@ use tracing::info;
 /// lopdf entry point (kept for direct callers / fallback). The router
 /// prefers `parse_text(&best)` over the richer `pdftotext -layout` text.
 pub fn parse(data: &[u8]) -> Result<Vec<ParsedTransaction>> {
-    let doc = Document::load_mem(data).map_err(|e| anyhow!("Failed to load PDF: {}", e))?;
+    let doc = Document::load_mem(data).map_err(|e| anyhow!("Failed to load PDF: {e}"))?;
     let mut full_text = String::new();
     for (page_num, _) in doc.get_pages().iter() {
         if let Ok(text) = doc.extract_text(&[*page_num]) {
@@ -398,7 +398,7 @@ Fecha    Descripción                                         Monto         Sald
     #[test]
     fn parses_nu_signed_monto_and_running_balance() {
         let txs = parse_text(SAMPLE).unwrap();
-        assert_eq!(txs.len(), 5, "got {:#?}", txs);
+        assert_eq!(txs.len(), 5, "got {txs:#?}");
         assert_eq!(txs[0].date, NaiveDate::from_ymd_opt(2024, 10, 1).unwrap());
         assert_eq!(txs[0].amount, Decimal::from_str("12000.00").unwrap());
         assert!(txs[0].description.contains("Recibiste de NOMINA"));
@@ -418,7 +418,7 @@ Periodo del 01 de marzo de 2024 al 31 de marzo de 2024
 16 MAR   Recibiste de PATRON SA                            3,000.00
 ";
         let txs = parse_text(text).unwrap();
-        assert_eq!(txs.len(), 2, "got {:#?}", txs);
+        assert_eq!(txs.len(), 2, "got {txs:#?}");
         assert_eq!(txs[0].amount, Decimal::from_str("-899.00").unwrap());
         assert_eq!(txs[1].amount, Decimal::from_str("3000.00").unwrap());
         assert!(txs[0].balance_after.is_none());
@@ -460,14 +460,14 @@ Cómo está organizado tu dinero
         // Main-account rows: account_label None, BANAMEX in a description must
         // NOT matter here.
         let main: Vec<_> = txs.iter().filter(|t| t.account_label.is_none()).collect();
-        assert_eq!(main.len(), 3, "main rows: {:#?}", main);
+        assert_eq!(main.len(), 3, "main rows: {main:#?}");
         // Signs come from the explicit +/-.
         assert_eq!(main[0].amount, Decimal::from_str("-2948.17").unwrap());
         assert_eq!(main[1].amount, Decimal::from_str("2500.00").unwrap());
 
         // Cajita rows tagged by name; freeze row dropped.
         let cajita: Vec<_> = txs.iter().filter(|t| t.account_label.is_some()).collect();
-        assert_eq!(cajita.len(), 2, "cajita rows: {:#?}", cajita);
+        assert_eq!(cajita.len(), 2, "cajita rows: {cajita:#?}");
         assert_eq!(cajita[0].account_label.as_deref(), Some("Cajita Turbo"));
         assert_eq!(cajita[0].amount, Decimal::from_str("2948.17").unwrap());
         assert_eq!(cajita[1].account_label.as_deref(), Some("Ahorro"));

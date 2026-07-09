@@ -1108,7 +1108,7 @@ async fn revoke_other_sessions(
         ip.as_deref(),
         ua.as_deref(),
         true,
-        Some(&format!("revoked={}", revoked)),
+        Some(&format!("revoked={revoked}")),
     )
     .await;
 
@@ -1443,10 +1443,9 @@ pub(crate) async fn enforce_password_policy(
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             &format!(
-                "This password has appeared in {} known data breaches. \
+                "This password has appeared in {count} known data breaches. \
                  Pick a new one — a passphrase of four unrelated words \
-                 is a good default.",
-                count
+                 is a good default."
             ),
         ));
     }

@@ -246,7 +246,7 @@ BANCO SANTANDER (MEXICO) S.A., INSTITUCION DE BANCA MULTIPLE, R.F.C. BSM970519DU
     fn parses_santander_columns_and_signs() {
         let txs = parse_text(SAMPLE).unwrap();
         // Opening + closing SALDO FINAL rows are skipped → 5 real movements.
-        assert_eq!(txs.len(), 5, "got {:#?}", txs);
+        assert_eq!(txs.len(), 5, "got {txs:#?}");
 
         // 1) Payroll deposit, year + balance from the row.
         assert_eq!(txs[0].date, NaiveDate::from_ymd_opt(2026, 5, 4).unwrap());

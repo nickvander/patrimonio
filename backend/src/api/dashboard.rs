@@ -1203,7 +1203,7 @@ async fn export_transactions_csv(
     use futures_util::StreamExt;
 
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-    let filename = format!("patrimonio-transactions-{}.csv", today);
+    let filename = format!("patrimonio-transactions-{today}.csv");
 
     // The channel-buffer of 16 lets the writer get ahead of the
     // socket without holding the whole CSV in RAM. Bigger is
@@ -1266,8 +1266,7 @@ async fn export_transactions_csv(
                     // instead of silently shipping a half CSV.
                     let _ = tx
                         .send(Err(std::io::Error::other(format!(
-                            "csv stream: {}",
-                            e
+                            "csv stream: {e}"
                         ))))
                         .await;
                     return;
@@ -1319,7 +1318,7 @@ async fn export_transactions_csv(
         .header(header::CONTENT_TYPE, "text/csv; charset=utf-8")
         .header(
             header::CONTENT_DISPOSITION,
-            format!("attachment; filename=\"{}\"", filename),
+            format!("attachment; filename=\"{filename}\""),
         )
         .body(body)
         .unwrap()
@@ -1341,7 +1340,7 @@ fn csv_attachment_response(filename: &str, body: axum::body::Body) -> Response {
         .header(header::CONTENT_TYPE, "text/csv; charset=utf-8")
         .header(
             header::CONTENT_DISPOSITION,
-            format!("attachment; filename=\"{}\"", filename),
+            format!("attachment; filename=\"{filename}\""),
         )
         .body(body)
         .unwrap()
@@ -1360,7 +1359,7 @@ async fn export_holdings_csv(
     let list = fetch_holdings_details(&state.db, ctx.user_id, fx_info.rate).await;
 
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-    let filename = format!("patrimonio_holdings_{}.csv", today);
+    let filename = format!("patrimonio_holdings_{today}.csv");
 
     // Money (and %) fields serialize at 2dp: the raw f64 Display leaked
     // float noise like `3679.9999999999995` into spreadsheets. CSV-only —
@@ -1417,7 +1416,7 @@ async fn export_lots_csv(
     .unwrap_or_default();
 
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-    let filename = format!("patrimonio_lots_{}.csv", today);
+    let filename = format!("patrimonio_lots_{today}.csv");
 
     let mut csv = String::from("symbol,account,acquired_at,qty,cost_per_unit,currency,usd_cost\n");
     for r in &rows {
@@ -2415,9 +2414,8 @@ async fn emergency_fund(
         FROM transactions t
         JOIN accounts a ON a.id = t.account_id
         WHERE t.amount < 0
-        {exclusions}
+        {TRAILING_CASHFLOW_EXCLUSIONS_SQL}
         "#,
-        exclusions = TRAILING_CASHFLOW_EXCLUSIONS_SQL,
     );
     let spend_row = sqlx::query(&spend_sql)
         .bind(ctx.user_id)
@@ -2840,7 +2838,7 @@ async fn export_realized_gains_csv(
                 Err(e) => {
                     error!("export_realized_gains_csv stream error: {}", e);
                     let _ = tx
-                        .send(Err(std::io::Error::other(format!("csv stream: {}", e))))
+                        .send(Err(std::io::Error::other(format!("csv stream: {e}"))))
                         .await;
                     return;
                 }
@@ -3621,7 +3619,7 @@ async fn detected_subscriptions(
             continue;
         }
         let band = amount.round() as i64;
-        let key = format!("{}::{}", key_part, band);
+        let key = format!("{key_part}::{band}");
         let display_name = display_merchant(
             user_description.as_deref(),
             counterparty_name.as_deref(),

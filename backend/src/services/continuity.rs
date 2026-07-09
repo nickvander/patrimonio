@@ -193,7 +193,7 @@ mod tests {
             row("apr.pdf", d(2024, 4, 5), "100.00", "2100.00"),
         ];
         let w = continuity_warnings(&rows);
-        assert_eq!(w.len(), 1, "got {:#?}", w);
+        assert_eq!(w.len(), 1, "got {w:#?}");
         assert_eq!(w[0].from_file, "feb.pdf");
         assert_eq!(w[0].to_file, "apr.pdf");
         assert!(w[0].diff.contains("300"), "reports the gap size");

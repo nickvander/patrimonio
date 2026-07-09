@@ -84,7 +84,7 @@ fn test_parse_cetes_pdf_text() {
         Saldo final   0.15";
     let result = cetes_pdf::parse_text(text).unwrap();
 
-    assert_eq!(result.len(), 2, "got {:#?}", result);
+    assert_eq!(result.len(), 2, "got {result:#?}");
     // Buy CETES → Cargo, negative.
     assert_eq!(result[0].amount, Decimal::from_str("-9741.00").unwrap());
     assert!(result[0].description.contains("CETES"));
@@ -108,7 +108,7 @@ fn test_cetes_pdf_maturity_premium_is_income() {
         Saldo final   258.64";
     let result = cetes_pdf::parse_text(text).unwrap();
 
-    assert_eq!(result.len(), 2, "got {:#?}", result);
+    assert_eq!(result.len(), 2, "got {result:#?}");
     // The PREMIO row: positive inflow, tagged income.
     let premio = result
         .iter()

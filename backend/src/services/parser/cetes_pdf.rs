@@ -37,7 +37,7 @@ use std::str::FromStr;
 use tracing::info;
 
 pub fn parse(data: &[u8]) -> Result<Vec<ParsedTransaction>> {
-    let doc = Document::load_mem(data).map_err(|e| anyhow!("Failed to load PDF: {}", e))?;
+    let doc = Document::load_mem(data).map_err(|e| anyhow!("Failed to load PDF: {e}"))?;
     let mut full_text = String::new();
     for (page_num, _) in doc.get_pages().iter() {
         if let Ok(text) = doc.extract_text(&[*page_num]) {
@@ -222,7 +222,7 @@ Saldo final                                                                     
     #[test]
     fn parses_movimientos_table() {
         let txs = parse_text(SAMPLE).unwrap();
-        assert_eq!(txs.len(), 4, "got {:#?}", txs);
+        assert_eq!(txs.len(), 4, "got {txs:#?}");
 
         // Cash deposit: Abono 24,000 − Cargo 0 = +24,000; date is liquidación.
         assert_eq!(txs[0].date, NaiveDate::from_ymd_opt(2024, 4, 8).unwrap());

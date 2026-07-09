@@ -289,7 +289,7 @@ async fn export_tax_csv(
     let mut wtr = WriterBuilder::new().flexible(true).from_writer(vec![]);
     // Always 2 decimals: `round_dp(2).to_string()` left zero/whole values as
     // "0" while non-zero showed "0.00", giving an inconsistent CSV column.
-    let money = |d: rust_decimal::Decimal| format!("{:.2}", d);
+    let money = |d: rust_decimal::Decimal| format!("{d:.2}");
 
     let _ = wtr.write_record(["Patrimonio tax export", &year.to_string()]);
     let _ = wtr.write_record(["Filing status", &status]);
@@ -490,7 +490,7 @@ async fn export_tax_csv(
     );
     headers.insert(
         axum::http::header::CONTENT_DISPOSITION,
-        format!("attachment; filename=\"tax_export_{}.csv\"", year).parse().unwrap(),
+        format!("attachment; filename=\"tax_export_{year}.csv\"").parse().unwrap(),
     );
 
     (headers, csv_data).into_response()
@@ -547,8 +547,8 @@ async fn export_tax_pdf(
         *y -= if size >= 20 { 40 } else { 22 };
     };
 
-    line(&mut ops, &mut y, 20, 0, format!("Patrimonio Tax Summary - {}", year));
-    line(&mut ops, &mut y, 12, 0, format!("Filing Status: {}", status));
+    line(&mut ops, &mut y, 20, 0, format!("Patrimonio Tax Summary - {year}"));
+    line(&mut ops, &mut y, 12, 0, format!("Filing Status: {status}"));
     y -= 8; // small gap before the figures
     line(
         &mut ops,
@@ -735,7 +735,7 @@ async fn export_tax_pdf(
     );
     headers.insert(
         axum::http::header::CONTENT_DISPOSITION,
-        format!("attachment; filename=\"tax_summary_{}.pdf\"", year).parse().unwrap(),
+        format!("attachment; filename=\"tax_summary_{year}.pdf\"").parse().unwrap(),
     );
 
     (headers, pdf_bytes).into_response()

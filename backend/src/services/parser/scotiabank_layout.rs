@@ -245,7 +245,7 @@ Scotiabank Inverlat S.A.
     #[test]
     fn parses_scotiabank_no_year_dates() {
         let txs = parse_text(SAMPLE).unwrap();
-        assert_eq!(txs.len(), 4, "got {:#?}", txs);
+        assert_eq!(txs.len(), 4, "got {txs:#?}");
 
         // Year inherited from the period header (2024).
         assert_eq!(txs[0].date, NaiveDate::from_ymd_opt(2024, 3, 1).unwrap());
@@ -272,7 +272,7 @@ Detalle de tus movimientos
 05 ENE   SPEI RECIBIDO NOMINA         222                       $9,000.00                      $14,000.00
 ";
         let txs = parse_text(sample).unwrap();
-        assert_eq!(txs.len(), 2, "got {:#?}", txs);
+        assert_eq!(txs.len(), 2, "got {txs:#?}");
         assert_eq!(txs[0].date, NaiveDate::from_ymd_opt(2024, 12, 28).unwrap());
         assert_eq!(txs[1].date, NaiveDate::from_ymd_opt(2025, 1, 5).unwrap());
     }

@@ -102,7 +102,7 @@ pub async fn refresh_yahoo(db: &PgPool, yahoo_symbol: &str, store_as: &str) -> R
         let Some(dt) = chrono::DateTime::from_timestamp(ts, 0) else {
             continue;
         };
-        if let Ok(dec) = Decimal::from_str(&format!("{:.4}", c)) {
+        if let Ok(dec) = Decimal::from_str(&format!("{c:.4}")) {
             rows.push((dt.naive_utc().date(), dec));
         }
     }

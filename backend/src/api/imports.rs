@@ -716,7 +716,7 @@ async fn upload_handler(
                 return (
                     StatusCode::BAD_REQUEST,
                     Json(ImportResponse {
-                        message: format!("Failed to parse upload request: {}", e),
+                        message: format!("Failed to parse upload request: {e}"),
                         status: "error".to_string(),
                         transactions_count: 0,
                         transactions: vec![],
@@ -762,10 +762,9 @@ async fn upload_handler(
                         StatusCode::BAD_REQUEST,
                         Json(ImportResponse {
                             message: format!(
-                                "Failed to read upload body for '{}'. \
+                                "Failed to read upload body for '{file_name}'. \
                                  The browser may have aborted, or the body \
-                                 exceeded the 100 MB cap. Detail: {}",
-                                file_name, e
+                                 exceeded the 100 MB cap. Detail: {e}"
                             ),
                             status: "error".to_string(),
                             transactions_count: 0,
@@ -853,7 +852,7 @@ async fn upload_handler(
             Ok(triple) => triple,
             Err(e) => {
                 error!("Parse task join failed: {}", e);
-                errors.push(format!("internal join error: {}", e));
+                errors.push(format!("internal join error: {e}"));
                 continue;
             }
         };
@@ -898,7 +897,7 @@ async fn upload_handler(
                     }
                 } else {
                     error!("Parser failed for {}: {}", file_name, error_msg);
-                    errors.push(format!("{}: {}", file_name, error_msg));
+                    errors.push(format!("{file_name}: {error_msg}"));
                 }
             }
         }

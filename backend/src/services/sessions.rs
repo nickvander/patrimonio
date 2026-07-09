@@ -90,7 +90,7 @@ async fn create_session_inner(
     .bind(pending_totp)
     .execute(db)
     .await
-    .map_err(|e| anyhow!("create_session: {}", e))?;
+    .map_err(|e| anyhow!("create_session: {e}"))?;
 
     Ok(CreatedSession {
         token: raw,
@@ -136,7 +136,7 @@ pub async fn validate_and_touch(db: &PgPool, raw_token: &str) -> Result<Option<V
         .bind(&hash)
         .fetch_optional(db)
         .await
-        .map_err(|e| anyhow!("validate_and_touch lookup: {}", e))?;
+        .map_err(|e| anyhow!("validate_and_touch lookup: {e}"))?;
 
     let Some((session_id, user_id, expires_at, revoked_at, pending_totp, role)) = row else {
         return Ok(None);
@@ -161,7 +161,7 @@ pub async fn validate_and_touch(db: &PgPool, raw_token: &str) -> Result<Option<V
     .bind(session_id)
     .execute(db)
     .await
-    .map_err(|e| anyhow!("validate_and_touch touch: {}", e))?;
+    .map_err(|e| anyhow!("validate_and_touch touch: {e}"))?;
 
     Ok(Some(ValidatedSession {
         session_id,
@@ -179,7 +179,7 @@ pub async fn revoke_by_token(db: &PgPool, raw_token: &str) -> Result<()> {
     .bind(&hash)
     .execute(db)
     .await
-    .map_err(|e| anyhow!("revoke_by_token: {}", e))?;
+    .map_err(|e| anyhow!("revoke_by_token: {e}"))?;
     Ok(())
 }
 
@@ -190,7 +190,7 @@ pub async fn revoke_all_for_user(db: &PgPool, user_id: Uuid) -> Result<()> {
     .bind(user_id)
     .execute(db)
     .await
-    .map_err(|e| anyhow!("revoke_all_for_user: {}", e))?;
+    .map_err(|e| anyhow!("revoke_all_for_user: {e}"))?;
     Ok(())
 }
 
@@ -234,7 +234,7 @@ pub async fn list_active(db: &PgPool, user_id: Uuid) -> Result<Vec<ActiveSession
     .bind(user_id)
     .fetch_all(db)
     .await
-    .map_err(|e| anyhow!("list_active: {}", e))?;
+    .map_err(|e| anyhow!("list_active: {e}"))?;
 
     Ok(rows
         .into_iter()
@@ -269,7 +269,7 @@ pub async fn revoke_by_id_for_user(
     .bind(user_id)
     .execute(db)
     .await
-    .map_err(|e| anyhow!("revoke_by_id_for_user: {}", e))?;
+    .map_err(|e| anyhow!("revoke_by_id_for_user: {e}"))?;
     Ok(result.rows_affected() > 0)
 }
 
@@ -292,6 +292,6 @@ pub async fn revoke_all_except(
     .bind(keep_session_id)
     .execute(db)
     .await
-    .map_err(|e| anyhow!("revoke_all_except: {}", e))?;
+    .map_err(|e| anyhow!("revoke_all_except: {e}"))?;
     Ok(result.rows_affected())
 }

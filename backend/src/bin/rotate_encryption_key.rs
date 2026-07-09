@@ -39,7 +39,7 @@ use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 use std::env;
 
 fn encrypt(key_hex: &str, plaintext: &str) -> Result<Vec<u8>> {
-    let key_bytes = hex::decode(key_hex).map_err(|e| anyhow!("invalid key hex: {}", e))?;
+    let key_bytes = hex::decode(key_hex).map_err(|e| anyhow!("invalid key hex: {e}"))?;
     if key_bytes.len() != 32 {
         bail!("encryption key must be 32 bytes (64 hex chars)");
     }
@@ -62,7 +62,7 @@ fn decrypt(key_hex: &str, payload: &[u8]) -> Result<String> {
         bail!("encrypted payload < 12 bytes (likely corrupt)");
     }
     let (nonce_bytes, ct) = payload.split_at(12);
-    let key_bytes = hex::decode(key_hex).map_err(|e| anyhow!("invalid key hex: {}", e))?;
+    let key_bytes = hex::decode(key_hex).map_err(|e| anyhow!("invalid key hex: {e}"))?;
     let key = aes_gcm::Key::<Aes256Gcm>::from_slice(&key_bytes);
     let cipher = Aes256Gcm::new(key);
     let nonce = Nonce::from_slice(nonce_bytes);

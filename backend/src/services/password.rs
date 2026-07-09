@@ -18,7 +18,7 @@ pub fn hash_password(password: &str) -> Result<String> {
     let salt = SaltString::generate(&mut OsRng);
     let hash = argon2()
         .hash_password(password.as_bytes(), &salt)
-        .map_err(|e| anyhow!("hash_password: {}", e))?;
+        .map_err(|e| anyhow!("hash_password: {e}"))?;
     Ok(hash.to_string())
 }
 
@@ -26,11 +26,11 @@ pub fn hash_password(password: &str) -> Result<String> {
 /// Errors only when the stored hash is corrupt / unparseable.
 pub fn verify_password(password: &str, stored_hash: &str) -> Result<bool> {
     let parsed = PasswordHash::new(stored_hash)
-        .map_err(|e| anyhow!("verify_password parse: {}", e))?;
+        .map_err(|e| anyhow!("verify_password parse: {e}"))?;
     match argon2().verify_password(password.as_bytes(), &parsed) {
         Ok(()) => Ok(true),
         Err(argon2::password_hash::Error::Password) => Ok(false),
-        Err(e) => Err(anyhow!("verify_password: {}", e)),
+        Err(e) => Err(anyhow!("verify_password: {e}")),
     }
 }
 
@@ -120,7 +120,7 @@ pub async fn check_hibp_breached(password: &str, api_base: &str) -> Result<u64> 
     let digest = hasher.finalize();
     let hex_full = digest
         .iter()
-        .map(|b| format!("{:02X}", b))
+        .map(|b| format!("{b:02X}"))
         .collect::<String>();
     let (prefix, suffix) = hex_full.split_at(5);
 

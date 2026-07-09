@@ -13,22 +13,22 @@ impl CryptoPriceService {
         let fiat = fiat.to_uppercase();
 
         if fiat == "USD" {
-            let url = format!("https://api.coinbase.com/v2/prices/{}-USD/spot", symbol);
+            let url = format!("https://api.coinbase.com/v2/prices/{symbol}-USD/spot");
             let res = client.get(&url).send().await?.json::<Value>().await?;
             
             if let Some(amount_str) = res["data"]["amount"].as_str() {
-                return Decimal::from_str(amount_str).map_err(|e| anyhow!("Invalid decimal: {}", e));
+                return Decimal::from_str(amount_str).map_err(|e| anyhow!("Invalid decimal: {e}"));
             }
         } else if fiat == "MXN" {
             let book = format!("{}_mxn", symbol.to_lowercase());
-            let url = format!("https://api.bitso.com/v3/ticker/?book={}", book);
+            let url = format!("https://api.bitso.com/v3/ticker/?book={book}");
             let res = client.get(&url).send().await?.json::<Value>().await?;
             
             if let Some(last_str) = res["payload"]["last"].as_str() {
-                return Decimal::from_str(last_str).map_err(|e| anyhow!("Invalid decimal: {}", e));
+                return Decimal::from_str(last_str).map_err(|e| anyhow!("Invalid decimal: {e}"));
             }
         }
 
-        Err(anyhow!("Could not fetch price for {} in {}", symbol, fiat))
+        Err(anyhow!("Could not fetch price for {symbol} in {fiat}"))
     }
 }

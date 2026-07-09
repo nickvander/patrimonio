@@ -301,7 +301,7 @@ Av. Paseo de la Reforma 510, Col. Juárez R.F.C. BBA830831LJ2
     #[test]
     fn parses_bbva_columns_and_signs() {
         let txs = parse_text(SAMPLE).unwrap();
-        assert_eq!(txs.len(), 5, "got {:#?}", txs);
+        assert_eq!(txs.len(), 5, "got {txs:#?}");
 
         // 1) ABONO (deposit) on 02 May 2026, year from Periodo.
         assert_eq!(txs[0].date, NaiveDate::from_ymd_opt(2026, 5, 2).unwrap());

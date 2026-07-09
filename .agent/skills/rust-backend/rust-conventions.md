@@ -116,6 +116,17 @@ new warning in the `correctness`/`suspicious`/`style`/`complexity`/`perf` groups
 fails the build. Keep it clean; where a lint is a false positive, add a scoped
 `#[allow(clippy::x)]` with a one-line rationale rather than leaving a warning.
 
+**Reproduce CI locally — use the pinned toolchain.** The project pins Rust
+**1.88.0** in `backend/rust-toolchain.toml` (matching CI's `dtolnay@1.88.0` and
+`Dockerfile: FROM rust:1.88-slim`), so from `backend/` a plain
+`cargo clippy --all-targets -- -D warnings` runs the *same* clippy CI does —
+verify there before pushing. Clippy lints drift between Rust versions (e.g.
+`uninlined_format_args` is a default `style` lint on 1.88 but moved to
+allow-by-default `pedantic` later), so a newer local toolchain will silently miss
+what CI flags. One-time setup on a fresh machine:
+`rustup component add clippy --toolchain 1.88.0`. When bumping Rust, change all
+three (rust-toolchain.toml + CI + Dockerfile) together.
+
 The stricter `restriction` lints below (no-unwrap/panic, etc.) are **documented
 guidance, not yet CI-gated** — the existing codebase carries too much
 pre-existing debt (hundreds of `.unwrap()` on the approved sqlx patterns) to

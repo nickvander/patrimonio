@@ -1,0 +1,13 @@
+# Pin the Rust toolchain so local `cargo` / `cargo clippy` reproduce CI and the
+# prod build exactly. Both CI (.github/workflows/test.yml — dtolnay@1.88.0) and
+# the production image (Dockerfile: FROM rust:1.88-slim) are on 1.88, so local
+# must be too or lints drift: newer clippy (1.96) moved `uninlined_format_args`
+# into the allow-by-default `pedantic` group, so a local 1.96 run passed while
+# CI's 1.88 (where it's a default `style` lint) failed under `-D warnings`.
+#
+# Keep this version in sync with the Dockerfile and the CI toolchain when bumping.
+# (clippy is installed by CI via dtolnay `components: clippy`; add it locally with
+#  `rustup component add clippy --toolchain 1.88.0` — not listed here so the Docker
+#  build doesn't fetch it.)
+[toolchain]
+channel = "1.88.0"

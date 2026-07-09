@@ -679,8 +679,7 @@ async fn split_already_split_returns_422() {
             .as_str()
             .unwrap_or("")
             .contains("already split"),
-        "expected 'already split' error, got: {:?}",
-        body
+        "expected 'already split' error, got: {body:?}"
     );
 }
 
@@ -3104,7 +3103,7 @@ async fn benchmark_series_returns_stored_sp500() {
 
     assert_eq!(body["symbol"], "SP500");
     let pts = body["points"].as_array().unwrap();
-    assert_eq!(pts.len(), 3, "three seeded closes, got {:#?}", pts);
+    assert_eq!(pts.len(), 3, "three seeded closes, got {pts:#?}");
     // Ascending by date → last point is today's 5100.00.
     assert!((pts[2]["close"].as_f64().unwrap() - 5100.0).abs() < 0.01);
     assert!((pts[0]["close"].as_f64().unwrap() - 5000.0).abs() < 0.01);
