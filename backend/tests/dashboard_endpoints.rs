@@ -2406,6 +2406,33 @@ async fn seed_tx_dated(
     .expect("seed dated tx")
 }
 
+/// Like `seed_tx_dated` but sets the raw `category` — needed to exercise the
+/// cash-flow exclusions, which key off `t.category` (investment trades,
+/// internal transfers) rather than the amount sign alone.
+async fn seed_tx_dated_cat(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    description: &str,
+    amount: &str,
+    date: &str,
+    category: &str,
+) -> uuid::Uuid {
+    sqlx::query_scalar(
+        "INSERT INTO transactions (account_id, date, description, amount, currency, source, user_id, category) \
+         VALUES ($1, $2::date, $3, $4, 'USD', 'manual', $5, $6) RETURNING id",
+    )
+    .bind(account_id)
+    .bind(date)
+    .bind(description)
+    .bind(Decimal::from_str(amount).unwrap())
+    .bind(user_id)
+    .bind(category)
+    .fetch_one(pool)
+    .await
+    .expect("seed dated tx with category")
+}
+
 /// Create a loan via the API, returning its id.
 async fn create_loan(app: &Router, token: &str, body: &Value) -> uuid::Uuid {
     let res = app
@@ -2668,6 +2695,44 @@ async fn loan_disbursement_and_repayment_excluded_from_cash_flow() {
         "post-link March spending should exclude the disbursement (200), got {}", march["spending"]);
     assert!((april["income"].as_f64().unwrap() - 3000.0).abs() < 0.01,
         "post-link April income should exclude the repayment (3000), got {}", april["income"]);
+}
+
+/// Cash flow must count genuine income/spending only — not securities trades
+/// (category `Investment`) nor internal `Transfer`s between the user's own
+/// accounts. Regression for the "Buy VOO shows as $3,326 expense / a $10k ACH
+/// shows as income" bug, where `spending_by_category` said "no spending" while
+/// the headline claimed thousands of expense.
+#[tokio::test]
+async fn cash_flow_excludes_investment_trades_and_transfers() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+
+    // In one month: a securities buy, an internal transfer in, a dividend, and
+    // a real grocery expense. Only the dividend (income) and grocery (spending)
+    // are household cash flow.
+    seed_tx_dated_cat(&pool, user_id, acct, "Buy 5 VOO @ 665.20", "-3326.00", "2026-03-05", "Investment").await;
+    seed_tx_dated_cat(&pool, user_id, acct, "ACH deposit from checking", "10000.00", "2026-03-06", "Transfer").await;
+    seed_tx_dated_cat(&pool, user_id, acct, "Dividend received - AAPL", "46.80", "2026-03-07", "Income").await;
+    seed_tx_dated_cat(&pool, user_id, acct, "Supermarket", "-200.00", "2026-03-08", "Food").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/trends", None, Some(&token)))
+        .await
+        .unwrap();
+    let trends = body_json(res.into_body()).await;
+    let march = trends.as_array().unwrap().iter()
+        .find(|p| p["month"] == "2026-03").cloned().unwrap();
+
+    // Income = dividend only (transfer-in excluded); spending = grocery only
+    // (investment buy excluded).
+    assert!((march["income"].as_f64().unwrap() - 46.80).abs() < 0.01,
+        "March income should exclude the $10k transfer, leaving the $46.80 dividend, got {}", march["income"]);
+    assert!((march["spending"].as_f64().unwrap() - 200.0).abs() < 0.01,
+        "March spending should exclude the $3,326 VOO buy, leaving the $200 grocery, got {}", march["spending"]);
 }
 
 // Insert an expense with an explicit PFC category at a date relative to

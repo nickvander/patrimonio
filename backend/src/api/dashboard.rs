@@ -168,7 +168,15 @@ pub(crate) const TRAILING_CASHFLOW_EXCLUSIONS_SQL: &str = r#"
           AND t.date >= CURRENT_DATE - INTERVAL '12 months'
           AND t.user_id = $1
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
-          AND COALESCE(t.category, '') NOT IN ('TRANSFER_IN', 'TRANSFER_OUT')
+          -- Case-insensitive so both taxonomies are covered at once: Plaid's
+          -- uppercase PFC (TRANSFER_IN/OUT) and the app's manual categories
+          -- (Transfer / Investment). A securities trade ("Buy VOO") is not
+          -- spending — the cash is still yours as holdings — and an internal
+          -- ACH "Transfer" between the user's own accounts is neither income
+          -- nor spend; counting either distorts the cash-flow view (and the
+          -- savings rate / emergency-fund runway / projection contribution
+          -- that read this same predicate). Dividends stay in scope (Income).
+          AND UPPER(COALESCE(t.category, '')) NOT IN ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')
           AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
           AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
           AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
@@ -1844,7 +1852,15 @@ async fn cash_flow_trends(
           --     LOAN_PAYMENTS_* (mortgage, student, auto) stay
           --     in-scope because the destination account isn't
           --     necessarily tracked.
-          AND COALESCE(t.category, '') NOT IN ('TRANSFER_IN', 'TRANSFER_OUT')
+          -- Case-insensitive so both taxonomies are covered at once: Plaid's
+          -- uppercase PFC (TRANSFER_IN/OUT) and the app's manual categories
+          -- (Transfer / Investment). A securities trade ("Buy VOO") is not
+          -- spending — the cash is still yours as holdings — and an internal
+          -- ACH "Transfer" between the user's own accounts is neither income
+          -- nor spend; counting either distorts the cash-flow view (and the
+          -- savings rate / emergency-fund runway / projection contribution
+          -- that read this same predicate). Dividends stay in scope (Income).
+          AND UPPER(COALESCE(t.category, '')) NOT IN ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')
           AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
           -- Exclude personal-lending legs: a loan disbursement isn't
           -- spending (it's a receivable) and a repayment isn't income
@@ -1952,7 +1968,15 @@ async fn spending_by_category(
           AND t.date >= (DATE_TRUNC('month', CURRENT_DATE) - make_interval(months => ($2::int - 1)))
           AND t.user_id = $1
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
-          AND COALESCE(t.category, '') NOT IN ('TRANSFER_IN', 'TRANSFER_OUT')
+          -- Case-insensitive so both taxonomies are covered at once: Plaid's
+          -- uppercase PFC (TRANSFER_IN/OUT) and the app's manual categories
+          -- (Transfer / Investment). A securities trade ("Buy VOO") is not
+          -- spending — the cash is still yours as holdings — and an internal
+          -- ACH "Transfer" between the user's own accounts is neither income
+          -- nor spend; counting either distorts the cash-flow view (and the
+          -- savings rate / emergency-fund runway / projection contribution
+          -- that read this same predicate). Dividends stay in scope (Income).
+          AND UPPER(COALESCE(t.category, '')) NOT IN ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')
           AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
           AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
           AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
@@ -2165,7 +2189,15 @@ async fn spending_insights(
           AND t.date <  DATE_TRUNC('month', CURRENT_DATE)
           AND t.user_id = $1
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
-          AND COALESCE(t.category, '') NOT IN ('TRANSFER_IN', 'TRANSFER_OUT')
+          -- Case-insensitive so both taxonomies are covered at once: Plaid's
+          -- uppercase PFC (TRANSFER_IN/OUT) and the app's manual categories
+          -- (Transfer / Investment). A securities trade ("Buy VOO") is not
+          -- spending — the cash is still yours as holdings — and an internal
+          -- ACH "Transfer" between the user's own accounts is neither income
+          -- nor spend; counting either distorts the cash-flow view (and the
+          -- savings rate / emergency-fund runway / projection contribution
+          -- that read this same predicate). Dividends stay in scope (Income).
+          AND UPPER(COALESCE(t.category, '')) NOT IN ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')
           AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
           AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
           AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
