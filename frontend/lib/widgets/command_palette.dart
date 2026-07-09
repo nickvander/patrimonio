@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import '../utils/theme_colors.dart';
-import '../l10n/app_localizations.dart';
 import 'package:flutter/services.dart';
+
+import '../l10n/app_localizations.dart';
+import '../utils/theme_colors.dart';
 
 /// One row in the command-palette results.
 class PaletteItem {

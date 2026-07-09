@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../theme/typography.dart';
 import '../utils/theme_colors.dart';
-import '../l10n/app_localizations.dart';
 
 /// "How many months of expenses could your liquid cash cover?" — reads
 /// `/dashboard/emergency-fund` (cash / trailing monthly spend, both USD).

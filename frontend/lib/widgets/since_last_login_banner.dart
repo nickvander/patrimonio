@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+import '../l10n/app_localizations.dart';
 import '../services/preferences.dart';
 import '../utils/theme_colors.dart';
-import '../l10n/app_localizations.dart';
 
 /// "What changed since your last visit" banner. Pinned above
 /// NetWorthCard on the Overview tab when the server has anything to

@@ -1,12 +1,13 @@
-import '../utils/percent_format.dart';
-import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
 import '../components/date_range_selector.dart';
 import '../l10n/app_localizations.dart';
 import '../services/preferences.dart';
 import '../theme/typography.dart';
 import '../utils/currency.dart';
+import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 
 class NetWorthCard extends StatefulWidget {

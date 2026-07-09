@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../l10n/app_localizations.dart';
-import '../utils/theme_colors.dart';
 import '../services/api_service.dart';
+import '../utils/theme_colors.dart';
 
 /// Per-exchange copy for the credential dialog. Keyed by the integration
 /// type string the dialog is opened with. Keeping label, docs URL, and the

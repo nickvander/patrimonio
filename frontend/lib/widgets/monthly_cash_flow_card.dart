@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
 import '../l10n/app_localizations.dart';
 import '../utils/chart_touch.dart';
 import '../utils/percent_format.dart';

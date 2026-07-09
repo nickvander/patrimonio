@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../utils/theme_colors.dart';
 import '../utils/url_opener.dart';
-import '../l10n/app_localizations.dart';
 import 'skeleton.dart';
 
 /// Realized capital gains/losses from `/dashboard/realized-gains`.

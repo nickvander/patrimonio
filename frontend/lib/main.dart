@@ -1,12 +1,14 @@
 import 'dart:js_interop';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+
 import 'l10n/app_localizations.dart';
-import 'utils/app_locale.dart';
 import 'screens/auth_gate.dart';
 import 'services/preferences.dart';
 import 'theme/palette.dart';
 import 'theme/typography.dart';
+import 'utils/app_locale.dart';
 
 /// Notifies the app when the user flips the theme. Held at module scope so
 /// the AppBar toggle can call `themeModeNotifier.value = ...` from

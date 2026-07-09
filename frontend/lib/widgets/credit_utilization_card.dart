@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
 import '../l10n/app_localizations.dart';
 import '../utils/currency.dart';
 import '../utils/mask_aware_name.dart';
 import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
-import 'package:intl/intl.dart';
 
 class CreditUtilizationCard extends StatefulWidget {
   final List<dynamic> creditData;

@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
-import '../utils/theme_colors.dart';
-import '../l10n/app_localizations.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+import '../l10n/app_localizations.dart';
+import '../utils/theme_colors.dart';
 
 class CashFlowTrendsChart extends StatelessWidget {
   final List<Map<String, dynamic>> trends;

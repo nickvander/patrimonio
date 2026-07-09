@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
 import '../services/auth_service.dart';
 import '../widgets/recovery_codes_dialog.dart';
-import '../l10n/app_localizations.dart';
 
 /// First-run screen: create the single owner account. Shown only when
 /// the server reports `needs_bootstrap: true`. After success the user

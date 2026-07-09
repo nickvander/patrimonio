@@ -1,26 +1,27 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
-import '../utils/percent_format.dart';
-import '../utils/theme_colors.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
-import '../services/api_service.dart';
-import '../services/transaction_mutation_refresh.dart'
-    show mergeRefetchedTransactions, txRefetchLimit;
-import '../utils/chart_touch.dart';
-import '../utils/currency.dart';
-import '../widgets/transactions_tab.dart';
-import '../widgets/account_balance_chart.dart';
-import '../widgets/clabe_info.dart';
-import '../widgets/add_holding_dialog.dart';
-import '../widgets/add_transaction_dialog.dart';
+
+import '../l10n/app_localizations.dart';
 // Conditional seam (NOT services/preferences.dart directly): Preferences
 // pulls package:web, which doesn't compile on the Dart test VM. See
 // services/account_alerts_cache.dart.
 import '../services/account_alerts_cache.dart';
-import '../utils/account_category.dart';
+import '../services/api_service.dart';
+import '../services/transaction_mutation_refresh.dart'
+    show mergeRefetchedTransactions, txRefetchLimit;
 import '../theme/typography.dart';
-import '../l10n/app_localizations.dart';
+import '../utils/account_category.dart';
+import '../utils/chart_touch.dart';
+import '../utils/currency.dart';
+import '../utils/percent_format.dart';
+import '../utils/theme_colors.dart';
+import '../widgets/account_balance_chart.dart';
+import '../widgets/add_holding_dialog.dart';
+import '../widgets/add_transaction_dialog.dart';
+import '../widgets/clabe_info.dart';
+import '../widgets/transactions_tab.dart';
 
 /// Signature of one paged, newest-first fetch of an account's
 /// transactions (see [AccountTransactionsScreen.transactionsFetcher]).

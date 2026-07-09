@@ -1,17 +1,18 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import '../utils/supported_banks.dart';
-import '../utils/theme_colors.dart';
-import '../utils/currency.dart';
-import '../utils/category.dart';
-import '../utils/mask_aware_name.dart';
-import '../widgets/add_account_dialog.dart';
-import 'import_cleanup_screen.dart';
-import 'package:file_picker/file_picker.dart';
+
+import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/file_drop_web.dart';
 import '../theme/typography.dart';
-import '../l10n/app_localizations.dart';
+import '../utils/category.dart';
+import '../utils/currency.dart';
+import '../utils/mask_aware_name.dart';
+import '../utils/supported_banks.dart';
+import '../utils/theme_colors.dart';
+import '../widgets/add_account_dialog.dart';
+import 'import_cleanup_screen.dart';
 
 /// Outcome of the post-parse account auto-match, surfaced as a cue under
 /// the destination dropdown so the selection (or its absence) is never

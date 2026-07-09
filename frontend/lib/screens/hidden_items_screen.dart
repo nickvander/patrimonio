@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/preferences.dart';
 import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
-import '../l10n/app_localizations.dart';
 
 /// Unified panel for everything the user has dismissed across the app —
 /// "ignored" subscriptions, the since-last-login banner suppression, etc.

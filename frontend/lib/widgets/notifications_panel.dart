@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../utils/percent_format.dart';
-import '../utils/theme_colors.dart';
+import '../l10n/app_localizations.dart';
 import '../utils/account_category.dart';
 import '../utils/category.dart';
-import '../l10n/app_localizations.dart';
+import '../utils/percent_format.dart';
+import '../utils/theme_colors.dart';
 
 /// One notification row shown in the bell-icon popover.
 class AppNotification {

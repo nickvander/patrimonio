@@ -38,8 +38,14 @@ linter:
     # rethrow, and prefer immutable locals.
     use_rethrow_when_possible: true
     prefer_final_locals: true
-    # NOT enabled yet (large backlogs — add incrementally per the conventions
-    # file): avoid_catches_without_on_clauses (~186), directives_ordering (~108).
+    # Import ordering (whole tree cleaned via `dart fix`; auto-fixable, so it
+    # stays clean).
+    directives_ordering: true
+    # NOT enabled — deliberately deferred: avoid_catches_without_on_clauses
+    # (~186 sites). The only mechanical fix (`catch (e)` -> `on Object catch (e)`)
+    # is behaviour-identical and just silences the lint; doing it RIGHT means
+    # narrowing each catch to its real exception type — real per-site work with
+    # real risk, not a sweep. Revisit deliberately, file by file.
 
 analyzer:
   errors:

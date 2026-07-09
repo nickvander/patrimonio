@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../utils/category.dart';
 import '../utils/theme_colors.dart';
-import '../l10n/app_localizations.dart';
 
 /// "Where's my money going?" — per-category spending stacked by month.
 ///

@@ -1,13 +1,14 @@
-import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
 import '../components/date_range_selector.dart';
+import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../utils/chart_time_axis.dart';
 import '../utils/chart_touch.dart';
 import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
-import '../l10n/app_localizations.dart';
 
 /// Portfolio performance: investment value over time (a line chart with a
 /// range selector) plus the contribution-weighted "vs S&P 500" comparison.

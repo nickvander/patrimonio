@@ -1,12 +1,14 @@
 import 'dart:math' as math;
-import 'package:flutter/material.dart';
-import '../utils/percent_format.dart';
-import '../utils/theme_colors.dart';
+
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/preferences.dart';
-import '../l10n/app_localizations.dart';
+import '../utils/percent_format.dart';
+import '../utils/theme_colors.dart';
 
 /// Which FIRE "flavor" the user is focusing on. Purely a view choice — it
 /// switches which target the headline + chart line emphasize; the underlying

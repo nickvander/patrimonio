@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
+
 import '../l10n/app_localizations.dart';
 import '../utils/category.dart';
+import '../utils/theme_colors.dart';
 
 enum TxFlow { all, income, expense }
 

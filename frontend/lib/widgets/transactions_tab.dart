@@ -1,17 +1,19 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
+
+import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/transaction_mutation_refresh.dart'
     show kTxBackendMaxPageSize;
-import '../l10n/app_localizations.dart';
 import '../theme/typography.dart';
 import '../utils/category.dart';
 import '../utils/category_style.dart';
 import '../utils/currency.dart';
 import '../utils/mask_aware_name.dart';
+import '../utils/theme_colors.dart';
 import '../utils/transaction_display.dart';
 import '../utils/url_opener.dart';
 import 'add_transaction_dialog.dart';

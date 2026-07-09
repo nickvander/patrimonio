@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
-import '../utils/percent_format.dart';
-import '../utils/theme_colors.dart';
 import 'package:intl/intl.dart';
-import '../utils/url_opener.dart';
+
+import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../theme/typography.dart';
 import '../utils/currency.dart';
 import '../utils/mask_aware_name.dart';
+import '../utils/percent_format.dart';
+import '../utils/theme_colors.dart';
+import '../utils/url_opener.dart';
 import '../widgets/skeleton.dart';
-import '../l10n/app_localizations.dart';
 import 'tax_planning_logic.dart';
 
 /// Test seams: the screen fetches through these typedefs so widget tests can

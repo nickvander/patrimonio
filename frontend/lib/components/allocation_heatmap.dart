@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
+import '../l10n/app_localizations.dart';
 import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
-import '../l10n/app_localizations.dart';
-import 'package:intl/intl.dart';
 
 class AllocationData {
   final String category;

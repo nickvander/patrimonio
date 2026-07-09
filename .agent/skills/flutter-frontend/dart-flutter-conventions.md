@@ -130,14 +130,18 @@ Already active: base `lints` recommended + `flutter_lints` (10 rules:
 `use_build_context_synchronously`, `use_full_hex_values_for_flutter_colors`,
 `use_key_in_widget_constructors`) + `prefer_const_constructors`.
 
-Also enabled (2026-07-08, all had a zero backlog when added):
-`cancel_subscriptions` and `close_sinks` — **promoted to `error`** in the
-`analyzer.errors:` block so an undisposed stream/sink breaks the build, not just
-warns — plus `use_rethrow_when_possible` and `prefer_final_locals`.
+Also enabled: `cancel_subscriptions` and `close_sinks` — **promoted to `error`**
+in the `analyzer.errors:` block so an undisposed stream/sink breaks the build,
+not just warns — plus `use_rethrow_when_possible`, `prefer_final_locals`, and
+`directives_ordering` (whole tree cleaned via `dart fix`; auto-fixable so it
+stays clean). `prefer_final_fields` is already in the recommended base set.
 
-Still deferred (large backlogs — add incrementally): `avoid_catches_without_on_clauses`
-(~186 sites), `directives_ordering` (~108). `prefer_final_fields` is already in
-the recommended base set.
+Deliberately deferred: `avoid_catches_without_on_clauses` (~186 sites). The only
+mechanical fix — `catch (e)` → `on Object catch (e)` — is behaviour-identical and
+just silences the lint (lint-theater). Satisfying it *properly* means narrowing
+each catch to its real exception type, which is genuine per-site work with real
+risk of dropping a throwable. Do it file-by-file when touching that code, not as
+a bulk sweep.
 
 ## Sources
 

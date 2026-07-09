@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+
+import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/recovery_codes_dialog.dart';
-import '../l10n/app_localizations.dart';
 
 /// Invite-redemption + account-creation screen.
 ///

@@ -1,6 +1,6 @@
 // Web implementation of the [ApiService] platform seam.
-import 'package:http/http.dart' as http;
 import 'package:http/browser_client.dart';
+import 'package:http/http.dart' as http;
 import 'package:web/web.dart' as web;
 
 String currentHost() => web.window.location.hostname.isEmpty

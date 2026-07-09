@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../utils/theme_colors.dart';
+
 import '../services/api_service.dart';
+import '../utils/theme_colors.dart';
 
 /// Add a manual equity holding (ticker + share quantity) to an account. The
 /// backend prices it live from the Yahoo quote cache and folds its value into

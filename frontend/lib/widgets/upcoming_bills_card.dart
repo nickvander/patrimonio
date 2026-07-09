@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+import '../l10n/app_localizations.dart';
 import '../utils/bill_forecast.dart';
 import '../utils/theme_colors.dart';
-import '../l10n/app_localizations.dart';
 
 /// 12-month forward projection of recurring bills, built from the already-
 /// loaded detected subscriptions (no extra fetch). Surfaces lumpy annual

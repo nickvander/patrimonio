@@ -1,4 +1,3 @@
-import '../utils/percent_format.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -8,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../components/allocation_heatmap.dart' show AllocationData;
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 import 'skeleton.dart';
 

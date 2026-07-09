@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import '../utils/theme_colors.dart';
+
 import '../l10n/app_localizations.dart';
+import '../utils/theme_colors.dart';
 
 /// Sticky banner shown above the dashboard body whenever one or more
 /// institutions are in `error` or `reconnect_required` state. Toast

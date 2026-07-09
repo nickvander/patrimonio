@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../services/auth_service.dart';
+
 import '../l10n/app_localizations.dart';
+import '../services/auth_service.dart';
 
 /// Second step of the two-step login. Shown by AuthGate when the
 /// server has issued a pending-TOTP session and is waiting for the

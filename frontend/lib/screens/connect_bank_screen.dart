@@ -1,13 +1,14 @@
-import 'package:flutter/material.dart';
-import 'package:plaid_flutter/plaid_flutter.dart';
-import 'package:http/http.dart' as http;
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:plaid_flutter/plaid_flutter.dart';
+
+import '../l10n/app_localizations.dart';
 import '../services/api_platform.dart';
 import '../services/plaid_oauth.dart';
 import '../utils/theme_colors.dart';
-import '../l10n/app_localizations.dart';
 
 class ConnectBankScreen extends StatefulWidget {
   const ConnectBankScreen({super.key});
