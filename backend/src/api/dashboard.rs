@@ -164,39 +164,52 @@ pub(crate) async fn latest_usd_mxn_rate(db: &sqlx::PgPool) -> FxRateInfo {
 /// `accounts a`, and binds `user_id` as `$1`. It does NOT include the
 /// `t.amount < 0` sign filter — callers add that themselves so the same
 /// fragment serves the spend-only and income+spend queries.
-pub(crate) const TRAILING_CASHFLOW_EXCLUSIONS_SQL: &str = r#"
-          AND t.date >= CURRENT_DATE - INTERVAL '12 months'
-          AND t.user_id = $1
+/// Effective category for cash-flow classification: a user re-categorization
+/// (`user_category`) overrides the raw imported/synced `category`, matching how
+/// the tax income predicate (`services::tax` INCOME_PREDICATE_SQL) and the
+/// spending labels resolve it. The query must alias transactions as `t`.
+pub(crate) const EFFECTIVE_CATEGORY_SQL: &str =
+    "UPPER(COALESCE(NULLIF(t.user_category, ''), t.category, ''))";
+
+/// Category values that are neither household income nor spending — internal
+/// transfers (Plaid PFC `TRANSFER_IN/OUT` + the app's manual `Transfer`) and
+/// securities/investment moves. Use as
+/// `{EFFECTIVE_CATEGORY_SQL} NOT IN {NON_CASHFLOW_CATEGORIES_SQL}`.
+pub(crate) const NON_CASHFLOW_CATEGORIES_SQL: &str =
+    "('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')";
+
+/// Row-level anti-joins that keep a transaction out of BOTH income and spending
+/// regardless of sign: a credit-card payment leg or a tax refund (a return of
+/// the user's own money); a positive inflow into a liability/credit-card
+/// account (payment / refund / reward — card purchases, being negative, still
+/// count as spend); a split parent; a personal-loan disbursement/repayment leg;
+/// or a confirmed cross-currency FX transfer pair. The transfer/investment
+/// CATEGORY exclusion is applied SEPARATELY (via `EFFECTIVE_CATEGORY_SQL`) so
+/// `cash_flow_trends` can still bucket those rows into invested/transferred.
+/// The query must alias transactions `t` and accounts `a`.
+pub(crate) const CASHFLOW_ROW_ANTI_JOINS_SQL: &str = r#"
+          AND COALESCE(t.category_detailed, '') NOT IN ('LOAN_PAYMENTS_CREDIT_CARD_PAYMENT', 'INCOME_TAX_REFUND')
+          AND NOT (t.amount > 0 AND is_liability_account_type(a.account_type))
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
-          -- Case-insensitive so both taxonomies are covered at once: Plaid's
-          -- uppercase PFC (TRANSFER_IN/OUT) and the app's manual categories
-          -- (Transfer / Investment). A securities trade ("Buy VOO") is not
-          -- spending — the cash is still yours as holdings — and an internal
-          -- ACH "Transfer" between the user's own accounts is neither income
-          -- nor spend; counting either distorts the cash-flow view (and the
-          -- savings rate / emergency-fund runway / projection contribution
-          -- that read this same predicate). Dividends stay in scope (Income).
-          AND UPPER(COALESCE(NULLIF(t.user_category, ''), t.category, '')) NOT IN ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')
-          AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
           AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
           AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
-          -- Internal cross-currency transfers move money between the user's
-          -- own accounts — neither income nor spend. Anti-join the confirmed
-          -- detected pairs so a mis-filed transfer leg can't distort the trend.
           AND NOT EXISTS (
               SELECT 1 FROM cash_fx_transfers f
               WHERE (f.source_tx_id = t.id OR f.dest_tx_id = t.id)
                 AND (f.user_confirmed OR f.detection_confidence >= 70)
           )
-          -- A positive inflow into a credit-card (liability) account is a
-          -- payment / refund / reward-redemption, not income; card purchases
-          -- (negatives) still count as spend. And a tax refund is a return of
-          -- the user's own overpaid tax, not earned income. Both are dropped
-          -- so the projection contribution / emergency-fund runway stay in
-          -- lockstep with the cash_flow_trends income CASE.
-          AND NOT (t.amount > 0 AND is_liability_account_type(a.account_type))
-          AND COALESCE(t.category_detailed, '') <> 'INCOME_TAX_REFUND'
 "#;
+
+/// The full WHERE-clause exclusion set for a trailing 12-month cash-flow sum —
+/// used by the FIRE projection defaults and the emergency-fund runway. Binds
+/// `$1` = user_id. `cash_flow_trends` deliberately does NOT use this: it needs
+/// the excluded transfer/investment rows to build its invested/transferred
+/// buckets, so it applies the same shared fragments inside its CASEs / WHERE.
+pub(crate) fn trailing_cashflow_exclusions_sql() -> String {
+    format!(
+        "\n          AND t.date >= CURRENT_DATE - INTERVAL '12 months'\n          AND t.user_id = $1\n          AND {EFFECTIVE_CATEGORY_SQL} NOT IN {NON_CASHFLOW_CATEGORIES_SQL}{CASHFLOW_ROW_ANTI_JOINS_SQL}"
+    )
+}
 
 /// Dashboard overview: net worth, account breakdown, recent changes —
 /// scoped to the authenticated user. Every aggregate filters on
@@ -1809,7 +1822,15 @@ async fn cash_flow_trends(
     Query(q): Query<TrendsQuery>,
 ) -> Json<Vec<CashFlowPoint>> {
     let months = q.months.unwrap_or(12).clamp(1, 24);
-    let rows = sqlx::query(
+    // Income/spending count genuine household cash flow only; securities
+    // trades (Investment) and internal Transfers are peeled into the
+    // `invested` / `transferred` buckets (still keyed on the effective
+    // category, so a user re-tag flows through). Every other non-cash-flow
+    // row — CC-payment leg / CC inflow, tax refund, loan leg, FX pair, split
+    // parent — is dropped by the shared `CASHFLOW_ROW_ANTI_JOINS_SQL` WHERE
+    // fragment, which those buckets don't need. Fallback rate 20.0 matches
+    // the dashboard convention.
+    let sql = format!(
         r#"
         WITH latest_fx AS (
             SELECT rate
@@ -1819,50 +1840,26 @@ async fn cash_flow_trends(
             LIMIT 1
         )
         SELECT TO_CHAR(t.date, 'YYYY-MM') as month,
-               -- Convert every amount to USD before summing (a MX$20,000
-               -- paycheck must not count as 20,000 next to USD amounts).
-               -- Fallback rate 20.0 matches the dashboard convention.
-               --
-               -- income/spending are genuine household cash flow only:
-               -- securities trades (Investment) and internal Transfers are
-               -- peeled off into their own `invested` / `transferred` buckets
-               -- so the headline isn't distorted but the money stays visible.
                SUM(CASE WHEN t.amount > 0
-                        AND UPPER(COALESCE(NULLIF(t.user_category, ''), t.category, '')) NOT IN
-                            ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')
-                        -- A positive inflow INTO a credit-card (liability)
-                        -- account is a payment / refund / reward-redemption,
-                        -- never household income. Its purchases (negatives)
-                        -- still count as spending; only the credit side is
-                        -- dropped. Catches CC "Payment Thank You" legs, Bilt
-                        -- rent-card payments, and statement credits.
-                        AND NOT is_liability_account_type(a.account_type)
-                        -- A tax refund is a return of the user's own overpaid
-                        -- tax (an interest-free loan to the govt coming back),
-                        -- not earned income — counting it inflates income and
-                        -- the savings rate the month it lands. Keep it out of
-                        -- the income line (it still shows in balances/net worth).
-                        AND COALESCE(t.category_detailed, '') <> 'INCOME_TAX_REFUND' THEN
+                        AND {EFFECTIVE_CATEGORY_SQL} NOT IN {NON_CASHFLOW_CATEGORIES_SQL} THEN
                        CASE WHEN a.currency = 'MXN'
                             THEN t.amount / COALESCE((SELECT rate FROM latest_fx), 20.0)
                             ELSE t.amount END
                    ELSE 0 END) as income,
                SUM(CASE WHEN t.amount < 0
-                        AND UPPER(COALESCE(NULLIF(t.user_category, ''), t.category, '')) NOT IN
-                            ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT') THEN
+                        AND {EFFECTIVE_CATEGORY_SQL} NOT IN {NON_CASHFLOW_CATEGORIES_SQL} THEN
                        CASE WHEN a.currency = 'MXN'
                             THEN ABS(t.amount) / COALESCE((SELECT rate FROM latest_fx), 20.0)
                             ELSE ABS(t.amount) END
                    ELSE 0 END) as spending,
                -- Net cash moved into investments (buys +, sells -): -amount, USD.
-               SUM(CASE WHEN UPPER(COALESCE(NULLIF(t.user_category, ''), t.category, '')) = 'INVESTMENT' THEN
+               SUM(CASE WHEN {EFFECTIVE_CATEGORY_SQL} = 'INVESTMENT' THEN
                        CASE WHEN a.currency = 'MXN'
                             THEN -t.amount / COALESCE((SELECT rate FROM latest_fx), 20.0)
                             ELSE -t.amount END
                    ELSE 0 END) as invested,
                -- Net internal transfer flow (in +, out -), USD.
-               SUM(CASE WHEN UPPER(COALESCE(NULLIF(t.user_category, ''), t.category, '')) IN
-                            ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER') THEN
+               SUM(CASE WHEN {EFFECTIVE_CATEGORY_SQL} IN ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER') THEN
                        CASE WHEN a.currency = 'MXN'
                             THEN t.amount / COALESCE((SELECT rate FROM latest_fx), 20.0)
                             ELSE t.amount END
@@ -1875,37 +1872,12 @@ async fn cash_flow_trends(
         -- this so "Last month" / "Last 3 months" / "YTD" each pull just the
         -- months they need while the default (12) is unchanged.
         WHERE t.date >= (DATE_TRUNC('month', CURRENT_DATE) - make_interval(months => ($2::int - 1)))
-          AND t.user_id = $1
-          AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
-          -- Investment trades and internal transfers are NOT filtered out
-          -- here — they're peeled into the `invested` / `transferred` buckets
-          -- in the SELECT above so income/spending stay clean while the money
-          -- stays visible. The rows below belong in NO bucket and are excluded
-          -- entirely:
-          --   LOAN_PAYMENTS_CREDIT_CARD_PAYMENT — paying off a tracked CC; the
-          --     original purchase was already counted as spending on the CC,
-          --     so counting the payment again would double it. Other
-          --     LOAN_PAYMENTS_* (mortgage, student, auto) stay in scope.
-          AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
-          -- Exclude personal-lending legs: a loan disbursement isn't
-          -- spending (it's a receivable) and a repayment isn't income
-          -- (it's the money coming back). Counting either would
-          -- double-distort the cash-flow bars. The partial unique
-          -- indexes on these columns make the anti-joins index probes.
-          AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
-          AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
-          -- Internal cross-currency transfers move money between the user's
-          -- own accounts — neither income nor spend. Anti-join the confirmed
-          -- detected pairs so a mis-filed transfer leg can't distort the bars.
-          AND NOT EXISTS (
-              SELECT 1 FROM cash_fx_transfers f
-              WHERE (f.source_tx_id = t.id OR f.dest_tx_id = t.id)
-                AND (f.user_confirmed OR f.detection_confidence >= 70)
-          )
+          AND t.user_id = $1{CASHFLOW_ROW_ANTI_JOINS_SQL}
         GROUP BY month
         ORDER BY month ASC
         "#
-    )
+    );
+    let rows = sqlx::query(&sql)
     .bind(ctx.user_id)
     .bind(months as i32)
     .fetch_all(&state.db)
@@ -1981,7 +1953,12 @@ async fn spending_by_category(
     let months = q.months.unwrap_or(6).clamp(1, 24);
     let top = q.top.unwrap_or(8).clamp(1, 30) as usize;
 
-    let rows = sqlx::query(
+    // Same cash-flow hygiene as `cash_flow_trends`, via the shared fragments:
+    // drop internal transfers / investment moves (by effective category) and
+    // the CC-payment / loan-leg / FX-pair / split-parent rows. The positive-
+    // only bits of the anti-join fragment (CC inflow, tax refund) are no-ops
+    // here since this sums outflows only.
+    let sql = format!(
         r#"
         WITH latest_fx AS (
             SELECT rate FROM exchange_rates
@@ -1998,35 +1975,13 @@ async fn spending_by_category(
         WHERE t.amount < 0
           AND t.date >= (DATE_TRUNC('month', CURRENT_DATE) - make_interval(months => ($2::int - 1)))
           AND t.user_id = $1
-          AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
-          -- Case-insensitive so both taxonomies are covered at once: Plaid's
-          -- uppercase PFC (TRANSFER_IN/OUT) and the app's manual categories
-          -- (Transfer / Investment). A securities trade ("Buy VOO") is not
-          -- spending — the cash is still yours as holdings — and an internal
-          -- ACH "Transfer" between the user's own accounts is neither income
-          -- nor spend; counting either distorts the cash-flow view (and the
-          -- savings rate / emergency-fund runway / projection contribution
-          -- that read this same predicate). Dividends stay in scope (Income).
-          AND UPPER(COALESCE(NULLIF(t.user_category, ''), t.category, '')) NOT IN ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')
-          AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
-          AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
-          AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
-          -- Linked cross-currency internal transfers are money moving between
-          -- the user's own accounts, not spend. The category-code filter above
-          -- misses them when an importer mis-filed a SPEI leg (e.g. a "RENTA"
-          -- substring → RENT_AND_UTILITIES), so anti-join the detected pairs.
-          -- Gated on confirmed / high-confidence so shaky pending matches don't
-          -- silently hide real expenses.
-          AND NOT EXISTS (
-              SELECT 1 FROM cash_fx_transfers f
-              WHERE (f.source_tx_id = t.id OR f.dest_tx_id = t.id)
-                AND (f.user_confirmed OR f.detection_confidence >= 70)
-          )
+          AND {EFFECTIVE_CATEGORY_SQL} NOT IN {NON_CASHFLOW_CATEGORIES_SQL}{CASHFLOW_ROW_ANTI_JOINS_SQL}
         GROUP BY TO_CHAR(t.date, 'YYYY-MM'),
                  COALESCE(NULLIF(t.user_category, ''), t.category, 'UNCATEGORIZED')
         ORDER BY month ASC
         "#,
-    )
+    );
+    let rows = sqlx::query(&sql)
     .bind(ctx.user_id)
     .bind(months as i32)
     .fetch_all(&state.db)
@@ -2199,7 +2154,9 @@ async fn spending_insights(
     let window_months: Vec<String> = month_rows.iter().map(|r| r.get::<String, _>("m")).collect();
     let recent_month = window_months.first().cloned().unwrap_or_default();
 
-    let rows = sqlx::query(
+    // Same cash-flow exclusions as the other spend views, via the shared
+    // fragments (the positive-only anti-joins are no-ops on this outflow sum).
+    let sql = format!(
         r#"
         WITH latest_fx AS (
             SELECT rate FROM exchange_rates
@@ -2219,30 +2176,11 @@ async fn spending_insights(
           AND t.date >= DATE_TRUNC('month', CURRENT_DATE) - make_interval(months => $2::int)
           AND t.date <  DATE_TRUNC('month', CURRENT_DATE)
           AND t.user_id = $1
-          AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
-          -- Case-insensitive so both taxonomies are covered at once: Plaid's
-          -- uppercase PFC (TRANSFER_IN/OUT) and the app's manual categories
-          -- (Transfer / Investment). A securities trade ("Buy VOO") is not
-          -- spending — the cash is still yours as holdings — and an internal
-          -- ACH "Transfer" between the user's own accounts is neither income
-          -- nor spend; counting either distorts the cash-flow view (and the
-          -- savings rate / emergency-fund runway / projection contribution
-          -- that read this same predicate). Dividends stay in scope (Income).
-          AND UPPER(COALESCE(NULLIF(t.user_category, ''), t.category, '')) NOT IN ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')
-          AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
-          AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
-          AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
-          -- Internal cross-currency transfers move money between the user's
-          -- own accounts — neither income nor spend. Anti-join the confirmed
-          -- detected pairs so a mis-filed transfer leg can't distort the spikes.
-          AND NOT EXISTS (
-              SELECT 1 FROM cash_fx_transfers f
-              WHERE (f.source_tx_id = t.id OR f.dest_tx_id = t.id)
-                AND (f.user_confirmed OR f.detection_confidence >= 70)
-          )
+          AND {EFFECTIVE_CATEGORY_SQL} NOT IN {NON_CASHFLOW_CATEGORIES_SQL}{CASHFLOW_ROW_ANTI_JOINS_SQL}
         GROUP BY month, t.user_category, t.category_detailed, t.category
         "#,
-    )
+    );
+    let rows = sqlx::query(&sql)
     .bind(ctx.user_id)
     .bind(window as i32)
     .fetch_all(&state.db)
@@ -2461,12 +2399,13 @@ async fn emergency_fund(
         .unwrap_or(0.0);
 
     // Trailing spend + month count. The exclusion set is the SHARED fragment
-    // (TRAILING_CASHFLOW_EXCLUSIONS_SQL) used verbatim by
+    // (trailing_cashflow_exclusions_sql) used verbatim by
     // `projections::projection_defaults`, so the two trailing-12-mo
     // aggregations can never silently drift. The MXN→USD divisor is the
     // already-resolved `fx` ($2) — identical to the old in-SQL latest rate
     // whenever a fresh rate exists, so the live monthly-spend figure is
     // unchanged.
+    let excl = trailing_cashflow_exclusions_sql();
     let spend_sql = format!(
         r#"
         SELECT
@@ -2477,7 +2416,7 @@ async fn emergency_fund(
         FROM transactions t
         JOIN accounts a ON a.id = t.account_id
         WHERE t.amount < 0
-        {TRAILING_CASHFLOW_EXCLUSIONS_SQL}
+        {excl}
         "#,
     );
     let spend_row = sqlx::query(&spend_sql)
@@ -3504,7 +3443,11 @@ async fn detected_subscriptions(
         .iter()
         .filter_map(|r| r.try_get::<String, _>("merchant_key").ok())
         .collect();
-    let rows = sqlx::query(
+    // Same non-spend exclusions the cash-flow views apply (via the shared
+    // fragments), so a recurring internal transfer, credit-card payment, loan
+    // leg, or investment buy doesn't cluster into a phantom "subscription"
+    // (honors user re-tags). The positive-only anti-joins are no-ops here.
+    let sql = format!(
         r#"
         SELECT
             t.date, t.amount, t.currency, t.account_id,
@@ -3520,23 +3463,11 @@ async fn detected_subscriptions(
           -- "subscriptions" once their recurring shape clusters.
           AND t.amount < 0
           AND t.date >= CURRENT_DATE - INTERVAL '548 days'
-          AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
-          -- Same non-spend exclusions the cash-flow views apply, so a recurring
-          -- internal transfer, credit-card payment, loan leg, or investment buy
-          -- doesn't cluster into a phantom "subscription" (honors user re-tags).
-          AND UPPER(COALESCE(NULLIF(t.user_category, ''), t.category, '')) NOT IN
-              ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')
-          AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
-          AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
-          AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
-          AND NOT EXISTS (
-              SELECT 1 FROM cash_fx_transfers f
-              WHERE (f.source_tx_id = t.id OR f.dest_tx_id = t.id)
-                AND (f.user_confirmed OR f.detection_confidence >= 70)
-          )
+          AND {EFFECTIVE_CATEGORY_SQL} NOT IN {NON_CASHFLOW_CATEGORIES_SQL}{CASHFLOW_ROW_ANTI_JOINS_SQL}
         ORDER BY t.date DESC
         "#,
-    )
+    );
+    let rows = sqlx::query(&sql)
     .bind(ctx.user_id)
     .fetch_all(&state.db)
     .await

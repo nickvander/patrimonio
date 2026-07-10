@@ -6,7 +6,7 @@ use axum::{
 use serde::Serialize;
 use sqlx::Row;
 
-use crate::api::dashboard::{latest_usd_mxn_rate, TRAILING_CASHFLOW_EXCLUSIONS_SQL};
+use crate::api::dashboard::{latest_usd_mxn_rate, trailing_cashflow_exclusions_sql};
 use crate::api::session::AuthContext;
 use crate::services::projections::{self, ProjectionRequest, ProjectionResponse};
 use crate::AppState;
@@ -63,6 +63,7 @@ async fn projection_defaults(
     // divisor — numerically identical to the old in-SQL latest rate whenever a
     // fresh rate exists.
     let fx = latest_usd_mxn_rate(&state.db).await.rate;
+    let excl = trailing_cashflow_exclusions_sql();
     let sql = format!(
         r#"
         SELECT
@@ -80,7 +81,7 @@ async fn projection_defaults(
         FROM transactions t
         JOIN accounts a ON a.id = t.account_id
         WHERE TRUE
-        {TRAILING_CASHFLOW_EXCLUSIONS_SQL}
+        {excl}
         "#,
     );
     let row = sqlx::query(&sql)
