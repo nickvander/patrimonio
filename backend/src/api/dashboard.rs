@@ -1821,7 +1821,14 @@ async fn cash_flow_trends(
                -- so the headline isn't distorted but the money stays visible.
                SUM(CASE WHEN t.amount > 0
                         AND UPPER(COALESCE(t.category, '')) NOT IN
-                            ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT') THEN
+                            ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')
+                        -- A positive inflow INTO a credit-card (liability)
+                        -- account is a payment / refund / reward-redemption,
+                        -- never household income. Its purchases (negatives)
+                        -- still count as spending; only the credit side is
+                        -- dropped. Catches CC "Payment Thank You" legs, Bilt
+                        -- rent-card payments, and statement credits.
+                        AND NOT is_liability_account_type(a.account_type) THEN
                        CASE WHEN a.currency = 'MXN'
                             THEN t.amount / COALESCE((SELECT rate FROM latest_fx), 20.0)
                             ELSE t.amount END

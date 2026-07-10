@@ -2742,6 +2742,47 @@ async fn cash_flow_excludes_investment_trades_and_transfers() {
         "March transferred should surface the ACH deposit (10000), got {}", march["transferred"]);
 }
 
+/// A positive inflow into a credit-card (liability) account — a payment,
+/// refund, or reward-redemption — is not household income. Its purchases
+/// (negatives) still count as spending. Regression for CC "Payment Thank You"
+/// legs, Bilt rent-card payments, and statement credits inflating income.
+#[tokio::test]
+async fn cash_flow_excludes_credit_card_inflows_from_income() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (inst, checking) = seed_account(&pool, user_id).await;
+    let card: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO accounts (institution_id, name, account_type, currency, current_balance, user_id) \
+         VALUES ($1, 'Visa', 'credit', 'USD', -500.00, $2) RETURNING id",
+    )
+    .bind(inst)
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .expect("seed credit account");
+
+    // Real payroll into checking; a CC payment inflow + a card purchase on the card.
+    seed_tx_dated(&pool, user_id, checking, "ACME Payroll", "3000.00", "2026-03-15").await;
+    seed_tx_dated(&pool, user_id, card, "Payment Thank You-Mobile", "800.00", "2026-03-16").await;
+    seed_tx_dated(&pool, user_id, card, "Grocery Store", "-120.00", "2026-03-17").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/trends", None, Some(&token)))
+        .await
+        .unwrap();
+    let trends = body_json(res.into_body()).await;
+    let march = trends.as_array().unwrap().iter()
+        .find(|p| p["month"] == "2026-03").cloned().unwrap();
+
+    assert!((march["income"].as_f64().unwrap() - 3000.0).abs() < 0.01,
+        "CC payment inflow must not count as income (payroll only), got {}", march["income"]);
+    assert!((march["spending"].as_f64().unwrap() - 120.0).abs() < 0.01,
+        "card purchase should still count as spending, got {}", march["spending"]);
+}
+
 // Insert an expense with an explicit PFC category at a date relative to
 // CURRENT_DATE (so the test is independent of the wall clock). `months_ago`
 // counts whole calendar months back from today.
