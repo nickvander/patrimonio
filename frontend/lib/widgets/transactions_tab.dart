@@ -1028,9 +1028,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
       child: Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: LayoutBuilder(builder: (context, constraints) {
+      child: LayoutBuilder(builder: (context, constraints) {
           final isNarrow = constraints.maxWidth < 560;
           // Bounded-host mode: when the parent hands us a finite height
           // (e.g. the account panel's Expanded slot, side panel or
@@ -1042,7 +1040,13 @@ class _TransactionsTabState extends State<TransactionsTab> {
           // SingleChildScrollView (unbounded height), which keeps the
           // existing page-scroll behavior there.
           final boundedHost = constraints.maxHeight.isFinite;
-          return Column(
+          return Padding(
+            // Tighter gutters on phone so the row's title/amount columns
+            // aren't starved: a constant 24px pad on a ~390px screen left
+            // the description column only ~140px and forced premature
+            // ellipsis on even short merchant names. Desktop keeps 24.
+            padding: EdgeInsets.all(isNarrow ? 12.0 : 24.0),
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildToolbar(isNarrow),
@@ -1118,9 +1122,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
                   ),
                 ),
             ],
+          ),
           );
         }),
-      ),
       ),
     );
   }
@@ -2850,6 +2854,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
   /// actually feels like a scannable list instead of an inbox of cards.
   Widget _buildTransactionRow(dynamic tx, bool isNarrow) {
     final l = AppLocalizations.of(context);
+    // Phone screens bump the row's type up a notch for legibility; the
+    // denser desktop sizing is unchanged. Paired with the tighter card
+    // gutters on narrow, the title/amount columns have room to grow.
+    final titleSize = isNarrow ? 15.0 : 14.0;
+    final metaSize = isNarrow ? 12.0 : 11.0;
+    final amountSize = isNarrow ? 15.0 : 14.0;
     final sourceAmount = ((tx['amount'] as num?)?.toDouble() ?? 0.0);
     final sourceCurrency =
         (tx['currency'] ?? widget.targetCurrency).toString();
@@ -3033,9 +3043,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
                                     focusNode: _inlineEditFocus,
                                     autofocus: true,
                                     onSubmitted: (_) => _commitInlineEdit(tx),
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontWeight: FontWeight.w600,
-                                      fontSize: 14,
+                                      fontSize: titleSize,
                                       height: 1.2,
                                     ),
                                     decoration: InputDecoration(
@@ -3059,9 +3069,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
                                     : () => _startInlineEdit(tx),
                                 child: Text(
                                   displayLabel(tx),
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.w600,
-                                    fontSize: 14,
+                                    fontSize: titleSize,
                                     height: 1.2,
                                   ),
                                   maxLines: 1,
@@ -3126,7 +3136,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                     _metaLine(tx, notes),
                     style: TextStyle(
                       color: context.textSubtle,
-                      fontSize: 11,
+                      fontSize: metaSize,
                       height: 1.3,
                     ),
                     maxLines: 1,
@@ -3140,7 +3150,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
             // converted estimate below (desktop only — narrow viewports
             // hide it so the description column has breathing room).
             ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: isNarrow ? 100 : 140),
+              constraints: BoxConstraints(maxWidth: isNarrow ? 128 : 140),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 mainAxisSize: MainAxisSize.min,
@@ -3155,7 +3165,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                         : '${isExpense ? '−' : '+'}${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}',
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
-                      fontSize: 14,
+                      fontSize: amountSize,
                       fontFeatures: const [FontFeature.tabularFigures()],
                       color: (isFxTransfer || isExpense)
                           ? context.textPrimary
