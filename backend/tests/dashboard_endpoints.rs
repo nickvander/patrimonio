@@ -2818,6 +2818,55 @@ async fn cash_flow_excludes_tax_refund_from_income() {
         "tax refund must not count as income (payroll only), got {}", march["income"]);
 }
 
+/// A user re-categorization (user_category) overrides the raw Plaid category in
+/// the cash-flow exclusions, in BOTH directions — matching how labels and the
+/// tax view already treat it. Re-tagging a row "Transfer" drops it from income;
+/// re-tagging a TRANSFER_IN row "Income" brings it back in.
+#[tokio::test]
+async fn cash_flow_honors_user_category_override() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, checking) = seed_account(&pool, user_id).await;
+
+    // Plain payroll baseline.
+    seed_tx_dated(&pool, user_id, checking, "ACME Payroll", "1000.00", "2026-03-12").await;
+    // (a) A raw INCOME row the user re-tagged as a Transfer → excluded from income.
+    // (b) A raw TRANSFER_IN row the user re-tagged as Income → counted as income.
+    for (amount, category, user_cat, day) in [
+        ("500.00", "INCOME", "Transfer", "10"),
+        ("700.00", "TRANSFER_IN", "Income", "11"),
+    ] {
+        sqlx::query(
+            "INSERT INTO transactions (account_id, date, description, amount, currency, source, user_id, category, user_category) \
+             VALUES ($1, ('2026-03-' || $6)::date, 'x', $2, 'USD', 'manual', $3, $4, $5)",
+        )
+        .bind(checking)
+        .bind(Decimal::from_str(amount).unwrap())
+        .bind(user_id)
+        .bind(category)
+        .bind(user_cat)
+        .bind(day)
+        .execute(&pool)
+        .await
+        .expect("seed override tx");
+    }
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/trends", None, Some(&token)))
+        .await
+        .unwrap();
+    let trends = body_json(res.into_body()).await;
+    let march = trends.as_array().unwrap().iter()
+        .find(|p| p["month"] == "2026-03").cloned().unwrap();
+
+    // 1000 payroll + 700 (TRANSFER_IN re-tagged Income); the 500 re-tagged Transfer is excluded.
+    assert!((march["income"].as_f64().unwrap() - 1700.0).abs() < 0.01,
+        "user_category override should drop the re-tagged Transfer and keep the re-tagged Income, got {}", march["income"]);
+}
+
 // Insert an expense with an explicit PFC category at a date relative to
 // CURRENT_DATE (so the test is independent of the wall clock). `months_ago`
 // counts whole calendar months back from today.

@@ -176,7 +176,7 @@ pub(crate) const TRAILING_CASHFLOW_EXCLUSIONS_SQL: &str = r#"
           -- nor spend; counting either distorts the cash-flow view (and the
           -- savings rate / emergency-fund runway / projection contribution
           -- that read this same predicate). Dividends stay in scope (Income).
-          AND UPPER(COALESCE(t.category, '')) NOT IN ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')
+          AND UPPER(COALESCE(NULLIF(t.user_category, ''), t.category, '')) NOT IN ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')
           AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
           AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
           AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
@@ -188,6 +188,14 @@ pub(crate) const TRAILING_CASHFLOW_EXCLUSIONS_SQL: &str = r#"
               WHERE (f.source_tx_id = t.id OR f.dest_tx_id = t.id)
                 AND (f.user_confirmed OR f.detection_confidence >= 70)
           )
+          -- A positive inflow into a credit-card (liability) account is a
+          -- payment / refund / reward-redemption, not income; card purchases
+          -- (negatives) still count as spend. And a tax refund is a return of
+          -- the user's own overpaid tax, not earned income. Both are dropped
+          -- so the projection contribution / emergency-fund runway stay in
+          -- lockstep with the cash_flow_trends income CASE.
+          AND NOT (t.amount > 0 AND is_liability_account_type(a.account_type))
+          AND COALESCE(t.category_detailed, '') <> 'INCOME_TAX_REFUND'
 "#;
 
 /// Dashboard overview: net worth, account breakdown, recent changes —
@@ -1820,7 +1828,7 @@ async fn cash_flow_trends(
                -- peeled off into their own `invested` / `transferred` buckets
                -- so the headline isn't distorted but the money stays visible.
                SUM(CASE WHEN t.amount > 0
-                        AND UPPER(COALESCE(t.category, '')) NOT IN
+                        AND UPPER(COALESCE(NULLIF(t.user_category, ''), t.category, '')) NOT IN
                             ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')
                         -- A positive inflow INTO a credit-card (liability)
                         -- account is a payment / refund / reward-redemption,
@@ -1840,20 +1848,20 @@ async fn cash_flow_trends(
                             ELSE t.amount END
                    ELSE 0 END) as income,
                SUM(CASE WHEN t.amount < 0
-                        AND UPPER(COALESCE(t.category, '')) NOT IN
+                        AND UPPER(COALESCE(NULLIF(t.user_category, ''), t.category, '')) NOT IN
                             ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT') THEN
                        CASE WHEN a.currency = 'MXN'
                             THEN ABS(t.amount) / COALESCE((SELECT rate FROM latest_fx), 20.0)
                             ELSE ABS(t.amount) END
                    ELSE 0 END) as spending,
                -- Net cash moved into investments (buys +, sells -): -amount, USD.
-               SUM(CASE WHEN UPPER(COALESCE(t.category, '')) = 'INVESTMENT' THEN
+               SUM(CASE WHEN UPPER(COALESCE(NULLIF(t.user_category, ''), t.category, '')) = 'INVESTMENT' THEN
                        CASE WHEN a.currency = 'MXN'
                             THEN -t.amount / COALESCE((SELECT rate FROM latest_fx), 20.0)
                             ELSE -t.amount END
                    ELSE 0 END) as invested,
                -- Net internal transfer flow (in +, out -), USD.
-               SUM(CASE WHEN UPPER(COALESCE(t.category, '')) IN
+               SUM(CASE WHEN UPPER(COALESCE(NULLIF(t.user_category, ''), t.category, '')) IN
                             ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER') THEN
                        CASE WHEN a.currency = 'MXN'
                             THEN t.amount / COALESCE((SELECT rate FROM latest_fx), 20.0)
@@ -1999,7 +2007,7 @@ async fn spending_by_category(
           -- nor spend; counting either distorts the cash-flow view (and the
           -- savings rate / emergency-fund runway / projection contribution
           -- that read this same predicate). Dividends stay in scope (Income).
-          AND UPPER(COALESCE(t.category, '')) NOT IN ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')
+          AND UPPER(COALESCE(NULLIF(t.user_category, ''), t.category, '')) NOT IN ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')
           AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
           AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
           AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
@@ -2220,7 +2228,7 @@ async fn spending_insights(
           -- nor spend; counting either distorts the cash-flow view (and the
           -- savings rate / emergency-fund runway / projection contribution
           -- that read this same predicate). Dividends stay in scope (Income).
-          AND UPPER(COALESCE(t.category, '')) NOT IN ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')
+          AND UPPER(COALESCE(NULLIF(t.user_category, ''), t.category, '')) NOT IN ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')
           AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
           AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
           AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
@@ -3513,6 +3521,19 @@ async fn detected_subscriptions(
           AND t.amount < 0
           AND t.date >= CURRENT_DATE - INTERVAL '548 days'
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
+          -- Same non-spend exclusions the cash-flow views apply, so a recurring
+          -- internal transfer, credit-card payment, loan leg, or investment buy
+          -- doesn't cluster into a phantom "subscription" (honors user re-tags).
+          AND UPPER(COALESCE(NULLIF(t.user_category, ''), t.category, '')) NOT IN
+              ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER', 'INVESTMENT')
+          AND COALESCE(t.category_detailed, '') <> 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT'
+          AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
+          AND NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
+          AND NOT EXISTS (
+              SELECT 1 FROM cash_fx_transfers f
+              WHERE (f.source_tx_id = t.id OR f.dest_tx_id = t.id)
+                AND (f.user_confirmed OR f.detection_confidence >= 70)
+          )
         ORDER BY t.date DESC
         "#,
     )
