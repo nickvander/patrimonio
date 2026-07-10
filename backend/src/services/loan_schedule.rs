@@ -16,6 +16,13 @@ use chrono::{Datelike, Duration, Months, NaiveDate};
 use rust_decimal::prelude::*;
 use rust_decimal::Decimal;
 
+/// Upper bound on a loan term (100 years). A schedule allocates one row
+/// per period, and a weekly frequency multiplies that ~4.3×, so an
+/// unbounded `term_months` (e.g. `i32::MAX`) would try to allocate
+/// billions of rows and abort the process. Validated at write time
+/// (`create_loan`) and re-checked here as a backstop for any legacy row.
+pub const MAX_TERM_MONTHS: i32 = 1200;
+
 /// One generated installment (pre-persistence). Dates + 2dp money.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ScheduleRow {
@@ -34,6 +41,9 @@ pub enum ScheduleError {
     OpenEnded,
     /// frequency string wasn't one of monthly/weekly/lump_sum.
     BadFrequency,
+    /// term_months exceeds [`MAX_TERM_MONTHS`] — refused rather than
+    /// allocating a runaway number of installment rows.
+    TermTooLong,
 }
 
 /// Round to 2 decimal places, half-up — the codebase's money idiom
@@ -100,6 +110,9 @@ pub fn generate(
     payment_frequency: Option<&str>,
 ) -> Result<Vec<ScheduleRow>, ScheduleError> {
     let term = term_months.filter(|t| *t > 0).ok_or(ScheduleError::OpenEnded)?;
+    if term > MAX_TERM_MONTHS {
+        return Err(ScheduleError::TermTooLong);
+    }
     let freq = payment_frequency.ok_or(ScheduleError::OpenEnded)?;
     // Normalize to an effective annual rate up front.
     let annual_rate = if rate_period == "monthly" {
@@ -387,6 +400,28 @@ mod tests {
     }
     fn sum_interest(rows: &[ScheduleRow]) -> Decimal {
         rows.iter().map(|r| r.interest).sum()
+    }
+
+    #[test]
+    fn rejects_term_over_max_instead_of_allocating_runaway_rows() {
+        // DoS guard: a huge term must return an error, not try to build
+        // billions of installment rows.
+        let err = generate(
+            d("1000"),
+            d("0"),
+            "annual",
+            "none",
+            orig(),
+            Some(MAX_TERM_MONTHS + 1),
+            Some("monthly"),
+        )
+        .unwrap_err();
+        assert_eq!(err, ScheduleError::TermTooLong);
+        // The boundary value is still accepted.
+        assert!(generate(
+            d("1000"), d("0"), "annual", "none", orig(), Some(MAX_TERM_MONTHS), Some("monthly"),
+        )
+        .is_ok());
     }
 
     #[test]

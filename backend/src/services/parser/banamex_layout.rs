@@ -29,6 +29,16 @@ use rust_decimal::Decimal;
 use std::str::FromStr;
 use tracing::info;
 
+/// Directional keywords for the rare case where the SALDO delta can't give
+/// a sign (a first record whose opening balance wasn't captured). Same
+/// spending vocabulary `banamex_pdf` uses; a match means outflow (debit).
+fn description_is_debit(description: &str) -> bool {
+    const DEBIT_KEYWORDS: &[&str] =
+        &["COMPRA", "RETIRO", "PAGO", "COMISION", "CARGO", "IVA", "TRASPASO"];
+    let upper = description.to_uppercase();
+    DEBIT_KEYWORDS.iter().any(|k| upper.contains(k))
+}
+
 fn month_abbr(s: &str) -> Option<u32> {
     match s {
         "ENE" => Some(1),
@@ -281,7 +291,13 @@ fn parse_section(lines: &[&str], resolve_year: &dyn Fn(u32) -> i32) -> Vec<Parse
                 amounts.clear();
                 return;
             }
-            None => magnitude, // first record, no prior balance — take as-is
+            // First record, no prior balance captured (a lost "SALDO
+            // ANTERIOR"): the saldo delta can't give the sign, so fall back
+            // to directional keywords in the description rather than blindly
+            // assuming a deposit — a RETIRO/CARGO first row was being stored
+            // as positive income.
+            None if description_is_debit(&description) => -magnitude,
+            None => magnitude,
         };
         *prev_saldo = Some(saldo);
         amounts.clear();

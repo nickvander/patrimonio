@@ -287,27 +287,30 @@ pub fn parse_text(text: &str) -> Result<Vec<ParsedTransaction>> {
         }
     }
 
-    // Stamp the statement's headline total ("Saldo al generar este estado de
-    // cuenta" = available + cajitas, else available + cajitas) onto the latest
-    // MAIN-account (non-cajita) transaction's balance_after. The import's
-    // snapshot back-fill turns it into a dated net-worth point and `closing`
-    // sets the current balance. Only one row carries it, so the continuity
-    // check (needs >=2 balance rows) skips it.
+    // Stamp the MAIN "Cuenta" account's AVAILABLE balance onto its latest
+    // (non-cajita) transaction's balance_after. `confirm_handler`'s `closing`
+    // turns it into that account's current_balance and a net-worth snapshot.
+    //
+    // NOT the headline grand total ("Saldo al generar este estado de cuenta"
+    // = available + cajitas + crédito): each cajita is routed to its OWN
+    // sub-account carrying its own balance, so stamping the grand total here
+    // double-counts every cajita in net worth. Prefer the explicit available
+    // figure; else derive it by removing the cajita total from the grand
+    // total; else (no cajitas seen) the grand total IS the available balance.
     let summary = parse_account_summary(text);
-    let total = summary.saldo_total.or_else(|| {
-        match (summary.en_su_cuenta, summary.total_cajitas) {
-            (Some(c), Some(j)) => Some(c + j),
-            (other, _) => other,
-        }
+    let available = summary.en_su_cuenta.or(match (summary.saldo_total, summary.total_cajitas) {
+        (Some(total), Some(cajitas)) => Some(total - cajitas),
+        (total, None) => total,
+        (None, _) => None,
     });
-    if let Some(total) = total {
+    if let Some(available) = available {
         if let Some((idx, _)) = txs
             .iter()
             .enumerate()
             .filter(|(_, t)| t.account_label.is_none())
             .max_by(|(_, a), (_, b)| a.date.cmp(&b.date))
         {
-            txs[idx].balance_after = Some(total);
+            txs[idx].balance_after = Some(available);
         }
     }
 
@@ -488,5 +491,29 @@ Cómo está organizado tu dinero
     #[test]
     fn empty_text_no_transactions() {
         assert!(parse_text("").unwrap().is_empty());
+    }
+
+    #[test]
+    fn main_row_balance_is_available_not_grand_total() {
+        // Regression: the main "Cuenta" row must carry the AVAILABLE balance
+        // (en su cuenta = 0.00 in this fixture), NOT the grand total
+        // (saldo_total = 63525.30). Stamping the grand total double-counts
+        // every cajita that gets routed to its own sub-account.
+        let txs = parse_text(CURRENT).unwrap();
+        let stamped: Vec<_> = txs
+            .iter()
+            .filter(|t| t.account_label.is_none() && t.balance_after.is_some())
+            .collect();
+        assert_eq!(stamped.len(), 1, "exactly one main row is stamped: {stamped:#?}");
+        assert_eq!(
+            stamped[0].balance_after,
+            Some(Decimal::from_str("0.00").unwrap()),
+            "main row must carry available, not the grand total"
+        );
+        assert!(
+            txs.iter()
+                .all(|t| t.balance_after != Some(Decimal::from_str("63525.30").unwrap())),
+            "the grand total must never be stamped as a balance"
+        );
     }
 }

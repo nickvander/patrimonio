@@ -538,6 +538,18 @@ async fn create_loan(
     if !matches!(payload.rate_period.as_str(), "annual" | "monthly") {
         return (StatusCode::BAD_REQUEST, "invalid rate_period").into_response();
     }
+    // Bound the term so schedule generation can't be asked to allocate a
+    // runaway number of installment rows (a process-crash DoS). The DB
+    // already enforces `> 0`; this adds the upper bound.
+    if let Some(t) = payload.term_months {
+        if t <= 0 || t > crate::services::loan_schedule::MAX_TERM_MONTHS {
+            return (
+                StatusCode::BAD_REQUEST,
+                "term_months must be between 1 and 1200",
+            )
+                .into_response();
+        }
+    }
 
     // Find-or-create the person. If person_id is supplied, verify it
     // belongs to the caller; otherwise upsert by (user, lower(name)).
@@ -850,19 +862,47 @@ async fn loans_summary(
     let mut total_lent = 0.0;
     let mut total_outstanding = 0.0;
     let mut active = 0i64;
+    // Per-currency breakdown: summing USD + MXN principal into one number is
+    // meaningless (the ~18x-overstatement bug class). Keep the flat totals
+    // for backward compat but label them, and expose a per-currency map plus
+    // a single `totals_currency` when every loan shares one — mirrors the
+    // interest_income response so the UI can convert/label safely.
+    let mut by_currency: std::collections::BTreeMap<String, (f64, f64)> =
+        std::collections::BTreeMap::new();
     for r in &rows {
         let v = loan_view(r, today);
         total_lent += v.principal;
         total_outstanding += v.outstanding;
+        let entry = by_currency.entry(v.currency.clone()).or_insert((0.0, 0.0));
+        entry.0 += v.principal;
+        entry.1 += v.outstanding;
         if v.status == "active" {
             active += 1;
         }
     }
+    let totals_by_currency: Vec<serde_json::Value> = by_currency
+        .iter()
+        .map(|(cur, (lent, outstanding))| {
+            serde_json::json!({
+                "currency": cur,
+                "total_lent": lent,
+                "total_outstanding": outstanding,
+            })
+        })
+        .collect();
+    let totals_currency: Option<&String> = match by_currency.len() {
+        1 => by_currency.keys().next(),
+        _ => None,
+    };
     Json(serde_json::json!({
         "loan_count": rows.len(),
         "active_count": active,
+        // Legacy naive cross-currency sums (backward compat). Prefer
+        // `totals_by_currency` when `totals_currency` is null (mixed).
         "total_lent": total_lent,
         "total_outstanding": total_outstanding,
+        "totals_by_currency": totals_by_currency,
+        "totals_currency": totals_currency,
     }))
 }
 
@@ -1722,7 +1762,13 @@ async fn suggest_repayment(
         .ok()
         .flatten()
         .unwrap_or(origination);
-    let horizon_months = term_months.unwrap_or(18).max(1) as i64;
+    // Clamp before the date arithmetic: `NaiveDate + Duration` panics when
+    // pushed past chrono's max year, and a legacy row could hold a huge
+    // term_months (new ones are bounded at create). MAX_TERM_MONTHS worth
+    // of days stays well inside range.
+    let horizon_months = term_months
+        .unwrap_or(18)
+        .clamp(1, crate::services::loan_schedule::MAX_TERM_MONTHS) as i64;
     let horizon = disbursement_date + chrono::Duration::days(horizon_months * 31 + 30);
 
     // Expected installment: the REMAINING amount on the earliest not-fully-
@@ -1906,6 +1952,11 @@ async fn regenerate_schedule(
             return RegenOutcome::OpenEnded;
         }
         Err(crate::services::loan_schedule::ScheduleError::BadFrequency) => {
+            return RegenOutcome::BadFrequency;
+        }
+        Err(crate::services::loan_schedule::ScheduleError::TermTooLong) => {
+            // Legacy loan with an out-of-range term (new ones are rejected
+            // at create). Treat like a bad frequency: a 400, not a rebuild.
             return RegenOutcome::BadFrequency;
         }
     };
@@ -2485,12 +2536,11 @@ async fn interest_income(
     // loans between two individuals exceed the $10,000 gift-loan
     // de-minimis. Surface active 0%-rate loans whose principal clears
     // that threshold so the user can raise it with an accountant.
-    let below_market = sqlx::query(
+    let below_market_rows = sqlx::query(
         r#"
         SELECT borrower_name, principal, currency
         FROM loans
-        WHERE user_id = $1 AND status = 'active'
-          AND interest_rate = 0 AND principal > 10000
+        WHERE user_id = $1 AND status = 'active' AND interest_rate = 0
         ORDER BY principal DESC
         "#,
     )
@@ -2498,14 +2548,29 @@ async fn interest_income(
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
-    let below_market: Vec<serde_json::Value> = below_market
+    // The $10,000 de-minimis is a USD figure, so compare each loan's
+    // USD-EQUIVALENT principal — otherwise a 15,000-MXN (~$830) 0% loan
+    // is wrongly flagged as clearing the threshold. US+MX app: convert
+    // MXN at the current rate, treat anything else as already-USD.
+    let usd_mxn = crate::api::dashboard::latest_usd_mxn_rate(&state.db).await.rate;
+    let below_market: Vec<serde_json::Value> = below_market_rows
         .iter()
-        .map(|r| {
-            serde_json::json!({
+        .filter_map(|r| {
+            let principal = dec_to_f64(r.try_get("principal").ok());
+            let currency = r.try_get::<String, _>("currency").unwrap_or_default();
+            let usd_principal = if currency.eq_ignore_ascii_case("MXN") && usd_mxn > 0.0 {
+                principal / usd_mxn
+            } else {
+                principal
+            };
+            if usd_principal <= 10_000.0 {
+                return None;
+            }
+            Some(serde_json::json!({
                 "borrower_name": r.try_get::<String, _>("borrower_name").unwrap_or_default(),
-                "principal": dec_to_f64(r.try_get("principal").ok()),
-                "currency": r.try_get::<String, _>("currency").unwrap_or_default(),
-            })
+                "principal": principal,
+                "currency": currency,
+            }))
         })
         .collect();
 

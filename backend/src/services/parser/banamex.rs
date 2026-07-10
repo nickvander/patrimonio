@@ -25,7 +25,12 @@ pub fn parse_csv(data: &[u8]) -> Result<Vec<ParsedTransaction>> {
             .or_else(|_| NaiveDate::parse_from_str(date_str, "%Y-%m-%d"))
             .map_err(|_| anyhow!("Invalid date format: {date_str}"))?;
             
-        let amount = amount_str.parse::<Decimal>()
+        // Strip thousands separators before parsing — Decimal::parse rejects
+        // "1,234.56" outright, and one such row would otherwise abort the
+        // whole CSV (the PDF parsers already do this).
+        let amount = amount_str
+            .replace(',', "")
+            .parse::<Decimal>()
             .map_err(|_| anyhow!("Invalid amount: {amount_str}"))?;
             
         transactions.push(ParsedTransaction {
