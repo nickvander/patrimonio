@@ -312,7 +312,11 @@ pub async fn suggest_repayments(
         WHERE t.user_id = $1
           AND t.currency = $2
           AND t.amount > 0
-          AND t.date > $3
+          -- Inclusive lower bound: a repayment dated ON the disbursement/
+          -- origination day (common — first installment same day) must not
+          -- be dropped. The disbursement itself is an outflow, so `amount > 0`
+          -- already keeps it out; `>=` here can't readmit it.
+          AND t.date >= $3
           AND t.date <= $4
           AND LOWER(a.account_type) = ANY($5)
           AND NOT EXISTS (SELECT 1 FROM transactions c WHERE c.parent_id = t.id)
