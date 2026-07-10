@@ -936,10 +936,18 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   // The per-period payment the borrower can make, for solve-by-payment.
   // Reused as the payment amount in flat-amount mode.
   final _paymentCtrl = TextEditingController();
-  // Flat-amount mode: the agreed TOTAL interest (a fixed peso/dollar figure,
-  // not a rate). Principal + this = what's owed; the payment amount then
-  // determines how many installments.
+  // Flat-interest, amount sub-mode: the agreed TOTAL interest (a fixed
+  // peso/dollar figure, not a rate). Principal + this = what's owed; the
+  // payment amount then determines how many installments.
   final _flatInterestCtrl = TextEditingController();
+  // The "Flat interest" style covers two inputs of the SAME loan shape:
+  // 'amount' (a fixed total → custom schedule) or 'rate' (a % → the 'simple'
+  // backend type). Kept as a sub-toggle so the two don't read as rival tiles.
+  String _flatMode = 'amount';
+  // The three less-common styles (interest-only, one-payment-at-end, custom)
+  // live behind this "More loan types" disclosure so the default view is the
+  // three everyday choices.
+  bool _showMoreStyles = false;
   // Rate period + payment frequency live behind this expander so the
   // default view isn't a wall of dropdowns.
   bool _showAdvanced = false;
@@ -959,9 +967,16 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   DateTime? _genEnd;
 
   bool get _isCustom => _interestType == 'custom';
-  // Flat-amount is a UI-only style: it submits as a 'custom' schedule that
-  // we generate from (principal + agreed interest) / payment.
-  bool get _isFlatAmount => _interestType == 'flat_amount';
+  // The merged "Flat interest" tile. Its 'amount' sub-mode submits as a
+  // custom schedule (interest inferred); its 'rate' sub-mode submits as the
+  // 'simple' backend type — same even-split schedule either way.
+  bool get _isFlat => _interestType == 'flat';
+  bool get _isFlatAmount => _isFlat && _flatMode == 'amount';
+  // The advanced styles hidden behind "More loan types".
+  static const _advancedStyles = ['interest_only', 'compound', 'custom'];
+  // Backend interest_type for the current UI selection ('flat' is not a real
+  // type — rate-mode is 'simple', amount-mode goes through the custom path).
+  String get _backendInterestType => _isFlat ? 'simple' : _interestType;
 
   /// Native-currency symbol for the loan being entered (never the
   /// converted display currency — the preview always speaks the loan's
@@ -981,7 +996,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   /// server-side in Decimal once the loan is saved.
   LoanProjection? _projection() => projectLoan(
         principal: double.tryParse(_principalCtrl.text.trim()),
-        interestType: _interestType,
+        interestType: _backendInterestType,
         ratePercent: double.tryParse(_rateCtrl.text.trim()),
         ratePeriod: _ratePeriod,
         termMonths: int.tryParse(_termCtrl.text.trim()),
@@ -1169,25 +1184,23 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                   if (_isCustom) ...[
                     const SizedBox(height: 14),
                     _customScheduleEditor(narrow),
-                  ] else if (_isFlatAmount) ...[
+                  ] else if (_isFlat) ...[
                     const SizedBox(height: 14),
-                    _flatAmountFields(narrow),
+                    _flatModeToggle(),
+                    const SizedBox(height: 14),
+                    if (_flatMode == 'amount')
+                      _flatAmountFields(narrow)
+                    else ...[
+                      // Rate sub-mode: same even-split loan, entered as a %.
+                      _rateField(),
+                      const SizedBox(height: 14),
+                      _termOrPaymentControls(narrow),
+                      _advancedPanel(narrow),
+                    ],
                   ] else ...[
                     if (_interestType != 'none') ...[
                       const SizedBox(height: 14),
-                      TextField(
-                        controller: _rateCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        onChanged: (_) => setState(() {}),
-                        decoration: _decoration(
-                            AppLocalizations.of(context).lendFieldInterestRate,
-                            hint: 'e.g. 5',
-                            icon: Icons.percent,
-                            suffixText: _ratePeriod == 'monthly'
-                                ? '% / month'
-                                : '% / year'),
-                      ),
+                      _rateField(),
                     ],
                     const SizedBox(height: 14),
                     _termOrPaymentControls(narrow),
@@ -1314,51 +1327,72 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     );
   }
 
-  /// Plain-language loan styles, each explaining how its plan works —
-  /// replaces the cryptic interest-type dropdown. Built from l10n so the
-  /// labels/descriptions localize.
-  List<(String, String, String)> _loanStyles(AppLocalizations l10n) => [
+  /// The three everyday styles, always visible. "Flat interest" is the
+  /// merged rate-or-amount tile (see [_flatMode]).
+  List<(String, String, String)> _primaryStyles(AppLocalizations l10n) => [
         ('none', l10n.lendInterestTypeNone, l10n.lendStyleNoInterestDesc),
+        ('flat', l10n.lendStyleFlatLabel, l10n.lendStyleFlatDesc),
         ('amortized', l10n.lendStyleStandardLabel, l10n.lendStyleStandardDesc),
-        ('simple', l10n.lendStyleFlatLabel, l10n.lendStyleFlatDesc),
+      ];
+
+  /// The less-common styles, tucked behind "More loan types".
+  List<(String, String, String)> _moreStyles(AppLocalizations l10n) => [
         (
           'interest_only',
           l10n.lendStyleInterestOnlyLabel,
           l10n.lendStyleInterestOnlyDesc
         ),
         ('compound', l10n.lendStylePayAtEndLabel, l10n.lendStylePayAtEndDesc),
+        ('custom', l10n.lendCustomStyleLabel, l10n.lendCustomStyleDesc),
       ];
 
   Widget _loanStyleChooser() {
     final l10n = AppLocalizations.of(context);
-    final styles = _loanStyles(l10n);
+    final primary = _primaryStyles(l10n);
+    final more = _moreStyles(l10n);
+    // Keep the disclosure open while one of its styles is the selection, so
+    // the chosen tile is never hidden.
+    final showMore = _showMoreStyles || _advancedStyles.contains(_interestType);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (var i = 0; i < styles.length; i++) ...[
+        for (var i = 0; i < primary.length; i++) ...[
           if (i > 0) const SizedBox(height: 8),
           _loanStyleTile(
-            value: styles[i].$1,
-            label: styles[i].$2,
-            desc: styles[i].$3,
+            value: primary[i].$1,
+            label: primary[i].$2,
+            desc: primary[i].$3,
           ),
         ],
         const SizedBox(height: 8),
-        // Flat/agreed interest: a fixed total amount, not a rate. The common
-        // informal-loan shape ("I lent 14k, we agreed 2k interest, 4k/mo").
-        _loanStyleTile(
-          value: 'flat_amount',
-          label: l10n.lendStyleFlatAmountLabel,
-          desc: l10n.lendStyleFlatAmountDesc,
+        InkWell(
+          onTap: () => setState(() => _showMoreStyles = !_showMoreStyles),
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+            child: Row(
+              children: [
+                Icon(showMore ? Icons.expand_less : Icons.expand_more,
+                    size: 18, color: context.textSubtle),
+                const SizedBox(width: 6),
+                Text(l10n.lendMoreLoanTypes,
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: context.textSubtle)),
+              ],
+            ),
+          ),
         ),
-        const SizedBox(height: 8),
-        // Custom, explicit-row schedule — the only style whose label /
-        // description come from i18n (added alongside this feature).
-        _loanStyleTile(
-          value: 'custom',
-          label: l10n.lendCustomStyleLabel,
-          desc: l10n.lendCustomStyleDesc,
-        ),
+        if (showMore)
+          for (var i = 0; i < more.length; i++) ...[
+            _loanStyleTile(
+              value: more[i].$1,
+              label: more[i].$2,
+              desc: more[i].$3,
+            ),
+            if (i < more.length - 1) const SizedBox(height: 8),
+          ],
       ],
     );
   }
@@ -1472,6 +1506,43 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
         else
           termField,
       ],
+    );
+  }
+
+  /// The interest-rate percent field (shared by the rate-mode of Flat
+  /// interest and by the standard / interest-only / compound styles).
+  Widget _rateField() {
+    return TextField(
+      controller: _rateCtrl,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      onChanged: (_) => setState(() {}),
+      decoration: _decoration(
+        AppLocalizations.of(context).lendFieldInterestRate,
+        hint: 'e.g. 5',
+        icon: Icons.percent,
+        suffixText: _ratePeriod == 'monthly' ? '% / month' : '% / year',
+      ),
+    );
+  }
+
+  /// The "Flat interest" sub-toggle: enter the interest as a fixed total
+  /// amount, or as a percentage rate. Both yield the same even-split
+  /// schedule — this keeps them one concept, not two rival tiles.
+  Widget _flatModeToggle() {
+    final l10n = AppLocalizations.of(context);
+    return SegmentedButton<String>(
+      segments: [
+        ButtonSegment(value: 'amount', label: Text(l10n.lendFlatModeAmount)),
+        ButtonSegment(value: 'rate', label: Text(l10n.lendFlatModeRate)),
+      ],
+      selected: {_flatMode},
+      showSelectedIcon: false,
+      style: ButtonStyle(
+        textStyle:
+            WidgetStatePropertyAll(Theme.of(context).textTheme.bodySmall),
+        visualDensity: VisualDensity.compact,
+      ),
+      onSelectionChanged: (s) => setState(() => _flatMode = s.first),
     );
   }
 
@@ -2286,6 +2357,8 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
       // Rate entered as a percent; backend wants a fraction. The period
       // (year/month) is passed through verbatim so it's stored exactly.
       final isNone = _interestType == 'none';
+      // Flat-interest rate mode maps to the 'simple' backend type.
+      final backendType = _backendInterestType;
       final ratePct = double.tryParse(_rateCtrl.text.trim()) ?? 0;
 
       // Resolve the term: either typed directly, or solved from the
@@ -2295,7 +2368,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
       if (_setByPayment && _supportsSolve) {
         final res = solveTermFromPayment(
           principal: principal,
-          interestType: _interestType,
+          interestType: backendType,
           ratePercent: isNone ? 0 : ratePct,
           ratePeriod: _ratePeriod,
           paymentFrequency: _paymentFrequency,
@@ -2318,7 +2391,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
         currency: _currency,
         originationDate: _originationDate,
         interestRate: isNone ? 0 : ratePct / 100.0,
-        interestType: _interestType,
+        interestType: backendType,
         ratePeriod: _ratePeriod,
         termMonths: term,
         // A frequency only makes sense alongside a fixed term; without one

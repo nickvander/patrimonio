@@ -9305,13 +9305,13 @@ abstract class AppLocalizations {
   /// No description provided for @lendStyleStandardLabel.
   ///
   /// In en, this message translates to:
-  /// **'Standard loan'**
+  /// **'Regular payments with a rate'**
   String get lendStyleStandardLabel;
 
   /// No description provided for @lendStyleStandardDesc.
   ///
   /// In en, this message translates to:
-  /// **'Equal payments over time; each covers interest plus a bit of principal.'**
+  /// **'Equal payments over time at an interest rate — like a bank loan.'**
   String get lendStyleStandardDesc;
 
   /// No description provided for @lendStyleFlatLabel.
@@ -9323,20 +9323,26 @@ abstract class AppLocalizations {
   /// No description provided for @lendStyleFlatDesc.
   ///
   /// In en, this message translates to:
-  /// **'Interest figured once on the full amount, split evenly across payments.'**
+  /// **'A set amount of interest, split evenly across the payments. Enter it as a total amount or a rate.'**
   String get lendStyleFlatDesc;
 
-  /// No description provided for @lendStyleFlatAmountLabel.
+  /// No description provided for @lendFlatModeAmount.
   ///
   /// In en, this message translates to:
-  /// **'Agreed interest (fixed amount)'**
-  String get lendStyleFlatAmountLabel;
+  /// **'Set amount'**
+  String get lendFlatModeAmount;
 
-  /// No description provided for @lendStyleFlatAmountDesc.
+  /// No description provided for @lendFlatModeRate.
   ///
   /// In en, this message translates to:
-  /// **'You agreed on a fixed total interest, not a rate. Enter the interest and the payment and we build the schedule.'**
-  String get lendStyleFlatAmountDesc;
+  /// **'Rate'**
+  String get lendFlatModeRate;
+
+  /// No description provided for @lendMoreLoanTypes.
+  ///
+  /// In en, this message translates to:
+  /// **'More loan types'**
+  String get lendMoreLoanTypes;
 
   /// No description provided for @lendFieldAgreedInterest.
   ///
@@ -9353,7 +9359,7 @@ abstract class AppLocalizations {
   /// No description provided for @lendStyleInterestOnlyLabel.
   ///
   /// In en, this message translates to:
-  /// **'Interest-only + balloon'**
+  /// **'Interest now, full amount at the end'**
   String get lendStyleInterestOnlyLabel;
 
   /// No description provided for @lendStyleInterestOnlyDesc.
@@ -9365,7 +9371,7 @@ abstract class AppLocalizations {
   /// No description provided for @lendStylePayAtEndLabel.
   ///
   /// In en, this message translates to:
-  /// **'Pay all at the end'**
+  /// **'One payment at the end'**
   String get lendStylePayAtEndLabel;
 
   /// No description provided for @lendStylePayAtEndDesc.

@@ -5719,25 +5719,27 @@ class AppLocalizationsEn extends AppLocalizations {
       'They pay back exactly what they borrowed.';
 
   @override
-  String get lendStyleStandardLabel => 'Standard loan';
+  String get lendStyleStandardLabel => 'Regular payments with a rate';
 
   @override
   String get lendStyleStandardDesc =>
-      'Equal payments over time; each covers interest plus a bit of principal.';
+      'Equal payments over time at an interest rate — like a bank loan.';
 
   @override
   String get lendStyleFlatLabel => 'Flat interest';
 
   @override
   String get lendStyleFlatDesc =>
-      'Interest figured once on the full amount, split evenly across payments.';
+      'A set amount of interest, split evenly across the payments. Enter it as a total amount or a rate.';
 
   @override
-  String get lendStyleFlatAmountLabel => 'Agreed interest (fixed amount)';
+  String get lendFlatModeAmount => 'Set amount';
 
   @override
-  String get lendStyleFlatAmountDesc =>
-      'You agreed on a fixed total interest, not a rate. Enter the interest and the payment and we build the schedule.';
+  String get lendFlatModeRate => 'Rate';
+
+  @override
+  String get lendMoreLoanTypes => 'More loan types';
 
   @override
   String get lendFieldAgreedInterest => 'Agreed interest (total)';
@@ -5746,14 +5748,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lendFieldPaymentAmount => 'Payment amount';
 
   @override
-  String get lendStyleInterestOnlyLabel => 'Interest-only + balloon';
+  String get lendStyleInterestOnlyLabel =>
+      'Interest now, full amount at the end';
 
   @override
   String get lendStyleInterestOnlyDesc =>
       'They pay just interest each period, then the whole amount at the end.';
 
   @override
-  String get lendStylePayAtEndLabel => 'Pay all at the end';
+  String get lendStylePayAtEndLabel => 'One payment at the end';
 
   @override
   String get lendStylePayAtEndDesc =>

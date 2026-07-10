@@ -5765,25 +5765,27 @@ class AppLocalizationsEs extends AppLocalizations {
       'Pagan exactamente lo que pidieron prestado.';
 
   @override
-  String get lendStyleStandardLabel => 'Préstamo estándar';
+  String get lendStyleStandardLabel => 'Pagos regulares con tasa';
 
   @override
   String get lendStyleStandardDesc =>
-      'Pagos iguales a lo largo del tiempo; cada uno cubre interés más un poco de capital.';
+      'Pagos iguales a lo largo del tiempo con una tasa de interés — como un préstamo bancario.';
 
   @override
   String get lendStyleFlatLabel => 'Interés fijo';
 
   @override
   String get lendStyleFlatDesc =>
-      'El interés se calcula una vez sobre el monto total y se reparte por igual entre los pagos.';
+      'Un monto de interés fijo, repartido por igual entre los pagos. Ingrésalo como monto total o como tasa.';
 
   @override
-  String get lendStyleFlatAmountLabel => 'Interés acordado (monto fijo)';
+  String get lendFlatModeAmount => 'Monto fijo';
 
   @override
-  String get lendStyleFlatAmountDesc =>
-      'Acordaron un interés total fijo, no una tasa. Ingresa el interés y el pago y nosotros armamos el calendario.';
+  String get lendFlatModeRate => 'Tasa';
+
+  @override
+  String get lendMoreLoanTypes => 'Más tipos de préstamo';
 
   @override
   String get lendFieldAgreedInterest => 'Interés acordado (total)';
@@ -5792,14 +5794,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get lendFieldPaymentAmount => 'Monto del pago';
 
   @override
-  String get lendStyleInterestOnlyLabel => 'Solo interés + pago final';
+  String get lendStyleInterestOnlyLabel =>
+      'Solo interés ahora, monto total al final';
 
   @override
   String get lendStyleInterestOnlyDesc =>
       'Pagan solo el interés cada período y luego el monto completo al final.';
 
   @override
-  String get lendStylePayAtEndLabel => 'Pagar todo al final';
+  String get lendStylePayAtEndLabel => 'Un solo pago al final';
 
   @override
   String get lendStylePayAtEndDesc =>
