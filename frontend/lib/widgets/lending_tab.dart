@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -3951,6 +3953,7 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
   List<dynamic> _txs = [];
   bool _loading = true;
   bool _submitting = false;
+  Timer? _searchDebounce;
   final _searchCtrl = TextEditingController();
   final _cashAmountCtrl = TextEditingController();
   DateTime _cashDate = DateTime.now();
@@ -3965,16 +3968,26 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchCtrl.dispose();
     _cashAmountCtrl.dispose();
     super.dispose();
   }
 
+  /// Fetch candidates server-side, scoped to the loan's currency and the
+  /// correct sign (inflows for a repayment, outflows for a disbursement)
+  /// and narrowed by the search box. Searching in SQL over the whole table
+  /// — not a client-side filter over one recent page — is what lets the
+  /// picker find a payment older than the newest N transactions.
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      // A generous recent window; we filter client-side by sign + search.
-      final txs = await widget.apiService.getTransactions(limit: 200);
+      final txs = await widget.apiService.getTransactions(
+        limit: 200,
+        currency: widget.currency,
+        sign: _isRepayment ? 'inflow' : 'outflow',
+        query: _searchCtrl.text,
+      );
       if (!mounted) return;
       setState(() {
         _txs = txs;
@@ -3986,28 +3999,24 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
     }
   }
 
+  /// Debounced reload as the user types, so each keystroke doesn't fire a
+  /// request. The search runs on the server (see [_load]).
+  void _onSearchChanged() {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), _load);
+  }
+
   String _money(num v) {
     final fmt = NumberFormat.currency(
         symbol: widget.currency == 'MXN' ? r'MX$' : r'$', decimalDigits: 2);
     return fmt.format(v);
   }
 
-  /// Candidate transactions: inflows (amount > 0) for a repayment,
-  /// outflows (amount < 0) for a disbursement — matching the backend's
-  /// sign convention — narrowed by the search box.
-  List<Map<String, dynamic>> get _candidates {
-    final q = _searchCtrl.text.trim().toLowerCase();
-    return _txs.whereType<Map<String, dynamic>>().where((t) {
-      final amt = (t['amount'] as num?)?.toDouble() ?? 0;
-      final signOk = _isRepayment ? amt > 0 : amt < 0;
-      if (!signOk) return false;
-      if (q.isEmpty) return true;
-      final hay =
-          '${t['description'] ?? ''} ${t['merchant'] ?? ''} ${t['category'] ?? ''}'
-              .toLowerCase();
-      return hay.contains(q);
-    }).toList();
-  }
+  /// Candidate transactions. Sign (inflow vs outflow), currency, and the
+  /// search query are all applied by the backend now (see [_load]), so this
+  /// just adapts the loaded rows to the typed list the picker renders.
+  List<Map<String, dynamic>> get _candidates =>
+      _txs.whereType<Map<String, dynamic>>().toList();
 
   @override
   Widget build(BuildContext context) {
@@ -4074,17 +4083,16 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
   }
 
   Widget _buildTxPicker(ScrollController scroll) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
     final items = _candidates;
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+          // Kept mounted during (re)loads so a server-side search keeps
+          // focus and doesn't flash the whole picker to a spinner.
           child: TextField(
             controller: _searchCtrl,
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) => _onSearchChanged(),
             decoration: InputDecoration(
               isDense: true,
               hintText: _isRepayment
@@ -4097,7 +4105,9 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
             ),
           ),
         ),
-        if (items.isEmpty)
+        if (_loading)
+          const Expanded(child: Center(child: CircularProgressIndicator()))
+        else if (items.isEmpty)
           Expanded(
             child: Center(
               child: Padding(

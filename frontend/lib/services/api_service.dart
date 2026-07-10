@@ -1015,9 +1015,29 @@ class ApiService {
         'No se pudo guardar el tipo de cambio'));
   }
 
-  Future<List<dynamic>> getTransactions({int limit = 50, int offset = 0}) async {
+  /// One newest-first page of transactions across all accounts. The
+  /// optional [currency], [sign] (`'inflow'` / `'outflow'`), and [query]
+  /// filters are applied server-side over the WHOLE table — the loan
+  /// payment picker uses them so it can find a match that's older than one
+  /// page and never surfaces a foreign-currency inflow.
+  Future<List<dynamic>> getTransactions({
+    int limit = 50,
+    int offset = 0,
+    String? currency,
+    String? sign,
+    String? query,
+  }) async {
+    final params = <String>[
+      'limit=$limit',
+      'offset=$offset',
+      if (currency != null && currency.isNotEmpty)
+        'currency=${Uri.encodeQueryComponent(currency)}',
+      if (sign != null && sign.isNotEmpty) 'sign=$sign',
+      if (query != null && query.trim().isNotEmpty)
+        'q=${Uri.encodeQueryComponent(query.trim())}',
+    ];
     final response = await _get(
-      Uri.parse('$_baseUrl/dashboard/transactions?limit=$limit&offset=$offset'),
+      Uri.parse('$_baseUrl/dashboard/transactions?${params.join('&')}'),
     );
     if (response.statusCode == 200) {
       return json.decode(response.body);

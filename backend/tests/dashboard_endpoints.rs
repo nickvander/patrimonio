@@ -6698,3 +6698,143 @@ async fn accounts_summary_converts_mxn_to_usd_not_raw_sum() {
     );
     assert_eq!(body["account_count"], 2);
 }
+
+// =====================================================================
+// /dashboard/transactions — currency / sign / q filters
+//
+// The loan-repayment picker used to pull one recent page and filter in
+// the client, so a repayment older than the newest N — or in a foreign
+// currency — was invisible. These filters push that scoping into SQL over
+// the WHOLE table: the picker can now find any matching inflow.
+// =====================================================================
+
+/// Insert an institution + account with an explicit currency; returns the
+/// account id.
+async fn seed_account_currency(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    currency: &str,
+) -> uuid::Uuid {
+    let inst_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO institutions (name, institution_type, country, integration_type, sync_status, user_id) \
+         VALUES ('Bank', 'bank', 'MX', 'manual', 'ok', $1) RETURNING id",
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .expect("seed institution");
+    sqlx::query_scalar(
+        "INSERT INTO accounts (institution_id, name, account_type, currency, current_balance, user_id) \
+         VALUES ($1, 'Acct', 'depository', $2, 0.00, $3) RETURNING id",
+    )
+    .bind(inst_id)
+    .bind(currency)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .expect("seed account")
+}
+
+/// Insert a transaction with an explicit currency; returns its id.
+async fn seed_tx_currency(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    account_id: uuid::Uuid,
+    description: &str,
+    amount: &str,
+    currency: &str,
+) -> uuid::Uuid {
+    sqlx::query_scalar(
+        "INSERT INTO transactions (account_id, date, description, amount, currency, source, user_id) \
+         VALUES ($1, CURRENT_DATE, $2, $3, $4, 'manual', $5) RETURNING id",
+    )
+    .bind(account_id)
+    .bind(description)
+    .bind(Decimal::from_str(amount).unwrap())
+    .bind(currency)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .expect("seed tx")
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn transactions_currency_sign_and_search_filters() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let _ = bootstrap(&app, &pool).await;
+    let (user_id, token) = seed_owner(&pool, "picker").await;
+
+    let mxn = seed_account_currency(&pool, user_id, "MXN").await;
+    let usd = seed_account_currency(&pool, user_id, "USD").await;
+
+    // The repayment we want the picker to find.
+    let repayment =
+        seed_tx_currency(&pool, user_id, mxn, "SPEI RECIBIDO LUIS OJEDA", "3500.00", "MXN").await;
+    // Same-currency inflow that does NOT match the search.
+    let other_mxn_inflow =
+        seed_tx_currency(&pool, user_id, mxn, "OXXO reembolso", "200.00", "MXN").await;
+    // Wrong sign (MXN outflow) — must never appear as a repayment candidate.
+    let mxn_outflow =
+        seed_tx_currency(&pool, user_id, mxn, "CFE pago", "-1000.00", "MXN").await;
+    // Right sign, wrong currency — reconciling it would 400, so it must be
+    // filtered out before the user can pick it.
+    let usd_inflow =
+        seed_tx_currency(&pool, user_id, usd, "PAYCHECK LUIS", "500.00", "USD").await;
+
+    // currency=MXN & sign=inflow → the two MXN inflows only.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/transactions?currency=MXN&sign=inflow&limit=200",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let ids = tx_ids(body_json(res.into_body()).await);
+    assert!(ids.contains(&repayment.to_string()), "MXN inflow must be listed");
+    assert!(
+        ids.contains(&other_mxn_inflow.to_string()),
+        "other MXN inflow must be listed"
+    );
+    assert!(
+        !ids.contains(&mxn_outflow.to_string()),
+        "sign=inflow must exclude the MXN outflow"
+    );
+    assert!(
+        !ids.contains(&usd_inflow.to_string()),
+        "currency=MXN must exclude the USD inflow"
+    );
+
+    // Add a search term → only the SPEI Luis inflow survives, proving the
+    // match is found in SQL rather than by scanning one client-side page.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/transactions?currency=MXN&sign=inflow&q=luis",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let ids = tx_ids(body_json(res.into_body()).await);
+    assert_eq!(
+        ids,
+        vec![repayment.to_string()],
+        "q=luis should return exactly the SPEI Luis repayment"
+    );
+}
+
+/// Extract the `id` array from a `/dashboard/transactions` response body.
+fn tx_ids(body: Value) -> Vec<String> {
+    body.as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|r| r["id"].as_str().map(String::from))
+        .collect()
+}

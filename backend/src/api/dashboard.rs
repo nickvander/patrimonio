@@ -1100,19 +1100,40 @@ async fn sync_status(
 /// Recent transactions across all accounts. `limit` defaults to 50 and is
 /// capped at 500 to keep one response cheap; `offset` lets the frontend
 /// page through the rest with a 'Load more' button.
+///
+/// The optional `currency`, `sign`, and `q` filters let a caller scope the
+/// list server-side instead of pulling a page and filtering in the client.
+/// The loan-repayment picker relies on this: it must search the WHOLE table
+/// (a repayment can be older than one page), scoped to the loan's currency
+/// (a foreign-currency inflow would be rejected at reconcile time) and to
+/// inflows only. Doing that here means the client no longer misses a match
+/// that fell outside the newest-N window.
 #[derive(Deserialize)]
 struct TransactionsQuery {
     limit: Option<i64>,
     offset: Option<i64>,
+    /// ISO currency code; scopes the list to that currency when present.
+    currency: Option<String>,
+    /// `"inflow"` (amount > 0) or `"outflow"` (amount < 0). Any other value
+    /// (or absent) applies no sign filter.
+    sign: Option<String>,
+    /// Case-insensitive substring matched across the transaction's text
+    /// columns, in SQL, so a hit is found regardless of recency/paging.
+    q: Option<String>,
 }
 
 async fn recent_transactions(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
-    Query(q): Query<TransactionsQuery>,
+    Query(query): Query<TransactionsQuery>,
 ) -> Json<Vec<TransactionEntry>> {
-    let limit = q.limit.unwrap_or(50).clamp(1, 500);
-    let offset = q.offset.unwrap_or(0).max(0);
+    let limit = query.limit.unwrap_or(50).clamp(1, 500);
+    let offset = query.offset.unwrap_or(0).max(0);
+    // Empty strings arrive from `?currency=&q=` — treat them as absent so
+    // the nullable-parameter filters below short-circuit to "no filter".
+    let currency = query.currency.filter(|s| !s.trim().is_empty());
+    let sign = query.sign.filter(|s| !s.trim().is_empty());
+    let search = query.q.filter(|s| !s.trim().is_empty());
     let rows = sqlx::query(
         r#"
         SELECT t.id, t.account_id,
@@ -1130,6 +1151,17 @@ async fn recent_transactions(
         JOIN institutions i ON a.institution_id = i.id
         WHERE t.user_id = $1
           AND NOT EXISTS (SELECT 1 FROM transactions tc WHERE tc.parent_id = t.id)
+          AND ($4::text IS NULL OR t.currency = $4)
+          -- Unknown/absent sign → no filter; only the two known values bite.
+          AND ($5::text IS NULL
+               OR $5 NOT IN ('inflow', 'outflow')
+               OR ($5 = 'inflow' AND t.amount > 0)
+               OR ($5 = 'outflow' AND t.amount < 0))
+          AND ($6::text IS NULL
+               OR t.description ILIKE '%' || $6 || '%'
+               OR t.merchant_name ILIKE '%' || $6 || '%'
+               OR t.counterparty_name ILIKE '%' || $6 || '%'
+               OR t.original_description ILIKE '%' || $6 || '%')
         ORDER BY t.date DESC, t.created_at DESC
         LIMIT $2 OFFSET $3
         "#
@@ -1137,6 +1169,9 @@ async fn recent_transactions(
     .bind(ctx.user_id)
     .bind(limit)
     .bind(offset)
+    .bind(currency)
+    .bind(sign)
+    .bind(search)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
