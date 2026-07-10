@@ -1828,7 +1828,13 @@ async fn cash_flow_trends(
                         -- still count as spending; only the credit side is
                         -- dropped. Catches CC "Payment Thank You" legs, Bilt
                         -- rent-card payments, and statement credits.
-                        AND NOT is_liability_account_type(a.account_type) THEN
+                        AND NOT is_liability_account_type(a.account_type)
+                        -- A tax refund is a return of the user's own overpaid
+                        -- tax (an interest-free loan to the govt coming back),
+                        -- not earned income — counting it inflates income and
+                        -- the savings rate the month it lands. Keep it out of
+                        -- the income line (it still shows in balances/net worth).
+                        AND COALESCE(t.category_detailed, '') <> 'INCOME_TAX_REFUND' THEN
                        CASE WHEN a.currency = 'MXN'
                             THEN t.amount / COALESCE((SELECT rate FROM latest_fx), 20.0)
                             ELSE t.amount END

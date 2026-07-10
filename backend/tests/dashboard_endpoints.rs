@@ -2783,6 +2783,41 @@ async fn cash_flow_excludes_credit_card_inflows_from_income() {
         "card purchase should still count as spending, got {}", march["spending"]);
 }
 
+/// A tax refund is a return of the user's own overpaid tax, not earned income,
+/// so it must not inflate the cash-flow income line the month it lands.
+#[tokio::test]
+async fn cash_flow_excludes_tax_refund_from_income() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, checking) = seed_account(&pool, user_id).await;
+
+    seed_tx_dated(&pool, user_id, checking, "ACME Payroll", "3000.00", "2026-03-15").await;
+    // A federal tax refund as Plaid tags it: INCOME / INCOME_TAX_REFUND.
+    sqlx::query(
+        "INSERT INTO transactions (account_id, date, description, amount, currency, source, user_id, category, category_detailed) \
+         VALUES ($1, '2026-03-20'::date, 'IRS TREAS 310 TAX REF', 5000.00, 'USD', 'manual', $2, 'INCOME', 'INCOME_TAX_REFUND')",
+    )
+    .bind(checking)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .expect("seed tax refund");
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/trends", None, Some(&token)))
+        .await
+        .unwrap();
+    let trends = body_json(res.into_body()).await;
+    let march = trends.as_array().unwrap().iter()
+        .find(|p| p["month"] == "2026-03").cloned().unwrap();
+
+    assert!((march["income"].as_f64().unwrap() - 3000.0).abs() < 0.01,
+        "tax refund must not count as income (payroll only), got {}", march["income"]);
+}
+
 // Insert an expense with an explicit PFC category at a date relative to
 // CURRENT_DATE (so the test is independent of the wall clock). `months_ago`
 // counts whole calendar months back from today.
