@@ -9326,6 +9326,30 @@ abstract class AppLocalizations {
   /// **'Interest figured once on the full amount, split evenly across payments.'**
   String get lendStyleFlatDesc;
 
+  /// No description provided for @lendStyleFlatAmountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Agreed interest (fixed amount)'**
+  String get lendStyleFlatAmountLabel;
+
+  /// No description provided for @lendStyleFlatAmountDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'You agreed on a fixed total interest, not a rate. Enter the interest and the payment and we build the schedule.'**
+  String get lendStyleFlatAmountDesc;
+
+  /// No description provided for @lendFieldAgreedInterest.
+  ///
+  /// In en, this message translates to:
+  /// **'Agreed interest (total)'**
+  String get lendFieldAgreedInterest;
+
+  /// No description provided for @lendFieldPaymentAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment amount'**
+  String get lendFieldPaymentAmount;
+
   /// No description provided for @lendStyleInterestOnlyLabel.
   ///
   /// In en, this message translates to:

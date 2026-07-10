@@ -5779,6 +5779,19 @@ class AppLocalizationsEs extends AppLocalizations {
       'El interés se calcula una vez sobre el monto total y se reparte por igual entre los pagos.';
 
   @override
+  String get lendStyleFlatAmountLabel => 'Interés acordado (monto fijo)';
+
+  @override
+  String get lendStyleFlatAmountDesc =>
+      'Acordaron un interés total fijo, no una tasa. Ingresa el interés y el pago y nosotros armamos el calendario.';
+
+  @override
+  String get lendFieldAgreedInterest => 'Interés acordado (total)';
+
+  @override
+  String get lendFieldPaymentAmount => 'Monto del pago';
+
+  @override
   String get lendStyleInterestOnlyLabel => 'Solo interés + pago final';
 
   @override

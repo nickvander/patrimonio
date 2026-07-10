@@ -5733,6 +5733,19 @@ class AppLocalizationsEn extends AppLocalizations {
       'Interest figured once on the full amount, split evenly across payments.';
 
   @override
+  String get lendStyleFlatAmountLabel => 'Agreed interest (fixed amount)';
+
+  @override
+  String get lendStyleFlatAmountDesc =>
+      'You agreed on a fixed total interest, not a rate. Enter the interest and the payment and we build the schedule.';
+
+  @override
+  String get lendFieldAgreedInterest => 'Agreed interest (total)';
+
+  @override
+  String get lendFieldPaymentAmount => 'Payment amount';
+
+  @override
   String get lendStyleInterestOnlyLabel => 'Interest-only + balloon';
 
   @override

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../utils/flat_schedule.dart';
 import '../utils/lending_summary.dart';
 import '../utils/theme_colors.dart';
 import 'interest_income_sheet.dart';
@@ -933,7 +934,12 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   // term — see [_supportsSolve].
   bool _setByPayment = false;
   // The per-period payment the borrower can make, for solve-by-payment.
+  // Reused as the payment amount in flat-amount mode.
   final _paymentCtrl = TextEditingController();
+  // Flat-amount mode: the agreed TOTAL interest (a fixed peso/dollar figure,
+  // not a rate). Principal + this = what's owed; the payment amount then
+  // determines how many installments.
+  final _flatInterestCtrl = TextEditingController();
   // Rate period + payment frequency live behind this expander so the
   // default view isn't a wall of dropdowns.
   bool _showAdvanced = false;
@@ -953,6 +959,9 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   DateTime? _genEnd;
 
   bool get _isCustom => _interestType == 'custom';
+  // Flat-amount is a UI-only style: it submits as a 'custom' schedule that
+  // we generate from (principal + agreed interest) / payment.
+  bool get _isFlatAmount => _interestType == 'flat_amount';
 
   /// Native-currency symbol for the loan being entered (never the
   /// converted display currency — the preview always speaks the loan's
@@ -1010,6 +1019,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     _rateCtrl.dispose();
     _termCtrl.dispose();
     _paymentCtrl.dispose();
+    _flatInterestCtrl.dispose();
     _notesCtrl.dispose();
     _pasteCtrl.dispose();
     _genFirstNCtrl.dispose();
@@ -1159,6 +1169,9 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                   if (_isCustom) ...[
                     const SizedBox(height: 14),
                     _customScheduleEditor(narrow),
+                  ] else if (_isFlatAmount) ...[
+                    const SizedBox(height: 14),
+                    _flatAmountFields(narrow),
                   ] else ...[
                     if (_interestType != 'none') ...[
                       const SizedBox(height: 14),
@@ -1331,6 +1344,14 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
           ),
         ],
         const SizedBox(height: 8),
+        // Flat/agreed interest: a fixed total amount, not a rate. The common
+        // informal-loan shape ("I lent 14k, we agreed 2k interest, 4k/mo").
+        _loanStyleTile(
+          value: 'flat_amount',
+          label: l10n.lendStyleFlatAmountLabel,
+          desc: l10n.lendStyleFlatAmountDesc,
+        ),
+        const SizedBox(height: 8),
         // Custom, explicit-row schedule — the only style whose label /
         // description come from i18n (added alongside this feature).
         _loanStyleTile(
@@ -1454,6 +1475,44 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     );
   }
 
+  /// Flat/agreed-interest inputs: a fixed TOTAL interest amount (not a
+  /// rate) plus the periodic payment. The schedule is generated client-side
+  /// and submitted as a custom schedule; the backend infers the interest as
+  /// (Σpayments − principal), so it always matches what's entered here.
+  Widget _flatAmountFields(bool narrow) {
+    final l10n = AppLocalizations.of(context);
+    final cadence = _paymentFrequency == 'weekly' ? 'week' : 'month';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _flatInterestCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          onChanged: (_) => setState(() {}),
+          decoration: _decoration(
+            l10n.lendFieldAgreedInterest,
+            hint: 'e.g. 2000',
+            prefixText: '$_sym ',
+            icon: Icons.handshake_outlined,
+          ),
+        ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _paymentCtrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          onChanged: (_) => setState(() {}),
+          decoration: _decoration(
+            l10n.lendFieldPaymentAmount,
+            hint: 'e.g. 4000',
+            prefixText: '$_sym ',
+            suffixText: '/ $cadence',
+            icon: Icons.payments_outlined,
+          ),
+        ),
+      ],
+    );
+  }
+
   /// Rate period + payment frequency, tucked behind an expander so the
   /// default view isn't a wall of dropdowns. Sensible defaults (per year,
   /// monthly) mean most users never open it.
@@ -1537,9 +1596,11 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
     final accent = context.tealAccent;
     final rows = _isCustom
         ? _customPreviewRows(accent)
-        : (_setByPayment && _supportsSolve)
-            ? _solvePreviewRows(accent)
-            : _termPreviewRows(accent);
+        : _isFlatAmount
+            ? _flatPreviewRows(accent)
+            : (_setByPayment && _supportsSolve)
+                ? _solvePreviewRows(accent)
+                : _termPreviewRows(accent);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1573,6 +1634,23 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
   }
 
   /// The default preview: given the term, what's the payment + totals.
+  List<Widget> _flatPreviewRows(Color accent) {
+    final l10n = AppLocalizations.of(context);
+    final principal = double.tryParse(_principalCtrl.text.trim()) ?? 0;
+    final interest = double.tryParse(_flatInterestCtrl.text.trim()) ?? 0;
+    final payment = double.tryParse(_paymentCtrl.text.trim()) ?? 0;
+    final total = principal + interest;
+    final rows = (payment > 0 && total > 0)
+        ? _flatScheduleRows(
+            principal: principal, interest: interest, payment: payment)
+        : const <Map<String, dynamic>>[];
+    return [
+      _previewRow(l10n.lendPreviewTotalToRepay, _fmtMoney(total), bold: true),
+      const SizedBox(height: 6),
+      _previewRow(l10n.lendCustomPreviewCount(rows.length), _fmtMoney(payment)),
+    ];
+  }
+
   List<Widget> _termPreviewRows(Color accent) {
     final proj = _projection();
     if (proj == null) {
@@ -2189,6 +2267,10 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
       await _submitCustom();
       return;
     }
+    if (_isFlatAmount) {
+      await _submitFlat();
+      return;
+    }
     final borrower = _borrowerText.trim();
     final principal = double.tryParse(_principalCtrl.text.trim());
     if (borrower.isEmpty) {
@@ -2280,11 +2362,52 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
       _toast(l10n.lendCustomNeedRows);
       return;
     }
+    await _createLoanWithSchedule(principal, rows);
+  }
+
+  /// Flat/agreed-interest confirm: generate the installment rows from
+  /// (principal + agreed interest) / payment, then create the loan as a
+  /// custom schedule (same create-then-schedule flow as [_submitCustom]).
+  Future<void> _submitFlat() async {
+    final l10n = AppLocalizations.of(context);
+    final borrower = _borrowerText.trim();
+    final principal = double.tryParse(_principalCtrl.text.trim());
+    if (borrower.isEmpty) {
+      _toast(l10n.lendToastEnterBorrowerName);
+      return;
+    }
+    if (principal == null || principal <= 0) {
+      _toast(l10n.lendToastEnterValidAmount);
+      return;
+    }
+    final interest = double.tryParse(_flatInterestCtrl.text.trim()) ?? 0;
+    final payment = double.tryParse(_paymentCtrl.text.trim());
+    if (interest < 0 || payment == null || payment <= 0) {
+      _toast(l10n.lendToastEnterValidAmount);
+      return;
+    }
+    final rows = _flatScheduleRows(
+        principal: principal, interest: interest, payment: payment);
+    if (rows.isEmpty) {
+      // Payment too small to ever clear the balance (would need > the cap).
+      _toast(l10n.lendToastEnterValidAmount);
+      return;
+    }
+    await _createLoanWithSchedule(principal, rows);
+  }
+
+  /// Shared create-then-schedule flow for the custom and flat-amount styles:
+  /// create the loan (interest_type 'custom'), push the explicit rows, then
+  /// optionally link the disbursement. On any failure after the loan is
+  /// created, delete it so no empty loan is left behind.
+  Future<void> _createLoanWithSchedule(
+      double principal, List<Map<String, dynamic>> rows) async {
+    final l10n = AppLocalizations.of(context);
     setState(() => _submitting = true);
     String? loanId;
     try {
       final loan = await widget.apiService.createLoan(
-        borrowerName: borrower,
+        borrowerName: _borrowerText.trim(),
         principal: principal,
         currency: _currency,
         originationDate: _originationDate,
@@ -2314,6 +2437,21 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
       _toast(l10n.lendCustomScheduleFailed(e.toString()));
     }
   }
+
+  /// Build the flat-amount installment rows from the current inputs. Pure
+  /// generation lives in [buildFlatSchedule] (unit-tested).
+  List<Map<String, dynamic>> _flatScheduleRows({
+    required double principal,
+    required double interest,
+    required double payment,
+  }) =>
+      buildFlatSchedule(
+        principal: principal,
+        interest: interest,
+        payment: payment,
+        origination: _originationDate,
+        frequency: _paymentFrequency,
+      );
 
   /// Link [loanId]'s disbursement to the prefilled transaction. Returns true
   /// on success; on a 409 conflict (tx already funds another loan) it deletes
