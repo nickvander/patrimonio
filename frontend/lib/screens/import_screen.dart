@@ -262,7 +262,11 @@ class _ImportScreenState extends State<ImportScreen> {
 
       if (result != null && result.files.isNotEmpty) {
         setState(() {
-          _selectedFiles = result.files;
+          // Append to the existing selection so the "Add more files"
+          // button adds to the batch instead of clearing it (mirrors
+          // _handleDroppedFiles). On the initial pick the list is empty,
+          // so this is equivalent to a plain assignment.
+          _selectedFiles = [..._selectedFiles, ...result.files];
           _previewTransactions = null;
           _selectedIndices = {};
           _message = null;
