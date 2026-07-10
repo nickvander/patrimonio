@@ -145,6 +145,7 @@ async fn same_day_repayment_is_suggested() {
         horizon,
         "Luis Enrique Ojeda",
         Some(3500.0),
+        None,
     )
     .await
     .expect("suggest_repayments");
@@ -157,5 +158,75 @@ async fn same_day_repayment_is_suggested() {
     assert!(
         !ids.contains(&before.to_string()),
         "an inflow dated before the disbursement day must not be suggested; got {ids:?}"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn no_schedule_lump_sum_payoff_is_suggested() {
+    let Some(pool) = try_pool().await else {
+        eprintln!("(skipping: set {TEST_DB_VAR} to run loan-match boundary test)");
+        return;
+    };
+
+    let user = seed_user(&pool).await;
+    let account = seed_mxn_depository(&pool, user).await;
+
+    let origination = NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
+    let horizon = NaiveDate::from_ymd_opt(2027, 12, 15).unwrap();
+    let paid_on = NaiveDate::from_ymd_opt(2026, 8, 1).unwrap();
+
+    // A terse, nameless, NON-round inflow that exactly clears the loan.
+    // With no schedule this used to be dropped (no name, not round); the
+    // payoff signal (amount ≈ outstanding) should now surface it.
+    let payoff = seed_inflow(
+        &pool,
+        user,
+        account,
+        paid_on,
+        "SPEI RECIBIDO 0009876",
+        "4237.55",
+    )
+    .await;
+
+    // No schedule (installment None). Borrower name deliberately absent
+    // from the description so only the payoff signal can match.
+    let with_target = loan_match::suggest_repayments(
+        &pool,
+        user,
+        "MXN",
+        origination,
+        horizon,
+        "Anonymous Borrower",
+        None,
+        Some(4237.55),
+    )
+    .await
+    .expect("suggest_repayments");
+    let ids: Vec<String> = with_target.iter().map(|s| s.transaction_id.clone()).collect();
+    assert!(
+        ids.contains(&payoff.to_string()),
+        "a nameless, non-round payoff matching the outstanding balance must be suggested; got {ids:?}"
+    );
+
+    // Control: without the payoff target the same inflow has no signal
+    // (no name, not round) and must stay out — proving the gate still bites.
+    let without_target = loan_match::suggest_repayments(
+        &pool,
+        user,
+        "MXN",
+        origination,
+        horizon,
+        "Anonymous Borrower",
+        None,
+        None,
+    )
+    .await
+    .expect("suggest_repayments");
+    let ids: Vec<String> =
+        without_target.iter().map(|s| s.transaction_id.clone()).collect();
+    assert!(
+        !ids.contains(&payoff.to_string()),
+        "without a payoff target a nameless non-round inflow must not be suggested; got {ids:?}"
     );
 }

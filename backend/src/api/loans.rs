@@ -1748,6 +1748,20 @@ async fn suggest_repayment(
         .filter(|a| *a > 0.0)
         .or_else(|| term_months.filter(|t| *t > 0).map(|t| principal / t as f64));
 
+    // Outstanding balance = principal minus everything already reconciled.
+    // In no-schedule mode this lets a single lump-sum payoff be suggested
+    // even with a terse, nameless bank description (a common IOU shape).
+    let paid_so_far: Option<rust_decimal::Decimal> = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(paid_amount), 0) FROM loan_payments WHERE loan_id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
+    let outstanding = principal - dec_to_f64(paid_so_far);
+    let lump_sum_target = Some(outstanding).filter(|a| *a > 0.0);
+
     match loan_match::suggest_repayments(
         &state.db,
         ctx.user_id,
@@ -1756,6 +1770,7 @@ async fn suggest_repayment(
         horizon,
         &borrower,
         installment,
+        lump_sum_target,
     )
     .await
     {

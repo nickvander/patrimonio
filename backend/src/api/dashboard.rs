@@ -1120,6 +1120,11 @@ struct TransactionsQuery {
     /// Case-insensitive substring matched across the transaction's text
     /// columns, in SQL, so a hit is found regardless of recency/paging.
     q: Option<String>,
+    /// When true, drop transactions already reconciled to a loan (a linked
+    /// repayment or a linked disbursement). The loan payment picker sets it
+    /// so it never offers a tx that would only be rejected as "already
+    /// linked" on submit.
+    exclude_linked: Option<bool>,
 }
 
 async fn recent_transactions(
@@ -1134,6 +1139,7 @@ async fn recent_transactions(
     let currency = query.currency.filter(|s| !s.trim().is_empty());
     let sign = query.sign.filter(|s| !s.trim().is_empty());
     let search = query.q.filter(|s| !s.trim().is_empty());
+    let exclude_linked = query.exclude_linked.unwrap_or(false);
     let rows = sqlx::query(
         r#"
         SELECT t.id, t.account_id,
@@ -1162,6 +1168,13 @@ async fn recent_transactions(
                OR t.merchant_name ILIKE '%' || $6 || '%'
                OR t.counterparty_name ILIKE '%' || $6 || '%'
                OR t.original_description ILIKE '%' || $6 || '%')
+          -- Hide transactions already reconciled to a loan (either leg) when
+          -- the caller asks — the payment picker does, so it can't offer a
+          -- tx the reconcile step would reject.
+          AND (NOT $7 OR (
+                NOT EXISTS (SELECT 1 FROM loan_payments lp WHERE lp.actual_tx_id = t.id)
+            AND NOT EXISTS (SELECT 1 FROM loans l WHERE l.disbursement_tx_id = t.id)
+          ))
         ORDER BY t.date DESC, t.created_at DESC
         LIMIT $2 OFFSET $3
         "#
@@ -1172,6 +1185,7 @@ async fn recent_transactions(
     .bind(currency)
     .bind(sign)
     .bind(search)
+    .bind(exclude_linked)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();

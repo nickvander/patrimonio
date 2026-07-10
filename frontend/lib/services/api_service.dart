@@ -1026,6 +1026,7 @@ class ApiService {
     String? currency,
     String? sign,
     String? query,
+    bool excludeLinked = false,
   }) async {
     final params = <String>[
       'limit=$limit',
@@ -1035,6 +1036,7 @@ class ApiService {
       if (sign != null && sign.isNotEmpty) 'sign=$sign',
       if (query != null && query.trim().isNotEmpty)
         'q=${Uri.encodeQueryComponent(query.trim())}',
+      if (excludeLinked) 'exclude_linked=true',
     ];
     final response = await _get(
       Uri.parse('$_baseUrl/dashboard/transactions?${params.join('&')}'),

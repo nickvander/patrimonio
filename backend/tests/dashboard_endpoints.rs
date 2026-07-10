@@ -6838,3 +6838,74 @@ fn tx_ids(body: Value) -> Vec<String> {
         .filter_map(|r| r["id"].as_str().map(String::from))
         .collect()
 }
+
+#[tokio::test]
+#[serial_test::serial]
+async fn transactions_exclude_linked_hides_reconciled_repayment() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let _ = bootstrap(&app, &pool).await;
+    let (user_id, token) = seed_owner(&pool, "linkpicker").await;
+
+    let mxn = seed_account_currency(&pool, user_id, "MXN").await;
+    let linked =
+        seed_tx_currency(&pool, user_id, mxn, "SPEI RECIBIDO LUIS", "3500.00", "MXN").await;
+    let free =
+        seed_tx_currency(&pool, user_id, mxn, "SPEI RECIBIDO OTRO", "3500.00", "MXN").await;
+
+    // Reconcile `linked` to a loan payment.
+    let loan_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO loans (user_id, borrower_name, principal, currency, origination_date) \
+         VALUES ($1, 'Luis', 3500, 'MXN', CURRENT_DATE) RETURNING id",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .expect("seed loan");
+    sqlx::query(
+        "INSERT INTO loan_payments (user_id, loan_id, installment_number, actual_tx_id, paid_amount) \
+         VALUES ($1, $2, 1, $3, 3500)",
+    )
+    .bind(user_id)
+    .bind(loan_id)
+    .bind(linked)
+    .execute(&pool)
+    .await
+    .expect("seed loan payment");
+
+    // Without the flag, both inflows show.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/transactions?sign=inflow&currency=MXN",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let ids = tx_ids(body_json(res.into_body()).await);
+    assert!(ids.contains(&linked.to_string()) && ids.contains(&free.to_string()));
+
+    // With exclude_linked, the reconciled one drops out; the free one stays.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/transactions?sign=inflow&currency=MXN&exclude_linked=true",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    let ids = tx_ids(body_json(res.into_body()).await);
+    assert!(
+        !ids.contains(&linked.to_string()),
+        "exclude_linked must hide the already-reconciled tx"
+    );
+    assert!(
+        ids.contains(&free.to_string()),
+        "exclude_linked must keep an unlinked tx"
+    );
+}

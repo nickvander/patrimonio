@@ -3987,6 +3987,9 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
         currency: widget.currency,
         sign: _isRepayment ? 'inflow' : 'outflow',
         query: _searchCtrl.text,
+        // Don't offer a tx already reconciled to a loan — picking it would
+        // only bounce with "already linked".
+        excludeLinked: true,
       );
       if (!mounted) return;
       setState(() {
@@ -4133,7 +4136,7 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
                 return ListTile(
                   dense: true,
                   title: Text(
-                    (t['description'] ?? t['merchant'] ?? 'Transaction')
+                    (t['description'] ?? t['merchant_name'] ?? 'Transaction')
                         .toString(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

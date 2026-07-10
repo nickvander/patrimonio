@@ -3159,20 +3159,27 @@ class _TransactionsTabState extends State<TransactionsTab> {
                   // neutral textPrimary: the money moved between the
                   // user's own accounts, so neither the green income
                   // treatment nor the expense one applies.
-                  Text(
-                    isFxTransfer
-                        ? '⇄ ${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}'
-                        : '${isExpense ? '−' : '+'}${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: amountSize,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                      color: (isFxTransfer || isExpense)
-                          ? context.textPrimary
-                          : context.positive,
+                  //
+                  // FittedBox(scaleDown) so a large native figure (e.g. a
+                  // 7-digit MXN sum in the narrow 128px box) shrinks to fit
+                  // rather than ellipsizing to a meaningless "−$1,234…".
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      isFxTransfer
+                          ? '⇄ ${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}'
+                          : '${isExpense ? '−' : '+'}${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: amountSize,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                        color: (isFxTransfer || isExpense)
+                            ? context.textPrimary
+                            : context.positive,
+                      ),
+                      maxLines: 1,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                   if (needsConversion && !isNarrow)
                     Padding(

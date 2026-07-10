@@ -47,12 +47,14 @@ const REPAY_WINDOW_DAYS: i64 = 15;
 
 /// Depository account types a personal loan is funded from / repaid
 /// to (lowercased — the query compares `LOWER(account_type)`). You
-/// don't lend off a credit card. Covers Plaid subtypes (stored
-/// lowercase by sync.rs), the manual add-account dialog's capitalized
-/// forms (folded by LOWER), and the generic 'depository' the bootstrap
-/// / test path uses. This filter only narrows AUTO-SUGGESTIONS — manual
-/// linking (link_disbursement / record_payment) has no account filter,
-/// so an oddly-typed account can always be reconciled by hand.
+/// don't lend off a credit card, and you don't route it through a
+/// brokerage / IRA either — this is the cash-like set. Covers Plaid
+/// subtypes (stored lowercase by sync.rs), the manual add-account
+/// dialog's capitalized forms (folded by LOWER), and the generic
+/// 'depository' the bootstrap / test path uses. This filter only
+/// narrows AUTO-SUGGESTIONS — manual linking (link_disbursement /
+/// record_payment, and the full-ledger payment picker) has no account
+/// filter, so an oddly-typed account can always be reconciled by hand.
 const DEPOSITORY_TYPES: &[&str] = &[
     "checking",
     "savings",
@@ -220,7 +222,6 @@ pub async fn suggest_disbursements(
     let lo = principal - tol_abs;
     let hi = principal + tol_abs;
     let depository: Vec<String> = DEPOSITORY_TYPES.iter().map(|s| s.to_string()).collect();
-
     let rows = sqlx::query(
         r#"
         SELECT t.id, t.date, t.amount, t.currency, t.description,
@@ -292,6 +293,7 @@ pub async fn suggest_disbursements(
 /// expected per-payment figure when a schedule exists; pass `None` for
 /// the no-schedule (interest-free IOU) case, where any plausible inflow
 /// up to the remaining balance is scored on name + round-number.
+#[allow(clippy::too_many_arguments)]
 pub async fn suggest_repayments(
     db: &PgPool,
     user_id: Uuid,
@@ -300,6 +302,7 @@ pub async fn suggest_repayments(
     horizon_date: NaiveDate,
     borrower_name: &str,
     installment_amount: Option<f64>,
+    lump_sum_target: Option<f64>,
 ) -> Result<Vec<LoanSuggestion>> {
     let depository: Vec<String> = DEPOSITORY_TYPES.iter().map(|s| s.to_string()).collect();
     let rows = sqlx::query(
@@ -354,14 +357,25 @@ pub async fn suggest_repayments(
                 score_repayment(amount_dev, 0, REPAY_WINDOW_DAYS, name_hit, round)
             }
             _ => {
-                // No-schedule mode: require a name hit OR a round number
-                // to avoid suggesting every inflow.
-                if !name_hit && !round {
+                // A lump-sum payoff: the inflow lands within tolerance of the
+                // outstanding balance. For an interest-free IOU (no schedule)
+                // this is the COMMON repayment shape and a strong signal on
+                // its own — a terse "SPEI RECIBIDO" with no name and a
+                // non-round amount that exactly clears the loan is the payoff.
+                let payoff_hit = matches!(
+                    lump_sum_target,
+                    Some(target)
+                        if target > 0.0
+                            && (tx.amount - target).abs() / target <= REPAY_AMOUNT_TOL
+                );
+                // No-schedule mode: require a name hit, a round number, or a
+                // payoff-sized amount to avoid suggesting every inflow.
+                if !name_hit && !round && !payoff_hit {
                     continue;
                 }
-                // amount_dev not meaningful with no expected amount;
-                // treat as in-band and lean on name + round.
-                score_repayment(0.0, 0, 0, name_hit, round)
+                // A payoff match is a near-exact amount, so score it as a
+                // clean (dev = 0) repayment; name/round lean on the flags.
+                score_repayment(0.0, 0, 0, name_hit, round || payoff_hit)
             }
         };
         if confidence < 50 {
