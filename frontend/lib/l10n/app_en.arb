@@ -738,6 +738,10 @@
   "dashRemindBeforeRepayment": "Remind me before a repayment is due",
   "dashFewerDays": "Fewer days",
   "dashMoreDays": "More days",
+  "dashOptionsTooltip": "Options",
+  "@dashOptionsTooltip": {
+    "description": "F16: tooltip/semantics label for the dashboard header kebab (overflow) menu. Deliberately distinct from navMore (the bottom-nav tab) so screen readers can tell them apart."
+  },
   "dashDaysShort": "{count} d",
   "dashReminderSaveFailed": "Couldn't save reminder setting",
   "dashSettingSaveFailed": "Couldn't save that setting",
@@ -853,7 +857,6 @@
   "projTitle": "Wealth projection",
   "projSubtitle": "Project your financial future based on current assets and savings strategy.",
   "projMonthlySavings": "Monthly savings",
-  "projExpectedReturn": "Expected return",
   "projAnnualExpenses": "Annual expenses",
   "projSafeWithdrawalRate": "Safe withdrawal rate",
   "projProjectionYears": "Projection years",
@@ -865,12 +868,9 @@
   "projTargetNetWorth": "Target net worth",
   "projTargetYear": "Target year",
   "projNetWorthProjection": "Net worth projection",
-  "projScenarios": "Scenarios",
   "projYearAxisLabel": "Yr {year}",
   "projTooltipYearAmount": "Year {year}\n{amount}",
   "projFiNumber": "FI number",
-  "projProgress": "Progress",
-  "projTowardFire": "Toward FIRE",
   "projYearsToFi": "Years to FI",
   "projEstimate": "Estimate",
   "projFiIncome": "FI income",
@@ -883,13 +883,11 @@
   "projRealNote": "All figures in today's dollars",
   "projSuccessRate": "Success rate",
   "projSuccessRateSub": "Chance the plan lasts the horizon",
-  "projMedian": "Median outcome",
-  "projMedianSub": "Most likely path (50th pct)",
-  "projCoastReached": "Coast FIRE reached",
+  "projSuccessRateNa": "n/a — no retirement phase in this projection",
+  "@projSuccessRateNa": {
+    "description": "F12: success-rate tile caption when retirement starts at/after the projection horizon, so no withdrawal phase was simulated."
+  },
   "projCoastReachedSub": "Growth alone reaches your goal — you can stop contributing.",
-  "projCoastNeed": "Coast FIRE: need {amount} invested today",
-  "projCoastNeedSub": "Invest this much now and growth alone gets you to FI by retirement.",
-  "projBaristaFi": "Barista FI number",
   "projBaristaFiSub": "Nest egg needed once part-time income helps cover spending",
   "projBaristaIncome": "Barista / pension income",
   "projFromYourData": "From your tracked spending",
@@ -901,7 +899,7 @@
   "projHelpSwr": "How much you withdraw from the portfolio each year in retirement. The classic '4% rule' implies a 25× nest egg.",
   "projHelpBaristaIncome": "Part-time work, a pension, or Social Security in retirement. Lowers the nest egg you need — this drives the Barista FI number.",
   "projHelpTaxDrag": "What taxes and fund fees take out of your return each year. ~0.5–1% is typical.",
-  "projLegendProjected": "Projected",
+  "projLegendProjected": "Projected (average path)",
   "projLegendTarget": "{flavor} target",
   "projLegendGoal": "Your goal",
   "projHelpYearsToRetirement": "When you stop contributing and start withdrawing — also sets the Coast FIRE target.",
@@ -917,7 +915,14 @@
   "projGlossarySwrDef": "The share of your portfolio you withdraw each year in retirement. The well-known '4% rule' is the default here.",
   "projGlossaryRangeDef": "The band is a 1,000-run market simulation — the spread of good and bad luck. 'Success rate' is how often the money lasts the whole horizon.",
   "projGlossaryRealDef": "Every figure is in today's dollars, so a future amount already accounts for inflation.",
-  "projFireFocusTitle": "Which FIRE are you aiming for?",
+  "projTermAveragePath": "The bold projected line",
+  "@projTermAveragePath": {
+    "description": "F11: glossary term for the chart's bold expected-path line."
+  },
+  "projGlossaryAveragePathDef": "The bold line compounds your expected return exactly — the average path. The typical (median) simulated outcome is often lower, so read it as an illustration, not a forecast.",
+  "@projGlossaryAveragePathDef": {
+    "description": "F11: glossary definition disclosing that the bold line is the mean path, which can sit above the Monte Carlo median."
+  },
   "projFirePlanTitle": "Your FIRE plan",
   "projGoalLabel": "Goal",
   "projTermLifestyle": "Lean / Standard / Fat",
@@ -925,7 +930,7 @@
   "projFocusFull": "Full FIRE",
   "projFullReached": "You've reached your FI number — full FIRE is covered.",
   "projFullYearsAway": "About {years} years away at your current pace.",
-  "projFullUnreachable": "Not reachable in this horizon — raise savings or returns.",
+  "projFullUnreachable": "Not reachable at your current pace — raise savings or returns.",
   "projCoastTake": "You're at {amount} today — close the gap and growth alone finishes the job.",
   "projBaristaPrompt": "Set 'Barista / pension income' above to see this lower target.",
   "projSpendingLevel": "Lifestyle",
@@ -936,6 +941,50 @@
   "projGuardrails": "Spending guardrails",
   "projGuardrailsOn": "Guardrails on — spending flexes with the market",
   "projGuardrailsOff": "Fixed spending — no adjustment in downturns",
+  "projLoadFailed": "Couldn't load your projection.",
+  "@projLoadFailed": {
+    "description": "F2: chart-card error message when the projection fetch fails and there is no cached data to show."
+  },
+  "projRetry": "Retry",
+  "@projRetry": {
+    "description": "F2: retry button under the projection load-failure message."
+  },
+  "projBasedOnMonths": "{months, plural, =1{Based on 1 month of your data} other{Based on {months} months of your data}}",
+  "@projBasedOnMonths": {
+    "description": "F3: provenance hint under a slider whose default was adopted from the user's tracked cash flow; {months} is how many months of history back it.",
+    "placeholders": {
+      "months": {
+        "type": "int",
+        "example": "6"
+      }
+    }
+  },
+  "projExpensesEstimateHint": "Estimate — adjust to your spending",
+  "@projExpensesEstimateHint": {
+    "description": "F3: hint under the annual-expenses slider when the static $40k default stands (no tracked data adopted)."
+  },
+  "projGoalAmountInvalid": "Enter an amount above zero (up to 1 billion)",
+  "@projGoalAmountInvalid": {
+    "description": "F5: inline validation error for the goal dialog's target amount field."
+  },
+  "projGoalYearRange": "Enter a year between {min} and {max}",
+  "@projGoalYearRange": {
+    "description": "F5: inline validation error for the goal dialog's target year field. The explicit placeholders below keep this declaration order in the generated signature: (min, max).",
+    "placeholders": {
+      "min": {
+        "type": "int",
+        "example": "2026"
+      },
+      "max": {
+        "type": "int",
+        "example": "2106"
+      }
+    }
+  },
+  "projGoalSaveFailed": "Couldn't save your goal",
+  "@projGoalSaveFailed": {
+    "description": "F5: snackbar when persisting the net-worth goal to the backend fails."
+  },
   "taxTitle": "Tax planning",
   "taxFilingSingle": "Single",
   "taxFilingMarried": "Married",

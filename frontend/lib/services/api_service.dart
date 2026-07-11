@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import '../utils/app_locale.dart';
+import '../utils/projection_seed.dart';
 import 'api_platform.dart';
 import 'auth_service.dart';
 import 'response_cache.dart';
@@ -2188,6 +2189,14 @@ class ApiService {
       if (yearsToRetirement != null)
         'years_to_retirement': yearsToRetirement.toString(),
     };
+
+    // F4: deterministic Monte Carlo — a stable seed derived from the
+    // canonical parameter string, so identical inputs always return the
+    // identical fan (map literals preserve insertion order, making the
+    // joined string canonical).
+    queryParams['mc_seed'] = projectionSeed(
+      queryParams.entries.map((e) => '${e.key}=${e.value}').join('&'),
+    ).toString();
 
     final uri = Uri.parse(
       '$_baseUrl/projections/calculate',

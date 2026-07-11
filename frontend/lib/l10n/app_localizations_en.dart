@@ -2229,6 +2229,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dashMoreDays => 'More days';
 
   @override
+  String get dashOptionsTooltip => 'Options';
+
+  @override
   String dashDaysShort(Object count) {
     return '$count d';
   }
@@ -2620,9 +2623,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get projMonthlySavings => 'Monthly savings';
 
   @override
-  String get projExpectedReturn => 'Expected return';
-
-  @override
   String get projAnnualExpenses => 'Annual expenses';
 
   @override
@@ -2658,9 +2658,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get projNetWorthProjection => 'Net worth projection';
 
   @override
-  String get projScenarios => 'Scenarios';
-
-  @override
   String projYearAxisLabel(Object year) {
     return 'Yr $year';
   }
@@ -2672,12 +2669,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get projFiNumber => 'FI number';
-
-  @override
-  String get projProgress => 'Progress';
-
-  @override
-  String get projTowardFire => 'Toward FIRE';
 
   @override
   String get projYearsToFi => 'Years to FI';
@@ -2716,29 +2707,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get projSuccessRateSub => 'Chance the plan lasts the horizon';
 
   @override
-  String get projMedian => 'Median outcome';
-
-  @override
-  String get projMedianSub => 'Most likely path (50th pct)';
-
-  @override
-  String get projCoastReached => 'Coast FIRE reached';
+  String get projSuccessRateNa =>
+      'n/a — no retirement phase in this projection';
 
   @override
   String get projCoastReachedSub =>
       'Growth alone reaches your goal — you can stop contributing.';
-
-  @override
-  String projCoastNeed(Object amount) {
-    return 'Coast FIRE: need $amount invested today';
-  }
-
-  @override
-  String get projCoastNeedSub =>
-      'Invest this much now and growth alone gets you to FI by retirement.';
-
-  @override
-  String get projBaristaFi => 'Barista FI number';
 
   @override
   String get projBaristaFiSub =>
@@ -2782,7 +2756,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'What taxes and fund fees take out of your return each year. ~0.5–1% is typical.';
 
   @override
-  String get projLegendProjected => 'Projected';
+  String get projLegendProjected => 'Projected (average path)';
 
   @override
   String projLegendTarget(Object flavor) {
@@ -2839,7 +2813,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'Every figure is in today\'s dollars, so a future amount already accounts for inflation.';
 
   @override
-  String get projFireFocusTitle => 'Which FIRE are you aiming for?';
+  String get projTermAveragePath => 'The bold projected line';
+
+  @override
+  String get projGlossaryAveragePathDef =>
+      'The bold line compounds your expected return exactly — the average path. The typical (median) simulated outcome is often lower, so read it as an illustration, not a forecast.';
 
   @override
   String get projFirePlanTitle => 'Your FIRE plan';
@@ -2868,7 +2846,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get projFullUnreachable =>
-      'Not reachable in this horizon — raise savings or returns.';
+      'Not reachable at your current pace — raise savings or returns.';
 
   @override
   String projCoastTake(Object amount) {
@@ -2903,6 +2881,38 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get projGuardrailsOff => 'Fixed spending — no adjustment in downturns';
+
+  @override
+  String get projLoadFailed => 'Couldn\'t load your projection.';
+
+  @override
+  String get projRetry => 'Retry';
+
+  @override
+  String projBasedOnMonths(int months) {
+    String _temp0 = intl.Intl.pluralLogic(
+      months,
+      locale: localeName,
+      other: 'Based on $months months of your data',
+      one: 'Based on 1 month of your data',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get projExpensesEstimateHint => 'Estimate — adjust to your spending';
+
+  @override
+  String get projGoalAmountInvalid =>
+      'Enter an amount above zero (up to 1 billion)';
+
+  @override
+  String projGoalYearRange(int min, int max) {
+    return 'Enter a year between $min and $max';
+  }
+
+  @override
+  String get projGoalSaveFailed => 'Couldn\'t save your goal';
 
   @override
   String get taxTitle => 'Tax planning';

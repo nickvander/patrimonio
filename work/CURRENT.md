@@ -1,7 +1,46 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-09 (round-9 AGENTS.md + palette contrast pass + lint cleanup)
+> **Last updated:** 2026-07-11 (round-10 FIRE/projections UX overhaul)
 > **Branch:** `main` (rounds 7 & 8 committed + deployed; round-9 in progress).
+
+## 2026-07-11 sprint — round 10 (FIRE / wealth-projection UX overhaul)
+
+Multi-agent pass over the projections screen: two live headless walkthroughs
+(desktop 1440×900 + mobile 390×844/es-MX/extremes) + a code-level UX review →
+PM triage → parallel frontend/backend implementation → live re-verification
+(8/8 checks pass).
+
+* **P0 (owner-reported):** milestone tiles never painted on phones (unbounded
+  stretch-rows in a scroll view → ~1,700px blank void) and the desktop flex
+  layout couldn't scroll at 1440×900 (tile row missing from the fit estimate →
+  KPIs clipped). Fixed with bounded intrinsic-height rows, an `<800px` stacking
+  threshold off the inner LayoutBuilder, and the tile row counted in `fixedH`;
+  pinned by `milestones_layout_regressions_test.dart` (390/760/1440 widths).
+* **Frontend UX batch** (all F-items + full stretch list): fetch-error state w/
+  retry; honest defaults adoption (contribution independent of expenses,
+  expenses need ≥3 months, "based on {n} months" / "estimate" hints);
+  deterministic Monte Carlo (FNV-1a `mc_seed`, web-safe 32-bit); goal-dialog
+  validation + save-failure snackbar (also fixed a latent dispose-during-exit
+  crash); es→es_MX Intl mapping + Mexican number conventions in
+  `percent_format.dart` (period decimals; Spain-style "12,5 %" removed);
+  adaptive x-axis intervals; Barista-FI dead-end prompt; visible controls
+  scrollbar; assumptions persisted as `projection_assumptions` setting;
+  mean-vs-median legend honesty; success-rate n/a edge; 11 orphaned l10n keys
+  deleted; 300ms debounce + stale-fetch guard; `didUpdateWidget` refetch;
+  dashboard kebab a11y label "Options". ~15 new test files; 455 tests green.
+* **Backend:** `/api/projections/defaults` hardened — per-row on-or-before-date
+  MXN FX (reuses `tax.rs` `USD_MXN_ROW_RATE_SQL`, now pub(crate)) instead of
+  latest-rate over 12 months; `Result<_, ApiError>` with loud 500s instead of
+  fabricated zeros; `.round_dp(2)` outputs. Integration tests pin per-row FX +
+  partial-month annualization. Clippy + full suite green.
+* **Known follow-ups (owner decisions, from PM triage):** goal-year/retirement
+  markers on the chart + calendar-year axis; typed slider entry + MXN-friendly
+  expense floor (<$10k); compact money (drop cents ≥$10k); savings-rate line
+  from `annual_income`; FI-number tile stays $1M under Barista focus (pinned to
+  standard plan — intentional?); **FX audit:** `cash_flow_trends`,
+  `spending_by_category`, `spending_insights`, `emergency_fund` trailing-spend
+  all still use the latest-rate shortcut on historical flows (same bug class,
+  batch fix will shift dashboard numbers slightly).
 
 ## 2026-07-09 sprint — round 9 (cross-tool AGENTS.md, palette contrast, lint cleanup)
 

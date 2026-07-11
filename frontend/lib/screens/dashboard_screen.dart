@@ -2309,8 +2309,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final isStale = recordedLocal != null &&
         DateTime.now().difference(recordedLocal).inHours > 24;
 
-    // Bare, locale-aware rate number (comma decimal in es) for the compact pill,
-    // e.g. "17.58" / "17,58" — no currency code, since the pair is already shown.
+    // Bare rate number for the compact pill, e.g. "17.58" — no currency code,
+    // since the pair is already shown. Routed through the locale decimal seam
+    // (no-op today: es-MX uses period decimals like en).
     final rateBare = rate == null
         ? '—'
         : localizeNumberString(context, rate.toStringAsFixed(2));
@@ -3540,7 +3541,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                   builder: (context, controller, _) => IconButton(
-                    tooltip: l.navMore,
+                    // F16: distinct from the bottom-nav "More" tab so screen
+                    // readers can tell the two controls apart.
+                    tooltip: l.dashOptionsTooltip,
                     icon: const Icon(Icons.more_vert),
                     onPressed: () => controller.isOpen
                         ? controller.close()

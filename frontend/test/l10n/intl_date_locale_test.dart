@@ -22,7 +22,9 @@ void main() {
 
   test('syncIntlLocale(es) makes DateFormat render Spanish', () async {
     await syncIntlLocale(const Locale('es'));
-    expect(Intl.defaultLocale, 'es');
+    // F6: a bare 'es' maps to es_MX so numbers/currency format Mexico-style
+    // ($1,000.00), not Spain-style (1.000,00 $).
+    expect(Intl.defaultLocale, 'es_MX');
     expect(DateFormat('EEEE').format(monday), 'lunes');
     expect(DateFormat('MMMM').format(monday), 'enero');
   });
@@ -42,7 +44,8 @@ void main() {
     await syncIntlLocale(const Locale('en'));
 
     localeNotifier.value = const Locale('es');
-    expect(Intl.defaultLocale, 'es');
+    // F6: bare 'es' → es_MX (Mexico-style numbers).
+    expect(Intl.defaultLocale, 'es_MX');
     expect(DateFormat('EEEE').format(monday), 'lunes');
 
     localeNotifier.value = const Locale('en');

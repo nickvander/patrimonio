@@ -2254,6 +2254,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get dashMoreDays => 'Más días';
 
   @override
+  String get dashOptionsTooltip => 'Opciones';
+
+  @override
   String dashDaysShort(Object count) {
     return '$count d';
   }
@@ -2646,9 +2649,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get projMonthlySavings => 'Ahorro mensual';
 
   @override
-  String get projExpectedReturn => 'Rendimiento esperado';
-
-  @override
   String get projAnnualExpenses => 'Gastos anuales';
 
   @override
@@ -2684,9 +2684,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get projNetWorthProjection => 'Proyección de patrimonio neto';
 
   @override
-  String get projScenarios => 'Escenarios';
-
-  @override
   String projYearAxisLabel(Object year) {
     return 'Año $year';
   }
@@ -2697,22 +2694,16 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get projFiNumber => 'Número IF';
+  String get projFiNumber => 'Número FI';
 
   @override
-  String get projProgress => 'Avance';
-
-  @override
-  String get projTowardFire => 'Hacia FIRE';
-
-  @override
-  String get projYearsToFi => 'Años para IF';
+  String get projYearsToFi => 'Años para FI';
 
   @override
   String get projEstimate => 'Estimación';
 
   @override
-  String get projFiIncome => 'Ingreso IF';
+  String get projFiIncome => 'Ingreso FI';
 
   @override
   String get projMonthlyAtWithdrawalRate => 'Mensual a la tasa de retiro';
@@ -2743,29 +2734,11 @@ class AppLocalizationsEs extends AppLocalizations {
       'Probabilidad de que el plan dure el horizonte';
 
   @override
-  String get projMedian => 'Resultado mediano';
-
-  @override
-  String get projMedianSub => 'Trayectoria más probable (pct. 50)';
-
-  @override
-  String get projCoastReached => 'Coast FIRE alcanzado';
+  String get projSuccessRateNa => 'n/d — sin fase de retiro en esta proyección';
 
   @override
   String get projCoastReachedSub =>
       'Solo el crecimiento alcanza tu meta — puedes dejar de aportar.';
-
-  @override
-  String projCoastNeed(Object amount) {
-    return 'Coast FIRE: necesitas $amount invertidos hoy';
-  }
-
-  @override
-  String get projCoastNeedSub =>
-      'Invierte esto ahora y solo el crecimiento te lleva a la IF en el retiro.';
-
-  @override
-  String get projBaristaFi => 'Número FI Barista';
 
   @override
   String get projBaristaFiSub =>
@@ -2809,7 +2782,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'Lo que los impuestos y comisiones de fondos restan a tu rendimiento cada año. ~0.5–1% es lo típico.';
 
   @override
-  String get projLegendProjected => 'Proyectado';
+  String get projLegendProjected => 'Proyectado (trayectoria promedio)';
 
   @override
   String projLegendTarget(Object flavor) {
@@ -2866,7 +2839,11 @@ class AppLocalizationsEs extends AppLocalizations {
       'Cada cifra está en dólares de hoy, así que un monto futuro ya considera la inflación.';
 
   @override
-  String get projFireFocusTitle => '¿A qué tipo de FIRE apuntas?';
+  String get projTermAveragePath => 'La línea gruesa proyectada';
+
+  @override
+  String get projGlossaryAveragePathDef =>
+      'La línea gruesa compone tu rendimiento esperado exactamente — la trayectoria promedio. El resultado típico (mediano) de la simulación suele ser menor, así que léela como una ilustración, no un pronóstico.';
 
   @override
   String get projFirePlanTitle => 'Tu plan FIRE';
@@ -2895,7 +2872,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get projFullUnreachable =>
-      'No alcanzable en este horizonte — sube el ahorro o el rendimiento.';
+      'No alcanzable a tu ritmo actual — sube el ahorro o el rendimiento.';
 
   @override
   String projCoastTake(Object amount) {
@@ -2930,6 +2907,38 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get projGuardrailsOff => 'Gasto fijo — sin ajuste en caídas';
+
+  @override
+  String get projLoadFailed => 'No se pudo cargar tu proyección.';
+
+  @override
+  String get projRetry => 'Reintentar';
+
+  @override
+  String projBasedOnMonths(int months) {
+    String _temp0 = intl.Intl.pluralLogic(
+      months,
+      locale: localeName,
+      other: 'Basado en $months meses de tus datos',
+      one: 'Basado en 1 mes de tus datos',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get projExpensesEstimateHint => 'Estimación — ajústala a tu gasto';
+
+  @override
+  String get projGoalAmountInvalid =>
+      'Ingresa un monto mayor que cero (hasta mil millones)';
+
+  @override
+  String projGoalYearRange(int min, int max) {
+    return 'Ingresa un año entre $min y $max';
+  }
+
+  @override
+  String get projGoalSaveFailed => 'No se pudo guardar tu meta';
 
   @override
   String get taxTitle => 'Planeación fiscal';

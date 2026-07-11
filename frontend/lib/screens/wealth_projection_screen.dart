@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:fl_chart/fl_chart.dart';
@@ -8,6 +9,7 @@ import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/preferences.dart';
 import '../utils/percent_format.dart';
+import '../utils/projection_axis.dart';
 import '../utils/theme_colors.dart';
 
 /// Which FIRE "flavor" the user is focusing on. Purely a view choice — it
@@ -37,6 +39,8 @@ typedef WealthProjectionFetcher = Future<Map<String, dynamic>> Function({
 typedef ProjectionDefaultsFetcher = Future<Map<String, dynamic>?> Function();
 typedef PortfolioDividendsFetcher = Future<Map<String, dynamic>?> Function();
 typedef ProjectionSettingReader = Future<dynamic> Function(String key);
+typedef ProjectionSettingWriter = Future<void> Function(
+    String key, dynamic value);
 
 class WealthProjectionScreen extends StatefulWidget {
   final double currentNetWorth;
@@ -48,6 +52,7 @@ class WealthProjectionScreen extends StatefulWidget {
   final ProjectionDefaultsFetcher? defaultsFetcher;
   final PortfolioDividendsFetcher? dividendsFetcher;
   final ProjectionSettingReader? settingReader;
+  final ProjectionSettingWriter? settingWriter;
 
   const WealthProjectionScreen({
     super.key,
@@ -58,6 +63,7 @@ class WealthProjectionScreen extends StatefulWidget {
     this.defaultsFetcher,
     this.dividendsFetcher,
     this.settingReader,
+    this.settingWriter,
   });
 
   @override
@@ -66,6 +72,33 @@ class WealthProjectionScreen extends StatefulWidget {
 
 class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   final ApiService _apiService = ApiService();
+
+  // F9: the desktop controls column hides most of its 12 controls below an
+  // unindicated fold — an always-visible scrollbar makes the fold obvious.
+  final ScrollController _controlsScrollController = ScrollController();
+
+  // F14: coalesce rapid assumption changes into one request (~300ms) and
+  // drop out-of-order responses (the guard sequence number).
+  Timer? _fetchDebounce;
+  int _fetchSeq = 0;
+
+  @override
+  void dispose() {
+    _fetchDebounce?.cancel();
+    _controlsScrollController.dispose();
+    super.dispose();
+  }
+
+  // F15: the dashboard passes a live net worth and the projection starts
+  // from it — a material change (> $1, i.e. not float noise) must re-run the
+  // projection or the chart keeps projecting from the stale balance.
+  @override
+  void didUpdateWidget(covariant WealthProjectionScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if ((widget.currentNetWorth - oldWidget.currentNetWorth).abs() > 1.0) {
+      _fetchProjection();
+    }
+  }
 
   // Projection parameters. All money values are USD internally (the backend
   // works in USD and we convert for display); the backend then deflates the
@@ -83,9 +116,18 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   int _projectionYears = 30;
 
   bool _isLoading = true;
-  // True once we've prefilled the contribution/expenses from the user's own
-  // tracked cash flow — drives the "from your data" hint chips.
-  bool _prefilledFromData = false;
+  // F2: true when the last projection fetch threw. With no data to show, the
+  // chart card renders a localized error + retry instead of a blank screen.
+  bool _loadFailed = false;
+  // Months of tracked data behind an adopted default (F3). Non-null means the
+  // value came from the user's own cash flow and drives the slider hint;
+  // null means the static default stands.
+  int? _contributionFromMonths;
+  int? _expensesFromMonths;
+  // F10: true when the sliders were restored from the saved
+  // `projection_assumptions` blob (suppresses the provenance hints — the
+  // values are the user's own, not derived defaults).
+  bool _assumptionsRestored = false;
   Map<String, dynamic>? _projectionData;
 
   // Optional user-set goal: "Hit $X by year Y". Stored in USD because the
@@ -119,10 +161,12 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         ((1 + _annualReturnRate) / (1 + _annualInflation) - 1) * 100;
     final nom = _annualReturnRate * 100;
     final inf = _annualInflation * 100;
+    // F6: route through the locale decimal seam (no-op today — es-MX uses
+    // period decimals like en); the % signs live in the template itself.
     return l.projFisherHelp(
-      nom.toStringAsFixed(1),
-      inf.toStringAsFixed(1),
-      real.toStringAsFixed(1),
+      localizeNumberString(context, nom.toStringAsFixed(1)),
+      localizeNumberString(context, inf.toStringAsFixed(1)),
+      localizeNumberString(context, real.toStringAsFixed(1)),
     );
   }
 
@@ -185,8 +229,107 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     _goalAmountUsd = Preferences.getGoalAmountUsd();
     _goalYear = Preferences.getGoalYear();
     _hydrateGoalFromBackend();
-    _prefillFromTrackedData();
+    _bootstrap();
     _loadDividendData();
+  }
+
+  // F10: saved assumptions (if any) win over derived defaults; otherwise the
+  // tracked-data prefill runs as before. Either path ends in a projection.
+  Future<void> _bootstrap() async {
+    if (await _hydrateAssumptions()) {
+      await _fetchProjection();
+    } else {
+      await _prefillFromTrackedData();
+    }
+  }
+
+  // F10: restore the assumption sliders from the `projection_assumptions`
+  // setting. Returns true when a stored blob was applied; a malformed or
+  // missing blob silently leaves the defaults.
+  Future<bool> _hydrateAssumptions() async {
+    try {
+      final read = widget.settingReader ?? _apiService.getSetting;
+      final raw = await read('projection_assumptions');
+      if (!mounted || raw is! Map) return false;
+      double? d(String k) {
+        final v = raw[k];
+        return v is num ? v.toDouble() : null;
+      }
+
+      setState(() {
+        _monthlyContribution =
+            (d('monthly_contribution') ?? _monthlyContribution)
+                .clamp(0.0, 10000.0);
+        _annualReturnRate =
+            (d('annual_return_rate') ?? _annualReturnRate).clamp(0.0, 0.15);
+        _annualInflation =
+            (d('annual_inflation_rate') ?? _annualInflation).clamp(0.0, 0.06);
+        _annualExpenses =
+            (d('annual_expenses') ?? _annualExpenses).clamp(10000.0, 200000.0);
+        _withdrawalRate =
+            (d('withdrawal_rate') ?? _withdrawalRate).clamp(0.02, 0.06);
+        _returnVolatility =
+            (d('return_volatility') ?? _returnVolatility).clamp(0.0, 0.25);
+        _baristaMonthlyIncome =
+            (d('barista_monthly_income') ?? _baristaMonthlyIncome)
+                .clamp(0.0, 10000.0);
+        _annualTaxDrag =
+            (d('annual_tax_drag') ?? _annualTaxDrag).clamp(0.0, 0.03);
+        if (raw['withdrawal_guardrails'] is bool) {
+          _withdrawalGuardrails = raw['withdrawal_guardrails'] as bool;
+        }
+        _projectionYears =
+            (d('projection_years') ?? _projectionYears.toDouble())
+                .round()
+                .clamp(5, 50);
+        _yearsToRetirement =
+            (d('years_to_retirement') ?? _yearsToRetirement.toDouble())
+                .round()
+                .clamp(0, _projectionYears);
+        _assumptionsRestored = true;
+      });
+      return true;
+    } catch (_) {
+      // Silent fallback to the static defaults / tracked-data prefill.
+      return false;
+    }
+  }
+
+  // F10: the ~10 assumption fields as one JSON blob, written best-effort on
+  // every committed change (onChangeEnd / toggle / preset chip).
+  Map<String, dynamic> get _assumptionsJson => {
+        'monthly_contribution': _monthlyContribution,
+        'annual_return_rate': _annualReturnRate,
+        'annual_inflation_rate': _annualInflation,
+        'annual_expenses': _annualExpenses,
+        'withdrawal_rate': _withdrawalRate,
+        'return_volatility': _returnVolatility,
+        'barista_monthly_income': _baristaMonthlyIncome,
+        'annual_tax_drag': _annualTaxDrag,
+        'withdrawal_guardrails': _withdrawalGuardrails,
+        'years_to_retirement': _yearsToRetirement,
+        'projection_years': _projectionYears,
+      };
+
+  Future<void> _persistAssumptions() async {
+    final write = widget.settingWriter ?? _apiService.putSetting;
+    try {
+      await write('projection_assumptions', _assumptionsJson);
+    } catch (_) {
+      // Best-effort — the projection itself already reflects the change.
+    }
+  }
+
+  // F10: a committed assumption change persists the blob and refreshes the
+  // projection. Every slider onChangeEnd / toggle / preset chip routes here.
+  // F14: debounced ~300ms so a burst of commits (rapid chip taps, slider
+  // flicks) issues one write + one fetch after the flurry settles.
+  void _assumptionChanged() {
+    _fetchDebounce?.cancel();
+    _fetchDebounce = Timer(const Duration(milliseconds: 300), () {
+      _persistAssumptions();
+      _fetchProjection();
+    });
   }
 
   // One-shot, best-effort fetch backing the dividend outlook toggle (O2).
@@ -247,19 +390,23 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         final contrib = (defaults['monthly_contribution'] as num?)?.toDouble();
         final expenses = (defaults['annual_expenses'] as num?)?.toDouble();
         final months = (defaults['months_of_data'] as num?)?.toInt() ?? 0;
-        // Only adopt the data when it's meaningful (some history + nonzero
-        // spend), so a brand-new account keeps the sensible static defaults.
-        if (months >= 1 && expenses != null && expenses > 0) {
-          setState(() {
-            if (contrib != null && contrib > 0) {
-              _monthlyContribution = contrib.clamp(0, 10000);
-            }
+        // F3: adopt each derived default on its own merits. A valid tracked
+        // contribution used to be discarded whenever expenses were $0, and a
+        // single month of data was silently extrapolated ×12 into the
+        // retirement-spend default — so the contribution is adopted whenever
+        // it's positive, while expenses need ≥3 months of history.
+        setState(() {
+          if (contrib != null && contrib > 0) {
+            _monthlyContribution = contrib.clamp(0, 10000);
+            _contributionFromMonths = math.max(months, 1);
+          }
+          if (months >= 3 && expenses != null && expenses > 0) {
             _annualExpenses = expenses.clamp(10000, 200000);
             // Anchor the Lean/Standard/Fat presets to the user's real spend.
             _baselineExpenses = _annualExpenses;
-            _prefilledFromData = true;
-          });
-        }
+            _expensesFromMonths = months;
+          }
+        });
       }
     } catch (_) {
       // ignore; static defaults stand
@@ -268,6 +415,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   }
 
   Future<void> _fetchProjection() async {
+    // F14: sequence guard — only the newest in-flight request may land, so a
+    // slow stale response can't overwrite a fresher one.
+    final seq = ++_fetchSeq;
     setState(() => _isLoading = true);
     try {
       final fetch = widget.projectionFetcher ?? _apiService.getWealthProjection;
@@ -289,13 +439,19 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         annualTaxDrag: _annualTaxDrag,
         withdrawalGuardrails: _withdrawalGuardrails,
       );
+      if (!mounted || seq != _fetchSeq) return; // stale response — drop it
       setState(() {
         _projectionData = data;
+        _loadFailed = false;
         _isLoading = false;
       });
     } catch (e) {
       debugPrint("Error fetching projection: $e");
-      setState(() => _isLoading = false);
+      if (!mounted || seq != _fetchSeq) return;
+      setState(() {
+        _loadFailed = true;
+        _isLoading = false;
+      });
     }
   }
 
@@ -304,7 +460,6 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     return LayoutBuilder(builder: (context, constraints) {
       final isNarrow = constraints.maxWidth < 800;
       if (isNarrow) {
-        final isPhone = constraints.maxWidth < 720;
         return SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -319,7 +474,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                   // Keep the box tall on phones too: the card stacks a
                   // title row + legend above an Expanded chart, so a shorter
                   // box squishes the plot to a sliver.
-                  height: isPhone ? 320 : 320, child: _buildChartCard()),
+                  height: 320, child: _buildChartCard()),
               // O2: informational dividend income outlook — sits between the
               // chart and the FIRE strip; never part of the chart itself.
               if (_showDividendOutlook && _dividendOutlookAvailable) ...[
@@ -329,11 +484,11 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               const SizedBox(height: 16),
               _buildFireStatusStrip(),
               const SizedBox(height: 16),
-              // On phones the 4-up milestone row clips currency values, so it
-              // lays out as a 2×2 grid (handled inside _buildMilestonesRow).
-              isPhone
-                  ? _buildMilestonesRow()
-                  : SizedBox(height: 140, child: _buildMilestonesRow()),
+              // Below 800px the milestone row stacks into a 2×2 grid with
+              // self-bounded row heights (handled inside _buildMilestonesRow
+              // off its own LayoutBuilder), so it's safe at intrinsic height
+              // inside this scroll view — no unbounded-height Row blowup (F1).
+              _buildMilestonesRow(),
             ],
           ),
         );
@@ -368,13 +523,19 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                     //
                     // Estimated fixed extents: FIRE strip ~210, outlook
                     // panel ~230, plus the 16px gaps; the chart takes 3/4 of
-                    // the leftover and needs ~260px for a readable plot
-                    // (title + legend inside the card use ~70 of it).
-                    const chartMinH = 260.0;
-                    final fixedH =
-                        210.0 + 32.0 + (panelOn ? 230.0 + 16.0 : 0.0);
-                    final flexFits =
-                        (col.maxHeight - fixedH) * 0.75 >= chartMinH;
+                    // the leftover and needs ~320px of card so the plot
+                    // itself stays ≥ ~200px (title + legend chrome inside the
+                    // card use ~70, padding ~48). The milestone tile row
+                    // (flex 1) needs its ~220px too — the old estimate
+                    // omitted it, so at 1440×900 the flex branch was chosen
+                    // and the OverflowBox painted the tiles past the window
+                    // edge with no way to scroll (F1).
+                    const chartMinH = 320.0;
+                    const tilesMinH = 220.0;
+                    final flexAvail = col.maxHeight -
+                        (210.0 + 32.0 + (panelOn ? 230.0 + 16.0 : 0.0));
+                    final flexFits = flexAvail * 0.75 >= chartMinH &&
+                        flexAvail * 0.25 >= tilesMinH;
                     if (flexFits) {
                       return Column(
                         children: [
@@ -585,6 +746,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                   row(l.projTermBarista, l.projGlossaryBaristaDef),
                   row(l.projSafeWithdrawalRate, l.projGlossarySwrDef),
                   row(l.projTermRange, l.projGlossaryRangeDef),
+                  // F11: the bold line is the *average* path — often above
+                  // the simulation's median — so say so.
+                  row(l.projTermAveragePath, l.projGlossaryAveragePathDef),
                   row(l.projTermRealDollars, l.projGlossaryRealDef),
                 ],
               ),
@@ -610,9 +774,13 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         min: 0,
         max: 10000,
         isCurrency: true,
-        hint: _prefilledFromData ? l.projFromYourData : null,
+        // F3: honest provenance — the hint names how much history backs the
+        // adopted value; no hint when the static default stands.
+        hint: _contributionFromMonths != null
+            ? l.projBasedOnMonths(_contributionFromMonths!)
+            : null,
         onChanged: (val) => setState(() => _monthlyContribution = val),
-        onChangeEnd: (_) => _fetchProjection(),
+        onChangeEnd: (_) => _assumptionChanged(),
       ),
       div(),
       _buildSliderControl(
@@ -623,7 +791,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         isPercent: true,
         help: '${l.projHelpExpectedReturn}\n${_fisherHelp(l)}',
         onChanged: (val) => setState(() => _annualReturnRate = val),
-        onChangeEnd: (_) => _fetchProjection(),
+        onChangeEnd: (_) => _assumptionChanged(),
       ),
       div(),
       _buildSliderControl(
@@ -637,7 +805,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         divisions: _projectionYears,
         help: l.projHelpYearsToRetirement,
         onChanged: (val) => setState(() => _yearsToRetirement = val.toInt()),
-        onChangeEnd: (_) => _fetchProjection(),
+        onChangeEnd: (_) => _assumptionChanged(),
       ),
     ];
 
@@ -651,7 +819,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         isPercent: true,
         help: l.projHelpInflation,
         onChanged: (val) => setState(() => _annualInflation = val),
-        onChangeEnd: (_) => _fetchProjection(),
+        onChangeEnd: (_) => _assumptionChanged(),
       ),
       div(),
       _buildSliderControl(
@@ -662,7 +830,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         isPercent: true,
         help: l.projHelpVolatility,
         onChanged: (val) => setState(() => _returnVolatility = val),
-        onChangeEnd: (_) => _fetchProjection(),
+        onChangeEnd: (_) => _assumptionChanged(),
       ),
       div(),
       _buildSliderControl(
@@ -672,9 +840,15 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         max: _expensesMax,
         isCurrency: true,
         help: l.projHelpAnnualExpenses,
-        hint: _prefilledFromData ? l.projFromYourData : null,
+        // F3: adopted → say how much data backs it; static $40k default →
+        // say it's an estimate instead of implying it came from tracked data.
+        // Restored user-saved assumptions (F10) carry no hint: the value is
+        // the user's own, neither derived nor a stock estimate.
+        hint: _expensesFromMonths != null
+            ? l.projBasedOnMonths(_expensesFromMonths!)
+            : (_assumptionsRestored ? null : l.projExpensesEstimateHint),
         onChanged: (val) => setState(() => _annualExpenses = val),
-        onChangeEnd: (_) => _fetchProjection(),
+        onChangeEnd: (_) => _assumptionChanged(),
       ),
       div(),
       _buildSliderControl(
@@ -685,7 +859,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         isPercent: true,
         help: l.projHelpSwr,
         onChanged: (val) => setState(() => _withdrawalRate = val),
-        onChangeEnd: (_) => _fetchProjection(),
+        onChangeEnd: (_) => _assumptionChanged(),
       ),
       div(),
       _buildSliderControl(
@@ -696,7 +870,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         isCurrency: true,
         help: l.projHelpBaristaIncome,
         onChanged: (val) => setState(() => _baristaMonthlyIncome = val),
-        onChangeEnd: (_) => _fetchProjection(),
+        onChangeEnd: (_) => _assumptionChanged(),
       ),
       div(),
       _buildSliderControl(
@@ -707,7 +881,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         isPercent: true,
         help: l.projHelpTaxDrag,
         onChanged: (val) => setState(() => _annualTaxDrag = val),
-        onChangeEnd: (_) => _fetchProjection(),
+        onChangeEnd: (_) => _assumptionChanged(),
       ),
       div(),
       _buildGuardrailsToggle(),
@@ -726,7 +900,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             _yearsToRetirement = _projectionYears;
           }
         }),
-        onChangeEnd: (_) => _fetchProjection(),
+        onChangeEnd: (_) => _assumptionChanged(),
       ),
       div(),
       _buildGoalEditor(),
@@ -749,7 +923,18 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: EdgeInsets.all(pad),
-        child: scrollable ? SingleChildScrollView(child: body) : body,
+        // F9: always-visible scrollbar so the fold in the controls column is
+        // discoverable (7 of 12 controls hide below it on short windows).
+        child: scrollable
+            ? Scrollbar(
+                controller: _controlsScrollController,
+                thumbVisibility: true,
+                child: SingleChildScrollView(
+                  controller: _controlsScrollController,
+                  child: body,
+                ),
+              )
+            : body,
       ),
     );
   }
@@ -853,12 +1038,17 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                           Icon(Icons.auto_awesome,
                               size: 11, color: context.info),
                           const SizedBox(width: 4),
-                          Text(
-                            hint,
-                            style: TextStyle(
-                                color: context.info,
-                                fontSize: 11,
-                                fontStyle: FontStyle.italic),
+                          // Flexible so longer hints (F3's provenance /
+                          // estimate wording) wrap instead of overflowing
+                          // the 320px controls column.
+                          Flexible(
+                            child: Text(
+                              hint,
+                              style: TextStyle(
+                                  color: context.info,
+                                  fontSize: 11,
+                                  fontStyle: FontStyle.italic),
+                            ),
                           ),
                         ],
                       ),
@@ -923,7 +1113,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             activeThumbColor: context.positive,
             onChanged: (v) {
               setState(() => _withdrawalGuardrails = v);
-              _fetchProjection();
+              _assumptionChanged();
             },
           ),
         ],
@@ -1195,9 +1385,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                   });
                   Preferences.setGoalAmountUsd(null);
                   Preferences.setGoalYear(null);
-                  _apiService
-                      .putSetting('net_worth_goal', null)
-                      .catchError((_) {});
+                  _writeGoalSetting(null);
                 },
                 child: Text(l.projClear),
               ),
@@ -1221,58 +1409,49 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     );
   }
 
+  // F5: persist the goal via the injected writer (real ApiService.putSetting
+  // in production). Failures used to be silently swallowed by catchError —
+  // the goal *looked* saved but evaporated on the next refresh; now they
+  // surface as a snackbar.
+  Future<void> _writeGoalSetting(dynamic value) async {
+    final write = widget.settingWriter ?? _apiService.putSetting;
+    try {
+      await write('net_worth_goal', value);
+    } catch (_) {
+      if (!mounted) return;
+      final l = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l.projGoalSaveFailed)),
+      );
+    }
+  }
+
+  // F5: sanity caps for the goal dialog — an amount must be positive and at
+  // most $1B (display currency), and the year within [now, now + 80].
+  static const double _maxGoalAmount = 1000000000.0;
+  static const int _maxGoalYearsAhead = 80;
+
   Future<void> _editGoal() async {
-    final amountCtrl = TextEditingController(
-      text: _goalAmountUsd == null
-          ? ''
-          : (_goalAmountUsd! * widget.conversionFactor).toInt().toString(),
-    );
     final nowYear = DateTime.now().year;
-    final yearCtrl = TextEditingController(
-      text: (_goalYear ?? nowYear + 10).toString(),
-    );
-    final l = AppLocalizations.of(context);
-    final saved = await showDialog<bool>(
+    // The dialog owns its TextEditingControllers (a StatefulWidget disposes
+    // them only after the route's exit animation tears the fields down —
+    // disposing them right after showDialog resolved threw during the
+    // fade-out) and pops (amount, year) only when validation passes (F5).
+    final result = await showDialog<(double, int)?>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text(l.projSetTargetTitle),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: amountCtrl,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                labelText: l.projTargetNetWorth,
-                prefixText: widget.currencyFormat.currencySymbol,
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: yearCtrl,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: l.projTargetYear),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: Text(l.actionCancel)),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(l.actionSave)),
-        ],
+      builder: (_) => _GoalDialog(
+        initialAmount: _goalAmountUsd == null
+            ? ''
+            : (_goalAmountUsd! * widget.conversionFactor).toInt().toString(),
+        initialYear: (_goalYear ?? nowYear + 10).toString(),
+        currencySymbol: widget.currencyFormat.currencySymbol,
+        minYear: nowYear,
+        maxYear: nowYear + _maxGoalYearsAhead,
+        maxAmount: _maxGoalAmount,
       ),
     );
-    final reported = double.tryParse(amountCtrl.text);
-    final yr = int.tryParse(yearCtrl.text);
-    // dispose: local controllers, else the dialog leaks them. Read .text first,
-    // then dispose on every exit path below.
-    amountCtrl.dispose();
-    yearCtrl.dispose();
-    if (saved != true) return;
-    if (reported == null || yr == null) return;
+    if (!mounted || result == null) return;
+    final (reported, yr) = result;
     final usd = widget.conversionFactor == 0
         ? reported
         : reported / widget.conversionFactor;
@@ -1282,10 +1461,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     });
     Preferences.setGoalAmountUsd(usd);
     Preferences.setGoalYear(yr);
-    _apiService.putSetting('net_worth_goal', {
+    await _writeGoalSetting({
       'amount_usd': usd,
       'year': yr,
-    }).catchError((_) {});
+    });
   }
 
   Widget _buildChartCard() {
@@ -1297,7 +1476,12 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         padding: EdgeInsets.all(pad),
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
-            : Column(
+            // F2: a failed load with nothing cached used to leave a silently
+            // blank card (empty Container from _buildChart, shrunk FIRE strip
+            // and tiles). Say so, and offer a retry.
+            : (_loadFailed && _projectionData == null)
+                ? _buildLoadError(l)
+                : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
@@ -1325,6 +1509,30 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                   Expanded(child: _buildChart()),
                 ],
               ),
+      ),
+    );
+  }
+
+  // F2: error state for the chart card — a failed fetch with no cached data
+  // explains itself and offers a retry instead of a blank card.
+  Widget _buildLoadError(AppLocalizations l) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.cloud_off_rounded, size: 32, color: context.textMuted),
+          const SizedBox(height: 12),
+          Text(
+            l.projLoadFailed,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: context.textMuted, fontSize: 14),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.tonal(
+            onPressed: _fetchProjection,
+            child: Text(l.projRetry),
+          ),
+        ],
       ),
     );
   }
@@ -1432,8 +1640,13 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     final (double targetValue, Color targetColor) = switch (_fireFocus) {
       _FireFocus.full => (fiNumber, context.warning),
       _FireFocus.coast => (coastNumber > 0 ? coastNumber : fiNumber, context.info),
+      // F8: with $0 barista income the backend returns barista_fi_number ==
+      // fi_number, so "less than the full FI number" is the real signal that
+      // barista income is configured — not merely "> 0".
       _FireFocus.barista => (
-          baristaNumber > 0 ? baristaNumber : fiNumber,
+          baristaNumber > 0 && baristaNumber < fiNumber
+              ? baristaNumber
+              : fiNumber,
           context.purpleAccent
         ),
     };
@@ -1522,7 +1735,15 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       widget.currencyFormat.format(endDisplay),
     );
 
-    return Semantics(
+    return LayoutBuilder(builder: (context, plot) {
+      // F7: adaptive x-label step computed off the inner plot width (this
+      // builder's constraint minus the 60px reserved for y labels) — a fixed
+      // `interval: 5` overlapped labels on phones with long horizons.
+      final xInterval = projectionYearAxisInterval(
+        plotWidth: math.max(0.0, plot.maxWidth - 60.0),
+        projectionYears: _projectionYears,
+      );
+      return Semantics(
       container: true,
       label: chartSummary,
       child: ExcludeSemantics(
@@ -1542,7 +1763,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              interval: 5,
+              interval: xInterval,
               getTitlesWidget: (value, meta) => Padding(
                 padding: const EdgeInsets.only(top: 8.0),
                 child: Text(
@@ -1561,8 +1782,12 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 if (value <= meta.min || value >= meta.max) {
                   return const SizedBox.shrink();
                 }
+                // F6: compact *currency* ticks (skill §5) — a bare "1.5M"
+                // carried no currency and used Spain-style separators in es.
                 return Text(
-                  NumberFormat.compact().format(value),
+                  NumberFormat.compactSimpleCurrency(
+                    name: widget.currencyFormat.currencyName,
+                  ).format(value),
                   style: TextStyle(color: context.textSubtle, fontSize: 10),
                 );
               },
@@ -1649,7 +1874,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                   // amount first — otherwise the two render swapped.
                   l.projTooltipYearAmount(
                     widget.currencyFormat.format(spot.y),
-                    spot.x.toStringAsFixed(1),
+                    // F6: locale decimal seam (no-op today — es-MX uses
+                    // period decimals like en).
+                    localizeNumberString(context, spot.x.toStringAsFixed(1)),
                   ),
                   TextStyle(
                     color: context.tooltipOnSurface,
@@ -1663,7 +1890,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       ),
         ),
       ),
-    );
+      );
+    });
   }
 
   // FIRE focus card: pick a flavor (Full / Coast / Barista) and the headline
@@ -1714,7 +1942,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             ? l.projFullUnreachable
             : (yearsToFi <= 0
                 ? l.projFullReached
-                : l.projFullYearsAway(yearsToFi.toStringAsFixed(1)));
+                // F6: locale decimal seam (no-op today — es-MX uses period
+                // decimals like en).
+                : l.projFullYearsAway(localizeNumberString(
+                    context, yearsToFi.toStringAsFixed(1))));
       case _FireFocus.coast:
         icon = coastAchieved
             ? Icons.check_circle_rounded
@@ -1730,10 +1961,17 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         icon = Icons.local_cafe_rounded;
         color = context.purpleAccent;
         title = l.projTermBarista;
-        number =
-            baristaNumber > 0 ? money(baristaNumber, atYears: retireYears) : '—';
+        // F8: the backend returns barista_fi_number == fi_number when barista
+        // income is $0, so a figure that isn't lower than full FIRE means
+        // "not configured" — show the setup prompt, not a misleading number
+        // identical to the Full FIRE target.
+        final baristaConfigured =
+            baristaNumber > 0 && baristaNumber < fiNumber;
+        number = baristaConfigured
+            ? money(baristaNumber, atYears: retireYears)
+            : '—';
         def = l.projGlossaryBaristaDef;
-        take = baristaNumber > 0 ? l.projBaristaFiSub : l.projBaristaPrompt;
+        take = baristaConfigured ? l.projBaristaFiSub : l.projBaristaPrompt;
     }
 
     Widget chip(_FireFocus f, String label) => ChoiceChip(
@@ -1756,7 +1994,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         visualDensity: VisualDensity.compact,
         onSelected: (_) {
           setState(() => _annualExpenses = value);
-          _fetchProjection();
+          _assumptionChanged();
         },
       );
     }
@@ -1888,83 +2126,98 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     // year dollars when nominal is on (factor is 1.0 when it's off).
     final atRetire = _nominalFactor(_yearsToRetirement.toDouble());
 
-    final cards = <Widget>[
-      _buildMilestoneCard(
-        title: l.projSuccessRate,
-        value: formatPercent(context, successRate * 100, digits: 0),
-        subtitle: l.projSuccessRateSub,
-        icon: Icons.verified_rounded,
-        color: _successColor(successRate),
-      ),
-      _buildMilestoneCard(
-        title: l.projFiNumber,
-        value: widget.currencyFormat.format(
-          (metrics['fi_number'] as num).toDouble() *
-              widget.conversionFactor *
-              atRetire,
+    return LayoutBuilder(builder: (context, constraints) {
+      // Stack into 2×2 below 800px — the same cutover as the screen's narrow
+      // layout, derived from this builder's own width (not MediaQuery), so
+      // the 720–800px band no longer renders a clipped 4-up row (F1).
+      final stacked = constraints.maxWidth < 800;
+      // F12: with retirement at/after the horizon the simulation never
+      // withdraws, so "chance the plan lasts" is vacuous (always ~100%) —
+      // caption it honestly instead.
+      final noRetirementPhase = _yearsToRetirement >= _projectionYears;
+      final cards = <Widget>[
+        _buildMilestoneCard(
+          title: l.projSuccessRate,
+          value: formatPercent(context, successRate * 100, digits: 0),
+          subtitle: noRetirementPhase
+              ? l.projSuccessRateNa
+              : l.projSuccessRateSub,
+          icon: Icons.verified_rounded,
+          color: _successColor(successRate),
+          compact: stacked,
         ),
-        subtitle: l.projTargetNetWorth,
-        icon: Icons.flag_rounded,
-        color: context.warning,
-      ),
-      _buildMilestoneCard(
-        title: l.projYearsToFi,
-        value: metrics['estimated_years_to_fi'] != null
-            ? (metrics['estimated_years_to_fi'] as num).toStringAsFixed(1)
-            : '∞',
-        subtitle: l.projEstimate,
-        icon: Icons.speed_rounded,
-        color: context.info,
-      ),
-      _buildMilestoneCard(
-        title: l.projFiIncome,
-        value: widget.currencyFormat.format(
-          (metrics['monthly_income_at_retirement'] as num).toDouble() *
-              widget.conversionFactor *
-              atRetire,
+        _buildMilestoneCard(
+          title: l.projFiNumber,
+          value: widget.currencyFormat.format(
+            (metrics['fi_number'] as num).toDouble() *
+                widget.conversionFactor *
+                atRetire,
+          ),
+          subtitle: l.projTargetNetWorth,
+          icon: Icons.flag_rounded,
+          color: context.warning,
+          compact: stacked,
         ),
-        subtitle: l.projMonthlyAtWithdrawalRate,
-        icon: Icons.account_balance_wallet_rounded,
-        color: context.purpleAccent,
-      ),
-    ];
+        _buildMilestoneCard(
+          title: l.projYearsToFi,
+          value: metrics['estimated_years_to_fi'] != null
+              ? localizeNumberString(
+                  context,
+                  (metrics['estimated_years_to_fi'] as num).toStringAsFixed(1),
+                )
+              : '∞',
+          subtitle: l.projEstimate,
+          icon: Icons.speed_rounded,
+          color: context.info,
+          compact: stacked,
+        ),
+        _buildMilestoneCard(
+          title: l.projFiIncome,
+          value: widget.currencyFormat.format(
+            (metrics['monthly_income_at_retirement'] as num).toDouble() *
+                widget.conversionFactor *
+                atRetire,
+          ),
+          subtitle: l.projMonthlyAtWithdrawalRate,
+          icon: Icons.account_balance_wallet_rounded,
+          color: context.purpleAccent,
+          compact: stacked,
+        ),
+      ];
 
-    // Phones clip currency values in a 4-up row, so stack into two rows of two.
-    if (MediaQuery.sizeOf(context).width < 720) {
-      return Column(
+      if (stacked) {
+        // Each 2-up row is bounded to its content height: inside the narrow
+        // layout's SingleChildScrollView an unbounded stretch-Row let the
+        // tiles blow up to fill infinite height and never paint (F1).
+        // IntrinsicHeight keeps the two cards equal-height without a fixed
+        // number that longer (es) strings could overflow.
+        Widget pair(Widget a, Widget b) => IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [a, const SizedBox(width: 16), b],
+              ),
+            );
+        return Column(
+          children: [
+            pair(cards[0], cards[1]),
+            const SizedBox(height: 16),
+            pair(cards[2], cards[3]),
+          ],
+        );
+      }
+
+      return Row(
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              cards[0],
-              const SizedBox(width: 16),
-              cards[1],
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              cards[2],
-              const SizedBox(width: 16),
-              cards[3],
-            ],
-          ),
+          cards[0],
+          const SizedBox(width: 16),
+          cards[1],
+          const SizedBox(width: 16),
+          cards[2],
+          const SizedBox(width: 16),
+          cards[3],
         ],
       );
-    }
-
-    return Row(
-      children: [
-        cards[0],
-        const SizedBox(width: 16),
-        cards[1],
-        const SizedBox(width: 16),
-        cards[2],
-        const SizedBox(width: 16),
-        cards[3],
-      ],
-    );
+    });
   }
 
   Widget _buildMilestoneCard({
@@ -1973,9 +2226,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     required String subtitle,
     required IconData icon,
     required Color color,
+    bool compact = false,
   }) {
-    final isPhone = MediaQuery.sizeOf(context).width < 720;
-    final pad = isPhone ? 16.0 : 20.0;
+    final pad = compact ? 16.0 : 20.0;
     return Expanded(
       child: Card(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1984,7 +2237,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: color, size: isPhone ? 28 : 32),
+              Icon(icon, color: color, size: compact ? 28 : 32),
               const SizedBox(height: 12),
               Text(
                 title,
@@ -2009,6 +2262,108 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// F5: the "Set a target" dialog. Validates before closing — the old inline
+/// dialog accepted anything ($999,999,999,999 "by 2020") — and owns its text
+/// controllers so they're disposed with the route (after the exit animation),
+/// not while the closing dialog is still rebuilding its fields.
+///
+/// Pops `null` on cancel, or the validated `(amount, year)` — amount in the
+/// *display* currency; the caller converts to USD.
+class _GoalDialog extends StatefulWidget {
+  final String initialAmount;
+  final String initialYear;
+  final String currencySymbol;
+  final int minYear;
+  final int maxYear;
+  final double maxAmount;
+
+  const _GoalDialog({
+    required this.initialAmount,
+    required this.initialYear,
+    required this.currencySymbol,
+    required this.minYear,
+    required this.maxYear,
+    required this.maxAmount,
+  });
+
+  @override
+  State<_GoalDialog> createState() => _GoalDialogState();
+}
+
+class _GoalDialogState extends State<_GoalDialog> {
+  late final TextEditingController _amountCtrl =
+      TextEditingController(text: widget.initialAmount);
+  late final TextEditingController _yearCtrl =
+      TextEditingController(text: widget.initialYear);
+  String? _amountError;
+  String? _yearError;
+
+  @override
+  void dispose() {
+    _amountCtrl.dispose();
+    _yearCtrl.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final l = AppLocalizations.of(context);
+    final amt = double.tryParse(_amountCtrl.text);
+    final yr = int.tryParse(_yearCtrl.text);
+    final amountOk = amt != null && amt > 0 && amt <= widget.maxAmount;
+    final yearOk = yr != null && yr >= widget.minYear && yr <= widget.maxYear;
+    if (!amountOk || !yearOk) {
+      setState(() {
+        _amountError = amountOk ? null : l.projGoalAmountInvalid;
+        // gen-l10n generated this signature as (min, max) — explicit
+        // placeholders keep their arb metadata order (verified in
+        // app_localizations.dart; only synthesized placeholders get
+        // alphabetized).
+        _yearError =
+            yearOk ? null : l.projGoalYearRange(widget.minYear, widget.maxYear);
+      });
+      return;
+    }
+    Navigator.pop(context, (amt, yr));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return AlertDialog(
+      title: Text(l.projSetTargetTitle),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _amountCtrl,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: l.projTargetNetWorth,
+              prefixText: widget.currencySymbol,
+              errorText: _amountError,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _yearCtrl,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: l.projTargetYear,
+              errorText: _yearError,
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: Text(l.actionCancel)),
+        FilledButton(onPressed: _save, child: Text(l.actionSave)),
+      ],
     );
   }
 }

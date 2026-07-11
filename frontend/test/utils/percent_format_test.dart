@@ -4,12 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/utils/percent_format.dart';
 
-// The helper takes a percentage NUMBER (12.5 → "12.5%"), not a ratio. en must
-// stay byte-identical to the old `'${v.toStringAsFixed(n)}%'`; es switches to
-// the comma decimal + (non-breaking) space-before-% convention. The exact
-// whitespace codepoint intl emits before `%` (U+00A0 vs U+202F) is normalized
-// to a plain space in the es assertions so the test proves the convention
-// without pinning the codepoint.
+// The helper takes a percentage NUMBER (12.5 → "12.5%"), not a ratio. Both
+// shipped locales use the same convention: en and es-MX (CLDR es_MX) write
+// period decimals with NO space before `%`. An earlier revision gave es
+// Spain-style "12,5 %" (comma decimal + NBSP); these tests pin the es-MX
+// behavior so it can't regress. The es assertions normalize any non-breaking
+// whitespace (U+00A0 / U+202F) to a plain space first, so a reintroduced NBSP
+// before `%` fails the equality regardless of codepoint.
 String _normSpace(String s) =>
     s.replaceAll('\u00A0', ' ').replaceAll('\u202F', ' ');
 
@@ -40,7 +41,8 @@ void main() {
       expect(find.text('-5.0%'), findsOneWidget);
     });
 
-    testWidgets('es localizes: comma decimal + space before %', (tester) async {
+    testWidgets('es (es-MX) matches en: period decimal, no space before %',
+        (tester) async {
       const k1 = Key('es-1'), k2 = Key('es-2');
       await tester.pumpWidget(_host(
         const Locale('es'),
@@ -51,8 +53,8 @@ void main() {
           ]),
         ),
       ));
-      expect(_normSpace(tester.widget<Text>(find.byKey(k1)).data!), '12,5 %');
-      expect(_normSpace(tester.widget<Text>(find.byKey(k2)).data!), '50 %');
+      expect(_normSpace(tester.widget<Text>(find.byKey(k1)).data!), '12.5%');
+      expect(_normSpace(tester.widget<Text>(find.byKey(k2)).data!), '50%');
     });
   });
 
@@ -62,12 +64,12 @@ void main() {
       expect(formatPercentLocale('en', -5.0, digits: 1), '-5.0%');
     });
 
-    test('es uses comma decimal + a space before %', () {
-      expect(_normSpace(formatPercentLocale('es', 12.5, digits: 1)), '12,5 %');
+    test('es (es-MX) uses period decimal + no space before %', () {
+      expect(_normSpace(formatPercentLocale('es', 12.5, digits: 1)), '12.5%');
     });
 
     test('grouping is off so large percents keep no thousands separator', () {
-      // Guards en visual parity with the old toStringAsFixed at every site.
+      // Guards visual parity with the old toStringAsFixed at every site.
       expect(formatPercentLocale('en', 1234.5, digits: 1), '1234.5%');
     });
   });

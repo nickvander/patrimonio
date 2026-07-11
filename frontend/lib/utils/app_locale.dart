@@ -37,9 +37,24 @@ ValueNotifier<Locale?> _buildLocaleNotifier() {
 /// so callers may safely fire-and-forget; the Future is returned for tests
 /// that prefer to await it.
 Future<void> syncIntlLocale(Locale? locale) {
-  // Locale.toString() yields underscore form ('es', 'es_MX') — the format
-  // Intl expects. null = no saved preference: leave Intl on its platform
-  // default, matching MaterialApp's own locale resolution.
-  Intl.defaultLocale = locale?.toString();
-  return initializeDateFormatting(locale?.toString());
+  final tag = _intlTag(locale);
+  Intl.defaultLocale = tag;
+  return initializeDateFormatting(tag);
+}
+
+/// The Intl locale tag for [locale]. Locale.toString() yields underscore form
+/// ('es_MX') — the format Intl expects; null = no saved preference: leave
+/// Intl on its platform default, matching MaterialApp's own resolution.
+///
+/// F6: the app's Spanish is es-MX, but the language toggle stores a bare
+/// 'es', which Intl resolves to Spain-style number formatting
+/// ("1.000,00 $"). Map it to 'es_MX' so `NumberFormat.currency` renders
+/// Mexico-style ("$1,000.00" / "17.50").
+String? _intlTag(Locale? locale) {
+  if (locale == null) return null;
+  if (locale.languageCode == 'es' &&
+      (locale.countryCode == null || locale.countryCode!.isEmpty)) {
+    return 'es_MX';
+  }
+  return locale.toString();
 }

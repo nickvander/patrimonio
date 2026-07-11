@@ -3746,6 +3746,12 @@ abstract class AppLocalizations {
   /// **'More days'**
   String get dashMoreDays;
 
+  /// F16: tooltip/semantics label for the dashboard header kebab (overflow) menu. Deliberately distinct from navMore (the bottom-nav tab) so screen readers can tell them apart.
+  ///
+  /// In en, this message translates to:
+  /// **'Options'**
+  String get dashOptionsTooltip;
+
   /// No description provided for @dashDaysShort.
   ///
   /// In en, this message translates to:
@@ -4376,12 +4382,6 @@ abstract class AppLocalizations {
   /// **'Monthly savings'**
   String get projMonthlySavings;
 
-  /// No description provided for @projExpectedReturn.
-  ///
-  /// In en, this message translates to:
-  /// **'Expected return'**
-  String get projExpectedReturn;
-
   /// No description provided for @projAnnualExpenses.
   ///
   /// In en, this message translates to:
@@ -4448,12 +4448,6 @@ abstract class AppLocalizations {
   /// **'Net worth projection'**
   String get projNetWorthProjection;
 
-  /// No description provided for @projScenarios.
-  ///
-  /// In en, this message translates to:
-  /// **'Scenarios'**
-  String get projScenarios;
-
   /// No description provided for @projYearAxisLabel.
   ///
   /// In en, this message translates to:
@@ -4471,18 +4465,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'FI number'**
   String get projFiNumber;
-
-  /// No description provided for @projProgress.
-  ///
-  /// In en, this message translates to:
-  /// **'Progress'**
-  String get projProgress;
-
-  /// No description provided for @projTowardFire.
-  ///
-  /// In en, this message translates to:
-  /// **'Toward FIRE'**
-  String get projTowardFire;
 
   /// No description provided for @projYearsToFi.
   ///
@@ -4556,47 +4538,17 @@ abstract class AppLocalizations {
   /// **'Chance the plan lasts the horizon'**
   String get projSuccessRateSub;
 
-  /// No description provided for @projMedian.
+  /// F12: success-rate tile caption when retirement starts at/after the projection horizon, so no withdrawal phase was simulated.
   ///
   /// In en, this message translates to:
-  /// **'Median outcome'**
-  String get projMedian;
-
-  /// No description provided for @projMedianSub.
-  ///
-  /// In en, this message translates to:
-  /// **'Most likely path (50th pct)'**
-  String get projMedianSub;
-
-  /// No description provided for @projCoastReached.
-  ///
-  /// In en, this message translates to:
-  /// **'Coast FIRE reached'**
-  String get projCoastReached;
+  /// **'n/a — no retirement phase in this projection'**
+  String get projSuccessRateNa;
 
   /// No description provided for @projCoastReachedSub.
   ///
   /// In en, this message translates to:
   /// **'Growth alone reaches your goal — you can stop contributing.'**
   String get projCoastReachedSub;
-
-  /// No description provided for @projCoastNeed.
-  ///
-  /// In en, this message translates to:
-  /// **'Coast FIRE: need {amount} invested today'**
-  String projCoastNeed(Object amount);
-
-  /// No description provided for @projCoastNeedSub.
-  ///
-  /// In en, this message translates to:
-  /// **'Invest this much now and growth alone gets you to FI by retirement.'**
-  String get projCoastNeedSub;
-
-  /// No description provided for @projBaristaFi.
-  ///
-  /// In en, this message translates to:
-  /// **'Barista FI number'**
-  String get projBaristaFi;
 
   /// No description provided for @projBaristaFiSub.
   ///
@@ -4667,7 +4619,7 @@ abstract class AppLocalizations {
   /// No description provided for @projLegendProjected.
   ///
   /// In en, this message translates to:
-  /// **'Projected'**
+  /// **'Projected (average path)'**
   String get projLegendProjected;
 
   /// No description provided for @projLegendTarget.
@@ -4760,11 +4712,17 @@ abstract class AppLocalizations {
   /// **'Every figure is in today\'s dollars, so a future amount already accounts for inflation.'**
   String get projGlossaryRealDef;
 
-  /// No description provided for @projFireFocusTitle.
+  /// F11: glossary term for the chart's bold expected-path line.
   ///
   /// In en, this message translates to:
-  /// **'Which FIRE are you aiming for?'**
-  String get projFireFocusTitle;
+  /// **'The bold projected line'**
+  String get projTermAveragePath;
+
+  /// F11: glossary definition disclosing that the bold line is the mean path, which can sit above the Monte Carlo median.
+  ///
+  /// In en, this message translates to:
+  /// **'The bold line compounds your expected return exactly — the average path. The typical (median) simulated outcome is often lower, so read it as an illustration, not a forecast.'**
+  String get projGlossaryAveragePathDef;
 
   /// No description provided for @projFirePlanTitle.
   ///
@@ -4811,7 +4769,7 @@ abstract class AppLocalizations {
   /// No description provided for @projFullUnreachable.
   ///
   /// In en, this message translates to:
-  /// **'Not reachable in this horizon — raise savings or returns.'**
+  /// **'Not reachable at your current pace — raise savings or returns.'**
   String get projFullUnreachable;
 
   /// No description provided for @projCoastTake.
@@ -4873,6 +4831,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Fixed spending — no adjustment in downturns'**
   String get projGuardrailsOff;
+
+  /// F2: chart-card error message when the projection fetch fails and there is no cached data to show.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load your projection.'**
+  String get projLoadFailed;
+
+  /// F2: retry button under the projection load-failure message.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get projRetry;
+
+  /// F3: provenance hint under a slider whose default was adopted from the user's tracked cash flow; {months} is how many months of history back it.
+  ///
+  /// In en, this message translates to:
+  /// **'{months, plural, =1{Based on 1 month of your data} other{Based on {months} months of your data}}'**
+  String projBasedOnMonths(int months);
+
+  /// F3: hint under the annual-expenses slider when the static $40k default stands (no tracked data adopted).
+  ///
+  /// In en, this message translates to:
+  /// **'Estimate — adjust to your spending'**
+  String get projExpensesEstimateHint;
+
+  /// F5: inline validation error for the goal dialog's target amount field.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an amount above zero (up to 1 billion)'**
+  String get projGoalAmountInvalid;
+
+  /// F5: inline validation error for the goal dialog's target year field. The explicit placeholders below keep this declaration order in the generated signature: (min, max).
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a year between {min} and {max}'**
+  String projGoalYearRange(int min, int max);
+
+  /// F5: snackbar when persisting the net-worth goal to the backend fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save your goal'**
+  String get projGoalSaveFailed;
 
   /// No description provided for @taxTitle.
   ///
