@@ -2198,24 +2198,25 @@ class _TransactionsTabState extends State<TransactionsTab> {
                           size: 20,
                         ),
                         const SizedBox(width: 12),
-                        Text(_selectionMode
-                            ? l.txExitSelectionMode
-                            : l.txSelectMultiple),
+                        Flexible(
+                          child: Text(_selectionMode
+                              ? l.txExitSelectionMode
+                              : l.txSelectMultiple),
+                        ),
                       ],
                     ),
                   ),
                   if (widget.apiService != null)
                     PopupMenuItem(
                       value: 'csv',
+                      // Short label in the menu — the verbose "…matching your
+                      // filter" wording stays on the wide-layout tooltip; here
+                      // it overflowed the item off the screen edge.
                       child: Row(
                         children: [
                           const Icon(Icons.file_download_outlined, size: 20),
                           const SizedBox(width: 12),
-                          Text((widget.csvExportConfirmAlways ||
-                                  _searchQuery.isNotEmpty ||
-                                  _filters.isActive)
-                              ? l.txExportCsvFiltered
-                              : l.txExportCsv),
+                          Flexible(child: Text(l.txExportCsv)),
                         ],
                       ),
                     ),
@@ -2226,7 +2227,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                         children: [
                           const Icon(Icons.swap_horiz, size: 20),
                           const SizedBox(width: 12),
-                          Text(l.txScanTransfers),
+                          Flexible(child: Text(l.txScanTransfers)),
                         ],
                       ),
                     ),
