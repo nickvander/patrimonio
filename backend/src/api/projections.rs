@@ -3,12 +3,16 @@ use axum::{
     routing::get,
     Json, Router,
 };
+use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 use serde::Serialize;
 use sqlx::Row;
 
-use crate::api::dashboard::{latest_usd_mxn_rate, trailing_cashflow_exclusions_sql};
-use crate::api::session::AuthContext;
+use crate::api::dashboard::trailing_cashflow_exclusions_sql;
+use crate::api::session::{internal, ApiError, AuthContext};
 use crate::services::projections::{self, ProjectionRequest, ProjectionResponse};
+use crate::services::tax::USD_MXN_ROW_RATE_SQL;
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -47,79 +51,74 @@ struct ProjectionDefaults {
 async fn projection_defaults(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
-) -> Json<ProjectionDefaults> {
+) -> Result<Json<ProjectionDefaults>, ApiError> {
     // Mirror cash_flow_trends: convert every amount to USD, exclude internal
     // transfers / CC payments / lending legs / split parents so the income and
     // spending totals reflect genuine external cash flow.
     //
     // The exclusion set is the SHARED fragment
-    // (dashboard::TRAILING_CASHFLOW_EXCLUSIONS_SQL) used verbatim by
+    // (dashboard::trailing_cashflow_exclusions_sql) used verbatim by
     // `dashboard::emergency_fund`, so the projection's trailing-12-mo spend and
-    // the emergency-fund runway can never silently disagree — both now apply
-    // the cash_fx_transfers anti-join that this query previously lacked.
+    // the emergency-fund runway can never silently disagree — both apply the
+    // cash_fx_transfers anti-join that this query previously lacked.
     //
-    // FX uses the shared policy (real rate when present, flagged fallback when
-    // missing/stale). The resolved rate is bound as $2 and used as the MXN→USD
-    // divisor — numerically identical to the old in-SQL latest rate whenever a
-    // fresh rate exists.
-    let fx = latest_usd_mxn_rate(&state.db).await.rate;
+    // FX is PER ROW: each MXN transaction is divided by the USD→MXN rate in
+    // effect on its own date (the shared `USD_MXN_ROW_RATE_SQL` rule from
+    // services::tax — on-or-before-date rate, else latest, else 20.0). This
+    // query previously converted all 12 months at the single LATEST rate;
+    // USD/MXN moves several percent over a year, so latest-rate conversion
+    // systematically skews the annualized income/spend (and therefore the
+    // prefilled contribution) whenever the peso has trended.
     let excl = trailing_cashflow_exclusions_sql();
     let sql = format!(
         r#"
         SELECT
             COALESCE(SUM(CASE WHEN t.amount > 0 THEN
                 CASE WHEN a.currency = 'MXN'
-                     THEN t.amount / $2::numeric
+                     THEN t.amount / fx.rate
                      ELSE t.amount END
                 ELSE 0 END), 0) AS income,
             COALESCE(SUM(CASE WHEN t.amount < 0 THEN
                 CASE WHEN a.currency = 'MXN'
-                     THEN ABS(t.amount) / $2::numeric
+                     THEN ABS(t.amount) / fx.rate
                      ELSE ABS(t.amount) END
                 ELSE 0 END), 0) AS spending,
             COUNT(DISTINCT TO_CHAR(t.date, 'YYYY-MM')) AS months
         FROM transactions t
         JOIN accounts a ON a.id = t.account_id
+        CROSS JOIN LATERAL (SELECT {USD_MXN_ROW_RATE_SQL} AS rate) fx
         WHERE TRUE
         {excl}
         "#,
     );
+    // A DB failure here must surface as a logged 500, not as fabricated
+    // zeros: the old `.ok()` path made "query blew up" indistinguishable
+    // from "user has no transactions", silently shipping a $0 prefill.
     let row = sqlx::query(&sql)
         .bind(ctx.user_id)
-        .bind(fx)
         .fetch_one(&state.db)
         .await
-        .ok();
+        .map_err(internal)?;
 
-    let (income, spending, months) = match row {
-        Some(r) => {
-            let income: f64 = r
-                .try_get::<rust_decimal::Decimal, _>("income")
-                .ok()
-                .map(|d| d.to_string().parse().unwrap_or(0.0))
-                .unwrap_or(0.0);
-            let spending: f64 = r
-                .try_get::<rust_decimal::Decimal, _>("spending")
-                .ok()
-                .map(|d| d.to_string().parse().unwrap_or(0.0))
-                .unwrap_or(0.0);
-            let months: i64 = r.try_get("months").unwrap_or(0);
-            (income, spending, months.max(0))
-        }
-        None => (0.0, 0.0, 0),
-    };
+    let income: Decimal = row.try_get("income").map_err(internal)?;
+    let spending: Decimal = row.try_get("spending").map_err(internal)?;
+    let months: i64 = row.try_get::<i64, _>("months").map_err(internal)?.max(0);
 
     // Annualize from however many months we actually have, so a user with 4
     // months of imported history isn't told they spend a third of reality.
-    let n = months.max(1) as f64;
-    let annual_income = income / n * 12.0;
-    let annual_expenses = spending / n * 12.0;
-    let monthly_contribution = ((annual_income - annual_expenses) / 12.0).max(0.0);
+    // Math stays in Decimal and is presented at 2dp — raw f64 division used
+    // to ship noise like 1828.8000000000002 to the client.
+    let n = Decimal::from(months.max(1));
+    let annual_income_d = income / n * dec!(12);
+    let annual_expenses_d = spending / n * dec!(12);
+    let monthly_contribution_d = ((annual_income_d - annual_expenses_d) / dec!(12))
+        .max(Decimal::ZERO)
+        .round_dp(2);
 
-    Json(ProjectionDefaults {
-        monthly_contribution,
-        annual_expenses,
-        annual_income,
+    Ok(Json(ProjectionDefaults {
+        monthly_contribution: monthly_contribution_d.to_f64().unwrap_or(0.0),
+        annual_expenses: annual_expenses_d.round_dp(2).to_f64().unwrap_or(0.0),
+        annual_income: annual_income_d.round_dp(2).to_f64().unwrap_or(0.0),
         months_of_data: months as i32,
-    })
+    }))
 }

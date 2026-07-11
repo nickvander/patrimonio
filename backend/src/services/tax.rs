@@ -312,7 +312,7 @@ const INCOME_PREDICATE_SQL: &str = r#"(
 ///      behavior of summing raw MXN and USD amounts together, which was off
 ///      ~18x by construction. Zero/negative stored rates are skipped so a
 ///      bad row can never divide-by-zero a sum into NULL.
-const USD_MXN_ROW_RATE_SQL: &str = r#"COALESCE(
+pub(crate) const USD_MXN_ROW_RATE_SQL: &str = r#"COALESCE(
     (SELECT rate FROM exchange_rates
       WHERE base_currency = 'USD' AND target_currency = 'MXN'
         AND rate > 0
