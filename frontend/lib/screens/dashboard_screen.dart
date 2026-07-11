@@ -23,7 +23,8 @@ import '../theme/typography.dart';
 import '../utils/account_category.dart';
 import '../utils/app_locale.dart';
 import '../utils/currency.dart';
-import '../utils/lending_summary.dart' show sumLoansConverted;
+import '../utils/lending_summary.dart'
+    show sumLoansConverted, loansAreMixedCurrency;
 import '../utils/percent_format.dart';
 import '../utils/supported_banks.dart';
 import '../utils/sync_progress.dart';
@@ -1788,8 +1789,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .toList();
     if (activeLoans.isEmpty) return null;
 
+    // Show the loans' NATIVE currency when they all share one (e.g. an
+    // all-MXN portfolio reads "MXN 178,704", not a "$10,211" conversion) —
+    // matching the Lending tab and the rest of the app. Only a genuinely
+    // mixed portfolio is converted to the display currency.
+    final mixed = loansAreMixedCurrency(activeLoans);
+    final summaryCur = mixed
+        ? _targetCurrency
+        : (activeLoans.first['currency'] ?? _targetCurrency).toString();
     final totalOutstanding = sumLoansConverted(
-        activeLoans, 'outstanding', _targetCurrency, usdMxnRate);
+        activeLoans, 'outstanding', summaryCur, usdMxnRate);
 
     // Soonest reminder is the head of the (due_date ASC) list; overdue means
     // any reminder with days_overdue > 0.
@@ -1848,7 +1857,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 10),
               Text(
-                currencyFormat.format(totalOutstanding),
+                formatCurrencyAmount(totalOutstanding, summaryCur),
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w900,
