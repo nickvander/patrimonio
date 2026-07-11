@@ -288,6 +288,24 @@ fn dec_to_f64(d: Option<rust_decimal::Decimal>) -> f64 {
     d.and_then(|v| v.to_string().parse().ok()).unwrap_or(0.0)
 }
 
+/// Money with thousands separators, e.g. `fmt_money("MX$", 16000.0)` ->
+/// "MX$16,000.00". Comma grouping + dot decimal reads correctly for both
+/// English and Mexican Spanish (MXN uses the same convention).
+fn fmt_money(sym: &str, x: f64) -> String {
+    let neg = x < 0.0;
+    let s = format!("{:.2}", x.abs());
+    let (int_part, dec) = s.split_once('.').unwrap_or((s.as_str(), "00"));
+    let len = int_part.len();
+    let mut grouped = String::with_capacity(len + len / 3);
+    for (i, c) in int_part.chars().enumerate() {
+        if i > 0 && (len - i) % 3 == 0 {
+            grouped.push(',');
+        }
+        grouped.push(c);
+    }
+    format!("{}{sym}{grouped}.{dec}", if neg { "-" } else { "" })
+}
+
 /// Simple interest accrued from origination to today: P · r · t(years).
 /// Used for the informational `interest_accrued` ("interest owed so
 /// far") figure — NOT for `outstanding`, which is the running principal.
@@ -2839,7 +2857,7 @@ async fn loan_agreement(
             .replace('>', "&gt;")
     }
     let sym = if v.currency == "MXN" { "MX$" } else { "$" };
-    let money = |x: f64| format!("{sym}{x:.2}");
+    let money = |x: f64| fmt_money(sym, x);
     let per = if v.rate_period == "monthly" {
         t("month", "mes")
     } else {
@@ -3467,7 +3485,7 @@ async fn loan_payment_plan(
             .replace('>', "&gt;")
     }
     let sym = if v.currency == "MXN" { "MX$" } else { "$" };
-    let money = |x: f64| format!("{sym}{x:.2}");
+    let money = |x: f64| fmt_money(sym, x);
 
     // Plain-language interest description (mirrors loan_agreement's).
     let per = if v.rate_period == "monthly" { "month" } else { "year" };
@@ -3586,6 +3604,16 @@ mod tests {
     use super::*;
     use rust_decimal::Decimal;
     use std::str::FromStr;
+
+    #[test]
+    fn fmt_money_groups_thousands() {
+        assert_eq!(fmt_money("MX$", 16000.0), "MX$16,000.00");
+        assert_eq!(fmt_money("$", 1234567.5), "$1,234,567.50");
+        assert_eq!(fmt_money("MX$", 500.0), "MX$500.00");
+        assert_eq!(fmt_money("MX$", 0.0), "MX$0.00");
+        assert_eq!(fmt_money("$", -4200.25), "-$4,200.25");
+        assert_eq!(fmt_money("$", 999.99), "$999.99");
+    }
 
     fn d(s: &str) -> Decimal {
         Decimal::from_str(s).unwrap()

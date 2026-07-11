@@ -3117,7 +3117,7 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
               Text(
                 AppLocalizations.of(context).lendLentOutstandingMeta(
                     _money((widget.loan['principal'] as num?) ?? 0),
-                    _money((widget.loan['outstanding'] as num?) ?? 0)),
+                    _money(_totalOwedRemaining())),
                 style: TextStyle(fontSize: 13, color: context.textSubtle),
               ),
               const SizedBox(height: 20),
@@ -3752,17 +3752,39 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
     return bal.abs() < 0.005 ? 0 : bal;
   }
 
-  /// "Paid X of N payments" + a progress bar of principal repaid and the
+  /// What the borrower still owes IN TOTAL (principal + interest): the sum of
+  /// the unpaid scheduled payments. Falls back to the loan's principal-based
+  /// outstanding when there's no generated schedule.
+  double _totalOwedRemaining() {
+    final scheduled = _payments
+        .where((p) => (p as Map)['scheduled_amount'] != null)
+        .toList();
+    if (scheduled.isEmpty) {
+      return (widget.loan['outstanding'] as num?)?.toDouble() ??
+          (widget.loan['principal'] as num?)?.toDouble() ??
+          0;
+    }
+    return scheduled.where((p) => !_rowPaid(p as Map)).fold<double>(
+        0, (a, p) => a + (((p as Map)['scheduled_amount'] as num?)?.toDouble() ?? 0));
+  }
+
+  /// "Paid X of N payments" + a progress bar of the total repaid and the
   /// amount remaining.
   Widget _buildScheduleProgress(List<dynamic> rows) {
     final l10n = AppLocalizations.of(context);
     final total = rows.length;
     final paid = rows.where((p) => _rowPaid(p as Map)).length;
-    final principal = (widget.loan['principal'] as num?)?.toDouble() ?? 0;
-    final outstanding =
-        (widget.loan['outstanding'] as num?)?.toDouble() ?? principal;
-    final repaid = (principal - outstanding).clamp(0, principal);
-    final frac = principal <= 0 ? 0.0 : (repaid / principal).clamp(0.0, 1.0);
+    // Base the bar + "remaining" on the TOTAL owed (Σ scheduled payments =
+    // principal + interest), not just principal — so a 14k + 2k loan reads
+    // "16,000 remaining", matching the schedule total and the agreement.
+    double schedAmount(dynamic p) =>
+        ((p as Map)['scheduled_amount'] as num?)?.toDouble() ?? 0;
+    final totalOwed = rows.fold<double>(0, (a, p) => a + schedAmount(p));
+    final outstanding = rows
+        .where((p) => !_rowPaid(p as Map))
+        .fold<double>(0, (a, p) => a + schedAmount(p));
+    final frac =
+        totalOwed <= 0 ? 0.0 : ((totalOwed - outstanding) / totalOwed).clamp(0.0, 1.0);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
