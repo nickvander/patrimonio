@@ -137,6 +137,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Plaid keeps 500-ing) doesn't nag on every load. A NEW failure re-shows.
   Set<String> _syncBannerSnoozeIds = const {};
   DateTime? _syncBannerSnoozeUntil;
+  // The lender's full name for loan agreements (app setting 'lender_name').
+  final _lenderNameCtrl = TextEditingController();
+  bool _savingLenderName = false;
   // Drives the "refresh while a newly-linked institution is still syncing"
   // backstop (see _scheduleSyncPollIfNeeded). Bounded by _syncPollAttempts.
   Timer? _syncPollTimer;
@@ -300,6 +303,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _accountAlerts = Preferences.getAccountAlerts();
     _hydrateAccountAlerts();
     _loadSyncBannerSnooze();
+    _loadLenderName();
     _dismissedNotifs = Preferences.getDismissedNotifications();
     _overviewDetailsExpanded = Preferences.getOverviewDetailsExpanded();
     _managementDetailsExpanded = Preferences.getManagementDetailsExpanded();
@@ -345,6 +349,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _realtimeSub?.cancel();
     _cancelPlaidSubs();
     _realtime.dispose();
+    _lenderNameCtrl.dispose();
     super.dispose();
   }
 
@@ -2924,6 +2929,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (_) {/* local dismissal still holds for the session */}
   }
 
+  Future<void> _loadLenderName() async {
+    try {
+      final raw = await _apiService.getSetting('lender_name');
+      if (raw is String && raw.isNotEmpty && mounted) {
+        _lenderNameCtrl.text = raw;
+      }
+    } catch (_) {/* absent → keep empty (agreement falls back to username) */}
+  }
+
+  Future<void> _saveLenderName() async {
+    setState(() => _savingLenderName = true);
+    try {
+      await _apiService.putSetting('lender_name', _lenderNameCtrl.text.trim());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context).dashLenderNameSaved)),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context).dashLenderNameSaveFailed)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _savingLenderName = false);
+    }
+  }
+
   Future<void> _handleReconnect(String institutionId) async {
     setState(() => _isLoading = true);
     try {
@@ -5002,6 +5036,60 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     );
                   }),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(height: gap),
+          // Your name — used as the lender on loan agreements.
+          Card(
+            child: Padding(
+              padding: EdgeInsets.all(pad),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.badge_outlined,
+                          size: 18, color: context.tealAccent),
+                      const SizedBox(width: 8),
+                      Text(l.dashLenderNameTitle,
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(l.dashLenderNameSubtitle,
+                      style:
+                          TextStyle(fontSize: 12, color: context.textSubtle)),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _lenderNameCtrl,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => _saveLenderName(),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            hintText: l.dashLenderNameHint,
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton(
+                        onPressed: _savingLenderName ? null : _saveLenderName,
+                        child: _savingLenderName
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2))
+                            : Text(l.dashSave),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),

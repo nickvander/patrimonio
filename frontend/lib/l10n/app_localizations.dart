@@ -8384,6 +8384,42 @@ abstract class AppLocalizations {
   /// **'Interest owed so far'**
   String get lendingInterestOwedSoFar;
 
+  /// No description provided for @dashLenderNameTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your name'**
+  String get dashLenderNameTitle;
+
+  /// No description provided for @dashLenderNameSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Shown as the lender on loan agreements. Leave blank to use your username.'**
+  String get dashLenderNameSubtitle;
+
+  /// No description provided for @dashLenderNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. Nick Van der Auwermeulen'**
+  String get dashLenderNameHint;
+
+  /// No description provided for @dashLenderNameSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Name saved'**
+  String get dashLenderNameSaved;
+
+  /// No description provided for @dashLenderNameSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save your name'**
+  String get dashLenderNameSaveFailed;
+
+  /// No description provided for @dashSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get dashSave;
+
   /// No description provided for @dashDataExportTitle.
   ///
   /// In en, this message translates to:

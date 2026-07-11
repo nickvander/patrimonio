@@ -5238,6 +5238,25 @@ class AppLocalizationsEs extends AppLocalizations {
   String get lendingInterestOwedSoFar => 'Interés adeudado hasta ahora';
 
   @override
+  String get dashLenderNameTitle => 'Tu nombre';
+
+  @override
+  String get dashLenderNameSubtitle =>
+      'Aparece como prestamista en los contratos de préstamo. Déjalo en blanco para usar tu nombre de usuario.';
+
+  @override
+  String get dashLenderNameHint => 'p. ej. Nick Van der Auwermeulen';
+
+  @override
+  String get dashLenderNameSaved => 'Nombre guardado';
+
+  @override
+  String get dashLenderNameSaveFailed => 'No se pudo guardar tu nombre';
+
+  @override
+  String get dashSave => 'Guardar';
+
+  @override
   String get dashDataExportTitle => 'Exportar datos';
 
   @override

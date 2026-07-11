@@ -5194,6 +5194,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lendingInterestOwedSoFar => 'Interest owed so far';
 
   @override
+  String get dashLenderNameTitle => 'Your name';
+
+  @override
+  String get dashLenderNameSubtitle =>
+      'Shown as the lender on loan agreements. Leave blank to use your username.';
+
+  @override
+  String get dashLenderNameHint => 'e.g. Nick Van der Auwermeulen';
+
+  @override
+  String get dashLenderNameSaved => 'Name saved';
+
+  @override
+  String get dashLenderNameSaveFailed => 'Couldn\'t save your name';
+
+  @override
+  String get dashSave => 'Save';
+
+  @override
   String get dashDataExportTitle => 'Data export';
 
   @override

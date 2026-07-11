@@ -2795,15 +2795,30 @@ async fn loan_agreement(
     let today = chrono::Utc::now().date_naive();
     let v = loan_view(&r, today);
 
-    // Lender display name (the account owner's username).
-    let lender: String =
-        sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
+    // Lender display name: the user's configured full name (app setting
+    // 'lender_name'), else their username. Lets the agreement read
+    // "Nick Van der Auwermeulen" instead of a login handle.
+    let configured_name: Option<String> = sqlx::query(
+        "SELECT value FROM app_settings WHERE key = 'lender_name' AND user_id = $1",
+    )
+    .bind(ctx.user_id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten()
+    .and_then(|r| r.try_get::<serde_json::Value, _>("value").ok())
+    .and_then(|val| val.as_str().map(|s| s.trim().to_string()))
+    .filter(|s| !s.is_empty());
+    let lender: String = match configured_name {
+        Some(name) => name,
+        None => sqlx::query_scalar("SELECT username FROM users WHERE id = $1")
             .bind(ctx.user_id)
             .fetch_optional(&state.db)
             .await
             .ok()
             .flatten()
-            .unwrap_or_else(|| "Lender".to_string());
+            .unwrap_or_else(|| "Lender".to_string()),
+    };
 
     // Schedule rows for the table (if generated).
     let payments = sqlx::query(
@@ -2831,35 +2846,71 @@ async fn loan_agreement(
         t("year", "año")
     };
     let pct = v.interest_rate * 100.0;
-    let interest_desc = match v.interest_type.as_str() {
-        "none" => t("no interest", "sin interés").to_string(),
-        "simple" if es => format!("interés simple de {pct:.3}% por {per}"),
-        "simple" => format!("simple interest at {pct:.3}% per {per}"),
-        "amortized" if es => format!("amortizado a {pct:.3}% por {per}"),
-        "amortized" => format!("amortized at {pct:.3}% per {per}"),
-        "interest_only" if es => {
-            format!("solo interés a {pct:.3}% por {per} (capital al vencimiento)")
+    let total_sched_interest: f64 = payments
+        .iter()
+        .map(|p| dec_to_f64(p.try_get("scheduled_interest").ok()))
+        .sum();
+    // A custom schedule carries no rate but can still charge interest; a
+    // 0%/none loan charges none. Drives both the terms line and the clause.
+    let has_interest = v.interest_rate > 0.0 || total_sched_interest > 0.0;
+    let interest_desc = if !has_interest {
+        t("no interest", "sin intereses").to_string()
+    } else {
+        match v.interest_type.as_str() {
+            "simple" if es => format!("interés simple de {pct:.3}% por {per}"),
+            "simple" => format!("simple interest at {pct:.3}% per {per}"),
+            "amortized" if es => format!("amortizado a {pct:.3}% por {per}"),
+            "amortized" => format!("amortized at {pct:.3}% per {per}"),
+            "interest_only" if es => {
+                format!("solo interés a {pct:.3}% por {per} (capital al vencimiento)")
+            }
+            "interest_only" => {
+                format!("interest-only at {pct:.3}% per {per} (principal due at maturity)")
+            }
+            "compound" if es => {
+                format!("interés compuesto a {pct:.3}% por {per} (al vencimiento)")
+            }
+            "compound" => {
+                format!("compound interest at {pct:.3}% per {per} (due at maturity)")
+            }
+            // 'custom' (or any other) with interest present: it's itemised in
+            // the schedule rather than expressed as a single rate.
+            _ if es => "el interés indicado en el calendario".to_string(),
+            _ => "the interest itemised in the schedule".to_string(),
         }
-        "interest_only" => {
-            format!("interest-only at {pct:.3}% per {per} (principal due at maturity)")
-        }
-        "compound" if es => {
-            format!("interés compuesto a {pct:.3}% por {per} (al vencimiento)")
-        }
-        "compound" => format!("compound interest at {pct:.3}% per {per} (due at maturity)"),
-        _ => format!("{pct:.3}%"),
     };
 
     let mut schedule_html = String::new();
     if !payments.is_empty() {
+        let paid_count = payments
+            .iter()
+            .filter(|p| {
+                p.try_get::<String, _>("status").ok().as_deref() == Some("paid")
+            })
+            .count();
+        let total_count = payments.len();
+        // A plain-language caption above the grid so the schedule reads as a
+        // progress record, not just a table.
+        let caption = if es {
+            format!(
+                "{paid_count} de {total_count} pagos completados · {} pendiente",
+                money(v.outstanding)
+            )
+        } else {
+            format!(
+                "{paid_count} of {total_count} payments completed · {} remaining",
+                money(v.outstanding)
+            )
+        };
         schedule_html.push_str(&format!(
-            "<h2>{}</h2><table><thead><tr>\
-             <th>#</th><th>{}</th><th>{}</th><th>{}</th><th>{}</th></tr></thead><tbody>",
+            "<h2>{}</h2><p class=\"caption\">{caption}</p><table><thead><tr>\
+             <th>#</th><th>{}</th><th class=\"num\">{}</th><th class=\"num\">{}</th><th class=\"num\">{}</th><th class=\"st\">{}</th></tr></thead><tbody>",
             t("Repayment schedule", "Calendario de pagos"),
             t("Due", "Vence"),
             t("Payment", "Pago"),
             t("Principal", "Capital"),
             t("Interest", "Interés"),
+            t("Status", "Estado"),
         ));
         for p in &payments {
             let n: i32 = p.try_get("installment_number").unwrap_or(0);
@@ -2870,8 +2921,18 @@ async fn loan_agreement(
             let amt = dec_to_f64(p.try_get("scheduled_amount").ok());
             let prin = dec_to_f64(p.try_get("scheduled_principal").ok());
             let int = dec_to_f64(p.try_get("scheduled_interest").ok());
+            let paid =
+                p.try_get::<String, _>("status").ok().as_deref() == Some("paid");
+            let (row_cls, status_cell) = if paid {
+                (
+                    " class=\"paid\"",
+                    format!("<span class=\"ok\">✔ {}</span>", t("Paid", "Pagado")),
+                )
+            } else {
+                ("", t("Pending", "Pendiente").to_string())
+            };
             schedule_html.push_str(&format!(
-                "<tr><td>{n}</td><td>{due}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td></tr>",
+                "<tr{row_cls}><td>{n}</td><td>{due}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"st\">{status_cell}</td></tr>",
                 money(amt), money(prin), money(int)
             ));
         }
@@ -2908,10 +2969,13 @@ async fn loan_agreement(
     let principal_str = format!("{:.2}", v.principal);
     let currency_esc = esc_html(&v.currency);
     let interest_esc = esc_html(&interest_desc);
-    let value_para = if es {
-        format!("Por el valor recibido, el Prestatario se compromete a pagar al Prestamista la suma principal de <strong>{principal_str} {currency_esc}</strong>, junto con {interest_esc}, conforme a los términos aquí establecidos.")
-    } else {
-        format!("For value received, the Borrower promises to pay the Lender the principal sum of <strong>{principal_str} {currency_esc}</strong>, together with {interest_esc}, according to the terms set out herein.")
+    // "…with the interest…" vs "…without interest" so a 0% loan doesn't read
+    // "together with no interest".
+    let value_para = match (es, has_interest) {
+        (true, true) => format!("Por el valor recibido, el Prestatario se compromete a pagar al Prestamista la suma principal de <strong>{principal_str} {currency_esc}</strong>, con {interest_esc}, conforme a los términos aquí establecidos."),
+        (true, false) => format!("Por el valor recibido, el Prestatario se compromete a pagar al Prestamista la suma principal de <strong>{principal_str} {currency_esc}</strong>, sin intereses, conforme a los términos aquí establecidos."),
+        (false, true) => format!("For value received, the Borrower promises to pay the Lender the principal sum of <strong>{principal_str} {currency_esc}</strong>, with {interest_esc}, according to the terms set out herein."),
+        (false, false) => format!("For value received, the Borrower promises to pay the Lender the principal sum of <strong>{principal_str} {currency_esc}</strong>, without interest, according to the terms set out herein."),
     };
     let (en_on, es_on) = if es { ("", " on") } else { (" on", "") };
     let status_hdr = format!("{} {}", t("Status as of", "Estado al"), today);
@@ -2951,7 +3015,12 @@ async fn loan_agreement(
   thead th {{ background:var(--soft); color:var(--accent); text-align:left; padding:8px 10px; border-bottom:2px solid #99f6e4; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }}
   tbody td {{ padding:7px 10px; border-bottom:1px solid var(--line); }}
   tbody tr:nth-child(even) {{ background:#fafafa; }}
+  tbody tr.paid {{ background:#f0fdf4; }}
+  tbody tr.paid td:nth-child(2) {{ color:var(--muted); }}
   td.num, th.num {{ text-align:right; font-variant-numeric: tabular-nums; }}
+  td.st, th.st {{ text-align:center; white-space:nowrap; }}
+  .ok {{ color:#16a34a; font-weight:700; }}
+  p.caption {{ font-size:13px; color:var(--muted); margin:2px 0 10px; }}
   thead th:nth-child(n+3) {{ text-align:right; }}
   .sig {{ margin-top: 44px; display: flex; justify-content: space-between; gap:24px; }}
   .sig div {{ flex:1; border-top: 1px solid var(--ink); padding-top: 6px; font-size: 12px; color:var(--muted); }}
@@ -3001,7 +3070,7 @@ async fn loan_agreement(
         title = t("Promissory Note & Loan Agreement", "Pagaré y Contrato de Préstamo"),
         subtitle = t(
             "A personal record of the loan, its terms, and its repayment.",
-            "Un registro personal del préstamo, sus términos y su pago."
+            "Registro personal del préstamo: sus términos y sus pagos."
         ),
         print = t("Print / Save as PDF", "Imprimir / Guardar como PDF"),
         en_on_cls = en_on.trim(),
@@ -3024,7 +3093,7 @@ async fn loan_agreement(
         borrower_sig = t("Borrower signature / date", "Firma del prestatario / fecha"),
         disclaimer = t(
             "Generated by Patrimonio as a personal record-keeping convenience. This document is not legal advice; consult a qualified professional for an enforceable agreement.",
-            "Generado por Patrimonio como una conveniencia de registro personal. Este documento no es asesoría legal; consulta a un profesional calificado para un contrato exigible."
+            "Generado por Patrimonio como registro personal. Este documento no constituye asesoría legal; para un contrato exigible, consulta a un profesional."
         ),
         borrower = esc_html(&v.borrower_name),
         lender = esc_html(&lender),
