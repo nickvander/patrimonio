@@ -648,7 +648,7 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
                         ),
                       ),
                       TextSpan(
-                        text: formatCurrencyAmount(spot.y, sparkCurrency),
+                        text: displayCurrencyAmount(spot.y, sparkCurrency),
                         style: TextStyle(
                           color: ctx.tooltipOnSurface,
                           fontWeight: FontWeight.bold,

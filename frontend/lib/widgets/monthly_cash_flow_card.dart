@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
 import '../utils/chart_touch.dart';
+import '../utils/currency.dart';
 import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 
@@ -192,7 +193,7 @@ class MonthlyCashFlowCard extends StatelessWidget {
                 Expanded(
                   child: _StatBlock(
                     label: l.cfIncome,
-                    value: currencyFormat.format(income),
+                    value: currencyFormat.displayMoney(income),
                     accent: context.tealAccent,
                   ),
                 ),
@@ -200,7 +201,7 @@ class MonthlyCashFlowCard extends StatelessWidget {
                 Expanded(
                   child: _StatBlock(
                     label: l.cfExpense,
-                    value: currencyFormat.format(spending),
+                    value: currencyFormat.displayMoney(spending),
                     accent: context.pinkAccent,
                   ),
                 ),
@@ -213,15 +214,15 @@ class MonthlyCashFlowCard extends StatelessWidget {
             final contextParts = <String>[];
             if (invested.abs() >= 0.005) {
               contextParts.add(invested >= 0
-                  ? l.cfInvestedContext(currencyFormat.format(invested.abs()))
-                  : l.cfWithdrawnContext(currencyFormat.format(invested.abs())));
+                  ? l.cfInvestedContext(currencyFormat.displayMoney(invested.abs()))
+                  : l.cfWithdrawnContext(currencyFormat.displayMoney(invested.abs())));
             }
             if (transferred.abs() >= 0.005) {
               contextParts.add(transferred >= 0
                   ? l.cfTransferredInContext(
-                      currencyFormat.format(transferred.abs()))
+                      currencyFormat.displayMoney(transferred.abs()))
                   : l.cfTransferredOutContext(
-                      currencyFormat.format(transferred.abs())));
+                      currencyFormat.displayMoney(transferred.abs())));
             }
             final Widget? contextLine = contextParts.isEmpty
                 ? null
@@ -373,7 +374,7 @@ class _NetLine extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              (positive ? '+' : '−') + currencyFormat.format(net.abs()),
+              (positive ? '+' : '−') + currencyFormat.displayMoney(net.abs()),
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w800,
@@ -389,7 +390,7 @@ class _NetLine extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
                   l.cfVsLastMonth(
-                      '${delta >= 0 ? '↑' : '↓'} ${currencyFormat.format(delta.abs())}'),
+                      '${delta >= 0 ? '↑' : '↓'} ${currencyFormat.displayMoney(delta.abs())}'),
                   style: TextStyle(
                     fontSize: 11,
                     color: delta >= 0 ? context.positive : context.pinkAccent,
@@ -594,7 +595,7 @@ class _NetSparkline extends StatelessWidget {
                   // spot.y is the month's net, already conversionFactor-
                   // converted at the call site.
                   TextSpan(
-                    text: currencyFormat.format(spot.y),
+                    text: currencyFormat.displayMoney(spot.y),
                     style: TextStyle(
                       color: ctx.tooltipOnSurface,
                       fontWeight: FontWeight.bold,

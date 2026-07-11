@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 import 'dividend_detail_sheet.dart';
 import 'skeleton.dart';
@@ -246,7 +247,7 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
   /// USD figure scaled into the display currency, same pattern as the
   /// dividend sheet and the cards behind it.
   String _money(double usd) =>
-      widget.currencyFormat.format(usd * widget.conversionFactor);
+      widget.currencyFormat.displayMoney(usd * widget.conversionFactor);
 
   /// Explicitly signed USD figure ("+$1,985.80"); negatives already carry
   /// the sign from the format.

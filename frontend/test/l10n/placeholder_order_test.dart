@@ -71,4 +71,19 @@ void main() {
     final s = await render(tester, (l) => l.lwNotifStaleSyncTitle('DAYS', 'NM'));
     expect(s, 'NM last synced DAYSd ago');
   });
+
+  testWidgets('projTooltipYearAmount(amount, year)', (tester) async {
+    // U1 template: "{year} · {amount}" — synthesized placeholders, so the
+    // generated signature is alphabetical: (amount, year), amount FIRST.
+    final s =
+        await render(tester, (l) => l.projTooltipYearAmount('AMT', 'YR'));
+    expect(s, 'YR · AMT');
+  });
+
+  testWidgets('projValueEntryRange(min, max)', (tester) async {
+    // U2 template: "Enter an amount between {min} and {max}" — explicit arb
+    // placeholders keep the declaration order (min, max), NOT alphabetical.
+    final s = await render(tester, (l) => l.projValueEntryRange('MIN', 'MAX'));
+    expect(s, 'Enter an amount between MIN and MAX');
+  });
 }

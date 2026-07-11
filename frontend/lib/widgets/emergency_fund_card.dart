@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../theme/typography.dart';
+import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
 /// "How many months of expenses could your liquid cash cover?" — reads
@@ -50,7 +51,7 @@ class _EmergencyFundCardState extends State<EmergencyFundCard> {
   }
 
   String _money(double usd) =>
-      widget.currencyFormat.format(usd * widget.conversionFactor);
+      widget.currencyFormat.displayMoney(usd * widget.conversionFactor);
 
   @override
   Widget build(BuildContext context) {

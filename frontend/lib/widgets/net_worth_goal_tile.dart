@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/preferences.dart';
+import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
 /// Compact "where am I against my net-worth goal" tile shown on the
@@ -88,7 +89,7 @@ class NetWorthGoalTile extends StatelessWidget {
             Text(
               // gen-l10n orders these alphabetically → (amount, remaining, year).
               l.pfGoalHitBy(
-                currencyFormat.format(goalUsd * conversionFactor),
+                currencyFormat.displayMoney(goalUsd * conversionFactor),
                 yearsRemaining <= 0
                     ? l.pfGoalDueNow
                     : l.pfGoalYearsLeft(yearsRemaining),
@@ -111,7 +112,7 @@ class NetWorthGoalTile extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               l.pfGoalCurrent(
-                  currencyFormat.format(netWorthUsd * conversionFactor)),
+                  currencyFormat.displayMoney(netWorthUsd * conversionFactor)),
               style: TextStyle(
                 fontSize: 12,
                 color: context.textSubtle,
@@ -305,7 +306,7 @@ class _PaceVerdict {
       // yMMM follows the locale ("Jun 2028" / "jun 2028").
       final when = DateFormat.yMMM().format(projected!);
       final rate =
-          currencyFormat.format(monthlyDeltaUsd! * conversionFactor);
+          currencyFormat.displayMoney(monthlyDeltaUsd! * conversionFactor);
       // gen-l10n orders positional args alphabetically: (rate, when).
       return '$base · ${l.pfGoalOnPaceFor(rate, when)}';
     }
@@ -313,7 +314,7 @@ class _PaceVerdict {
     // Behind: surface the catch-up contribution to still hit the goal year.
     if (_kind == 2 && requiredMonthlyUsd != null && requiredMonthlyUsd! > 0) {
       final need =
-          currencyFormat.format(requiredMonthlyUsd! * conversionFactor);
+          currencyFormat.displayMoney(requiredMonthlyUsd! * conversionFactor);
       return '$base · ${l.pfGoalNeedPerMonth(need)}';
     }
 

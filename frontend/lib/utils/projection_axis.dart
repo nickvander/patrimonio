@@ -6,11 +6,12 @@ import 'dart:math' as math;
 /// phone with a 50-year horizon and thins them needlessly on wide screens.
 /// Budget ~1 label per 56px on narrow plots / 62px on wide ones (the house
 /// thinning rule, skill §4 — the narrow budget is deliberately a bit wider
-/// than the 46px used elsewhere because these labels are wide: "Año 50" must
-/// never collide with its neighbor), then round the step up to a clean
-/// 5/10/15/…, preferring a step that divides [projectionYears] so the last
-/// year keeps its label (the axis is anchored at year 0, so the first always
-/// shows).
+/// than the 46px used elsewhere; it was sized for "Año 50" and now carries
+/// U1's 4-digit calendar years, e.g. "2026", which render ~28–30px at the
+/// 12px label size, so the budget still leaves a comfortable gap), then
+/// round the step up to a clean 5/10/15/…, preferring a step that divides
+/// [projectionYears] so the last year keeps its label (the axis is anchored
+/// at year 0, so the first always shows).
 double projectionYearAxisInterval({
   required double plotWidth,
   required int projectionYears,

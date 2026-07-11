@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
 import '../utils/bill_forecast.dart';
+import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
 /// 12-month forward projection of recurring bills, built from the already-
@@ -71,7 +72,7 @@ class UpcomingBillsCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      currencyFormat.format(totalUsd * conversionFactor),
+                      currencyFormat.displayMoney(totalUsd * conversionFactor),
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -88,7 +89,7 @@ class UpcomingBillsCard extends StatelessWidget {
                     // rather than a single scary number.
                     Text(
                       l.cfPerMonthApprox(currencyFormat
-                          .format(totalUsd / 12 * conversionFactor)),
+                          .displayMoney(totalUsd / 12 * conversionFactor)),
                       style:
                           TextStyle(color: context.textFaint, fontSize: 11),
                     ),
@@ -202,7 +203,7 @@ class UpcomingBillsCard extends StatelessWidget {
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
               final m = forecast[group.x.toInt()].month;
               return BarTooltipItem(
-                '${DateFormat.yMMM().format(m)}\n${currencyFormat.format(rod.toY)}',
+                '${DateFormat.yMMM().format(m)}\n${currencyFormat.displayMoney(rod.toY)}',
                 TextStyle(
                   color: context.tooltipOnSurface,
                   fontWeight: FontWeight.bold,

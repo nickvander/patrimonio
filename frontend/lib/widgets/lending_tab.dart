@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../utils/currency.dart' show MoneyDisplayFormat;
 import '../utils/flat_schedule.dart';
 import '../utils/lending_summary.dart';
 import '../utils/theme_colors.dart';
@@ -134,7 +135,9 @@ class _LendingTabState extends State<LendingTab> {
     // Anything whose magnitude rounds below half a cent is zero for display.
     // Without this, a negative zero (-0.0) or sub-cent residue formats as an
     // ugly "-$0.00" — e.g. the "Interest earned" stat with no payments yet.
-    return fmt.format(v.abs() < 0.005 ? 0 : v);
+    // Summary tiles and list rows are display surfaces, so cents drop at the
+    // whole-money threshold ("$16,000" rather than "$16,000.00").
+    return fmt.displayMoney(v.abs() < 0.005 ? 0 : v);
   }
 
   /// "≈ $1,729.18 USD" — the [amount] (in [fromCurrency]) converted to the
@@ -3086,6 +3089,17 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
     return fmt.format(v);
   }
 
+  /// Display variant of [_money] for headline figures (principal, total
+  /// owed, interest earned/accrued, amount remaining): cents drop at the
+  /// whole-money threshold. Schedule rows, payment history, and the
+  /// transaction picker keep the exact [_money] — those are reconciled
+  /// line by line.
+  String _moneyDisplay(num v) {
+    final fmt = NumberFormat.currency(
+        symbol: _currency == 'MXN' ? r'MX$' : r'$', decimalDigits: 2);
+    return fmt.displayMoney(v);
+  }
+
   @override
   Widget build(BuildContext context) {
     final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
@@ -3124,8 +3138,8 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
               const SizedBox(height: 4),
               Text(
                 AppLocalizations.of(context).lendLentOutstandingMeta(
-                    _money((widget.loan['principal'] as num?) ?? 0),
-                    _money(_totalOwedRemaining())),
+                    _moneyDisplay((widget.loan['principal'] as num?) ?? 0),
+                    _moneyDisplay(_totalOwedRemaining())),
                 style: TextStyle(fontSize: 13, color: context.textSubtle),
               ),
               const SizedBox(height: 20),
@@ -3262,7 +3276,7 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
                   children: [
                     TextSpan(text: '${l10n.lendingInterestEarnedLabel}: '),
                     TextSpan(
-                      text: _money(earned),
+                      text: _moneyDisplay(earned),
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         color: context.positive,
@@ -3272,7 +3286,7 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
                       const TextSpan(text: ' · '),
                       TextSpan(text: '${l10n.lendingAccruedNotYetPaid}: '),
                       TextSpan(
-                        text: _money(accrued),
+                        text: _moneyDisplay(accrued),
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
                           color: context.warning,
@@ -3808,7 +3822,7 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
               ),
             ),
             Text(
-              l10n.lendScheduleRemaining(_money(outstanding)),
+              l10n.lendScheduleRemaining(_moneyDisplay(outstanding)),
               style: TextStyle(fontSize: 12, color: context.textMuted),
             ),
           ],

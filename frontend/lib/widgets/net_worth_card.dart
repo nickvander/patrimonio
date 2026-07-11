@@ -238,7 +238,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
           child: Text(
-            currencyFormat.format(netWorth),
+            currencyFormat.displayMoney(netWorth),
             // JetBrains Mono with tabular lining figures — the signature
             // "ledger" hero number. Tabular figures keep digit columns
             // aligned as the value changes.
@@ -325,7 +325,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                   TextSpan(
                     children: [
                       TextSpan(
-                        text: formatCurrencyWithCode(e.net, e.cur),
+                        text: displayCurrencyWithCode(e.net, e.cur),
                         style: TextStyle(
                           color: context.textSubtle,
                           fontWeight: FontWeight.w700,
@@ -333,7 +333,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                       ),
                       if (!isTarget)
                         TextSpan(
-                          text: '  ≈ ${currencyFormat.format(converted)}',
+                          text: '  ≈ ${currencyFormat.displayMoney(converted)}',
                           style: TextStyle(
                             color: context.textFaint,
                             fontWeight: FontWeight.w400,
@@ -458,7 +458,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                       const SizedBox(width: 2),
                       Text(
                         '${totalUp ? '+' : '−'}'
-                        '${currencyFormat.format(totalAmount.abs())}',
+                        '${currencyFormat.displayMoney(totalAmount.abs())}',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -527,7 +527,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
           ),
           const SizedBox(width: 4),
           Text(
-            '${up ? '+' : '−'}${currencyFormat.format(amount)}',
+            '${up ? '+' : '−'}${currencyFormat.displayMoney(amount)}',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
@@ -805,7 +805,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                   ),
                   TextSpan(
                     text:
-                        '${AppLocalizations.of(context).pfTooltipNetWorth(currencyFormat.format((nw as num).toDouble() * conversionFactor))}\n',
+                        '${AppLocalizations.of(context).pfTooltipNetWorth(currencyFormat.displayMoney((nw as num).toDouble() * conversionFactor))}\n',
                     style: TextStyle(
                       color: context.tooltipOnSurface,
                       fontWeight: FontWeight.bold,
@@ -826,7 +826,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                     // background. See ThemeColorsExt.tooltipPositive.
                     TextSpan(
                       text:
-                          '${AppLocalizations.of(context).pfTooltipAssets(currencyFormat.format((ta as num).toDouble() * conversionFactor))}\n',
+                          '${AppLocalizations.of(context).pfTooltipAssets(currencyFormat.displayMoney((ta as num).toDouble() * conversionFactor))}\n',
                       style: TextStyle(
                         color: context.tooltipPositive,
                         fontSize: 12,
@@ -835,7 +835,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                     ),
                     TextSpan(
                       text:
-                          '${AppLocalizations.of(context).pfTooltipLiabilities(currencyFormat.format((tl as num).toDouble() * conversionFactor))}\n',
+                          '${AppLocalizations.of(context).pfTooltipLiabilities(currencyFormat.displayMoney((tl as num).toDouble() * conversionFactor))}\n',
                       style: TextStyle(
                         color: context.tooltipNegative,
                         fontSize: 12,
@@ -856,7 +856,7 @@ class _NetWorthCardState extends State<NetWorthCard> {
                     final value = raw.toDouble() * conversionFactor;
                     children.add(TextSpan(
                       text:
-                          '${inst.key}: ${currencyFormat.format(value)}\n',
+                          '${inst.key}: ${currencyFormat.displayMoney(value)}\n',
                       style: TextStyle(
                         color: inst.value,
                         fontSize: 11,
@@ -1281,7 +1281,7 @@ class _DeltaChip extends StatelessWidget {
                     : ' (${isUp ? '+' : ''}'
                         '${formatPercent(context, pct, digits: periodTag != null ? 1 : 2)})';
                 final amt =
-                    '${isUp ? '+' : '−'}${currencyFormat.format(amount.abs())}';
+                    '${isUp ? '+' : '−'}${currencyFormat.displayMoney(amount.abs())}';
                 return periodTag != null
                     ? '$amt$pctStr'
                     : '$amt$pctStr ${AppLocalizations.of(context).pfDeltaVsAgo(label)}';

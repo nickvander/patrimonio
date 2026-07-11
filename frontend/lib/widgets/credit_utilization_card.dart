@@ -206,8 +206,8 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
                   children: [
                     Text(
                       hasLimit
-                          ? '${currencyFormat.format(balance * conversionFactor)} / ${currencyFormat.format(limit * conversionFactor)}'
-                          : currencyFormat.format(balance * conversionFactor),
+                          ? '${currencyFormat.displayMoney(balance * conversionFactor)} / ${currencyFormat.displayMoney(limit * conversionFactor)}'
+                          : currencyFormat.displayMoney(balance * conversionFactor),
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,

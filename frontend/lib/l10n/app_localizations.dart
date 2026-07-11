@@ -4448,16 +4448,10 @@ abstract class AppLocalizations {
   /// **'Net worth projection'**
   String get projNetWorthProjection;
 
-  /// No description provided for @projYearAxisLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Yr {year}'**
-  String projYearAxisLabel(Object year);
-
   /// No description provided for @projTooltipYearAmount.
   ///
   /// In en, this message translates to:
-  /// **'Year {year}\n{amount}'**
+  /// **'{year} · {amount}'**
   String projTooltipYearAmount(Object amount, Object year);
 
   /// No description provided for @projFiNumber.
@@ -4873,6 +4867,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t save your goal'**
   String get projGoalSaveFailed;
+
+  /// U1: small label on the chart's dashed vertical marker at the retirement year (the accumulation-to-drawdown kink).
+  ///
+  /// In en, this message translates to:
+  /// **'Retirement'**
+  String get projRetirementMarker;
+
+  /// U1: label on the goal line when the goal amount exceeds the chart's y-range and the line is clamped to the top edge; {amount} is the compact goal amount.
+  ///
+  /// In en, this message translates to:
+  /// **'Your goal: {amount}'**
+  String projGoalOffChart(String amount);
+
+  /// U2: inline validation error in the typed slider-value dialog; min/max arrive pre-formatted as money. The explicit placeholders below keep this declaration order in the generated signature: (min, max).
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an amount between {min} and {max}'**
+  String projValueEntryRange(String min, String max);
+
+  /// U3: caption under the monthly-savings slider relating the current contribution to tracked annual income; {pct} is a pre-formatted percentage, capped at 100%.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re saving about {pct} of your income'**
+  String projSavingsRateCaption(String pct);
 
   /// No description provided for @taxTitle.
   ///

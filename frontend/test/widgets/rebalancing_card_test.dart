@@ -176,9 +176,10 @@ void main() {
       expect(find.text('on target'), findsOneWidget); // cash 10 vs 10
 
       // Greedy guidance: largest deficit first, then the remainder.
-      expect(find.text(r'Move $150,000.00 from Stocks & funds to Bonds'),
+      // Display rule: >= $10k drops cents ("$150,000", not "$150,000.00").
+      expect(find.text(r'Move $150,000 from Stocks & funds to Bonds'),
           findsOneWidget);
-      expect(find.text(r'Move $45,000.00 from Stocks & funds to Crypto'),
+      expect(find.text(r'Move $45,000 from Stocks & funds to Crypto'),
           findsOneWidget);
       // Two moves resolve everything — no truncation line.
       expect(find.text('…and smaller adjustments'), findsNothing);

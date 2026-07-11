@@ -507,7 +507,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
             label: AppLocalizations.of(context).axGroupAccounts(
               title,
               groupAccounts.length,
-              currencyFormat.format(total),
+              currencyFormat.displayMoney(total),
             ),
             hint: collapsed
                 ? AppLocalizations.of(context).axTapToExpand
@@ -544,7 +544,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                 color: context.textSubtle,
               );
               final totalText = Text(
-                currencyFormat.format(total),
+                currencyFormat.displayMoney(total),
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
@@ -606,7 +606,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                                 children: [
                                   TextSpan(
                                     text:
-                                        formatCurrencyWithCode(e.value, e.key),
+                                        displayCurrencyWithCode(e.value, e.key),
                                     style: TextStyle(
                                       fontWeight: FontWeight.w700,
                                       color: context.textSubtle,
@@ -615,7 +615,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                                   if (!isTarget)
                                     TextSpan(
                                       text:
-                                          '  ≈ ${currencyFormat.format(converted)}',
+                                          '  ≈ ${currencyFormat.displayMoney(converted)}',
                                       style: TextStyle(
                                         fontWeight: FontWeight.w400,
                                         color: context.textFaint,
@@ -867,8 +867,8 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
         institution: inst,
         countLabel: '${cluster.length} ${l.txAccounts.toLowerCase()}',
         totalLabel: curs.length == 1
-            ? formatCurrencyAmount(nativeSum, curs.first)
-            : currencyFormat.format(convSum),
+            ? displayCurrencyAmount(nativeSum, curs.first)
+            : currencyFormat.displayMoney(convSum),
         rows: inner,
       ));
     }
@@ -932,7 +932,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
               constraints:
                   BoxConstraints(maxWidth: constraints.maxWidth * 0.4),
               child: Text(
-                currencyFormat.format(total),
+                currencyFormat.displayMoney(total),
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
@@ -968,7 +968,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
     return Semantics(
       button: true,
       label: _accountRowSemanticsLabel(
-          l, name, formatCurrencyAmount(balance, sourceCurrency)),
+          l, name, displayCurrencyAmount(balance, sourceCurrency)),
       hint: l.ovwOpensAccountDetails,
       child: InkWell(
       onTap: () {
@@ -1011,7 +1011,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
             ),
             const SizedBox(width: 8),
             Text(
-              formatCurrencyAmount(balance, sourceCurrency),
+              displayCurrencyAmount(balance, sourceCurrency),
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -1069,7 +1069,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
         usdMxnRate > 0 && sourceCurrency != targetCurrency;
 
     // Native value — this is the "real" amount the bank reported.
-    final nativeText = formatCurrencyAmount(balance, sourceCurrency);
+    final nativeText = displayCurrencyAmount(balance, sourceCurrency);
     // Converted amount only matters when there's an FX conversion to do.
     final convertedAmount = convertCurrency(
       balance,
@@ -1138,7 +1138,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
       // "$50.16 base + 6 vaults" — makes clear the headline figure is the
       // savings base enhanced by the vaults, with the base called out.
       subBalance = Text(
-        '${formatCurrencyAmount(base, sourceCurrency)} ${l.pfBase} '
+        '${displayCurrencyAmount(base, sourceCurrency)} ${l.pfBase} '
         '+ ${vaultCount ?? 0} ${(vaultLabel ?? l.pfVaults).toLowerCase()}',
         style: TextStyle(
           fontSize: 11,
@@ -1161,7 +1161,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
       );
     } else if (needsConversion) {
       subBalance = Text(
-        '≈ ${currencyFormat.format(convertedAmount)}',
+        '≈ ${currencyFormat.displayMoney(convertedAmount)}',
         style: TextStyle(
           fontSize: 11,
           color: context.textFaint,

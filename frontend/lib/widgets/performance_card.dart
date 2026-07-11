@@ -7,6 +7,7 @@ import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../utils/chart_time_axis.dart';
 import '../utils/chart_touch.dart';
+import '../utils/currency.dart';
 import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 
@@ -165,7 +166,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
   }
 
   String _money(double usd) =>
-      widget.currencyFormat.format(usd * widget.conversionFactor);
+      widget.currencyFormat.displayMoney(usd * widget.conversionFactor);
 
   List<dynamic> _filterByRange(List<dynamic> data) {
     if (data.isEmpty || _range == DateRange.all) return data;
@@ -431,7 +432,7 @@ class _PerformanceCardState extends State<PerformanceCard> {
                                 // so format directly — _money would double-
                                 // convert.
                                 TextSpan(
-                                  text: widget.currencyFormat.format(spot.y),
+                                  text: widget.currencyFormat.displayMoney(spot.y),
                                   style: TextStyle(
                                     color: ctx.tooltipOnSurface,
                                     fontWeight: FontWeight.bold,

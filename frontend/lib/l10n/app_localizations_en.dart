@@ -2658,13 +2658,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get projNetWorthProjection => 'Net worth projection';
 
   @override
-  String projYearAxisLabel(Object year) {
-    return 'Yr $year';
-  }
-
-  @override
   String projTooltipYearAmount(Object amount, Object year) {
-    return 'Year $year\n$amount';
+    return '$year · $amount';
   }
 
   @override
@@ -2913,6 +2908,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get projGoalSaveFailed => 'Couldn\'t save your goal';
+
+  @override
+  String get projRetirementMarker => 'Retirement';
+
+  @override
+  String projGoalOffChart(String amount) {
+    return 'Your goal: $amount';
+  }
+
+  @override
+  String projValueEntryRange(String min, String max) {
+    return 'Enter an amount between $min and $max';
+  }
+
+  @override
+  String projSavingsRateCaption(String pct) {
+    return 'You\'re saving about $pct of your income';
+  }
 
   @override
   String get taxTitle => 'Tax planning';

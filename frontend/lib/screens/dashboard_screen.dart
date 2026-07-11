@@ -894,7 +894,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   TextSpan(
                     children: [
                       TextSpan(
-                        text: formatCurrencyWithCode(e.net, e.cur),
+                        text: displayCurrencyWithCode(e.net, e.cur),
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
                           color: context.textPrimary,
@@ -902,7 +902,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       if (!isTarget)
                         TextSpan(
-                          text: '  ≈ ${currencyFormat.format(converted)}',
+                          text: '  ≈ ${currencyFormat.displayMoney(converted)}',
                           style: TextStyle(
                             fontWeight: FontWeight.w400,
                             color: context.textFaint,
@@ -953,7 +953,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  currencyFormat.format(netWorth),
+                  currencyFormat.displayMoney(netWorth),
                   style: TextStyle(
                     fontSize: 30,
                     fontWeight: FontWeight.w800,
@@ -1049,7 +1049,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(width: 4),
           Text(
-            '$sign${currencyFormat.format(delta.abs())}$pctLabel',
+            '$sign${currencyFormat.displayMoney(delta.abs())}$pctLabel',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
@@ -1313,7 +1313,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final tiles = <_StatTile>[
       _StatTile(
         label: l.statAssets,
-        value: currencyFormat.format(assets),
+        value: currencyFormat.displayMoney(assets),
         // Neutral grey — a calm lead-in to the colour-coded secondary
         // stats so the row reads as a coherent set with a meaningful
         // category cue rather than competing colours.
@@ -1332,7 +1332,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       _StatTile(
         label: l.statLiabilities,
-        value: currencyFormat.format(liabilities),
+        value: currencyFormat.displayMoney(liabilities),
         accent: context.negative,
         onTap: liabilityAccounts.isEmpty
             ? null
@@ -1348,7 +1348,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       _StatTile(
         label: l.statCash,
-        value: currencyFormat.format(cash),
+        value: currencyFormat.displayMoney(cash),
         accent: context.info,
         onTap: cashAccounts.isEmpty
             ? null
@@ -1364,7 +1364,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       _StatTile(
         label: l.statInvestments,
-        value: currencyFormat.format(investments),
+        value: currencyFormat.displayMoney(investments),
         accent: context.tealAccent,
         // This subtotal is the full balance of investment/brokerage
         // accounts, including any uninvested cash sleeve — so it can sit
@@ -1393,7 +1393,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ((_portfolioData?['holdings'] as List?) ?? const []).isNotEmpty)
         _StatTile(
           label: l.ovw3DividendsPerYear,
-          value: currencyFormat.format(dividendIncome * conversionFactor),
+          value: currencyFormat.displayMoney(dividendIncome * conversionFactor),
           // Income accent — same styling family as the Investments tile's
           // category cue, but in the "money coming in" green.
           accent: context.positive,
@@ -1411,7 +1411,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (realAssets > 0)
         _StatTile(
           label: 'Real assets',
-          value: currencyFormat.format(realAssets),
+          value: currencyFormat.displayMoney(realAssets),
           accent: context.yellowAccent,
           onTap: realAssetAccounts.isEmpty
               ? null
@@ -1514,7 +1514,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ),
                       Text(
-                        currencyFormat.format(total),
+                        currencyFormat.displayMoney(total),
                         style: brandDisplayStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
@@ -1545,10 +1545,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       // Native figure always carries its ISO code so a
                       // dual-currency list is self-labelling; the reporting
                       // equivalent sits beneath only when it actually differs.
-                      final nativeStr = formatCurrencyWithCode(
+                      final nativeStr = displayCurrencyWithCode(
                           row.nativeBalance, row.nativeCurrency);
                       final reportedStr =
-                          currencyFormat.format(row.reportedBalance);
+                          currencyFormat.displayMoney(row.reportedBalance);
                       final showReported = row.nativeCurrency.toUpperCase() !=
                           _targetCurrency.toUpperCase();
                       return ListTile(
@@ -1700,7 +1700,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             TextSpan(
               children: [
                 TextSpan(
-                  text: formatCurrencyWithCode(native, cur),
+                  text: displayCurrencyWithCode(native, cur),
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     color: color,
@@ -1708,7 +1708,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 if (!isTarget)
                   TextSpan(
-                    text: '  ≈ ${currencyFormat.format(converted)}',
+                    text: '  ≈ ${currencyFormat.displayMoney(converted)}',
                     style: TextStyle(
                       fontWeight: FontWeight.w400,
                       color: context.textFaint,
@@ -1869,7 +1869,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 10),
               Text(
-                formatCurrencyAmount(totalOutstanding, summaryCur),
+                displayCurrencyAmount(totalOutstanding, summaryCur),
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w900,

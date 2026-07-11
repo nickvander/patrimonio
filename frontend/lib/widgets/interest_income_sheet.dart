@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
 /// Interest-income drill-down (cash basis) reachable from the Lending
@@ -65,6 +66,17 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
       decimalDigits: 2,
     );
     return fmt.format(v.abs() < 0.005 ? 0 : v);
+  }
+
+  /// Display variant of [_money] for headline stats and per-loan rows:
+  /// cents drop at the whole-money threshold. The monthly breakdown table
+  /// keeps the exact [_money] — its rows sum to reconcilable totals.
+  String _moneyDisplay(num v, String currency) {
+    final fmt = NumberFormat.currency(
+      symbol: currency == 'MXN' ? r'MX$' : r'$',
+      decimalDigits: 2,
+    );
+    return fmt.displayMoney(v.abs() < 0.005 ? 0 : v);
   }
 
   @override
@@ -280,7 +292,7 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
           ),
           const SizedBox(height: 6),
           Text(
-            _money(interest, currency),
+            _moneyDisplay(interest, currency),
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w800,
@@ -294,7 +306,7 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
           ),
           const SizedBox(height: 10),
           _miniStat(l10n.lendingInterestIncomePrincipalReceived,
-              _money(principal, currency)),
+              _moneyDisplay(principal, currency)),
           const SizedBox(height: 4),
           _miniStat(l10n.lendingInterestIncomePaymentsCount, '$payments'),
         ],
@@ -614,7 +626,7 @@ class _InterestIncomeSheetState extends State<InterestIncomeSheet> {
             ),
           ),
           Text(
-            _money(principal, currency),
+            _moneyDisplay(principal, currency),
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,

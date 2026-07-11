@@ -122,7 +122,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
                 ),
                 Text(
                   l.cfPerMonthApprox(widget.currencyFormat
-                      .format(totalMonthly * widget.conversionFactor)),
+                      .displayMoney(totalMonthly * widget.conversionFactor)),
                   style: TextStyle(
                     fontSize: 13,
                     color: context.textPrimary,
@@ -344,9 +344,9 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
                 Text(
                   cancelled
                       ? l.cfWasPerMonth(widget.currencyFormat
-                          .format(monthlyUsd * widget.conversionFactor))
+                          .displayMoney(monthlyUsd * widget.conversionFactor))
                       : l.cfPerMonth(widget.currencyFormat
-                          .format(monthlyUsd * widget.conversionFactor)),
+                          .displayMoney(monthlyUsd * widget.conversionFactor)),
                   style: TextStyle(
                     fontSize: 11,
                     color: context.textSubtle,

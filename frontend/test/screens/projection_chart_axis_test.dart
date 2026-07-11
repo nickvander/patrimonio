@@ -6,17 +6,29 @@ import 'projection_test_host.dart';
 // F7: the chart's bottom axis used a fixed interval of 5 years, which
 // overlaps labels on a phone with a 50-year horizon. The step now adapts to
 // the inner plot width (via utils/projection_axis.dart).
+// U1: the labels are 4-digit calendar years ("2026, 2031, …") — unified with
+// the a11y summary and the dividend panel — instead of "Yr N" offsets.
 
-/// Rects of all rendered bottom-axis labels ("Yr N").
+/// Rendered bottom-axis labels (4-digit calendar years), left-to-right.
+List<Text> _yearLabelTexts(WidgetTester tester) {
+  final finder = find.byWidgetPredicate((w) =>
+      w is Text && w.data != null && RegExp(r'^\d{4}$').hasMatch(w.data!));
+  return [for (final e in finder.evaluate()) e.widget as Text];
+}
+
 List<Rect> _yearLabelRects(WidgetTester tester) {
   final finder = find.byWidgetPredicate((w) =>
-      w is Text && w.data != null && RegExp(r'^Yr \d+$').hasMatch(w.data!));
-  return [for (final e in finder.evaluate()) tester.getRect(find.byWidget(e.widget))];
+      w is Text && w.data != null && RegExp(r'^\d{4}$').hasMatch(w.data!));
+  return [
+    for (final e in finder.evaluate()) tester.getRect(find.byWidget(e.widget))
+  ];
 }
 
 void main() {
-  testWidgets('phone 390px, 50-year horizon: at most 7 labels, none '
-      'overlapping', (tester) async {
+  final nowYear = DateTime.now().year;
+
+  testWidgets('phone 390px, 50-year horizon: 4-digit calendar years, at most '
+      '7 labels, none overlapping', (tester) async {
     setTestSize(tester, const Size(390, 844));
     await tester.pumpWidget(buildProjectionHost());
     await tester.pumpAndSettle();
@@ -51,9 +63,19 @@ void main() {
       expect(rects[i].left, greaterThanOrEqualTo(rects[i - 1].right),
           reason: 'labels $i and ${i - 1} overlap');
     }
+
+    // U1: labels are calendar years anchored at the current year, and the
+    // old "Yr N" offsets are gone.
+    final labels = [for (final t in _yearLabelTexts(tester)) t.data!];
+    expect(labels, contains('$nowYear'));
+    for (final label in labels) {
+      final year = int.parse(label);
+      expect(year, inInclusiveRange(nowYear, nowYear + 50));
+    }
+    expect(find.textContaining('Yr '), findsNothing);
   });
 
-  testWidgets('wide 1200px, 30-year horizon: at least 5 labels',
+  testWidgets('wide 1200px, 30-year horizon: at least 5 calendar-year labels',
       (tester) async {
     setTestSize(tester, const Size(1200, 1600));
     await tester.pumpWidget(buildProjectionHost());
@@ -64,6 +86,16 @@ void main() {
     rects.sort((a, b) => a.left.compareTo(b.left));
     for (var i = 1; i < rects.length; i++) {
       expect(rects[i].left, greaterThanOrEqualTo(rects[i - 1].right));
+    }
+
+    // U1: the first label is this calendar year and the steps are the
+    // adaptive interval (multiples of a clean 5-year step here).
+    final labels = [for (final t in _yearLabelTexts(tester)) t.data!]
+      ..sort();
+    expect(labels.first, '$nowYear');
+    for (final label in labels) {
+      expect((int.parse(label) - nowYear) % 5, 0,
+          reason: 'label $label is not on a clean 5-year step');
     }
   });
 }

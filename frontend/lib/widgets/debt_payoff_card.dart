@@ -271,7 +271,7 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
       0.0, (s, d) => s + (d.balance * 0.02 > 25 ? d.balance * 0.02 : 25));
 
   String _money(double usd) =>
-      widget.currencyFormat.format(usd * widget.conversionFactor);
+      widget.currencyFormat.displayMoney(usd * widget.conversionFactor);
 
   @override
   Widget build(BuildContext context) {

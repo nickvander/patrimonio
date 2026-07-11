@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
+import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
 /// 12-month projected dividend income calendar (contract C4-B).
@@ -37,7 +38,7 @@ class DividendCalendar extends StatelessWidget {
 
   /// USD figure scaled into the display currency — the exact `_money`
   /// convention of the host dividend-income card.
-  String _money(double usd) => currencyFormat.format(usd * conversionFactor);
+  String _money(double usd) => currencyFormat.displayMoney(usd * conversionFactor);
 
   @override
   Widget build(BuildContext context) {

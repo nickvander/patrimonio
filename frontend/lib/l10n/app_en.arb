@@ -868,8 +868,7 @@
   "projTargetNetWorth": "Target net worth",
   "projTargetYear": "Target year",
   "projNetWorthProjection": "Net worth projection",
-  "projYearAxisLabel": "Yr {year}",
-  "projTooltipYearAmount": "Year {year}\n{amount}",
+  "projTooltipYearAmount": "{year} \u00b7 {amount}",
   "projFiNumber": "FI number",
   "projYearsToFi": "Years to FI",
   "projEstimate": "Estimate",
@@ -984,6 +983,44 @@
   "projGoalSaveFailed": "Couldn't save your goal",
   "@projGoalSaveFailed": {
     "description": "F5: snackbar when persisting the net-worth goal to the backend fails."
+  },
+  "projRetirementMarker": "Retirement",
+  "@projRetirementMarker": {
+    "description": "U1: small label on the chart's dashed vertical marker at the retirement year (the accumulation-to-drawdown kink)."
+  },
+  "projGoalOffChart": "Your goal: {amount}",
+  "@projGoalOffChart": {
+    "description": "U1: label on the goal line when the goal amount exceeds the chart's y-range and the line is clamped to the top edge; {amount} is the compact goal amount.",
+    "placeholders": {
+      "amount": {
+        "type": "String",
+        "example": "$5M"
+      }
+    }
+  },
+  "projValueEntryRange": "Enter an amount between {min} and {max}",
+  "@projValueEntryRange": {
+    "description": "U2: inline validation error in the typed slider-value dialog; min/max arrive pre-formatted as money. The explicit placeholders below keep this declaration order in the generated signature: (min, max).",
+    "placeholders": {
+      "min": {
+        "type": "String",
+        "example": "$4,000"
+      },
+      "max": {
+        "type": "String",
+        "example": "$1,000,000,000"
+      }
+    }
+  },
+  "projSavingsRateCaption": "You're saving about {pct} of your income",
+  "@projSavingsRateCaption": {
+    "description": "U3: caption under the monthly-savings slider relating the current contribution to tracked annual income; {pct} is a pre-formatted percentage, capped at 100%.",
+    "placeholders": {
+      "pct": {
+        "type": "String",
+        "example": "10%"
+      }
+    }
   },
   "taxTitle": "Tax planning",
   "taxFilingSingle": "Single",

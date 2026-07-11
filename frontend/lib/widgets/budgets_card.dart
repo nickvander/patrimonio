@@ -216,13 +216,13 @@ class _BudgetsCardState extends State<BudgetsCard> {
                                 overflow: TextOverflow.ellipsis),
                             subtitle: Text(
                               l.cfBudgetsSuggestAvg(widget.currencyFormat
-                                  .format(s.monthlyAvg *
+                                  .displayMoney(s.monthlyAvg *
                                       widget.conversionFactor)),
                               style: TextStyle(
                                   fontSize: 11, color: context.textFaint),
                             ),
                             secondary: Text(
-                              widget.currencyFormat.format(
+                              widget.currencyFormat.displayMoney(
                                   s.amount * widget.conversionFactor),
                               style: const TextStyle(
                                 fontWeight: FontWeight.w700,
@@ -523,8 +523,8 @@ class _BudgetsCardState extends State<BudgetsCard> {
                           // out to a single character.
                           Flexible(
                             child: Text(
-                              '${widget.currencyFormat.format(spentUsd * widget.conversionFactor)} '
-                              '/ ${widget.currencyFormat.format(budgetUsd * widget.conversionFactor)}',
+                              '${widget.currencyFormat.displayMoney(spentUsd * widget.conversionFactor)} '
+                              '/ ${widget.currencyFormat.displayMoney(budgetUsd * widget.conversionFactor)}',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: color,
@@ -578,12 +578,12 @@ class _BudgetsCardState extends State<BudgetsCard> {
                       const SizedBox(height: 3),
                       Text(
                         over
-                            ? l.cfBudgetsOverBy(widget.currencyFormat.format(
+                            ? l.cfBudgetsOverBy(widget.currencyFormat.displayMoney(
                                 (spentUsd - budgetUsd) *
                                     widget.conversionFactor))
                             : state == _BudgetState.pacing
                                 ? l.cfBudgetsPacingToExceed
-                                : l.cfBudgetsLeft(widget.currencyFormat.format(
+                                : l.cfBudgetsLeft(widget.currencyFormat.displayMoney(
                                     (budgetUsd - spentUsd)
                                             .clamp(0, double.infinity) *
                                         widget.conversionFactor)),
@@ -638,7 +638,7 @@ class _BudgetsCardState extends State<BudgetsCard> {
     if (isOver) {
       text = l.cfBudgetsOverAlert(
         overCount,
-        widget.currencyFormat.format(overTotalUsd * widget.conversionFactor),
+        widget.currencyFormat.displayMoney(overTotalUsd * widget.conversionFactor),
       );
     } else if (nearCount > 0) {
       text = l.cfBudgetsNearAlert(nearCount);

@@ -2684,13 +2684,8 @@ class AppLocalizationsEs extends AppLocalizations {
   String get projNetWorthProjection => 'Proyección de patrimonio neto';
 
   @override
-  String projYearAxisLabel(Object year) {
-    return 'Año $year';
-  }
-
-  @override
   String projTooltipYearAmount(Object amount, Object year) {
-    return 'Año $year\n$amount';
+    return '$year · $amount';
   }
 
   @override
@@ -2939,6 +2934,24 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get projGoalSaveFailed => 'No se pudo guardar tu meta';
+
+  @override
+  String get projRetirementMarker => 'Retiro';
+
+  @override
+  String projGoalOffChart(String amount) {
+    return 'Tu meta: $amount';
+  }
+
+  @override
+  String projValueEntryRange(String min, String max) {
+    return 'Ingresa un monto entre $min y $max';
+  }
+
+  @override
+  String projSavingsRateCaption(String pct) {
+    return 'Estás ahorrando alrededor del $pct de tus ingresos';
+  }
 
   @override
   String get taxTitle => 'Planeación fiscal';

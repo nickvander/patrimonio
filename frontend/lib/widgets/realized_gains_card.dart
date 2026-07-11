@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 import '../utils/url_opener.dart';
 import 'skeleton.dart';
@@ -115,12 +116,12 @@ class _RealizedGainsCardState extends State<RealizedGainsCard> {
   }
 
   String _money(double usd) =>
-      widget.currencyFormat.format(usd * widget.conversionFactor);
+      widget.currencyFormat.displayMoney(usd * widget.conversionFactor);
 
   /// Signed money with a leading + on gains, for the P&L column.
   String _signedMoney(double usd) {
     final v = usd * widget.conversionFactor;
-    final formatted = widget.currencyFormat.format(v.abs());
+    final formatted = widget.currencyFormat.displayMoney(v.abs());
     if (v > 0) return '+$formatted';
     if (v < 0) return '-$formatted';
     return formatted;

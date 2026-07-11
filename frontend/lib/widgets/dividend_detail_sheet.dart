@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../utils/currency.dart';
 import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 
@@ -89,7 +90,7 @@ class _DividendDetailSheetState extends State<DividendDetailSheet> {
   /// USD figure scaled into the display currency, same pattern as the
   /// dividend-income card behind this sheet.
   String _money(double usd) =>
-      widget.currencyFormat.format(usd * widget.conversionFactor);
+      widget.currencyFormat.displayMoney(usd * widget.conversionFactor);
 
   /// Per-share amounts (annual rate, history events) stay in the payer's
   /// native currency and can be sub-cent (e.g. $0.0825/share), so they

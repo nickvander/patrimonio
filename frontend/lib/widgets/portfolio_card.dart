@@ -406,11 +406,11 @@ class _PortfolioCardState extends State<PortfolioCard> {
               // fragments. excludeSemantics folds the inner Texts away;
               // the pills' visual tooltips (overlay-based) are unaffected.
               final allTimeText =
-                  '${totalGainLoss > 0 ? '+' : totalGainLoss < 0 ? '-' : ''}${widget.currencyFormat.format(totalGainLoss.abs())} (${formatPercent(context, totalGainLossPct, digits: 2)})';
+                  '${totalGainLoss > 0 ? '+' : totalGainLoss < 0 ? '-' : ''}${widget.currencyFormat.displayMoney(totalGainLoss.abs())} (${formatPercent(context, totalGainLossPct, digits: 2)})';
               final dayText = _dayChangeText();
               final heroLabel = [
                 l.axPortfolioHero(
-                    widget.currencyFormat.format(totalValue), allTimeText),
+                    widget.currencyFormat.displayMoney(totalValue), allTimeText),
                 if (dayText != null) l.axHeroToday(dayText),
               ].join(', ');
               final summary = Column(
@@ -458,7 +458,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                           fit: BoxFit.scaleDown,
                           alignment: Alignment.centerLeft,
                           child: Text(
-                            widget.currencyFormat.format(totalValue),
+                            widget.currencyFormat.displayMoney(totalValue),
                             style: TextStyle(
                               fontSize: heroFontSize,
                               fontWeight: FontWeight.w800,
@@ -593,7 +593,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
     // (-1.41%)"), which the .abs() calls below would otherwise strip.
     final sign = dayUsd > 0 ? '+' : dayUsd < 0 ? '-' : '';
     final converted = dayUsd * widget.conversionFactor;
-    final amount = '$sign${widget.currencyFormat.format(converted.abs())}';
+    final amount = '$sign${widget.currencyFormat.displayMoney(converted.abs())}';
     return dayPct == null
         ? amount
         : '$amount (${dayPct > 0 ? '+' : dayPct < 0 ? '-' : ''}${formatPercent(context, dayPct.abs(), digits: 2)})';
@@ -848,17 +848,17 @@ class _PortfolioCardState extends State<PortfolioCard> {
     final usdTile = tile(
       currencyTitle: 'USD',
       currencySubtitle: l.pfUsDollar,
-      totalValueStr: usdFmt.format(valUsd),
+      totalValueStr: usdFmt.displayMoney(valUsd),
       gainLoss: glUsd ?? 0,
-      gainLossStr: usdFmt.format((glUsd ?? 0).abs()),
+      gainLossStr: usdFmt.displayMoney((glUsd ?? 0).abs()),
       gainLossPct: glPctUsd,
     );
     final mxnTile = tile(
       currencyTitle: 'MXN',
       currencySubtitle: l.pfMexicanPeso,
-      totalValueStr: mxnFmt.format(valMxn),
+      totalValueStr: mxnFmt.displayMoney(valMxn),
       gainLoss: glMxn ?? 0,
-      gainLossStr: mxnFmt.format((glMxn ?? 0).abs()),
+      gainLossStr: mxnFmt.displayMoney((glMxn ?? 0).abs()),
       gainLossPct: glPctMxn,
     );
 
@@ -999,7 +999,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
           // USD-normalised: a native MXN value here read as "$300,000" for a
           // ~$17k position. value_usd → display via the conversion factor.
           sub: widget.currencyFormat
-              .format(((top['value_usd'] as num?)?.toDouble() ?? 0.0) * cf),
+              .displayMoney(((top['value_usd'] as num?)?.toDouble() ?? 0.0) * cf),
           accent: context.tealAccent,
         ),
     ];
@@ -1166,7 +1166,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
             ),
             const SizedBox(width: 8),
             Text(
-              '${positive ? '+' : ''}${widget.currencyFormat.format(disp)}',
+              '${positive ? '+' : ''}${widget.currencyFormat.displayMoney(disp)}',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -1403,7 +1403,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                     if (inst.isNotEmpty) inst,
                     l.pfDaySemPositionsSubtotal(
                       list.length,
-                      widget.currencyFormat.format(subtotal),
+                      widget.currencyFormat.displayMoney(subtotal),
                     ),
                   ].join(', '),
                   excludeSemantics: true,
@@ -1438,7 +1438,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
                         ),
                         const SizedBox(width: 12),
                         Text(
-                          widget.currencyFormat.format(subtotal),
+                          widget.currencyFormat.displayMoney(subtotal),
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w800,
@@ -1496,7 +1496,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
         label: l.pfDaySemHoldingRow(
           displaySymbol,
           _formatQuantity(qty),
-          widget.currencyFormat.format(value),
+          widget.currencyFormat.displayMoney(value),
           pct == null ? '—' : '${isGain ? '+' : ''}${formatPercent(context, pct, digits: 2)}',
         ),
         child: InkWell(
@@ -1554,7 +1554,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
           Expanded(
             flex: 3,
             child: Text(
-              widget.currencyFormat.format(value),
+              widget.currencyFormat.displayMoney(value),
               textAlign: TextAlign.right,
               style: TextStyle(
                 fontSize: 13,
@@ -2583,7 +2583,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
-          widget.format.format(value),
+          widget.format.displayMoney(value),
           style: const TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 14,
@@ -2592,7 +2592,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
         ),
         if (sourceCurrency != widget.targetCurrency)
           Text(
-            formatCurrencyAmount(sourceValue, sourceCurrency),
+            displayCurrencyAmount(sourceValue, sourceCurrency),
             style: TextStyle(
               fontSize: 10,
               color: context.textFaint,
@@ -2658,7 +2658,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
                   ),
                 if (dayConverted != null)
                   Text(
-                    '${signOf(dayConverted)}${widget.format.format(dayConverted.abs())}',
+                    '${signOf(dayConverted)}${widget.format.displayMoney(dayConverted.abs())}',
                     style: TextStyle(
                       fontSize: 11,
                       color: context.textMuted,
@@ -2681,7 +2681,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
               ),
             )
           : Text(
-              widget.format.format(costBasis),
+              widget.format.displayMoney(costBasis),
               style: TextStyle(
                 fontSize: 14,
                 color: context.textMuted,
@@ -2702,7 +2702,7 @@ class _HoldingRowTileState extends State<_HoldingRowTile> {
               ),
             )
           : Text(
-              '${isGain ? '+' : ''}${widget.format.format(gainConverted)}',
+              '${isGain ? '+' : ''}${widget.format.displayMoney(gainConverted)}',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -3374,7 +3374,7 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      widget.format.format(value),
+                      widget.format.displayMoney(value),
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 14,
@@ -3434,7 +3434,7 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
                 _detailRow(l.pfColPrice, widget.format.format(price)),
                 _detailRow(
                   l.pfColCostBasis,
-                  costBasis == null ? '—' : widget.format.format(costBasis),
+                  costBasis == null ? '—' : widget.format.displayMoney(costBasis),
                   color: costBasis == null ? context.textMuted : null,
                   tooltip: costBasis == null ? l.pfCostBasisUnavailable : null,
                 ),
@@ -3442,7 +3442,7 @@ class _MobileHoldingRowState extends State<_MobileHoldingRow> {
                   l.pfColGain,
                   gainConverted == null
                       ? '—'
-                      : '${isGain ? '+' : ''}${widget.format.format(gainConverted)}',
+                      : '${isGain ? '+' : ''}${widget.format.displayMoney(gainConverted)}',
                   color: gainConverted == null
                       ? context.textMuted
                       : (isGain ? context.positive : context.negative),
@@ -3668,7 +3668,7 @@ class _DividendIncomeCardState extends State<DividendIncomeCard> {
   /// USD figure scaled into the display currency, same pattern as the
   /// realized-gains and holdings cards.
   String _money(double usd) =>
-      widget.currencyFormat.format(usd * widget.conversionFactor);
+      widget.currencyFormat.displayMoney(usd * widget.conversionFactor);
 
   @override
   Widget build(BuildContext context) {

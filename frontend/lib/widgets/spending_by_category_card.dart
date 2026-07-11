@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../utils/category.dart';
+import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
 /// "Where's my money going?" — per-category spending stacked by month.
@@ -309,7 +310,7 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
                 final name =
                     prettyCategory(primary: cats[i]['category']?.toString());
                 children.add(TextSpan(
-                  text: '\n$name  ${widget.currencyFormat.format(amt)}',
+                  text: '\n$name  ${widget.currencyFormat.displayMoney(amt)}',
                   style: TextStyle(
                     color: palette[i % palette.length],
                     fontWeight: FontWeight.normal,
@@ -375,7 +376,7 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
         ),
         const SizedBox(width: 6),
         Text(
-          widget.currencyFormat.format(totalUsd * widget.conversionFactor),
+          widget.currencyFormat.displayMoney(totalUsd * widget.conversionFactor),
           style: TextStyle(
             color: context.textPrimary,
             fontSize: 12,

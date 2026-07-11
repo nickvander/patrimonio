@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
+import '../utils/currency.dart';
 import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 
@@ -246,7 +247,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
                     Flexible(
                       child: Text(
                         l.lwAllocTotal(widget.currencyFormat
-                            .format(activeTotal * widget.conversionFactor)),
+                            .displayMoney(activeTotal * widget.conversionFactor)),
                         style: TextStyle(
                           fontSize: 14,
                           color: context.textSubtle,
@@ -625,7 +626,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
                   ),
                   Text(
                     widget.currencyFormat
-                        .format(b.value * widget.conversionFactor),
+                        .displayMoney(b.value * widget.conversionFactor),
                     style: TextStyle(
                       fontSize: 11,
                       color: context.textFaint,
@@ -706,7 +707,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
     // holdings count (items.length); type/institution bands carry the
     // breakdown rows' account count. Bands with neither omit the count.
     final valueLabel =
-        '${formatPercent(context, pct * 100, digits: 1)} · ${widget.currencyFormat.format(b.value * widget.conversionFactor)}';
+        '${formatPercent(context, pct * 100, digits: 1)} · ${widget.currencyFormat.displayMoney(b.value * widget.conversionFactor)}';
     final String baseLabel;
     if (b.holdingsCount != null) {
       baseLabel =
@@ -893,7 +894,7 @@ class _AllocationHeatmapState extends State<AllocationHeatmap> {
           ),
           const SizedBox(width: 8),
           Text(
-            widget.currencyFormat.format(item.value * widget.conversionFactor),
+            widget.currencyFormat.displayMoney(item.value * widget.conversionFactor),
             style: TextStyle(
               fontSize: 12,
               color: context.textPrimary,

@@ -33,14 +33,24 @@ PM triage → parallel frontend/backend implementation → live re-verification
   latest-rate over 12 months; `Result<_, ApiError>` with loud 500s instead of
   fabricated zeros; `.round_dp(2)` outputs. Integration tests pin per-row FX +
   partial-month annualization. Clippy + full suite green.
-* **Known follow-ups (owner decisions, from PM triage):** goal-year/retirement
-  markers on the chart + calendar-year axis; typed slider entry + MXN-friendly
-  expense floor (<$10k); compact money (drop cents ≥$10k); savings-rate line
-  from `annual_income`; FI-number tile stays $1M under Barista focus (pinned to
-  standard plan — intentional?); **FX audit:** `cash_flow_trends`,
-  `spending_by_category`, `spending_insights`, `emergency_fund` trailing-spend
-  all still use the latest-rate shortcut on historical flows (same bug class,
-  batch fix will shift dashboard numbers slightly).
+* **Round-10b (owner approved all PM-deferred items; verified live 8/8):**
+  chart upgraded — calendar-year x-axis + "{year} · {amount}" tooltip, dashed
+  retirement marker, pink goal line + goal-year marker + Clear button,
+  out-of-range goals clamp to the top edge instead of rescaling maxY; typed
+  value entry on money sliders (expense floor now $4k, maxes auto-grow, typed
+  values round-trip through `projection_assumptions`); savings-rate caption
+  from `annual_income`; Barista-aware target tile; app-wide compact money
+  (`displayMoney`: cents dropped at |value| ≥ $10k on display surfaces;
+  ledgers/exports/tax stay exact). Backend: per-row historical FX applied to
+  `cash_flow_trends`, `spending_by_category`, `spending_insights`,
+  `emergency_fund` trailing-spend (current cash stays latest-rate by policy);
+  regression tests fail against the old code. 481 frontend + full backend
+  suites green.
+* **Known follow-ups:** the four dashboard handlers above still swallow DB
+  errors (`unwrap_or_default()` → error renders as empty chart) — convert to
+  `Result<_, ApiError>` like projections; chart hover tooltip lingers after
+  mouse-out (cosmetic, fl_chart touch config); percent sliders are drag-only
+  (money sliders got typed entry).
 
 ## 2026-07-09 sprint — round 9 (cross-tool AGENTS.md, palette contrast, lint cleanup)
 

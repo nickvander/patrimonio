@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/preferences.dart';
+import '../utils/currency.dart';
 import '../utils/percent_format.dart';
 import '../utils/projection_axis.dart';
 import '../utils/theme_colors.dart';
@@ -212,14 +213,36 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   double _presetExpense(String key, double base) =>
       ((base * _lifestyleMultipliers[key]!) / 1000).round() * 1000.0;
 
+  // U2: typed-entry bounds. Values typed into the numeric-entry dialog may
+  // exceed a slider's drag range; the slider max then grows to a clean tick
+  // so the thumb stays meaningful (generalized from the _expensesMax
+  // pattern), and the hydration clamps accept the same widened range so a
+  // persisted typed value round-trips instead of snapping to the old max.
+  static const double _expensesFloor = 4000.0;
+  static const double _typedMoneyCap = 1000000000.0; // $1B — the goal cap
+  double _savingsMax = 10000.0;
+  double _baristaMax = 10000.0;
+  // Extra expenses headroom beyond the baseline-driven max, set by typed
+  // entry / hydration.
+  double _expensesTypedMax = 0.0;
+
+  /// Smallest clean multiple of [tick] that fits [value] — never below
+  /// [current], so a slider max only ever grows.
+  static double _grownMax(double current, double value, double tick) {
+    if (value <= current) return current;
+    return (value / tick).ceil() * tick;
+  }
+
   // Upper bound of the annual-expense slider. Normally $200k, but it grows
   // with the baseline so a high earner's "Fat" preset (1.6×) doesn't clamp
-  // and collapse into "Standard". Rounded up to a clean $50k tick.
+  // and collapse into "Standard" — rounded up to a clean $50k tick — and
+  // with any larger typed value (U2).
   double get _expensesMax {
     final base = _baselineExpenses ?? _annualExpenses;
     final needed = base * 1.8;
-    if (needed <= 200000) return 200000;
-    return (needed / 50000).ceil() * 50000.0;
+    final computed =
+        needed <= 200000 ? 200000.0 : (needed / 50000).ceil() * 50000.0;
+    return math.max(computed, _expensesTypedMax);
   }
 
   @override
@@ -233,13 +256,37 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     _loadDividendData();
   }
 
+  // U3: tracked annual income (USD) from /projections/defaults — powers the
+  // savings-rate caption under the Monthly savings slider. 0 = unknown/absent
+  // → no caption.
+  double _annualIncome = 0.0;
+
   // F10: saved assumptions (if any) win over derived defaults; otherwise the
   // tracked-data prefill runs as before. Either path ends in a projection.
   Future<void> _bootstrap() async {
     if (await _hydrateAssumptions()) {
+      // U3: restored assumptions skip the prefill, but the savings-rate
+      // caption still wants the tracked income — fetch it best-effort
+      // without adopting any defaults.
+      unawaited(_loadIncomeContext());
       await _fetchProjection();
     } else {
       await _prefillFromTrackedData();
+    }
+  }
+
+  // U3: best-effort read of `annual_income` only (never adopts contribution
+  // or expenses — the saved assumptions already won).
+  Future<void> _loadIncomeContext() async {
+    try {
+      final fetch =
+          widget.defaultsFetcher ?? _apiService.getProjectionDefaults;
+      final defaults = await fetch();
+      if (!mounted || defaults == null) return;
+      final income = (defaults['annual_income'] as num?)?.toDouble() ?? 0.0;
+      if (income > 0) setState(() => _annualIncome = income);
+    } catch (_) {
+      // Caption simply stays hidden.
     }
   }
 
@@ -257,22 +304,30 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       }
 
       setState(() {
+        // U2: money fields clamp to the typed-entry cap, not the slider's
+        // drag range — a persisted typed value (e.g. $12,500/mo) must restore
+        // as-is, with the slider max grown to accommodate it.
         _monthlyContribution =
             (d('monthly_contribution') ?? _monthlyContribution)
-                .clamp(0.0, 10000.0);
+                .clamp(0.0, _typedMoneyCap);
+        _savingsMax = _grownMax(_savingsMax, _monthlyContribution, 1000.0);
         _annualReturnRate =
             (d('annual_return_rate') ?? _annualReturnRate).clamp(0.0, 0.15);
         _annualInflation =
             (d('annual_inflation_rate') ?? _annualInflation).clamp(0.0, 0.06);
-        _annualExpenses =
-            (d('annual_expenses') ?? _annualExpenses).clamp(10000.0, 200000.0);
+        _annualExpenses = (d('annual_expenses') ?? _annualExpenses)
+            .clamp(_expensesFloor, _typedMoneyCap);
+        if (_annualExpenses > _expensesMax) {
+          _expensesTypedMax = _grownMax(0.0, _annualExpenses, 50000.0);
+        }
         _withdrawalRate =
             (d('withdrawal_rate') ?? _withdrawalRate).clamp(0.02, 0.06);
         _returnVolatility =
             (d('return_volatility') ?? _returnVolatility).clamp(0.0, 0.25);
         _baristaMonthlyIncome =
             (d('barista_monthly_income') ?? _baristaMonthlyIncome)
-                .clamp(0.0, 10000.0);
+                .clamp(0.0, _typedMoneyCap);
+        _baristaMax = _grownMax(_baristaMax, _baristaMonthlyIncome, 1000.0);
         _annualTaxDrag =
             (d('annual_tax_drag') ?? _annualTaxDrag).clamp(0.0, 0.03);
         if (raw['withdrawal_guardrails'] is bool) {
@@ -390,18 +445,26 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         final contrib = (defaults['monthly_contribution'] as num?)?.toDouble();
         final expenses = (defaults['annual_expenses'] as num?)?.toDouble();
         final months = (defaults['months_of_data'] as num?)?.toInt() ?? 0;
+        final income = (defaults['annual_income'] as num?)?.toDouble() ?? 0.0;
         // F3: adopt each derived default on its own merits. A valid tracked
         // contribution used to be discarded whenever expenses were $0, and a
         // single month of data was silently extrapolated ×12 into the
         // retirement-spend default — so the contribution is adopted whenever
         // it's positive, while expenses need ≥3 months of history.
         setState(() {
+          // U3: income backs the savings-rate caption, independent of
+          // whether the contribution/expenses defaults are adopted.
+          if (income > 0) _annualIncome = income;
           if (contrib != null && contrib > 0) {
-            _monthlyContribution = contrib.clamp(0, 10000);
+            // U2: don't truncate a genuinely high tracked contribution to
+            // the drag range — grow the slider max instead.
+            _monthlyContribution = contrib.clamp(0.0, _typedMoneyCap);
+            _savingsMax =
+                _grownMax(_savingsMax, _monthlyContribution, 1000.0);
             _contributionFromMonths = math.max(months, 1);
           }
           if (months >= 3 && expenses != null && expenses > 0) {
-            _annualExpenses = expenses.clamp(10000, 200000);
+            _annualExpenses = expenses.clamp(_expensesFloor, _typedMoneyCap);
             // Anchor the Lean/Standard/Fat presets to the user's real spend.
             _baselineExpenses = _annualExpenses;
             _expensesFromMonths = months;
@@ -766,21 +829,44 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     final divH = isPhone ? 20.0 : 32.0;
     Widget div() => Divider(height: divH, color: context.hairline);
 
+    // U3: savings-rate caption — the CURRENT contribution against tracked
+    // annual income, capped at 100% for display; hidden without income data.
+    // Recomputed on every rebuild so it tracks the slider live (onChanged
+    // runs setState on each drag tick).
+    String? savingsRateCaption;
+    if (_annualIncome > 0) {
+      final pct =
+          (_monthlyContribution * 12 / _annualIncome * 100).clamp(0.0, 100.0);
+      savingsRateCaption =
+          l.projSavingsRateCaption(formatPercent(context, pct, digits: 0));
+    }
+
     // The 3 primary sliders stay visible at all widths.
     final primary = <Widget>[
       _buildSliderControl(
         label: l.projMonthlySavings,
         value: _monthlyContribution,
         min: 0,
-        max: 10000,
+        max: _savingsMax,
         isCurrency: true,
         // F3: honest provenance — the hint names how much history backs the
         // adopted value; no hint when the static default stands.
         hint: _contributionFromMonths != null
             ? l.projBasedOnMonths(_contributionFromMonths!)
             : null,
+        caption: savingsRateCaption,
         onChanged: (val) => setState(() => _monthlyContribution = val),
         onChangeEnd: (_) => _assumptionChanged(),
+        // U2: tap the value label to type an exact figure.
+        onTapValue: () => _editMoneyValue(
+          label: l.projMonthlySavings,
+          currentUsd: _monthlyContribution,
+          minUsd: 0,
+          commit: (v) {
+            _monthlyContribution = v;
+            _savingsMax = _grownMax(_savingsMax, v, 1000.0);
+          },
+        ),
       ),
       div(),
       _buildSliderControl(
@@ -836,7 +922,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       _buildSliderControl(
         label: l.projAnnualExpenses,
         value: _annualExpenses,
-        min: 10000,
+        min: _expensesFloor,
         max: _expensesMax,
         isCurrency: true,
         help: l.projHelpAnnualExpenses,
@@ -849,6 +935,17 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             : (_assumptionsRestored ? null : l.projExpensesEstimateHint),
         onChanged: (val) => setState(() => _annualExpenses = val),
         onChangeEnd: (_) => _assumptionChanged(),
+        onTapValue: () => _editMoneyValue(
+          label: l.projAnnualExpenses,
+          currentUsd: _annualExpenses,
+          minUsd: _expensesFloor,
+          commit: (v) {
+            _annualExpenses = v;
+            if (v > _expensesMax) {
+              _expensesTypedMax = _grownMax(0.0, v, 50000.0);
+            }
+          },
+        ),
       ),
       div(),
       _buildSliderControl(
@@ -866,11 +963,20 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         label: l.projBaristaIncome,
         value: _baristaMonthlyIncome,
         min: 0,
-        max: 10000,
+        max: _baristaMax,
         isCurrency: true,
         help: l.projHelpBaristaIncome,
         onChanged: (val) => setState(() => _baristaMonthlyIncome = val),
         onChangeEnd: (_) => _assumptionChanged(),
+        onTapValue: () => _editMoneyValue(
+          label: l.projBaristaIncome,
+          currentUsd: _baristaMonthlyIncome,
+          minUsd: 0,
+          commit: (v) {
+            _baristaMonthlyIncome = v;
+            _baristaMax = _grownMax(_baristaMax, v, 1000.0);
+          },
+        ),
       ),
       div(),
       _buildSliderControl(
@@ -988,6 +1094,8 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     int? divisions,
     String? hint,
     String? help,
+    String? caption,
+    VoidCallback? onTapValue,
     required ValueChanged<double> onChanged,
     required ValueChanged<double> onChangeEnd,
   }) {
@@ -996,10 +1104,24 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       displayValue = formatPercent(context, value * 100, digits: 1);
     } else if (isCurrency) {
       final reported = value * widget.conversionFactor;
-      displayValue = widget.currencyFormat.format(reported);
+      displayValue = widget.currencyFormat.displayMoney(reported);
     } else {
       displayValue = value.toInt().toString();
     }
+
+    // U2: the value label doubles as the typed-entry affordance — a dotted
+    // underline hints it's tappable; the tap opens the numeric dialog.
+    final valueText = Text(
+      displayValue,
+      style: TextStyle(
+        color: context.positive,
+        fontWeight: FontWeight.bold,
+        decoration: onTapValue != null ? TextDecoration.underline : null,
+        decorationStyle:
+            onTapValue != null ? TextDecorationStyle.dotted : null,
+        decorationColor: context.positive,
+      ),
+    );
 
     // A6 (round 3, a11y): the aria dump showed anonymous sliders — merge
     // label + help + value + slider into one node so each slider announces
@@ -1056,13 +1178,18 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                 ],
               ),
             ),
-            Text(
-              displayValue,
-              style: TextStyle(
-                color: context.positive,
-                fontWeight: FontWeight.bold,
+            if (onTapValue == null)
+              valueText
+            else
+              InkWell(
+                onTap: onTapValue,
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: valueText,
+                ),
               ),
-            ),
           ],
         ),
         Slider(
@@ -1075,9 +1202,54 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           onChanged: onChanged,
           onChangeEnd: onChangeEnd,
         ),
+        // U3: live caption under the slider (savings rate vs income).
+        if (caption != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              caption,
+              style: TextStyle(color: context.textMuted, fontSize: 11),
+            ),
+          ),
       ],
       ),
     );
+  }
+
+  // U2: numeric entry behind a money slider's value label — type an exact
+  // figure instead of scrubbing. The dialog works in the *display* currency
+  // (like _GoalDialog); the commit converts back to USD and routes through
+  // the same _assumptionChanged() path as a slider drag (persist + one
+  // debounced refetch).
+  Future<void> _editMoneyValue({
+    required String label,
+    required double currentUsd,
+    required double minUsd,
+    required void Function(double usd) commit,
+  }) async {
+    final l = AppLocalizations.of(context);
+    final cf = widget.conversionFactor == 0 ? 1.0 : widget.conversionFactor;
+    final minDisplay = minUsd * cf;
+    final maxDisplay = _typedMoneyCap * cf;
+    final result = await showDialog<double>(
+      context: context,
+      builder: (_) => _ValueEntryDialog(
+        title: label,
+        initialValue: (currentUsd * cf).round().toString(),
+        currencySymbol: widget.currencyFormat.currencySymbol,
+        min: minDisplay,
+        max: maxDisplay,
+        // gen-l10n: explicit arb placeholders keep the (min, max) declaration
+        // order in the generated signature (same pattern as projGoalYearRange).
+        rangeError: l.projValueEntryRange(
+          widget.currencyFormat.displayMoney(minDisplay),
+          widget.currencyFormat.displayMoney(maxDisplay),
+        ),
+      ),
+    );
+    if (!mounted || result == null) return;
+    setState(() => commit(result / cf));
+    _assumptionChanged();
   }
 
   // Guyton-Klinger guardrails toggle: when on, the Monte Carlo flexes
@@ -1239,11 +1411,11 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           yieldFrac *
           widget.conversionFactor *
           _nominalFactor(years.toDouble());
-      return widget.currencyFormat.format(display);
+      return widget.currencyFormat.displayMoney(display);
     }
 
     final todayIncome =
-        widget.currencyFormat.format(incomeUsd * widget.conversionFactor);
+        widget.currencyFormat.displayMoney(incomeUsd * widget.conversionFactor);
     final retIncome = incomeAt(yearsToRet);
     final horizonIncome = incomeAt(_projectionYears);
 
@@ -1366,7 +1538,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       children: [
         Row(
           children: [
-            Icon(Icons.flag_outlined, color: context.yellowAccent, size: 18),
+            // U1: pink matches the chart's goal line (it used to be yellow,
+            // which collided with the amber FIRE-target dashes).
+            Icon(Icons.flag_outlined, color: context.pinkAccent, size: 18),
             const SizedBox(width: 8),
             Text(
               l.projGoal,
@@ -1399,7 +1573,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             hasGoal
                 ? l.projGoalHitBy(
                     widget.currencyFormat
-                        .format(_goalAmountUsd! * widget.conversionFactor),
+                        .displayMoney(_goalAmountUsd! * widget.conversionFactor),
                     _goalYear!,
                   )
                 : l.projGoalSetTarget,
@@ -1589,8 +1763,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         children: [
           line(context.positive, l.projLegendProjected),
           line(targetColor, l.projLegendTarget(flavor), dashed: true),
+          // U1: pink, matching the goal line/markers — deliberately distinct
+          // from the amber Full-FIRE target dashes.
           if (_goalAmountUsd != null)
-            line(context.yellowAccent, l.projLegendGoal, dashed: true),
+            line(context.pinkAccent, l.projLegendGoal, dashed: true),
           if (_showBand)
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -1717,6 +1893,35 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       );
     }
 
+    // U1: the y-range comes from the projection itself (expected path,
+    // uncertainty band, focused FIRE target) and NEVER from the user goal —
+    // a huge goal used to rescale the axis and flatten the whole chart. An
+    // out-of-range goal instead clamps to the top edge as a labelled dashed
+    // line, and its vertical year marker still shows.
+    double maxOf(Iterable<FlSpot> s) =>
+        s.fold(0.0, (m, e) => math.max(m, e.y));
+    final fireTargetSpots = targetSpots(targetValue);
+    var chartMaxY = math.max(maxOf(spots), maxOf(fireTargetSpots));
+    if (hasBand) chartMaxY = math.max(chartMaxY, maxOf(p90));
+    if (chartMaxY <= 0) chartMaxY = 1.0;
+
+    // The goal is deliberately NOT amber/yellow: the focused FIRE target
+    // line is amber (context.warning) for Full FIRE, and the two dashed
+    // lines were near-indistinguishable. Pink is unused on this chart.
+    final goalColor = context.pinkAccent;
+    final goalBase = _goalAmountUsd != null
+        ? _goalAmountUsd! * widget.conversionFactor
+        : null;
+    // Whole goal line above the plot? (In nominal mode the goal curve rises
+    // with (1+i)^t, so its year-0 base is its minimum.)
+    final goalOffChart = goalBase != null && goalBase > chartMaxY;
+    final goalSpots = _goalAmountUsd == null
+        ? const <FlSpot>[]
+        : [
+            for (final s in targetSpots(_goalAmountUsd!))
+              FlSpot(s.x, math.min(s.y, chartMaxY)),
+          ];
+
     // A6 (round 3, a11y): the canvas chart is opaque to screen readers —
     // announce one summary sentence ("Projected balance from 2026 to 2056,
     // median ending $2.4M") and exclude the chart internals. The median
@@ -1732,7 +1937,63 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     final chartSummary = l.axProjectionChart(
       '$nowYear',
       '${nowYear + _projectionYears}',
-      widget.currencyFormat.format(endDisplay),
+      widget.currencyFormat.displayMoney(endDisplay),
+    );
+
+    // U1: structural markers — a dashed vertical at retirement (the
+    // accumulation→drawdown kink) and, when a goal is set, at the goal year.
+    // The clamped-goal horizontal line carries the goal amount when the goal
+    // sits above the y-range (see chartMaxY above).
+    final retireX = _yearsToRetirement.clamp(0, _projectionYears);
+    final goalX =
+        _goalYear != null ? (_goalYear! - nowYear).toDouble() : null;
+    final extraLines = ExtraLinesData(
+      verticalLines: [
+        if (retireX > 0 && retireX < _projectionYears)
+          VerticalLine(
+            x: retireX.toDouble(),
+            color: context.textSubtle,
+            strokeWidth: 1,
+            dashArray: [4, 4],
+            label: VerticalLineLabel(
+              show: true,
+              alignment: Alignment.topRight,
+              padding: const EdgeInsets.only(left: 4, bottom: 2),
+              style: TextStyle(color: context.textSubtle, fontSize: 10),
+              labelResolver: (_) => l.projRetirementMarker,
+            ),
+          ),
+        if (_goalAmountUsd != null &&
+            goalX != null &&
+            goalX > 0 &&
+            goalX <= _projectionYears)
+          VerticalLine(
+            x: goalX,
+            color: goalColor.withValues(alpha: 0.75),
+            strokeWidth: 1,
+            dashArray: [3, 6],
+          ),
+      ],
+      horizontalLines: [
+        if (goalOffChart)
+          HorizontalLine(
+            y: chartMaxY,
+            color: goalColor.withValues(alpha: 0.75),
+            strokeWidth: 2,
+            dashArray: [3, 6],
+            label: HorizontalLineLabel(
+              show: true,
+              alignment: Alignment.topRight,
+              padding: const EdgeInsets.only(right: 6, bottom: 2),
+              style: TextStyle(color: goalColor, fontSize: 10),
+              labelResolver: (_) => l.projGoalOffChart(
+                NumberFormat.compactSimpleCurrency(
+                  name: widget.currencyFormat.currencyName,
+                ).format(goalBase),
+              ),
+            ),
+          ),
+      ],
     );
 
     return LayoutBuilder(builder: (context, plot) {
@@ -1764,10 +2025,13 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
             sideTitles: SideTitles(
               showTitles: true,
               interval: xInterval,
+              // U1: calendar years ("2026, 2031, …"), unifying the axis with
+              // the a11y summary and the dividend panel, which already speak
+              // in calendar years. Locale-neutral, so no l10n key needed.
               getTitlesWidget: (value, meta) => Padding(
                 padding: const EdgeInsets.only(top: 8.0),
                 child: Text(
-                  l.projYearAxisLabel(value.toInt()),
+                  '${nowYear + value.round()}',
                   style: TextStyle(color: context.textSubtle, fontSize: 12),
                 ),
               ),
@@ -1795,6 +2059,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           ),
         ),
         borderData: FlBorderData(show: false),
+        // U1: explicit top-of-range (goal excluded — see chartMaxY) + the
+        // retirement/goal markers.
+        maxY: chartMaxY,
+        extraLinesData: extraLines,
         betweenBarsData: betweenBars,
         lineBarsData: [
           ...bandBars,
@@ -1820,19 +2088,21 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           ),
           // Focused FIRE target line (Full / Coast / Barista)
           LineChartBarData(
-            spots: targetSpots(targetValue),
+            spots: fireTargetSpots,
             isCurved: false,
             color: targetColor.withValues(alpha: 0.7),
             barWidth: 2,
             dashArray: [5, 5],
             dotData: const FlDotData(show: false),
           ),
-          // User-set goal line
-          if (_goalAmountUsd != null)
+          // User-set goal line (pink — distinct from the amber FIRE target).
+          // When the whole goal sits above the y-range the labelled
+          // HorizontalLine in extraLines stands in for it instead.
+          if (_goalAmountUsd != null && !goalOffChart)
             LineChartBarData(
-              spots: targetSpots(_goalAmountUsd!),
+              spots: goalSpots,
               isCurved: false,
-              color: context.yellowAccent.withValues(alpha: 0.75),
+              color: goalColor.withValues(alpha: 0.75),
               barWidth: 2,
               dashArray: [3, 6],
               dotData: const FlDotData(show: false),
@@ -1872,11 +2142,11 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
                   // gen-l10n orders placeholders alphabetically (amount, year)
                   // regardless of their order in the template string, so pass
                   // amount first — otherwise the two render swapped.
+                  // U1: calendar year, rounded — "2040 · $894,514", never
+                  // "Year 19.2".
                   l.projTooltipYearAmount(
-                    widget.currencyFormat.format(spot.y),
-                    // F6: locale decimal seam (no-op today — es-MX uses
-                    // period decimals like en).
-                    localizeNumberString(context, spot.x.toStringAsFixed(1)),
+                    widget.currencyFormat.displayMoney(spot.y),
+                    '${(nowYear + spot.x).round()}',
                   ),
                   TextStyle(
                     color: context.tooltipOnSurface,
@@ -1912,7 +2182,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     // line). Today's figures (current net worth) pass `atYears: 0`, which leaves
     // them untouched since (1+i)^0 = 1.
     String money(double usd, {double atYears = 0}) => widget.currencyFormat
-        .format(usd * widget.conversionFactor * _nominalFactor(atYears));
+        .displayMoney(usd * widget.conversionFactor * _nominalFactor(atYears));
     final retireYears = _yearsToRetirement.toDouble();
 
     // Per-focus headline content.
@@ -1986,7 +2256,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     final base = (_baselineExpenses ??= _annualExpenses);
     Widget lifeChip(String key, String label) {
       final double value =
-          _presetExpense(key, base).clamp(10000.0, _expensesMax).toDouble();
+          _presetExpense(key, base).clamp(_expensesFloor, _expensesMax).toDouble();
       final active = (_annualExpenses - value).abs() < 500;
       return ChoiceChip(
         label: Text(label),
@@ -2126,6 +2396,43 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     // year dollars when nominal is on (factor is 1.0 when it's off).
     final atRetire = _nominalFactor(_yearsToRetirement.toDouble());
 
+    // U4: the target-number tile follows the focused plan (Full / Coast /
+    // Barista), mirroring the plan card — it used to pin the Full-FIRE
+    // number even with Barista focused. Same F8 rule as the plan card:
+    // barista_fi_number == fi_number means barista income isn't configured,
+    // so show the em-dash + the setup prompt instead of a misleading figure.
+    final fiNumber = (metrics['fi_number'] as num?)?.toDouble() ?? 0.0;
+    final coastNumber = (metrics['coast_fi_number'] as num?)?.toDouble() ?? 0.0;
+    final baristaNumber =
+        (metrics['barista_fi_number'] as num?)?.toDouble() ?? 0.0;
+    final baristaConfigured = baristaNumber > 0 && baristaNumber < fiNumber;
+    String tileMoney(double usd) => widget.currencyFormat
+        .displayMoney(usd * widget.conversionFactor * atRetire);
+    final (String targetTitle, String targetValue, String targetSub,
+        IconData targetIcon, Color targetColor) = switch (_fireFocus) {
+      _FireFocus.full => (
+          l.projFiNumber,
+          tileMoney(fiNumber),
+          l.projTargetNetWorth,
+          Icons.flag_rounded,
+          context.warning,
+        ),
+      _FireFocus.coast => (
+          l.projTermCoast,
+          tileMoney(coastNumber > 0 ? coastNumber : fiNumber),
+          l.projTargetNetWorth,
+          Icons.trending_up_rounded,
+          context.info,
+        ),
+      _FireFocus.barista => (
+          l.projTermBarista,
+          baristaConfigured ? tileMoney(baristaNumber) : '—',
+          baristaConfigured ? l.projTargetNetWorth : l.projBaristaPrompt,
+          Icons.local_cafe_rounded,
+          context.purpleAccent,
+        ),
+    };
+
     return LayoutBuilder(builder: (context, constraints) {
       // Stack into 2×2 below 800px — the same cutover as the screen's narrow
       // layout, derived from this builder's own width (not MediaQuery), so
@@ -2147,15 +2454,11 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           compact: stacked,
         ),
         _buildMilestoneCard(
-          title: l.projFiNumber,
-          value: widget.currencyFormat.format(
-            (metrics['fi_number'] as num).toDouble() *
-                widget.conversionFactor *
-                atRetire,
-          ),
-          subtitle: l.projTargetNetWorth,
-          icon: Icons.flag_rounded,
-          color: context.warning,
+          title: targetTitle,
+          value: targetValue,
+          subtitle: targetSub,
+          icon: targetIcon,
+          color: targetColor,
           compact: stacked,
         ),
         _buildMilestoneCard(
@@ -2173,7 +2476,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         ),
         _buildMilestoneCard(
           title: l.projFiIncome,
-          value: widget.currencyFormat.format(
+          value: widget.currencyFormat.displayMoney(
             (metrics['monthly_income_at_retirement'] as num).toDouble() *
                 widget.conversionFactor *
                 atRetire,
@@ -2262,6 +2565,80 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// U2: small numeric-entry dialog behind a slider's value label (same
+/// StatefulWidget-owns-its-controllers pattern as [_GoalDialog], for the same
+/// dispose-with-the-route reason). Works entirely in the *display* currency;
+/// pops `null` on cancel or the validated value on save. [rangeError] arrives
+/// pre-localized/pre-formatted because the min/max are money strings the
+/// caller already knows how to format.
+class _ValueEntryDialog extends StatefulWidget {
+  final String title;
+  final String initialValue;
+  final String currencySymbol;
+  final double min;
+  final double max;
+  final String rangeError;
+
+  const _ValueEntryDialog({
+    required this.title,
+    required this.initialValue,
+    required this.currencySymbol,
+    required this.min,
+    required this.max,
+    required this.rangeError,
+  });
+
+  @override
+  State<_ValueEntryDialog> createState() => _ValueEntryDialogState();
+}
+
+class _ValueEntryDialogState extends State<_ValueEntryDialog> {
+  late final TextEditingController _ctrl =
+      TextEditingController(text: widget.initialValue);
+  String? _error;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final v = double.tryParse(_ctrl.text.trim());
+    final ok = v != null && v.isFinite && v >= widget.min && v <= widget.max;
+    if (!ok) {
+      setState(() => _error = widget.rangeError);
+      return;
+    }
+    Navigator.pop(context, v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return AlertDialog(
+      title: Text(widget.title),
+      content: TextField(
+        controller: _ctrl,
+        autofocus: true,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: InputDecoration(
+          labelText: widget.title,
+          prefixText: widget.currencySymbol,
+          errorText: _error,
+        ),
+        onSubmitted: (_) => _save(),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: Text(l.actionCancel)),
+        FilledButton(onPressed: _save, child: Text(l.actionSave)),
+      ],
     );
   }
 }

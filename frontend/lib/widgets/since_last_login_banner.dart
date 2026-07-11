@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/preferences.dart';
+import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
 /// "What changed since your last visit" banner. Pinned above
@@ -108,7 +109,7 @@ class _SinceLastLoginBannerState extends State<SinceLastLoginBanner> {
         // gen-l10n orders these alphabetically → (account, amount); pass account (name) first.
         l.lwSinceLargestMove(
           name,
-          '$sign${widget.currencyFormat.format(delta.abs())}',
+          '$sign${widget.currencyFormat.displayMoney(delta.abs())}',
         ),
       );
     }

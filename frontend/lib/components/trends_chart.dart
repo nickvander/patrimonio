@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
+import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
 class CashFlowTrendsChart extends StatelessWidget {
@@ -153,7 +154,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                         // most users don't expect chart bars to be tappable.
                         final headerLine =
                             rodIndex == 0 ? l.lwTrendsIncome : l.lwTrendsSpending;
-                        final amountLine = currencyFormat.format(rod.toY * conversionFactor);
+                        final amountLine = currencyFormat.displayMoney(rod.toY * conversionFactor);
                         final hint = onMonthSelected == null
                             ? ''
                             : '\n${l.lwTrendsTapToView}';
@@ -355,7 +356,7 @@ class CashFlowTrendsChart extends StatelessWidget {
   }
 
   String _money(num value) =>
-      currencyFormat.format(value * conversionFactor);
+      currencyFormat.displayMoney(value * conversionFactor);
 
   /// One-line summary spoken for the whole chart: span + latest month's
   /// income and spending.

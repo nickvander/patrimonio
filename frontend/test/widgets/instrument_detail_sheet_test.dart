@@ -176,7 +176,8 @@ void main() {
       expect(find.text('—'), findsNWidgets(2));
       expect(find.textContaining(r'$0.00'), findsNothing);
       // Everything else still renders: stats, account row + tax badge.
-      expect(find.text(r'$84,000.00'), findsWidgets);
+      // Display rule: >= $10k drops cents ($84,000, not $84,000.00).
+      expect(find.text(r'$84,000'), findsWidgets);
       expect(find.text('Employer 401k'), findsOneWidget);
       expect(find.text('Tax-advantaged'), findsOneWidget);
       // No day-change chip when the fields are null.

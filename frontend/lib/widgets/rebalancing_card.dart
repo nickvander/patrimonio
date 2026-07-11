@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../components/allocation_heatmap.dart' show AllocationData;
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../utils/currency.dart';
 import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 import 'skeleton.dart';
@@ -316,7 +317,7 @@ class _RebalancingCardState extends State<RebalancingCard> {
   }
 
   String _money(double usd) =>
-      widget.currencyFormat.format(usd * widget.conversionFactor);
+      widget.currencyFormat.displayMoney(usd * widget.conversionFactor);
 
   /// "65" for whole targets, "12.5" otherwise — targets carry at most one
   /// decimal by contract.

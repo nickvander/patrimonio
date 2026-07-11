@@ -153,7 +153,7 @@ class AccountBalanceChart extends StatelessWidget {
                               ? points[idx]['month']?.toString() ?? ''
                               : '';
                           return LineTooltipItem(
-                            '$m\n${formatCurrencyAmount(spot.y, currency)}',
+                            '$m\n${displayCurrencyAmount(spot.y, currency)}',
                             TextStyle(
                               color: context.tooltipOnSurface,
                               fontWeight: FontWeight.bold,

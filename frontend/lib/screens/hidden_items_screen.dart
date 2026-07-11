@@ -368,7 +368,7 @@ class _HiddenItemsScreenState extends State<HiddenItemsScreen> {
         : '$institution · $displayName';
     final metaParts = <String>[
       if (accountType.isNotEmpty) accountType,
-      formatCurrencyWithCode(balance, currency),
+      displayCurrencyWithCode(balance, currency),
       if (archivedAt.isNotEmpty)
         l.accountClosedOn(_formatClosedDate(archivedAt)),
     ];
