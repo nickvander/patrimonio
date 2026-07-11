@@ -79,6 +79,9 @@ pub struct LoanSuggestion {
     pub confidence: i32,
     /// True when the borrower's name appeared in the transaction text.
     pub name_matched: bool,
+    /// Account the candidate sits in (nickname or name), for the picker.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_name: Option<String>,
 }
 
 /// One transaction candidate pulled from the windowed query.
@@ -93,6 +96,8 @@ struct TxCandidate {
     original_description: Option<String>,
     payment_payee: Option<String>,
     payment_payer: Option<String>,
+    // Only the repayment query selects this; None elsewhere (via `.ok()`).
+    account_name: Option<String>,
 }
 
 impl TxCandidate {
@@ -112,6 +117,7 @@ impl TxCandidate {
             original_description: row.try_get("original_description").ok(),
             payment_payee: row.try_get("payment_payee").ok(),
             payment_payer: row.try_get("payment_payer").ok(),
+            account_name: row.try_get("account_name").ok(),
         })
     }
 
@@ -226,7 +232,8 @@ pub async fn suggest_disbursements(
         r#"
         SELECT t.id, t.date, t.amount, t.currency, t.description,
                t.merchant_name, t.counterparty_name, t.original_description,
-               t.payment_payee, t.payment_payer
+               t.payment_payee, t.payment_payer,
+               COALESCE(NULLIF(a.nickname, ''), a.name) AS account_name
         FROM transactions t
         JOIN accounts a ON a.id = t.account_id
         WHERE t.user_id = $1
@@ -283,6 +290,7 @@ pub async fn suggest_disbursements(
             description: tx.label(),
             confidence,
             name_matched: name_hit,
+            account_name: tx.account_name.clone(),
         });
     }
     out.sort_by_key(|c| std::cmp::Reverse(c.confidence));
@@ -309,7 +317,8 @@ pub async fn suggest_repayments(
         r#"
         SELECT t.id, t.date, t.amount, t.currency, t.description,
                t.merchant_name, t.counterparty_name, t.original_description,
-               t.payment_payee, t.payment_payer
+               t.payment_payee, t.payment_payer,
+               COALESCE(NULLIF(a.nickname, ''), a.name) AS account_name
         FROM transactions t
         JOIN accounts a ON a.id = t.account_id
         WHERE t.user_id = $1
@@ -389,6 +398,7 @@ pub async fn suggest_repayments(
             description: tx.label(),
             confidence,
             name_matched: name_hit,
+            account_name: tx.account_name.clone(),
         });
     }
     out.sort_by_key(|c| std::cmp::Reverse(c.confidence));
@@ -456,6 +466,7 @@ mod tests {
             original_description: None,
             payment_payee: None,
             payment_payer: None,
+            account_name: None,
         };
         assert!(borrower_name_hit(&tx, "Jose Ramirez"));
         assert!(borrower_name_hit(&tx, "jose"));

@@ -5223,6 +5223,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // from cash flow — refresh silently so the Cash flow tab + net
         // worth reflect it without a full reload flash.
         onChanged: () => _loadAllData(silent: true),
+        // Tap a linked loan payment → jump to its bank transaction, reusing
+        // the command-palette deep-link (search seed + highlight pulse).
+        onOpenTransaction: (txId, description) {
+          setState(() {
+            _transactionsSearchOverride = description;
+            _highlightedTxId = txId;
+          });
+          _goToNav(NavId.transactions);
+          Future.delayed(const Duration(milliseconds: 2400), () {
+            if (!mounted) return;
+            if (_highlightedTxId == txId) {
+              setState(() => _highlightedTxId = null);
+            }
+          });
+        },
       ),
       // LendingTab owns its scrolling (RefreshIndicator → ListView), so it
       // must NOT be wrapped in the default SingleChildScrollView — a

@@ -60,6 +60,9 @@ class LendingTab extends StatefulWidget {
   /// 1.0 (no conversion) when the rate hasn't loaded.
   final double usdMxnRate;
   final VoidCallback? onChanged;
+  /// Jump to a transaction in the Transactions tab (id + a search seed like
+  /// the merchant/description). Lets a linked loan payment open its bank tx.
+  final void Function(String txId, String description)? onOpenTransaction;
 
   const LendingTab({
     super.key,
@@ -67,6 +70,7 @@ class LendingTab extends StatefulWidget {
     required this.targetCurrency,
     this.usdMxnRate = 1.0,
     this.onChanged,
+    this.onOpenTransaction,
   });
 
   @override
@@ -844,6 +848,7 @@ class _LendingTabState extends State<LendingTab> {
           _load();
           widget.onChanged?.call();
         },
+        onOpenTransaction: widget.onOpenTransaction,
       ),
     );
     // Belt-and-braces: also refresh when the sheet closes (covers the
@@ -3007,11 +3012,14 @@ class _LoanDetailSheet extends StatefulWidget {
   /// Called after each successful in-sheet mutation so the parent can
   /// refresh the loan list + the dashboard's cash-flow view live.
   final VoidCallback onMutated;
+  /// Jump to a linked payment's bank transaction (closes this sheet first).
+  final void Function(String txId, String description)? onOpenTransaction;
 
   const _LoanDetailSheet({
     required this.apiService,
     required this.loan,
     required this.onMutated,
+    this.onOpenTransaction,
   });
 
   @override
@@ -3294,38 +3302,9 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
           ...reconciled.map((p) {
             final m = p as Map<String, dynamic>;
             // OFF-BANK: recorded amount but no real bank tx attached yet.
-            // Offer to attach the imported inflow so it's excluded from
-            // cash flow (and not double-counted by a fresh record).
             final isOffBank =
                 m['actual_tx_id'] == null && m['paid_amount'] != null;
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  Icon(Icons.south_west, size: 16, color: context.positive),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '${m['paid_date'] ?? ''} · ${_money((m['paid_amount'] as num?) ?? 0)}',
-                      style:
-                          TextStyle(fontSize: 13, color: context.textMuted),
-                    ),
-                  ),
-                  if (isOffBank)
-                    IconButton(
-                      icon: const Icon(Icons.add_link, size: 16),
-                      tooltip:
-                          AppLocalizations.of(context).lendLinkBankTx,
-                      onPressed: () => _openLinkBankTx(m['id'].toString()),
-                    ),
-                  IconButton(
-                    icon: const Icon(Icons.link_off, size: 16),
-                    tooltip: AppLocalizations.of(context).lendTooltipUnlink,
-                    onPressed: () => _unreconcile(m['id'].toString()),
-                  ),
-                ],
-              ),
-            );
+            return isOffBank ? _offBankPaymentRow(m) : _linkedPaymentCard(m);
           }),
         const SizedBox(height: 12),
         if (_repaySuggestions.isNotEmpty) ...[
@@ -3354,6 +3333,144 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
     );
   }
 
+  /// A linked repayment: a rich, tappable card that jumps to the bank
+  /// transaction (merchant · account · category · amount).
+  Widget _linkedPaymentCard(Map<String, dynamic> m) {
+    final l = AppLocalizations.of(context);
+    final title = (m['merchant_name'] ??
+            m['tx_description'] ??
+            l.lendLinkedPaymentUntitled)
+        .toString();
+    final amount = (m['paid_amount'] as num?) ?? 0;
+    final account = (m['account_name'] ?? '').toString();
+    final category = (m['category'] ?? '').toString();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: InkWell(
+        onTap: () => _openLinkedTx(m),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: context.tint(0.04),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: context.hairline),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.south_west, size: 18, color: context.positive),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: context.textPrimary)),
+                    const SizedBox(height: 2),
+                    Text('${_fmtPaidDate(m['paid_date'])} · ${_money(amount)}',
+                        style: TextStyle(
+                            fontSize: 12, color: context.textSubtle)),
+                    if (account.isNotEmpty || category.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Wrap(spacing: 10, runSpacing: 4, children: [
+                        if (account.isNotEmpty)
+                          _metaChip(
+                              Icons.account_balance_wallet_outlined, account),
+                        if (category.isNotEmpty)
+                          _metaChip(Icons.sell_outlined, category),
+                      ]),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.open_in_new, size: 16, color: context.textSubtle),
+              IconButton(
+                icon: const Icon(Icons.link_off, size: 16),
+                tooltip: l.lendTooltipUnlink,
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _unreconcile(m['id'].toString()),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// An off-bank (cash / manually recorded) repayment: no transaction to
+  /// open, but offer to attach a bank inflow so it's excluded from cash flow.
+  Widget _offBankPaymentRow(Map<String, dynamic> m) {
+    final l = AppLocalizations.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(Icons.payments_outlined, size: 16, color: context.textSubtle),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${_fmtPaidDate(m['paid_date'])} · ${_money((m['paid_amount'] as num?) ?? 0)}',
+                  style: TextStyle(fontSize: 13, color: context.textMuted),
+                ),
+                Text(l.lendOffBankBadge,
+                    style: TextStyle(fontSize: 11, color: context.textFaint)),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.add_link, size: 16),
+            tooltip: l.lendLinkBankTx,
+            onPressed: () => _openLinkBankTx(m['id'].toString()),
+          ),
+          IconButton(
+            icon: const Icon(Icons.link_off, size: 16),
+            tooltip: l.lendTooltipUnlink,
+            onPressed: () => _unreconcile(m['id'].toString()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _metaChip(IconData icon, String text) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: context.textFaint),
+        const SizedBox(width: 4),
+        Text(text,
+            style: TextStyle(fontSize: 11, color: context.textSubtle)),
+      ],
+    );
+  }
+
+  String _fmtPaidDate(dynamic isoDate) {
+    final s = (isoDate ?? '').toString();
+    if (s.isEmpty) return '';
+    final parsed = DateTime.tryParse(s);
+    return parsed == null ? s : DateFormat('MMM d, y').format(parsed);
+  }
+
+  /// Close the loan sheet, then jump to the linked bank transaction (the
+  /// Transactions tab sits behind the sheet).
+  void _openLinkedTx(Map<String, dynamic> m) {
+    final txId = m['actual_tx_id']?.toString();
+    if (txId == null || widget.onOpenTransaction == null) return;
+    final label =
+        (m['merchant_name'] ?? m['tx_description'] ?? '').toString();
+    Navigator.of(context).pop();
+    widget.onOpenTransaction!(txId, label);
+  }
+
   Future<void> _openRecordPayment() async {
     final recorded = await showModalBottomSheet<bool>(
       context: context,
@@ -3378,9 +3495,19 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
 
   Widget _suggestionTile(Map<String, dynamic> s,
       {required VoidCallback onConfirm}) {
+    final l = AppLocalizations.of(context);
     final conf = (s['confidence'] as num?)?.toInt() ?? 0;
     final amount = (s['amount'] as num?)?.toDouble() ?? 0;
-    final color = conf >= 80 ? context.positive : context.warning;
+    final account = (s['account_name'] ?? '').toString();
+    final nameMatched = s['name_matched'] == true;
+    // Tiered WORDS, not a raw "50% match" (which reads as half-wrong even
+    // when it's the right transaction). Blue for the middle band is
+    // neutral-informative rather than warning-amber.
+    final (matchLabel, color) = conf >= 80
+        ? (l.lendMatchStrong, context.positive)
+        : conf >= 65
+            ? (l.lendMatchLikely, context.info)
+            : (l.lendMatchPossible, context.warning);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -3404,15 +3531,17 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 2),
-                Row(
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(
-                      '${s['date']} · ${_money(amount.abs())}',
+                      '${_fmtPaidDate(s['date'])} · ${_money(amount.abs())}',
                       style:
                           TextStyle(fontSize: 11, color: context.textSubtle),
                     ),
-                    const SizedBox(width: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 6, vertical: 1),
@@ -3420,12 +3549,24 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
                         color: context.accentSoft(color),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Text('$conf% match',
+                      child: Text(matchLabel,
                           style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
                               color: color)),
                     ),
+                    // The single strongest "trust this pick" signal — why a
+                    // low-amount-confidence tx is still the right one.
+                    if (nameMatched)
+                      Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.person, size: 11, color: context.positive),
+                        const SizedBox(width: 2),
+                        Text(l.lendMatchNameHit,
+                            style: TextStyle(
+                                fontSize: 10, color: context.positive)),
+                      ]),
+                    if (account.isNotEmpty)
+                      _metaChip(Icons.account_balance_wallet_outlined, account),
                   ],
                 ),
               ],

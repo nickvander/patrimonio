@@ -9080,6 +9080,42 @@ abstract class AppLocalizations {
   /// **'Confirm'**
   String get lendConfirm;
 
+  /// No description provided for @lendLinkedPaymentUntitled.
+  ///
+  /// In en, this message translates to:
+  /// **'Linked payment'**
+  String get lendLinkedPaymentUntitled;
+
+  /// No description provided for @lendOffBankBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Recorded manually'**
+  String get lendOffBankBadge;
+
+  /// No description provided for @lendMatchStrong.
+  ///
+  /// In en, this message translates to:
+  /// **'Strong match'**
+  String get lendMatchStrong;
+
+  /// No description provided for @lendMatchLikely.
+  ///
+  /// In en, this message translates to:
+  /// **'Likely match'**
+  String get lendMatchLikely;
+
+  /// No description provided for @lendMatchPossible.
+  ///
+  /// In en, this message translates to:
+  /// **'Possible match'**
+  String get lendMatchPossible;
+
+  /// No description provided for @lendMatchNameHit.
+  ///
+  /// In en, this message translates to:
+  /// **'Name matches'**
+  String get lendMatchNameHit;
+
   /// No description provided for @lendExportPrintablePlan.
   ///
   /// In en, this message translates to:

@@ -150,6 +150,20 @@ struct PaymentView {
     #[serde(skip_serializing_if = "Option::is_none")]
     paid_date: Option<String>,
     status: String,
+    // Details of the linked bank transaction (present only for a reconciled
+    // row), so the UI can show a rich, tappable payment card.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tx_description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    merchant_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    category: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    account_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tx_amount: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tx_currency: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1084,7 +1098,15 @@ async fn list_payments(
         return StatusCode::NOT_FOUND.into_response();
     }
     let rows = sqlx::query(
-        "SELECT * FROM loan_payments WHERE loan_id = $1 AND user_id = $2 ORDER BY installment_number ASC",
+        "SELECT p.*, \
+                t.description AS tx_description, t.merchant_name AS tx_merchant, \
+                t.category AS tx_category, t.amount AS tx_amount, t.currency AS tx_currency, \
+                COALESCE(NULLIF(a.nickname, ''), a.name) AS tx_account_name \
+         FROM loan_payments p \
+         LEFT JOIN transactions t ON t.id = p.actual_tx_id \
+         LEFT JOIN accounts a ON a.id = t.account_id \
+         WHERE p.loan_id = $1 AND p.user_id = $2 \
+         ORDER BY p.installment_number ASC",
     )
     .bind(id)
     .bind(ctx.user_id)
@@ -1121,6 +1143,16 @@ async fn list_payments(
                     .flatten()
                     .map(|d| d.to_string()),
                 status: r.try_get("status").unwrap_or_else(|_| "scheduled".to_string()),
+                tx_description: r.try_get::<Option<String>, _>("tx_description").ok().flatten(),
+                merchant_name: r.try_get::<Option<String>, _>("tx_merchant").ok().flatten(),
+                category: r.try_get::<Option<String>, _>("tx_category").ok().flatten(),
+                account_name: r.try_get::<Option<String>, _>("tx_account_name").ok().flatten(),
+                tx_amount: r
+                    .try_get::<Option<rust_decimal::Decimal>, _>("tx_amount")
+                    .ok()
+                    .flatten()
+                    .and_then(|d| d.to_string().parse().ok()),
+                tx_currency: r.try_get::<Option<String>, _>("tx_currency").ok().flatten(),
             })
             .collect::<Vec<_>>(),
     )

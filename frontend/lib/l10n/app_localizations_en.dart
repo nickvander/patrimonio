@@ -5605,6 +5605,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lendConfirm => 'Confirm';
 
   @override
+  String get lendLinkedPaymentUntitled => 'Linked payment';
+
+  @override
+  String get lendOffBankBadge => 'Recorded manually';
+
+  @override
+  String get lendMatchStrong => 'Strong match';
+
+  @override
+  String get lendMatchLikely => 'Likely match';
+
+  @override
+  String get lendMatchPossible => 'Possible match';
+
+  @override
+  String get lendMatchNameHit => 'Name matches';
+
+  @override
   String get lendExportPrintablePlan => 'Printable plan (PDF)';
 
   @override
