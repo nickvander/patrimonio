@@ -2397,6 +2397,9 @@ class ApiService {
   /// Sync an arbitrary set of institutions in one round-trip. Replaces
   /// the client-side loop the "Retry N failed" shortcut used to do.
   Future<void> syncInstitutionsBatch(List<String> institutionIds) async {
+    // An empty batch matches zero rows server-side (a silent no-op) — don't
+    // fire it.
+    if (institutionIds.isEmpty) return;
     final response = await _post(
       Uri.parse('$_baseUrl/institutions/sync'),
       headers: _withCsrf({'Content-Type': 'application/json'}),

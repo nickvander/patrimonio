@@ -49,17 +49,12 @@ class _SyncStatusCardState extends State<SyncStatusCard> {
     }).map((raw) => (raw as Map)['id'].toString()).toList();
   }
 
-  /// Institutions that need a re-sync attempt — failed status, or stuck
-  /// in `reconnect_required`. The `error`/`failed` ones can be retried in
-  /// place; `reconnect_required` ones need the Plaid Link flow but show
-  /// up in the count so the user knows total attention required.
-  int get _failedCount {
-    return _syncData.where((raw) {
-      if (raw is! Map) return false;
-      final s = raw['sync_status']?.toString();
-      return s == 'error' || s == 'failed' || s == 'reconnect_required';
-    }).length;
-  }
+  /// Institutions the "Retry failed" button will actually re-sync. MUST
+  /// equal [_failedIds] — a `reconnect_required` (e.g. a locked E*Trade
+  /// item) was being counted here but excluded from the retry batch, so
+  /// the button fired an empty request and did nothing. Locked items are
+  /// surfaced by their own per-row Reconnect action instead.
+  int get _failedCount => _failedIds().length;
 
   /// Count institutions whose [sync_status] matches any in [statuses].
   int _statusCount(Set<String> statuses) {
@@ -152,6 +147,7 @@ class _SyncStatusCardState extends State<SyncStatusCard> {
                   TextButton.icon(
                     onPressed: () async {
                       final ids = _failedIds();
+                      if (ids.isEmpty) return; // nothing retryable
                       // Preference: batched > per-institution loop >
                       // global fallback. The batched path is one HTTP
                       // round-trip server-side via ANY($1).
@@ -463,7 +459,10 @@ class _SyncStatusCardState extends State<SyncStatusCard> {
               ].contains(status))
                 IconButton(
                   icon: Icon(Icons.refresh, color: context.info, size: 20),
-                  onPressed: widget.onRetrySync,
+                  // Retry THIS institution, not a global sync-all.
+                  onPressed: widget.onRetrySingle != null
+                      ? () => widget.onRetrySingle!(inst['id'].toString())
+                      : widget.onRetrySync,
                   tooltip: l.lwSyncRetrySync,
                   padding: const EdgeInsets.all(6),
                   constraints: const BoxConstraints(),
