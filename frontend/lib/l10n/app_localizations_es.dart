@@ -5689,6 +5689,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get lendActionAgreement => 'Contrato';
 
   @override
+  String get lendActionMore => 'Más';
+
+  @override
+  String get lendAgreementEnglish => 'Inglés';
+
+  @override
+  String get lendAgreementSpanish => 'Español';
+
+  @override
   String get lendActionPayOffInFull => 'Liquidar por completo';
 
   @override

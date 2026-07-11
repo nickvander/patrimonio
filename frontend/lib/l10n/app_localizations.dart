@@ -9152,6 +9152,24 @@ abstract class AppLocalizations {
   /// **'Agreement'**
   String get lendActionAgreement;
 
+  /// No description provided for @lendActionMore.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get lendActionMore;
+
+  /// No description provided for @lendAgreementEnglish.
+  ///
+  /// In en, this message translates to:
+  /// **'English'**
+  String get lendAgreementEnglish;
+
+  /// No description provided for @lendAgreementSpanish.
+  ///
+  /// In en, this message translates to:
+  /// **'Spanish'**
+  String get lendAgreementSpanish;
+
   /// No description provided for @lendActionPayOffInFull.
   ///
   /// In en, this message translates to:

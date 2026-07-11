@@ -2737,8 +2737,8 @@ class ApiService {
 
   /// Printable promissory-note / agreement HTML for a loan (opened in
   /// a new tab; the user prints to PDF from the browser).
-  String loanAgreementUrl(String loanId) =>
-      '$_baseUrl/loans/$loanId/agreement';
+  String loanAgreementUrl(String loanId, {String lang = 'en'}) =>
+      '$_baseUrl/loans/$loanId/agreement?lang=$lang';
 
   /// Borrower-facing printable payment plan (HTML → browser PDF): the
   /// schedule with a running balance, friendlier than the legal

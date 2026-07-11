@@ -3138,8 +3138,6 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
                 _buildRepaymentsSection(),
                 SizedBox(height: gap),
                 _buildStatusActions(),
-                const SizedBox(height: 8),
-                _buildDangerZone(),
               ],
             ],
           ),
@@ -4017,61 +4015,106 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
     );
   }
 
-  /// Status actions: mark defaulted / written-off / back to active.
+  /// Loan actions — decluttered: the two everyday actions (Edit, Agreement)
+  /// stay visible; the rarer lifecycle + destructive ones (pay off, mark
+  /// defaulted, write off, reactivate, delete) fold into a "More" menu.
   Widget _buildStatusActions() {
+    final l = AppLocalizations.of(context);
     final status = (widget.loan['status'] ?? 'active').toString();
     return Wrap(
       spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        // Correct a fat-fingered borrower / principal / rate / interest
-        // type without delete-and-recreate.
         OutlinedButton.icon(
           onPressed: _openEditLoan,
           icon: const Icon(Icons.edit_outlined, size: 16),
-          label: Text(AppLocalizations.of(context).lendActionEdit,
-              style: const TextStyle(fontSize: 12)),
+          label: Text(l.lendActionEdit, style: const TextStyle(fontSize: 12)),
         ),
-        // Printable promissory-note / agreement (HTML → browser PDF).
-        OutlinedButton.icon(
-          onPressed: () => launchUrl(
-              Uri.parse(widget.apiService.loanAgreementUrl(_loanId)),
+        // Agreement — pick the language (a bilingual document).
+        PopupMenuButton<String>(
+          tooltip: l.lendActionAgreement,
+          onSelected: (lang) => launchUrl(
+              Uri.parse(widget.apiService.loanAgreementUrl(_loanId, lang: lang)),
               webOnlyWindowName: '_blank'),
-          icon: const Icon(Icons.description_outlined, size: 16),
-          label: Text(AppLocalizations.of(context).lendActionAgreement,
-              style: const TextStyle(fontSize: 12)),
+          itemBuilder: (_) => [
+            PopupMenuItem(value: 'en', child: Text(l.lendAgreementEnglish)),
+            PopupMenuItem(value: 'es', child: Text(l.lendAgreementSpanish)),
+          ],
+          child: _pseudoButton(Icons.description_outlined, l.lendActionAgreement),
         ),
-        // Early/full payoff: close the loan + void remaining installments.
-        // Only meaningful while the loan is still active.
-        if (status == 'active')
-          OutlinedButton.icon(
-            onPressed: _confirmPayoff,
-            icon: Icon(Icons.task_alt, size: 16, color: context.positive),
-            label: Text(AppLocalizations.of(context).lendActionPayOffInFull,
-                style: TextStyle(fontSize: 12, color: context.positive)),
-          ),
-        if (status != 'defaulted')
-          OutlinedButton.icon(
-            onPressed: () => _setStatus('defaulted'),
-            icon: const Icon(Icons.warning_amber_outlined, size: 16),
-            label: Text(AppLocalizations.of(context).lendActionMarkDefaulted,
-                style: const TextStyle(fontSize: 12)),
-          ),
-        if (status != 'written_off')
-          OutlinedButton.icon(
-            onPressed: () => _setStatus('written_off'),
-            icon: const Icon(Icons.money_off, size: 16),
-            label: Text(AppLocalizations.of(context).lendActionWriteOff,
-                style: const TextStyle(fontSize: 12)),
-          ),
-        if (status != 'active')
-          OutlinedButton.icon(
-            onPressed: () => _setStatus('active'),
-            icon: const Icon(Icons.restart_alt, size: 16),
-            label: Text(AppLocalizations.of(context).lendActionReactivate,
-                style: const TextStyle(fontSize: 12)),
-          ),
+        PopupMenuButton<String>(
+          tooltip: l.lendActionMore,
+          onSelected: _onMoreAction,
+          itemBuilder: (_) => [
+            if (status == 'active')
+              PopupMenuItem(
+                  value: 'payoff',
+                  child: _menuRow(Icons.task_alt, l.lendActionPayOffInFull,
+                      context.positive)),
+            if (status != 'defaulted')
+              PopupMenuItem(
+                  value: 'defaulted',
+                  child: _menuRow(Icons.warning_amber_outlined,
+                      l.lendActionMarkDefaulted, null)),
+            if (status != 'written_off')
+              PopupMenuItem(
+                  value: 'written_off',
+                  child:
+                      _menuRow(Icons.money_off, l.lendActionWriteOff, null)),
+            if (status != 'active')
+              PopupMenuItem(
+                  value: 'active',
+                  child: _menuRow(
+                      Icons.restart_alt, l.lendActionReactivate, null)),
+            const PopupMenuDivider(),
+            PopupMenuItem(
+                value: 'delete',
+                child: _menuRow(
+                    Icons.delete_outline, l.lendDeleteLoan, context.negative)),
+          ],
+          child: _pseudoButton(Icons.more_horiz, l.lendActionMore),
+        ),
       ],
     );
+  }
+
+  /// A tappable widget styled like an OutlinedButton with a dropdown caret —
+  /// used as a PopupMenuButton child so the menu opens on tap.
+  Widget _pseudoButton(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: BoxDecoration(
+        border: Border.all(color: context.hairline),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 16, color: context.textPrimary),
+        const SizedBox(width: 6),
+        Text(label,
+            style: TextStyle(fontSize: 12, color: context.textPrimary)),
+        Icon(Icons.arrow_drop_down, size: 18, color: context.textSubtle),
+      ]),
+    );
+  }
+
+  Widget _menuRow(IconData icon, String label, Color? color) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 18, color: color ?? context.textSubtle),
+      const SizedBox(width: 12),
+      Text(label, style: TextStyle(color: color)),
+    ]);
+  }
+
+  void _onMoreAction(String value) {
+    switch (value) {
+      case 'payoff':
+        _confirmPayoff();
+      case 'delete':
+        _confirmDelete();
+      default:
+        _setStatus(value); // 'defaulted' | 'written_off' | 'active'
+    }
   }
 
   Future<void> _generateSchedule() async {
@@ -4156,18 +4199,6 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
           ? l10n.lendToastLoanNoLongerActive
           : l10n.lendToastCouldntPayOff);
     }
-  }
-
-  Widget _buildDangerZone() {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: TextButton.icon(
-        onPressed: _confirmDelete,
-        icon: Icon(Icons.delete_outline, size: 18, color: context.negative),
-        label: Text(AppLocalizations.of(context).lendDeleteLoan,
-            style: TextStyle(color: context.negative)),
-      ),
-    );
   }
 
   Future<void> _confirmDisbursement(Map<String, dynamic> s) async {

@@ -5643,6 +5643,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lendActionAgreement => 'Agreement';
 
   @override
+  String get lendActionMore => 'More';
+
+  @override
+  String get lendAgreementEnglish => 'English';
+
+  @override
+  String get lendAgreementSpanish => 'Spanish';
+
+  @override
   String get lendActionPayOffInFull => 'Pay off in full';
 
   @override
