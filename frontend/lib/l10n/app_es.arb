@@ -1494,6 +1494,7 @@
   "lwSyncBannerReconnectName": "Reconectar {name}",
   "lwSyncBannerReconnectCount": "Reconectar {count}…",
   "lwSyncBannerOpenSettings": "Abrir configuración",
+  "lwSyncBannerDismiss": "Descartar por una semana",
   "lwSinceNewTransactions": "{count, plural, one{{count} transacción nueva} other{{count} transacciones nuevas}}",
   "lwSinceLargestMove": "{amount} en {account}",
   "lwSinceSyncErrors": "{count, plural, one{{count} error de sincronización} other{{count} errores de sincronización}}",
@@ -1850,6 +1851,13 @@
   },
   "lendScheduleColPayment": "Pago",
   "lendScheduleColBalance": "Saldo restante",
+  "lendScheduleRowMeta": "Saldo {balance} · int {interest}",
+  "@lendScheduleRowMeta": {
+    "placeholders": {
+      "balance": { "type": "String" },
+      "interest": { "type": "String" }
+    }
+  },
   "lendScheduleColStatus": "Estado",
   "lendScheduleNextDue": "Próximo",
   "lendScheduleTotals": "Total",

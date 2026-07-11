@@ -1707,6 +1707,7 @@
   "lwSyncBannerReconnectName": "Reconnect {name}",
   "lwSyncBannerReconnectCount": "Reconnect {count}…",
   "lwSyncBannerOpenSettings": "Open settings",
+  "lwSyncBannerDismiss": "Dismiss for a week",
   "lwSinceNewTransactions": "{count, plural, one{{count} new transaction} other{{count} new transactions}}",
   "@lwSinceNewTransactions": {
     "placeholders": {
@@ -2220,6 +2221,13 @@
   },
   "lendScheduleColPayment": "Payment",
   "lendScheduleColBalance": "Balance remaining",
+  "lendScheduleRowMeta": "Bal {balance} · int {interest}",
+  "@lendScheduleRowMeta": {
+    "placeholders": {
+      "balance": { "type": "String" },
+      "interest": { "type": "String" }
+    }
+  },
   "lendScheduleColStatus": "Status",
   "lendScheduleNextDue": "Next due",
   "lendScheduleTotals": "Total",

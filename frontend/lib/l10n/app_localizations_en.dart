@@ -4406,6 +4406,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lwSyncBannerOpenSettings => 'Open settings';
 
   @override
+  String get lwSyncBannerDismiss => 'Dismiss for a week';
+
+  @override
   String lwSinceNewTransactions(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -5369,6 +5372,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lendScheduleColBalance => 'Balance remaining';
+
+  @override
+  String lendScheduleRowMeta(String balance, String interest) {
+    return 'Bal $balance · int $interest';
+  }
 
   @override
   String get lendScheduleColStatus => 'Status';

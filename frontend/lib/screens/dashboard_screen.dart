@@ -132,6 +132,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic>? _portfolioData;
   List<dynamic>? _creditData;
   List<dynamic>? _syncData;
+  // Sync-error banner snooze: institution ids the user dismissed + until
+  // when, persisted in app settings so a known-flaky institution (e.g. one
+  // Plaid keeps 500-ing) doesn't nag on every load. A NEW failure re-shows.
+  Set<String> _syncBannerSnoozeIds = const {};
+  DateTime? _syncBannerSnoozeUntil;
   // Drives the "refresh while a newly-linked institution is still syncing"
   // backstop (see _scheduleSyncPollIfNeeded). Bounded by _syncPollAttempts.
   Timer? _syncPollTimer;
@@ -294,6 +299,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // with the backend setting (source of truth across devices).
     _accountAlerts = Preferences.getAccountAlerts();
     _hydrateAccountAlerts();
+    _loadSyncBannerSnooze();
     _dismissedNotifs = Preferences.getDismissedNotifications();
     _overviewDetailsExpanded = Preferences.getOverviewDetailsExpanded();
     _managementDetailsExpanded = Preferences.getManagementDetailsExpanded();
@@ -2882,6 +2888,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// Management tab first. Mirrors the nested `handleReconnect` used
   /// from the Management tab's row buttons; both feed into the same
   /// `PlaidLink.open()` flow.
+  static const _syncBannerSnoozeKey = 'sync_banner_snooze';
+
+  /// Load the persisted sync-banner snooze (institution ids + expiry).
+  Future<void> _loadSyncBannerSnooze() async {
+    try {
+      final raw = await _apiService.getSetting(_syncBannerSnoozeKey);
+      if (raw is! Map) return;
+      final until = DateTime.tryParse((raw['until'] ?? '').toString());
+      final ids = (raw['ids'] as List?)
+              ?.map((e) => e.toString())
+              .toSet() ??
+          <String>{};
+      if (!mounted) return;
+      setState(() {
+        _syncBannerSnoozeUntil = until;
+        _syncBannerSnoozeIds = ids;
+      });
+    } catch (_) {/* absent / unreadable → no snooze */}
+  }
+
+  /// Dismiss the sync-error banner for [problemIds] for a week. A NEW
+  /// institution failing (an id not in this set) re-shows it immediately.
+  Future<void> _snoozeSyncBanner(Set<String> problemIds) async {
+    final until = DateTime.now().add(const Duration(days: 7));
+    setState(() {
+      _syncBannerSnoozeIds = problemIds;
+      _syncBannerSnoozeUntil = until;
+    });
+    try {
+      await _apiService.putSetting(_syncBannerSnoozeKey, {
+        'until': until.toIso8601String(),
+        'ids': problemIds.toList(),
+      });
+    } catch (_) {/* local dismissal still holds for the session */}
+  }
+
   Future<void> _handleReconnect(String institutionId) async {
     setState(() => _isLoading = true);
     try {
@@ -3550,6 +3592,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       // reconnecting" banner is one click to resolve,
                       // not three (banner → Settings → row button).
                       onReconnect: _handleReconnect,
+                      dismissedIds: _syncBannerSnoozeIds,
+                      dismissedUntil: _syncBannerSnoozeUntil,
+                      onDismiss: _snoozeSyncBanner,
                     ),
                   Expanded(
                     child: (!firstRun && !isCompact)

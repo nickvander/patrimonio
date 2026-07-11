@@ -11,12 +11,22 @@ class SyncErrorBanner extends StatelessWidget {
   final List<dynamic> syncData;
   final VoidCallback? onJumpToManagement;
   final Future<void> Function(String institutionId)? onReconnect;
+  /// Snooze: institution ids the user dismissed, and until when. While the
+  /// snooze is active the banner stays hidden UNLESS a not-yet-dismissed
+  /// institution fails — a genuinely new problem still surfaces.
+  final Set<String> dismissedIds;
+  final DateTime? dismissedUntil;
+  /// Called with the current problem institution ids when the user taps ×.
+  final void Function(Set<String> problemIds)? onDismiss;
 
   const SyncErrorBanner({
     super.key,
     required this.syncData,
     this.onJumpToManagement,
     this.onReconnect,
+    this.dismissedIds = const {},
+    this.dismissedUntil,
+    this.onDismiss,
   });
 
   @override
@@ -29,6 +39,18 @@ class SyncErrorBanner extends StatelessWidget {
     }).toList();
 
     if (problems.isEmpty) return const SizedBox.shrink();
+
+    final problemIds = problems
+        .map((p) => (p['id'] ?? '').toString())
+        .where((s) => s.isNotEmpty)
+        .toSet();
+    // Hidden only while the snooze window is active AND every currently-
+    // failing institution was among those dismissed.
+    final snoozed = dismissedUntil != null &&
+        DateTime.now().isBefore(dismissedUntil!) &&
+        problemIds.isNotEmpty &&
+        problemIds.every(dismissedIds.contains);
+    if (snoozed) return const SizedBox.shrink();
 
     final reconnectOnly = problems
         .where((p) => p['sync_status'] == 'reconnect_required')
@@ -94,6 +116,16 @@ class SyncErrorBanner extends StatelessWidget {
               icon: const Icon(Icons.settings, size: 16),
               label: Text(l.lwSyncBannerOpenSettings),
             ),
+            if (onDismiss != null) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                onPressed: () => onDismiss!(problemIds),
+                icon: const Icon(Icons.close, size: 18),
+                tooltip: l.lwSyncBannerDismiss,
+                visualDensity: VisualDensity.compact,
+                color: context.textSubtle,
+              ),
+            ],
           ],
         );
 
@@ -134,11 +166,18 @@ class SyncErrorBanner extends StatelessWidget {
           children: [
             Icon(Icons.warning_amber_rounded, color: accent, size: 18),
             const SizedBox(width: 8),
-            Text(
-              summary,
-              style: TextStyle(
-                color: accent,
-                fontWeight: FontWeight.w700,
+            // Flexible so a long summary + the action buttons (now including
+            // the dismiss ×) never overflow a medium-width banner — it
+            // ellipsizes instead.
+            Flexible(
+              child: Text(
+                summary,
+                style: TextStyle(
+                  color: accent,
+                  fontWeight: FontWeight.w700,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: 8),

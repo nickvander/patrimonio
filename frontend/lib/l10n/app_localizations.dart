@@ -7250,6 +7250,12 @@ abstract class AppLocalizations {
   /// **'Open settings'**
   String get lwSyncBannerOpenSettings;
 
+  /// No description provided for @lwSyncBannerDismiss.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss for a week'**
+  String get lwSyncBannerDismiss;
+
   /// No description provided for @lwSinceNewTransactions.
   ///
   /// In en, this message translates to:
@@ -8665,6 +8671,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Balance remaining'**
   String get lendScheduleColBalance;
+
+  /// No description provided for @lendScheduleRowMeta.
+  ///
+  /// In en, this message translates to:
+  /// **'Bal {balance} · int {interest}'**
+  String lendScheduleRowMeta(String balance, String interest);
 
   /// No description provided for @lendScheduleColStatus.
   ///

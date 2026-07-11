@@ -3865,6 +3865,11 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
   Widget _buildScheduleTable(List<dynamic> rows, {bool showInterest = true}) {
     final l10n = AppLocalizations.of(context);
     final nextDue = _nextDueIndex(rows);
+    // On a phone there's no room for 5-6 columns — the money truncates and
+    // the Interest/Balance columns collide. Drop those two on narrow (the
+    // Balance-remaining already shows in the progress line above); each row
+    // instead carries a compact "int · balance" subtitle so nothing is lost.
+    final narrow = MediaQuery.sizeOf(context).width < 520;
     // Totals footer.
     var totalPayment = 0.0;
     for (final p in rows) {
@@ -3881,16 +3886,17 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
               _schCell('#', flex: 1),
               _schCell('Due', flex: 3),
               _schCell(l10n.lendScheduleColPayment, flex: 3, alignRight: true),
-              if (showInterest)
+              if (showInterest && !narrow)
                 _schCell('Interest', flex: 3, alignRight: true),
-              _schCell(l10n.lendScheduleColBalance, flex: 3, alignRight: true),
-              _schCell('', flex: 2, alignRight: true),
+              if (!narrow)
+                _schCell(l10n.lendScheduleColBalance, flex: 3, alignRight: true),
+              _schCell('', flex: 1, alignRight: true),
             ],
           ),
         ),
         Divider(height: 1, color: context.hairline),
         for (var i = 0; i < rows.length; i++) _scheduleRow(rows, i,
-            showInterest: showInterest, isNextDue: i == nextDue),
+            showInterest: showInterest, isNextDue: i == nextDue, narrow: narrow),
         Divider(height: 1, color: context.hairline),
         // Totals footer.
         Padding(
@@ -3907,9 +3913,9 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
               ),
               _schCell(_money(totalPayment),
                   flex: 3, alignRight: true, bold: true),
-              if (showInterest) _schCell('', flex: 3, alignRight: true),
-              _schCell('', flex: 3, alignRight: true),
-              _schCell('', flex: 2, alignRight: true),
+              if (showInterest && !narrow) _schCell('', flex: 3, alignRight: true),
+              if (!narrow) _schCell('', flex: 3, alignRight: true),
+              _schCell('', flex: 1, alignRight: true),
             ],
           ),
         ),
@@ -3918,10 +3924,15 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
   }
 
   Widget _scheduleRow(List<dynamic> rows, int i,
-      {required bool showInterest, required bool isNextDue}) {
+      {required bool showInterest,
+      required bool isNextDue,
+      required bool narrow}) {
     final m = rows[i] as Map<String, dynamic>;
+    final l10n = AppLocalizations.of(context);
     final paid = _rowPaid(m);
     final payment = (m['scheduled_amount'] as num?)?.toDouble() ?? 0;
+    final interest = (m['scheduled_interest'] as num?)?.toDouble() ?? 0;
+    final balance = _balanceAfter(rows, i);
     return Container(
       decoration: isNextDue
           ? BoxDecoration(
@@ -3932,16 +3943,38 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
       padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
       margin: const EdgeInsets.symmetric(vertical: 1),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _schCell('${m['installment_number']}', flex: 1),
-          _schCell(_fmtDue(m['due_date']), flex: 3),
-          _schCell(_money(payment), flex: 3, alignRight: true),
-          if (showInterest)
-            _schCell(_money((m['scheduled_interest'] as num?) ?? 0),
-                flex: 3, alignRight: true),
-          _schCell(_money(_balanceAfter(rows, i)), flex: 3, alignRight: true),
+          // Due, with the dropped Interest/Balance folded into a subtitle on
+          // narrow so no data is lost.
           Expanded(
-            flex: 2,
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_fmtDue(m['due_date']),
+                    style: TextStyle(fontSize: 12, color: context.textMuted)),
+                if (narrow)
+                  Text(
+                    l10n.lendScheduleRowMeta(
+                        _money(balance), _money(interest)),
+                    style:
+                        TextStyle(fontSize: 10.5, color: context.textFaint),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          _schCell(_money(payment), flex: 3, alignRight: true),
+          if (showInterest && !narrow)
+            _schCell(_money(interest), flex: 3, alignRight: true),
+          if (!narrow)
+            _schCell(_money(balance), flex: 3, alignRight: true),
+          Expanded(
+            flex: 1,
             child: Align(
               alignment: Alignment.centerRight,
               child: Icon(
