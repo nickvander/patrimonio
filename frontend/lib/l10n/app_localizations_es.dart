@@ -4018,6 +4018,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get dlgAccountClabeInvalid => 'La CLABE debe tener 18 dígitos';
 
   @override
+  String get acctDetailsToggle => 'Detalles de la cuenta';
+
+  @override
   String get acctTypeChecking => 'Cheques';
 
   @override

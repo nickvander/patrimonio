@@ -3980,6 +3980,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dlgAccountClabeInvalid => 'CLABE must be 18 digits';
 
   @override
+  String get acctDetailsToggle => 'Account details';
+
+  @override
   String get acctTypeChecking => 'Checking';
 
   @override

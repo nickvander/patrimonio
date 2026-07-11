@@ -1520,6 +1520,7 @@
   "dlgAccountClabe": "CLABE",
   "dlgAccountHolder": "Account holder",
   "dlgAccountClabeInvalid": "CLABE must be 18 digits",
+  "acctDetailsToggle": "Account details",
   "acctTypeChecking": "Checking",
   "acctTypeSavings": "Savings",
   "acctTypeCD": "Certificate of deposit",

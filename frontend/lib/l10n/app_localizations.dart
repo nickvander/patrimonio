@@ -6564,6 +6564,12 @@ abstract class AppLocalizations {
   /// **'CLABE must be 18 digits'**
   String get dlgAccountClabeInvalid;
 
+  /// No description provided for @acctDetailsToggle.
+  ///
+  /// In en, this message translates to:
+  /// **'Account details'**
+  String get acctDetailsToggle;
+
   /// No description provided for @acctTypeChecking.
   ///
   /// In en, this message translates to:

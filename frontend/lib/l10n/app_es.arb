@@ -1314,6 +1314,7 @@
   "dlgAccountClabe": "CLABE",
   "dlgAccountHolder": "Titular de la cuenta",
   "dlgAccountClabeInvalid": "La CLABE debe tener 18 dígitos",
+  "acctDetailsToggle": "Detalles de la cuenta",
   "acctTypeChecking": "Cheques",
   "acctTypeSavings": "Ahorros",
   "acctTypeCD": "Depósito a plazo",

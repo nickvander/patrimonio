@@ -140,6 +140,10 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
   // one cheap request (was a fixed 1,000-row download), large enough
   // that the bounded-host virtualised list has a screenful to show.
   static const int _pageSize = 50;
+  // Whether the account-details block (CLABE, balance chart, holdings) is
+  // expanded. null = follow the width default (collapsed on a narrow phone
+  // sheet so the transactions list fills the screen; open on a wide panel).
+  bool? _showDetails;
   List<dynamic> _balanceHistory = const [];
   // Equity holdings (Plaid-synced or manually added by ticker + quantity).
   List<dynamic> _holdings = const [];
@@ -1348,6 +1352,26 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
     }
   }
 
+  /// Compact toggle that shows/hides the account-details block (CLABE,
+  /// balance chart, holdings) above the transactions list.
+  Widget _detailsToggle(bool showDetails) {
+    final l = AppLocalizations.of(context);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: () => setState(() => _showDetails = !showDetails),
+        icon: Icon(showDetails ? Icons.expand_less : Icons.expand_more,
+            size: 18),
+        label: Text(l.acctDetailsToggle),
+        style: TextButton.styleFrom(
+          foregroundColor: context.textSubtle,
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        ),
+      ),
+    );
+  }
+
   Widget _buildBody() {
     final l = AppLocalizations.of(context);
     if (_isLoading) {
@@ -1461,22 +1485,32 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
             const SizedBox(height: 12),
           ],
         ];
-        // Leave the transactions list at least ~300px whenever the panel
-        // is tall enough; on very short panels fall back to a 35/65 split
-        // (clamp bounds stay ordered because 0.35·h ≤ h always).
+        // The account details (CLABE, balance chart, holdings) collapse
+        // behind a toggle so the transactions list — the reason you open a
+        // account — fills the sheet. Default: collapsed on a narrow phone
+        // sheet, open on a wide side panel. When open, the details are
+        // capped to ~40% so the list still gets the majority.
         final bodyHeight = constraints.maxHeight;
-        final preListCap = bodyHeight.isFinite
-            ? (bodyHeight - 300.0).clamp(bodyHeight * 0.35, bodyHeight)
-            : double.infinity;
+        // Default collapsed on a short host (the phone bottom sheet) so the
+        // list isn't squeezed to ~2 rows; open on a tall side panel / an
+        // unbounded host where there's room for both.
+        final showDetails =
+            _showDetails ?? (!bodyHeight.isFinite || bodyHeight > 820);
+        final preListCap =
+            bodyHeight.isFinite ? bodyHeight * 0.4 : double.infinity;
         return Column(
           children: [
-            if (preList.isNotEmpty)
-              ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: preListCap),
-                child: SingleChildScrollView(
-                  child: Column(children: preList),
+            if (preList.isNotEmpty) ...[
+              _detailsToggle(showDetails),
+              if (showDetails)
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: preListCap),
+                  child: SingleChildScrollView(
+                    child: Column(children: preList),
+                  ),
                 ),
-              ),
+              const SizedBox(height: 8),
+            ],
             Expanded(
             child: TransactionsTab(
               transactions: _transactions!,

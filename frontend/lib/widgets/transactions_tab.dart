@@ -2076,7 +2076,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
         Flexible(
           child: Text(
             l.navTransactions,
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            // Smaller on narrow so the title + inline actions fit a phone
+            // sheet without ellipsizing to "Transact…".
+            style: TextStyle(
+                fontSize: isNarrow ? 18 : 24, fontWeight: FontWeight.bold),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
