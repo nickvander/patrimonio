@@ -1012,6 +1012,34 @@
       }
     }
   },
+  "projValueEntryRangePercent": "Enter a rate between {min} and {max}",
+  "@projValueEntryRangePercent": {
+    "description": "U5: inline validation error in the typed slider-value dialog for percent sliders; min/max arrive pre-formatted as percentages (formatPercent). The explicit placeholders below keep this declaration order in the generated signature: (min, max).",
+    "placeholders": {
+      "min": {
+        "type": "String",
+        "example": "0%"
+      },
+      "max": {
+        "type": "String",
+        "example": "15%"
+      }
+    }
+  },
+  "projValueEntryWholeYears": "Enter a whole number of years between {min} and {max}",
+  "@projValueEntryWholeYears": {
+    "description": "U5: inline validation error in the typed slider-value dialog for the whole-year sliders (years to retirement, projection years); also shown for fractional input like 12.5, which is rejected, not clamped. The explicit placeholders below keep this declaration order in the generated signature: (min, max).",
+    "placeholders": {
+      "min": {
+        "type": "int",
+        "example": "0"
+      },
+      "max": {
+        "type": "int",
+        "example": "50"
+      }
+    }
+  },
   "projSavingsRateCaption": "You're saving about {pct} of your income",
   "@projSavingsRateCaption": {
     "description": "U3: caption under the monthly-savings slider relating the current contribution to tracked annual income; {pct} is a pre-formatted percentage, capped at 100%.",

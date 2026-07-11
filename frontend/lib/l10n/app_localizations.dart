@@ -4886,6 +4886,18 @@ abstract class AppLocalizations {
   /// **'Enter an amount between {min} and {max}'**
   String projValueEntryRange(String min, String max);
 
+  /// U5: inline validation error in the typed slider-value dialog for percent sliders; min/max arrive pre-formatted as percentages (formatPercent). The explicit placeholders below keep this declaration order in the generated signature: (min, max).
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a rate between {min} and {max}'**
+  String projValueEntryRangePercent(String min, String max);
+
+  /// U5: inline validation error in the typed slider-value dialog for the whole-year sliders (years to retirement, projection years); also shown for fractional input like 12.5, which is rejected, not clamped. The explicit placeholders below keep this declaration order in the generated signature: (min, max).
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a whole number of years between {min} and {max}'**
+  String projValueEntryWholeYears(int min, int max);
+
   /// U3: caption under the monthly-savings slider relating the current contribution to tracked annual income; {pct} is a pre-formatted percentage, capped at 100%.
   ///
   /// In en, this message translates to:

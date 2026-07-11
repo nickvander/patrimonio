@@ -46,11 +46,14 @@ PM triage → parallel frontend/backend implementation → live re-verification
   `emergency_fund` trailing-spend (current cash stays latest-rate by policy);
   regression tests fail against the old code. 481 frontend + full backend
   suites green.
-* **Known follow-ups:** the four dashboard handlers above still swallow DB
-  errors (`unwrap_or_default()` → error renders as empty chart) — convert to
-  `Result<_, ApiError>` like projections; chart hover tooltip lingers after
-  mouse-out (cosmetic, fl_chart touch config); percent sliders are drag-only
-  (money sliders got typed entry).
+* **Round-10c (follow-ups, verified live):** the four dashboard chart handlers
+  now return `Result<_, ApiError>` — DB errors are logged 500s, not empty
+  charts / all-zero runways (empty DATA still 200s with the empty shape);
+  chart tooltip owns its hover state (`handleBuiltInTouches: false` + manual
+  `showingTooltipIndicators`) and dismisses on mouse-out; typed entry extended
+  to all seven percent/year sliders (hard bounds, integers-only years, es-MX
+  strings). 488 frontend + 122 dashboard-integration tests green. Deployed to
+  thelab.
 
 ## 2026-07-09 sprint — round 9 (cross-tool AGENTS.md, palette contrast, lint cleanup)
 

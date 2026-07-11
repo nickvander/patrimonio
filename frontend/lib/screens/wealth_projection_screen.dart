@@ -141,6 +141,29 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   // fan) around the expected line.
   bool _showBand = true;
 
+  // U6: chart hover state, owned by the screen instead of fl_chart's
+  // built-in handleBuiltInTouches — the built-in tooltip kept the last
+  // hovered spot pinned after the pointer left the chart area. Holding the
+  // touched spots here lets the touchCallback clear them on
+  // FlPointerExitEvent / pan-end / long-press-end (anything
+  // !isInterestedForInteractions), and makes the dismissal testable via
+  // LineChartData.showingTooltipIndicators. null/empty = no tooltip.
+  List<LineBarSpot>? _chartTouchedSpots;
+
+  // True when [spots] describes the same touched positions as the current
+  // state — used to skip no-op setState calls on every hover tick.
+  bool _sameTouchedSpots(List<LineBarSpot> spots) {
+    final cur = _chartTouchedSpots;
+    if (cur == null || cur.length != spots.length) return false;
+    for (var i = 0; i < spots.length; i++) {
+      if (cur[i].barIndex != spots[i].barIndex ||
+          cur[i].spotIndex != spots[i].spotIndex) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   // Display-only conversion. The backend math is always real (today's dollars);
   // when this is on we multiply every displayed figure by the cumulative
   // inflation path so the chart + KPIs read in future nominal dollars instead.
@@ -507,6 +530,9 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         _projectionData = data;
         _loadFailed = false;
         _isLoading = false;
+        // U6: a fresh projection invalidates any hovered spot — its indexes
+        // point into the previous curve.
+        _chartTouchedSpots = null;
       });
     } catch (e) {
       debugPrint("Error fetching projection: $e");
@@ -878,6 +904,13 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         help: '${l.projHelpExpectedReturn}\n${_fisherHelp(l)}',
         onChanged: (val) => setState(() => _annualReturnRate = val),
         onChangeEnd: (_) => _assumptionChanged(),
+        onTapValue: () => _editPercentValue(
+          label: l.projExpectedReturnNominal,
+          currentFraction: _annualReturnRate,
+          minFraction: 0,
+          maxFraction: 0.15,
+          commit: (v) => _annualReturnRate = v,
+        ),
       ),
       div(),
       _buildSliderControl(
@@ -892,6 +925,13 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         help: l.projHelpYearsToRetirement,
         onChanged: (val) => setState(() => _yearsToRetirement = val.toInt()),
         onChangeEnd: (_) => _assumptionChanged(),
+        onTapValue: () => _editYearsValue(
+          label: l.projYearsToRetirement,
+          current: _yearsToRetirement.clamp(0, _projectionYears),
+          min: 0,
+          max: _projectionYears,
+          commit: (v) => _yearsToRetirement = v,
+        ),
       ),
     ];
 
@@ -906,6 +946,13 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         help: l.projHelpInflation,
         onChanged: (val) => setState(() => _annualInflation = val),
         onChangeEnd: (_) => _assumptionChanged(),
+        onTapValue: () => _editPercentValue(
+          label: l.projInflation,
+          currentFraction: _annualInflation,
+          minFraction: 0,
+          maxFraction: 0.06,
+          commit: (v) => _annualInflation = v,
+        ),
       ),
       div(),
       _buildSliderControl(
@@ -917,6 +964,13 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         help: l.projHelpVolatility,
         onChanged: (val) => setState(() => _returnVolatility = val),
         onChangeEnd: (_) => _assumptionChanged(),
+        onTapValue: () => _editPercentValue(
+          label: l.projVolatility,
+          currentFraction: _returnVolatility,
+          minFraction: 0,
+          maxFraction: 0.25,
+          commit: (v) => _returnVolatility = v,
+        ),
       ),
       div(),
       _buildSliderControl(
@@ -957,6 +1011,13 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         help: l.projHelpSwr,
         onChanged: (val) => setState(() => _withdrawalRate = val),
         onChangeEnd: (_) => _assumptionChanged(),
+        onTapValue: () => _editPercentValue(
+          label: l.projSafeWithdrawalRate,
+          currentFraction: _withdrawalRate,
+          minFraction: 0.02,
+          maxFraction: 0.06,
+          commit: (v) => _withdrawalRate = v,
+        ),
       ),
       div(),
       _buildSliderControl(
@@ -988,6 +1049,13 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         help: l.projHelpTaxDrag,
         onChanged: (val) => setState(() => _annualTaxDrag = val),
         onChangeEnd: (_) => _assumptionChanged(),
+        onTapValue: () => _editPercentValue(
+          label: l.projTaxDrag,
+          currentFraction: _annualTaxDrag,
+          minFraction: 0,
+          maxFraction: 0.03,
+          commit: (v) => _annualTaxDrag = v,
+        ),
       ),
       div(),
       _buildGuardrailsToggle(),
@@ -1007,6 +1075,20 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           }
         }),
         onChangeEnd: (_) => _assumptionChanged(),
+        onTapValue: () => _editYearsValue(
+          label: l.projProjectionYears,
+          current: _projectionYears,
+          min: 5,
+          max: 50,
+          commit: (v) {
+            // Mirror the slider's invariant: retirement can't sit past the
+            // horizon.
+            _projectionYears = v;
+            if (_yearsToRetirement > _projectionYears) {
+              _yearsToRetirement = _projectionYears;
+            }
+          },
+        ),
       ),
       div(),
       _buildGoalEditor(),
@@ -1236,7 +1318,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       builder: (_) => _ValueEntryDialog(
         title: label,
         initialValue: (currentUsd * cf).round().toString(),
-        currencySymbol: widget.currencyFormat.currencySymbol,
+        prefixText: widget.currencyFormat.currencySymbol,
         min: minDisplay,
         max: maxDisplay,
         // gen-l10n: explicit arb placeholders keep the (min, max) declaration
@@ -1249,6 +1331,78 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     );
     if (!mounted || result == null) return;
     setState(() => commit(result / cf));
+    _assumptionChanged();
+  }
+
+  /// U5: percent slider value as dialog text, in percent units with float
+  /// noise trimmed — 0.07 → "7", 0.085 → "8.5".
+  static String _percentText(double fraction) {
+    final pct = double.parse((fraction * 100).toStringAsFixed(2));
+    return pct == pct.roundToDouble() ? pct.round().toString() : pct.toString();
+  }
+
+  // U5: typed entry behind a percent slider's value label. The dialog works
+  // in percent units (type "8.5" for 8.5%); the commit converts back to the
+  // fraction the sliders hold. Unlike the money sliders, the slider min/max
+  // are HARD limits — a value outside them shows the inline range error, the
+  // slider never grows. Commits route through the same debounced
+  // _assumptionChanged() path as a drag.
+  Future<void> _editPercentValue({
+    required String label,
+    required double currentFraction,
+    required double minFraction,
+    required double maxFraction,
+    required void Function(double fraction) commit,
+  }) async {
+    final l = AppLocalizations.of(context);
+    final result = await showDialog<double>(
+      context: context,
+      builder: (_) => _ValueEntryDialog(
+        title: label,
+        initialValue: _percentText(currentFraction),
+        suffixText: '%',
+        min: minFraction * 100,
+        max: maxFraction * 100,
+        // gen-l10n: explicit arb placeholders keep the (min, max) declaration
+        // order in the generated signature (same pattern as projValueEntryRange).
+        rangeError: l.projValueEntryRangePercent(
+          formatPercent(context, minFraction * 100, digits: 0),
+          formatPercent(context, maxFraction * 100, digits: 0),
+        ),
+      ),
+    );
+    if (!mounted || result == null) return;
+    setState(() => commit(result / 100));
+    _assumptionChanged();
+  }
+
+  // U5: typed entry behind a whole-year slider's value label (years to
+  // retirement, projection years). Integers only — a fractional entry like
+  // "12.5" is rejected with the inline whole-number error, never clamped —
+  // and the slider bounds are hard limits, like the percent sliders.
+  Future<void> _editYearsValue({
+    required String label,
+    required int current,
+    required int min,
+    required int max,
+    required void Function(int years) commit,
+  }) async {
+    final l = AppLocalizations.of(context);
+    final result = await showDialog<double>(
+      context: context,
+      builder: (_) => _ValueEntryDialog(
+        title: label,
+        initialValue: current.toString(),
+        integerOnly: true,
+        min: min.toDouble(),
+        max: max.toDouble(),
+        // gen-l10n: explicit arb placeholders keep the (min, max) declaration
+        // order in the generated signature (same pattern as projValueEntryRange).
+        rangeError: l.projValueEntryWholeYears(min, max),
+      ),
+    );
+    if (!mounted || result == null) return;
+    setState(() => commit(result.round()));
     _assumptionChanged();
   }
 
@@ -1996,6 +2150,70 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       ],
     );
 
+    // U6: the bar list is assembled up front so the screen-owned hover state
+    // can be re-applied to it (showingIndicators / showingTooltipIndicators)
+    // on every rebuild — fl_chart's built-in touch state is bypassed.
+    final rawBars = <LineChartBarData>[
+      ...bandBars,
+      // Expected path
+      LineChartBarData(
+        spots: spots,
+        isCurved: true,
+        color: context.positive,
+        barWidth: 4,
+        isStrokeCapRound: true,
+        dotData: const FlDotData(show: false),
+        belowBarData: BarAreaData(
+          show: !hasBand,
+          gradient: LinearGradient(
+            colors: [
+              context.positive.withValues(alpha: 0.3),
+              context.positive.withValues(alpha: 0.0),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+      ),
+      // Focused FIRE target line (Full / Coast / Barista)
+      LineChartBarData(
+        spots: fireTargetSpots,
+        isCurved: false,
+        color: targetColor.withValues(alpha: 0.7),
+        barWidth: 2,
+        dashArray: [5, 5],
+        dotData: const FlDotData(show: false),
+      ),
+      // User-set goal line (pink — distinct from the amber FIRE target).
+      // When the whole goal sits above the y-range the labelled
+      // HorizontalLine in extraLines stands in for it instead.
+      if (_goalAmountUsd != null && !goalOffChart)
+        LineChartBarData(
+          spots: goalSpots,
+          isCurved: false,
+          color: goalColor.withValues(alpha: 0.75),
+          barWidth: 2,
+          dashArray: [3, 6],
+          dotData: const FlDotData(show: false),
+        ),
+    ];
+
+    // Drop any stored spot that no longer points inside the current bars
+    // (band toggled off, goal cleared, shorter horizon…).
+    final touchedSpots = <LineBarSpot>[
+      for (final s in _chartTouchedSpots ?? const <LineBarSpot>[])
+        if (s.barIndex < rawBars.length &&
+            s.spotIndex < rawBars[s.barIndex].spots.length)
+          s,
+    ];
+    final lineBars = <LineChartBarData>[
+      for (var i = 0; i < rawBars.length; i++)
+        rawBars[i].copyWith(showingIndicators: [
+          for (final s in touchedSpots)
+            if (s.barIndex == i) s.spotIndex,
+        ]),
+    ];
+
     return LayoutBuilder(builder: (context, plot) {
       // F7: adaptive x-label step computed off the inner plot width (this
       // builder's constraint minus the 60px reserved for y labels) — a fixed
@@ -2064,55 +2282,40 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
         maxY: chartMaxY,
         extraLinesData: extraLines,
         betweenBarsData: betweenBars,
-        lineBarsData: [
-          ...bandBars,
-          // Expected path
-          LineChartBarData(
-            spots: spots,
-            isCurved: true,
-            color: context.positive,
-            barWidth: 4,
-            isStrokeCapRound: true,
-            dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(
-              show: !hasBand,
-              gradient: LinearGradient(
-                colors: [
-                  context.positive.withValues(alpha: 0.3),
-                  context.positive.withValues(alpha: 0.0),
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
-          ),
-          // Focused FIRE target line (Full / Coast / Barista)
-          LineChartBarData(
-            spots: fireTargetSpots,
-            isCurved: false,
-            color: targetColor.withValues(alpha: 0.7),
-            barWidth: 2,
-            dashArray: [5, 5],
-            dotData: const FlDotData(show: false),
-          ),
-          // User-set goal line (pink — distinct from the amber FIRE target).
-          // When the whole goal sits above the y-range the labelled
-          // HorizontalLine in extraLines stands in for it instead.
-          if (_goalAmountUsd != null && !goalOffChart)
-            LineChartBarData(
-              spots: goalSpots,
-              isCurved: false,
-              color: goalColor.withValues(alpha: 0.75),
-              barWidth: 2,
-              dashArray: [3, 6],
-              dotData: const FlDotData(show: false),
-            ),
-        ],
+        lineBarsData: lineBars,
+        // U6: screen-owned tooltip state (see _chartTouchedSpots). The spots
+        // arrive pre-sorted by y like the built-in handling produced, so the
+        // tooltip renders identically.
+        showingTooltipIndicators: touchedSpots.isEmpty
+            ? const []
+            : [ShowingTooltipIndicators(touchedSpots)],
         lineTouchData: LineTouchData(
           touchSpotThreshold: 100000,
           distanceCalculator: (touchPoint, spotPixelCoordinates) =>
               (touchPoint.dx - spotPixelCoordinates.dx).abs(),
-          handleBuiltInTouches: true,
+          // U6: built-in touch handling left the tooltip pinned after the
+          // pointer exited the chart — the screen owns the state instead and
+          // clears it on any not-interested event (pointer exit, pan end,
+          // long-press end), mirroring the built-in gating otherwise.
+          handleBuiltInTouches: false,
+          touchCallback: (event, response) {
+            final spots = response?.lineBarSpots;
+            if (!event.isInterestedForInteractions ||
+                spots == null ||
+                spots.isEmpty) {
+              if (_chartTouchedSpots != null) {
+                setState(() => _chartTouchedSpots = null);
+              }
+              return;
+            }
+            // Same y-descending order the built-in handler used, so the
+            // tooltip rows / anchor spot are unchanged.
+            final sorted = List<LineBarSpot>.of(spots)
+              ..sort((a, b) => b.y.compareTo(a.y));
+            if (!_sameTouchedSpots(sorted)) {
+              setState(() => _chartTouchedSpots = sorted);
+            }
+          },
           getTouchedSpotIndicator: (barData, spotIndexes) {
             return spotIndexes.map((idx) {
               return TouchedSpotIndicatorData(
@@ -2569,16 +2772,21 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
   }
 }
 
-/// U2: small numeric-entry dialog behind a slider's value label (same
+/// U2/U5: small numeric-entry dialog behind a slider's value label (same
 /// StatefulWidget-owns-its-controllers pattern as [_GoalDialog], for the same
-/// dispose-with-the-route reason). Works entirely in the *display* currency;
-/// pops `null` on cancel or the validated value on save. [rangeError] arrives
-/// pre-localized/pre-formatted because the min/max are money strings the
-/// caller already knows how to format.
+/// dispose-with-the-route reason). Works entirely in the caller's *display*
+/// units — display currency for money ([prefixText] = the currency symbol),
+/// percent units for rates ([suffixText] = '%'), plain integers for years
+/// ([integerOnly]; a fractional entry like "12.5" is REJECTED with the inline
+/// error, never clamped). Pops `null` on cancel or the validated value on
+/// save. [rangeError] arrives pre-localized/pre-formatted because only the
+/// caller knows how to format the min/max (money vs percent vs years).
 class _ValueEntryDialog extends StatefulWidget {
   final String title;
   final String initialValue;
-  final String currencySymbol;
+  final String? prefixText;
+  final String? suffixText;
+  final bool integerOnly;
   final double min;
   final double max;
   final String rangeError;
@@ -2586,7 +2794,9 @@ class _ValueEntryDialog extends StatefulWidget {
   const _ValueEntryDialog({
     required this.title,
     required this.initialValue,
-    required this.currencySymbol,
+    this.prefixText,
+    this.suffixText,
+    this.integerOnly = false,
     required this.min,
     required this.max,
     required this.rangeError,
@@ -2608,8 +2818,16 @@ class _ValueEntryDialogState extends State<_ValueEntryDialog> {
   }
 
   void _save() {
-    final v = double.tryParse(_ctrl.text.trim());
-    final ok = v != null && v.isFinite && v >= widget.min && v <= widget.max;
+    final text = _ctrl.text.trim();
+    final v = double.tryParse(text);
+    // U5: integer fields (years) reject fractional input outright — the
+    // whole-number range error explains both failure modes.
+    final wholeOk = !widget.integerOnly || int.tryParse(text) != null;
+    final ok = v != null &&
+        v.isFinite &&
+        wholeOk &&
+        v >= widget.min &&
+        v <= widget.max;
     if (!ok) {
       setState(() => _error = widget.rangeError);
       return;
@@ -2625,10 +2843,12 @@ class _ValueEntryDialogState extends State<_ValueEntryDialog> {
       content: TextField(
         controller: _ctrl,
         autofocus: true,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        keyboardType:
+            TextInputType.numberWithOptions(decimal: !widget.integerOnly),
         decoration: InputDecoration(
           labelText: widget.title,
-          prefixText: widget.currencySymbol,
+          prefixText: widget.prefixText,
+          suffixText: widget.suffixText,
           errorText: _error,
         ),
         onSubmitted: (_) => _save(),

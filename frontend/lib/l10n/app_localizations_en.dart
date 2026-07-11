@@ -2923,6 +2923,16 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String projValueEntryRangePercent(String min, String max) {
+    return 'Enter a rate between $min and $max';
+  }
+
+  @override
+  String projValueEntryWholeYears(int min, int max) {
+    return 'Enter a whole number of years between $min and $max';
+  }
+
+  @override
   String projSavingsRateCaption(String pct) {
     return 'You\'re saving about $pct of your income';
   }

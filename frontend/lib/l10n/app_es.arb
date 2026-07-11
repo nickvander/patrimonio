@@ -828,6 +828,8 @@
   "projRetirementMarker": "Retiro",
   "projGoalOffChart": "Tu meta: {amount}",
   "projValueEntryRange": "Ingresa un monto entre {min} y {max}",
+  "projValueEntryRangePercent": "Ingresa una tasa entre {min} y {max}",
+  "projValueEntryWholeYears": "Ingresa un número entero de años entre {min} y {max}",
   "projSavingsRateCaption": "Estás ahorrando alrededor del {pct} de tus ingresos",
   "taxTitle": "Planeación fiscal",
   "taxFilingSingle": "Soltero",

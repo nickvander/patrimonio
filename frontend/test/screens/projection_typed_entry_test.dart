@@ -147,6 +147,138 @@ void main() {
     expect(blob!['annual_expenses'], 4500.0);
   });
 
+  // U5: typed entry for the percent sliders. The dialog works in percent
+  // units (8.5 → 8.5%); unlike money, the slider min/max are HARD limits —
+  // out-of-range input shows the inline error and never grows the slider.
+  testWidgets('typing 8.5 into Expected return commits 8.5%, persists into '
+      'the assumptions blob and refetches once', (tester) async {
+    setTestSize(tester, const Size(1300, 1800));
+    final fetches = <int>[];
+    final writes = <String, dynamic>{};
+    await tester.pumpWidget(buildProjectionHost(
+      projectionFetcher: _countingFetcher(fetches),
+      settingWriter: (key, value) async => writes[key] = value,
+    ));
+    await tester.pumpAndSettle();
+    expect(fetches.length, 1); // initial load
+
+    await _tapValueLabel(tester, '7.0%'); // default nominal return
+    await _typeAndSave(tester, '8.5');
+
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('8.5%'), findsOneWidget);
+
+    // F14 path: one debounced persist + refetch, fraction in the blob.
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    expect(fetches.length, 2);
+    final blob = writes['projection_assumptions'] as Map<String, dynamic>?;
+    expect(blob, isNotNull);
+    expect(blob!['annual_return_rate'], closeTo(0.085, 1e-9));
+  });
+
+  testWidgets('a percent above the slider max (99 into Expected return) '
+      'shows the inline range error and does not commit', (tester) async {
+    setTestSize(tester, const Size(1300, 1800));
+    final fetches = <int>[];
+    await tester.pumpWidget(
+        buildProjectionHost(projectionFetcher: _countingFetcher(fetches)));
+    await tester.pumpAndSettle();
+
+    await _tapValueLabel(tester, '7.0%');
+
+    await _typeAndSave(tester, '99'); // slider max is 15%
+    expect(find.byType(AlertDialog), findsOneWidget); // still open
+    expect(find.text('Enter a rate between 0% and 15%'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    expect(find.text('7.0%'), findsOneWidget); // unchanged
+    expect(fetches.length, 1); // just the initial load
+  });
+
+  testWidgets('the percent range error localizes (es): 99 into Expected '
+      'return shows "Ingresa una tasa entre 0% y 15%"', (tester) async {
+    setTestSize(tester, const Size(1300, 1800));
+    await tester
+        .pumpWidget(buildProjectionHost(locale: const Locale('es')));
+    await tester.pumpAndSettle();
+
+    await _tapValueLabel(tester, '7.0%');
+    final field = find.descendant(
+        of: find.byType(AlertDialog), matching: find.byType(TextField));
+    await tester.enterText(field, '99');
+    await tester.tap(find.widgetWithText(FilledButton, 'Guardar'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.text('Ingresa una tasa entre 0% y 15%'), findsOneWidget);
+  });
+
+  // U5: whole-year sliders accept integers only — "12.5" is REJECTED with
+  // the inline whole-number error (never clamped or truncated).
+  testWidgets('Years to retirement accepts a typed 12, rejects 12.5 with '
+      'the whole-number error, and persists the commit', (tester) async {
+    setTestSize(tester, const Size(1300, 1800));
+    final writes = <String, dynamic>{};
+    await tester.pumpWidget(buildProjectionHost(
+      settingWriter: (key, value) async => writes[key] = value,
+    ));
+    await tester.pumpAndSettle();
+
+    await _tapValueLabel(tester, '20'); // default years to retirement
+
+    // Fractional years: rejected, dialog stays open.
+    await _typeAndSave(tester, '12.5');
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(
+      find.text('Enter a whole number of years between 0 and 30'),
+      findsOneWidget,
+    );
+
+    // Out of range (above the 30-year horizon): same error.
+    await _typeAndSave(tester, '35');
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(
+      find.text('Enter a whole number of years between 0 and 30'),
+      findsOneWidget,
+    );
+
+    await _typeAndSave(tester, '12');
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('12'), findsOneWidget);
+    expect(_sliderFor(tester, 'Years to retirement').value, 12.0);
+
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    final blob = writes['projection_assumptions'] as Map<String, dynamic>?;
+    expect(blob, isNotNull);
+    expect(blob!['years_to_retirement'], 12);
+  });
+
+  testWidgets('typing a projection-years value pulls retirement down to the '
+      'new horizon (slider invariant preserved)', (tester) async {
+    setTestSize(tester, const Size(1300, 1800));
+    final writes = <String, dynamic>{};
+    await tester.pumpWidget(buildProjectionHost(
+      settingWriter: (key, value) async => writes[key] = value,
+    ));
+    await tester.pumpAndSettle();
+
+    await _tapValueLabel(tester, '30'); // default projection years
+    await _typeAndSave(tester, '12');
+    expect(find.byType(AlertDialog), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    final blob = writes['projection_assumptions'] as Map<String, dynamic>?;
+    expect(blob, isNotNull);
+    expect(blob!['projection_years'], 12);
+    // Retirement (default 20) can't sit past the new 12-year horizon.
+    expect(blob['years_to_retirement'], 12);
+  });
+
   testWidgets('a hydrated blob with monthly_contribution 12500 restores '
       '12500 — not clamped to the old 10000 slider max', (tester) async {
     setTestSize(tester, const Size(1300, 1800));
