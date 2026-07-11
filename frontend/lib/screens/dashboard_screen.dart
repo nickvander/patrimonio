@@ -4823,14 +4823,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 20),
+                            // Slimmer, flatter tiles — the vertical: 20 + the
+                            // default elevation made these read as chunky.
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            elevation: 0,
                             backgroundColor: bg,
                             // Pin foreground so the label stays legible on
                             // every tinted tile (ElevatedButton's default
                             // light-mode tonal grey fades into the tint).
                             foregroundColor: foreground,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
                           onPressed: onPressed,
@@ -4856,8 +4859,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       children: [
                         subLabel(l.dashConnectStandardAccounts),
                         Wrap(
-                          spacing: 16,
-                          runSpacing: 16,
+                          spacing: 12,
+                          runSpacing: 10,
                           children: [
                             tile(
                               Icons.add_link,
@@ -4908,8 +4911,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         const SizedBox(height: 20),
                         subLabel(l.dashConnectCryptoExchanges),
                         Wrap(
-                          spacing: 16,
-                          runSpacing: 16,
+                          spacing: 12,
+                          runSpacing: 10,
                           children: [
                             tile(
                               Icons.login,
