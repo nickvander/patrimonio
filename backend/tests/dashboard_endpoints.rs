@@ -7094,3 +7094,223 @@ async fn projection_defaults_months_of_data_partial_months() {
         "monthly_contribution {contribution}"
     );
 }
+
+// =====================================================================
+// Dashboard trends / spending / emergency-fund — per-row historical FX
+//
+// Same bug class as /api/projections/defaults above: these endpoints used
+// to convert MONTHS of historical MXN transactions at the single LATEST
+// USD/MXN rate. Each test seeds flows in two months under two different
+// stored rates and asserts the response matches per-row (on-or-before-date)
+// conversion — and provably differs from what latest-rate conversion would
+// produce.
+//
+// Shared fixture: rate 20.00 recorded ~100 days ago, rate 21.00 recorded
+// ~40 days ago (also the latest). Month A (100d back) flows convert at 20;
+// month B (40d back) flows convert at 21. 100d and 40d are always in
+// different calendar months (60 days apart) and both inside every window
+// these endpoints use.
+// =====================================================================
+
+/// Regression: /api/dashboard/trends must convert each month's MXN flows at
+/// that month's rate, not restate the whole 12-month chart at today's rate.
+#[tokio::test]
+#[serial_test::serial]
+async fn cash_flow_trends_converts_each_month_at_its_own_fx_rate() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let mxn_acct = seed_account_currency(&pool, user_id, "MXN").await;
+
+    seed_fx_rate_days_ago(&pool, "20.00", 100).await;
+    seed_fx_rate_days_ago(&pool, "21.00", 40).await;
+
+    // Month A (rate 20): +20,000 → $1,000.00; −2,100 → $105.00
+    seed_tx_currency_days_ago(&pool, user_id, mxn_acct, "salary A", "20000.00", "MXN", 100).await;
+    seed_tx_currency_days_ago(&pool, user_id, mxn_acct, "rent A", "-2100.00", "MXN", 100).await;
+    // Month B (rate 21): +10,000 → $476.190476…; −1,050 → $50.00
+    seed_tx_currency_days_ago(&pool, user_id, mxn_acct, "salary B", "10000.00", "MXN", 40).await;
+    seed_tx_currency_days_ago(&pool, user_id, mxn_acct, "rent B", "-1050.00", "MXN", 40).await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/trends", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    let points = body.as_array().expect("trends array");
+    assert_eq!(points.len(), 2, "one point per seeded month: {body}");
+
+    // Rows come back ORDER BY month ASC, so [0] = month A, [1] = month B.
+    let inc_a = points[0]["income"].as_f64().unwrap();
+    let sp_a = points[0]["spending"].as_f64().unwrap();
+    let inc_b = points[1]["income"].as_f64().unwrap();
+    let sp_b = points[1]["spending"].as_f64().unwrap();
+    assert!(
+        (inc_a - 1000.00).abs() < 0.01,
+        "month A income {inc_a}: expected 1000.00 at its own rate 20 \
+         (latest-rate bug would give 952.38)"
+    );
+    assert!(
+        (sp_a - 105.00).abs() < 0.01,
+        "month A spending {sp_a}: expected 105.00 at its own rate 20 \
+         (latest-rate bug would give 100.00)"
+    );
+    assert!((inc_b - 476.19).abs() < 0.01, "month B income {inc_b}: expected 476.19 at rate 21");
+    assert!((sp_b - 50.00).abs() < 0.01, "month B spending {sp_b}: expected 50.00 at rate 21");
+}
+
+/// Regression: /api/dashboard/emergency-fund's trailing-12-month spend
+/// (the runway denominator) must convert per row. The liquid-cash numerator
+/// deliberately stays at the LATEST rate — a current balance is a
+/// present-day value — and this test pins that policy split.
+#[tokio::test]
+#[serial_test::serial]
+async fn emergency_fund_spend_per_row_fx_cash_at_latest_rate() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+
+    // A liquid (checking) MXN account holding 2,100 MXN today.
+    let inst_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO institutions (name, institution_type, country, integration_type, sync_status, user_id) \
+         VALUES ('Banco', 'bank', 'MX', 'manual', 'ok', $1) RETURNING id",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .expect("seed institution");
+    let mxn_acct: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO accounts (institution_id, name, account_type, currency, current_balance, user_id) \
+         VALUES ($1, 'Cuenta', 'checking', 'MXN', 2100.00, $2) RETURNING id",
+    )
+    .bind(inst_id)
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .expect("seed checking account");
+
+    seed_fx_rate_days_ago(&pool, "20.00", 100).await;
+    seed_fx_rate_days_ago(&pool, "21.00", 40).await;
+
+    // −2,100 MXN at rate 20 → $105.00; −1,050 MXN at rate 21 → $50.00.
+    seed_tx_currency_days_ago(&pool, user_id, mxn_acct, "rent A", "-2100.00", "MXN", 100).await;
+    seed_tx_currency_days_ago(&pool, user_id, mxn_acct, "rent B", "-1050.00", "MXN", 40).await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/emergency-fund", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+
+    // Current cash converts at the LATEST rate (21): 2100 / 21 = $100.00.
+    let cash = body["liquid_cash_usd"].as_f64().unwrap();
+    assert!(
+        (cash - 100.00).abs() < 0.01,
+        "liquid_cash_usd {cash}: current balances convert at the latest rate (2100/21 = 100)"
+    );
+
+    // Historical spend converts PER ROW: (105 + 50) / 2 months = $77.50.
+    let spend = body["monthly_spend_usd"].as_f64().unwrap();
+    assert!(
+        (spend - 77.50).abs() < 0.01,
+        "monthly_spend_usd {spend}: expected per-row FX 77.50 \
+         (latest-rate bug would give 75.00)"
+    );
+    assert_eq!(body["months_of_data"].as_i64(), Some(2));
+    let covered = body["months_covered"].as_f64().unwrap();
+    assert!(
+        (covered - 100.0 / 77.50).abs() < 0.001,
+        "months_covered {covered}: expected 100 / 77.50"
+    );
+}
+
+/// Regression: /api/dashboard/spending-by-category totals use per-row FX
+/// (same converted-CTE shape as trends — one representative assertion).
+#[tokio::test]
+#[serial_test::serial]
+async fn spending_by_category_per_row_fx() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let mxn_acct = seed_account_currency(&pool, user_id, "MXN").await;
+
+    seed_fx_rate_days_ago(&pool, "20.00", 100).await;
+    seed_fx_rate_days_ago(&pool, "21.00", 40).await;
+    seed_tx_currency_days_ago(&pool, user_id, mxn_acct, "rent A", "-2100.00", "MXN", 100).await;
+    seed_tx_currency_days_ago(&pool, user_id, mxn_acct, "rent B", "-1050.00", "MXN", 40).await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/spending-by-category",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+
+    let cats = body["categories"].as_array().expect("categories array");
+    assert_eq!(cats.len(), 1, "one seeded category: {body}");
+    assert_eq!(cats[0]["category"], "UNCATEGORIZED");
+    let total = cats[0]["total"].as_f64().unwrap();
+    // Per-row: 2100/20 + 1050/21 = 105 + 50 = 155. Latest-rate bug: 150.
+    assert!(
+        (total - 155.00).abs() < 0.01,
+        "category total {total}: expected per-row FX 155.00 (latest-rate bug would give 150.00)"
+    );
+}
+
+/// Regression: /api/dashboard/spending-insights averages use per-row FX
+/// (same converted-CTE shape — one representative assertion on the
+/// trailing average, which spans both rate regimes).
+#[tokio::test]
+#[serial_test::serial]
+async fn spending_insights_per_row_fx() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let mxn_acct = seed_account_currency(&pool, user_id, "MXN").await;
+
+    seed_fx_rate_days_ago(&pool, "20.00", 100).await;
+    seed_fx_rate_days_ago(&pool, "21.00", 40).await;
+    // Both dates are always inside the default window (lookback 3 → the 4
+    // complete months before the current one): 40 days back is always before
+    // the current month starts, 100 days back is always after the window
+    // start (≥ ~120 days back).
+    seed_tx_currency_days_ago(&pool, user_id, mxn_acct, "rent A", "-2100.00", "MXN", 100).await;
+    seed_tx_currency_days_ago(&pool, user_id, mxn_acct, "rent B", "-1050.00", "MXN", 40).await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/spending-insights",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+
+    let cats = body["categories"].as_array().expect("categories array");
+    assert_eq!(cats.len(), 1, "one seeded category group: {body}");
+    let trailing = cats[0]["trailing_avg"].as_f64().unwrap();
+    // Per-row: (2100/20 + 1050/21) / 4-month window = 155/4 = 38.75.
+    // Latest-rate bug: 150/4 = 37.50.
+    assert!(
+        (trailing - 38.75).abs() < 0.01,
+        "trailing_avg {trailing}: expected per-row FX 38.75 (latest-rate bug would give 37.50)"
+    );
+}

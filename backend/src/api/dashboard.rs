@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use tracing::error;
 
 use crate::api::session::AuthContext;
+use crate::services::tax::USD_MXN_ROW_RATE_SQL;
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -1877,44 +1878,45 @@ async fn cash_flow_trends(
     // category, so a user re-tag flows through). Every other non-cash-flow
     // row — CC-payment leg / CC inflow, tax refund, loan leg, FX pair, split
     // parent — is dropped by the shared `CASHFLOW_ROW_ANTI_JOINS_SQL` WHERE
-    // fragment, which those buckets don't need. Fallback rate 20.0 matches
-    // the dashboard convention.
+    // fragment, which those buckets don't need.
+    //
+    // FX is PER ROW: each MXN transaction is divided by the USD→MXN rate in
+    // effect on its own date (the shared `USD_MXN_ROW_RATE_SQL` rule from
+    // services::tax — on-or-before-date rate, else latest, else 20.0). This
+    // query previously converted up to 24 months of history at the single
+    // LATEST rate; USD/MXN moves several percent over a year, so latest-rate
+    // conversion systematically skews every historical month's income/spend
+    // bars whenever the peso has trended.
     let sql = format!(
         r#"
-        WITH latest_fx AS (
-            SELECT rate
-            FROM exchange_rates
-            WHERE base_currency = 'USD' AND target_currency = 'MXN'
-            ORDER BY recorded_at DESC
-            LIMIT 1
-        )
         SELECT TO_CHAR(t.date, 'YYYY-MM') as month,
                SUM(CASE WHEN t.amount > 0
                         AND {EFFECTIVE_CATEGORY_SQL} NOT IN {NON_CASHFLOW_CATEGORIES_SQL} THEN
                        CASE WHEN a.currency = 'MXN'
-                            THEN t.amount / COALESCE((SELECT rate FROM latest_fx), 20.0)
+                            THEN t.amount / fx.rate
                             ELSE t.amount END
                    ELSE 0 END) as income,
                SUM(CASE WHEN t.amount < 0
                         AND {EFFECTIVE_CATEGORY_SQL} NOT IN {NON_CASHFLOW_CATEGORIES_SQL} THEN
                        CASE WHEN a.currency = 'MXN'
-                            THEN ABS(t.amount) / COALESCE((SELECT rate FROM latest_fx), 20.0)
+                            THEN ABS(t.amount) / fx.rate
                             ELSE ABS(t.amount) END
                    ELSE 0 END) as spending,
                -- Net cash moved into investments (buys +, sells -): -amount, USD.
                SUM(CASE WHEN {EFFECTIVE_CATEGORY_SQL} = 'INVESTMENT' THEN
                        CASE WHEN a.currency = 'MXN'
-                            THEN -t.amount / COALESCE((SELECT rate FROM latest_fx), 20.0)
+                            THEN -t.amount / fx.rate
                             ELSE -t.amount END
                    ELSE 0 END) as invested,
                -- Net internal transfer flow (in +, out -), USD.
                SUM(CASE WHEN {EFFECTIVE_CATEGORY_SQL} IN ('TRANSFER_IN', 'TRANSFER_OUT', 'TRANSFER') THEN
                        CASE WHEN a.currency = 'MXN'
-                            THEN t.amount / COALESCE((SELECT rate FROM latest_fx), 20.0)
+                            THEN t.amount / fx.rate
                             ELSE t.amount END
                    ELSE 0 END) as transferred
         FROM transactions t
         JOIN accounts a ON a.id = t.account_id
+        CROSS JOIN LATERAL (SELECT {USD_MXN_ROW_RATE_SQL} AS rate) fx
         -- Calendar-month-aligned trailing window: months=1 yields the
         -- current month only, months=2 adds the prior month, etc. (mirrors
         -- spending_by_category). The Cash Flow tab's period selector binds
@@ -2007,20 +2009,21 @@ async fn spending_by_category(
     // the CC-payment / loan-leg / FX-pair / split-parent rows. The positive-
     // only bits of the anti-join fragment (CC inflow, tax refund) are no-ops
     // here since this sums outflows only.
+    //
+    // FX is PER ROW (shared `USD_MXN_ROW_RATE_SQL`: on-or-before-date rate,
+    // else latest, else 20.0) — up to 24 months of MXN outflows used to be
+    // converted at the single latest rate, skewing every historical month's
+    // category totals whenever the peso has trended.
     let sql = format!(
         r#"
-        WITH latest_fx AS (
-            SELECT rate FROM exchange_rates
-            WHERE base_currency = 'USD' AND target_currency = 'MXN'
-            ORDER BY recorded_at DESC LIMIT 1
-        )
         SELECT TO_CHAR(t.date, 'YYYY-MM') AS month,
                COALESCE(NULLIF(t.user_category, ''), t.category, 'UNCATEGORIZED') AS category,
                SUM(CASE WHEN a.currency = 'MXN'
-                        THEN ABS(t.amount) / COALESCE((SELECT rate FROM latest_fx), 20.0)
+                        THEN ABS(t.amount) / fx.rate
                         ELSE ABS(t.amount) END) AS amount
         FROM transactions t
         JOIN accounts a ON a.id = t.account_id
+        CROSS JOIN LATERAL (SELECT {USD_MXN_ROW_RATE_SQL} AS rate) fx
         WHERE t.amount < 0
           AND t.date >= (DATE_TRUNC('month', CURRENT_DATE) - make_interval(months => ($2::int - 1)))
           AND t.user_id = $1
@@ -2205,22 +2208,23 @@ async fn spending_insights(
 
     // Same cash-flow exclusions as the other spend views, via the shared
     // fragments (the positive-only anti-joins are no-ops on this outflow sum).
+    //
+    // FX is PER ROW (shared `USD_MXN_ROW_RATE_SQL`: on-or-before-date rate,
+    // else latest, else 20.0) — the recent-vs-baseline comparison used to
+    // convert the whole lookback window at the single latest rate, so a peso
+    // move could masquerade as a spending change in every MXN category.
     let sql = format!(
         r#"
-        WITH latest_fx AS (
-            SELECT rate FROM exchange_rates
-            WHERE base_currency = 'USD' AND target_currency = 'MXN'
-            ORDER BY recorded_at DESC LIMIT 1
-        )
         SELECT TO_CHAR(t.date, 'YYYY-MM') AS month,
                t.user_category AS user_category,
                t.category_detailed AS category_detailed,
                t.category AS category,
                SUM(CASE WHEN a.currency = 'MXN'
-                        THEN ABS(t.amount) / COALESCE((SELECT rate FROM latest_fx), 20.0)
+                        THEN ABS(t.amount) / fx.rate
                         ELSE ABS(t.amount) END) AS amount
         FROM transactions t
         JOIN accounts a ON a.id = t.account_id
+        CROSS JOIN LATERAL (SELECT {USD_MXN_ROW_RATE_SQL} AS rate) fx
         WHERE t.amount < 0
           AND t.date >= DATE_TRUNC('month', CURRENT_DATE) - make_interval(months => $2::int)
           AND t.date <  DATE_TRUNC('month', CURRENT_DATE)
@@ -2417,10 +2421,11 @@ async fn emergency_fund(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Json<EmergencyFundResponse> {
-    // Shared FX policy: real rate when present, hard fallback flagged stale
-    // (and warn-logged) when missing/old. The numeric value matches the old
-    // inline query whenever a fresh rate exists, so the runway figure is
-    // unchanged on live data.
+    // Shared FX policy for CURRENT balances: real latest rate when present,
+    // hard fallback flagged stale (and warn-logged) when missing/old. The
+    // latest rate is correct here — a cash balance is a present-day value, so
+    // it converts at the present-day rate. Historical spend below deliberately
+    // does NOT use this: each transaction converts at its own date's rate.
     let fx = latest_usd_mxn_rate(&state.db).await.rate;
 
     let cash_row = sqlx::query(
@@ -2450,27 +2455,31 @@ async fn emergency_fund(
     // Trailing spend + month count. The exclusion set is the SHARED fragment
     // (trailing_cashflow_exclusions_sql) used verbatim by
     // `projections::projection_defaults`, so the two trailing-12-mo
-    // aggregations can never silently drift. The MXN→USD divisor is the
-    // already-resolved `fx` ($2) — identical to the old in-SQL latest rate
-    // whenever a fresh rate exists, so the live monthly-spend figure is
-    // unchanged.
+    // aggregations can never silently drift.
+    //
+    // FX is PER ROW: each MXN transaction is divided by the USD→MXN rate in
+    // effect on its own date (the shared `USD_MXN_ROW_RATE_SQL` rule from
+    // services::tax — on-or-before-date rate, else latest, else 20.0). This
+    // trailing-12-month spend used to divide by the single LATEST rate, so a
+    // peso trend skewed the runway's monthly-spend denominator. (The cash
+    // numerator above correctly keeps the latest rate — it's a current value.)
     let excl = trailing_cashflow_exclusions_sql();
     let spend_sql = format!(
         r#"
         SELECT
             COALESCE(SUM(CASE WHEN a.currency = 'MXN'
-                     THEN ABS(t.amount) / $2::numeric
+                     THEN ABS(t.amount) / fx.rate
                      ELSE ABS(t.amount) END), 0) AS spending,
             COUNT(DISTINCT TO_CHAR(t.date, 'YYYY-MM')) AS months
         FROM transactions t
         JOIN accounts a ON a.id = t.account_id
+        CROSS JOIN LATERAL (SELECT {USD_MXN_ROW_RATE_SQL} AS rate) fx
         WHERE t.amount < 0
         {excl}
         "#,
     );
     let spend_row = sqlx::query(&spend_sql)
         .bind(ctx.user_id)
-        .bind(fx)
         .fetch_optional(&state.db)
         .await
         .ok()
