@@ -102,6 +102,11 @@ struct LoanView {
     /// to today − repaid. Forced to 0 for written_off / cancelled /
     /// paid_off.
     outstanding: f64,
+    /// What the borrower still owes IN TOTAL — principal + unpaid scheduled
+    /// interest (Σ scheduled payments − repaid). Equals `outstanding` for a
+    /// 0%/no-schedule loan. The figure the lending UI shows as "owed"; net
+    /// worth still uses the interest-excluded `outstanding`.
+    total_owed: f64,
     /// Sum of every installment's scheduled_amount (0 when no schedule).
     total_scheduled: f64,
     /// True once a payment schedule has been generated.
@@ -471,6 +476,16 @@ fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
     } else {
         (principal - principal_paid).max(0.0)
     };
+    // Total still owed = scheduled payments (principal + interest) minus what
+    // was repaid, when a schedule exists; else the principal-based
+    // outstanding (a no-schedule loan has no scheduled interest).
+    let total_owed = if matches!(status.as_str(), "written_off" | "cancelled" | "paid_off") {
+        0.0
+    } else if has_schedule {
+        (total_scheduled - total_repaid).max(0.0)
+    } else {
+        outstanding
+    };
     // Paid-ahead: borrower has repaid more than what's been billed so
     // far (only meaningful with a schedule + something billed).
     let paid_ahead = has_schedule && cumulative_due > 0.0 && total_repaid >= cumulative_due;
@@ -517,6 +532,7 @@ fn loan_view(r: &sqlx::postgres::PgRow, today: chrono::NaiveDate) -> LoanView {
         notes: r.try_get("notes").ok().flatten(),
         total_repaid,
         outstanding,
+        total_owed,
         total_scheduled,
         has_schedule,
         next_due: next_due.map(|d| d.to_string()),

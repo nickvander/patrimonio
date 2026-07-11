@@ -214,8 +214,9 @@ class _LendingTabState extends State<LendingTab> {
     final summaryCur = mixed ? widget.targetCurrency : _summaryCurrency();
     final totalLent =
         sumLoansConverted(_loans, 'principal', summaryCur, widget.usdMxnRate);
+    // Total still owed across loans (principal + unpaid interest).
     final totalOut = sumLoansConverted(
-        _loans, 'outstanding', summaryCur, widget.usdMxnRate);
+        _loans, 'total_owed', summaryCur, widget.usdMxnRate);
     final interestEarned = sumLoansConverted(
         _loans, 'interest_earned', summaryCur, widget.usdMxnRate);
     final active = (_summary['active_count'] as num?)?.toInt() ?? 0;
@@ -568,17 +569,24 @@ class _LendingTabState extends State<LendingTab> {
 
   Widget _buildLoanCard(Map<String, dynamic> loan) {
     final currency = (loan['currency'] ?? 'USD').toString();
-    final outstanding = (loan['outstanding'] as num?)?.toDouble() ?? 0;
+    // "Outstanding" here means the TOTAL still owed (principal + unpaid
+    // interest) so the card matches the loan detail + agreement — a
+    // 14k-principal + 2k-interest loan reads "16,000". Falls back to the
+    // principal-based outstanding for older payloads.
+    final outstanding = (loan['total_owed'] as num?)?.toDouble() ??
+        (loan['outstanding'] as num?)?.toDouble() ??
+        0;
     final principal = (loan['principal'] as num?)?.toDouble() ?? 0;
     final repaid = (loan['total_repaid'] as num?)?.toDouble() ?? 0;
     final status = (loan['status'] ?? 'active').toString();
-    // Progress = principal actually repaid / principal. Deriving it from
-    // `outstanding` keeps the bar consistent with the outstanding balance
-    // shown on the card. The old `total_repaid / principal` mixed interest
-    // into the numerator, so the bar read e.g. 80% while the balance didn't
-    // match.
-    final pct =
-        principal > 0 ? ((principal - outstanding) / principal).clamp(0.0, 1.0) : 0.0;
+    // Progress = (total to repay − still owed) / total to repay, so the bar
+    // tracks payoff of the full amount and stays consistent with the figure
+    // shown.
+    final totalScheduled = (loan['total_scheduled'] as num?)?.toDouble() ?? 0;
+    final totalToPay = totalScheduled > 0 ? totalScheduled : principal;
+    final pct = totalToPay > 0
+        ? ((totalToPay - outstanding) / totalToPay).clamp(0.0, 1.0)
+        : 0.0;
     final linked = loan['disbursement_tx_id'] != null;
     final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 

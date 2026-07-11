@@ -1808,8 +1808,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final summaryCur = mixed
         ? _targetCurrency
         : (activeLoans.first['currency'] ?? _targetCurrency).toString();
+    // Total still owed (principal + unpaid interest), matching the loan view.
     final totalOutstanding = sumLoansConverted(
-        activeLoans, 'outstanding', summaryCur, usdMxnRate);
+        activeLoans, 'total_owed', summaryCur, usdMxnRate);
 
     // Soonest reminder is the head of the (due_date ASC) list; overdue means
     // any reminder with days_overdue > 0.
