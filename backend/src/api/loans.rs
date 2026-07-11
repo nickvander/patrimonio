@@ -2761,11 +2761,28 @@ async fn export_interest_summary(
 /// standard web approach — no server-side PDF dependency). Includes the
 /// parties, terms, and the amortization schedule when one exists. This
 /// is a record-keeping convenience, NOT legal advice.
+#[derive(Deserialize)]
+struct AgreementQuery {
+    /// `es` for Spanish, anything else (or absent) for English.
+    #[serde(default)]
+    lang: Option<String>,
+}
+
 async fn loan_agreement(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Path(id): Path<uuid::Uuid>,
+    Query(q): Query<AgreementQuery>,
 ) -> Response {
+    let es = q.lang.as_deref() == Some("es");
+    // Bilingual static-label helper.
+    let t = |en: &'static str, es_s: &'static str| -> &'static str {
+        if es {
+            es_s
+        } else {
+            en
+        }
+    };
     let sql = format!("SELECT l.*, {LOAN_AGGREGATES} FROM loans l WHERE l.id = $1 AND l.user_id = $2");
     let row = sqlx::query(&sql)
         .bind(id)
@@ -2808,21 +2825,42 @@ async fn loan_agreement(
     }
     let sym = if v.currency == "MXN" { "MX$" } else { "$" };
     let money = |x: f64| format!("{sym}{x:.2}");
+    let per = if v.rate_period == "monthly" {
+        t("month", "mes")
+    } else {
+        t("year", "año")
+    };
+    let pct = v.interest_rate * 100.0;
     let interest_desc = match v.interest_type.as_str() {
-        "none" => "no interest".to_string(),
-        "simple" => format!("simple interest at {:.3}% per {}", v.interest_rate * 100.0, v.rate_period.trim_end_matches("ly").replace("annual", "year")),
-        "amortized" => format!("amortized at {:.3}% per {}", v.interest_rate * 100.0, if v.rate_period == "monthly" { "month" } else { "year" }),
-        "interest_only" => format!("interest-only at {:.3}% per {} (principal due at maturity)", v.interest_rate * 100.0, if v.rate_period == "monthly" { "month" } else { "year" }),
-        "compound" => format!("compound interest at {:.3}% per {} (due at maturity)", v.interest_rate * 100.0, if v.rate_period == "monthly" { "month" } else { "year" }),
-        _ => format!("{:.3}%", v.interest_rate * 100.0),
+        "none" => t("no interest", "sin interés").to_string(),
+        "simple" if es => format!("interés simple de {pct:.3}% por {per}"),
+        "simple" => format!("simple interest at {pct:.3}% per {per}"),
+        "amortized" if es => format!("amortizado a {pct:.3}% por {per}"),
+        "amortized" => format!("amortized at {pct:.3}% per {per}"),
+        "interest_only" if es => {
+            format!("solo interés a {pct:.3}% por {per} (capital al vencimiento)")
+        }
+        "interest_only" => {
+            format!("interest-only at {pct:.3}% per {per} (principal due at maturity)")
+        }
+        "compound" if es => {
+            format!("interés compuesto a {pct:.3}% por {per} (al vencimiento)")
+        }
+        "compound" => format!("compound interest at {pct:.3}% per {per} (due at maturity)"),
+        _ => format!("{pct:.3}%"),
     };
 
     let mut schedule_html = String::new();
     if !payments.is_empty() {
-        schedule_html.push_str(
-            "<h2>Repayment schedule</h2><table><thead><tr>\
-             <th>#</th><th>Due</th><th>Payment</th><th>Principal</th><th>Interest</th></tr></thead><tbody>",
-        );
+        schedule_html.push_str(&format!(
+            "<h2>{}</h2><table><thead><tr>\
+             <th>#</th><th>{}</th><th>{}</th><th>{}</th><th>{}</th></tr></thead><tbody>",
+            t("Repayment schedule", "Calendario de pagos"),
+            t("Due", "Vence"),
+            t("Payment", "Pago"),
+            t("Principal", "Capital"),
+            t("Interest", "Interés"),
+        ));
         for p in &payments {
             let n: i32 = p.try_get("installment_number").unwrap_or(0);
             let due = p
@@ -2833,7 +2871,7 @@ async fn loan_agreement(
             let prin = dec_to_f64(p.try_get("scheduled_principal").ok());
             let int = dec_to_f64(p.try_get("scheduled_interest").ok());
             schedule_html.push_str(&format!(
-                "<tr><td>{n}</td><td>{due}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+                "<tr><td>{n}</td><td>{due}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td></tr>",
                 money(amt), money(prin), money(int)
             ));
         }
@@ -2841,71 +2879,164 @@ async fn loan_agreement(
     }
 
     let term_line = match (v.term_months, v.payment_frequency.as_deref()) {
-        (Some(t), Some(f)) => format!("Term: {t} months, {f} payments."),
-        _ => "Term: open-ended (no fixed schedule).".to_string(),
+        (Some(tm), Some(f)) => {
+            let freq = if es {
+                match f {
+                    "monthly" => "mensuales",
+                    "weekly" => "semanales",
+                    "lump_sum" => "de pago único",
+                    other => other,
+                }
+            } else {
+                f
+            };
+            if es {
+                format!("Plazo: {tm} meses, pagos {freq}.")
+            } else {
+                format!("Term: {tm} months, {f} payments.")
+            }
+        }
+        _ => t("Open-ended (no fixed schedule).", "Abierto (sin calendario fijo).").to_string(),
+    };
+    // Repaid-vs-principal progress for the status summary bar.
+    let paid_pct = if v.principal > 0.0 {
+        (v.total_repaid / v.principal * 100.0).clamp(0.0, 100.0)
+    } else {
+        0.0
     };
 
+    let principal_str = format!("{:.2}", v.principal);
+    let currency_esc = esc_html(&v.currency);
+    let interest_esc = esc_html(&interest_desc);
+    let value_para = if es {
+        format!("Por el valor recibido, el Prestatario se compromete a pagar al Prestamista la suma principal de <strong>{principal_str} {currency_esc}</strong>, junto con {interest_esc}, conforme a los términos aquí establecidos.")
+    } else {
+        format!("For value received, the Borrower promises to pay the Lender the principal sum of <strong>{principal_str} {currency_esc}</strong>, together with {interest_esc}, according to the terms set out herein.")
+    };
+    let (en_on, es_on) = if es { ("", " on") } else { (" on", "") };
+    let status_hdr = format!("{} {}", t("Status as of", "Estado al"), today);
+    let principal_disp = format!("{principal_str} {currency_esc}");
+
     let html = format!(
-        r#"<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
-<title>Loan agreement — {borrower}</title>
+        r#"<!DOCTYPE html><html lang="{doc_lang}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title} — {borrower}</title>
 <style>
-  body {{ font-family: Georgia, 'Times New Roman', serif; max-width: 720px; margin: 40px auto; color: #1a1a1a; line-height: 1.6; padding: 0 20px; }}
-  h1 {{ font-size: 22px; border-bottom: 2px solid #1a1a1a; padding-bottom: 8px; }}
-  h2 {{ font-size: 16px; margin-top: 28px; }}
+  :root {{ --ink:#1f2933; --muted:#6b7280; --line:#e5e7eb; --accent:#0f766e; --soft:#f0fdfa; --bg:#ffffff; }}
+  * {{ box-sizing: border-box; }}
+  body {{ font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 780px; margin: 0 auto; color: var(--ink); line-height: 1.55; padding: 24px 20px 64px; background: var(--bg); }}
+  .topbar {{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom: 20px; }}
+  .brand {{ font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); }}
+  .tools {{ display:flex; align-items:center; gap:10px; }}
+  .lang a {{ text-decoration:none; color:var(--muted); font-size:12px; font-weight:600; padding:3px 7px; border-radius:6px; }}
+  .lang a.on {{ background:var(--soft); color:var(--accent); }}
+  button.print {{ font: inherit; font-size:12px; font-weight:600; padding:7px 12px; border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:8px; cursor:pointer; }}
+  h1 {{ font-size: 24px; margin: 0 0 4px; letter-spacing:-0.01em; }}
+  .subtitle {{ color:var(--muted); font-size:13px; margin:0 0 24px; }}
+  h2 {{ font-size: 13px; text-transform:uppercase; letter-spacing:.08em; color:var(--accent); margin: 30px 0 10px; }}
+  .cards {{ display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-top:8px; }}
+  .card {{ border:1px solid var(--line); border-radius:12px; padding:14px 16px; background:var(--bg); }}
+  .card .k {{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }}
+  .card .val {{ font-size:20px; font-weight:800; margin-top:4px; font-variant-numeric: tabular-nums; }}
+  .card.accent {{ background:var(--soft); border-color:#99f6e4; }}
+  .card.accent .val {{ color:var(--accent); }}
+  .bar {{ height:8px; border-radius:6px; background:var(--line); overflow:hidden; margin:14px 0 4px; }}
+  .bar > span {{ display:block; height:100%; background:var(--accent); }}
+  .barlabel {{ font-size:12px; color:var(--muted); }}
+  .dl {{ display:grid; grid-template-columns: 180px 1fr; gap:6px 16px; font-size:14px; }}
+  .dl .k {{ color:var(--muted); }}
+  .dl .v {{ font-weight:600; }}
+  p.para {{ font-size:14px; }}
   table {{ width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }}
-  th, td {{ border: 1px solid #999; padding: 4px 8px; text-align: right; }}
-  th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) {{ text-align: left; }}
-  .terms td {{ border: none; padding: 2px 0; text-align: left; }}
-  .terms td:first-child {{ font-weight: bold; width: 160px; }}
-  .sig {{ margin-top: 48px; display: flex; justify-content: space-between; }}
-  .sig div {{ width: 45%; border-top: 1px solid #1a1a1a; padding-top: 6px; font-size: 13px; }}
-  .note {{ margin-top: 32px; font-size: 11px; color: #666; font-style: italic; }}
-  @media print {{ body {{ margin: 0; }} button {{ display: none; }} }}
+  thead th {{ background:var(--soft); color:var(--accent); text-align:left; padding:8px 10px; border-bottom:2px solid #99f6e4; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }}
+  tbody td {{ padding:7px 10px; border-bottom:1px solid var(--line); }}
+  tbody tr:nth-child(even) {{ background:#fafafa; }}
+  td.num, th.num {{ text-align:right; font-variant-numeric: tabular-nums; }}
+  thead th:nth-child(n+3) {{ text-align:right; }}
+  .sig {{ margin-top: 44px; display: flex; justify-content: space-between; gap:24px; }}
+  .sig div {{ flex:1; border-top: 1px solid var(--ink); padding-top: 6px; font-size: 12px; color:var(--muted); }}
+  .note {{ margin-top: 28px; font-size: 11px; color: var(--muted); border-top:1px solid var(--line); padding-top:12px; }}
+  @media (max-width: 520px) {{ .cards {{ grid-template-columns: 1fr; }} .dl {{ grid-template-columns: 130px 1fr; }} }}
+  @media print {{ body {{ padding:0; }} .tools {{ display:none; }} .card, thead th {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }} }}
 </style></head><body>
-<button onclick="window.print()" style="float:right;padding:6px 12px;">Print / Save as PDF</button>
-<h1>Promissory Note &amp; Loan Agreement</h1>
+<div class="topbar">
+  <span class="brand">Patrimonio</span>
+  <div class="tools">
+    <span class="lang"><a href="?lang=en" class="{en_on_cls}">EN</a><a href="?lang=es" class="{es_on_cls}">ES</a></span>
+    <button class="print" onclick="window.print()">{print}</button>
+  </div>
+</div>
+<h1>{title}</h1>
+<p class="subtitle">{subtitle}</p>
 
-<h2>Parties</h2>
-<table class="terms">
-  <tr><td>Lender</td><td>{lender}</td></tr>
-  <tr><td>Borrower</td><td>{borrower}</td></tr>
-</table>
+<h2>{status_hdr}</h2>
+<div class="cards">
+  <div class="card"><div class="k">{repaid_lbl}</div><div class="val">{repaid}</div></div>
+  <div class="card"><div class="k">{interest_lbl}</div><div class="val">{interest_received}</div></div>
+  <div class="card accent"><div class="k">{outstanding_lbl}</div><div class="val">{outstanding}</div></div>
+</div>
+<div class="bar"><span style="width:{paid_pct:.1}%"></span></div>
+<div class="barlabel">{repaid} {of_word} {principal_disp} {repaid_word} · {paid_pct:.0}%</div>
 
-<h2>Loan terms</h2>
-<table class="terms">
-  <tr><td>Principal</td><td>{principal} {currency}</td></tr>
-  <tr><td>Date of loan</td><td>{origination}</td></tr>
-  <tr><td>Interest</td><td>{interest_desc}</td></tr>
-  <tr><td>Schedule</td><td>{term_line_val}</td></tr>
-</table>
+<h2>{parties_hdr}</h2>
+<div class="dl">
+  <div class="k">{lender_lbl}</div><div class="v">{lender}</div>
+  <div class="k">{borrower_lbl}</div><div class="v">{borrower}</div>
+</div>
 
-<p>For value received, the Borrower named above promises to pay the Lender
-the principal sum of <strong>{principal} {currency}</strong>, together with
-{interest_desc}, according to the terms set out herein.</p>
+<h2>{terms_hdr}</h2>
+<div class="dl">
+  <div class="k">{principal_lbl}</div><div class="v">{principal_disp}</div>
+  <div class="k">{date_lbl}</div><div class="v">{origination}</div>
+  <div class="k">{interest_lbl2}</div><div class="v">{interest_desc}</div>
+  <div class="k">{schedule_lbl}</div><div class="v">{term_line_val}</div>
+</div>
 
-<h2>Status as of {origination_today}</h2>
-<table class="terms">
-  <tr><td>Principal repaid</td><td>{repaid}</td></tr>
-  <tr><td>Interest received</td><td>{interest_received}</td></tr>
-  <tr><td>Outstanding</td><td>{outstanding}</td></tr>
-</table>
+<p class="para">{value_para}</p>
 {schedule_html}
-<div class="sig"><div>Lender signature / date</div><div>Borrower signature / date</div></div>
-<p class="note">Generated by Patrimonio as a personal record-keeping convenience.
-This document is not legal advice; consult a qualified professional for an
-enforceable agreement.</p>
+<div class="sig"><div>{lender_sig}</div><div>{borrower_sig}</div></div>
+<p class="note">{disclaimer}</p>
 </body></html>"#,
+        doc_lang = if es { "es" } else { "en" },
+        title = t("Promissory Note & Loan Agreement", "Pagaré y Contrato de Préstamo"),
+        subtitle = t(
+            "A personal record of the loan, its terms, and its repayment.",
+            "Un registro personal del préstamo, sus términos y su pago."
+        ),
+        print = t("Print / Save as PDF", "Imprimir / Guardar como PDF"),
+        en_on_cls = en_on.trim(),
+        es_on_cls = es_on.trim(),
+        status_hdr = status_hdr,
+        repaid_lbl = t("Principal repaid", "Capital pagado"),
+        interest_lbl = t("Interest received", "Interés recibido"),
+        outstanding_lbl = t("Outstanding", "Saldo pendiente"),
+        of_word = t("of", "de"),
+        repaid_word = t("repaid", "pagado"),
+        parties_hdr = t("Parties", "Partes"),
+        lender_lbl = t("Lender", "Prestamista"),
+        borrower_lbl = t("Borrower", "Prestatario"),
+        terms_hdr = t("Loan terms", "Términos del préstamo"),
+        principal_lbl = t("Principal", "Capital"),
+        date_lbl = t("Date of loan", "Fecha del préstamo"),
+        interest_lbl2 = t("Interest", "Interés"),
+        schedule_lbl = t("Schedule", "Calendario"),
+        lender_sig = t("Lender signature / date", "Firma del prestamista / fecha"),
+        borrower_sig = t("Borrower signature / date", "Firma del prestatario / fecha"),
+        disclaimer = t(
+            "Generated by Patrimonio as a personal record-keeping convenience. This document is not legal advice; consult a qualified professional for an enforceable agreement.",
+            "Generado por Patrimonio como una conveniencia de registro personal. Este documento no es asesoría legal; consulta a un profesional calificado para un contrato exigible."
+        ),
         borrower = esc_html(&v.borrower_name),
         lender = esc_html(&lender),
-        principal = format!("{:.2}", v.principal),
-        currency = esc_html(&v.currency),
+        principal_disp = principal_disp,
         origination = v.origination_date,
-        origination_today = today,
-        interest_desc = esc_html(&interest_desc),
+        interest_desc = interest_esc,
         term_line_val = esc_html(&term_line),
+        value_para = value_para,
         repaid = money(v.total_repaid),
         interest_received = money(v.interest_earned),
         outstanding = money(v.outstanding),
+        paid_pct = paid_pct,
         schedule_html = schedule_html,
     );
 
