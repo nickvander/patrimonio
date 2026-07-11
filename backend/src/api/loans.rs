@@ -2853,6 +2853,20 @@ async fn loan_agreement(
     // A custom schedule carries no rate but can still charge interest; a
     // 0%/none loan charges none. Drives both the terms line and the clause.
     let has_interest = v.interest_rate > 0.0 || total_sched_interest > 0.0;
+    // Total the borrower owes = Σ scheduled payments (principal + interest)
+    // when a schedule exists, else the principal. Makes "owes 16,000, not
+    // 14,000" explicit throughout the document.
+    let total_sched_payment: f64 = payments
+        .iter()
+        .map(|p| dec_to_f64(p.try_get("scheduled_amount").ok()))
+        .sum();
+    let total_to_repay = if payments.is_empty() {
+        v.principal
+    } else {
+        total_sched_payment
+    };
+    let total_paid = v.total_repaid + v.interest_earned;
+    let remaining_owed = (total_to_repay - total_paid).max(0.0);
     let interest_desc = if !has_interest {
         t("no interest", "sin intereses").to_string()
     } else {
@@ -2894,12 +2908,12 @@ async fn loan_agreement(
         let caption = if es {
             format!(
                 "{paid_count} de {total_count} pagos completados · {} pendiente",
-                money(v.outstanding)
+                money(remaining_owed)
             )
         } else {
             format!(
                 "{paid_count} of {total_count} payments completed · {} remaining",
-                money(v.outstanding)
+                money(remaining_owed)
             )
         };
         schedule_html.push_str(&format!(
@@ -2957,13 +2971,43 @@ async fn loan_agreement(
                 format!("Term: {tm} months, {f} payments.")
             }
         }
+        // A custom schedule has no term/frequency but IS a fixed set of
+        // payments — don't call it open-ended.
+        _ if !payments.is_empty() => {
+            let n = payments.len();
+            if es {
+                format!("{n} pagos programados.")
+            } else {
+                format!("{n} scheduled payments.")
+            }
+        }
         _ => t("Open-ended (no fixed schedule).", "Abierto (sin calendario fijo).").to_string(),
     };
-    // Repaid-vs-principal progress for the status summary bar.
-    let paid_pct = if v.principal > 0.0 {
-        (v.total_repaid / v.principal * 100.0).clamp(0.0, 100.0)
+    let paid_pct = if total_to_repay > 0.0 {
+        (total_paid / total_to_repay * 100.0).clamp(0.0, 100.0)
     } else {
         0.0
+    };
+    let total_repay_disp = money(total_to_repay);
+    let total_paid_disp = money(total_paid);
+    let remaining_disp = money(remaining_owed);
+    // Show the principal + interest composition so the total reads clearly.
+    let breakdown = if !payments.is_empty() && total_sched_interest > 0.0 {
+        if es {
+            format!(
+                "<div class=\"sub\">Capital {} + interés {}</div>",
+                money(v.principal),
+                money(total_sched_interest)
+            )
+        } else {
+            format!(
+                "<div class=\"sub\">Principal {} + interest {}</div>",
+                money(v.principal),
+                money(total_sched_interest)
+            )
+        }
+    } else {
+        String::new()
     };
 
     let principal_str = format!("{:.2}", v.principal);
@@ -3002,6 +3046,7 @@ async fn loan_agreement(
   .card {{ border:1px solid var(--line); border-radius:12px; padding:14px 16px; background:var(--bg); }}
   .card .k {{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }}
   .card .val {{ font-size:20px; font-weight:800; margin-top:4px; font-variant-numeric: tabular-nums; }}
+  .card .sub {{ font-size:11px; color:var(--muted); margin-top:6px; }}
   .card.accent {{ background:var(--soft); border-color:#99f6e4; }}
   .card.accent .val {{ color:var(--accent); }}
   .bar {{ height:8px; border-radius:6px; background:var(--line); overflow:hidden; margin:14px 0 4px; }}
@@ -3040,12 +3085,12 @@ async fn loan_agreement(
 
 <h2>{status_hdr}</h2>
 <div class="cards">
-  <div class="card"><div class="k">{repaid_lbl}</div><div class="val">{repaid}</div></div>
-  <div class="card"><div class="k">{interest_lbl}</div><div class="val">{interest_received}</div></div>
-  <div class="card accent"><div class="k">{outstanding_lbl}</div><div class="val">{outstanding}</div></div>
+  <div class="card"><div class="k">{total_lbl}</div><div class="val">{total_repay_disp}</div>{breakdown}</div>
+  <div class="card"><div class="k">{paid_lbl}</div><div class="val">{total_paid_disp}</div></div>
+  <div class="card accent"><div class="k">{remaining_lbl}</div><div class="val">{remaining_disp}</div></div>
 </div>
 <div class="bar"><span style="width:{paid_pct:.1}%"></span></div>
-<div class="barlabel">{repaid} {of_word} {principal_disp} {repaid_word} · {paid_pct:.0}%</div>
+<div class="barlabel">{total_paid_disp} {of_word} {total_repay_disp} {paid_word} · {paid_pct:.0}%</div>
 
 <h2>{parties_hdr}</h2>
 <div class="dl">
@@ -3076,11 +3121,15 @@ async fn loan_agreement(
         en_on_cls = en_on.trim(),
         es_on_cls = es_on.trim(),
         status_hdr = status_hdr,
-        repaid_lbl = t("Principal repaid", "Capital pagado"),
-        interest_lbl = t("Interest received", "Interés recibido"),
-        outstanding_lbl = t("Outstanding", "Saldo pendiente"),
+        total_lbl = t("Total to repay", "Total a pagar"),
+        paid_lbl = t("Paid", "Pagado"),
+        remaining_lbl = t("Remaining", "Pendiente"),
+        total_repay_disp = total_repay_disp,
+        total_paid_disp = total_paid_disp,
+        remaining_disp = remaining_disp,
+        breakdown = breakdown,
         of_word = t("of", "de"),
-        repaid_word = t("repaid", "pagado"),
+        paid_word = t("paid", "pagado"),
         parties_hdr = t("Parties", "Partes"),
         lender_lbl = t("Lender", "Prestamista"),
         borrower_lbl = t("Borrower", "Prestatario"),
@@ -3102,9 +3151,6 @@ async fn loan_agreement(
         interest_desc = interest_esc,
         term_line_val = esc_html(&term_line),
         value_para = value_para,
-        repaid = money(v.total_repaid),
-        interest_received = money(v.interest_earned),
-        outstanding = money(v.outstanding),
         paid_pct = paid_pct,
         schedule_html = schedule_html,
     );
