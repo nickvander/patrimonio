@@ -7314,3 +7314,87 @@ async fn spending_insights_per_row_fx() {
         "trailing_avg {trailing}: expected per-row FX 38.75 (latest-rate bug would give 37.50)"
     );
 }
+
+// =====================================================================
+// Dashboard trends / spending / emergency-fund — errors are 500s, empty
+// data is still a 200
+//
+// These four handlers used to swallow DB failures (`.unwrap_or_default()`
+// / `.ok().flatten()`), rendering "the query blew up" as an empty chart /
+// all-zeros runway. They now return Result<_, ApiError> and 500 loudly.
+// The tests below pin the OTHER half of that contract: a user with
+// genuinely no data must still get a 200 with the same empty-shaped body
+// as before — only errors changed behavior. (A real DB error can't be
+// simulated through the harness; the signature change + clippy guard it.)
+// =====================================================================
+
+/// A brand-new user with zero transactions gets 200 + `[]` from /trends,
+/// not an error — "no data" is a legitimate empty state, not a failure.
+#[tokio::test]
+#[serial_test::serial]
+async fn cash_flow_trends_no_data_is_200_empty_array() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user_id) = bootstrap(&app, &pool).await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/trends", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK, "empty data must stay a 200, not a 500");
+    let body = body_json(res.into_body()).await;
+    assert_eq!(
+        body,
+        serde_json::json!([]),
+        "no transactions → empty array, same shape as before the error-handling change"
+    );
+}
+
+/// A brand-new user with zero accounts/transactions gets 200 + an
+/// all-zeros runway from /emergency-fund — the ungrouped aggregates
+/// still decode as (0, 0) on genuinely empty data.
+#[tokio::test]
+#[serial_test::serial]
+async fn emergency_fund_no_data_is_200_zero_runway() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user_id) = bootstrap(&app, &pool).await;
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/emergency-fund", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK, "empty data must stay a 200, not a 500");
+    let body = body_json(res.into_body()).await;
+    assert_eq!(body["liquid_cash_usd"].as_f64(), Some(0.0), "no accounts → $0 cash: {body}");
+    assert_eq!(body["monthly_spend_usd"].as_f64(), Some(0.0), "no spend → $0/mo: {body}");
+    assert_eq!(body["months_covered"].as_f64(), Some(0.0), "no spend signal → 0 months: {body}");
+    assert_eq!(body["months_of_data"].as_i64(), Some(0), "no history → 0 months of data: {body}");
+}
+
+/// All four upgraded chart endpoints still require auth: unauthenticated
+/// requests are 401, not empty-but-200 bodies.
+#[tokio::test]
+#[serial_test::serial]
+async fn dashboard_chart_endpoints_unauthenticated_are_401() {
+    let Some((app, _pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    for uri in [
+        "/api/dashboard/trends",
+        "/api/dashboard/spending-by-category",
+        "/api/dashboard/spending-insights",
+        "/api/dashboard/emergency-fund",
+    ] {
+        let res = app
+            .clone()
+            .oneshot(req(Method::GET, uri, None, None))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED, "{uri} without a session must 401");
+    }
+}

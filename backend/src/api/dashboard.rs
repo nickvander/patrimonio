@@ -10,7 +10,7 @@ use sqlx::Row;
 use std::collections::HashMap;
 use tracing::error;
 
-use crate::api::session::AuthContext;
+use crate::api::session::{internal, ApiError, AuthContext};
 use crate::services::tax::USD_MXN_ROW_RATE_SQL;
 use crate::AppState;
 
@@ -1870,7 +1870,7 @@ async fn cash_flow_trends(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Query(q): Query<TrendsQuery>,
-) -> Json<Vec<CashFlowPoint>> {
+) -> Result<Json<Vec<CashFlowPoint>>, ApiError> {
     let months = q.months.unwrap_or(12).clamp(1, 24);
     // Income/spending count genuine household cash flow only; securities
     // trades (Investment) and internal Transfers are peeled into the
@@ -1928,34 +1928,35 @@ async fn cash_flow_trends(
         ORDER BY month ASC
         "#
     );
+    // A DB failure must surface as a logged 500, not as fabricated emptiness:
+    // the old `.unwrap_or_default()` made "query blew up" indistinguishable
+    // from "user has no transactions", silently rendering an empty chart.
     let rows = sqlx::query(&sql)
-    .bind(ctx.user_id)
-    .bind(months as i32)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+        .bind(ctx.user_id)
+        .bind(months as i32)
+        .fetch_all(&state.db)
+        .await
+        .map_err(internal)?;
 
-    Json(
-        rows.iter()
-            .map(|r| {
-                let income: f64 = r.try_get::<rust_decimal::Decimal, _>("income")
-                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
-                let spending: f64 = r.try_get::<rust_decimal::Decimal, _>("spending")
-                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
-                let invested: f64 = r.try_get::<rust_decimal::Decimal, _>("invested")
-                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
-                let transferred: f64 = r.try_get::<rust_decimal::Decimal, _>("transferred")
-                    .ok().map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0);
-                CashFlowPoint {
-                    month: r.get("month"),
-                    income,
-                    spending,
-                    invested,
-                    transferred,
-                }
-            })
-            .collect(),
-    )
+    // Decode failures are bugs, not empty states: every SUM column is built
+    // from CASE arms with an ELSE 0, over a non-empty GROUP BY group, so a
+    // NULL/type mismatch here means the query changed under us — 500 loudly
+    // instead of charting a silent 0.
+    let mut points = Vec::with_capacity(rows.len());
+    for r in &rows {
+        let dec = |col: &str| -> Result<f64, ApiError> {
+            let d = r.try_get::<rust_decimal::Decimal, _>(col).map_err(internal)?;
+            Ok(d.to_string().parse().unwrap_or(0.0))
+        };
+        points.push(CashFlowPoint {
+            month: r.try_get("month").map_err(internal)?,
+            income: dec("income")?,
+            spending: dec("spending")?,
+            invested: dec("invested")?,
+            transferred: dec("transferred")?,
+        });
+    }
+    Ok(Json(points))
 }
 
 #[derive(Deserialize)]
@@ -2000,7 +2001,7 @@ async fn spending_by_category(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Query(q): Query<SpendingByCategoryQuery>,
-) -> Json<SpendingByCategoryResponse> {
+) -> Result<Json<SpendingByCategoryResponse>, ApiError> {
     let months = q.months.unwrap_or(6).clamp(1, 24);
     let top = q.top.unwrap_or(8).clamp(1, 30) as usize;
 
@@ -2033,12 +2034,15 @@ async fn spending_by_category(
         ORDER BY month ASC
         "#,
     );
+    // A DB failure must surface as a logged 500, not as fabricated emptiness:
+    // the old `.unwrap_or_default()` made "query blew up" indistinguishable
+    // from "no spending in the window", silently rendering an empty chart.
     let rows = sqlx::query(&sql)
-    .bind(ctx.user_id)
-    .bind(months as i32)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+        .bind(ctx.user_id)
+        .bind(months as i32)
+        .fetch_all(&state.db)
+        .await
+        .map_err(internal)?;
 
     // (category -> (month -> amount)) plus per-category totals and the set of
     // months actually present, so the response only carries populated buckets.
@@ -2047,12 +2051,15 @@ async fn spending_by_category(
     let mut month_set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
 
     for r in &rows {
-        let month: String = r.get("month");
-        let category: String = r.get("category");
+        let month: String = r.try_get("month").map_err(internal)?;
+        let category: String = r.try_get("category").map_err(internal)?;
+        // SUM over a non-empty group of ABS(...) values is never NULL, so a
+        // decode failure is a bug — 500 loudly instead of a silent 0 bar.
         let amount: f64 = r
             .try_get::<rust_decimal::Decimal, _>("amount")
-            .ok()
-            .map(|d| d.to_string().parse().unwrap_or(0.0))
+            .map_err(internal)?
+            .to_string()
+            .parse()
             .unwrap_or(0.0);
         month_set.insert(month.clone());
         *totals.entry(category.clone()).or_insert(0.0) += amount;
@@ -2117,11 +2124,11 @@ async fn spending_by_category(
         });
     }
 
-    Json(SpendingByCategoryResponse {
+    Ok(Json(SpendingByCategoryResponse {
         months: months_vec,
         categories,
         fx_stale: latest_usd_mxn_rate(&state.db).await.stale,
-    })
+    }))
 }
 
 #[derive(Deserialize)]
@@ -2181,7 +2188,7 @@ async fn spending_insights(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     Query(q): Query<SpendingInsightsQuery>,
-) -> Json<SpendingInsightsResponse> {
+) -> Result<Json<SpendingInsightsResponse>, ApiError> {
     let lookback = q.lookback.unwrap_or(3).clamp(1, 12);
     // Window = recent + baseline = lookback + 1 complete months.
     let window = lookback + 1;
@@ -2201,9 +2208,16 @@ async fn spending_insights(
     .bind(window as i32)
     .fetch_all(&state.db)
     .await
-    .unwrap_or_default();
+    // A failure here used to `.unwrap_or_default()` into an empty label set,
+    // making every insight silently disappear — surface it as a logged 500.
+    .map_err(internal)?;
 
-    let window_months: Vec<String> = month_rows.iter().map(|r| r.get::<String, _>("m")).collect();
+    let window_months: Vec<String> = month_rows
+        .iter()
+        .map(|r| r.try_get::<String, _>("m").map_err(internal))
+        .collect::<Result<_, _>>()?;
+    // generate_series(1, window>=2) always yields rows, so `first()` is
+    // always Some — the fallback only guards an impossible empty series.
     let recent_month = window_months.first().cloned().unwrap_or_default();
 
     // Same cash-flow exclusions as the other spend views, via the shared
@@ -2233,39 +2247,45 @@ async fn spending_insights(
         GROUP BY month, t.user_category, t.category_detailed, t.category
         "#,
     );
+    // A DB failure must surface as a logged 500, not as fabricated emptiness:
+    // the old `.unwrap_or_default()` made "query blew up" indistinguishable
+    // from "no spending in the window" (no insights, no budget suggestions).
     let rows = sqlx::query(&sql)
-    .bind(ctx.user_id)
-    .bind(window as i32)
-    .fetch_all(&state.db)
-    .await
-    .unwrap_or_default();
+        .bind(ctx.user_id)
+        .bind(window as i32)
+        .fetch_all(&state.db)
+        .await
+        .map_err(internal)?;
 
     // Accumulate per (user_category, category_detailed, category) → (month → amount).
     type CatKey = (Option<String>, Option<String>, Option<String>);
     let mut by_cat: HashMap<CatKey, HashMap<String, f64>> = HashMap::new();
     for r in &rows {
-        let month: String = r.get("month");
-        // Treat an empty-string user_category as absent so it folds in with
-        // the NULL group (both prettify to the detailed/primary label).
+        let month: String = r.try_get("month").map_err(internal)?;
+        // The three category columns are legitimately NULLable — read them as
+        // Option (NULL is data, not an error) but still 500 on a genuine
+        // decode failure. Treat an empty-string user_category as absent so it
+        // folds in with the NULL group (both prettify to the detailed/primary
+        // label).
         let user_category: Option<String> = r
             .try_get::<Option<String>, _>("user_category")
-            .ok()
-            .flatten()
+            .map_err(internal)?
             .filter(|s| !s.trim().is_empty());
         let category_detailed: Option<String> = r
             .try_get::<Option<String>, _>("category_detailed")
-            .ok()
-            .flatten()
+            .map_err(internal)?
             .filter(|s| !s.trim().is_empty());
         let category: Option<String> = r
             .try_get::<Option<String>, _>("category")
-            .ok()
-            .flatten()
+            .map_err(internal)?
             .filter(|s| !s.trim().is_empty());
+        // SUM over a non-empty group of ABS(...) values is never NULL, so a
+        // decode failure is a bug — 500 loudly instead of a silent $0 insight.
         let amount: f64 = r
             .try_get::<rust_decimal::Decimal, _>("amount")
-            .ok()
-            .and_then(|d| d.to_string().parse().ok())
+            .map_err(internal)?
+            .to_string()
+            .parse()
             .unwrap_or(0.0);
         *by_cat
             .entry((user_category, category_detailed, category))
@@ -2303,12 +2323,12 @@ async fn spending_insights(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    Json(SpendingInsightsResponse {
+    Ok(Json(SpendingInsightsResponse {
         recent_month,
         lookback,
         categories,
         fx_stale: latest_usd_mxn_rate(&state.db).await.stale,
-    })
+    }))
 }
 
 #[derive(Deserialize)]
@@ -2420,7 +2440,7 @@ struct EmergencyFundResponse {
 async fn emergency_fund(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
-) -> Json<EmergencyFundResponse> {
+) -> Result<Json<EmergencyFundResponse>, ApiError> {
     // Shared FX policy for CURRENT balances: real latest rate when present,
     // hard fallback flagged stale (and warn-logged) when missing/old. The
     // latest rate is correct here — a cash balance is a present-day value, so
@@ -2443,13 +2463,19 @@ async fn emergency_fund(
     )
     .bind(ctx.user_id)
     .bind(fx)
-    .fetch_optional(&state.db)
+    // Ungrouped COALESCE(SUM(...), 0) aggregate: always exactly one non-NULL
+    // row, even with zero matching accounts — so fetch_one, and any failure
+    // is a real DB/decode error. The old `.ok().flatten()` turned "query blew
+    // up" into an all-zeros runway indistinguishable from "no cash tracked";
+    // now it surfaces as a logged 500 (mirrors projections::projection_defaults).
+    .fetch_one(&state.db)
     .await
-    .ok()
-    .flatten();
-    let liquid_cash_usd = cash_row
-        .and_then(|r| r.try_get::<rust_decimal::Decimal, _>("cash").ok())
-        .map(|d| d.to_string().parse().unwrap_or(0.0))
+    .map_err(internal)?;
+    let liquid_cash_usd: f64 = cash_row
+        .try_get::<rust_decimal::Decimal, _>("cash")
+        .map_err(internal)?
+        .to_string()
+        .parse()
         .unwrap_or(0.0);
 
     // Trailing spend + month count. The exclusion set is the SHARED fragment
@@ -2478,25 +2504,23 @@ async fn emergency_fund(
         {excl}
         "#,
     );
+    // Same shape as the cash query above: ungrouped aggregate → exactly one
+    // row, COALESCE/COUNT are never NULL. Zero transactions still decodes as
+    // (0, 0) — only genuine DB/decode failures become logged 500s (the old
+    // `.ok().flatten()` shipped them as a fabricated all-zeros runway).
     let spend_row = sqlx::query(&spend_sql)
         .bind(ctx.user_id)
-        .fetch_optional(&state.db)
+        .fetch_one(&state.db)
         .await
-        .ok()
-        .flatten();
+        .map_err(internal)?;
 
-    let (spending, months) = match spend_row {
-        Some(r) => {
-            let s: f64 = r
-                .try_get::<rust_decimal::Decimal, _>("spending")
-                .ok()
-                .map(|d| d.to_string().parse().unwrap_or(0.0))
-                .unwrap_or(0.0);
-            let m: i64 = r.try_get("months").unwrap_or(0);
-            (s, m.max(0))
-        }
-        None => (0.0, 0),
-    };
+    let spending: f64 = spend_row
+        .try_get::<rust_decimal::Decimal, _>("spending")
+        .map_err(internal)?
+        .to_string()
+        .parse()
+        .unwrap_or(0.0);
+    let months: i64 = spend_row.try_get::<i64, _>("months").map_err(internal)?.max(0);
 
     let monthly_spend_usd = if months > 0 {
         spending / months as f64
@@ -2509,12 +2533,12 @@ async fn emergency_fund(
         0.0
     };
 
-    Json(EmergencyFundResponse {
+    Ok(Json(EmergencyFundResponse {
         liquid_cash_usd,
         monthly_spend_usd,
         months_covered,
         months_of_data: months as i32,
-    })
+    }))
 }
 
 #[derive(Deserialize)]
