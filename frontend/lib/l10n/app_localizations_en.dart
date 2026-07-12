@@ -1431,6 +1431,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Money-weighted, all time — if your contributions had bought the index on each purchase date';
 
   @override
+  String get bmContribCaveat =>
+      'Covers only purchases with recorded lots — recent buys weigh most, so this can sit far below the portfolio return above.';
+
+  @override
   String bmAheadPts(Object pts) {
     return 'You\'re ahead of the index by $pts pts';
   }

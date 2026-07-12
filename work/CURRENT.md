@@ -53,8 +53,12 @@ PM triage → parallel frontend/backend implementation → live re-verification
   tap-to-expand shows ALL payers inline (chips/tooltips/"+N more" deleted),
   two shared-scale columns at ≥720px via inner LayoutBuilder (was
   MediaQuery). Whole year fits one phone screen (~620px vs ~2.5 screens).
-  Regression test pins uniform row widths at 390px. 494 tests green. Minor
-  known: est-ex-date text ellipsizes in expanded rows at 390px (cosmetic).
+  Regression test pins uniform row widths at 390px. 494 tests green.
+* **Round-10e (polish):** expanded calendar rows show the bare localized date
+  (full `calEstExDate` wording kept in semantics) so nothing ellipsizes at
+  390px — TextPainter-measured test proves the fit; "Investments vs S&P 500"
+  card gained the `bmContribCaveat` caption explaining why the money-weighted
+  tracked-lots figure can sit far below the TWR above it (en + es). 498 tests.
 * **Round-10c (follow-ups, verified live):** the four dashboard chart handlers
   now return `Result<_, ApiError>` — DB errors are logged 500s, not empty
   charts / all-zero runways (empty DATA still 200s with the empty shape);

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:intl/intl.dart';
+// hide TextDirection: intl exports its own, which would shadow the dart:ui
+// one the TextPainter in _expectNotEllipsized needs.
+import 'package:intl/intl.dart' hide TextDirection;
 
 import 'package:patrimonio/l10n/app_localizations.dart';
 import 'package:patrimonio/services/api_service.dart';
+import 'package:patrimonio/utils/app_locale.dart';
 import 'package:patrimonio/widgets/dividend_calendar.dart';
 import 'package:patrimonio/widgets/portfolio_card.dart';
 
@@ -31,6 +34,17 @@ String _monthLabel(int offset) {
 
 Key _rowKey(int offset) => ValueKey('cal-row-${_monthKey(offset)}');
 Key _barKey(int offset) => ValueKey('cal-bar-${_monthKey(offset)}');
+
+/// The visible panel date line for an entry built by [_entry]: the widget
+/// renders `DateFormat.yMMMd()` of the entry's `est_date` (the 14th of the
+/// bucket month), WITHOUT the "Est. ex-date" prefix — that wording lives only
+/// in the line's semantics label since the 390px ellipsis fix. Evaluated at
+/// call time so it follows the active Intl locale (en vs es).
+String _entryDateLabel(int offset) {
+  final now = DateTime.now();
+  return DateFormat.yMMMd()
+      .format(DateTime(now.year, now.month + offset, 14));
+}
 
 Map<String, dynamic> _entry(String symbol, int offset, double amount) => {
       'symbol': symbol,
@@ -139,11 +153,40 @@ Map<String, dynamic> _cardPayload({List<Map<String, dynamic>>? calendar}) => {
       'calendar': ?calendar,
     };
 
-Widget _host(Widget child) => MaterialApp(
+Widget _host(Widget child, {Locale? locale}) => MaterialApp(
+      locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(body: SingleChildScrollView(child: child)),
     );
+
+/// Asserts every Text matched by [finder] fits its laid-out width in full —
+/// i.e. its `TextOverflow.ellipsis` never triggered. The full string is
+/// measured with a TextPainter using the widget's effective
+/// (DefaultTextStyle-merged) style and compared against the width the
+/// framework actually gave the text.
+void _expectNotEllipsized(WidgetTester tester, Finder finder) {
+  final elements = finder.evaluate().toList();
+  expect(elements, isNotEmpty,
+      reason: 'no Text widgets matched — nothing to measure');
+  for (final element in elements) {
+    final text = element.widget as Text;
+    final style = DefaultTextStyle.of(element).style.merge(text.style);
+    final painter = TextPainter(
+      text: TextSpan(text: text.data, style: style),
+      maxLines: 1,
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final box = element.renderObject! as RenderBox;
+    expect(
+      painter.width,
+      lessThanOrEqualTo(box.size.width + 0.01),
+      reason: '"${text.data}" needs ${painter.width}px but only got '
+          '${box.size.width}px — it would ellipsize',
+    );
+    painter.dispose();
+  }
+}
 
 void _useSurface(WidgetTester tester, Size size) {
   tester.view.physicalSize = size;
@@ -181,8 +224,11 @@ void main() {
       }
       // No dry months in this payload — no em-dash totals.
       expect(find.text('—'), findsNothing);
-      // Collapsed by default: no payer breakdown lines anywhere.
-      expect(find.textContaining('Est. ex-date'), findsNothing);
+      // Collapsed by default: no payer breakdown date lines anywhere.
+      for (var i = 0; i < 12; i++) {
+        expect(find.text(_entryDateLabel(i)), findsNothing,
+            reason: 'month $i breakdown must be collapsed');
+      }
       // Honesty caption present.
       expect(
         find.text(
@@ -233,7 +279,7 @@ void main() {
       await tester.pumpWidget(_host(calendar(_crowdedCalendar())));
 
       // Collapsed: no breakdown lines, no overflow chip of any kind.
-      expect(find.textContaining('Est. ex-date'), findsNothing);
+      expect(find.text(_entryDateLabel(0)), findsNothing);
       expect(find.textContaining('more'), findsNothing);
 
       await tester.tap(find.byKey(_rowKey(0)));
@@ -244,7 +290,7 @@ void main() {
         expect(find.text(symbol), findsOneWidget,
             reason: 'expanded payer $symbol missing');
       }
-      expect(find.textContaining('Est. ex-date'), findsNWidgets(5));
+      expect(find.text(_entryDateLabel(0)), findsNWidgets(5));
       for (final amount in [r'$60.00', r'$40.00', r'$30.00', r'$15.00', r'$5.00']) {
         expect(find.text(amount), findsOneWidget,
             reason: 'expanded amount $amount missing');
@@ -263,18 +309,19 @@ void main() {
       await tester.tap(find.byKey(_rowKey(0)));
       await tester.pump();
       expect(find.text('KO'), findsOneWidget);
-      expect(find.textContaining('Est. ex-date'), findsNWidgets(2));
+      expect(find.text(_entryDateLabel(0)), findsNWidgets(2));
 
       // Expand month 1 (O only): month 0 collapses — single line remains.
       await tester.tap(find.byKey(_rowKey(1)));
       await tester.pump();
       expect(find.text('KO'), findsNothing);
-      expect(find.textContaining('Est. ex-date'), findsOneWidget);
+      expect(find.text(_entryDateLabel(0)), findsNothing);
+      expect(find.text(_entryDateLabel(1)), findsOneWidget);
 
       // Tapping the open month again collapses everything.
       await tester.tap(find.byKey(_rowKey(1)));
       await tester.pump();
-      expect(find.textContaining('Est. ex-date'), findsNothing);
+      expect(find.text(_entryDateLabel(1)), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
@@ -425,6 +472,69 @@ void main() {
       for (var i = 0; i < 12; i++) {
         expect(find.text(_monthLabel(i)), findsOneWidget);
       }
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'FIX (390px ellipsis): expanded panel shows the full date '
+        'un-ellipsized, semantics keep the est-ex-date wording (en)',
+        (tester) async {
+      _useSurface(tester, const Size(390, 844));
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(_host(calendar(_crowdedCalendar())));
+
+      await tester.tap(find.byKey(_rowKey(0)));
+      await tester.pump();
+
+      // The visible line is exactly the localized date — the "Est. ex-date"
+      // prefix (which used to push the date into the ellipsis at 390px) is
+      // gone from the visible text...
+      final date = _entryDateLabel(0);
+      final dateFinder = find.text(date);
+      expect(dateFinder, findsNWidgets(5));
+      expect(find.textContaining('Est. ex-date'), findsNothing);
+      // ...and every date fits its allotted width in full (no ellipsis).
+      _expectNotEllipsized(tester, dateFinder);
+
+      // Screen readers lose nothing: each panel line still announces the
+      // full "Est. ex-date <date>" wording via its semantics label.
+      final entryLabel =
+          tester.getSemantics(find.text('ABBV')).getSemanticsData().label;
+      expect(entryLabel, contains('Est. ex-date $date'));
+
+      handle.dispose();
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'FIX (390px ellipsis): expanded panel date fits and semantics keep '
+        'the full wording (es)', (tester) async {
+      // Point package:intl at es (as syncIntlLocale does at runtime) so
+      // DateFormat.yMMMd() renders the Spanish date the widget will show.
+      await syncIntlLocale(const Locale('es'));
+      addTearDown(() async => syncIntlLocale(null));
+
+      _useSurface(tester, const Size(390, 844));
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(_host(
+        calendar(_crowdedCalendar()),
+        locale: const Locale('es'),
+      ));
+
+      await tester.tap(find.byKey(_rowKey(0)));
+      await tester.pump();
+
+      final date = _entryDateLabel(0); // es_MX yMMMd, e.g. "14 sep 2026"
+      final dateFinder = find.text(date);
+      expect(dateFinder, findsNWidgets(5));
+      expect(find.textContaining('Fecha ex estimada'), findsNothing);
+      _expectNotEllipsized(tester, dateFinder);
+
+      final entryLabel =
+          tester.getSemantics(find.text('ABBV')).getSemanticsData().label;
+      expect(entryLabel, contains('Fecha ex estimada: $date'));
+
+      handle.dispose();
       expect(tester.takeException(), isNull);
     });
   });

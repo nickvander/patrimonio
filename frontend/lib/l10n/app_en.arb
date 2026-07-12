@@ -457,6 +457,7 @@
   "cfPlusNMore": "+{count} more",
   "bmTitle": "Investments vs S&P 500",
   "bmSubtitle": "Money-weighted, all time — if your contributions had bought the index on each purchase date",
+  "bmContribCaveat": "Covers only purchases with recorded lots — recent buys weigh most, so this can sit far below the portfolio return above.",
   "bmAheadPts": "You're ahead of the index by {pts} pts",
   "bmBehindPts": "The index is ahead by {pts} pts",
   "bmYou": "You",

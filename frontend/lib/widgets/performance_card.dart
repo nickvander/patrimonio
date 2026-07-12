@@ -41,12 +41,22 @@ class PerformanceCard extends StatefulWidget {
   /// loaded holdings yet / older call sites) falls back to the series.
   final double? totalValueUsd;
 
+  /// Test seams (same convention as `DividendIncomeCard.fetchOverride`:
+  /// widget tests can't subclass ApiService). When non-null they replace the
+  /// corresponding ApiService fetch; production call sites leave them null.
+  final Future<List<dynamic>> Function()? historyFetchOverride;
+  final Future<Map<String, dynamic>?> Function()? comparisonFetchOverride;
+  final Future<Map<String, dynamic>?> Function()? twrFetchOverride;
+
   const PerformanceCard({
     super.key,
     required this.apiService,
     required this.conversionFactor,
     required this.currencyFormat,
     this.totalValueUsd,
+    this.historyFetchOverride,
+    this.comparisonFetchOverride,
+    this.twrFetchOverride,
   });
 
   @override
@@ -90,30 +100,40 @@ class _PerformanceCardState extends State<PerformanceCard> {
     _load();
   }
 
+  // Best-effort fetches, routed through the widget's test seams when present.
+  Future<List<dynamic>> _fetchHistory() =>
+      (widget.historyFetchOverride ??
+              () => widget.apiService.getPortfolioValueHistory())()
+          .catchError((_) => <dynamic>[]);
+
+  Future<Map<String, dynamic>?> _fetchComparison() => (widget
+              .comparisonFetchOverride ??
+          () => widget.apiService.getBenchmarkComparison(benchmark: _benchmark))()
+      .catchError((_) => <String, dynamic>{});
+
+  Future<Map<String, dynamic>?> _fetchTwr() =>
+      (widget.twrFetchOverride ??
+              () => widget.apiService.getPortfolioTwr(benchmark: _benchmark))()
+          .catchError((_) => <String, dynamic>{});
+
   Future<void> _load() async {
     // History + contribution comparison are quick; both best-effort.
     final results = await Future.wait([
-      widget.apiService
-          .getPortfolioValueHistory()
-          .catchError((_) => <dynamic>[]),
-      widget.apiService
-          .getBenchmarkComparison(benchmark: _benchmark)
-          .catchError((_) => <String, dynamic>{}),
+      _fetchHistory(),
+      _fetchComparison(),
     ]);
     if (!mounted) return;
     setState(() {
       _history = results[0] as List<dynamic>;
-      final c = results[1] as Map<String, dynamic>;
-      _comparison = c.isEmpty ? null : c;
+      final c = results[1] as Map<String, dynamic>?;
+      _comparison = (c == null || c.isEmpty) ? null : c;
       _loading = false;
     });
 
     // TWR is loaded separately: on a cold quote cache it triggers a per-symbol
     // Yahoo fetch and can take many seconds, so we paint the card immediately
     // (dollar line) and upgrade to the time-weighted view when it resolves.
-    final t = await widget.apiService
-        .getPortfolioTwr(benchmark: _benchmark)
-        .catchError((_) => <String, dynamic>{});
+    final t = await _fetchTwr();
     if (!mounted) return;
     setState(() {
       _twr = (t == null || t.isEmpty) ? null : t;
@@ -132,12 +152,8 @@ class _PerformanceCardState extends State<PerformanceCard> {
       _twr = null;
     });
     final results = await Future.wait([
-      widget.apiService
-          .getBenchmarkComparison(benchmark: _benchmark)
-          .catchError((_) => <String, dynamic>{}),
-      widget.apiService
-          .getPortfolioTwr(benchmark: _benchmark)
-          .catchError((_) => <String, dynamic>{}),
+      _fetchComparison(),
+      _fetchTwr(),
     ]);
     if (!mounted) return;
     setState(() {
@@ -832,6 +848,13 @@ class _PerformanceCardState extends State<PerformanceCard> {
           const SizedBox(height: 4),
         ],
         Text(l.bmSubtitle,
+            style: TextStyle(color: context.textFaint, fontSize: 11)),
+        const SizedBox(height: 4),
+        // Comprehension caveat: this money-weighted % covers recorded lots
+        // only and is dominated by recent purchases, so it legitimately sits
+        // far below the all-time TWR pill above — spell that out to prevent
+        // the double-take.
+        Text(l.bmContribCaveat,
             style: TextStyle(color: context.textFaint, fontSize: 11)),
         const SizedBox(height: 18),
         Row(

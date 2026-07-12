@@ -276,7 +276,16 @@ class _DividendCalendarState extends State<DividendCalendar> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            l10n.calEstExDate(e.dateLabel()),
+                            // Date only: at phone widths (390px) the full
+                            // "Est. ex-date …" prefix ellipsized the DATE
+                            // itself in both locales. The card's
+                            // calEstimateCaption already frames these as
+                            // estimates, so the panel shows just the
+                            // localized date — screen readers keep the full
+                            // calEstExDate wording via semanticsLabel (each
+                            // line is its own MergeSemantics node).
+                            e.dateLabel(),
+                            semanticsLabel: l10n.calEstExDate(e.dateLabel()),
                             style: TextStyle(
                               fontSize: 11,
                               color: context.textMuted,

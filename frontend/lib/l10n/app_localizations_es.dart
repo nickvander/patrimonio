@@ -1451,6 +1451,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'Ponderado por dinero, todo el periodo — si tus aportaciones hubieran comprado el índice en cada fecha de compra';
 
   @override
+  String get bmContribCaveat =>
+      'Cubre solo compras con lotes registrados — las compras recientes pesan más, por lo que puede quedar muy por debajo del rendimiento del portafolio de arriba.';
+
+  @override
   String bmAheadPts(Object pts) {
     return 'Vas por encima del índice por $pts pts';
   }

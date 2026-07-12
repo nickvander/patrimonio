@@ -2456,6 +2456,12 @@ abstract class AppLocalizations {
   /// **'Money-weighted, all time — if your contributions had bought the index on each purchase date'**
   String get bmSubtitle;
 
+  /// No description provided for @bmContribCaveat.
+  ///
+  /// In en, this message translates to:
+  /// **'Covers only purchases with recorded lots — recent buys weigh most, so this can sit far below the portfolio return above.'**
+  String get bmContribCaveat;
+
   /// No description provided for @bmAheadPts.
   ///
   /// In en, this message translates to:

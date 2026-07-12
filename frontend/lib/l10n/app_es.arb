@@ -399,6 +399,7 @@
   "cfPlusNMore": "+{count} más",
   "bmTitle": "Inversiones vs S&P 500",
   "bmSubtitle": "Ponderado por dinero, todo el periodo — si tus aportaciones hubieran comprado el índice en cada fecha de compra",
+  "bmContribCaveat": "Cubre solo compras con lotes registrados — las compras recientes pesan más, por lo que puede quedar muy por debajo del rendimiento del portafolio de arriba.",
   "bmAheadPts": "Vas por encima del índice por {pts} pts",
   "bmBehindPts": "El índice va por encima por {pts} pts",
   "bmYou": "Tú",
