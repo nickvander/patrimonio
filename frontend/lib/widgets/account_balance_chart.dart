@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
+import '../utils/chart_touch.dart';
 import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
@@ -62,8 +63,10 @@ class AccountBalanceChart extends StatelessWidget {
             const SizedBox(height: 12),
             SizedBox(
               height: 130,
-              child: LineChart(
-                LineChartData(
+              // Transient tooltip (dismisses on finger lift / pointer
+              // exit) — the raw LineChart pinned it on mobile web.
+              child: TransientTooltipLineChart(
+                data: LineChartData(
                   minY: minY - pad,
                   maxY: maxY + pad,
                   gridData: FlGridData(

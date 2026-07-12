@@ -1475,6 +1475,58 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get bmSeeTracked => 'See what\'s tracked';
+
+  @override
+  String get bmSheetTapHint =>
+      'Shows which tickers have recorded lots and which are excluded';
+
+  @override
+  String get bmSheetTitle => 'What\'s tracked';
+
+  @override
+  String get bmSheetCaption =>
+      'Purchases with recorded lots, compared with buying the index on the same dates';
+
+  @override
+  String bmLots(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lots',
+      one: '1 lot',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String bmFirstBuy(Object monthYear) {
+    return 'first buy $monthYear';
+  }
+
+  @override
+  String bmInvestedToValue(Object invested, Object value) {
+    return '$invested → $value';
+  }
+
+  @override
+  String bmPtsVsIndex(Object pts) {
+    return '$pts pts vs index';
+  }
+
+  @override
+  String get bmUntrackedHeader => 'Not included — no recorded purchase data';
+
+  @override
+  String bmUntrackedTotal(Object amount) {
+    return '$amount of holdings excluded';
+  }
+
+  @override
+  String get bmUntrackedHint =>
+      'Add purchase lots to include these holdings in the comparison.';
+
+  @override
   String get dpTitle => 'Debt payoff';
 
   @override

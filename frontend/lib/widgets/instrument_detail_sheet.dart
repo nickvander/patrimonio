@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
+import '../utils/chart_touch.dart';
 import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 import 'dividend_detail_sheet.dart';
@@ -706,8 +707,11 @@ class _InstrumentDetailSheetState extends State<InstrumentDetailSheet> {
 
     final compactAxis = NumberFormat.compactSimpleCurrency(name: currency);
 
-    return LineChart(
-      LineChartData(
+    // Transient tooltip (dismisses on finger lift / pointer exit) — the raw
+    // LineChart's built-in handling kept it pinned on mobile web. The inline
+    // LineTouchData below is unchanged; the wrapper only owns show/dismiss.
+    return TransientTooltipLineChart(
+      data: LineChartData(
         minX: 0,
         maxX: maxDays,
         minY: minY,

@@ -1495,6 +1495,59 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get bmSeeTracked => 'Ver qué está registrado';
+
+  @override
+  String get bmSheetTapHint =>
+      'Muestra qué símbolos tienen lotes registrados y cuáles quedan fuera';
+
+  @override
+  String get bmSheetTitle => 'Qué está registrado';
+
+  @override
+  String get bmSheetCaption =>
+      'Compras con lotes registrados, comparadas con comprar el índice en las mismas fechas';
+
+  @override
+  String bmLots(num count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lotes',
+      one: '1 lote',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String bmFirstBuy(Object monthYear) {
+    return 'primera compra $monthYear';
+  }
+
+  @override
+  String bmInvestedToValue(Object invested, Object value) {
+    return '$invested → $value';
+  }
+
+  @override
+  String bmPtsVsIndex(Object pts) {
+    return '$pts pts vs índice';
+  }
+
+  @override
+  String get bmUntrackedHeader =>
+      'No incluido — sin datos de compras registradas';
+
+  @override
+  String bmUntrackedTotal(Object amount) {
+    return '$amount de posiciones excluidas';
+  }
+
+  @override
+  String get bmUntrackedHint =>
+      'Agrega lotes de compra para incluir estas posiciones en la comparación.';
+
+  @override
   String get dpTitle => 'Pago de deudas';
 
   @override

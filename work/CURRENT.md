@@ -54,6 +54,21 @@ PM triage → parallel frontend/backend implementation → live re-verification
   two shared-scale columns at ≥720px via inner LayoutBuilder (was
   MediaQuery). Whole year fits one phone screen (~620px vs ~2.5 screens).
   Regression test pins uniform row widths at 390px. 494 tests green.
+* **Round-10f (tracked-lots transparency + app-wide transient tooltips):**
+  `/api/dashboard/benchmark-comparison` gained additive `symbols` (per-ticker
+  lot count/invested/value/benchmark + first/last buy dates, same per-lot
+  math, rows sum to totals) and `untracked` (+ total) fields; the "{n}
+  purchases" line opens a "What's tracked" bottom sheet (per-ticker ±pts vs
+  index, untracked/excluded section, en+es, degrades on old backend). All 11
+  fl_chart tooltips are now transient scrub indicators via shared
+  `utils/chart_touch.dart` (`TransientTooltipLine/BarChart`): owner-reported
+  pinned-tooltip-on-mobile bug fixed — root causes were fl_chart's web tap-up
+  carve-out AND Flutter web's synthesized post-tap-up hover (kind=touch),
+  both dismissed now unless the pointer can hover. Verified by touch
+  emulation on TWR/net-worth/trends charts + desktop hover regression.
+  517 frontend / 123 dashboard-integration tests green. Latent note:
+  benchmark card treats h.value as USD as-is (existing convention) — belongs
+  with the FX-policy audit follow-up.
 * **Round-10e (polish):** expanded calendar rows show the bare localized date
   (full `calEstExDate` wording kept in semantics) so nothing ellipsizes at
   390px — TextPainter-measured test proves the fit; "Investments vs S&P 500"

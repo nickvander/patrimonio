@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
 import '../utils/bill_forecast.dart';
+import '../utils/chart_touch.dart';
 import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
@@ -124,8 +125,10 @@ class UpcomingBillsCard extends StatelessWidget {
       );
     }
 
-    return BarChart(
-      BarChartData(
+    // Transient tooltip (dismisses on finger lift / pointer exit) — the raw
+    // BarChart's built-in handling kept it pinned on mobile web.
+    return TransientTooltipBarChart(
+      data: BarChartData(
         alignment: BarChartAlignment.spaceAround,
         maxY: maxY <= 0 ? 1 : maxY * conversionFactor * 1.2,
         gridData: FlGridData(

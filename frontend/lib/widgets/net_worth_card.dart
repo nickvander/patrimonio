@@ -6,6 +6,7 @@ import '../components/date_range_selector.dart';
 import '../l10n/app_localizations.dart';
 import '../services/preferences.dart';
 import '../theme/typography.dart';
+import '../utils/chart_touch.dart';
 import '../utils/currency.dart';
 import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
@@ -719,8 +720,11 @@ class _NetWorthCardState extends State<NetWorthCard> {
       yInterval = (rawInterval / 50000).ceil() * 50000;
     }
 
-    return LineChart(
-      LineChartData(
+    // Transient tooltip (dismisses on finger lift / pointer exit) — the raw
+    // LineChart's built-in handling kept it pinned on mobile web. The inline
+    // LineTouchData below is unchanged; the wrapper only owns show/dismiss.
+    return TransientTooltipLineChart(
+      data: LineChartData(
         lineTouchData: LineTouchData(
           // Snap-to-nearest-x feel: a very large threshold makes the
           // chart always pick the closest sample to the cursor's X

@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../services/preferences.dart';
+import '../utils/chart_touch.dart';
 import '../utils/currency.dart';
 import '../utils/percent_format.dart';
 import '../utils/projection_axis.dart';
@@ -2295,12 +2296,14 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               (touchPoint.dx - spotPixelCoordinates.dx).abs(),
           // U6: built-in touch handling left the tooltip pinned after the
           // pointer exited the chart — the screen owns the state instead and
-          // clears it on any not-interested event (pointer exit, pan end,
-          // long-press end), mirroring the built-in gating otherwise.
+          // clears it on any dismissing event (pointer exit, pan end,
+          // long-press end, and — via chartTouchDismisses — the finger-lift
+          // tap-up that fl_chart's own gating keeps "interested" on mobile
+          // web, which pinned the tooltip there).
           handleBuiltInTouches: false,
           touchCallback: (event, response) {
             final spots = response?.lineBarSpots;
-            if (!event.isInterestedForInteractions ||
+            if (chartTouchDismisses(event) ||
                 spots == null ||
                 spots.isEmpty) {
               if (_chartTouchedSpots != null) {

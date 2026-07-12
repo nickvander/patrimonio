@@ -10,6 +10,7 @@ import '../utils/chart_touch.dart';
 import '../utils/currency.dart';
 import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
+import 'tracked_lots_sheet.dart';
 
 /// Portfolio performance: investment value over time (a line chart with a
 /// range selector) plus the contribution-weighted "vs S&P 500" comparison.
@@ -415,8 +416,10 @@ class _PerformanceCardState extends State<PerformanceCard> {
             height: MediaQuery.sizeOf(context).width < 720 ? 120.0 : 150.0,
             child: spots.length < 2
                 ? const SizedBox.shrink()
-                : LineChart(
-                    LineChartData(
+                // Transient tooltip (dismisses on finger lift / pointer
+                // exit) — the raw LineChart pinned it on mobile web.
+                : TransientTooltipLineChart(
+                    data: LineChartData(
                       gridData: const FlGridData(show: false),
                       titlesData: const FlTitlesData(show: false),
                       borderData: FlBorderData(show: false),
@@ -641,8 +644,10 @@ class _PerformanceCardState extends State<PerformanceCard> {
         RepaintBoundary(
           child: SizedBox(
             height: MediaQuery.sizeOf(context).width < 720 ? 120.0 : 150.0,
-            child: LineChart(
-              LineChartData(
+            // Transient tooltip (dismisses on finger lift / pointer exit) —
+            // the raw LineChart kept it pinned on mobile web (prod bug).
+            child: TransientTooltipLineChart(
+              data: LineChartData(
                 gridData: const FlGridData(show: false),
                 titlesData: const FlTitlesData(show: false),
                 borderData: FlBorderData(show: false),
@@ -884,11 +889,83 @@ class _PerformanceCardState extends State<PerformanceCard> {
           ),
         ),
         const SizedBox(height: 4),
-        Text(
-          l.bmContribNote(lots, _money(invested)),
-          style: TextStyle(color: context.textFaint, fontSize: 11),
-        ),
+        _contribNoteLine(context, l, c, invested, lots),
       ],
+    );
+  }
+
+  /// The "{n} purchases · {amount} invested" footer. When the payload carries
+  /// the per-symbol breakdown (`symbols`), the whole line becomes a tap target
+  /// (with a visible "see what's tracked" affordance) that opens the
+  /// [TrackedLotsSheet] drill-down; on an older backend without the additive
+  /// fields it stays the plain caption.
+  Widget _contribNoteLine(
+    BuildContext context,
+    AppLocalizations l,
+    Map<String, dynamic> c,
+    double invested,
+    int lots,
+  ) {
+    // gen-l10n orders these alphabetically → (count, invested).
+    final note = Text(
+      l.bmContribNote(lots, _money(invested)),
+      style: TextStyle(color: context.textFaint, fontSize: 11),
+    );
+
+    final breakdown = TrackedLotsBreakdown.parse(c);
+    if (breakdown.isEmpty) return note;
+
+    // MergeSemantics: the note + affordance + chevron announce as ONE button
+    // ("118 purchases · $103,436 invested, See what's tracked") with the hint.
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        hint: l.bmSheetTapHint,
+        child: InkWell(
+          onTap: () => _openTrackedLotsSheet(breakdown),
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            // Comfortable tap target (≥ 44 px) for an otherwise-caption line.
+            constraints: const BoxConstraints(minHeight: 44),
+            alignment: Alignment.centerLeft,
+            child: Row(
+              children: [
+                Expanded(child: note),
+                const SizedBox(width: 8),
+                Text(
+                  l.bmSeeTracked,
+                  style: TextStyle(
+                    color: context.tealAccent,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded,
+                    size: 16, color: context.tealAccent),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Opens the "What's tracked" bottom sheet (same chrome as the dividend
+  /// detail sheet). The breakdown is already in hand from the comparison
+  /// payload, so the sheet fetches nothing.
+  Future<void> _openTrackedLotsSheet(TrackedLotsBreakdown breakdown) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => TrackedLotsSheet(
+        breakdown: breakdown,
+        conversionFactor: widget.conversionFactor,
+        currencyFormat: widget.currencyFormat,
+      ),
     );
   }
 

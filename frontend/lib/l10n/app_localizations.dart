@@ -2522,6 +2522,72 @@ abstract class AppLocalizations {
   /// **'{count} purchases · {invested} invested'**
   String bmContribNote(Object count, Object invested);
 
+  /// No description provided for @bmSeeTracked.
+  ///
+  /// In en, this message translates to:
+  /// **'See what\'s tracked'**
+  String get bmSeeTracked;
+
+  /// No description provided for @bmSheetTapHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Shows which tickers have recorded lots and which are excluded'**
+  String get bmSheetTapHint;
+
+  /// No description provided for @bmSheetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What\'s tracked'**
+  String get bmSheetTitle;
+
+  /// No description provided for @bmSheetCaption.
+  ///
+  /// In en, this message translates to:
+  /// **'Purchases with recorded lots, compared with buying the index on the same dates'**
+  String get bmSheetCaption;
+
+  /// No description provided for @bmLots.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 lot} other{{count} lots}}'**
+  String bmLots(num count);
+
+  /// No description provided for @bmFirstBuy.
+  ///
+  /// In en, this message translates to:
+  /// **'first buy {monthYear}'**
+  String bmFirstBuy(Object monthYear);
+
+  /// No description provided for @bmInvestedToValue.
+  ///
+  /// In en, this message translates to:
+  /// **'{invested} → {value}'**
+  String bmInvestedToValue(Object invested, Object value);
+
+  /// No description provided for @bmPtsVsIndex.
+  ///
+  /// In en, this message translates to:
+  /// **'{pts} pts vs index'**
+  String bmPtsVsIndex(Object pts);
+
+  /// No description provided for @bmUntrackedHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Not included — no recorded purchase data'**
+  String get bmUntrackedHeader;
+
+  /// No description provided for @bmUntrackedTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} of holdings excluded'**
+  String bmUntrackedTotal(Object amount);
+
+  /// No description provided for @bmUntrackedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add purchase lots to include these holdings in the comparison.'**
+  String get bmUntrackedHint;
+
   /// No description provided for @dpTitle.
   ///
   /// In en, this message translates to:

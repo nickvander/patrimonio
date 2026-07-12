@@ -620,8 +620,10 @@ class _AccountTransactionsScreenState extends State<AccountTransactionsScreen> {
       padding: const EdgeInsets.only(top: 8),
       child: SizedBox(
         height: 48,
-        child: LineChart(
-          LineChartData(
+        // Transient tooltip (dismisses on finger lift / pointer exit) — the
+        // raw LineChart pinned it on mobile web.
+        child: TransientTooltipLineChart(
+          data: LineChartData(
             minY: minY - pad,
             maxY: maxY + pad,
             gridData: const FlGridData(show: false),

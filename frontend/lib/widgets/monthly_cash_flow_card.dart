@@ -566,8 +566,10 @@ class _NetSparkline extends StatelessWidget {
 
     final color = positive ? context.positive : context.pinkAccent;
 
-    return LineChart(
-      LineChartData(
+    // Transient tooltip (dismisses on finger lift / pointer exit) — the raw
+    // LineChart pinned it on mobile web.
+    return TransientTooltipLineChart(
+      data: LineChartData(
         minX: 0,
         maxX: (points.length - 1).toDouble(),
         minY: minV - pad,

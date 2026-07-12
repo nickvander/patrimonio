@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../l10n/app_localizations.dart';
+import '../utils/chart_touch.dart';
 import '../utils/currency.dart';
 import '../utils/theme_colors.dart';
 
@@ -140,8 +141,12 @@ class CashFlowTrendsChart extends StatelessWidget {
               height: chartHeight,
               child: Builder(builder: (context) {
                 final maxY = _getMaxValue();
-                return BarChart(
-                BarChartData(
+                // Transient tooltip (dismisses on finger lift / pointer
+                // exit) — the raw BarChart pinned it on mobile web. The
+                // tap-to-filter touchCallback below still fires (the
+                // wrapper chains it).
+                return TransientTooltipBarChart(
+                data: BarChartData(
                   alignment: BarChartAlignment.spaceEvenly,
                   groupsSpace: 16,
                   maxY: maxY,
