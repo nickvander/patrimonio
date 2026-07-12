@@ -3414,6 +3414,162 @@ async fn benchmark_comparison_contribution_weighted() {
     assert!((body["benchmark_value_usd"].as_f64().unwrap() - 1200.0).abs() < 0.01);
 }
 
+/// The comparison itemizes WHAT it recorded: a per-symbol breakdown built
+/// with the same per-lot math as the totals (so rows sum back to them),
+/// plus the holdings it could NOT cover (value but zero counted lots) and
+/// their total. Regression test for the "aggregates only — can't see what's
+/// in or out" gap.
+#[tokio::test]
+#[serial_test::serial]
+async fn benchmark_comparison_per_symbol_breakdown_and_untracked() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, acct) = seed_account(&pool, user_id).await;
+
+    // S&P closes: 5000 (D-60), 5500 (D-30), 6000 (today). A today-dated
+    // close keeps the series "fresh" so the test never reaches out to Yahoo.
+    sqlx::query(
+        "INSERT INTO benchmark_prices (symbol, price_date, close) VALUES \
+         ('SP500', CURRENT_DATE - 60, 5000), \
+         ('SP500', CURRENT_DATE - 30, 5500), \
+         ('SP500', CURRENT_DATE,      6000) \
+         ON CONFLICT (symbol, price_date) DO UPDATE SET close = EXCLUDED.close",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    // Expected ISO dates straight from Postgres so the assertion can't
+    // drift from CURRENT_DATE across a midnight/timezone boundary.
+    let (d60, d30): (String, String) =
+        sqlx::query_as("SELECT (CURRENT_DATE - 60)::text, (CURRENT_DATE - 30)::text")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    // Tracked holding 1: VOO, worth $2,400 (10 sh), one lot of 10 @
+    // $100.0033 on D-60 → invested 1000.033, which must be presented as
+    // 1000.03 (2dp house rounding).
+    let voo: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO holdings (account_id, symbol, name, currency, quantity, value, user_id) \
+         VALUES ($1,'VOO','Vanguard S&P 500','USD',10,2400,$2) RETURNING id",
+    )
+    .bind(acct).bind(user_id).fetch_one(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) \
+         VALUES ($1,$2,$3, CURRENT_DATE - 60, 10, 100.0033, 'USD', 1.0, 'voo1')",
+    )
+    .bind(voo).bind(acct).bind(user_id).execute(&pool).await.unwrap();
+
+    // Tracked holding 2: AAPL, worth $550 (5 sh), two lots — 2 @ $50 on
+    // D-60 (index 5000) and 3 @ $60 on D-30 (index 5500).
+    let aapl: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO holdings (account_id, symbol, name, currency, quantity, value, user_id) \
+         VALUES ($1,'AAPL','Apple','USD',5,550,$2) RETURNING id",
+    )
+    .bind(acct).bind(user_id).fetch_one(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) VALUES \
+         ($1,$2,$3, CURRENT_DATE - 60, 2, 50, 'USD', 1.0, 'aapl1'), \
+         ($1,$2,$3, CURRENT_DATE - 30, 3, 60, 'USD', 1.0, 'aapl2')",
+    )
+    .bind(aapl).bind(acct).bind(user_id).execute(&pool).await.unwrap();
+
+    // Untracked holding: FXAIX worth $25,000, no lots at all.
+    sqlx::query(
+        "INSERT INTO holdings (account_id, symbol, name, currency, quantity, value, user_id) \
+         VALUES ($1,'FXAIX','Fidelity 500','USD',100,25000,$2)",
+    )
+    .bind(acct).bind(user_id).execute(&pool).await.unwrap();
+    // Untracked holding: has a lot, but its cost is 0 → the lot is skipped,
+    // so the holding contributed zero counted lots.
+    let crypto: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO holdings (account_id, symbol, name, currency, quantity, value, user_id) \
+         VALUES ($1,'BTC','Bitcoin','USD',1,100,$2) RETURNING id",
+    )
+    .bind(acct).bind(user_id).fetch_one(&pool).await.unwrap();
+    sqlx::query(
+        "INSERT INTO holding_lots (holding_id, account_id, user_id, acquired_at, qty, cost_per_unit, currency, usd_fx_rate, source_id) \
+         VALUES ($1,$2,$3, CURRENT_DATE - 10, 1, 0, 'USD', 1.0, 'btc1')",
+    )
+    .bind(crypto).bind(acct).bind(user_id).execute(&pool).await.unwrap();
+    // Zero-value lot-less holding and a soft-deleted holding: neither may
+    // appear anywhere.
+    sqlx::query(
+        "INSERT INTO holdings (account_id, symbol, name, currency, quantity, value, user_id) \
+         VALUES ($1,'EMPTY','Sold Out','USD',0,0,$2), \
+                ($1,'GONE','Deleted','USD',3,999,$2)",
+    )
+    .bind(acct).bind(user_id).execute(&pool).await.unwrap();
+    sqlx::query("UPDATE holdings SET deleted_at = NOW() WHERE symbol = 'GONE' AND user_id = $1")
+        .bind(user_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/benchmark-comparison", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+
+    // Totals: 1000.033 + 280 invested over 3 counted lots.
+    assert_eq!(body["lot_count"].as_i64().unwrap(), 3);
+    let total_invested = body["invested_usd"].as_f64().unwrap();
+    let total_value = body["your_value_usd"].as_f64().unwrap();
+    let total_bench = body["benchmark_value_usd"].as_f64().unwrap();
+    assert!((total_invested - 1280.033).abs() < 0.01, "invested total, got {total_invested}");
+    assert!((total_value - 2950.0).abs() < 0.01, "value total, got {total_value}");
+
+    // Per-symbol rows: sorted by invested_usd DESC → VOO before AAPL.
+    let symbols = body["symbols"].as_array().unwrap();
+    assert_eq!(symbols.len(), 2, "two tracked symbols, got {symbols:#?}");
+    let voo_row = &symbols[0];
+    let aapl_row = &symbols[1];
+    assert_eq!(voo_row["symbol"], "VOO");
+    assert_eq!(aapl_row["symbol"], "AAPL");
+
+    // VOO: exact 2dp presentation (1000.033 → 1000.03), 5000→6000 = ×1.2.
+    assert_eq!(voo_row["lot_count"].as_i64().unwrap(), 1);
+    assert!((voo_row["invested_usd"].as_f64().unwrap() - 1000.03).abs() < 1e-9,
+        "VOO invested must be rounded to exactly 1000.03, got {}", voo_row["invested_usd"]);
+    assert!((voo_row["your_value_usd"].as_f64().unwrap() - 2400.0).abs() < 1e-9);
+    assert!((voo_row["benchmark_value_usd"].as_f64().unwrap() - 1200.04).abs() < 1e-9,
+        "VOO benchmark: 1000.033 × 1.2 = 1200.0396 → 1200.04, got {}", voo_row["benchmark_value_usd"]);
+    assert_eq!(voo_row["first_acquired"], d60.as_str());
+    assert_eq!(voo_row["last_acquired"], d60.as_str());
+
+    // AAPL: 2 lots; bench = 100×(6000/5000) + 180×(6000/5500) = 316.36.
+    assert_eq!(aapl_row["lot_count"].as_i64().unwrap(), 2);
+    assert!((aapl_row["invested_usd"].as_f64().unwrap() - 280.0).abs() < 1e-9);
+    assert!((aapl_row["your_value_usd"].as_f64().unwrap() - 550.0).abs() < 1e-9);
+    assert!((aapl_row["benchmark_value_usd"].as_f64().unwrap() - 316.36).abs() < 1e-9,
+        "AAPL benchmark, got {}", aapl_row["benchmark_value_usd"]);
+    assert_eq!(aapl_row["first_acquired"], d60.as_str());
+    assert_eq!(aapl_row["last_acquired"], d30.as_str());
+
+    // The rows must reproduce the totals (modulo the per-row 2dp rounding).
+    let sum = |field: &str| -> f64 {
+        symbols.iter().map(|s| s[field].as_f64().unwrap()).sum()
+    };
+    assert!((sum("invested_usd") - total_invested).abs() < 0.01);
+    assert!((sum("your_value_usd") - total_value).abs() < 0.01);
+    assert!((sum("benchmark_value_usd") - total_bench).abs() < 0.01);
+
+    // Untracked: FXAIX (no lots) then BTC (only a skipped zero-cost lot),
+    // value DESC; the zero-value and soft-deleted holdings are absent.
+    let untracked = body["untracked"].as_array().unwrap();
+    assert_eq!(untracked.len(), 2, "untracked, got {untracked:#?}");
+    assert_eq!(untracked[0]["symbol"], "FXAIX");
+    assert!((untracked[0]["value_usd"].as_f64().unwrap() - 25000.0).abs() < 1e-9);
+    assert_eq!(untracked[1]["symbol"], "BTC");
+    assert!((untracked[1]["value_usd"].as_f64().unwrap() - 100.0).abs() < 1e-9);
+    assert!((body["untracked_value_usd"].as_f64().unwrap() - 25100.0).abs() < 1e-9);
+}
+
 /// True time-weighted return divides out the contribution: a mid-window buy
 /// must NOT inflate the return the way a naive (end-start)/start would. We
 /// hand-build a price path where the honest TWR is +21% even though the
@@ -7389,6 +7545,7 @@ async fn dashboard_chart_endpoints_unauthenticated_are_401() {
         "/api/dashboard/spending-by-category",
         "/api/dashboard/spending-insights",
         "/api/dashboard/emergency-fund",
+        "/api/dashboard/benchmark-comparison",
     ] {
         let res = app
             .clone()

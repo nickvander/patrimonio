@@ -171,6 +171,54 @@ pub struct ContributionComparison {
     pub your_value_usd: f64,
     pub benchmark_value_usd: f64,
     pub lot_count: i64,
+    /// Per-ticker breakdown of the counted lots. Each row is aggregated with
+    /// the SAME per-lot math as the totals above, so summing the rows
+    /// reproduces the totals (modulo the 2dp presentation rounding applied
+    /// per row). Sorted by `invested_usd` descending.
+    pub symbols: Vec<SymbolComparison>,
+    /// Holdings in the same population the comparison draws from (this
+    /// user's non-deleted holdings) that have current value but contributed
+    /// ZERO counted lots — either no lots at all, or every lot skipped
+    /// (missing acquired date / non-positive cost). Surfaced so the owner
+    /// can see what the dollar-weighted comparison does NOT cover.
+    /// Sorted by `value_usd` descending.
+    pub untracked: Vec<UntrackedHolding>,
+    pub untracked_value_usd: f64,
+}
+
+/// One distinct holding symbol's slice of the contribution comparison.
+/// `first_acquired` / `last_acquired` are ISO `YYYY-MM-DD` of the earliest /
+/// latest counted lot for the symbol.
+#[derive(Debug, serde::Serialize)]
+pub struct SymbolComparison {
+    pub symbol: String,
+    pub lot_count: i64,
+    pub invested_usd: f64,
+    pub your_value_usd: f64,
+    pub benchmark_value_usd: f64,
+    pub first_acquired: String,
+    pub last_acquired: String,
+}
+
+/// A holding the comparison can't see (no counted lots) but which holds real
+/// value today. `value_usd` follows the counted path's `h.value` convention
+/// (used as USD as-is — see the lot loop's `cur_usd`), so the tracked and
+/// untracked columns are directly comparable.
+#[derive(Debug, serde::Serialize)]
+pub struct UntrackedHolding {
+    pub symbol: String,
+    pub value_usd: f64,
+}
+
+/// Presentation rounding for the money fields of the per-symbol / untracked
+/// breakdown: house rule is `Decimal::round_dp(2)` before handing an f64 to
+/// the client.
+fn round2(v: f64) -> f64 {
+    use rust_decimal::prelude::ToPrimitive;
+    Decimal::from_f64_retain(v)
+        .map(|d| d.round_dp(2))
+        .and_then(|d| d.to_f64())
+        .unwrap_or(v)
 }
 
 pub async fn contribution_comparison(
@@ -183,6 +231,9 @@ pub async fn contribution_comparison(
         your_value_usd: 0.0,
         benchmark_value_usd: 0.0,
         lot_count: 0,
+        symbols: Vec::new(),
+        untracked: Vec::new(),
+        untracked_value_usd: 0.0,
     };
 
     // Resolve the requested benchmark (defaults to S&P 500) and make sure its
@@ -213,6 +264,7 @@ pub async fn contribution_comparison(
     let rows = sqlx::query(
         r#"
         SELECT l.qty, l.cost_per_unit, l.usd_fx_rate, l.acquired_at,
+               h.id AS holding_id, h.symbol, h.name,
                h.value AS h_value, h.quantity AS h_qty
         FROM holding_lots l
         JOIN holdings h ON h.id = l.holding_id
@@ -230,6 +282,24 @@ pub async fn contribution_comparison(
             .map(|d| d.to_string().parse().unwrap_or(0.0))
             .unwrap_or(0.0)
     };
+
+    // Per-symbol accumulator: exactly the same per-lot numbers as the
+    // totals, just bucketed by display symbol, so the rows always sum back
+    // to the aggregate the chart shows.
+    struct SymAgg {
+        lot_count: i64,
+        invested: f64,
+        your_value: f64,
+        benchmark_value: f64,
+        first_acquired: NaiveDate,
+        last_acquired: NaiveDate,
+    }
+    let mut by_symbol: std::collections::HashMap<String, SymAgg> =
+        std::collections::HashMap::new();
+    // Holdings that contributed at least one counted lot — everything else
+    // in the population with value is "untracked" below.
+    let mut counted_holdings: std::collections::HashSet<uuid::Uuid> =
+        std::collections::HashSet::new();
 
     let mut invested = 0.0;
     let mut your_value = 0.0;
@@ -269,13 +339,104 @@ pub async fn contribution_comparison(
         your_value += cur_usd;
         benchmark_value += bench_usd;
         count += 1;
+
+        if let Ok(hid) = r.try_get::<uuid::Uuid, _>("holding_id") {
+            counted_holdings.insert(hid);
+        }
+        let agg = by_symbol
+            .entry(display_symbol(r))
+            .or_insert_with(|| SymAgg {
+                lot_count: 0,
+                invested: 0.0,
+                your_value: 0.0,
+                benchmark_value: 0.0,
+                first_acquired: acquired,
+                last_acquired: acquired,
+            });
+        agg.lot_count += 1;
+        agg.invested += cost_usd;
+        agg.your_value += cur_usd;
+        agg.benchmark_value += bench_usd;
+        agg.first_acquired = agg.first_acquired.min(acquired);
+        agg.last_acquired = agg.last_acquired.max(acquired);
     }
+
+    let mut symbols: Vec<SymbolComparison> = by_symbol
+        .into_iter()
+        .map(|(symbol, a)| SymbolComparison {
+            symbol,
+            lot_count: a.lot_count,
+            invested_usd: round2(a.invested),
+            your_value_usd: round2(a.your_value),
+            benchmark_value_usd: round2(a.benchmark_value),
+            first_acquired: a.first_acquired.to_string(),
+            last_acquired: a.last_acquired.to_string(),
+        })
+        .collect();
+    symbols.sort_by(|a, b| {
+        b.invested_usd
+            .partial_cmp(&a.invested_usd)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // Holdings the comparison could NOT see: same population as the lot
+    // query (this user's non-deleted holdings — deliberately no account
+    // filter, matching the counted JOIN above), currently worth something,
+    // but with zero counted lots. `h.value` is used as USD as-is, exactly
+    // like `cur_usd` above — the two columns must stay comparable.
+    let untracked_rows = sqlx::query(
+        r#"
+        SELECT h.id, h.symbol, h.name, h.value
+        FROM holdings h
+        WHERE h.user_id = $1 AND h.deleted_at IS NULL AND h.value > 0
+        "#,
+    )
+    .bind(user_id)
+    .fetch_all(db)
+    .await
+    .unwrap_or_default();
+
+    let mut untracked: Vec<UntrackedHolding> = untracked_rows
+        .iter()
+        .filter(|r| {
+            !r.try_get::<uuid::Uuid, _>("id")
+                .map(|id| counted_holdings.contains(&id))
+                .unwrap_or(false)
+        })
+        .map(|r| UntrackedHolding {
+            symbol: display_symbol(r),
+            value_usd: round2(dec(r, "value")),
+        })
+        .collect();
+    untracked.sort_by(|a, b| {
+        b.value_usd
+            .partial_cmp(&a.value_usd)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let untracked_value_usd = round2(untracked.iter().map(|u| u.value_usd).sum());
 
     ContributionComparison {
         invested_usd: invested,
         your_value_usd: your_value,
         benchmark_value_usd: benchmark_value,
         lot_count: count,
+        symbols,
+        untracked,
+        untracked_value_usd,
+    }
+}
+
+/// Display key for a holdings row: the ticker symbol, falling back to the
+/// holding's name when the symbol is empty/whitespace (both columns are
+/// NOT NULL, but manual entries sometimes leave the symbol blank).
+fn display_symbol(r: &sqlx::postgres::PgRow) -> String {
+    let symbol: String = r.try_get("symbol").unwrap_or_default();
+    let trimmed = symbol.trim();
+    if trimmed.is_empty() {
+        let name: String = r.try_get("name").unwrap_or_default();
+        name.trim().to_string()
+    } else {
+        trimmed.to_string()
     }
 }
 
