@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:js_interop';
 import 'package:flutter/foundation.dart';
-import 'package:web/web.dart' as web;
 
 import 'api_platform.dart';
+import 'realtime_socket.dart';
 
 /// Coarse server-pushed events. Mirrors `services::realtime::RealtimeEvent`
 /// in the backend — payloads are intentionally tiny ("go refetch
@@ -50,7 +49,7 @@ class RealtimeService {
   /// `ApiService._baseUrl`.
   static String _wsUrl() => apiWsUrl();
 
-  web.WebSocket? _socket;
+  RealtimeSocket? _socket;
   StreamController<RealtimeEvent>? _events;
   /// Tracks the next reconnect delay (ms). Reset on a clean open.
   int _backoffMs = 1000;
@@ -68,50 +67,23 @@ class RealtimeService {
   /// `dispose()` in between is a no-op.
   void connect() {
     if (_disposed) return;
-    if (_socket != null && _socket!.readyState == 1) return; // OPEN
+    if (_socket != null && _socket!.isOpen) return;
     final url = _wsUrl();
     try {
-      final ws = web.WebSocket(url);
-      _socket = ws;
-      // package:web's WebSocket exposes events both as
-      // assignable `on*` properties (which need JSFunction) AND as
-      // EventTarget listeners (which take typed Dart callbacks).
-      // The listener API is simpler — same lifecycle (the listener
-      // is removed when the socket is GC'd alongside it) without
-      // the .toJS / type-inference dance.
-      ws.addEventListener(
-        'open',
-        ((web.Event _) {
+      final sock = createRealtimeSocket();
+      _socket = sock;
+      sock.connect(
+        url,
+        onOpen: () {
           _backoffMs = 1000;
           debugPrint('realtime: connected to $url');
-        }).toJS,
-      );
-      ws.addEventListener(
-        'message',
-        ((web.MessageEvent ev) {
-          final raw = ev.data;
-          // Text WS frames arrive as JSString. Anything else (Blob,
-          // ArrayBuffer) is ignored — we don't send binary frames.
-          if (raw.isA<JSString>()) {
-            _handleMessage((raw as JSString).toDart);
-          }
-        }).toJS,
-      );
-      ws.addEventListener(
-        'error',
-        ((web.Event _) {
-          debugPrint('realtime: socket error');
-        }).toJS,
-      );
-      ws.addEventListener(
-        'close',
-        ((web.CloseEvent ev) {
-          debugPrint(
-            'realtime: closed (code=${ev.code} clean=${ev.wasClean}); '
-            'reconnecting in ${_backoffMs}ms',
-          );
+        },
+        onMessage: _handleMessage,
+        onError: () => debugPrint('realtime: socket error'),
+        onClose: () {
+          debugPrint('realtime: closed; reconnecting in ${_backoffMs}ms');
           _scheduleReconnect();
-        }).toJS,
+        },
       );
     } catch (e) {
       debugPrint('realtime: connect failed: $e');

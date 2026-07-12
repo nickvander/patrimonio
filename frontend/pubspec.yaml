@@ -44,6 +44,10 @@ dependencies:
   file_picker: ^10.3.10
   syncfusion_flutter_treemap: ^28.1.33
   url_launcher: ^6.3.1
+  # Native (Android/iOS/desktop) key-value persistence. On web the app uses
+  # window.localStorage via the Preferences seam; this backs the same seam off
+  # the web so the configured backend URL and other prefs survive restarts.
+  shared_preferences: ^2.3.2
 
   web: any
 dev_dependencies:

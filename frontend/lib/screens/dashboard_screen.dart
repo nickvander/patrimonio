@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:patrimonio/screens/tax_planning_screen.dart';
 import 'package:plaid_flutter/plaid_flutter.dart';
-import 'package:web/web.dart' as web;
 
 import '../components/allocation_heatmap.dart';
 import '../components/date_range_selector.dart';
@@ -31,6 +30,7 @@ import '../utils/sync_progress.dart';
 import '../utils/theme_colors.dart';
 import '../utils/transaction_display.dart';
 import '../utils/url_opener.dart';
+import '../utils/web_env.dart';
 import '../widgets/accounts_list_widget.dart';
 import '../widgets/add_account_dialog.dart';
 import '../widgets/add_crypto_dialog.dart';
@@ -613,7 +613,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               subtitle: Text(l.dashConnectViaOauth),
               onTap: () {
                 Navigator.of(sheetCtx).pop();
-                web.window.location.href = '${_apiService.baseUrl}/auth/coinbase';
+                navigateTo('${_apiService.baseUrl}/auth/coinbase');
               },
             ),
             ListTile(
@@ -2593,7 +2593,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _checkRedirectStatus() {
-    final uri = Uri.parse(web.window.location.href);
+    final uri = Uri.parse(currentUrl());
     final status = uri.queryParameters['status'];
     if (status == 'success') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -5016,8 +5016,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               fg: Colors.white,
                               onPressed: () {
                                 final baseUrl = _apiService.baseUrl;
-                                web.window.location.href =
-                                    '$baseUrl/auth/coinbase';
+                                navigateTo('$baseUrl/auth/coinbase');
                               },
                             ),
                             tile(

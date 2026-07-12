@@ -4,6 +4,9 @@
 // localStorage access, so both calls swallow errors.
 import 'package:web/web.dart' as web;
 
+// localStorage is synchronous, so there's nothing to preload.
+Future<void> initPrefsStorage() async {}
+
 String? prefsRead(String key) {
   try {
     return web.window.localStorage.getItem(key);

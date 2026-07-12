@@ -36,7 +36,7 @@ CSV exports plus a printable promissory-note agreement.
 | Backend | Rust + axum |
 | Database | PostgreSQL 17 |
 | Cache | Redis 7 |
-| Frontend | Flutter Web served by nginx in Docker |
+| Frontend | Flutter — web (served by nginx in Docker) + native Android APK |
 | Financial Data | Plaid, Coinbase OAuth, Bitso API, CSV/PDF import |
 | Exchange Rates | ExchangeRate-API with Redis caching |
 | Deployment | Docker Compose locally; static hosting + API container for production |
@@ -193,6 +193,26 @@ cd frontend
 flutter pub get
 flutter run -d chrome
 ```
+
+### Android app (APK)
+
+The same Flutter frontend builds a native Android app that connects to your
+self-hosted backend over HTTPS:
+
+```bash
+cd frontend
+flutter build apk --release
+# → build/app/outputs/flutter-apk/app-release.apk
+```
+
+On first launch the app asks for your backend URL (e.g.
+`https://patrimonio.nickvda.com`) and remembers it; you can also bake one in with
+`--dart-define=API_BASE_URL=…`. The app is HTTPS-only, so the backend must be
+served over TLS. If your deployment sits behind **Cloudflare Access**, the setup
+screen's *Advanced* section takes a CF Access service token — any other HTTPS
+front door needs only the URL. Release signing, install steps, and the
+Cloudflare walkthrough are in the
+[Deployment guide](docs/deployment.md#android-apk).
 
 ## API Endpoints
 

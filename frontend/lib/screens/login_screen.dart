@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../services/auth_service.dart';
+import '../services/backend_config.dart';
 import '../services/passkeys.dart';
+import '../utils/app_locale.dart';
 import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -175,6 +178,25 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                     child: Text(l.authForgotPassword),
                   ),
+                  // Native only: reopen the backend-setup screen (clearing the
+                  // stored URL flips RootGate back to it). Without this, a
+                  // mistyped URL or Cloudflare Access token would be a dead
+                  // end — the setup screen only shows while no URL is stored.
+                  // Web derives its backend from the page origin, so there is
+                  // nothing to change there. Native-only UI, so the label uses
+                  // the web-free locale helper rather than .arb strings (same
+                  // precedent as backend_setup_screen.dart).
+                  if (!kIsWeb)
+                    TextButton.icon(
+                      onPressed:
+                          _submitting ? null : () => BackendConfig.clear(),
+                      icon: const Icon(Icons.dns_outlined, size: 16),
+                      label: Text(
+                        localeNotifier.value?.languageCode == 'es'
+                            ? 'Cambiar servidor'
+                            : 'Change server',
+                      ),
+                    ),
                 ],
               ),
             ),

@@ -53,6 +53,110 @@ The smoke test checks API health and uses Playwright to confirm the Flutter app 
 
 The API exposes `GET /api/setup/status` for launch readiness checks. The Management tab uses it to show whether Plaid credentials and `ENCRYPTION_KEY` are configured before enabling real account linking.
 
+## Android APK
+
+The Flutter frontend also builds a native Android APK that connects to a
+self-hosted backend over HTTPS. It's the same codebase as the web build; browser
+-only code is isolated behind conditional-import platform seams.
+
+### Build
+
+```bash
+cd frontend
+flutter build apk --release
+# → build/app/outputs/flutter-apk/app-release.apk  (~70 MB)
+```
+
+The Android SDK is required (`ANDROID_HOME`). On first launch the app shows a
+**Settings screen** to enter the backend URL (e.g. `https://patrimonio.nickvda.com`),
+persisted on-device. To bake in a default, add
+`--dart-define=API_BASE_URL=https://your-host`.
+
+The app is **HTTPS-only** (`android/app/src/main/res/xml/network_security_config.xml`).
+Production already serves HTTPS with `COOKIE_SECURE=true`, so the session cookie
+works. If you must target a plain-http backend, flip `cleartextTrafficPermitted`
+to `true` there and re-add `android:usesCleartextTraffic="true"` to the manifest.
+
+### Connecting the app to your server
+
+The app is **edge-agnostic**: it only ever needs a backend URL, plus (optionally)
+a Cloudflare Access service token. That keeps one APK usable by every hosting
+style — each operator brings their own front door:
+
+| Your setup | What to enter in the app |
+|---|---|
+| Backend on a plain HTTPS domain (reverse proxy, Cloudflare Tunnel *without* Access, Caddy, nginx…) | Just the URL. Patrimonio's own auth (Argon2 password + TOTP + rate limiting) is the gate. |
+| Backend behind **Cloudflare Access** (Zero Trust) | The URL **and** a CF Access **service token** under *Advanced* (see below). |
+| Backend on a **Tailscale** tailnet | The `https://<host>.<tailnet>.ts.net` URL from `tailscale serve` (mobile requires real HTTPS — the raw `100.x.y.z` IP over plain http will not work). Phone must run Tailscale. |
+
+If the URL you enter is guarded by Cloudflare Access and no token is configured,
+the setup screen detects the Access login page during its connection test and
+tells you a service token is needed — it won't fail silently.
+
+### Cloudflare Access service token (step by step)
+
+A browser can complete Cloudflare Access's interactive login; a native app
+cannot. A **service token** is the CF-supported way to let a non-browser client
+through while keeping the edge gate up for everyone else. The app sends it as
+`CF-Access-Client-Id` / `CF-Access-Client-Secret` headers on every API request
+(WebSocket included).
+
+**1. Mint the token** (Cloudflare Zero Trust dashboard):
+
+1. Go to **Access ➔ Service Auth ➔ Service Tokens** and click
+   **Create Service Token**.
+2. Name it after the device/purpose, e.g. `patrimonio-android-nick` (one token
+   per device makes revocation surgical).
+3. Pick a duration (or non-expiring; you can rotate any time).
+4. Copy the **Client ID** (`….access`) and **Client Secret** now — the secret
+   is shown only once. Store both in Bitwarden/Vaultwarden.
+
+**2. Allow it on the application:**
+
+1. Go to **Access ➔ Applications**, edit the application for your Patrimonio
+   hostname (e.g. `patrimonio.nickvda.com`).
+2. Add a **second policy** (keep your existing browser-login policy as-is):
+   * **Action**: `Service Auth` (not Allow — Service Auth skips the identity
+     login entirely).
+   * **Include ➔ Selector**: `Service Token` → pick the token you just minted.
+3. Save. Browser users still get the normal Access login; requests carrying the
+   token headers pass straight through.
+
+**3. Enter it in the app:** on the backend-setup screen, expand
+**Advanced: Cloudflare Access** and paste the Client ID and Client Secret, then
+Connect. (Reachable later via **Change server** on the login screen.)
+
+**Rotation/revocation:** delete or roll the token in Service Auth; the app keeps
+working until its next request, then fails cleanly — enter the new token via
+*Change server*. Losing the phone = revoke that one token; nothing else changes.
+
+**Security note:** the token only lets a client *reach* Patrimonio — the app's
+own login (password + TOTP) is still required. Prefer the service token over an
+Access *Bypass* policy: with Bypass, every pre-auth endpoint is exposed to the
+whole internet; with Service Auth, the edge stays closed to anyone without a
+token.
+
+### Release signing
+
+Release builds are signed from `frontend/android/key.properties` (gitignored),
+which points at a keystore under `frontend/android/keystore/` (also gitignored):
+
+```properties
+storePassword=…
+keyPassword=…
+keyAlias=patrimonio
+storeFile=/abs/path/to/patrimonio-release.jks
+```
+
+Generate a keystore once with `keytool -genkeypair -keystore … -alias patrimonio
+-keyalg RSA -keysize 2048 -validity 10000`. **Back up the keystore and
+`key.properties`** — losing them means you can't ship updates to an installed
+app. When `key.properties` is absent (fresh clone / CI), the build falls back to
+debug signing so it still succeeds; it just isn't signed with the real upload key.
+
+Install by sideloading the APK onto the phone (enable "install unknown apps").
+The APK is not published to the Play Store.
+
 ## Production Shape
 
 A production deployment should keep the same service boundaries:

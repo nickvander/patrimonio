@@ -30,6 +30,32 @@ description: How to run, build, and test the Patrimonio development environment
 - The **browser subagent** cannot connect to localhost servers (sandbox limitation). Use `curl` to verify the server is responding, and ask the user to test in their browser.
 - `flutter run -d web-server` is unreliable in this environment — always use `flutter build web` + `python3 -m http.server` instead.
 
+## Building the Android APK
+
+The frontend also builds a native **Android APK** (same codebase; web-only code
+is behind conditional-import seams — see the flutter-frontend skill §8). The
+Android SDK is at `~/android-sdk` (`ANDROID_HOME`); `flutter build apk` works on
+this VM.
+
+// turbo
+1. Build the signed release APK: `cd ~/patrimonio/frontend && flutter build apk --release`
+   - Output: `build/app/outputs/flutter-apk/app-release.apk` (~70 MB).
+   - Release signing is read from `frontend/android/key.properties` (gitignored,
+     points at the gitignored keystore under `android/keystore/`). If that file
+     is absent (fresh clone / CI), the build falls back to debug signing so it
+     still succeeds — it just isn't signed with the real upload key. **Back up
+     the keystore + `key.properties`; losing them means you can't update an
+     installed app.**
+2. Bake in a default backend URL (optional): add
+   `--dart-define=API_BASE_URL=https://patrimonio.nickvda.com`. Otherwise the app
+   asks for the backend URL on first launch (Settings screen) and remembers it.
+3. Install: push the APK to the phone and sideload it. The app is **HTTPS-only**
+   (network security config); the backend must be reachable over TLS.
+
+Verify a change compiles for **both** targets before calling it done —
+`flutter build web` and `flutter build apk`. A stray `package:web` import breaks
+only the APK, and `flutter analyze` won't catch it.
+
 ## Rebuilding after backend changes
 // turbo
 1. Rebuild and restart the API: `cd ~/patrimonio && docker compose up --build -d api`

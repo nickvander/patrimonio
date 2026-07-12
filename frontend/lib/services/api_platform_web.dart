@@ -39,6 +39,12 @@ Map<String, String> apiExtraHeaders() {
   return const {};
 }
 
+/// WebSocket-handshake headers. Empty on web: the browser's `WebSocket`
+/// attaches the session cookie itself and doesn't allow custom headers.
+/// (A CF-Access-protected deployment works on web because the browser also
+/// carries the CF Access cookie from the interactive login.)
+Map<String, String> wsHandshakeHeaders() => const {};
+
 /// Wraps an inner client to stamp [apiExtraHeaders] onto every request, so the
 /// ngrok header rides along no matter which ApiService helper made the call.
 class _ExtraHeaderClient extends http.BaseClient {

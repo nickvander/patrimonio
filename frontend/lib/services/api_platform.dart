@@ -14,5 +14,11 @@
 // is never used against a real server — tests inject their own fakes — so
 // its plain client + 'localhost' host are only there to satisfy the
 // compiler.
+// Resolution order matters: web has `dart.library.js_interop`, native
+// (Android/iOS/desktop) and the Dart test VM have `dart.library.io`. The io
+// impl handles the native app *and* doubles as the test-VM stub (it defaults to
+// localhost when no backend is configured, and tests inject fakes anyway), so
+// the original pure stub is now only a belt-and-suspenders fallback.
 export 'api_platform_stub.dart'
-    if (dart.library.js_interop) 'api_platform_web.dart';
+    if (dart.library.js_interop) 'api_platform_web.dart'
+    if (dart.library.io) 'api_platform_io.dart';

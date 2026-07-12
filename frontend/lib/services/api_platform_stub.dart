@@ -13,4 +13,6 @@ String apiWsUrl() => 'ws://localhost:3000/api/realtime/ws';
 
 Map<String, String> apiExtraHeaders() => const {};
 
+Map<String, String> wsHandshakeHeaders() => const {};
+
 http.Client createApiClient() => http.Client();

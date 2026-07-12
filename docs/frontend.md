@@ -1,6 +1,6 @@
 # Frontend Deep Dive
 
-The frontend is a Flutter application focused on the web build today, with the codebase structured so desktop and mobile targets can continue to evolve from the same app.
+The frontend is a Flutter application that builds for **web and Android** from one codebase, with desktop targets available from the same app. Web is the primary deployment (Dockerized, served by nginx); the Android APK talks to the same self-hosted backend over HTTPS.
 
 ## UI Architecture
 
@@ -43,10 +43,27 @@ flutter analyze
 flutter run -d chrome
 ```
 
+## Native Android build
+
+The same Flutter app builds an Android APK that connects to your self-hosted backend:
+
+```bash
+cd frontend
+flutter build apk --release
+# → build/app/outputs/flutter-apk/app-release.apk
+```
+
+On **web** the API base URL is same-origin (derived from `window.location`, proxied by nginx at `/api`). A native build has no page origin, so on first launch it shows a **Settings screen** to enter the backend URL (e.g. `https://patrimonio.nickvda.com`); it's persisted on-device and can also be baked in with `--dart-define=API_BASE_URL=…`. The app is **HTTPS-only** — the backend must be served over TLS (as production is, with `COOKIE_SECURE=true`).
+
+The app is **edge-agnostic**: a deployment behind **Cloudflare Access** enters a CF Access service token under the setup screen's *Advanced* section (sent as `CF-Access-Client-Id`/`CF-Access-Client-Secret` on every request and on the realtime WebSocket handshake); any other HTTPS front door needs only the URL. The setup screen's connection test detects a Cloudflare Access login page and prompts for the token instead of failing opaquely, and a native-only **Change server** button on the login screen reopens the setup screen. See the [Deployment guide](deployment.md#connecting-the-app-to-your-server) for the full connection matrix and the Cloudflare walkthrough.
+
+Because browser APIs (`dart:js_interop` / `package:web`) only compile for web, every web-only capability lives behind a **conditional-import platform seam** (API client, preferences, realtime WebSocket, splash, file-drop, Plaid/passkeys). Native session auth uses a cookie-persisting `dart:io` HTTP client (the browser cookie jar has no native equivalent). Passkeys are web-only; on native, password + TOTP is the auth path. Release signing is configured via `frontend/android/key.properties` (gitignored) — see the [Deployment guide](deployment.md#android-apk).
+
 ## Platform Support
 
 | Platform | Status | Notes |
 |----------|--------|-------|
-| Web | Primary | Dockerized and smoke-tested locally. |
+| Web | Primary | Dockerized, served by nginx, smoke-tested locally. |
+| Android | Supported | `flutter build apk` produces a signed APK; backend URL set at first run; HTTPS-only. Passkeys unavailable (password + TOTP). |
 | macOS/Windows/Linux | Supported by Flutter | Native packaging is not the current deployment target. |
-| Android/iOS | Future hardening | Responsive layouts exist, but production mobile QA remains future work. |
+| iOS | Future | Shares the native seams with Android; no iOS signing/QA done yet. |

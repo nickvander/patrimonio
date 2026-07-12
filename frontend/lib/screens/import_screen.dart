@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
-import '../services/file_drop_web.dart';
+import '../services/file_drop.dart';
 import '../theme/typography.dart';
 import '../utils/category.dart';
 import '../utils/currency.dart';

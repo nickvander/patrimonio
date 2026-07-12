@@ -6,7 +6,8 @@
 import 'dart:convert';
 
 import 'preferences_storage_stub.dart'
-    if (dart.library.js_interop) 'preferences_storage_web.dart';
+    if (dart.library.js_interop) 'preferences_storage_web.dart'
+    if (dart.library.io) 'preferences_storage_io.dart';
 
 /// Thin wrapper around `window.localStorage` for user preferences that
 /// should survive a page refresh — reporting currency, last selected tab,
@@ -17,6 +18,11 @@ import 'preferences_storage_stub.dart'
 /// collide with other apps if this site is ever served behind a path.
 class Preferences {
   static const _prefix = 'patrimonio:';
+
+  /// Preload the persistent store. No-op on web (localStorage is synchronous);
+  /// on native it hydrates the in-memory cache from shared_preferences. Must be
+  /// awaited in `main()` before any preference is read.
+  static Future<void> init() => initPrefsStorage();
 
   static String? _read(String key) => prefsRead('$_prefix$key');
 

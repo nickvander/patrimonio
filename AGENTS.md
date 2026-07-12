@@ -54,8 +54,10 @@ redis-server --port 6380 --requirepass patrimonio_dev --daemonize yes \
   --dir ~/dev/patrimonio/redisdata --logfile ~/dev/patrimonio/redisdata/redis.log --save ""
 # Backend (migrations auto-run on boot; listens on :8080)
 cd backend && source ~/.cargo/env && cargo build && RUST_LOG=warn ./target/debug/patrimonio
-# Frontend
+# Frontend (web)
 cd frontend && ~/flutter/bin/flutter run   # or: flutter build web
+# Frontend (Android APK — same codebase; web-only code is behind platform seams)
+cd frontend && ~/flutter/bin/flutter build apk --release   # → build/app/outputs/flutter-apk/app-release.apk
 ```
 
 Data dirs (`pgdata/`, `redisdata/`) live inside the project and are gitignored —

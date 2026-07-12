@@ -204,6 +204,56 @@ with `group(...)`.
 - Tests deliberately avoid pumping real app screens (a `package:web` widget-test hazard) — test
   cards/utils in isolation instead.
 
+## 8. Platform seams — web-only APIs must be isolated (the app targets web AND Android)
+
+The app builds for **web and Android** from one codebase (`flutter build web` and
+`flutter build apk`). `dart:js_interop` / `dart:html` / `package:web` /
+`package:http/browser_client` compile **only on web** — importing any of them
+unconditionally breaks the Android build *and* the Dart test VM. Every web-only
+capability is therefore behind a **conditional-import seam**: a neutral
+`foo.dart` that `export`s a default (stub/io) impl and swaps in the web impl
+under `if (dart.library.js_interop)` (and, where native needs real behaviour, an
+io impl under `if (dart.library.io)`).
+
+- **Never import `dart:js_interop` / `dart:html` / `package:web` /
+  `browser_client` from a widget/screen/service directly** — put it in a
+  `*_web.dart` and reach it through the seam. Seams to copy:
+  `services/api_platform` (3-way stub/web/io — native adds a cookie-persisting
+  `dart:io` client + a configurable base URL), `preferences_storage`, `splash`,
+  `realtime_socket` (`dart:io` WebSocket on native), `utils/web_env`
+  (navigate / current-URL), `file_drop`, `plaid_oauth`, `passkeys`. Passkeys are
+  **unavailable on native** (WebAuthn is web-only) — password + TOTP is the
+  native auth path; gate passkey UI on `PasskeyService.instance.isAvailable`.
+- **Conditional-export order + the test-VM trap:** `export 'stub.dart' if
+  (dart.library.js_interop) 'web.dart' if (dart.library.io) 'io.dart';`. Web has
+  `js_interop`; **native AND `flutter test` both have `dart.library.io`** — you
+  can't distinguish them at compile time. If an io impl holds process-global
+  state (e.g. the prefs cache), gate reads/writes behind an explicit `init()`
+  that only `main()` calls, so widget tests (which never run `main()`) keep the
+  old inert-stub behaviour and stay isolated. (This is exactly what bit the
+  projection tests during the Android port.)
+- **Backend URL:** web derives it from `window.location` (same-origin nginx
+  `/api`); native has no origin, so it comes from `services/backend_config.dart`
+  (the Settings screen, persisted via shared_preferences) and is
+  bake-in-able via `--dart-define=API_BASE_URL=…`. `screens/root_gate.dart` shows
+  the setup screen on native until a URL is set; web goes straight to `AuthGate`.
+- **Session auth:** the browser cookie jar carries the session cookie for free;
+  native `package:http` drops `Set-Cookie`, so `api_platform_io` wraps a
+  `dart:io` client that captures and re-sends it (in-memory — re-login after an
+  app restart). The cookie is `HttpOnly`+`Secure`+`Lax`; HttpOnly does **not**
+  block the native client (it only hides the cookie from browser JS).
+- **Per-host headers + the WS handshake:** all three `api_platform` impls must
+  export the same surface — `apiBaseUrl/apiWsUrl/currentHost/apiExtraHeaders/
+  wsHandshakeHeaders/createApiClient`. `apiExtraHeaders()` is stamped on every
+  HTTP request (web: ngrok skip header; io: the optional **Cloudflare Access
+  service token** from `BackendConfig` as `CF-Access-Client-Id/Secret`).
+  `wsHandshakeHeaders()` exists because the browser WebSocket attaches
+  cookies/CF-cookies itself but forbids custom headers (web impl returns `{}`),
+  while `dart:io`'s WebSocket attaches nothing — the io impl returns the session
+  cookie from the shared jar + the CF token, or the realtime upgrade is
+  rejected. If you add a function to one impl, add it to all three, or the
+  analyzer (which resolves the *stub*) breaks.
+
 ## Anti-patterns to avoid
 
 - Adding to god files (`dashboard_screen.dart`, `api_service.dart`, `net_worth_card.dart`) —
@@ -223,4 +273,7 @@ with `group(...)`.
 - [ ] Responsive sizing off the inner `LayoutBuilder` width with the established breakpoints.
 - [ ] Custom charts mirror data into the semantics tree.
 - [ ] Unit test for extracted logic; bilingual widget test for locale-sensitive strings.
-- [ ] `flutter analyze` clean; `flutter test` green.
+- [ ] No unconditional `dart:js_interop` / `package:web` / `browser_client` import outside a
+      `*_web.dart`; any new web-only capability is behind a conditional-import seam (§8).
+- [ ] `flutter analyze` clean; `flutter test` green; **both `flutter build web` and
+      `flutter build apk` compile** (a web-only import that slips in breaks only the APK).

@@ -1,11 +1,10 @@
-import 'dart:js_interop';
-
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import 'l10n/app_localizations.dart';
-import 'screens/auth_gate.dart';
+import 'screens/root_gate.dart';
+import 'services/backend_config.dart';
 import 'services/preferences.dart';
+import 'services/splash.dart';
 import 'theme/palette.dart';
 import 'theme/typography.dart';
 import 'utils/app_locale.dart';
@@ -36,30 +35,14 @@ ThemeMode _loadInitialThemeMode() {
   }
 }
 
-@JS('__splashProgress')
-external void _splashProgress(int percent, String message);
-
-@JS('__splashDone')
-external void _splashDone();
-
-void _updateSplash(int percent, String message) {
-  if (kIsWeb) {
-    try {
-      _splashProgress(percent, message);
-    } catch (_) {}
-  }
-}
-
-void _dismissSplash() {
-  if (kIsWeb) {
-    try {
-      _splashDone();
-    } catch (_) {}
-  }
-}
-
-void main() {
-  _updateSplash(60, 'Starting app…');
+Future<void> main() async {
+  // Needed before awaiting plugin-backed startup (shared_preferences).
+  WidgetsFlutterBinding.ensureInitialized();
+  // Hydrate persisted preferences (no-op on web) and the configured backend URL
+  // (native only) before the first frame reads either.
+  await Preferences.init();
+  await BackendConfig.load();
+  splashProgress(60, 'Starting app…');
   // Seed the active locale (web-free notifier) from the saved preference.
   localeNotifier.value = _loadInitialLocale();
   // The notifier's listener only fires on *change*; with no saved language
@@ -80,11 +63,11 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
   @override
   void initState() {
     super.initState();
-    _updateSplash(80, 'Rendering UI…');
+    splashProgress(80, 'Rendering UI…');
     // Dismiss the HTML splash after Flutter paints its first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _updateSplash(100, 'Ready');
-      _dismissSplash();
+      splashProgress(100, 'Ready');
+      splashDone();
     });
   }
 
@@ -111,7 +94,7 @@ class _PatrimonioAppState extends State<PatrimonioApp> {
               locale: locale,
               localizationsDelegates: AppLocalizations.localizationsDelegates,
               supportedLocales: AppLocalizations.supportedLocales,
-              home: const AuthGate(),
+              home: const RootGate(),
             );
           },
         );

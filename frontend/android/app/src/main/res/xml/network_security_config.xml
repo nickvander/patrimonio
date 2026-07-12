@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  HTTPS-only. The production backend is served over HTTPS
+  (https://patrimonio.nickvda.com, COOKIE_SECURE=true), so plain-http (cleartext)
+  traffic is disallowed — this is the secure default for a finance app and lets
+  the session cookie's Secure flag work.
+
+  If you ever need to point the app at a plain-http backend (e.g. a LAN dev
+  server), flip cleartextTrafficPermitted to "true" here and re-add
+  android:usesCleartextTraffic="true" to the <application> tag in
+  AndroidManifest.xml, then rebuild.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
