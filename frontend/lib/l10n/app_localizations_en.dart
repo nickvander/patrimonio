@@ -6594,9 +6594,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Estimated from each payer\'s current rate and cadence — not announced dates.';
 
   @override
-  String calMoreChip(int n) {
-    return '+$n more';
-  }
+  String get calExpandHint => 'Show payer breakdown';
+
+  @override
+  String get calCollapseHint => 'Hide payer breakdown';
 
   @override
   String calEstExDate(String date) {

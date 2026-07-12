@@ -46,6 +46,15 @@ PM triage → parallel frontend/backend implementation → live re-verification
   `emergency_fund` trailing-spend (current cash stays latest-rate by policy);
   regression tests fail against the old code. 481 frontend + full backend
   suites green.
+* **Round-10d (dividend calendar redesign, verified live 6/6):** the 12-month
+  calendar's staggered month cards (intrinsic-width cards centered in a
+  Column — meaningless offsets, owner-reported from prod) replaced with a
+  uniform 12-row bar list: month + proportional income bar + amount,
+  tap-to-expand shows ALL payers inline (chips/tooltips/"+N more" deleted),
+  two shared-scale columns at ≥720px via inner LayoutBuilder (was
+  MediaQuery). Whole year fits one phone screen (~620px vs ~2.5 screens).
+  Regression test pins uniform row widths at 390px. 494 tests green. Minor
+  known: est-ex-date text ellipsizes in expanded rows at 390px (cosmetic).
 * **Round-10c (follow-ups, verified live):** the four dashboard chart handlers
   now return `Result<_, ApiError>` — DB errors are logged 500s, not empty
   charts / all-zero runways (empty DATA still 200s with the empty shape);

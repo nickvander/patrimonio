@@ -14,20 +14,23 @@ import '../utils/theme_colors.dart';
 /// presentation — all cadence math happens backend-side, so this widget
 /// never re-derives dates or amounts.
 ///
-/// Layout: a 3×4 month grid on wide surfaces (>= 720 px), a vertical
-/// 12-row list below that. Zero-income months always render (muted em-dash
-/// total) — the dry months are as much the point as the payday ones. The
-/// current month gets a subtle accent border. Each month cell is a single
-/// merged semantics node ("July 2026, $310 expected, KO, ABBV") per the
-/// round-3 a11y conventions.
-class DividendCalendar extends StatelessWidget {
+/// Layout: a 12-row month bar-list — each row is month label → a bar
+/// proportional to the month's projected total (one global scale across
+/// all 12 months) → the amount. Tapping an income row expands its full
+/// per-payer breakdown inline (one month open at a time); there are no
+/// chips, tooltips, or "+N more" overflow. On wide constraints (>= 720 px
+/// off the inner LayoutBuilder) the 12 rows split into two side-by-side
+/// columns of six. Zero-income months always render (muted em-dash total,
+/// empty track) — the dry months are as much the point as the payday
+/// ones. The current month gets a subtle accent border. Each collapsed
+/// row is a single merged semantics node ("July 2026, $310 expected, KO,
+/// ABBV") per the round-3 a11y conventions; expanded payer lines are
+/// their own merged nodes so screen readers announce them.
+class DividendCalendar extends StatefulWidget {
   /// Raw `calendar` list from the API (C4-B shape).
   final List<dynamic> calendar;
   final double conversionFactor;
   final NumberFormat currencyFormat;
-
-  /// Chips shown per month before collapsing into a "+N more" chip.
-  static const int _maxChips = 3;
 
   const DividendCalendar({
     super.key,
@@ -36,222 +39,268 @@ class DividendCalendar extends StatelessWidget {
     required this.currencyFormat,
   });
 
+  @override
+  State<DividendCalendar> createState() => _DividendCalendarState();
+}
+
+class _DividendCalendarState extends State<DividendCalendar> {
+  /// `YYYY-MM` key of the single expanded month, if any. Only one month's
+  /// payer breakdown is open at a time.
+  String? _expandedKey;
+
   /// USD figure scaled into the display currency — the exact `_money`
   /// convention of the host dividend-income card.
-  String _money(double usd) => currencyFormat.displayMoney(usd * conversionFactor);
+  String _money(double usd) =>
+      widget.currencyFormat.displayMoney(usd * widget.conversionFactor);
+
+  void _toggle(String key) {
+    setState(() => _expandedKey = _expandedKey == key ? null : key);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final months = calendar
+    final months = widget.calendar
         .whereType<Map>()
         .map((m) => _CalMonth.parse(m.cast<String, dynamic>()))
         .toList();
     if (months.isEmpty) return const SizedBox.shrink();
 
     final l10n = AppLocalizations.of(context);
-    final isWide = MediaQuery.sizeOf(context).width >= 720;
     // The backend builds the 12 buckets starting at the UTC current month, so
     // the first bucket's key IS "now" server-side. Deriving the accent from it
     // (rather than local DateTime.now()) keeps the highlight correct near a
     // month boundary when the client's local month differs from UTC.
     final currentKey = months.first.key;
+    // One global scale: every bar is linear in USD magnitude against the
+    // biggest month, so bars compare across both columns on wide layouts.
+    // USD values keep the scale invariant under the display conversion factor.
+    final maxTotalUsd =
+        months.fold<double>(0, (max, m) => m.totalUsd > max ? m.totalUsd : max);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (isWide)
-          _grid(context, l10n, months, currentKey)
-        else
-          _list(context, l10n, months, currentKey),
-        const SizedBox(height: 10),
-        // Mandatory honesty caption: these are projections from current
-        // rate + cadence, not declared dividends.
-        Text(
-          l10n.calEstimateCaption,
-          style: TextStyle(fontSize: 11, color: context.textMuted),
-        ),
-      ],
-    );
-  }
-
-  // ---------- wide: 3×4 grid ----------
-
-  Widget _grid(BuildContext context, AppLocalizations l10n,
-      List<_CalMonth> months, String currentKey) {
-    const columns = 3;
-    final rows = (months.length / columns).ceil();
-    return Column(
-      children: [
-        for (var r = 0; r < rows; r++) ...[
-          if (r > 0) const SizedBox(height: 8),
-          // IntrinsicHeight + stretch keeps every cell in a row the same
-          // height (a real grid) without clipping a month that needs an
-          // extra chip run.
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+    return LayoutBuilder(builder: (context, constraints) {
+      // House rule: responsiveness off the INNER constraint, not the screen.
+      final isWide = constraints.maxWidth >= 720;
+      final rows = isWide
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (var c = 0; c < columns; c++) ...[
-                  if (c > 0) const SizedBox(width: 8),
-                  Expanded(
-                    child: r * columns + c < months.length
-                        ? _monthCell(context, l10n, months[r * columns + c],
-                            currentKey)
-                        : const SizedBox.shrink(),
-                  ),
-                ],
+                Expanded(
+                  child: _rowColumn(context, l10n, months.take(6).toList(),
+                      currentKey, maxTotalUsd),
+                ),
+                const SizedBox(width: 24),
+                Expanded(
+                  child: _rowColumn(context, l10n, months.skip(6).toList(),
+                      currentKey, maxTotalUsd),
+                ),
               ],
-            ),
+            )
+          : _rowColumn(context, l10n, months, currentKey, maxTotalUsd);
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          rows,
+          const SizedBox(height: 10),
+          // Mandatory honesty caption: these are projections from current
+          // rate + cadence, not declared dividends.
+          Text(
+            l10n.calEstimateCaption,
+            style: TextStyle(fontSize: 11, color: context.textMuted),
           ),
         ],
-      ],
-    );
+      );
+    });
   }
 
-  // ---------- narrow: vertical 12-row list ----------
-
-  Widget _list(BuildContext context, AppLocalizations l10n,
-      List<_CalMonth> months, String currentKey) {
+  Widget _rowColumn(BuildContext context, AppLocalizations l10n,
+      List<_CalMonth> months, String currentKey, double maxTotalUsd) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (var i = 0; i < months.length; i++) ...[
-          if (i > 0) const SizedBox(height: 8),
-          _monthCell(context, l10n, months[i], currentKey),
+          if (i > 0) const SizedBox(height: 2),
+          _monthRow(context, l10n, months[i], currentKey, maxTotalUsd),
         ],
       ],
     );
   }
 
-  // ---------- month cell (shared by grid + list) ----------
+  // ---------- one month: collapsed bar row + inline payer breakdown ----------
 
-  Widget _monthCell(BuildContext context, AppLocalizations l10n,
-      _CalMonth month, String currentKey) {
+  Widget _monthRow(BuildContext context, AppLocalizations l10n,
+      _CalMonth month, String currentKey, double maxTotalUsd) {
     final isCurrent = month.key == currentKey;
+    final isExpanded = _expandedKey == month.key;
     final label = month.label();
     final hasIncome = month.totalUsd > 0 && month.entries.isNotEmpty;
+    // Nonzero months keep a 2% minimum sliver so tiny payers stay visible;
+    // guard the all-zero calendar (maxTotalUsd == 0) against NaN.
+    final widthFactor = maxTotalUsd <= 0
+        ? 0.0
+        : (month.totalUsd / maxTotalUsd)
+            .clamp(hasIncome ? 0.02 : 0.0, 1.0)
+            .toDouble();
 
-    // One merged, labelled node per month cell — "July 2026, $310
-    // expected, KO, ABBV" (round-3 a11y conventions).
+    // One merged, labelled node per collapsed row — "July 2026, $310
+    // expected, KO, ABBV" (round-3 a11y conventions, labels unchanged).
     final semLabel = hasIncome
         ? l10n.calMonthSem(label, _money(month.totalUsd),
             month.entries.map((e) => e.symbol).join(', '))
         : l10n.calMonthSemEmpty(label);
 
-    return MergeSemantics(
+    final collapsedRow = MergeSemantics(
       child: Semantics(
         label: semLabel,
+        hint: hasIncome
+            ? (isExpanded ? l10n.calCollapseHint : l10n.calExpandHint)
+            : null,
+        button: hasIncome,
+        expanded: hasIncome ? isExpanded : null,
+        onTap: hasIncome ? () => _toggle(month.key) : null,
         excludeSemantics: true,
         container: true,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 104),
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: context.tileSurface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isCurrent
-                  ? context.accentSoft(context.tealAccent)
-                  : context.hairline,
-              width: isCurrent ? 1.5 : 1,
+          key: ValueKey('cal-row-${month.key}'),
+          decoration: isCurrent
+              ? BoxDecoration(
+                  color: context.tileSurface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: context.accentBorder(context.tealAccent),
+                    width: 1.5,
+                  ),
+                )
+              : null,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: hasIncome ? () => _toggle(month.key) : null,
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 48),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              alignment: Alignment.centerLeft,
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 84,
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: isCurrent
+                            ? context.tealAccent
+                            : context.textSubtle,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Expanded(
+                    child: Container(
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: context.tint(0.06),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: FractionallySizedBox(
+                        key: ValueKey('cal-bar-${month.key}'),
+                        alignment: AlignmentDirectional.centerStart,
+                        widthFactor: widthFactor,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: context.tealAccent
+                                .withValues(alpha: isCurrent ? 0.95 : 0.45),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    // Zero months render a muted em-dash, never disappear —
+                    // seeing the dry months is the point of the calendar.
+                    hasIncome ? _money(month.totalUsd) : '—',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color:
+                          hasIncome ? context.textPrimary : context.textFaint,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  if (hasIncome)
+                    Icon(
+                      isExpanded ? Icons.expand_less : Icons.expand_more,
+                      size: 16,
+                      color: context.textMuted,
+                    ),
+                ],
+              ),
             ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: isCurrent ? context.tealAccent : context.textSubtle,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                // Zero months render a muted em-dash, never disappear —
-                // seeing the dry months is the point of the grid.
-                hasIncome ? _money(month.totalUsd) : '—',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: hasIncome ? context.textPrimary : context.textFaint,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (hasIncome) ...[
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: _chips(context, l10n, month),
-                ),
-              ],
-            ],
           ),
         ),
       ),
     );
-  }
 
-  // ---------- per-symbol chips ----------
+    if (!isExpanded || !hasIncome) return collapsedRow;
 
-  List<Widget> _chips(
-      BuildContext context, AppLocalizations l10n, _CalMonth month) {
-    final visible = month.entries.take(_maxChips).toList();
-    final overflow = month.entries.skip(_maxChips).toList();
-    return [
-      for (final e in visible)
-        _chip(
-          context,
-          label: '${e.symbol} · ${_money(e.amountUsd)}',
-          tooltip: l10n.calEstExDate(e.dateLabel()),
-          accent: true,
-        ),
-      if (overflow.isNotEmpty)
-        _chip(
-          context,
-          label: l10n.calMoreChip(overflow.length),
-          // The overflow chip's tooltip lists every hidden entry, one
-          // per line, with its amount and estimated date.
-          tooltip: overflow
-              .map((e) =>
-                  '${e.symbol} · ${_money(e.amountUsd)} · ${e.dateLabel()}')
-              .join('\n'),
-          accent: false,
-        ),
-    ];
-  }
-
-  /// Chip in the freq-chip styling family (teal 12% fill); the "+N more"
-  /// overflow chip goes muted so it reads as a control, not a payer.
-  Widget _chip(BuildContext context,
-      {required String label, required String tooltip, required bool accent}) {
-    final fg = accent ? context.tealAccent : context.textMuted;
-    final bg =
-        accent ? context.tealAccent.withValues(alpha: 0.12) : context.tint(0.06);
-    return Tooltip(
-      message: tooltip,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: fg,
-            fontFeatures: const [FontFeature.tabularFigures()],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        collapsedRow,
+        // Inline payer breakdown — ALL entries, server order (amount-desc).
+        // Sits OUTSIDE the collapsed row's excludeSemantics node so each
+        // line is announced; indented 84px past the row's 10px gutter to
+        // align with the bar start.
+        Padding(
+          padding: const EdgeInsets.only(left: 10 + 84, right: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final e in month.entries)
+                MergeSemantics(
+                  child: SizedBox(
+                    height: 28,
+                    child: Row(
+                      children: [
+                        Text(
+                          e.symbol,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: context.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            l10n.calEstExDate(e.dateLabel()),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: context.textMuted,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          _money(e.amountUsd),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.textPrimary,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
-      ),
+      ],
     );
   }
 }

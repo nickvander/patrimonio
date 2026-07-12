@@ -3431,14 +3431,13 @@
   "@calEstimateCaption": {
     "description": "Mandatory honesty caption under the dividend calendar: projections, not declared dividends."
   },
-  "calMoreChip": "+{n} more",
-  "@calMoreChip": {
-    "description": "Overflow chip in a calendar month cell when more payers exist than the visible chips; its tooltip lists the rest.",
-    "placeholders": {
-      "n": {
-        "type": "int"
-      }
-    }
+  "calExpandHint": "Show payer breakdown",
+  "@calExpandHint": {
+    "description": "A11y hint on a collapsed calendar month row with income: tapping expands the inline per-payer breakdown."
+  },
+  "calCollapseHint": "Hide payer breakdown",
+  "@calCollapseHint": {
+    "description": "A11y hint on an expanded calendar month row: tapping collapses the inline per-payer breakdown."
   },
   "calEstExDate": "Est. ex-date {date}",
   "@calEstExDate": {

@@ -10631,11 +10631,17 @@ abstract class AppLocalizations {
   /// **'Estimated from each payer\'s current rate and cadence — not announced dates.'**
   String get calEstimateCaption;
 
-  /// Overflow chip in a calendar month cell when more payers exist than the visible chips; its tooltip lists the rest.
+  /// A11y hint on a collapsed calendar month row with income: tapping expands the inline per-payer breakdown.
   ///
   /// In en, this message translates to:
-  /// **'+{n} more'**
-  String calMoreChip(int n);
+  /// **'Show payer breakdown'**
+  String get calExpandHint;
+
+  /// A11y hint on an expanded calendar month row: tapping collapses the inline per-payer breakdown.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide payer breakdown'**
+  String get calCollapseHint;
 
   /// Tooltip on a calendar payer chip: the estimated ex-dividend date, e.g. 'Est. ex-date Jul 14, 2026'.
   ///

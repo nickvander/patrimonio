@@ -6650,9 +6650,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'Estimado con la tasa y cadencia actuales de cada pagador — no son fechas anunciadas.';
 
   @override
-  String calMoreChip(int n) {
-    return '+$n más';
-  }
+  String get calExpandHint => 'Mostrar desglose por pagador';
+
+  @override
+  String get calCollapseHint => 'Ocultar desglose por pagador';
 
   @override
   String calEstExDate(String date) {
