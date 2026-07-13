@@ -1,0 +1,15 @@
+# Android launcher-icon generation — same artwork as the web icons.
+# Regenerate after changing the logo:  dart run flutter_launcher_icons
+#
+# - Legacy icon (older launchers): the rounded-square web icon.
+# - Adaptive icon (Android 8+): the full-bleed maskable variant as the
+#   foreground, so the green gradient fills whatever mask shape the device
+#   uses (circle on Pixel). The solid background color sits behind it and is
+#   normally invisible (the foreground is opaque edge-to-edge); it matches the
+#   gradient's midpoint for any launcher that insists on showing it.
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "web/icons/Icon-512.png"
+  adaptive_icon_background: "#12B76A"
+  adaptive_icon_foreground: "web/icons/Icon-maskable-512.png"
