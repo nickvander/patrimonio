@@ -1,7 +1,36 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-11 (round-10 FIRE/projections UX overhaul)
-> **Branch:** `main` (rounds 7 & 8 committed + deployed; round-9 in progress).
+> **Last updated:** 2026-07-13 (native Android passkeys)
+> **Branch:** `main`.
+
+## 2026-07-13 — Native Android passkeys (+ APK launch-crash fix)
+
+* **APK launch crash fixed + emulator-verified:** R8 stripped WorkManager's
+  Room-generated `WorkDatabase_Impl` no-arg ctor (WorkManager rides in via
+  plaid_flutter) → instant `NoSuchMethodException` crash at startup. Keep rule
+  in `frontend/android/app/proguard-rules.pro`; CI gained a `flutter build
+  apk --release` gate; the emulator smoke test is documented in AGENTS.md
+  ("Android APK" section — headless AVD needs the `sg kvm` wrapper).
+* **Native passkeys (was a stub):** Android Credential Manager via a raw
+  WebAuthn-JSON MethodChannel `patrimonio/passkeys` in `MainActivity.kt`
+  (androidx.credentials 1.5.0; own channel because the `credential_manager`
+  pub package's typed login options drop `allowCredentials`, which
+  non-discoverable security keys need). `passkeys_io.dart` mirrors
+  `passkeys_web.dart`'s HTTP flow 1:1; `isAvailable` = Platform.isAndroid so
+  the test VM/desktop keep the inert-stub behaviour. Backend:
+  `ANDROID_APK_CERT_SHA256` env feeds BOTH the extra webauthn-rs allowed
+  origin (`android:apk-key-hash:<b64url>`, exact-Url-equality match in
+  0.5.5) AND a new public `GET /.well-known/assetlinks.json` (nginx proxies
+  the path to the api; 404 when unconfigured). Cloudflare Access needs a
+  path-scoped Bypass application for that file (Google's servers fetch it) —
+  steps in docs/deployment.md §"Native passkeys (Android)".
+* **Verified:** backend passkey suite (9) + new assetlinks/origin tests +
+  clippy clean; frontend 537 tests + analyze; web AND apk builds compile.
+  Emulator end-to-end: passkey button on native login, server errors surface
+  cleanly, Security→Add→This device reaches Android's system passkey sheet
+  with the server's user identity, cancel maps to a clean bilingual
+  snackbar. Remaining: user's on-phone test with the real security key + the
+  CF Bypass application (dashboard step).
 
 ## 2026-07-11 sprint — round 10 (FIRE / wealth-projection UX overhaul)
 

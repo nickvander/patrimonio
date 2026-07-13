@@ -88,7 +88,10 @@ pub fn reauth_protected_router() -> Router<AppState> {
 // IP-literal rp_ids — we collapse that to "localhost" so the spec is
 // happy. Authenticators will then bind the credential to "localhost".
 // ---------------------------------------------------------------------------
-pub fn build_webauthn(frontend_base_url: &str) -> anyhow::Result<Webauthn> {
+pub fn build_webauthn(
+    frontend_base_url: &str,
+    android_apk_cert_sha256: &[String],
+) -> anyhow::Result<Webauthn> {
     let parsed = Url::parse(frontend_base_url)
         .map_err(|e| anyhow::anyhow!("invalid FRONTEND_BASE_URL '{frontend_base_url}': {e}"))?;
     let host = parsed
@@ -109,10 +112,86 @@ pub fn build_webauthn(frontend_base_url: &str) -> anyhow::Result<Webauthn> {
             .set_host(Some("localhost"))
             .map_err(|e| anyhow::anyhow!("failed to override origin host: {e}"))?;
     }
-    let builder = WebauthnBuilder::new(rp_id, &origin)?
+    let mut builder = WebauthnBuilder::new(rp_id, &origin)?
         .rp_name("Patrimonio")
         .allow_subdomains(false);
+    // The native Android app doesn't have a browser origin: GMS stamps
+    // clientDataJSON.origin with `android:apk-key-hash:<b64url-sha256(cert)>`.
+    // webauthn-rs matches extra origins by EXACT Url equality (the opaque-
+    // origin fallback never matches non-http schemes), so the string built
+    // here must be byte-identical to what the device emits — unpadded
+    // base64url of the raw digest, no trailing slash.
+    for cert_hex in android_apk_cert_sha256 {
+        builder = builder.append_allowed_origin(&android_apk_origin(cert_hex)?);
+    }
     Ok(builder.build()?)
+}
+
+/// `android:apk-key-hash:<unpadded-b64url(sha256(signing cert DER))>` —
+/// the WebAuthn origin GMS Credential Manager reports for an APK signed
+/// with the cert whose SHA-256 is `cert_hex` (lowercase no-colon hex, as
+/// normalized by config::parse_cert_sha256_list).
+pub fn android_apk_origin(cert_hex: &str) -> anyhow::Result<Url> {
+    let raw = hex::decode(cert_hex)
+        .map_err(|e| anyhow::anyhow!("ANDROID_APK_CERT_SHA256 '{cert_hex}' is not hex: {e}"))?;
+    if raw.len() != 32 {
+        anyhow::bail!("ANDROID_APK_CERT_SHA256 '{cert_hex}' is not a 32-byte digest");
+    }
+    let origin = format!("android:apk-key-hash:{}", URL_SAFE_NO_PAD.encode(raw));
+    Url::parse(&origin).map_err(|e| anyhow::anyhow!("bad android origin '{origin}': {e}"))
+}
+
+// ---------------------------------------------------------------------------
+// GET /.well-known/assetlinks.json — Digital Asset Links.
+//
+// Android only lets an app perform passkey ceremonies for an rp_id after
+// verifying this statement on the rp_id's domain: it binds the app's
+// package name + signing-cert fingerprint(s) to the site. Served by the
+// backend (nginx proxies /.well-known/ through) so the fingerprints come
+// from the same env var that feeds the allowed WebAuthn origins — one
+// source of truth, impossible to rotate one without the other.
+//
+// NOTE for Cloudflare Access deployments: Google fetches this URL from
+// its own servers, so the edge needs a Bypass policy for exactly this
+// path (it's public-by-design data). Documented in docs/deployment.md.
+// ---------------------------------------------------------------------------
+pub async fn assetlinks(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if state.config.android_apk_cert_sha256.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "assetlinks not configured (set ANDROID_APK_CERT_SHA256)",
+        ));
+    }
+    // The DAL format wants uppercase colon-separated hex.
+    let fingerprints: Vec<String> = state
+        .config
+        .android_apk_cert_sha256
+        .iter()
+        .map(|h| {
+            h.to_uppercase()
+                .as_bytes()
+                .chunks(2)
+                .map(|c| std::str::from_utf8(c).unwrap_or_default())
+                .collect::<Vec<_>>()
+                .join(":")
+        })
+        .collect();
+    // Both relations per Google's passkey docs: get_login_creds is the
+    // credential-sharing grant, handle_all_urls covers app-link checks
+    // some GMS versions perform.
+    Ok(Json(serde_json::json!([{
+        "relation": [
+            "delegate_permission/common.handle_all_urls",
+            "delegate_permission/common.get_login_creds",
+        ],
+        "target": {
+            "namespace": "android_app",
+            "package_name": state.config.android_package_name,
+            "sha256_cert_fingerprints": fingerprints,
+        },
+    }])))
 }
 
 // ---------------------------------------------------------------------------
@@ -929,4 +1008,38 @@ async fn take_state<T: for<'de> Deserialize<'de>>(
         ));
     };
     serde_json::from_str(&json).map_err(internal)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The production signing cert (apksigner --print-certs hex) and the
+    // origin GMS derives from it. If android_apk_origin ever drifts from
+    // unpadded-base64url-of-raw-digest, native passkey verification fails
+    // with InvalidRPOrigin on every request — pin the exact mapping.
+    const CERT_HEX: &str = "e1ef2549ade55b49a678772fd274a8a08a546247146a388462cb47026fc5028d";
+
+    #[test]
+    fn android_origin_is_unpadded_b64url_of_raw_digest() {
+        let url = android_apk_origin(CERT_HEX).expect("valid cert hex");
+        assert_eq!(
+            url.as_str(),
+            "android:apk-key-hash:4e8lSa3lW0mmeHcv0nSooIpUYkcUajiEYstHAm_FAo0"
+        );
+    }
+
+    #[test]
+    fn android_origin_rejects_non_digest_input() {
+        assert!(android_apk_origin("not-hex").is_err());
+        assert!(android_apk_origin("abcd").is_err()); // hex but not 32 bytes
+    }
+
+    #[test]
+    fn build_webauthn_accepts_android_cert_list() {
+        // Must not error with android origins appended — a bad origin
+        // here would take the whole server down at boot.
+        build_webauthn("https://patrimonio.example.com", &[CERT_HEX.to_string()])
+            .expect("webauthn builds with android origin");
+    }
 }

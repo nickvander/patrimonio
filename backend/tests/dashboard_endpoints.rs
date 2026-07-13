@@ -108,11 +108,13 @@ async fn try_setup(
         cookie_secure: false,
         trusted_proxy_cidrs: vec![],
         hibp_api_base: String::new(),
+        android_apk_cert_sha256: vec![],
+        android_package_name: "com.patrimonio.patrimonio".to_string(),
     };
 
     let redis = redis::Client::open(config.redis_url.clone()).expect("redis client");
     let webauthn = std::sync::Arc::new(
-        patrimonio::api::passkeys::build_webauthn(&config.frontend_base_url)
+        patrimonio::api::passkeys::build_webauthn(&config.frontend_base_url, &config.android_apk_cert_sha256)
             .expect("webauthn builder"),
     );
     let state = AppState {

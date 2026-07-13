@@ -28,6 +28,12 @@ use common::TestLockGuard;
 
 const TEST_DB_VAR: &str = "PATRIMONIO_TEST_DATABASE_URL";
 const SESSION_COOKIE: &str = "patrimonio_session";
+/// The prod APK signing cert digest (lowercase no-colon hex, as
+/// config::parse_cert_sha256_list normalizes). Configured on the shared
+/// harness so EVERY ceremony test in this file also runs against a
+/// Webauthn built with the android origin appended — proving the extra
+/// origin never breaks the browser flows.
+const TEST_APK_CERT_HEX: &str = "e1ef2549ade55b49a678772fd274a8a08a546247146a388462cb47026fc5028d";
 
 async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
     let database_url = std::env::var(TEST_DB_VAR).ok()?;
@@ -71,11 +77,13 @@ async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
         allowed_origins: vec!["http://localhost:3000".to_string()],
         cookie_secure: false,
         hibp_api_base: String::new(),
+        android_apk_cert_sha256: vec![TEST_APK_CERT_HEX.to_string()],
+        android_package_name: "com.patrimonio.patrimonio".to_string(),
     };
 
     let redis = redis::Client::open(config.redis_url.clone()).expect("redis client");
     let webauthn = Arc::new(
-        patrimonio::api::passkeys::build_webauthn(&config.frontend_base_url)
+        patrimonio::api::passkeys::build_webauthn(&config.frontend_base_url, &config.android_apk_cert_sha256)
             .expect("webauthn builder"),
     );
     let state = AppState {
@@ -89,8 +97,13 @@ async fn try_setup() -> Option<(Router, PgPool, TestLockGuard)> {
     // Mirror main.rs: bootstrap lives on the public session router; the
     // passkeys management routes sit behind require_auth (NOT require_owner —
     // a read-only user manages their own credentials).
-    let public =
-        Router::new().nest("/api/auth", patrimonio::api::session::public_router());
+    let public = Router::new()
+        .nest("/api/auth", patrimonio::api::session::public_router())
+        // Digital Asset Links route, mounted exactly as main.rs does.
+        .route(
+            "/.well-known/assetlinks.json",
+            axum::routing::get(patrimonio::api::passkeys::assetlinks),
+        );
 
     let protected = Router::new()
         .nest(
@@ -484,4 +497,100 @@ fn fake_assertion_credential() -> Value {
         },
         "extensions": {}
     })
+}
+
+// ---------------------------------------------------------------------------
+// /.well-known/assetlinks.json — native Android passkey support.
+// ---------------------------------------------------------------------------
+
+/// With ANDROID_APK_CERT_SHA256 configured, the DAL statement must carry
+/// the package name and the UPPERCASE COLON-SEPARATED form of the same
+/// digest — the exact format Google's verifier compares against
+/// `apksigner`'s output. A formatting drift here silently disables
+/// native passkeys on every device.
+#[tokio::test]
+#[serial_test::serial]
+async fn assetlinks_serves_cert_fingerprint_in_dal_format() {
+    let Some((app, _pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/.well-known/assetlinks.json")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK, "assetlinks should serve");
+    let body = body_json(res.into_body()).await;
+    let stmt = &body[0];
+    assert_eq!(stmt["target"]["namespace"], "android_app");
+    assert_eq!(stmt["target"]["package_name"], "com.patrimonio.patrimonio");
+    assert_eq!(
+        stmt["target"]["sha256_cert_fingerprints"][0],
+        "E1:EF:25:49:AD:E5:5B:49:A6:78:77:2F:D2:74:A8:A0:8A:54:62:47:14:6A:38:84:62:CB:47:02:6F:C5:02:8D"
+    );
+    let relations = stmt["relation"].as_array().expect("relation array");
+    assert!(
+        relations
+            .iter()
+            .any(|r| r == "delegate_permission/common.get_login_creds"),
+        "passkey credential-sharing relation must be present"
+    );
+}
+
+/// No configured cert → 404, not an empty statement list. An empty `[]`
+/// would make Google's verifier cache "this app is NOT authorized" for
+/// the domain, which is worse than unreachable.
+#[tokio::test]
+#[serial_test::serial]
+async fn assetlinks_404s_when_unconfigured() {
+    let Some((_app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let config = AppConfig {
+        database_url: std::env::var(TEST_DB_VAR).unwrap(),
+        database_max_connections: 2,
+        redis_url: "redis://127.0.0.1:6379".to_string(),
+        port: 0,
+        plaid_client_id: None,
+        plaid_secret: None,
+        plaid_env: "sandbox".to_string(),
+        exchange_rate_api_key: None,
+        encryption_key: None,
+        coinbase_client_id: None,
+        coinbase_client_secret: None,
+        coinbase_redirect_uri: "http://localhost/api/auth/coinbase/callback".to_string(),
+        frontend_base_url: "http://localhost:3000".to_string(),
+        plaid_redirect_uri: None,
+        plaid_webhook_url: None,
+        trusted_proxy_cidrs: vec![],
+        allowed_origins: vec!["http://localhost:3000".to_string()],
+        cookie_secure: false,
+        hibp_api_base: String::new(),
+        android_apk_cert_sha256: vec![], // <- the unconfigured case
+        android_package_name: "com.patrimonio.patrimonio".to_string(),
+    };
+    let state = AppState {
+        db: pool.clone(),
+        redis: redis::Client::open(config.redis_url.clone()).expect("redis client"),
+        config: Arc::new(config),
+        webauthn: Arc::new(
+            patrimonio::api::passkeys::build_webauthn("http://localhost:3000", &[])
+                .expect("webauthn builder"),
+        ),
+        realtime: patrimonio::services::realtime::Realtime::new(),
+    };
+    let app = Router::new()
+        .route(
+            "/.well-known/assetlinks.json",
+            axum::routing::get(patrimonio::api::passkeys::assetlinks),
+        )
+        .with_state(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/.well-known/assetlinks.json")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }

@@ -221,9 +221,14 @@ io impl under `if (dart.library.io)`).
   `services/api_platform` (3-way stub/web/io — native adds a cookie-persisting
   `dart:io` client + a configurable base URL), `preferences_storage`, `splash`,
   `realtime_socket` (`dart:io` WebSocket on native), `utils/web_env`
-  (navigate / current-URL), `file_drop`, `plaid_oauth`, `passkeys`. Passkeys are
-  **unavailable on native** (WebAuthn is web-only) — password + TOTP is the
-  native auth path; gate passkey UI on `PasskeyService.instance.isAvailable`.
+  (navigate / current-URL), `file_drop`, `plaid_oauth`, `passkeys`. Passkeys
+  work on **web (navigator.credentials) AND Android** (Credential Manager via
+  the `patrimonio/passkeys` MethodChannel in `MainActivity.kt` — a raw
+  WebAuthn-JSON pass-through; `passkeys_io.dart` mirrors the web impl's HTTP
+  flow 1:1). Android-side prerequisites (assetlinks.json, the
+  `ANDROID_APK_CERT_SHA256` backend var) are in docs/deployment.md. On
+  desktop/test-VM `isAvailable` is false — always gate passkey UI on
+  `PasskeyService.instance.isAvailable`.
 - **Conditional-export order + the test-VM trap:** `export 'stub.dart' if
   (dart.library.js_interop) 'web.dart' if (dart.library.io) 'io.dart';`. Web has
   `js_interop`; **native AND `flutter test` both have `dart.library.io`** — you

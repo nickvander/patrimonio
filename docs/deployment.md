@@ -157,6 +157,52 @@ debug signing so it still succeeds; it just isn't signed with the real upload ke
 Install by sideloading the APK onto the phone (enable "install unknown apps").
 The APK is not published to the Play Store.
 
+### Native passkeys (Android)
+
+The app performs real WebAuthn ceremonies through Android's Credential
+Manager (Google Password Manager passkeys AND USB/NFC security keys). Three
+server-side pieces make the native app a legitimate WebAuthn client for your
+domain — all driven by ONE env var:
+
+1. **Set `ANDROID_APK_CERT_SHA256`** in the api's `.env`: the SHA-256 of the
+   APK signing certificate, exactly as `apksigner verify --print-certs
+   your.apk` prints it (colon-hex or plain hex; comma-separate several to
+   trust more than one build key). This feeds both of the following — they
+   can't drift apart.
+2. **Allowed WebAuthn origin.** The backend appends
+   `android:apk-key-hash:<base64url(sha256)>` to webauthn-rs' allowed
+   origins, which is the origin GMS stamps into clientDataJSON for an APK
+   signed with that cert. No extra config.
+3. **Digital Asset Links.** The backend serves
+   `GET /.well-known/assetlinks.json` (nginx proxies that exact path to the
+   api) binding `ANDROID_PACKAGE_NAME` (default `com.patrimonio.patrimonio`)
+   + the fingerprint to your domain. Android verifies this file — via
+   **Google's servers** — before allowing any passkey ceremony for the
+   domain.
+
+**Cloudflare Access deployments need one extra application:** Google fetches
+`/.well-known/assetlinks.json` from its own infrastructure, which can't pass
+your Access login OR carry a service token. This is a different problem than
+the app's service token (§above): the token lets *your APK* through the edge;
+this lets *Google's verifier* read one public file. Path scoping in Zero
+Trust lives on the application, so: **Access ➔ Applications ➔ Add ➔
+Self-hosted**, domain = your Patrimonio host, path =
+`.well-known/assetlinks.json`, with a single policy **Action: Bypass,
+Include: Everyone**. Access matches the most specific application per
+request, so everything else on the host stays gated exactly as before. The
+file is public-by-design (it only states "this APK may speak for this
+domain"), so the bypass leaks nothing.
+
+Verify after deploying: `curl https://your-domain/.well-known/assetlinks.json`
+from anywhere (no CF token) must return the JSON with your fingerprint.
+Then on the phone: Security → Passkeys → Add → This device (Google Password
+Manager, needs a Google account + screen lock) or → Security key (USB/NFC).
+Sign out and use "Sign in with passkey" to confirm the assertion path. If
+every ceremony fails instantly with a security error, it's almost always
+the assetlinks file: unreachable (CF bypass missing), wrong fingerprint
+(debug-signed build vs release fingerprint), or a stale Google-side cache
+(propagates within ~minutes, occasionally longer).
+
 ## Production Shape
 
 A production deployment should keep the same service boundaries:

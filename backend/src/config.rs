@@ -53,6 +53,19 @@ pub struct AppConfig {
     /// k-anonymity protocol gives the server only ~20 bits of
     /// information about the password.
     pub hibp_api_base: String,
+    /// SHA-256 fingerprint(s) of the Android APK signing certificate(s),
+    /// comma-separated. Accepts `apksigner`-style colon-hex
+    /// (`E1:EF:25:...`) or plain hex; normalized to lowercase no-colon
+    /// hex at load. Feeds TWO things that must agree with the same cert:
+    ///  1. extra allowed WebAuthn origins (`android:apk-key-hash:<b64url>`)
+    ///     so the native app's passkey ceremonies verify, and
+    ///  2. the served `/.well-known/assetlinks.json` fingerprints so
+    ///     Android agrees the app may speak for this domain's rp_id.
+    ///
+    /// Empty (default) = native passkeys off; web passkeys unaffected.
+    pub android_apk_cert_sha256: Vec<String>,
+    /// Android applicationId the assetlinks.json statement targets.
+    pub android_package_name: String,
 }
 
 impl AppConfig {
@@ -119,6 +132,11 @@ impl AppConfig {
                 .unwrap_or(true),
             hibp_api_base: std::env::var("HIBP_API_BASE")
                 .unwrap_or_else(|_| "https://api.pwnedpasswords.com".to_string()),
+            android_apk_cert_sha256: parse_cert_sha256_list(
+                &std::env::var("ANDROID_APK_CERT_SHA256").unwrap_or_default(),
+            ),
+            android_package_name: std::env::var("ANDROID_PACKAGE_NAME")
+                .unwrap_or_else(|_| "com.patrimonio.patrimonio".to_string()),
         })
     }
 }
@@ -135,6 +153,36 @@ fn env_non_empty(name: &str) -> Option<String> {
 /// tracing warning so a typo doesn't take the whole server down — the
 /// worst case is "no peers are trusted" which means XFF is always
 /// stripped, which is the safer side to fail on anyway.
+/// Parse a comma-separated list of SHA-256 cert fingerprints into
+/// normalized lowercase no-colon hex. Accepts the `apksigner
+/// verify --print-certs` colon form and plain hex, either case.
+/// Invalid entries are skipped with a warning (same philosophy as
+/// parse_cidr_list): the failure mode is "that APK's passkeys don't
+/// verify", which is the safe side — never a boot failure over a typo.
+fn parse_cert_sha256_list(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .filter_map(|s| {
+            let norm: String = s
+                .chars()
+                .filter(|c| *c != ':')
+                .collect::<String>()
+                .to_lowercase();
+            // A SHA-256 digest is exactly 32 bytes = 64 hex chars.
+            if norm.len() == 64 && norm.chars().all(|c| c.is_ascii_hexdigit()) {
+                Some(norm)
+            } else {
+                tracing::warn!(
+                    "ANDROID_APK_CERT_SHA256: invalid entry '{}' (want 64 hex chars, colons ok)",
+                    s
+                );
+                None
+            }
+        })
+        .collect()
+}
+
 fn parse_cidr_list(raw: &str) -> Vec<ipnet::IpNet> {
     raw.split(',')
         .map(str::trim)

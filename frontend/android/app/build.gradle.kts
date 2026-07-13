@@ -76,6 +76,15 @@ kotlin {
     }
 }
 
+dependencies {
+    // Native passkeys (MainActivity's "patrimonio/passkeys" channel):
+    // Credential Manager + its Play-services provider. The play-services
+    // artifact is what actually talks to GMS/Google Password Manager —
+    // without it every ceremony fails with NoCredentialException.
+    implementation("androidx.credentials:credentials:1.5.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.5.0")
+}
+
 flutter {
     source = "../.."
 }

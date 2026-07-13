@@ -60,6 +60,13 @@ services:
       # auto-on when FRONTEND_BASE_URL is https). Production
       # docker-compose overrides should drop this override.
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # SHA-256 of the Android APK signing cert (apksigner colon-hex or
+      # plain hex, comma-separated for multiple). Enables native-app
+      # passkeys: feeds the extra allowed WebAuthn origins AND the
+      # /.well-known/assetlinks.json fingerprints. Empty = native
+      # passkeys off (web passkeys unaffected).
+      ANDROID_APK_CERT_SHA256: ${ANDROID_APK_CERT_SHA256:-}
+      ANDROID_PACKAGE_NAME: ${ANDROID_PACKAGE_NAME:-com.patrimonio.patrimonio}
       # Default info; flip to debug only for active debugging — debug
       # can write request/response metadata that includes auth headers
       # or other sensitive context into stdout.

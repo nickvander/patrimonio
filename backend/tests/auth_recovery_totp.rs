@@ -70,11 +70,13 @@ async fn try_setup() -> Option<(Router, TestLockGuard)> {
         allowed_origins: vec!["http://localhost:3000".to_string()],
         cookie_secure: false,
         hibp_api_base: String::new(),
+        android_apk_cert_sha256: vec![],
+        android_package_name: "com.patrimonio.patrimonio".to_string(),
     };
 
     let redis = redis::Client::open(config.redis_url.clone()).expect("redis");
     let webauthn = std::sync::Arc::new(
-        patrimonio::api::passkeys::build_webauthn(&config.frontend_base_url)
+        patrimonio::api::passkeys::build_webauthn(&config.frontend_base_url, &config.android_apk_cert_sha256)
             .expect("webauthn builder"),
     );
     let state = AppState {

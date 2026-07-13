@@ -78,7 +78,10 @@ async fn main() -> Result<()> {
     // URL. We refuse to come up without it — a misconfigured rp_id
     // silently breaks every passkey enrolment, and we'd rather fail
     // fast at boot.
-    let webauthn = patrimonio::api::passkeys::build_webauthn(&config.frontend_base_url)?;
+    let webauthn = patrimonio::api::passkeys::build_webauthn(
+        &config.frontend_base_url,
+        &config.android_apk_cert_sha256,
+    )?;
 
     // Build shared state
     let state = AppState {
@@ -195,6 +198,15 @@ async fn main() -> Result<()> {
         // ceremony). Register endpoints are mounted under the
         // protected router below.
         .nest("/api/auth/passkeys", patrimonio::api::passkeys::public_router())
+        // Digital Asset Links for the native Android app: binds the APK
+        // signing cert to this domain so Android allows passkey
+        // ceremonies for our rp_id. Public by design (Google's servers
+        // fetch it); 404s unless ANDROID_APK_CERT_SHA256 is set. nginx
+        // proxies /.well-known/ through to us.
+        .route(
+            "/.well-known/assetlinks.json",
+            get(patrimonio::api::passkeys::assetlinks),
+        )
         // Plaid webhooks. Public because Plaid POSTs with no session
         // cookie. The handler itself refuses to do anything unless a
         // signed `Plaid-Verification` header is present — see
