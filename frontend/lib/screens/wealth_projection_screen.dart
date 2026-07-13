@@ -560,11 +560,11 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               const SizedBox(height: 24),
               _buildControls(scrollable: false),
               const SizedBox(height: 24),
-              SizedBox(
-                  // Keep the box tall on phones too: the card stacks a
-                  // title row + legend above an Expanded chart, so a shorter
-                  // box squishes the plot to a sliver.
-                  height: 320, child: _buildChartCard()),
+              // Intrinsic height: the card self-sizes (title + legend at
+              // natural height, plot at a guaranteed width-derived height),
+              // so a legend that wraps to extra lines grows the card instead
+              // of squishing the plot — the old fixed 320 box did the latter.
+              _buildChartCard(),
               // O2: informational dividend income outlook — sits between the
               // chart and the FIRE strip; never part of the chart itself.
               if (_showDividendOutlook && _dividendOutlookAvailable) ...[
@@ -1803,41 +1803,64 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: EdgeInsets.all(pad),
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            // F2: a failed load with nothing cached used to leave a silently
-            // blank card (empty Container from _buildChart, shrunk FIRE strip
-            // and tiles). Say so, and offer a retry.
-            : (_loadFailed && _projectionData == null)
-                ? _buildLoadError(l)
-                : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        child: LayoutBuilder(builder: (context, box) {
+          // Two hosting contexts: the desktop flex branch grants a bounded
+          // height (the plot fills it, as before), while the phone scroll
+          // column is unbounded — there the card sizes itself with a
+          // guaranteed, width-derived plot height. The old fixed
+          // SizedBox(320) around this card let a wrapped legend (es-MX with
+          // band + goal on) starve the Expanded plot to a sliver.
+          final bounded = box.maxHeight.isFinite;
+          final chartHeight = (box.maxWidth * 0.55).clamp(220.0, 320.0);
+          Widget plotSized(Widget child) => bounded
+              ? Expanded(child: child)
+              : SizedBox(height: chartHeight, child: child);
+
+          if (_isLoading) {
+            const spinner = Center(child: CircularProgressIndicator());
+            return bounded
+                ? spinner
+                : SizedBox(height: chartHeight, child: spinner);
+          }
+          // F2: a failed load with nothing cached used to leave a silently
+          // blank card (empty Container from _buildChart, shrunk FIRE strip
+          // and tiles). Say so, and offer a retry.
+          if (_loadFailed && _projectionData == null) {
+            final error = _buildLoadError(l);
+            return bounded
+                ? error
+                : SizedBox(height: chartHeight, child: error);
+          }
+          return Column(
+            mainAxisSize: bounded ? MainAxisSize.max : MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          l.projNetWorthProjection,
-                          style: const TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      FilterChip(
-                        label: Text(l.projRange),
-                        selected: _showBand,
-                        onSelected: (v) => setState(() => _showBand = v),
-                        avatar: Icon(
-                          _showBand ? Icons.area_chart : Icons.show_chart,
-                          size: 16,
-                        ),
-                      ),
-                    ],
+                  Expanded(
+                    child: Text(
+                      l.projNetWorthProjection,
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
                   ),
-                  _buildChartLegend(l),
-                  const SizedBox(height: 18),
-                  Expanded(child: _buildChart()),
+                  FilterChip(
+                    label: Text(l.projRange),
+                    selected: _showBand,
+                    onSelected: (v) => setState(() => _showBand = v),
+                    avatar: Icon(
+                      _showBand ? Icons.area_chart : Icons.show_chart,
+                      size: 16,
+                    ),
+                  ),
                 ],
               ),
+              _buildChartLegend(l),
+              const SizedBox(height: 18),
+              plotSized(RepaintBoundary(child: _buildChart())),
+            ],
+          );
+        }),
       ),
     );
   }

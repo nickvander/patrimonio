@@ -47,8 +47,11 @@ class AccountBalanceChart extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.show_chart_rounded,
-                    color: context.tealAccent, size: 16),
+                Icon(
+                  Icons.show_chart_rounded,
+                  color: context.tealAccent,
+                  size: 16,
+                ),
                 const SizedBox(width: 6),
                 Text(
                   l.acctxBalanceOverTime,
@@ -61,113 +64,141 @@ class AccountBalanceChart extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            SizedBox(
-              height: 130,
-              // Transient tooltip (dismisses on finger lift / pointer
-              // exit) — the raw LineChart pinned it on mobile web.
-              child: TransientTooltipLineChart(
-                data: LineChartData(
-                  minY: minY - pad,
-                  maxY: maxY + pad,
-                  gridData: FlGridData(
-                    show: true,
-                    drawVerticalLine: false,
-                    getDrawingHorizontalLine: (v) =>
-                        FlLine(color: context.hairline, strokeWidth: 1),
-                  ),
-                  borderData: FlBorderData(show: false),
-                  titlesData: FlTitlesData(
-                    rightTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
-                    topTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false)),
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: 44,
-                        getTitlesWidget: (value, meta) {
-                          if (value <= meta.min || value >= meta.max) {
-                            return const SizedBox.shrink();
-                          }
-                          return Text(
-                            NumberFormat.compact().format(value),
-                            style: TextStyle(
-                                color: context.textSubtle, fontSize: 9),
-                          );
-                        },
-                      ),
-                    ),
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        getTitlesWidget: (value, meta) {
-                          final idx = value.toInt();
-                          if (idx < 0 ||
-                              idx >= points.length ||
-                              value != idx.toDouble()) {
-                            return const SizedBox.shrink();
-                          }
-                          final m = points[idx]['month']?.toString() ?? '';
-                          final parsed = DateTime.tryParse('$m-01');
-                          final label = parsed == null
-                              ? m
-                              : DateFormat.MMM().format(parsed);
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Text(
-                              label,
-                              style: TextStyle(
-                                  color: context.textSubtle, fontSize: 10),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                  lineBarsData: [
-                    LineChartBarData(
-                      spots: spots,
-                      isCurved: true,
-                      color: context.tealAccent,
-                      barWidth: 3,
-                      isStrokeCapRound: true,
-                      dotData: const FlDotData(show: false),
-                      belowBarData: BarAreaData(
+            LayoutBuilder(
+              builder: (context, outer) {
+                // Thin the month labels off the inner width (~1 per 46px,
+                // always keeping the last) — previously every month rendered
+                // and overlapped on phones past ~6 points. Same pattern as
+                // trends_chart.dart.
+                final count = points.isEmpty ? 1 : points.length;
+                final minLabels = count < 2 ? count : 2;
+                final maxLabels = (outer.maxWidth / 46.0).floor().clamp(
+                  minLabels,
+                  count,
+                );
+                final labelStep = (count / maxLabels).ceil().clamp(1, count);
+                return SizedBox(
+                  height: 180,
+                  // Transient tooltip (dismisses on finger lift / pointer
+                  // exit) — the raw LineChart pinned it on mobile web.
+                  child: TransientTooltipLineChart(
+                    data: LineChartData(
+                      minY: minY - pad,
+                      maxY: maxY + pad,
+                      gridData: FlGridData(
                         show: true,
-                        gradient: LinearGradient(
-                          colors: [
-                            context.tealAccent.withValues(alpha: 0.25),
-                            context.tealAccent.withValues(alpha: 0.0),
-                          ],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
+                        drawVerticalLine: false,
+                        getDrawingHorizontalLine: (v) =>
+                            FlLine(color: context.hairline, strokeWidth: 1),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      titlesData: FlTitlesData(
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 44,
+                            getTitlesWidget: (value, meta) {
+                              if (value <= meta.min || value >= meta.max) {
+                                return const SizedBox.shrink();
+                              }
+                              return Text(
+                                NumberFormat.compact().format(value),
+                                style: TextStyle(
+                                  color: context.textSubtle,
+                                  fontSize: 9,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            interval: labelStep.toDouble(),
+                            getTitlesWidget: (value, meta) {
+                              final idx = value.toInt();
+                              if (idx < 0 ||
+                                  idx >= points.length ||
+                                  value != idx.toDouble()) {
+                                return const SizedBox.shrink();
+                              }
+                              // Every Nth label plus the last, so the axis
+                              // never overlaps on narrow phones.
+                              final isLast = idx == points.length - 1;
+                              if (idx % labelStep != 0 && !isLast) {
+                                return const SizedBox.shrink();
+                              }
+                              final m = points[idx]['month']?.toString() ?? '';
+                              final parsed = DateTime.tryParse('$m-01');
+                              final label = parsed == null
+                                  ? m
+                                  : DateFormat.MMM().format(parsed);
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  label,
+                                  style: TextStyle(
+                                    color: context.textSubtle,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      lineBarsData: [
+                        LineChartBarData(
+                          spots: spots,
+                          isCurved: true,
+                          color: context.tealAccent,
+                          barWidth: 3,
+                          isStrokeCapRound: true,
+                          dotData: const FlDotData(show: false),
+                          belowBarData: BarAreaData(
+                            show: true,
+                            gradient: LinearGradient(
+                              colors: [
+                                context.tealAccent.withValues(alpha: 0.25),
+                                context.tealAccent.withValues(alpha: 0.0),
+                              ],
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                            ),
+                          ),
+                        ),
+                      ],
+                      lineTouchData: LineTouchData(
+                        handleBuiltInTouches: true,
+                        touchTooltipData: LineTouchTooltipData(
+                          getTooltipColor: (_) => context.tooltipSurface,
+                          getTooltipItems: (touchedSpots) {
+                            return touchedSpots.map((spot) {
+                              final idx = spot.x.toInt();
+                              final m = (idx >= 0 && idx < points.length)
+                                  ? points[idx]['month']?.toString() ?? ''
+                                  : '';
+                              return LineTooltipItem(
+                                '$m\n${displayCurrencyAmount(spot.y, currency)}',
+                                TextStyle(
+                                  color: context.tooltipOnSurface,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              );
+                            }).toList();
+                          },
                         ),
                       ),
                     ),
-                  ],
-                  lineTouchData: LineTouchData(
-                    handleBuiltInTouches: true,
-                    touchTooltipData: LineTouchTooltipData(
-                      getTooltipColor: (_) => context.tooltipSurface,
-                      getTooltipItems: (touchedSpots) {
-                        return touchedSpots.map((spot) {
-                          final idx = spot.x.toInt();
-                          final m = (idx >= 0 && idx < points.length)
-                              ? points[idx]['month']?.toString() ?? ''
-                              : '';
-                          return LineTooltipItem(
-                            '$m\n${displayCurrencyAmount(spot.y, currency)}',
-                            TextStyle(
-                              color: context.tooltipOnSurface,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          );
-                        }).toList();
-                      },
-                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ],
         ),

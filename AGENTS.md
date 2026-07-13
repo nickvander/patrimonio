@@ -57,7 +57,9 @@ cd backend && source ~/.cargo/env && cargo build && RUST_LOG=warn ./target/debug
 # Frontend (web)
 cd frontend && ~/flutter/bin/flutter run   # or: flutter build web
 # Frontend (Android APK — same codebase; web-only code is behind platform seams)
-cd frontend && ~/flutter/bin/flutter build apk --release   # → build/app/outputs/flutter-apk/app-release.apk
+cd frontend && ~/flutter/bin/flutter build apk --release   # → build/app/outputs/flutter-apk/app-release.apk (universal, ~70 MB)
+# Phone installs: add --split-per-abi → app-arm64-v8a-release.apk (~25 MB).
+# The universal APK stays the emulator (x86_64) + CI build.
 ```
 
 Data dirs (`pgdata/`, `redisdata/`) live inside the project and are gitignored —

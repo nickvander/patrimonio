@@ -1,7 +1,40 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-13 (native Android passkeys)
+> **Last updated:** 2026-07-13 (mobile chart layout + APK slimming)
 > **Branch:** `main`.
+
+## 2026-07-13 — Mobile chart un-squish + per-ABI APK
+
+* **Squished hero chart on phones (owner-reported, APK screenshot):** the
+  dashboard pinned `NetWorthCard` in a fixed 380px box while the compact
+  header (hero + delta chips + currency chips + toggle + detailed-mode
+  legend) stacked to 300px+, starving the `Expanded` plot to a ~40px sliver
+  with overlapping y-labels. The card now self-sizes: header at natural
+  height + a guaranteed width-derived chart height (220–280,
+  `net_worth_card.dart`), fixed box removed from `dashboard_screen.dart`.
+  Same bug class fixed in `wealth_projection_screen.dart` (fixed 320 box on
+  the phone branch → card adapts: bounded host keeps the fill-the-flex
+  behaviour, unbounded scroll column gets an intrinsic card). Pinned by
+  `net_worth_chart_height_test.dart` (380px phone, simple + detailed + wide).
+* **X-label overlap sweep (audit-driven):** house thinning rule (~1 label /
+  46px, always keep the last, off the inner LayoutBuilder) applied to
+  `account_balance_chart.dart` (also 130→180 tall), `spending_by_category_
+  card.dart` (+ adaptive bar width), `upcoming_bills_card.dart` (160→200);
+  `net_worth_card.dart` bottom axis gained the fractional-x guard + a
+  keep-last collision guard (last two "Jul 2026" labels used to merge).
+* **APK size/perf:** phone installs now documented as `--split-per-abi` —
+  arm64 APK is 27.5MB vs 71.8MB universal (3 ABIs bundled). Universal stays
+  the emulator/CI build. `RepaintBoundary` around the hero + projection
+  charts (tooltip scrubbing no longer repaints the whole scroll layer).
+* **Verified:** 540 tests + analyze (19 pre-existing infos only); web +
+  both APK builds; release APK launch-smoked on the headless AVD; visual
+  verification headless at 390px (profile web build + Playwright, claude_dev
+  account): plot full-height in simple AND detailed mode, x-axis clean.
+* **Rig note:** stale `.dart_tool/flutter_build` cache produced a web bundle
+  whose plugin registrant was missing `SharedPreferencesPlugin` → local web
+  boot died pre-`runApp` with MissingPluginException. `flutter clean` fixed
+  it; prod builds in fresh Docker so unaffected (worth confirming web loads
+  after the next prod deploy anyway).
 
 ## 2026-07-13 — Native Android passkeys (+ APK launch-crash fix)
 

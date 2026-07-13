@@ -144,9 +144,25 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
                 ),
               )
             else ...[
-              SizedBox(
+              LayoutBuilder(builder: (context, outer) {
+                // Bar width and month-label density derive from the inner
+                // width (house rule: ~1 label per 46px phone / 62px wide,
+                // always keep the last) — hardcoded 22px bars + a label on
+                // every month overlapped on narrow phones with 6-12 months.
+                final narrow = outer.maxWidth < 420;
+                final count = months.isEmpty ? 1 : months.length;
+                final minLabels = count < 2 ? count : 2;
+                final maxLabels = (outer.maxWidth / (narrow ? 46.0 : 62.0))
+                    .floor()
+                    .clamp(minLabels, count);
+                final labelStep = (count / maxLabels).ceil().clamp(1, count);
+                final barWidth = narrow ? 14.0 : 22.0;
+                return SizedBox(
                   height: isPhone ? 200.0 : 240.0,
-                  child: _buildChart(months, cats)),
+                  child: _buildChart(months, cats,
+                      barWidth: barWidth, labelStep: labelStep),
+                );
+              }),
               const SizedBox(height: 16),
               // The figures next to each category are an average PER MONTH,
               // not the window total — the bare window sum (e.g. 6× a $3k
@@ -191,7 +207,8 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
     );
   }
 
-  Widget _buildChart(List<dynamic> months, List<dynamic> cats) {
+  Widget _buildChart(List<dynamic> months, List<dynamic> cats,
+      {required double barWidth, required int labelStep}) {
     final palette = _palette(context);
 
     // category -> month -> amount (USD).
@@ -228,7 +245,7 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
           barRods: [
             BarChartRodData(
               toY: running,
-              width: 22,
+              width: barWidth,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
               rodStackItems: stack,
             ),
@@ -276,6 +293,12 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
               getTitlesWidget: (value, meta) {
                 final idx = value.toInt();
                 if (idx < 0 || idx >= months.length) {
+                  return const SizedBox.shrink();
+                }
+                // Every Nth label plus the last — the axis never overlaps
+                // on narrow phones.
+                final isLast = idx == months.length - 1;
+                if (idx % labelStep != 0 && !isLast) {
                   return const SizedBox.shrink();
                 }
                 final parsed = DateTime.tryParse('${months[idx]}-01');

@@ -4207,29 +4207,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
-    Widget buildChartsColumn(bool isNarrow) {
+    Widget buildChartsColumn() {
       return Column(
         children: [
           buildNetWorthHeader(),
           const SizedBox(height: 12),
-          // The card stacks a tall header (value + delta + mode toggle) above
-          // an Expanded chart, so the box has to stay tall enough that the
-          // plot area doesn't get squished — this is the hero glance on
-          // mobile. (A shorter box collapsed the chart to a sliver.)
-          SizedBox(
-            height: isNarrow ? 380 : 440,
-            child: NetWorthCard(
-              netWorth:
-                  ((_overview?['net_worth'] as num?)?.toDouble() ?? 0.0) *
-                  conversionFactor,
-              history: _netWorthHistory ?? [],
-              conversionFactor: conversionFactor,
-              currencyFormat: currencyFormat,
-              reportingCurrency: _targetCurrency,
-              sourceBreakdown: _overview?['currency_breakdown'] ?? [],
-              usdMxnRate: fxRate,
-              selectedRange: _selectedRange,
-            ),
+          // The card sizes itself: header at natural height + a
+          // guaranteed chart height inside NetWorthCard. Pinning the card
+          // to a fixed box here is what squished the chart to a sliver on
+          // phones whenever the compact header wrapped taller than
+          // budgeted (detailed-mode legend + currency chips).
+          NetWorthCard(
+            netWorth:
+                ((_overview?['net_worth'] as num?)?.toDouble() ?? 0.0) *
+                conversionFactor,
+            history: _netWorthHistory ?? [],
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
+            reportingCurrency: _targetCurrency,
+            sourceBreakdown: _overview?['currency_breakdown'] ?? [],
+            usdMxnRate: fxRate,
+            selectedRange: _selectedRange,
           ),
           // Glanceable assets-vs-liabilities split. Skipped during
           // first-run when typeBreakdown is empty (the widget renders
@@ -4270,7 +4268,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     // On mobile the net-worth trend is the canonical glance,
                     // so it leads — the long accounts list follows. (On wide
                     // screens they sit side by side, order doesn't matter.)
-                    buildChartsColumn(true),
+                    buildChartsColumn(),
                     const SizedBox(height: 20),
                     buildAccountsColumn(),
                   ],
@@ -4283,7 +4281,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     // charts still have the larger 2/3 share.
                     Expanded(flex: 1, child: buildAccountsColumn()),
                     const SizedBox(width: 24),
-                    Expanded(flex: 2, child: buildChartsColumn(false)),
+                    Expanded(flex: 2, child: buildChartsColumn()),
                   ],
                 );
 

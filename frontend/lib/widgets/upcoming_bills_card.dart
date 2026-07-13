@@ -99,14 +99,30 @@ class UpcomingBillsCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
-            SizedBox(height: 160, child: _chart(context, forecast, maxMonth)),
+            LayoutBuilder(builder: (context, outer) {
+              // Month-label density off the inner width (~1 per 46px, keep
+              // the last) — a full 12-month forecast rendered a two-line
+              // month+year label under every bar and collided on phones.
+              // 200 tall (was 160): the two-line labels plus y-ticks were
+              // crowding the plot itself.
+              final count = forecast.isEmpty ? 1 : forecast.length;
+              final minLabels = count < 2 ? count : 2;
+              final maxLabels =
+                  (outer.maxWidth / 46.0).floor().clamp(minLabels, count);
+              final labelStep = (count / maxLabels).ceil().clamp(1, count);
+              return SizedBox(
+                height: 200,
+                child: _chart(context, forecast, maxMonth, labelStep),
+              );
+            }),
           ],
         ),
       ),
     );
   }
 
-  Widget _chart(BuildContext context, List<BillMonth> forecast, double maxY) {
+  Widget _chart(BuildContext context, List<BillMonth> forecast, double maxY,
+      int labelStep) {
     final groups = <BarChartGroupData>[];
     for (var i = 0; i < forecast.length; i++) {
       groups.add(
@@ -170,6 +186,12 @@ class UpcomingBillsCard extends StatelessWidget {
                 if (idx < 0 ||
                     idx >= forecast.length ||
                     value != idx.toDouble()) {
+                  return const SizedBox.shrink();
+                }
+                // Every Nth label plus the last — the two-line month/year
+                // labels collided on narrow phones with a 12-month span.
+                final isLast = idx == forecast.length - 1;
+                if (idx % labelStep != 0 && !isLast) {
                   return const SizedBox.shrink();
                 }
                 final month = forecast[idx].month;

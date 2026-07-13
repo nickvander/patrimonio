@@ -127,6 +127,14 @@ class _NetWorthCardState extends State<NetWorthCard> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final isCompact = constraints.maxWidth < 640;
+            // The chart's height is guaranteed, not "whatever the header
+            // leaves over": on phones the compact header stacks (hero,
+            // delta chips, currency chips, toggle + legend) to 300px+, and
+            // an Expanded chart inside a fixed-height card collapsed to a
+            // sliver with overlapping y labels. Width-derived, clamped so
+            // the plot area stays readable from 320px phones to desktop.
+            final chartHeight =
+                (constraints.maxWidth * 0.5).clamp(220.0, 280.0);
             final filtered = _filterByRange(history);
             // Only compute the per-institution slices when the detailed
             // view is actually being shown — saves a meaningful chunk of
@@ -135,11 +143,22 @@ class _NetWorthCardState extends State<NetWorthCard> {
                 ? _topInstitutions(context, filtered, max: 4)
                 : const <MapEntry<String, Color>>[];
             return Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildHeader(isCompact, institutions),
                 const SizedBox(height: 24),
-                Expanded(child: _buildChart(filtered, institutions)),
+                SizedBox(
+                  height: chartHeight,
+                  // Chart repaints (tooltip scrubbing, touch guides) stay
+                  // inside this boundary instead of invalidating the whole
+                  // card/scroll layer — noticeably less raster work on
+                  // Android while scrubbing.
+                  child: RepaintBoundary(
+                    child: _buildChart(
+                        filtered, institutions, constraints.maxWidth),
+                  ),
+                ),
               ],
             );
           },
@@ -606,8 +625,8 @@ class _NetWorthCardState extends State<NetWorthCard> {
     );
   }
 
-  Widget _buildChart(
-      List<dynamic> filtered, List<MapEntry<String, Color>> institutions) {
+  Widget _buildChart(List<dynamic> filtered,
+      List<MapEntry<String, Color>> institutions, double chartWidth) {
     if (history.isEmpty) {
       // Mock historical data if empty - show a flat line for onboarding
       final now = DateTime.now();
@@ -620,14 +639,22 @@ class _NetWorthCardState extends State<NetWorthCard> {
           'by_institution': const <String, dynamic>{},
         };
       });
-      return _renderLineChart(mockData, const []);
+      return _renderLineChart(mockData, const [], chartWidth);
     }
 
-    return _renderLineChart(filtered, institutions);
+    return _renderLineChart(filtered, institutions, chartWidth);
   }
 
-  Widget _renderLineChart(
-      List<dynamic> data, List<MapEntry<String, Color>> institutions) {
+  /// ~1 x-label per 72px of plot width ("MMM y" labels are wide); never
+  /// denser than one per sample. Same house thinning rule as trends_chart.
+  int _bottomLabelStep(int count, double chartWidth) {
+    if (count <= 1) return 1;
+    final maxLabels = (chartWidth / 72).floor().clamp(1, count);
+    return (count / maxLabels).ceil().clamp(1, count);
+  }
+
+  Widget _renderLineChart(List<dynamic> data,
+      List<MapEntry<String, Color>> institutions, double chartWidth) {
     if (data.isEmpty) return const SizedBox.shrink();
 
     // For a true "where the total comes from" stacked-area visualisation we
@@ -898,22 +925,36 @@ class _NetWorthCardState extends State<NetWorthCard> {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 22,
-              interval: (data.length / 5).clamp(1, 100).toDouble(),
+              interval: _bottomLabelStep(data.length, chartWidth).toDouble(),
               getTitlesWidget: (value, meta) {
                 final int index = value.toInt();
-                if (index >= 0 && index < data.length) {
-                  final dateStr = data[index]['date'].toString();
-                  if (dateStr.length >= 10) {
-                    final date = DateTime.parse(dateStr);
-                    // Adapt format based on range
-                    final fmt = selectedRange == DateRange.oneMonth
-                        ? DateFormat('MMM d')
-                        : DateFormat('MMM y');
-                    return Text(
-                      fmt.format(date),
-                      style: TextStyle(color: context.textSubtle, fontSize: 10),
-                    );
-                  }
+                // Only label real samples: fl_chart emits ticks at every
+                // interval multiple, including fractional x positions, which
+                // painted duplicate month labels between points.
+                if (index < 0 ||
+                    index >= data.length ||
+                    value != index.toDouble()) {
+                  return const SizedBox.shrink();
+                }
+                // Keep the last label; drop any earlier tick that would
+                // paint within ~60px of it — a "Jul 2026" tick one sample
+                // before the end used to collide with the final label.
+                final unitPx = chartWidth / (data.length - 1).clamp(1, 1 << 30);
+                final isLast = index == data.length - 1;
+                if (!isLast && (data.length - 1 - index) * unitPx < 60) {
+                  return const SizedBox.shrink();
+                }
+                final dateStr = data[index]['date'].toString();
+                if (dateStr.length >= 10) {
+                  final date = DateTime.parse(dateStr);
+                  // Adapt format based on range
+                  final fmt = selectedRange == DateRange.oneMonth
+                      ? DateFormat('MMM d')
+                      : DateFormat('MMM y');
+                  return Text(
+                    fmt.format(date),
+                    style: TextStyle(color: context.textSubtle, fontSize: 10),
+                  );
                 }
                 return const Text('');
               },

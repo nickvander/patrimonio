@@ -63,9 +63,22 @@ self-hosted backend over HTTPS. It's the same codebase as the web build; browser
 
 ```bash
 cd frontend
+# Phone installs: per-ABI APKs — ~3x smaller because the universal APK
+# bundles native libs for three CPU architectures and a phone uses one.
+flutter build apk --release --split-per-abi
+# → build/app/outputs/flutter-apk/app-arm64-v8a-release.apk  (~25 MB — any modern phone)
+#   app-armeabi-v7a-release.apk / app-x86_64-release.apk also produced
+
+# Universal APK (all ABIs in one file — needed for the x86_64 emulator
+# smoke test; also what CI builds as the Android gate):
 flutter build apk --release
 # → build/app/outputs/flutter-apk/app-release.apk  (~70 MB)
 ```
+
+Both are signed with the same key, so either installs as an update over the
+other — but Android refuses a *downgrade* by `versionCode`, and per-ABI APKs
+get a derived versionCode offset. If an install fails with
+`INSTALL_FAILED_VERSION_DOWNGRADE`, uninstall first or bump the version.
 
 The Android SDK is required (`ANDROID_HOME`). On first launch the app shows a
 **Settings screen** to enter the backend URL (e.g. `https://patrimonio.nickvda.com`),
