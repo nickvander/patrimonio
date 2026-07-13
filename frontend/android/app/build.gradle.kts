@@ -59,6 +59,13 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
+            // Keep rules for reflection-instantiated classes that R8 would
+            // otherwise strip (see proguard-rules.pro — fixes the instant
+            // launch crash in WorkManager's Room database init).
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }

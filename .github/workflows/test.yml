@@ -93,3 +93,14 @@ jobs:
       - name: flutter test (excluding local-only golden screenshots)
         working-directory: frontend
         run: flutter test --exclude-tags golden
+      # Build the release APK so the Android build config can't silently break.
+      # This is a BUILD gate, not a runtime one: it catches broken Gradle/R8
+      # config (e.g. a malformed proguard-rules.pro) and dependency/manifest
+      # regressions. It does NOT catch launch-time crashes — those are found by
+      # the emulator smoke test documented in AGENTS.md ("Android APK"), which
+      # is a manual/local step (an emulator is too heavy for this job). CI has no
+      # android/key.properties, so R8 runs with the same minify config as a real
+      # release but the APK falls back to debug signing.
+      - name: flutter build apk --release (Android build gate)
+        working-directory: frontend
+        run: flutter build apk --release

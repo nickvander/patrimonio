@@ -79,13 +79,47 @@ cd frontend && ~/flutter/bin/flutter analyze && ~/flutter/bin/flutter test
 The integration harness **panics** on a configured-but-unreachable test DB/Redis
 (it no longer silently skips) — keep Postgres/Redis up.
 
+### Android APK — build + launch smoke test
+
+`analyze`/`test` run on the Dart VM and **never exercise the Android build or a
+real device**, so R8/Gradle regressions slip past them. CI now also runs
+`flutter build apk --release` as a build gate — but a green build is **not**
+proof the app launches: R8 minification can strip reflectively-instantiated
+classes and the APK crashes instantly at startup (this happened once —
+`plaid_flutter` pulls in WorkManager, and R8 stripped Room's generated
+`WorkDatabase_Impl` no-arg constructor → `NoSuchMethodException` at launch; fixed
+by keep rules in `frontend/android/app/proguard-rules.pro`). **After any change
+to Android deps, `build.gradle.kts`, or `proguard-rules.pro`, smoke-test the
+release APK on an emulator** — a build alone won't catch launch crashes:
+
+```bash
+export ANDROID_HOME=$HOME/android-sdk
+ADB=$ANDROID_HOME/platform-tools/adb
+# Headless AVD on this GUI-less VM: needs the `sg kvm` wrapper (plain -no-accel
+# segfaults; the user is in the kvm group). AVD name is "pixel".
+sg kvm -c "env LD_LIBRARY_PATH=$ANDROID_HOME/emulator/lib64/qt/lib:$HOME/.local/chromium-libs/lib \
+  $ANDROID_HOME/emulator/emulator -avd pixel -no-window -no-audio -no-boot-anim \
+  -gpu swiftshader_indirect -no-snapshot -memory 2048 &"
+# Wait for boot, install, launch, then assert the process is still alive:
+$ADB wait-for-device
+cd frontend && ~/flutter/bin/flutter build apk --release
+$ADB install -r build/app/outputs/flutter-apk/app-release.apk
+$ADB logcat -c && $ADB shell am start -n com.patrimonio.patrimonio/.MainActivity && sleep 8
+$ADB shell pidof com.patrimonio.patrimonio || echo "CRASHED — check: $ADB logcat -b crash -d"
+```
+
+(Emulator SystemUI throws spurious "System UI isn't responding" ANRs under
+swiftshader — that's the emulator's own UI, not the app.)
+
 ## Enforcement (the checkable rules run automatically)
 
 The skills are guidance; their machine-checkable subset is enforced so nothing
 regresses silently:
 
 - **CI** (`.github/workflows/test.yml`) runs on every push/PR: `cargo clippy
-  --all-targets -- -D warnings`, `flutter analyze`, and both full test suites.
+  --all-targets -- -D warnings`, `flutter analyze`, both full test suites, and
+  `flutter build apk --release` (Android build gate — catches R8/Gradle breakage;
+  launch crashes still need the emulator smoke test in Testing above).
 - **Frontend analyzer:** `cancel_subscriptions` / `close_sinks` are promoted to
   build-breaking **errors** (undisposed stream/sink fails the build).
 - **Regression tests** pin the specific bugs we've fixed (l10n transpositions,
