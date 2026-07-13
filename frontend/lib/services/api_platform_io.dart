@@ -16,8 +16,10 @@
 // Tests inject fakes and never hit the network, so the localhost fallback and
 // the unused cookie client are harmless there.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import 'backend_config.dart';
@@ -87,6 +89,121 @@ http.Client createApiClient() => _CookieClient();
 /// session, and [wsHandshakeHeaders] can hand the cookie to the WebSocket.
 final Map<String, Cookie> _sharedJar = {};
 
+// ---------------------------------------------------------------------------
+// Session persistence — survive app restarts/updates like a browser does.
+//
+// The browser keeps the session cookie (Max-Age 30d) across restarts for
+// free; the in-memory jar above forgets it, which forced a re-login after
+// every APK update. On Android/iOS the jar is mirrored into Keystore-backed
+// secure storage (flutter_secure_storage) — NOT shared_preferences, because
+// the cookie is a full-access credential for a finance backend.
+//
+// Same init()-gating pattern as preferences_storage_io: nothing reads or
+// writes the platform plugin until main() calls [initSessionPersistence],
+// so the Dart test VM (which compiles this file) keeps the old inert
+// in-memory behaviour and widget tests stay isolated.
+// ---------------------------------------------------------------------------
+
+const _secureStorage = FlutterSecureStorage(
+  aOptions: AndroidOptions(),
+);
+const _cookieStoreKey = 'patrimonio_session_cookies';
+bool _persistenceEnabled = false;
+
+/// Restore any persisted session cookies into the process jar, and enable
+/// mirroring of future jar changes. Call once from `main()` before the first
+/// API request. No-op on desktop and under `flutter test` (only mobile
+/// platforms get a keystore; everything else keeps the in-memory jar).
+Future<void> initSessionPersistence() async {
+  if (!Platform.isAndroid && !Platform.isIOS) return;
+  _persistenceEnabled = true;
+  try {
+    final raw = await _secureStorage.read(key: _cookieStoreKey);
+    if (raw == null || raw.isEmpty) return;
+    for (final cookie in decodePersistedCookies(raw, DateTime.now())) {
+      _sharedJar[cookie.name] = cookie;
+    }
+  } catch (_) {
+    // Corrupted payload or keystore unavailable (e.g. restored backup on a
+    // new device) — start signed out rather than crash the boot path.
+  }
+}
+
+/// Drop the session everywhere: the in-memory jar AND the secure store.
+/// Called on logout, on a 401 (the server no longer honours the session),
+/// and on "change server" (a cookie for the old backend must not leak to
+/// the next one).
+Future<void> clearPersistedSession() async {
+  _sharedJar.clear();
+  if (!_persistenceEnabled) return;
+  try {
+    await _secureStorage.delete(key: _cookieStoreKey);
+  } catch (_) {
+    // Best-effort: worst case a stale (already-revoked) cookie is restored
+    // next boot and the server rejects it with a 401 → login screen anyway.
+  }
+}
+
+/// Mirror the current jar into secure storage. Fire-and-forget: losing a
+/// write only costs an extra login after the next restart.
+void _persistJar() {
+  if (!_persistenceEnabled) return;
+  if (_sharedJar.isEmpty) {
+    _secureStorage.delete(key: _cookieStoreKey).catchError((_) {});
+    return;
+  }
+  _secureStorage
+      .write(key: _cookieStoreKey, value: encodeJarCookies(_sharedJar.values))
+      .catchError((_) {});
+}
+
+/// Serialize cookies for persistence. A cookie that only carries `Max-Age`
+/// (the backend's session cookie does) gets an absolute expiry stamped now,
+/// so restores can drop it once it has lapsed. Visible for testing.
+String encodeJarCookies(Iterable<Cookie> cookies) {
+  final now = DateTime.now().toUtc();
+  return jsonEncode([
+    for (final c in cookies)
+      {
+        'name': c.name,
+        'value': c.value,
+        if (c.expires != null)
+          'expires': c.expires!.toUtc().toIso8601String()
+        else if (c.maxAge != null)
+          'expires': now.add(Duration(seconds: c.maxAge!)).toIso8601String(),
+      },
+  ]);
+}
+
+/// Parse a persisted payload back into cookies, silently dropping entries
+/// that are malformed or already expired at [now]. Visible for testing.
+List<Cookie> decodePersistedCookies(String raw, DateTime now) {
+  final result = <Cookie>[];
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(raw);
+  } on FormatException {
+    return result;
+  }
+  if (decoded is! List) return result;
+  for (final entry in decoded) {
+    if (entry is! Map) continue;
+    final name = entry['name'];
+    final value = entry['value'];
+    if (name is! String || value is! String || name.isEmpty) continue;
+    DateTime? expires;
+    final rawExpires = entry['expires'];
+    if (rawExpires is String) {
+      expires = DateTime.tryParse(rawExpires);
+      if (expires != null && expires.isBefore(now.toUtc())) continue;
+    }
+    final cookie = Cookie(name, value);
+    if (expires != null) cookie.expires = expires;
+    result.add(cookie);
+  }
+  return result;
+}
+
 /// Minimal cookie-persisting HTTP client built on `dart:io`'s [HttpClient],
 /// which parses `Set-Cookie`/`Cookie` correctly (unlike the comma-joined header
 /// string `package:http` exposes). The jar is process-global (see [_sharedJar])
@@ -129,13 +246,18 @@ class _CookieClient extends http.BaseClient {
 
     // Update the jar from Set-Cookie. An empty value or a non-positive Max-Age
     // is the server telling us to drop it (e.g. logout's removal cookie).
-    for (final cookie in ioResp.cookies) {
-      final expired = cookie.maxAge != null && cookie.maxAge! <= 0;
-      if (cookie.value.isEmpty || expired) {
-        _jar.remove(cookie.name);
-      } else {
-        _jar[cookie.name] = cookie;
+    if (ioResp.cookies.isNotEmpty) {
+      for (final cookie in ioResp.cookies) {
+        final expired = cookie.maxAge != null && cookie.maxAge! <= 0;
+        if (cookie.value.isEmpty || expired) {
+          _jar.remove(cookie.name);
+        } else {
+          _jar[cookie.name] = cookie;
+        }
       }
+      // Mirror every jar change (login's new cookie, logout's removal) into
+      // secure storage so the session survives an app restart/update.
+      _persistJar();
     }
 
     final headers = <String, String>{};

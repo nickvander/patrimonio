@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'api_platform.dart';
 import 'api_service.dart';
 
 class AuthUser {
@@ -138,6 +139,11 @@ class AuthService {
     } catch (_) {
       // Server-side revoke best-effort; clear client state regardless.
     }
+    // The server's removal Set-Cookie already empties the native jar when
+    // the request succeeds; this also covers the network-failure path so a
+    // locally "signed out" app can't silently resurrect the session (from
+    // the keystore mirror) on its next launch.
+    await clearPersistedSession();
     _emit(const AuthState(AuthPhase.signedOut));
   }
 
@@ -145,6 +151,11 @@ class AuthService {
   /// of the app gets pushed back to the login screen without waiting
   /// for a manual refresh.
   void handleUnauthorized() {
+    // The server no longer honours the session — drop the native jar and
+    // its keystore mirror so the dead cookie isn't restored next launch.
+    // Fire-and-forget: this callback is sync and the UI transition below
+    // must not wait on storage I/O.
+    unawaited(clearPersistedSession());
     if (_current.phase == AuthPhase.signedIn) {
       _emit(const AuthState(AuthPhase.signedOut));
     }

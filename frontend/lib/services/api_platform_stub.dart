@@ -16,3 +16,9 @@ Map<String, String> apiExtraHeaders() => const {};
 Map<String, String> wsHandshakeHeaders() => const {};
 
 http.Client createApiClient() => http.Client();
+
+/// Session persistence is a native concern (in-memory jar + keystore); the
+/// VM stub has no session to persist.
+Future<void> initSessionPersistence() async {}
+
+Future<void> clearPersistedSession() async {}

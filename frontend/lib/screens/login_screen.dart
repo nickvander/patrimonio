@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
+import '../services/api_platform.dart';
 import '../services/auth_service.dart';
 import '../services/backend_config.dart';
 import '../services/passkeys.dart';
@@ -188,8 +189,14 @@ class _LoginScreenState extends State<LoginScreen> {
                   // precedent as backend_setup_screen.dart).
                   if (!kIsWeb)
                     TextButton.icon(
-                      onPressed:
-                          _submitting ? null : () => BackendConfig.clear(),
+                      onPressed: _submitting
+                          ? null
+                          : () {
+                              // A stored session cookie belongs to the old
+                              // backend — never carry it to the next one.
+                              clearPersistedSession();
+                              BackendConfig.clear();
+                            },
                       icon: const Icon(Icons.dns_outlined, size: 16),
                       label: Text(
                         localeNotifier.value?.languageCode == 'es'

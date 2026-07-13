@@ -1,7 +1,27 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-13 (mobile chart layout + APK slimming)
+> **Last updated:** 2026-07-13 (persistent native sessions)
 > **Branch:** `main`.
+
+## 2026-07-13 — Native session persists across app restarts/updates
+
+* **Owner-reported:** every APK update forced a re-login. Root cause: the
+  native cookie jar (`api_platform_io.dart`) was in-memory only (a known
+  limitation of the Android port), while the browser keeps the 30-day
+  session cookie for free.
+* **Fix:** the jar is mirrored into **Android-Keystore-backed secure
+  storage** (`flutter_secure_storage`, new dep — deliberately not
+  shared_preferences: the cookie is a full-access credential). Restored in
+  `main()` via `initSessionPersistence()` before the first request (same
+  init()-gating pattern as preferences_storage_io, so the test VM stays
+  inert); mirrored on every Set-Cookie (login/logout); cleared on logout
+  (even when the network revoke fails), on any 401, and on "Change server".
+  Max-Age-only cookies get an absolute expiry stamped at persist time and
+  expired entries are dropped on restore (`session_persistence_test.dart`).
+  Seam surface (`initSessionPersistence`/`clearPersistedSession`) added to
+  all three api_platform impls; web/stub are no-ops.
+* Server sessions are 30d fixed (`SESSION_TTL_DAYS`), so the practical
+  outcome is: re-login at most monthly, not per update.
 
 ## 2026-07-13 — Mobile chart un-squish + per-ABI APK
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'l10n/app_localizations.dart';
 import 'screens/root_gate.dart';
+import 'services/api_platform.dart';
 import 'services/backend_config.dart';
 import 'services/preferences.dart';
 import 'services/splash.dart';
@@ -42,6 +43,10 @@ Future<void> main() async {
   // (native only) before the first frame reads either.
   await Preferences.init();
   await BackendConfig.load();
+  // Restore the persisted session cookie (Android/iOS keystore) so an app
+  // restart or update doesn't force a re-login while the server-side
+  // session (30d) is still valid. No-op on web (browser jar) and desktop.
+  await initSessionPersistence();
   splashProgress(60, 'Starting app…');
   // Seed the active locale (web-free notifier) from the saved preference.
   localeNotifier.value = _loadInitialLocale();

@@ -63,3 +63,10 @@ class _ExtraHeaderClient extends http.BaseClient {
 /// (e.g. the ngrok skip header) are applied uniformly.
 http.Client createApiClient() =>
     _ExtraHeaderClient(BrowserClient()..withCredentials = true);
+
+/// No-ops on web: the browser's own cookie jar already persists the session
+/// across restarts (the cookie carries Max-Age) and clears it on the
+/// server's removal Set-Cookie — there is nothing extra to store.
+Future<void> initSessionPersistence() async {}
+
+Future<void> clearPersistedSession() async {}
