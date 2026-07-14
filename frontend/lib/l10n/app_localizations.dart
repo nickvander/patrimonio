@@ -9203,7 +9203,7 @@ abstract class AppLocalizations {
   /// No description provided for @lendSegCash.
   ///
   /// In en, this message translates to:
-  /// **'Cash'**
+  /// **'Record manually'**
   String get lendSegCash;
 
   /// No description provided for @lendAdvancedOptions.
@@ -9891,7 +9891,7 @@ abstract class AppLocalizations {
   /// No description provided for @lendCashFormHint.
   ///
   /// In en, this message translates to:
-  /// **'Record a repayment that didn\'t come through a linked bank account (e.g. cash). It reduces the outstanding balance but isn\'t tied to a transaction.'**
+  /// **'Record a repayment received in cash — or into an account whose transactions haven\'t been imported yet (e.g. a statement-based account). It reduces the outstanding balance now; when the bank transaction shows up later, attach it from the payment\'s link button.'**
   String get lendCashFormHint;
 
   /// No description provided for @lendToastTxAlreadyLinked.

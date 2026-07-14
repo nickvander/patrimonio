@@ -5689,7 +5689,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lendSegBankTransaction => 'Bank transaction';
 
   @override
-  String get lendSegCash => 'Cash';
+  String get lendSegCash => 'Record manually';
 
   @override
   String get lendAdvancedOptions => 'Advanced options';
@@ -6108,7 +6108,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lendCashFormHint =>
-      'Record a repayment that didn\'t come through a linked bank account (e.g. cash). It reduces the outstanding balance but isn\'t tied to a transaction.';
+      'Record a repayment received in cash — or into an account whose transactions haven\'t been imported yet (e.g. a statement-based account). It reduces the outstanding balance now; when the bank transaction shows up later, attach it from the payment\'s link button.';
 
   @override
   String get lendToastTxAlreadyLinked => 'That transaction is already linked';

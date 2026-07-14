@@ -5734,7 +5734,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get lendSegBankTransaction => 'Transacción bancaria';
 
   @override
-  String get lendSegCash => 'Efectivo';
+  String get lendSegCash => 'Registrar manualmente';
 
   @override
   String get lendAdvancedOptions => 'Opciones avanzadas';
@@ -6155,7 +6155,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get lendCashFormHint =>
-      'Registra un pago que no pasó por una cuenta bancaria vinculada (p. ej. efectivo). Reduce el saldo pendiente pero no está ligado a una transacción.';
+      'Registra un pago recibido en efectivo — o en una cuenta cuyas transacciones aún no se han importado (p. ej. una cuenta con estado de cuenta mensual). Reduce el saldo pendiente ahora; cuando aparezca la transacción bancaria, vincúlala desde el botón de enlace del pago.';
 
   @override
   String get lendToastTxAlreadyLinked => 'Esa transacción ya está vinculada';
