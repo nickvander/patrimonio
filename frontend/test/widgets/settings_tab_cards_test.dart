@@ -1,0 +1,251 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:patrimonio/l10n/app_localizations.dart';
+import 'package:patrimonio/main.dart' show themeModeNotifier;
+import 'package:patrimonio/screens/dashboard_screen.dart'
+    show SettingsAccountSecurityCard, SettingsPreferencesCard;
+
+// The Settings tab's app-level settings cards (Preferences and
+// Account & security) — the settings home that replaces the AppBar kebab.
+// Cards are pumped in isolation (tests never pump the full dashboard).
+
+Widget _host(Widget child, {Locale locale = const Locale('en'), ThemeData? theme}) =>
+    MaterialApp(
+      locale: locale,
+      theme: theme,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(body: SingleChildScrollView(child: child)),
+    );
+
+SettingsAccountSecurityCard _accountCard({
+  VoidCallback? onSignOut,
+  VoidCallback? onHiddenItemsClosed,
+  Future<void> Function()? onChangeServer,
+}) =>
+    SettingsAccountSecurityCard(
+      onHiddenItemsClosed: onHiddenItemsClosed ?? () {},
+      onSignOut: onSignOut ?? () {},
+      onChangeServer: onChangeServer ?? () async {},
+    );
+
+void main() {
+  group('SettingsPreferencesCard', () {
+    testWidgets('en: shows Language row with the active-locale autonym',
+        (tester) async {
+      await tester.pumpWidget(_host(const SettingsPreferencesCard()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Preferences'), findsOneWidget);
+      expect(find.text('Language'), findsOneWidget);
+      // Subtitle is the autonym of the ACTIVE locale.
+      expect(find.text('English'), findsOneWidget);
+      expect(find.text('Theme'), findsOneWidget);
+      expect(find.byType(SegmentedButton<ThemeMode>), findsOneWidget);
+    });
+
+    testWidgets('es: localized headers + Spanish autonym subtitle',
+        (tester) async {
+      await tester.pumpWidget(_host(
+        const SettingsPreferencesCard(),
+        locale: const Locale('es'),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Preferencias'), findsOneWidget);
+      expect(find.text('Idioma'), findsOneWidget);
+      expect(find.text('Español (México)'), findsOneWidget);
+      expect(find.text('Tema'), findsOneWidget);
+    });
+
+    testWidgets('Language row opens a radio picker with BOTH autonyms; '
+        'cancel keeps the locale', (tester) async {
+      await tester.pumpWidget(_host(const SettingsPreferencesCard()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Language'));
+      await tester.pumpAndSettle();
+
+      // Both options always show their own name, never a translation.
+      expect(find.byType(RadioListTile<String>), findsNWidgets(2));
+      expect(find.text('Español (México)'), findsOneWidget);
+      // 'English' appears twice: the row subtitle + the dialog option.
+      expect(find.text('English'), findsNWidgets(2));
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.byType(RadioListTile<String>), findsNothing);
+      // Still English — cancel must not persist anything.
+      expect(find.text('Language'), findsOneWidget);
+    });
+
+    testWidgets('theme selector tracks themeModeNotifier (e.g. the wide '
+        'AppBar cycle button)', (tester) async {
+      final original = themeModeNotifier.value;
+      addTearDown(() => themeModeNotifier.value = original);
+
+      themeModeNotifier.value = ThemeMode.light;
+      await tester.pumpWidget(_host(const SettingsPreferencesCard()));
+      await tester.pumpAndSettle();
+
+      SegmentedButton<ThemeMode> segmented() => tester.widget(
+            find.byType(SegmentedButton<ThemeMode>),
+          );
+      expect(segmented().selected, {ThemeMode.light});
+
+      // External change (what the AppBar theme-cycle button does) must be
+      // reflected without rebuilding the card from outside.
+      themeModeNotifier.value = ThemeMode.dark;
+      await tester.pumpAndSettle();
+      expect(segmented().selected, {ThemeMode.dark});
+    });
+
+    testWidgets('renders without overflow on a narrow phone in es (long '
+        'segment labels) and in dark theme', (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(_host(
+        const SettingsPreferencesCard(),
+        locale: const Locale('es'),
+        theme: ThemeData(brightness: Brightness.dark),
+      ));
+      await tester.pumpAndSettle();
+      // Narrow layout stacks the picker under the label; an overflow would
+      // fail the test via FlutterError.
+      expect(find.byType(SegmentedButton<ThemeMode>), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('SettingsAccountSecurityCard', () {
+    testWidgets('en: shows Security, Hidden items, Server (non-web test VM) '
+        'and Sign out rows', (tester) async {
+      await tester.pumpWidget(_host(_accountCard()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Account & security'), findsOneWidget);
+      expect(find.text('Security'), findsOneWidget);
+      expect(find.text('Hidden items'), findsOneWidget);
+      // kIsWeb is false on the test VM, so the native-only Server row shows.
+      expect(find.text('Server'), findsOneWidget);
+      expect(find.text('Sign out'), findsOneWidget);
+    });
+
+    testWidgets('sign-out row shows the confirm dialog instead of signing '
+        'out directly; cancel does nothing', (tester) async {
+      var signedOut = false;
+      await tester.pumpWidget(
+        _host(_accountCard(onSignOut: () => signedOut = true)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Sign out'));
+      await tester.pumpAndSettle();
+
+      // The tap alone must NOT sign out — the confirmation comes first,
+      // reusing the Security screen's bilingual strings.
+      expect(signedOut, isFalse);
+      expect(find.text('Sign out of this device?'), findsOneWidget);
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(signedOut, isFalse);
+      expect(find.text('Sign out of this device?'), findsNothing);
+    });
+
+    testWidgets('confirming the dialog fires onSignOut', (tester) async {
+      var signedOut = false;
+      await tester.pumpWidget(
+        _host(_accountCard(onSignOut: () => signedOut = true)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Sign out'));
+      await tester.pumpAndSettle();
+      // The confirm action is the dialog's FilledButton (the row itself is a
+      // ListTile, so the finder can't collide with it).
+      await tester.tap(find.widgetWithText(FilledButton, 'Sign out'));
+      await tester.pumpAndSettle();
+
+      expect(signedOut, isTrue);
+    });
+
+    testWidgets('es: sign-out confirmation uses the Spanish strings',
+        (tester) async {
+      var signedOut = false;
+      await tester.pumpWidget(_host(
+        _accountCard(onSignOut: () => signedOut = true),
+        locale: const Locale('es'),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cuenta y seguridad'), findsOneWidget);
+      await tester.tap(find.text('Cerrar sesión'));
+      await tester.pumpAndSettle();
+
+      expect(signedOut, isFalse);
+      expect(find.text('¿Cerrar sesión en este dispositivo?'), findsOneWidget);
+
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      expect(signedOut, isFalse);
+    });
+
+    testWidgets('server row asks for confirmation before onChangeServer',
+        (tester) async {
+      var changed = false;
+      await tester.pumpWidget(_host(
+        _accountCard(onChangeServer: () async => changed = true),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Server'));
+      await tester.pumpAndSettle();
+      expect(changed, isFalse);
+      expect(find.text('Change server?'), findsOneWidget);
+      expect(
+        find.text('Changing the server will sign you out.'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(changed, isFalse);
+
+      await tester.tap(find.text('Server'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Sign out'));
+      await tester.pumpAndSettle();
+      expect(changed, isTrue);
+    });
+
+    testWidgets('renders on a wide (>=720) window and in dark theme without '
+        'overflow', (tester) async {
+      tester.view.physicalSize = const Size(1100, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(_host(
+        const Column(
+          children: [
+            SettingsPreferencesCard(),
+            SizedBox(height: 24),
+          ],
+        ),
+        theme: ThemeData(brightness: Brightness.dark),
+      ));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(_host(
+        _accountCard(),
+        theme: ThemeData(brightness: Brightness.dark),
+      ));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Sign out'), findsOneWidget);
+    });
+  });
+}

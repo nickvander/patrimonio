@@ -2296,9 +2296,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dashMoreDays => 'More days';
 
   @override
-  String get dashOptionsTooltip => 'Options';
-
-  @override
   String dashDaysShort(Object count) {
     return '$count d';
   }
@@ -2666,6 +2663,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dashThemeSystemDefault => 'System default';
 
   @override
+  String get dashThemeSystemShort => 'System';
+
+  @override
   String get dashThemeLightShort => 'Light';
 
   @override
@@ -2673,6 +2673,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get dashThemeMenu => 'Theme';
+
+  @override
+  String get dashPreferencesTitle => 'Preferences';
+
+  @override
+  String get dashLanguageLabel => 'Language';
+
+  @override
+  String get dashAccountSecurityTitle => 'Account & security';
+
+  @override
+  String get dashServerLabel => 'Server';
+
+  @override
+  String get dashServerChangeTitle => 'Change server?';
+
+  @override
+  String get dashServerChangeBody => 'Changing the server will sign you out.';
 
   @override
   String dashThemeTooltip(Object label) {

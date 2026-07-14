@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -13,6 +14,7 @@ import '../l10n/app_localizations.dart';
 import '../main.dart' show themeModeNotifier;
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import '../services/backend_config.dart';
 import '../services/plaid_oauth.dart';
 import '../services/preferences.dart';
 import '../services/realtime_service.dart';
@@ -21,6 +23,7 @@ import '../theme/palette.dart';
 import '../theme/typography.dart';
 import '../utils/account_category.dart';
 import '../utils/app_locale.dart';
+import '../utils/bar_scroll.dart';
 import '../utils/currency.dart';
 import '../utils/lending_summary.dart'
     show sumLoansConverted, loansAreMixedCurrency;
@@ -210,6 +213,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Whether the Management-tab "Auto-archived accounts" section is expanded.
   // Collapsed by default — it's a recovery affordance, not a daily-use list.
   bool _archivedSectionExpanded = false;
+  // Scroll-away app bar (compact, non-first-run only): whether the top bar is
+  // currently shown. Driven by bubbling UserScrollNotifications through
+  // utils/bar_scroll.dart — enter-always + snap semantics. Only flips on
+  // scroll-direction changes, never per scrolled pixel.
+  bool _appBarVisible = true;
   // Configurable reminder lead time (days before due). Server-stored
   // (app_settings 'lending_reminder_lead_days'), surfaced in the
   // Management-tab Modules card.
@@ -479,6 +487,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// Navigate to a section by stable id — robust to reordering and to the
   /// conditional Lending section. No-op if the target isn't visible.
   void _goToNav(NavId id) {
+    // Switching tabs always restores the scroll-away app bar — a tab whose
+    // list was scrolled deep must not land the user under a hidden bar.
+    if (!_appBarVisible) setState(() => _appBarVisible = true);
     final i = _indexOfNav(id);
     if (i != null) _selectSection(i);
   }
@@ -2229,6 +2240,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  /// Preferences card on the Settings tab — language + theme. These app-level
+  /// settings live here (not only in the AppBar kebab) so the Settings tab is
+  /// the single settings home.
+  Widget _buildPreferencesCard() => const SettingsPreferencesCard();
+
+  /// Account & security card on the Settings tab: Security, Hidden &
+  /// archived items, Server (native builds), and the confirmed sign-out.
+  Widget _buildAccountCard() => SettingsAccountSecurityCard(
+        // Hiding/unhiding accounts or holdings changes totals — refresh
+        // silently, mirroring the kebab's Hidden-items behavior.
+        onHiddenItemsClosed: () {
+          if (mounted) _loadAllData(silent: true);
+        },
+        // The card shows the confirmation dialog itself; this fires only
+        // after the user confirmed.
+        onSignOut: () => AuthService.instance.logout(),
+        // Order matters: logout() needs the current server to revoke the
+        // session; clear() then flips root_gate to BackendSetupScreen.
+        onChangeServer: () async {
+          await AuthService.instance.logout();
+          await BackendConfig.clear();
+        },
+      );
+
+  /// Confirmed sign-out, reusing the Security screen's bilingual strings so
+  /// every sign-out entry point reads identically. Called by the first-run
+  /// AppBar sign-out action (the only bar-level sign-out left post-kebab).
+  Future<void> _confirmSignOut() async {
+    final confirmed = await confirmSignOutDialog(context);
+    if (!confirmed || !mounted) return;
+    await AuthService.instance.logout();
+    // AuthService emits signedOut → the AuthGate listener in main.dart
+    // unmounts the dashboard tree; no explicit navigation needed.
+  }
+
   Future<void> _setReminderLeadDays(int days) async {
     final clamped = days.clamp(0, 60);
     final prev = _lendingReminderLeadDays;
@@ -3549,26 +3595,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // would be empty) and currency / FX controls (no balances to convert).
     final firstRun = _isFirstRun;
 
-    return Shortcuts(
-      shortcuts: <LogicalKeySet, Intent>{
-        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyK):
-            const _OpenPaletteIntent(),
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyK):
-            const _OpenPaletteIntent(),
-      },
-      child: Actions(
-        actions: <Type, Action<Intent>>{
-          _OpenPaletteIntent: CallbackAction<_OpenPaletteIntent>(
-            onInvoke: (_) {
-              if (!firstRun) _openPalette();
-              return null;
-            },
-          ),
-        },
-        child: Focus(
-          autofocus: true,
-          child: Scaffold(
-              appBar: AppBar(
+    // Built once, then either used as-is (wide, first-run) or handed to the
+    // scroll-away shell below — the bar's contents never change between the
+    // two paths.
+    final appBar = AppBar(
           // Compact widths: the slimmed actions row (app-bar audit) leaves
           // room for the current destination's name — same label as the
           // selected bottom-nav item, and a page heading for screen
@@ -3668,9 +3698,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             ],
-            // Compact widths move theme selection into the overflow menu
-            // below — five always-on icons crowded a 360px AppBar.
-            if (!isCompact) _ThemeCycleButton(),
+            // Compact widths get theme selection from the Settings tab
+            // instead — five always-on icons crowded a 360px AppBar. During
+            // first-run the bottom nav (and thus the Settings tab) is
+            // hidden, so the cycle button shows on all widths there.
+            if (!isCompact || firstRun) _ThemeCycleButton(),
+            // First-run escape hatch: language now lives on the Settings
+            // tab, which is hidden with the rest of the nav chrome here —
+            // keep the kebab's EN ⇄ ES toggle on the bar so a
+            // freshly-registered user can switch locale. Tooltip is the
+            // autonym of the language you'd switch TO (deliberately not
+            // localized, matching the Settings-tab language picker).
+            if (firstRun)
+              IconButton(
+                icon: const Icon(Icons.translate),
+                tooltip:
+                    Localizations.localeOf(context).languageCode == 'es'
+                        ? 'English'
+                        : 'Español',
+                onPressed: () {
+                  final next =
+                      Localizations.localeOf(context).languageCode == 'es'
+                          ? 'en'
+                          : 'es';
+                  // Same persist + live-notify pattern as the Settings
+                  // tab's picker.
+                  Preferences.setLocale(next);
+                  localeNotifier.value = Locale(next);
+                },
+              ),
+            // First-run escape hatch: with the nav chrome hidden there is
+            // no other path to sign out, so the bar carries a confirmed
+            // sign-out action (never a direct logout).
+            if (firstRun)
+              IconButton(
+                icon: const Icon(Icons.logout),
+                tooltip: l.dashSignOut,
+                onPressed: _confirmSignOut,
+              ),
             if (!firstRun)
               // Compact: one combined "USD · 17.51" chip (48dp target, tap
               // toggles the display currency, carries the FX rate the
@@ -3683,155 +3748,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       onSwap: () => _setTargetCurrency(
                           _targetCurrency == 'USD' ? 'MXN' : 'USD'),
                     ),
-            // Hidden Items, Security, and Sign Out live in a single overflow
-            // menu so the AppBar doesn't clip at typical widths. Material 3
-            // MenuAnchor anchors the menu to the button and opens it directly
-            // beneath (end-aligned for this right-side trigger), with a
-            // rounded, elevated M3 surface — cleaner than the old tap-anchored
-            // PopupMenuButton.
-            Builder(
-              builder: (menuCtx) {
-                final scheme = Theme.of(menuCtx).colorScheme;
-                return MenuAnchor(
-                  alignmentOffset: const Offset(0, 6),
-                  style: MenuStyle(
-                    alignment: AlignmentDirectional.bottomEnd,
-                    elevation: const WidgetStatePropertyAll(3),
-                    backgroundColor:
-                        WidgetStatePropertyAll(scheme.surfaceContainerHigh),
-                    surfaceTintColor:
-                        WidgetStatePropertyAll(scheme.surfaceTint),
-                    shape: WidgetStatePropertyAll(
-                      RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    padding: const WidgetStatePropertyAll(
-                      EdgeInsets.symmetric(vertical: 6),
-                    ),
-                  ),
-                  builder: (context, controller, _) => IconButton(
-                    // F16: distinct from the bottom-nav "More" tab so screen
-                    // readers can tell the two controls apart.
-                    tooltip: l.dashOptionsTooltip,
-                    icon: const Icon(Icons.more_vert),
-                    onPressed: () => controller.isOpen
-                        ? controller.close()
-                        : controller.open(),
-                  ),
-                  menuChildren: [
-                    MenuItemButton(
-                      leadingIcon:
-                          const Icon(Icons.visibility_off_outlined, size: 20),
-                      onPressed: () async {
-                        await Navigator.of(context).push(
-                          MaterialPageRoute(
-                              builder: (_) => const HiddenItemsScreen()),
-                        );
-                        if (mounted) _loadAllData(silent: true);
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 16),
-                        child: Text(l.dashHiddenItems),
-                      ),
-                    ),
-                    MenuItemButton(
-                      leadingIcon: const Icon(Icons.shield_outlined, size: 20),
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) => const SecurityScreen()),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 16),
-                        child: Text(l.dashSecurity),
-                      ),
-                    ),
-                    // Language toggle (EN ⇄ ES). Shows the language you'd
-                    // switch TO, in its own name (autonym). Persists + flips
-                    // the app locale live via localeNotifier.
-                    MenuItemButton(
-                      leadingIcon: const Icon(Icons.translate, size: 20),
-                      onPressed: () {
-                        final next =
-                            Localizations.localeOf(context).languageCode == 'es'
-                                ? 'en'
-                                : 'es';
-                        Preferences.setLocale(next);
-                        localeNotifier.value = Locale(next);
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 16),
-                        child: Text(
-                          Localizations.localeOf(context).languageCode == 'es'
-                              ? 'English'
-                              : 'Español',
-                        ),
-                      ),
-                    ),
-                    // Theme picker, compact widths only — the AppBar's
-                    // _ThemeCycleButton is hidden there to save space.
-                    // Mirrors the cycle button's set-and-persist logic.
-                    if (isCompact)
-                      SubmenuButton(
-                        leadingIcon:
-                            const Icon(Icons.brightness_6_outlined, size: 20),
-                        menuChildren: [
-                          for (final (mode, icon, label) in [
-                            (
-                              ThemeMode.system,
-                              Icons.brightness_auto,
-                              l.dashThemeSystemDefault
-                            ),
-                            (
-                              ThemeMode.light,
-                              Icons.light_mode_outlined,
-                              l.dashThemeLightShort
-                            ),
-                            (
-                              ThemeMode.dark,
-                              Icons.dark_mode_outlined,
-                              l.dashThemeDarkShort
-                            ),
-                          ])
-                            MenuItemButton(
-                              leadingIcon: Icon(icon, size: 20),
-                              onPressed: () {
-                                themeModeNotifier.value = mode;
-                                Preferences.setThemeMode(switch (mode) {
-                                  ThemeMode.system => 'system',
-                                  ThemeMode.light => 'light',
-                                  ThemeMode.dark => 'dark',
-                                });
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.only(right: 16),
-                                child: Text(label),
-                              ),
-                            ),
-                        ],
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 16),
-                          child: Text(l.dashThemeMenu),
-                        ),
-                      ),
-                    const Divider(height: 8, indent: 12, endIndent: 12),
-                    MenuItemButton(
-                      leadingIcon:
-                          Icon(Icons.logout, size: 20, color: scheme.error),
-                      onPressed: () => AuthService.instance.logout(),
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 16),
-                        child: Text(l.dashSignOut,
-                            style: TextStyle(color: scheme.error)),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
             const SizedBox(width: 8),
           ],
-        ),
+        );
+    // Scroll-away app bar (enter-always + snap): compact non-first-run
+    // widths wrap the bar in the collapsing shell driven by _appBarVisible.
+    // Wide and first-run keep the static bar untouched.
+    final PreferredSizeWidget topBar = (isCompact && !firstRun)
+        ? _CollapsingAppBar(visible: _appBarVisible, child: appBar)
+        : appBar;
+
+    return Shortcuts(
+      shortcuts: <LogicalKeySet, Intent>{
+        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyK):
+            const _OpenPaletteIntent(),
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyK):
+            const _OpenPaletteIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _OpenPaletteIntent: CallbackAction<_OpenPaletteIntent>(
+            onInvoke: (_) {
+              if (!firstRun) _openPalette();
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+              appBar: topBar,
               // Narrow screens get a Material 3 bottom nav bar; wide
               // screens get a left rail (built into the body Row below).
               bottomNavigationBar:
@@ -3857,7 +3803,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: const Icon(Icons.add),
                     )
                   : null,
-              body: Column(
+              // Scroll-away app bar: every tab's scrollables (tab-level
+              // SingleChildScrollViews, tabs that own internal scrollables,
+              // and the Activity tab's inner virtualised list) bubble
+              // UserScrollNotification up to here, so no tab file changes.
+              // setState fires only when visibility actually flips — i.e. on
+              // scroll-direction changes, never per scrolled pixel. Returning
+              // false keeps the notifications bubbling (AppBar lift-on-scroll
+              // relies on them too). SyncErrorBanner stays inside the pinned
+              // Column — it is an alert and never scrolls away.
+              body: NotificationListener<UserScrollNotification>(
+                onNotification: (n) {
+                  if (isCompact && !firstRun) {
+                    final visible = barVisibleAfter(
+                      direction: n.direction,
+                      axis: n.metrics.axis,
+                      pixels: n.metrics.pixels,
+                    );
+                    if (visible != null && visible != _appBarVisible) {
+                      setState(() => _appBarVisible = visible);
+                    }
+                  }
+                  return false;
+                },
+                child: Column(
                 children: [
                   if (!firstRun)
                     SyncErrorBanner(
@@ -3884,6 +3853,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         : _buildBody(),
                   ),
                 ],
+                ),
               ),
             ),
           ),
@@ -5650,10 +5620,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   );
           }()),
           SizedBox(height: gap),
-          // Deployment diagnostics sit last — they collapse to a single
-          // "Ready" row once required checks pass, so they no longer crowd
-          // the top of the tab.
+          // Deployment diagnostics sit below the data-management sections —
+          // they collapse to a single "Ready" row once required checks pass,
+          // so they no longer crowd the top of the tab.
           buildSetupStatusCard(),
+          // App-level settings close the tab: preferences (language, theme)
+          // and account & security (Security, Hidden items, Server, and the
+          // deliberately low-prominence confirmed sign-out as the final row).
+          SizedBox(height: gap),
+          _buildPreferencesCard(),
+          SizedBox(height: gap),
+          _buildAccountCard(),
         ],
       ),
     );
@@ -6261,6 +6238,428 @@ class _ThemeCycleButton extends StatelessWidget {
               themeModeNotifier.value = next;
               _persist(next);
             },
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Shows the shared sign-out confirmation dialog — the same bilingual strings
+/// as the Security screen's "Sign out of this device" — and resolves to true
+/// only if the user confirmed. Used by the Settings tab's Account & security
+/// card and by the dashboard's own confirmed sign-out; public so widget tests
+/// can exercise the flow.
+Future<bool> confirmSignOutDialog(BuildContext context) async {
+  final l = AppLocalizations.of(context);
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: Text(l.secSignOutThisDeviceTitle),
+      content: Text(l.secSignOutThisDeviceBody),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: Text(l.actionCancel),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: Text(l.secSignOut),
+        ),
+      ],
+    ),
+  );
+  return confirmed == true;
+}
+
+/// Preferences card on the Settings tab: language (explicit radio picker) and
+/// theme (three-way segmented control). Reads/writes the app-global notifiers
+/// (localeNotifier, themeModeNotifier) and persists via Preferences — the
+/// exact persist+notify pattern the AppBar controls use, so both stay in
+/// step. Public (unlike the dashboard's other cards) so widget tests can pump
+/// it in isolation — tests never pump the full dashboard screen.
+class SettingsPreferencesCard extends StatelessWidget {
+  const SettingsPreferencesCard({super.key});
+
+  void _pickLanguage(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final current = Localizations.localeOf(context).languageCode;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l.dashLanguageLabel),
+        // Radio tiles carry their own horizontal padding; shrink the default
+        // 24px content inset so they align under the title.
+        contentPadding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
+        content: RadioGroup<String>(
+          groupValue: current,
+          onChanged: (code) {
+            if (code == null) return;
+            // Same persist + live-notify pattern as the AppBar's language
+            // toggle: Preferences stores it, localeNotifier re-points intl
+            // and rebuilds MaterialApp.
+            Preferences.setLocale(code);
+            localeNotifier.value = Locale(code);
+            Navigator.of(dialogContext).pop();
+          },
+          child: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Autonyms — deliberately NOT localized: each language names
+              // itself so it stays findable from the "wrong" locale.
+              RadioListTile<String>(value: 'en', title: Text('English')),
+              RadioListTile<String>(
+                value: 'es',
+                title: Text('Español (México)'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(l.actionCancel),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(pad),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.tune, size: 18, color: context.tealAccent),
+                const SizedBox(width: 8),
+                Text(
+                  l.dashPreferencesTitle,
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.translate),
+              title: Text(l.dashLanguageLabel),
+              subtitle: Text(
+                // Autonym of the ACTIVE locale (deliberately not localized).
+                Localizations.localeOf(context).languageCode == 'es'
+                    ? 'Español (México)'
+                    : 'English',
+              ),
+              onTap: () => _pickLanguage(context),
+            ),
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              // Width decisions off the card's INNER constraint (house
+              // convention), not the screen.
+              child: LayoutBuilder(builder: (ctx, c) {
+                final label = Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.brightness_6_outlined),
+                    const SizedBox(width: 16),
+                    Text(l.dashThemeMenu,
+                        style: const TextStyle(fontSize: 16)),
+                  ],
+                );
+                // ValueListenableBuilder keeps the selection in step with
+                // theme changes made elsewhere (the wide AppBar's
+                // theme-cycle button writes the same notifier).
+                final picker = ValueListenableBuilder<ThemeMode>(
+                  valueListenable: themeModeNotifier,
+                  builder: (_, mode, _) => SegmentedButton<ThemeMode>(
+                    segments: [
+                      ButtonSegment(
+                        value: ThemeMode.system,
+                        icon: const Icon(Icons.brightness_auto),
+                        // Short label ("System"/"Sistema") — the long
+                        // "System default"/"Predeterminado del sistema"
+                        // pushed the Dark segment past a 390px card edge,
+                        // leaving the picker scroll-clipped with no
+                        // affordance. All three segments must fit at rest.
+                        label: Text(l.dashThemeSystemShort),
+                      ),
+                      ButtonSegment(
+                        value: ThemeMode.light,
+                        icon: const Icon(Icons.light_mode_outlined),
+                        label: Text(l.dashThemeLightShort),
+                      ),
+                      ButtonSegment(
+                        value: ThemeMode.dark,
+                        icon: const Icon(Icons.dark_mode_outlined),
+                        label: Text(l.dashThemeDarkShort),
+                      ),
+                    ],
+                    selected: {mode},
+                    onSelectionChanged: (sel) {
+                      final next = sel.first;
+                      themeModeNotifier.value = next;
+                      // Same persist mapping as the AppBar theme controls.
+                      Preferences.setThemeMode(switch (next) {
+                        ThemeMode.system => 'system',
+                        ThemeMode.light => 'light',
+                        ThemeMode.dark => 'dark',
+                      });
+                    },
+                  ),
+                );
+                if (c.maxWidth < 520) {
+                  // Narrow: the picker gets its own line under the label; a
+                  // horizontal scroll guards against the long es-MX
+                  // "Predeterminado del sistema" segment on small phones.
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      label,
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: picker,
+                        ),
+                      ),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: label),
+                    const SizedBox(width: 16),
+                    Flexible(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: picker,
+                      ),
+                    ),
+                  ],
+                );
+              }),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Account & security card on the Settings tab: Security, Hidden & archived
+/// items, Server (native builds only), and the confirmed sign-out as the
+/// deliberately low-prominence final row. Dumb/injected per house convention;
+/// public so widget tests can pump it in isolation.
+class SettingsAccountSecurityCard extends StatelessWidget {
+  const SettingsAccountSecurityCard({
+    super.key,
+    required this.onHiddenItemsClosed,
+    required this.onSignOut,
+    required this.onChangeServer,
+  });
+
+  /// Fired when HiddenItemsScreen pops — hiding/unhiding accounts or
+  /// holdings changes totals, so the owner must refresh.
+  final VoidCallback onHiddenItemsClosed;
+
+  /// Fired only after the user CONFIRMED the sign-out dialog.
+  final VoidCallback onSignOut;
+
+  /// Fired only after the user confirmed the change-server dialog. The owner
+  /// runs the logout-then-clear sequence.
+  final Future<void> Function() onChangeServer;
+
+  Future<void> _confirmChangeServer(BuildContext context) async {
+    final l = AppLocalizations.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(l.dashServerChangeTitle),
+        content: Text(l.dashServerChangeBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l.actionCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            // The consequence the user is accepting is the sign-out, so the
+            // confirm button reuses the Security screen's sign-out label.
+            child: Text(l.secSignOut),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await onChangeServer();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(pad),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.shield_outlined,
+                    size: 18, color: context.tealAccent),
+                const SizedBox(width: 8),
+                Text(
+                  l.dashAccountSecurityTitle,
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.shield_outlined),
+              title: Text(l.dashSecurity),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SecurityScreen()),
+              ),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.visibility_off_outlined),
+              title: Text(l.dashHiddenItems),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => const HiddenItemsScreen()),
+                );
+                onHiddenItemsClosed();
+              },
+            ),
+            // Native builds configure the backend URL at first run; this row
+            // keeps that setting reachable afterwards. Web derives the URL
+            // from its own origin, so there's nothing to change there.
+            if (!kIsWeb)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.dns_outlined),
+                title: Text(l.dashServerLabel),
+                subtitle: Text(BackendConfig.baseUrl ?? ''),
+                onTap: () => _confirmChangeServer(context),
+              ),
+            const Divider(),
+            // Sign out — deliberately the final, low-prominence row, always
+            // behind a confirmation.
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.logout, color: scheme.error),
+              title:
+                  Text(l.dashSignOut, style: TextStyle(color: scheme.error)),
+              onTap: () async {
+                if (await confirmSignOutDialog(context)) onSignOut();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Scroll-away shell for the compact app bar (enter-always + snap semantics).
+///
+/// Keeps `Scaffold.appBar` instead of migrating tabs to slivers:
+/// [preferredSize] stays constant — Scaffold only uses it as a *max*
+/// constraint and positions the body by the bar's ACTUAL laid-out height
+/// (`_ScaffoldLayout.performLayout` uses `layoutChild(...).height`) — so
+/// animating the inner height slides the body up/down smoothly, with the
+/// wrapped [AppBar] itself completely untouched. Its default lift-on-scroll
+/// surface tint keeps working: the scrolled-under listener registers with the
+/// Scaffold's own ScrollNotificationObserver, which wraps this slot too.
+///
+/// Collapsed, the shell never reaches height 0 on a phone: an opaque strip of
+/// exactly the status-bar inset remains (painted in the bar's own background
+/// colour), so tab content never renders under the OS status bar.
+class _CollapsingAppBar extends StatelessWidget
+    implements PreferredSizeWidget {
+  const _CollapsingAppBar({required this.visible, required this.child});
+
+  /// Whether the bar is shown. Flipping this triggers the ~200ms snap.
+  final bool visible;
+
+  /// The untouched app bar being slid in/out.
+  final AppBar child;
+
+  @override
+  Size get preferredSize => child.preferredSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final topInset = MediaQuery.paddingOf(context).top;
+    final expanded = child.preferredSize.height + topInset;
+    // Implicitly animated — no controller to own or dispose. t runs 1.0
+    // (shown) -> 0.0 (collapsed to the status-bar strip); the short easeInOut
+    // is the "snap". The bar subtree is passed as `child` so it is NOT
+    // rebuilt per animation frame — only this cheap shell is.
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(end: visible ? 1.0 : 0.0),
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+      child: child,
+      builder: (context, t, bar) {
+        return SizedBox(
+          height: topInset + (expanded - topInset) * t,
+          child: ClipRect(
+            child: Stack(
+              children: [
+                // Bottom-anchored at its full height inside the shrinking
+                // clip, so the bar slides up out of view rather than
+                // squashing its contents. While hidden it must not be
+                // hit-testable through the residual strip.
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: expanded,
+                  child: IgnorePointer(ignoring: !visible, child: bar!),
+                ),
+                // Opaque status-bar strip: fades in as the bar leaves so no
+                // toolbar content ever sits under the OS status bar, and at
+                // rest fully covers the slice of the bar still inside the
+                // clip. Uses the bar's themed background (falling back to
+                // surface) so the strip blends with it in both themes.
+                if (t < 1.0)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    height: topInset,
+                    child: IgnorePointer(
+                      child: Opacity(
+                        opacity: 1.0 - t,
+                        child: ColoredBox(
+                          color:
+                              Theme.of(context).appBarTheme.backgroundColor ??
+                                  Theme.of(context).colorScheme.surface,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         );
       },

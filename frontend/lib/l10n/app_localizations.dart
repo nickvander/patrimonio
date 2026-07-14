@@ -3836,12 +3836,6 @@ abstract class AppLocalizations {
   /// **'More days'**
   String get dashMoreDays;
 
-  /// F16: tooltip/semantics label for the dashboard header kebab (overflow) menu. Deliberately distinct from navMore (the bottom-nav tab) so screen readers can tell them apart.
-  ///
-  /// In en, this message translates to:
-  /// **'Options'**
-  String get dashOptionsTooltip;
-
   /// No description provided for @dashDaysShort.
   ///
   /// In en, this message translates to:
@@ -4430,6 +4424,12 @@ abstract class AppLocalizations {
   /// **'System default'**
   String get dashThemeSystemDefault;
 
+  /// No description provided for @dashThemeSystemShort.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get dashThemeSystemShort;
+
   /// No description provided for @dashThemeLightShort.
   ///
   /// In en, this message translates to:
@@ -4447,6 +4447,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Theme'**
   String get dashThemeMenu;
+
+  /// No description provided for @dashPreferencesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Preferences'**
+  String get dashPreferencesTitle;
+
+  /// No description provided for @dashLanguageLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Language'**
+  String get dashLanguageLabel;
+
+  /// No description provided for @dashAccountSecurityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Account & security'**
+  String get dashAccountSecurityTitle;
+
+  /// No description provided for @dashServerLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Server'**
+  String get dashServerLabel;
+
+  /// No description provided for @dashServerChangeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Change server?'**
+  String get dashServerChangeTitle;
+
+  /// No description provided for @dashServerChangeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Changing the server will sign you out.'**
+  String get dashServerChangeBody;
 
   /// No description provided for @dashThemeTooltip.
   ///
