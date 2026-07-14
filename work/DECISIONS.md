@@ -175,9 +175,9 @@ Tracking key architectural and design decisions with rationale.
 
 ---
 
-## DEC-020: Vault Heuristic Never Applies to Credit-Category Accounts
-**Date:** 2026-07-14
+## DEC-020: Vault Heuristic Applies to Cash-Category Accounts Only
+**Date:** 2026-07-14 (broadened same day: credit-only exclusion → cash-only inclusion)
 **Status:** Accepted
-**Context:** The accounts-list "vault" heuristic (nest a sub-account whose name matches neither its type token nor the bank) was written for SoFi-style savings buckets, but credit-card product names ("Cash +", "Prime Visa", "Bilt Blue Card") routinely match neither — so a card sharing an institution cluster with a generically-named sibling nested under it as a fake vault (U.S. Bank rendered Cash+ inside "Credit Card" with a bogus "base + 1 cards" line).
-**Decision:** Credit-category accounts always classify as products; sibling cards render as plain rows inside the collapsible institution block.
-**Alternatives:** Tuning the name-similarity threshold (rejected — card product naming is inherently arbitrary; category scoping is deterministic and testable).
+**Context:** The accounts-list "vault" heuristic (nest a sub-account whose name matches neither its type token nor the bank) was written for SoFi-style savings buckets, but non-cash product names routinely match neither pattern — a U.S. Bank "Cash +" card nested under a generically-named "Credit Card" sibling ("base + 1 cards"), and a Vanguard "GOOGLE LLC 401(K) SAVINGS PLAN" nested under a $0 Traditional IRA ("$0.00 base + 1 accounts").
+**Decision:** Only cash-category accounts can classify as vaults — savings buckets are the only place user-nicknamed sub-accounts exist. Credit and investment accounts always render as sibling product rows inside the collapsible institution block.
+**Alternatives:** Tuning the name-similarity threshold (rejected — product naming is inherently arbitrary; category scoping is deterministic and testable).

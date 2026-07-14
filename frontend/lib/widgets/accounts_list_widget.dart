@@ -774,14 +774,15 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
       // name matches neither its account-type token nor the bank name. A real
       // product (Checking, Savings, a 401k) does.
       bool isVault(dynamic acc) {
-        // Credit cards are NEVER vaults: card product names routinely contain
-        // neither the word "credit" nor the bank ("Cash +", "Prime Visa",
-        // "Bilt Blue Card"), so the name heuristic misread a real card as a
-        // nicknamed sub-account and nested it under a generically-named
-        // sibling ("Credit Card — $103.80 base + 1 cards"). Vault semantics
-        // only exist for cash savings buckets.
-        if (categorizeAccount((acc['account_type'] ?? '').toString()) ==
-            AccountCategory.credit) {
+        // Vault semantics exist ONLY for cash accounts — savings buckets a
+        // user nicknames (SoFi "Car", "Rent", …). Every other category is
+        // always a real product: product names routinely match neither the
+        // type token nor the bank ("Cash +", "Prime Visa", "GOOGLE LLC
+        // 401(K) SAVINGS PLAN"), so the name heuristic nested a sibling
+        // U.S. Bank card — and a Vanguard 401(k) under a $0 Traditional
+        // IRA — as fake vaults with a bogus "base + N" summary line.
+        if (categorizeAccount((acc['account_type'] ?? '').toString()) !=
+            AccountCategory.cash) {
           return false;
         }
         final name = (acc['name'] ?? '').toString().toLowerCase();
