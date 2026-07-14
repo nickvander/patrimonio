@@ -104,4 +104,34 @@ void main() {
     expect(find.text('2 accounts'), findsOneWidget);
     expect(find.textContaining('25,196'), findsWidgets);
   });
+
+  testWidgets(
+      'sibling credit cards never nest as vaults under a generic card '
+      '(U.S. Bank "Credit Card" + "Cash +" regression)', (tester) async {
+    // Real-world shape: the bank reports one card with the generic name
+    // "Credit Card" (contains the type token → product) and one with a pure
+    // product name "Cash +" (contains neither type token nor bank name).
+    // The vault heuristic used to classify Cash+ as a nicknamed sub-account
+    // and nest it under Credit Card with a "base + 1 cards" summary line.
+    await tester.pumpWidget(_host([
+      _acc('Credit Card', 'credit card', 'U.S. Bank', 103.80),
+      _acc('Cash +', 'credit card', 'U.S. Bank', 458.39),
+    ]));
+    await tester.pumpAndSettle();
+
+    // One collapsed institution header; expand it.
+    expect(find.text('2 accounts'), findsOneWidget);
+    await tester.tap(find.text('2 accounts'));
+    await tester.pumpAndSettle();
+
+    // Both cards render as sibling rows with their own balances — no vault
+    // subgroup and no "base + N cards" summary line. (The institution
+    // header legitimately shows the combined 562.19 total, so only the
+    // per-row figures are asserted.)
+    expect(find.text('Credit Card'), findsOneWidget);
+    expect(find.text('Cash +'), findsOneWidget);
+    expect(find.textContaining('base'), findsNothing);
+    expect(find.textContaining('103.80'), findsOneWidget);
+    expect(find.textContaining('458.39'), findsOneWidget);
+  });
 }
