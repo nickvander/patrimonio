@@ -408,6 +408,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (d.id != NavId.lending || _lendingEnabled) d,
       ];
 
+  /// The destination currently on screen. Guarded: `_section` can briefly
+  /// point past the list while destinations change (lending toggling off).
+  _NavDest get _currentDest {
+    final dests = _destinations;
+    return (_section >= 0 && _section < dests.length)
+        ? dests[_section]
+        : dests.first;
+  }
+
   /// Localized full label for a section (rail, More sheet, palette).
   String _navLabel(AppLocalizations l, NavId id) {
     switch (id) {
@@ -2394,6 +2403,83 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  /// Compact-width combined currency control: "USD · 17.51" in one tappable
+  /// tonal chip (tap toggles the display currency). Replaces two bar
+  /// elements from the pre-audit design — the bordered-but-inert FX pill
+  /// (button styling, no tap handler) and the sub-30dp _CurrencyToggleButton
+  /// — bringing the compact bar to three actions + overflow (the M3
+  /// ceiling). Tonal fill, no border: color is reserved for state, warning
+  /// when the rate is >24h stale. Wide layouts keep the separate pair.
+  Widget _buildCurrencyFxChip() {
+    final l = AppLocalizations.of(context);
+    // Same payload parse as _buildFxBadge (kept in sync): dynamic pair codes,
+    // >24h staleness off recorded_at.
+    final rate = (_fxRate?['rate'] as num?)?.toDouble();
+    final base =
+        (_fxRate?['base'] ?? _fxRate?['base_currency'] ?? 'USD').toString();
+    final target =
+        (_fxRate?['target'] ?? _fxRate?['target_currency'] ?? 'MXN').toString();
+    final recordedAtRaw = _fxRate?['recorded_at'] as String?;
+    final recordedLocal = recordedAtRaw == null
+        ? null
+        : DateTime.tryParse(recordedAtRaw)?.toLocal();
+    final isStale = recordedLocal != null &&
+        DateTime.now().difference(recordedLocal).inHours > 24;
+    final rateBare = rate == null
+        ? null
+        : localizeNumberString(context, rate.toStringAsFixed(2));
+    final label =
+        rateBare == null ? _targetCurrency : '$_targetCurrency · $rateBare';
+    final fg = isStale ? context.warning : context.textPrimary;
+    // Toggle affordance first, then the full rate equation so the tooltip /
+    // screen reader explains both of the chip's facts.
+    final rateMoney = rate == null ? null : formatCurrencyAmount(rate, target);
+    final tooltip = rateMoney == null
+        ? l.currencyToggleTooltip(_targetCurrency)
+        : '${l.currencyToggleTooltip(_targetCurrency)}\n'
+            '${l.dashFxRateEquation(base, rateMoney)}';
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: () =>
+            _setTargetCurrency(_targetCurrency == 'USD' ? 'MXN' : 'USD'),
+        // 48dp touch floor: the visual pill stays compact; the hit area
+        // doesn't shrink with it.
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+          child: Center(
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: context.tint(0.06),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.currency_exchange, size: 14, color: fg),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: fg,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.4,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   // Full-page welcome shown when the user has not connected any accounts.
   // Lives in the body slot so the AppBar's tab strip can be dropped — every
   // tab is empty in this state and would mislead a fresh user.
@@ -3483,12 +3569,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
           autofocus: true,
           child: Scaffold(
               appBar: AppBar(
-          // Compact widths: the actions row owns nearly the whole bar, so
-          // the FittedBox could only render this wordmark at an unreadable
-          // ~8px (it was fully crowded out before the theme button moved
-          // into the overflow menu). No title beats a squeezed one there.
+          // Compact widths: the slimmed actions row (app-bar audit) leaves
+          // room for the current destination's name — same label as the
+          // selected bottom-nav item, and a page heading for screen
+          // readers. First-run keeps the wordmark (its chrome is hidden,
+          // so there's room and no destination to name).
           title: isCompact
-              ? null
+              ? Text(
+                  firstRun
+                      ? 'Patrimonio'
+                      : _navShortLabel(
+                          AppLocalizations.of(context), _currentDest.id),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                )
               : const FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
@@ -3515,11 +3608,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               // Sandbox / Development indicator.
               if (!isCompact) _buildEnvChip(),
-              if (!isCompact) const SizedBox(width: 4),
-              // FX pill — keep visible on mobile too; the live USD/MXN
-              // rate is the most currency-relevant signal for this user.
-              _buildFxBadge(compact: true),
-              const SizedBox(width: 4),
+              if (!isCompact) const SizedBox(width: 8),
+              // FX pill — wide only. On phones the standalone pill was the
+              // over-budget 4th+ bar action AND a bordered chip with no tap
+              // handler (app-bar audit findings 1-2); the rate now rides
+              // inside the combined currency chip below instead.
+              if (!isCompact) ...[
+                _buildFxBadge(compact: true),
+                const SizedBox(width: 8),
+              ],
               NotificationsBell(
                 dismissedIds: _dismissedNotifs,
                 onMarkAllRead: (ids) {
@@ -3575,11 +3672,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // below — five always-on icons crowded a 360px AppBar.
             if (!isCompact) _ThemeCycleButton(),
             if (!firstRun)
-              _CurrencyToggleButton(
-                targetCurrency: _targetCurrency,
-                onSwap: () => _setTargetCurrency(
-                    _targetCurrency == 'USD' ? 'MXN' : 'USD'),
-              ),
+              // Compact: one combined "USD · 17.51" chip (48dp target, tap
+              // toggles the display currency, carries the FX rate the
+              // standalone pill used to show). Wide keeps the separate
+              // badge + toggle.
+              isCompact
+                  ? _buildCurrencyFxChip()
+                  : _CurrencyToggleButton(
+                      targetCurrency: _targetCurrency,
+                      onSwap: () => _setTargetCurrency(
+                          _targetCurrency == 'USD' ? 'MXN' : 'USD'),
+                    ),
             // Hidden Items, Security, and Sign Out live in a single overflow
             // menu so the AppBar doesn't clip at typical widths. Material 3
             // MenuAnchor anchors the menu to the button and opens it directly
@@ -3726,7 +3829,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 );
               },
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 8),
           ],
         ),
               // Narrow screens get a Material 3 bottom nav bar; wide
