@@ -18,6 +18,11 @@ class ConnectBankScreen extends StatefulWidget {
 }
 
 class _ConnectBankScreenState extends State<ConnectBankScreen> {
+  // Credentialed client, NOT package:http's top-level functions: on native
+  // only this client's shared jar attaches the session cookie (the browser
+  // does it for free on web) — raw http.get/post made every request here
+  // anonymous on Android, so the link-token fetch 401'd.
+  final http.Client _http = createApiClient();
   bool _isLoading = false;
   Map<String, dynamic>? _setupStatus;
 
@@ -37,12 +42,13 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
     for (final s in _plaidSubs) {
       s.cancel();
     }
+    _http.close();
     super.dispose();
   }
 
   Future<void> _loadSetupStatus() async {
     try {
-      final response = await http.get(
+      final response = await _http.get(
         Uri.parse('${apiBaseUrl()}/setup/status'),
         headers: apiExtraHeaders(),
       );
@@ -58,7 +64,7 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final response = await http.post(
+      final response = await _http.post(
         Uri.parse('${apiBaseUrl()}/institutions/link-token'),
         headers: {'X-Requested-With': 'fetch', ...apiExtraHeaders()},
       );
@@ -102,7 +108,7 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
       final String institutionName =
           event.metadata.institution?.name ?? 'Unknown institution';
 
-      final response = await http.post(
+      final response = await _http.post(
         Uri.parse('${apiBaseUrl()}/institutions/exchange-token'),
         headers: {
           'Content-Type': 'application/json',
