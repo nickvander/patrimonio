@@ -3105,7 +3105,12 @@ async fn loan_agreement(
   .sig div {{ flex:1; border-top: 1px solid var(--ink); padding-top: 6px; font-size: 12px; color:var(--muted); }}
   .note {{ margin-top: 28px; font-size: 11px; color: var(--muted); border-top:1px solid var(--line); padding-top:12px; }}
   @media (max-width: 520px) {{ .cards {{ grid-template-columns: 1fr; }} .dl {{ grid-template-columns: 130px 1fr; }} }}
-  @media print {{ body {{ padding:0; }} .tools {{ display:none; }} .card, thead th {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }} }}
+  /* Zero @page margins suppress the browser's print header/footer (URL,
+     date, page numbers) — those render INSIDE the page margin band. The
+     document supplies its own margins via body padding instead, so the
+     saved PDF is clean. */
+  @page {{ margin: 0; }}
+  @media print {{ body {{ padding: 16mm 18mm 18mm; }} .tools {{ display:none; }} .card, thead th {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }} }}
 </style></head><body>
 <div class="topbar">
   <span class="brand">Patrimonio</span>
@@ -3584,7 +3589,11 @@ async fn loan_payment_plan(
   .totals td {{ border-top: 2px solid #1a1a1a; font-weight: 700; }}
   td.paid {{ color: #2e7d5b; font-weight: 600; text-align: left; }}
   .note {{ margin-top: 28px; font-size: 11px; color: #777; }}
-  @media print {{ body {{ margin: 0; }} button {{ display: none; }} }}
+  /* Same trick as the loan agreement: @page margin 0 removes the
+     browser's URL/date/page-number print chrome; body padding provides
+     the visual margins in the saved PDF. */
+  @page {{ margin: 0; }}
+  @media print {{ body {{ margin: 0 auto; padding: 14mm 16mm; }} button {{ display: none; }} }}
 </style></head><body>
 <button onclick="window.print()" style="float:right;padding:6px 12px;">Print / Save as PDF</button>
 <h1>Payment plan</h1>
