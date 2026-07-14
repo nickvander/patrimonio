@@ -240,11 +240,47 @@ fn attach_redirect_uri(payload: &mut serde_json::Value, redirect: &Option<String
     }
 }
 
+/// Optional request body for the link-token endpoints: the client's
+/// platform ("android" / "ios" / "web"). Older clients send no body.
+#[derive(Deserialize, Default)]
+struct LinkTokenParams {
+    #[serde(default)]
+    platform: Option<String>,
+}
+
+/// Attach the OAuth return target for the requesting platform. A native
+/// Android app must NOT use the web `redirect_uri`: Plaid sends the OAuth
+/// return to the browser at that URL, stranding the Link session outside
+/// the app, and the public token is never delivered (a US Bank link died
+/// exactly this way). Android instead registers its package name and the
+/// Plaid SDK intercepts the OAuth return in-app. Web (and iOS, which uses
+/// an https universal link) keep the redirect_uri.
+fn attach_oauth_target(
+    payload: &mut serde_json::Value,
+    platform: Option<&str>,
+    config: &crate::config::AppConfig,
+) {
+    if platform == Some("android") {
+        if let Some(pkg) = &config.plaid_android_package_name {
+            payload["android_package_name"] = serde_json::Value::String(pkg.clone());
+            return;
+        }
+        tracing::warn!(
+            "Android client requested a link token but PLAID_ANDROID_PACKAGE_NAME \
+             is empty; falling back to redirect_uri — OAuth banks will not return \
+             to the app."
+        );
+    }
+    attach_redirect_uri(payload, &config.plaid_redirect_uri);
+}
+
 /// Creates a Plaid Link token
 async fn create_link_token(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
+    params: Option<Json<LinkTokenParams>>,
 ) -> Response {
+    let platform = params.and_then(|p| p.0.platform);
     let (client_id, secret) = match (&state.config.plaid_client_id, &state.config.plaid_secret) {
         (Some(client_id), Some(secret)) => (client_id, secret),
         _ => {
@@ -279,7 +315,7 @@ async fn create_link_token(
         "products": ["transactions"],
         "required_if_supported_products": ["investments"]
     });
-    attach_redirect_uri(&mut payload, &state.config.plaid_redirect_uri);
+    attach_oauth_target(&mut payload, platform.as_deref(), &state.config);
     // Plaid will POST update notifications to this URL once the item
     // is created. Items inherit the webhook URL from their link
     // session, so the *first* time Plaid Production is configured the
@@ -324,7 +360,9 @@ async fn create_reconnect_token(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
     axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
+    params: Option<Json<LinkTokenParams>>,
 ) -> Response {
+    let platform = params.and_then(|p| p.0.platform);
     let (client_id, secret) = match (&state.config.plaid_client_id, &state.config.plaid_secret) {
         (Some(client_id), Some(secret)) => (client_id, secret),
         _ => return json_error(StatusCode::SERVICE_UNAVAILABLE, "Plaid is not configured", None),
@@ -378,7 +416,7 @@ async fn create_reconnect_token(
             "client_user_id": ctx.user_id.to_string()
         }
     });
-    attach_redirect_uri(&mut payload, &state.config.plaid_redirect_uri);
+    attach_oauth_target(&mut payload, platform.as_deref(), &state.config);
     // Re-establish the webhook URL on every reconnect. Items that
     // were originally linked before PLAID_WEBHOOK_URL was configured
     // pick up the URL here, so reconnecting an old institution is

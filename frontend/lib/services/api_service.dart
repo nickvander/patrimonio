@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:http/http.dart' as http;
 import '../utils/app_locale.dart';
 import '../utils/projection_seed.dart';
@@ -1085,6 +1086,12 @@ class ApiService {
   Future<Map<String, dynamic>> getReconnectToken(String institutionId) async {
     final response = await _post(
       Uri.parse('$_baseUrl/institutions/reconnect-token/$institutionId'),
+      headers: {'Content-Type': 'application/json'},
+      // Same platform hint as the new-link flow: Android OAuth must return
+      // in-app via android_package_name, not the web redirect_uri.
+      body: json.encode({
+        'platform': kIsWeb ? 'web' : defaultTargetPlatform.name.toLowerCase(),
+      }),
     );
     if (response.statusCode == 200) {
       return json.decode(response.body);

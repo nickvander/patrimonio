@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:plaid_flutter/plaid_flutter.dart';
@@ -66,7 +68,19 @@ class _ConnectBankScreenState extends State<ConnectBankScreen> {
     try {
       final response = await _http.post(
         Uri.parse('${apiBaseUrl()}/institutions/link-token'),
-        headers: {'X-Requested-With': 'fetch', ...apiExtraHeaders()},
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Requested-With': 'fetch',
+          ...apiExtraHeaders(),
+        },
+        // OAuth banks need a platform-appropriate return target: Android
+        // gets android_package_name (the Plaid SDK intercepts the OAuth
+        // return in-app); web keeps the https redirect_uri. Without this,
+        // an Android OAuth link completes in the browser and the public
+        // token never reaches the app.
+        body: json.encode({
+          'platform': kIsWeb ? 'web' : defaultTargetPlatform.name.toLowerCase(),
+        }),
       );
 
       if (response.statusCode == 200) {

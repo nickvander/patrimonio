@@ -65,6 +65,7 @@ async fn try_setup() -> Option<(Router, TestLockGuard)> {
         coinbase_redirect_uri: "http://localhost/api/auth/coinbase/callback".to_string(),
         frontend_base_url: "http://localhost:3000".to_string(),
         plaid_redirect_uri: None,
+        plaid_android_package_name: None,
         plaid_webhook_url: None,
         trusted_proxy_cidrs: vec![],
         allowed_origins: vec!["http://localhost:3000".to_string()],

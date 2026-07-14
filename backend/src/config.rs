@@ -26,6 +26,14 @@ pub struct AppConfig {
     pub coinbase_redirect_uri: String,
     pub frontend_base_url: String,
     pub plaid_redirect_uri: Option<String>,
+    /// Android application id, registered under "Allowed Android package
+    /// names" in the Plaid dashboard. Sent as `android_package_name` (in
+    /// place of `redirect_uri`) when a native Android client requests a
+    /// link token: Android OAuth returns into the app via the Plaid SDK,
+    /// whereas a web redirect_uri strands the OAuth return in the browser
+    /// and the public token is never delivered to the app. Defaults to
+    /// this repo's applicationId; override with PLAID_ANDROID_PACKAGE_NAME.
+    pub plaid_android_package_name: Option<String>,
     /// Public URL Plaid uses to deliver webhooks for items linked
     /// through this deployment. Set to the externally-reachable HTTPS
     /// URL of the `/api/institutions/webhook` route — e.g.
@@ -117,6 +125,8 @@ impl AppConfig {
                 .unwrap_or_else(|_| "http://localhost:8080/api/auth/coinbase/callback".to_string()),
             frontend_base_url,
             plaid_redirect_uri: env_non_empty("PLAID_REDIRECT_URI"),
+            plaid_android_package_name: env_non_empty("PLAID_ANDROID_PACKAGE_NAME")
+                .or_else(|| Some("com.patrimonio.patrimonio".to_string())),
             plaid_webhook_url: env_non_empty("PLAID_WEBHOOK_URL"),
             trusted_proxy_cidrs: parse_cidr_list(
                 &std::env::var("TRUSTED_PROXY_CIDRS").unwrap_or_default(),
