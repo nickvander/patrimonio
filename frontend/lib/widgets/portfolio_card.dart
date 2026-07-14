@@ -382,150 +382,178 @@ class _PortfolioCardState extends State<PortfolioCard> {
     final showCoverage = hasNullBasis && _allHoldings.isNotEmpty;
 
     final isPositive = totalGainLoss >= 0;
-    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
 
     return Card(
-      elevation: 6,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: EdgeInsets.all(pad),
-        child: Column(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      // Width-responsive off the card's OWN constraint (inner LayoutBuilder,
+      // per the skill rule), not MediaQuery — the card can be narrower than
+      // the screen (outer tab padding, the 1600px clamp).
+      child: LayoutBuilder(builder: (context, c) {
+        // 688 ≈ the old 720 screen breakpoint minus the outer tab padding.
+        final pad = c.maxWidth < 688 ? 16.0 : 24.0;
+        // House ~420 phone breakpoint: compact chrome (overline title,
+        // tighter section gaps, abbreviated change pills) on phone widths;
+        // wider layouts are unchanged.
+        final isPhone = c.maxWidth < 420;
+        // Shrink the big total-value number so a long "USD 1,234,567.89"
+        // still fits a phone-width card without wrapping or ellipsis.
+        final heroFontSize = c.maxWidth < 400
+            ? 30.0
+            : c.maxWidth < 520
+                ? 36.0
+                : 42.0;
+        // A1 (round 3, a11y): the value caption, hero figure and
+        // change pills read as ONE labelled node — "Portfolio value
+        // $X, all-time +$Y (+Z%), today +$W (+V%)" — instead of four
+        // fragments. excludeSemantics folds the inner Texts away;
+        // the pills' visual tooltips (overlay-based) are unaffected.
+        // Explicit sign on the amount: losses must read "-$500.00", not a
+        // red "$500.00" (the abs() strips the minus, so it's re-applied).
+        final allTimeSign =
+            totalGainLoss > 0 ? '+' : totalGainLoss < 0 ? '-' : '';
+        final allTimeText =
+            '$allTimeSign${widget.currencyFormat.displayMoney(totalGainLoss.abs())} (${formatPercent(context, totalGainLossPct, digits: 2)})';
+        // Phones abbreviate the pill amount ("+$53.9K (50.36%)") so the
+        // all-time + today pills fit ONE Wrap row instead of stacking.
+        // Sign handling is identical to the full string above. The a11y
+        // heroLabel below keeps the FULL-precision strings — only the
+        // visual pill text compacts.
+        final allTimePillText = isPhone
+            ? '$allTimeSign${_compactMoney(totalGainLoss.abs())} (${formatPercent(context, totalGainLossPct, digits: 2)})'
+            : allTimeText;
+        final dayText = _dayChangeText();
+        final heroLabel = [
+          l.axPortfolioHero(
+              widget.currencyFormat.displayMoney(totalValue), allTimeText),
+          if (dayText != null) l.axHeroToday(dayText),
+        ].join(', ');
+        final summary = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            LayoutBuilder(builder: (context, c) {
-              // Shrink the big total-value number so a long "USD 1,234,567.89"
-              // still fits a phone-width card without wrapping or ellipsis.
-              final heroFontSize = c.maxWidth < 400
-                  ? 30.0
-                  : c.maxWidth < 520
-                      ? 36.0
-                      : 42.0;
-              // A1 (round 3, a11y): the value caption, hero figure and
-              // change pills read as ONE labelled node — "Portfolio value
-              // $X, all-time +$Y (+Z%), today +$W (+V%)" — instead of four
-              // fragments. excludeSemantics folds the inner Texts away;
-              // the pills' visual tooltips (overlay-based) are unaffected.
-              final allTimeText =
-                  '${totalGainLoss > 0 ? '+' : totalGainLoss < 0 ? '-' : ''}${widget.currencyFormat.displayMoney(totalGainLoss.abs())} (${formatPercent(context, totalGainLossPct, digits: 2)})';
-              final dayText = _dayChangeText();
-              final heroLabel = [
-                l.axPortfolioHero(
-                    widget.currencyFormat.displayMoney(totalValue), allTimeText),
-                if (dayText != null) l.axHeroToday(dayText),
-              ].join(', ');
-              final summary = Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header landmark so screen readers can jump to the card.
-                  // `container: true` per the round-2 lesson at the grouped
-                  // account header: without an explicit boundary the header
-                  // flag is absorbed by the CARD-level node and the whole
-                  // card announces as one giant heading.
-                  Semantics(
-                    container: true,
-                    header: true,
-                    child: Text(
-                      l.pfInvestmentPortfolio,
-                      style: TextStyle(
+            // Header landmark so screen readers can jump to the card.
+            // `container: true` per the round-2 lesson at the grouped
+            // account header: without an explicit boundary the header
+            // flag is absorbed by the CARD-level node and the whole
+            // card announces as one giant heading.
+            Semantics(
+              container: true,
+              header: true,
+              child: Text(
+                l.pfInvestmentPortfolio,
+                // Phones: the bottom-nav tab already names this surface,
+                // so the 22px in-card title compresses to a small overline
+                // and gives that first-viewport space back to the data.
+                style: isPhone
+                    ? TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.6,
+                        color: context.textSubtle,
+                      )
+                    : TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w700,
                         letterSpacing: -0.3,
                         color: context.textPrimary,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            SizedBox(height: isPhone ? 12 : 20),
+            Semantics(
+              container: true,
+              label: heroLabel,
+              excludeSemantics: true,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l.pfTotalValue,
+                    style: TextStyle(
+                      color: context.textSubtle,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.4,
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  Semantics(
-                    container: true,
-                    label: heroLabel,
-                    excludeSemantics: true,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          l.pfTotalValue,
-                          style: TextStyle(
-                            color: context.textSubtle,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0.4,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            widget.currencyFormat.displayMoney(totalValue),
-                            style: TextStyle(
-                              fontSize: heroFontSize,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -1.0,
-                              height: 1.1,
-                              color: context.textPrimary,
-                              fontFeatures: const [
-                                FontFeature.tabularFigures()
-                              ],
-                            ),
-                            maxLines: 1,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        // All-time pill + (when the backend reports it,
-                        // contract C-B) a "today" pill with identical
-                        // geometry. A Wrap so a 400px-wide card stacks the
-                        // two instead of overflowing.
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            _heroChangePill(
-                              positive: isPositive,
-                              // Explicit sign on the amount: losses must read
-                              // "-$500.00", not a red "$500.00" (the abs()
-                              // strips the minus, so it's re-applied here).
-                              text: allTimeText,
-                            ),
-                            ?_buildTodayPill(l),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (showCoverage) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      l.pfReturnCoverage(
-                        _compactMoney(coveredValue),
-                        _compactMoney(totalValue),
-                      ),
+                  const SizedBox(height: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      widget.currencyFormat.displayMoney(totalValue),
                       style: TextStyle(
-                        color: context.textSubtle,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        height: 1.3,
+                        fontSize: heroFontSize,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -1.0,
+                        height: 1.1,
+                        color: context.textPrimary,
+                        fontFeatures: const [
+                          FontFeature.tabularFigures()
+                        ],
                       ),
-                      maxLines: 2,
+                      maxLines: 1,
                     ),
-                  ],
+                  ),
+                  const SizedBox(height: 12),
+                  // All-time pill + (when the backend reports it,
+                  // contract C-B) a "today" pill with identical
+                  // geometry. Phones compact the amounts (above) so
+                  // both pills share one row; the Wrap still stacks
+                  // them if an extreme value overflows anyway.
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _heroChangePill(
+                        positive: isPositive,
+                        text: allTimePillText,
+                      ),
+                      ?_buildTodayPill(l, compact: isPhone),
+                    ],
+                  ),
                 ],
-              );
-              // The donut-by-holding chart was removed: it duplicated the
-              // "Asset distribution" allocation card (two part-to-whole
-              // encodings of the same data) and the holdings table. The hero
-              // now owns the headline number + change; allocation lives in the
-              // one allocation card, per-holding detail in the table below.
-              return summary;
-            }),
-            const SizedBox(height: 24),
-            _buildSummaryKpis(),
-            const SizedBox(height: 16),
-            _buildDualCurrencyPanel(),
+              ),
+            ),
+            if (showCoverage) ...[
+              const SizedBox(height: 6),
+              Text(
+                l.pfReturnCoverage(
+                  _compactMoney(coveredValue),
+                  _compactMoney(totalValue),
+                ),
+                style: TextStyle(
+                  color: context.textSubtle,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  height: 1.3,
+                ),
+                maxLines: 2,
+              ),
+            ],
           ],
-        ),
-      ),
+        );
+        // The donut-by-holding chart was removed: it duplicated the
+        // "Asset distribution" allocation card (two part-to-whole
+        // encodings of the same data) and the holdings table. The hero
+        // now owns the headline number + change; allocation lives in the
+        // one allocation card, per-holding detail in the table below.
+        return Padding(
+          padding: EdgeInsets.all(pad),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              summary,
+              SizedBox(height: isPhone ? 12 : 24),
+              _buildSummaryKpis(),
+              SizedBox(height: isPhone ? 12 : 16),
+              _buildDualCurrencyPanel(),
+            ],
+          ),
+        );
+      }),
     );
   }
 
@@ -582,8 +610,11 @@ class _PortfolioCardState extends State<PortfolioCard> {
   /// Signed day-change text ("-$731.53 (-1.41%)") from the contract C-B
   /// top-level fields, or null when the backend doesn't send them. Shared
   /// by the "today" pill and the hero's merged a11y label (A1) so the two
-  /// can never drift apart.
-  String? _dayChangeText() {
+  /// can never drift apart. [compact] abbreviates the amount through
+  /// [_compactMoney] ("-$731.53" → "-$731.53", "-$7,315.30" → "-$7.32K")
+  /// for the phone-width pill; the a11y label always passes false so the
+  /// spoken figure stays full-precision.
+  String? _dayChangeText({bool compact = false}) {
     final dayUsd =
         (widget.portfolioData['day_change_usd'] as num?)?.toDouble();
     if (dayUsd == null) return null;
@@ -593,7 +624,8 @@ class _PortfolioCardState extends State<PortfolioCard> {
     // (-1.41%)"), which the .abs() calls below would otherwise strip.
     final sign = dayUsd > 0 ? '+' : dayUsd < 0 ? '-' : '';
     final converted = dayUsd * widget.conversionFactor;
-    final amount = '$sign${widget.currencyFormat.displayMoney(converted.abs())}';
+    final amount =
+        '$sign${compact ? _compactMoney(converted.abs()) : widget.currencyFormat.displayMoney(converted.abs())}';
     return dayPct == null
         ? amount
         : '$amount (${dayPct > 0 ? '+' : dayPct < 0 ? '-' : ''}${formatPercent(context, dayPct.abs(), digits: 2)})';
@@ -604,7 +636,9 @@ class _PortfolioCardState extends State<PortfolioCard> {
   /// the fields (older server, or nothing is covered) — the pill simply
   /// doesn't render. When coverage is partial or the closes are stale, a
   /// tooltip discloses the as-of date and covered share honestly.
-  Widget? _buildTodayPill(AppLocalizations l) {
+  /// [compact] routes the displayed amount through [_compactMoney] on
+  /// phone widths (the tooltip / a11y strings stay full-precision).
+  Widget? _buildTodayPill(AppLocalizations l, {bool compact = false}) {
     final dayUsd =
         (widget.portfolioData['day_change_usd'] as num?)?.toDouble();
     if (dayUsd == null) return null;
@@ -620,7 +654,7 @@ class _PortfolioCardState extends State<PortfolioCard> {
     // Flat day: nothing moved (both the amount and the % are zero) — the
     // pill renders neutral (muted, no arrow) instead of a green "+$0.00".
     final flat = dayUsd == 0 && (dayPct ?? 0) == 0;
-    final change = _dayChangeText()!;
+    final change = _dayChangeText(compact: compact)!;
 
     final pill = _heroChangePill(
       positive: positive,
@@ -649,26 +683,19 @@ class _PortfolioCardState extends State<PortfolioCard> {
     );
   }
 
-  /// Abbreviates a display-currency amount as `$1.53M` / `$160.7K` so the
-  /// return-coverage caption stays on one or two short lines. Reuses the
-  /// hero formatter's currency symbol (so `$` vs `MXN ` follows the target
-  /// currency) and falls back to the full formatter under $1K where an
-  /// abbreviation would lose precision without saving space.
+  /// Abbreviates a display-currency amount as `$1.53M` / `$53.9K` so the
+  /// return-coverage caption stays on one or two short lines. Formatting goes
+  /// through `NumberFormat.compactCurrency` (house rule: never build money
+  /// strings by hand), mirroring `moneyFormat`'s name/symbol split so `$` vs
+  /// `MXN ` follows the target currency. Falls back to the full formatter
+  /// under $1K, where compaction would drop the cents without saving space.
   String _compactMoney(double amount) {
-    final symbol = widget.currencyFormat.currencySymbol;
-    final abs = amount.abs();
-    final sign = amount < 0 ? '-' : '';
-    String body;
-    if (abs >= 1e9) {
-      body = '${(abs / 1e9).toStringAsFixed(2)}B';
-    } else if (abs >= 1e6) {
-      body = '${(abs / 1e6).toStringAsFixed(2)}M';
-    } else if (abs >= 1e3) {
-      body = '${(abs / 1e3).toStringAsFixed(1)}K';
-    } else {
-      return widget.currencyFormat.format(amount);
-    }
-    return '$sign$symbol$body';
+    if (amount.abs() < 1000) return widget.currencyFormat.format(amount);
+    return NumberFormat.compactCurrency(
+      locale: widget.currencyFormat.locale,
+      name: widget.currencyFormat.currencyName,
+      symbol: widget.currencyFormat.currencySymbol,
+    ).format(amount);
   }
 
   /// Holdings slice: search/toolbar + the holdings table (flat or grouped).
@@ -845,6 +872,69 @@ class _PortfolioCardState extends State<PortfolioCard> {
       );
     }
 
+    // Phone-width variant: ONE compact single-line row (~48dp) instead of a
+    // full 4-row tile. Surface styling matches _KpiTile so the row sits
+    // visually inside the KPI grid above it. Reads as an FX equivalence
+    // ("Total value in pesos  ≈ MX$…"): a plain-language label carries the
+    // meaning and the money string alone carries the currency — a code on
+    // the left would just repeat the MX$/$ symbol. The P/L is dropped —
+    // converted at one spot rate its percentage is identical to the hero
+    // pill right above, so repeating it here cost cramped type for no
+    // information. The >=520 branch keeps the full side-by-side comparison.
+    Widget compactRow({
+      required String label,
+      required String totalValueStr,
+    }) {
+      return Semantics(
+        container: true,
+        label: '$label: ≈ $totalValueStr',
+        excludeSemantics: true,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: context.tint(0.03),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: context.tint(0.06)),
+          ),
+          child: Row(
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: context.textSubtle,
+                  letterSpacing: 0.3,
+                ),
+              ),
+              const SizedBox(width: 12),
+              // The value claims the rest of the row, right-aligned.
+              // FittedBox(scaleDown) — the hero's own idiom — shrinks it
+              // slightly when a big MXN figure won't fit at full size:
+              // scaled-but-complete money beats digits lost to an ellipsis.
+              Expanded(
+                flex: 3,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    '≈ $totalValueStr',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: context.textPrimary,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                    maxLines: 1,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final usdTile = tile(
       currencyTitle: 'USD',
       currencySubtitle: l.pfUsDollar,
@@ -866,16 +956,19 @@ class _PortfolioCardState extends State<PortfolioCard> {
       builder: (context, c) {
         final narrow = c.maxWidth < 520;
         if (narrow) {
-          // Stack on phone widths — two tiles side-by-side are too
-          // squeezed to fit the value + P/L numbers without
-          // ellipsising. Vertical stack keeps the comparison readable.
-          return Column(
-            children: [
-              Row(children: [usdTile]),
-              const SizedBox(height: 8),
-              Row(children: [mxnTile]),
-            ],
-          );
+          // Phone widths: the tile matching the display currency repeats
+          // the hero's exact figures, so drop it and render only the OTHER
+          // currency as one compact row. The >=520 branch keeps BOTH full
+          // tiles — the side-by-side comparison is intentional there.
+          return widget.targetCurrency == 'MXN'
+              ? compactRow(
+                  label: l.pfTotalInUsd,
+                  totalValueStr: usdFmt.displayMoney(valUsd),
+                )
+              : compactRow(
+                  label: l.pfTotalInMxn,
+                  totalValueStr: mxnFmt.displayMoney(valMxn),
+                );
         }
         return Row(
           children: [
@@ -1005,7 +1098,11 @@ class _PortfolioCardState extends State<PortfolioCard> {
     ];
 
     return LayoutBuilder(builder: (ctx, c) {
-      final perRow = c.maxWidth >= 520 ? 2 : 1;
+      // 2-up even on phones — _KpiTile ellipsizes label/value/sub, so a
+      // ~150px tile is overflow-safe, and stacked full-width tiles wasted
+      // most of the first viewport on narrow screens. 300, not 320: a 390px
+      // phone leaves ~318px here after page (20) + card (16) padding.
+      final perRow = c.maxWidth >= 300 ? 2 : 1;
       final tileWidth = (c.maxWidth - 12 * (perRow - 1)) / perRow;
       return Wrap(
         spacing: 12,

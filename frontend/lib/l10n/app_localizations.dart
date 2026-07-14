@@ -806,6 +806,12 @@ abstract class AppLocalizations {
   /// **'Filter transactions'**
   String get txFilterTransactions;
 
+  /// No description provided for @txFilterSort.
+  ///
+  /// In en, this message translates to:
+  /// **'Filter & sort'**
+  String get txFilterSort;
+
   /// No description provided for @txFilterLoadingHistory.
   ///
   /// In en, this message translates to:
@@ -6389,6 +6395,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Mexican Peso'**
   String get pfMexicanPeso;
+
+  /// No description provided for @pfTotalInMxn.
+  ///
+  /// In en, this message translates to:
+  /// **'Total value in pesos'**
+  String get pfTotalInMxn;
+
+  /// No description provided for @pfTotalInUsd.
+  ///
+  /// In en, this message translates to:
+  /// **'Total value in dollars'**
+  String get pfTotalInUsd;
 
   /// No description provided for @pfHoldings.
   ///

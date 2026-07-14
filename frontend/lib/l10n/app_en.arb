@@ -134,6 +134,7 @@
   "txCloseSearch": "Close search",
   "txRecentTransactions": "Recent transactions",
   "txFilterTransactions": "Filter transactions",
+  "txFilterSort": "Filter & sort",
   "txFilterLoadingHistory": "Loading your full history so every option is available…",
   "txExitSelectionMode": "Exit selection mode",
   "txSelectMultiple": "Select multiple",
@@ -1554,6 +1555,8 @@
   "pfProfitLoss": "Profit / Loss",
   "pfUsDollar": "US Dollar",
   "pfMexicanPeso": "Mexican Peso",
+  "pfTotalInMxn": "Total value in pesos",
+  "pfTotalInUsd": "Total value in dollars",
   "pfHoldings": "Holdings",
   "pfAccountsCount": "{count, plural, =1{1 account} other{{count} accounts}}",
   "@pfAccountsCount": {

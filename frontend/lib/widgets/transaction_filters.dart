@@ -38,6 +38,35 @@ extension TxDateRangeLabel on TxDateRange {
   }
 }
 
+/// Row ordering for the transactions list. `dateNewest` is the default
+/// and the only mode that keeps the date-group headers (month landmarks
+/// + day headings); every other mode renders a flat, header-less list.
+enum TxSort {
+  dateNewest,
+  dateOldest,
+  amountHigh,
+  amountLow,
+  merchant,
+}
+
+/// User-facing label for a [TxSort] mode — shared by the wide toolbar's
+/// sort menu, the filter panel's "Sort by" section, and the active-sort
+/// chip in the transactions tab.
+String txSortLabel(AppLocalizations l, TxSort mode) {
+  switch (mode) {
+    case TxSort.dateNewest:
+      return l.txSortDateNewest;
+    case TxSort.dateOldest:
+      return l.txSortDateOldest;
+    case TxSort.amountHigh:
+      return l.txSortAmountHigh;
+    case TxSort.amountLow:
+      return l.txSortAmountLow;
+    case TxSort.merchant:
+      return l.txSortMerchant;
+  }
+}
+
 /// Immutable bundle of filter selections applied to the transactions
 /// list. Empty when every field is "all" — i.e. the list is unfiltered.
 class TxFilters {
@@ -205,11 +234,19 @@ double? parseFilterAmount(String raw) {
   return double.tryParse(t)?.abs();
 }
 
-/// Filter editor — shown as a dialog on wide screens, bottom sheet on
-/// narrow. Lets the user multi-select accounts and categories and pick
-/// flow/status. Returns the new TxFilters when the user taps Apply.
+/// Filter & sort editor — shown as an AlertDialog on wide screens and a
+/// modal bottom sheet on narrow (set [asSheet]). Lets the user
+/// multi-select accounts and categories, pick flow/status/date/amount,
+/// and choose the row ordering. Pops a `(TxFilters, TxSort)` record when
+/// the user taps Apply; pops null on Cancel/dismiss.
 class TxFiltersDialog extends StatefulWidget {
   final TxFilters initial;
+  /// Sort mode the "Sort by" section starts on.
+  final TxSort initialSort;
+  /// True when hosted inside `showModalBottomSheet` (narrow layouts):
+  /// renders the sheet shell (header + scrollable body + pinned action
+  /// row) instead of the AlertDialog shell.
+  final bool asSheet;
   /// All transactions in the parent list — used to derive the distinct
   /// set of account names and category labels the user can filter by.
   final List<dynamic> transactions;
@@ -230,6 +267,8 @@ class TxFiltersDialog extends StatefulWidget {
   const TxFiltersDialog({
     super.key,
     required this.initial,
+    this.initialSort = TxSort.dateNewest,
+    this.asSheet = false,
     required this.transactions,
     required this.accounts,
     this.historyLoad,
@@ -242,6 +281,7 @@ class TxFiltersDialog extends StatefulWidget {
 
 class _TxFiltersDialogState extends State<TxFiltersDialog> {
   late TxFilters _draft;
+  late TxSort _draftSort;
   // Free-typed min/max amount bounds. Parsed only on Apply (and
   // swapped if the user typed them backwards) so half-typed numbers
   // never fight the draft state while editing.
@@ -256,6 +296,7 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
   void initState() {
     super.initState();
     _draft = widget.initial;
+    _draftSort = widget.initialSort;
     if (widget.initial.minAmount != null) {
       _minAmountCtrl.text = formatFilterAmount(widget.initial.minAmount!);
     }
@@ -278,9 +319,10 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
     super.dispose();
   }
 
-  /// Fold the amount fields into the draft and close. min > max is
-  /// silently swapped — the user's intent ("between these two
-  /// numbers") is unambiguous, so a graceful fix beats an error.
+  /// Fold the amount fields into the draft and close, returning the
+  /// `(filters, sort)` pair. min > max is silently swapped — the user's
+  /// intent ("between these two numbers") is unambiguous, so a graceful
+  /// fix beats an error.
   void _apply() {
     var lo = parseFilterAmount(_minAmountCtrl.text);
     var hi = parseFilterAmount(_maxAmountCtrl.text);
@@ -289,18 +331,21 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
       lo = hi;
       hi = tmp;
     }
-    Navigator.pop<TxFilters>(
+    Navigator.pop<(TxFilters, TxSort)>(
       context,
-      TxFilters(
-        accountIds: _draft.accountIds,
-        categories: _draft.categories,
-        flow: _draft.flow,
-        status: _draft.status,
-        dateRange: _draft.dateRange,
-        customStart: _draft.customStart,
-        customEnd: _draft.customEnd,
-        minAmount: lo,
-        maxAmount: hi,
+      (
+        TxFilters(
+          accountIds: _draft.accountIds,
+          categories: _draft.categories,
+          flow: _draft.flow,
+          status: _draft.status,
+          dateRange: _draft.dateRange,
+          customStart: _draft.customStart,
+          customEnd: _draft.customEnd,
+          minAmount: lo,
+          maxAmount: hi,
+        ),
+        _draftSort,
       ),
     );
   }
@@ -358,30 +403,99 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final accountOptions = _accountOptions();
-    final categoryOptions = _categoryOptions();
+    return widget.asSheet ? _sheetShell(l) : _dialogShell(l);
+  }
 
+  /// Wide-layout shell — the AlertDialog presentation.
+  Widget _dialogShell(AppLocalizations l) {
     return AlertDialog(
-      title: Row(
-        children: [
-          Expanded(child: Text(l.txFilterTransactions)),
-          if (_draft.isActive ||
-              _minAmountCtrl.text.isNotEmpty ||
-              _maxAmountCtrl.text.isNotEmpty)
-            TextButton(
-              onPressed: () => setState(() {
-                _draft = TxFilters.empty;
-                _minAmountCtrl.clear();
-                _maxAmountCtrl.clear();
-              }),
-              child: Text(l.txReset),
-            ),
-        ],
-      ),
+      title: _titleRow(l),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480, maxHeight: 560),
-        child: SingleChildScrollView(
-          child: Column(
+        child: SingleChildScrollView(child: _body(l)),
+      ),
+      actions: _actionButtons(l),
+    );
+  }
+
+  /// Narrow-layout shell for `showModalBottomSheet`: header + scrollable
+  /// body with the action row pinned at the bottom of the sheet. The
+  /// viewInsets padding keeps Apply clear of the soft keyboard while the
+  /// amount fields are being edited.
+  Widget _sheetShell(AppLocalizations l) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        bottom: 16 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DefaultTextStyle(
+            style: Theme.of(context).textTheme.titleLarge ??
+                const TextStyle(fontSize: 22),
+            child: _titleRow(l),
+          ),
+          const SizedBox(height: 8),
+          Flexible(child: SingleChildScrollView(child: _body(l))),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              for (final b in _actionButtons(l)) ...[
+                const SizedBox(width: 8),
+                b,
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Header shared by both shells: panel title + a Reset affordance
+  /// that appears once anything (filters, amounts, or sort) deviates
+  /// from the defaults.
+  Widget _titleRow(AppLocalizations l) {
+    return Row(
+      children: [
+        Expanded(child: Text(l.txFilterSort)),
+        if (_draft.isActive ||
+            _draftSort != TxSort.dateNewest ||
+            _minAmountCtrl.text.isNotEmpty ||
+            _maxAmountCtrl.text.isNotEmpty)
+          TextButton(
+            onPressed: () => setState(() {
+              _draft = TxFilters.empty;
+              _draftSort = TxSort.dateNewest;
+              _minAmountCtrl.clear();
+              _maxAmountCtrl.clear();
+            }),
+            child: Text(l.txReset),
+          ),
+      ],
+    );
+  }
+
+  List<Widget> _actionButtons(AppLocalizations l) => [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(l.actionCancel),
+        ),
+        FilledButton(
+          onPressed: _apply,
+          child: Text(l.actionApply),
+        ),
+      ];
+
+  /// Filter + sort sections shared by both shells (the shells provide
+  /// the scrolling).
+  Widget _body(AppLocalizations l) {
+    final accountOptions = _accountOptions();
+    final categoryOptions = _categoryOptions();
+    return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -590,21 +704,30 @@ class _TxFiltersDialogState extends State<TxFiltersDialog> {
                   ],
                 ),
               ],
+              const SizedBox(height: 18),
+              _sectionLabel(l.txSortBy),
+              const SizedBox(height: 2),
+              RadioGroup<TxSort>(
+                groupValue: _draftSort,
+                onChanged: (v) => setState(
+                    () => _draftSort = v ?? TxSort.dateNewest),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final mode in TxSort.values)
+                      RadioListTile<TxSort>(
+                        value: mode,
+                        // dense keeps each option at the 48dp minimum
+                        // touch target instead of the 56dp default.
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(txSortLabel(l, mode)),
+                      ),
+                  ],
+                ),
+              ),
             ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop<TxFilters>(context),
-          child: Text(l.actionCancel),
-        ),
-        FilledButton(
-          onPressed: _apply,
-          child: Text(l.actionApply),
-        ),
-      ],
-    );
+          );
   }
 
   Widget _sectionLabel(String text) => Text(

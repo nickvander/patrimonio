@@ -273,14 +273,28 @@ void main() {
       expect(find.widgetWithText(TextField, 'Food & drink'), findsOneWidget);
       expect(find.text('FOOD_AND_DRINK'), findsNothing);
 
-      // Open-then-Save with zero edits must be a pure no-op: previously it
-      // unconditionally wrote userCategory/userNotes, silently converting
-      // the auto-category into a user override of the raw enum string.
-      await tester.ensureVisible(find.text('Save'));
-      await tester.tap(find.text('Save'));
+      // A clean (unedited) open shows NO Save footer at all — the button
+      // only appears once a field actually differs from its prefill, so an
+      // open-then-dismiss can never silently convert the auto-category
+      // into a user override of the raw enum string.
+      expect(find.text('Save'), findsNothing);
+
+      // Typing a real change makes Save appear; reverting it back to the
+      // prefill hides it again (diffed, not just "touched").
+      final catField = find.widgetWithText(TextField, 'Category');
+      await tester.enterText(catField, 'Something else');
+      await tester.pumpAndSettle();
+      expect(find.text('Save'), findsOneWidget);
+      await tester.enterText(catField, 'Food & drink');
+      await tester.pumpAndSettle();
+      expect(find.text('Save'), findsNothing);
+
+      // Dismiss (wide layout: the leading close X) → nothing is sent.
+      await tester.tap(find.byTooltip('Close'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Save'), findsNothing); // panel closed
+      expect(find.widgetWithText(TextField, 'Food & drink'),
+          findsNothing); // panel closed
       expect(updates, isEmpty);
     });
 

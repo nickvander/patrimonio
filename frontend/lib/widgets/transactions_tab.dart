@@ -54,7 +54,7 @@ final RegExp _trailingZeros = RegExp(r'\.?0+$');
 /// services/sync.rs:659) or how the row formats the currency.
 ///
 /// Top-level (not a method) so the field list is unit-testable without
-/// pumping the tab; [_TransactionsTabState._haystackFor] wraps it with
+/// pumping the tab; [TransactionsTabState._haystackFor] wraps it with
 /// the per-list-identity memoization.
 String searchHaystackFor(Map<String, dynamic> tx) {
   final label = displayLabel(tx).toLowerCase();
@@ -263,6 +263,12 @@ class TransactionsTab extends StatefulWidget {
   /// Add-loan dialog (principal = |amount|, currency, date, borrower from
   /// the tx, disbursement linked to this tx). Null hides the action.
   final void Function(dynamic tx)? onCreateLoanFromTx;
+  /// The host renders its own Add-transaction affordance (the dashboard's
+  /// compact-layout FAB, wired to [TransactionsTabState.openAddDialog] via
+  /// a GlobalKey). When true the toolbar hides its inline '+' and the
+  /// transaction list gains bottom padding so the FAB never occludes the
+  /// last row. Defaults to false — every existing host keeps the inline '+'.
+  final bool hostProvidesAddFab;
 
   const TransactionsTab({
     super.key,
@@ -297,26 +303,18 @@ class TransactionsTab extends StatefulWidget {
     this.singleAccountContext = false,
     this.runningBalanceAnchor,
     this.onCreateLoanFromTx,
+    this.hostProvidesAddFab = false,
   });
 
   @override
-  State<TransactionsTab> createState() => _TransactionsTabState();
+  State<TransactionsTab> createState() => TransactionsTabState();
 }
 
-/// Row ordering for the sort menu. `dateNewest` is the default and the
-/// only mode that keeps the date-group headers (month landmarks + day
-/// headings); every other mode renders a flat list with no headers.
-enum _TxSort {
-  dateNewest,
-  dateOldest,
-  amountHigh,
-  amountLow,
-  merchant,
-}
+// Row ordering: the public `TxSort` enum lives in transaction_filters.dart
+// (the filter panel edits it alongside the filters).
 
-class _TransactionsTabState extends State<TransactionsTab> {
+class TransactionsTabState extends State<TransactionsTab> {
   String _searchQuery = '';
-  bool _searchOpenOnNarrow = false;
   TxFilters _filters = TxFilters.empty;
   // Tracks the most recent searchOverride we applied so future rebuilds
   // don't keep re-seeding the input over user edits.
@@ -329,9 +327,9 @@ class _TransactionsTabState extends State<TransactionsTab> {
   bool _selectionMode = false;
   final Set<String> _selectedIds = {};
   // Active row ordering (see the sort menu in _buildToolbar). Only
-  // _TxSort.dateNewest keeps the grouped (month/day header) view; every
+  // TxSort.dateNewest keeps the grouped (month/day header) view; every
   // other mode renders a flat, header-less list (see _ensureItemPlan).
-  _TxSort _sortMode = _TxSort.dateNewest;
+  TxSort _sortMode = TxSort.dateNewest;
   // Deferred-delete buffer for the Undo affordance. Ids in here are
   // hidden from the displayed/filtered list immediately on delete, but
   // the actual onDelete/onBulkDelete call is only committed when the
@@ -392,7 +390,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
   // sort mode and the count of pending-delete ids (a count change is the
   // only way the hidden set affects the result — a delete adds an id, an
   // undo removes one). The sort sentinel forces a first-run rebuild.
-  _TxSort? _filteredCacheSort;
+  TxSort? _filteredCacheSort;
   int _filteredCachePendingDeleteCount = 0;
   final Map<String, String> _haystackCache = {};
   int _haystackCacheIdentity = 0;
@@ -431,24 +429,22 @@ class _TransactionsTabState extends State<TransactionsTab> {
       _searchQuery = seed;
       _searchController.text = seed;
       _appliedOverride = seed;
-      _searchOpenOnNarrow = true;
     }
     _maybeApplyDateSeed(widget.dateSeed);
   }
 
   @override
-  void didUpdateWidget(TransactionsTab old) {
-    super.didUpdateWidget(old);
+  void didUpdateWidget(TransactionsTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
     final seed = widget.searchOverride;
     if (seed != null && seed.isNotEmpty && seed != _appliedOverride) {
       setState(() {
         _searchQuery = seed;
         _searchController.text = seed;
         _appliedOverride = seed;
-        _searchOpenOnNarrow = true;
       });
     }
-    if (widget.dateSeed != null && widget.dateSeed != old.dateSeed) {
+    if (widget.dateSeed != null && widget.dateSeed != oldWidget.dateSeed) {
       _maybeApplyDateSeed(widget.dateSeed);
     }
   }
@@ -655,19 +651,19 @@ class _TransactionsTabState extends State<TransactionsTab> {
   /// secondary key.
   List<dynamic> _applySort(List<dynamic> rows) {
     switch (_sortMode) {
-      case _TxSort.dateNewest:
+      case TxSort.dateNewest:
         return rows;
-      case _TxSort.dateOldest:
+      case TxSort.dateOldest:
         return rows.reversed.toList();
-      case _TxSort.amountHigh:
+      case TxSort.amountHigh:
         final out = List<dynamic>.from(rows);
         out.sort((a, b) => _absAmount(b).compareTo(_absAmount(a)));
         return out;
-      case _TxSort.amountLow:
+      case TxSort.amountLow:
         final out = List<dynamic>.from(rows);
         out.sort((a, b) => _absAmount(a).compareTo(_absAmount(b)));
         return out;
-      case _TxSort.merchant:
+      case TxSort.merchant:
         final out = List<dynamic>.from(rows);
         out.sort((a, b) => _merchantKey(a).compareTo(_merchantKey(b)));
         return out;
@@ -758,7 +754,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
     return hay;
   }
 
-  Future<void> _openFilters() async {
+  Future<void> _openFilters({required bool isNarrow}) async {
     // Make the option lists (categories especially) reflect the user's
     // WHOLE history, not just the pages loaded so far — a category that
     // only occurs in unloaded history was previously impossible to select.
@@ -767,26 +763,58 @@ class _TransactionsTabState extends State<TransactionsTab> {
     // false) costs nothing and shows no loading affordance.
     final Future<void>? historyLoad =
         widget.hasMore ? _loadAllForFilter(ignoreFilters: true) : null;
-    final result = await showDialog<TxFilters>(
-      context: context,
-      builder: (_) => TxFiltersDialog(
-        initial: _filters,
-        transactions: widget.transactions,
-        accounts: widget.accounts,
-        historyLoad: historyLoad,
-        // Live getter: when the cascade completes the dialog re-reads the
-        // (by then fully loaded) list so its options refresh in place.
-        liveTransactions: () => widget.transactions,
-      ),
-    );
-    if (result != null && mounted) setState(() => _filters = result);
+    Widget panel({required bool asSheet}) => TxFiltersDialog(
+          initial: _filters,
+          initialSort: _sortMode,
+          asSheet: asSheet,
+          transactions: widget.transactions,
+          accounts: widget.accounts,
+          historyLoad: historyLoad,
+          // Live getter: when the cascade completes the panel re-reads the
+          // (by then fully loaded) list so its options refresh in place.
+          liveTransactions: () => widget.transactions,
+        );
+    // Narrow hosts get a modal bottom sheet (thumb-reachable, standard
+    // mobile idiom); wide keeps the AlertDialog. Both pop the same
+    // (filters, sort) record from the shared panel body.
+    final (TxFilters, TxSort)? result;
+    if (isNarrow) {
+      result = await showModalBottomSheet<(TxFilters, TxSort)>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        showDragHandle: true,
+        builder: (sheetContext) => ConstrainedBox(
+          // Cap the sheet below full height so it still reads as a sheet;
+          // the panel's inner scroll view handles longer content.
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.9,
+          ),
+          child: panel(asSheet: true),
+        ),
+      );
+    } else {
+      result = await showDialog<(TxFilters, TxSort)>(
+        context: context,
+        builder: (_) => panel(asSheet: false),
+      );
+    }
+    if (result == null || !mounted) return;
+    final (filters, sort) = result;
+    setState(() {
+      _filters = filters;
+      _sortMode = sort;
+    });
   }
 
   /// Removable chip strip below the toolbar showing every active filter
-  /// in a single horizontal scroll. Tapping the X on a chip clears just
-  /// that one; the strip hides entirely when nothing's active.
+  /// (and a non-default sort) in a single horizontal scroll. Tapping the
+  /// X on a chip clears just that one; the strip hides entirely when
+  /// nothing's active.
   Widget _activeFilterChips(bool isNarrow) {
-    if (!_filters.isActive) return const SizedBox.shrink();
+    if (!_filters.isActive && _sortMode == TxSort.dateNewest) {
+      return const SizedBox.shrink();
+    }
     final l = AppLocalizations.of(context);
     final chips = <Widget>[];
     if (_filters.flow != TxFlow.all) {
@@ -868,8 +896,20 @@ class _TransactionsTabState extends State<TransactionsTab> {
         () => setState(() => _filters = _filters.copyWith(clearAmounts: true)),
       ));
     }
+    // Sort isn't a filter, but a non-default order changes what the list
+    // shows just as visibly (headers disappear, rows re-order) — surface
+    // it in the same strip so it's one tap to see and one tap to undo.
+    if (_sortMode != TxSort.dateNewest) {
+      chips.add(_filterChip(
+        txSortLabel(l, _sortMode),
+        () => setState(() => _sortMode = TxSort.dateNewest),
+      ));
+    }
     chips.add(TextButton(
-      onPressed: () => setState(() => _filters = TxFilters.empty),
+      onPressed: () => setState(() {
+        _filters = TxFilters.empty;
+        _sortMode = TxSort.dateNewest;
+      }),
       style: TextButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 8),
         minimumSize: const Size(0, 28),
@@ -921,7 +961,6 @@ class _TransactionsTabState extends State<TransactionsTab> {
     setState(() {
       _searchQuery = '';
       _searchController.clear();
-      _searchOpenOnNarrow = false;
       _filters = TxFilters.empty;
     });
   }
@@ -1050,6 +1089,14 @@ class _TransactionsTabState extends State<TransactionsTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildToolbar(isNarrow),
+              // Persistent search on narrow: a full-width row of its own
+              // right under the toolbar (wide keeps the inline 280px
+              // field in the toolbar). Always visible — no toggle to
+              // discover, and closing nothing means the query survives.
+              if (isNarrow) ...[
+                const SizedBox(height: 8),
+                SizedBox(height: 40, child: _searchField()),
+              ],
               _activeFilterChips(isNarrow),
               const SizedBox(height: 8),
               Text(
@@ -1978,36 +2025,22 @@ class _TransactionsTabState extends State<TransactionsTab> {
     );
   }
 
-  /// Sort menu: picks the row ordering. A dot badge (mirroring the
-  /// filter button) marks any non-default order; a check marks the
-  /// active option. Selecting a mode just flips _sortMode — the
+  /// Sort menu (wide layout only — narrow folds sort into the filter
+  /// sheet). An M3 Badge dot marks any non-default order; a check marks
+  /// the active option. Selecting a mode just flips _sortMode — the
   /// filtering pipeline re-sorts and the item plan switches between the
   /// grouped (newest-first only) and flat (every other mode) layouts.
   Widget _buildSortMenu(AppLocalizations l) {
-    return PopupMenuButton<_TxSort>(
+    return PopupMenuButton<TxSort>(
       tooltip: l.txSortBy,
-      icon: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          const Icon(Icons.sort, size: 22),
-          if (_sortMode != _TxSort.dateNewest)
-            Positioned(
-              right: -1,
-              top: -1,
-              child: Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: context.positive,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-        ],
+      icon: Badge(
+        isLabelVisible: _sortMode != TxSort.dateNewest,
+        smallSize: 8,
+        child: const Icon(Icons.sort, size: 22),
       ),
       onSelected: (mode) => setState(() => _sortMode = mode),
       itemBuilder: (context) => [
-        for (final mode in _TxSort.values)
+        for (final mode in TxSort.values)
           PopupMenuItem(
             value: mode,
             child: Row(
@@ -2018,7 +2051,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
                       ? Icon(Icons.check, size: 18, color: context.positive)
                       : null,
                 ),
-                Text(_sortLabel(l, mode)),
+                Text(txSortLabel(l, mode)),
               ],
             ),
           ),
@@ -2026,60 +2059,23 @@ class _TransactionsTabState extends State<TransactionsTab> {
     );
   }
 
-  String _sortLabel(AppLocalizations l, _TxSort mode) {
-    switch (mode) {
-      case _TxSort.dateNewest:
-        return l.txSortDateNewest;
-      case _TxSort.dateOldest:
-        return l.txSortDateOldest;
-      case _TxSort.amountHigh:
-        return l.txSortAmountHigh;
-      case _TxSort.amountLow:
-        return l.txSortAmountLow;
-      case _TxSort.merchant:
-        return l.txSortMerchant;
-    }
-  }
-
-  /// Header toolbar. On wide screens shows title + inline search. On narrow
-  /// screens the search collapses to an icon button that expands into a
-  /// full-width input, so the title doesn't fight a 280px search box for
-  /// horizontal space.
+  /// Header toolbar. Wide screens show title + filter/sort/actions +
+  /// inline search. Narrow screens keep exactly three inline actions —
+  /// combined filter&sort, add, overflow — and the persistent search
+  /// field renders on its own full-width row below the toolbar (see the
+  /// build method), so search no longer replaces the whole toolbar.
   Widget _buildToolbar(bool isNarrow) {
     final l = AppLocalizations.of(context);
-    if (isNarrow && _searchOpenOnNarrow) {
-      return Row(
-        children: [
-          Expanded(child: _searchField()),
-          const SizedBox(width: 8),
-          IconButton(
-            onPressed: () {
-              // Synchronous flush — cancel a pending debounce so the
-              // close button doesn't get a stray re-filter fired
-              // after the panel has already collapsed.
-              _searchDebounce?.cancel();
-              setState(() {
-                _searchOpenOnNarrow = false;
-                _searchQuery = '';
-                _searchController.clear();
-              });
-            },
-            icon: const Icon(Icons.close, size: 20),
-            tooltip: l.txCloseSearch,
-          ),
-        ],
-      );
-    }
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Flexible(
           child: Text(
             l.navTransactions,
-            // Smaller on narrow so the title + inline actions fit a phone
-            // sheet without ellipsizing to "Transact…".
+            // Slightly smaller on narrow; with only three inline actions
+            // the title fits a phone sheet without ellipsizing.
             style: TextStyle(
-                fontSize: isNarrow ? 18 : 24, fontWeight: FontWeight.bold),
+                fontSize: isNarrow ? 22 : 24, fontWeight: FontWeight.bold),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -2087,40 +2083,42 @@ class _TransactionsTabState extends State<TransactionsTab> {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Filter button with a small dot badge when any filters are
-            // active. Always visible — independent of apiService.
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                IconButton(
-                  onPressed: _openFilters,
-                  icon: const Icon(Icons.filter_list, size: 22),
-                  tooltip: l.txFilterTransactions,
+            // Filter & sort. Narrow: ONE combined button that opens the
+            // filter+sort bottom sheet, with an M3 count badge totalling
+            // the active filters plus a non-default sort. Wide: separate
+            // filter-dialog button and sort menu sharing the same Badge
+            // idiom. Always visible — independent of apiService.
+            if (isNarrow)
+              IconButton(
+                onPressed: () => _openFilters(isNarrow: true),
+                icon: Badge.count(
+                  count: _filters.badgeCount +
+                      (_sortMode != TxSort.dateNewest ? 1 : 0),
+                  isLabelVisible:
+                      _filters.isActive || _sortMode != TxSort.dateNewest,
+                  child: const Icon(Icons.tune, size: 22),
                 ),
-                if (_filters.isActive)
-                  Positioned(
-                    right: 6,
-                    top: 6,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: context.positive,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            // Sort control. A dot badge mirrors the filter button's idiom
-            // when the order isn't the default newest-first. Stays inline
-            // on every width (it's compact, and sort is a primary lever).
-            _buildSortMenu(l),
+                tooltip: l.txFilterSort,
+              )
+            else ...[
+              IconButton(
+                onPressed: () => _openFilters(isNarrow: false),
+                icon: Badge.count(
+                  count: _filters.badgeCount,
+                  isLabelVisible: _filters.isActive,
+                  child: const Icon(Icons.tune, size: 22),
+                ),
+                tooltip: l.txFilterTransactions,
+              ),
+              // Sort control (wide only — narrow folds sort into the
+              // filter sheet). A Badge dot marks a non-default order.
+              _buildSortMenu(l),
+            ],
             // On narrow widths the secondary actions (select-multiple, CSV
             // export, FX-transfer scan) collapse into an overflow menu so
-            // the "Transactions" title keeps enough room and no
-            // longer ellipsizes to "Tr...". Add + filter + search stay
-            // inline as the primary actions.
+            // the "Transactions" title keeps enough room. Filter&sort +
+            // add stay inline as the primary actions (search lives on its
+            // own row below the toolbar).
             if (!isNarrow)
               IconButton(
                 onPressed: () => setState(() {
@@ -2135,9 +2133,11 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 tooltip:
                     _selectionMode ? l.txExitSelectionMode : l.txSelectMultiple,
               ),
-            if (widget.apiService != null)
+            // Hidden when the host provides its own FAB (compact dashboard)
+            // so there's never a duplicate creation affordance.
+            if (widget.apiService != null && !widget.hostProvidesAddFab)
               IconButton(
-                onPressed: () => _openAddDialog(),
+                onPressed: () => openAddDialog(),
                 icon: const Icon(Icons.add, size: 22),
                 tooltip: l.txAddTransaction,
               ),
@@ -2163,12 +2163,6 @@ class _TransactionsTabState extends State<TransactionsTab> {
                 onPressed: () => widget.onDetectFxTransfers!(),
               ),
             if (isNarrow) ...[
-              IconButton(
-                onPressed: () =>
-                    setState(() => _searchOpenOnNarrow = true),
-                icon: const Icon(Icons.search, size: 20),
-                tooltip: l.txSearchTransactions,
-              ),
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, size: 22),
                 tooltip: l.txMoreActions,
@@ -2241,7 +2235,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
     );
   }
 
-  void _openAddDialog() {
+  /// Opens the Add-transaction dialog. Public so a host that provides its
+  /// own creation affordance (the dashboard's compact-layout FAB, via a
+  /// `GlobalKey<TransactionsTabState>`) can trigger the exact same flow.
+  void openAddDialog() {
     if (widget.apiService == null) return;
     showDialog(
       context: context,
@@ -2346,7 +2343,6 @@ class _TransactionsTabState extends State<TransactionsTab> {
   Widget _searchField() {
     final l = AppLocalizations.of(context);
     return TextField(
-      autofocus: _searchOpenOnNarrow,
       controller: _searchController,
       // Debounced. See _searchDebounce field comment for rationale.
       // When the user clears via the X button below we flush
@@ -2367,9 +2363,10 @@ class _TransactionsTabState extends State<TransactionsTab> {
         prefixIcon:
             Icon(Icons.search, size: 18, color: context.textFaint),
         // Inline clear affordance — appears only when there's text so the
-        // user doesn't have to backspace the whole query. Mirrors the
-        // narrow close button: flush the pending debounce synchronously so
-        // no stray re-filter fires after the field is already empty.
+        // user doesn't have to backspace the whole query. Flushes the
+        // pending debounce synchronously so no stray re-filter fires
+        // after the field is already empty. This is the only clear path
+        // now that the field is persistent on narrow (no close button).
         suffixIcon: ValueListenableBuilder<TextEditingValue>(
           valueListenable: _searchController,
           builder: (context, value, _) {
@@ -2421,9 +2418,15 @@ class _TransactionsTabState extends State<TransactionsTab> {
   ) {
     const eagerThreshold = 50;
     if (txs.length <= eagerThreshold) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: _buildGroupedRows(txs, isNarrow),
+      return Padding(
+        // Clearance so a host-provided FAB (compact dashboard) never sits
+        // on top of the last row. Mirrors _buildVirtualisedList's padding.
+        padding:
+            EdgeInsets.only(bottom: widget.hostProvidesAddFab ? 88.0 : 0.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: _buildGroupedRows(txs, isNarrow),
+        ),
       );
     }
     // Viewport-relative height so the inner list always shows a
@@ -2449,13 +2452,25 @@ class _TransactionsTabState extends State<TransactionsTab> {
   /// Expanded slot in a bounded host.
   Widget _buildVirtualisedList(List<dynamic> txs, bool isNarrow) {
     final items = _ensureItemPlan(txs, isNarrow);
+    // A forced-visible thumb is a pointer affordance: on touch platforms
+    // the persistent bar paints on top of the rows' amount column, so let
+    // those fall back to the transient auto-hiding thumb.
+    final platform = Theme.of(context).platform;
+    final isTouch = platform == TargetPlatform.android ||
+        platform == TargetPlatform.iOS ||
+        platform == TargetPlatform.fuchsia;
     return Scrollbar(
-      thumbVisibility: true,
+      thumbVisibility: !isTouch,
       child: ListView.builder(
         // No itemExtent — rows can be one or two lines depending
         // on the override / notes presence. Flutter still
         // virtualises by viewport visibility; we just lose the
         // O(1) scroll-to-index optimisation, which we don't need.
+        //
+        // Bottom clearance so a host-provided FAB (compact dashboard)
+        // never occludes the last row when scrolled to the end.
+        padding:
+            EdgeInsets.only(bottom: widget.hostProvidesAddFab ? 88.0 : 0.0),
         itemCount: items.length,
         itemBuilder: (context, i) => _planItemWidget(items[i], isNarrow, txs),
       ),
@@ -2505,7 +2520,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
   List<_TxListItem>? _itemPlanCache;
   int _itemPlanCacheFilteredId = 0;
   bool _itemPlanCacheNarrow = false;
-  _TxSort? _itemPlanCacheSort;
+  TxSort? _itemPlanCacheSort;
 
   List<_TxListItem> _ensureItemPlan(List<dynamic> txs, bool isNarrow) {
     final identity = identityHashCode(txs);
@@ -2520,7 +2535,7 @@ class _TransactionsTabState extends State<TransactionsTab> {
     // those modes render a FLAT list: just rows, hairline-separated, no
     // headers. (A divider between every row keeps the row rhythm the
     // grouped view has between same-day rows.)
-    if (_sortMode != _TxSort.dateNewest) {
+    if (_sortMode != TxSort.dateNewest) {
       final flat = <_TxListItem>[];
       for (var i = 0; i < txs.length; i++) {
         if (i > 0) flat.add(const _TxListItem.divider());
@@ -3350,9 +3365,16 @@ class _TransactionsTabState extends State<TransactionsTab> {
                     color: Colors.transparent,
                     child: Container(
                       width: isNarrow ? screen.width : 480,
-                      height: isNarrow
-                          ? (sheetWanted < sheetMax ? sheetWanted : sheetMax)
-                          : screen.height,
+                      // Narrow: hug the content (the panel column is
+                      // mainAxisSize.min) and cap at ~90% / keyboard-safe
+                      // height so long content scrolls instead of growing.
+                      height: isNarrow ? null : screen.height,
+                      constraints: isNarrow
+                          ? BoxConstraints(
+                              maxHeight: sheetWanted < sheetMax
+                                  ? sheetWanted
+                                  : sheetMax)
+                          : null,
                       // The surface color lives on a Material (not the
                       // BoxDecoration) so the category-editor autocomplete's
                       // ListTiles paint their background/ink on a Material
@@ -3652,12 +3674,12 @@ class _TransactionsTabState extends State<TransactionsTab> {
 /// previous inline `showGeneralDialog` builder created them in a method
 /// and never freed them, leaking on every open) and the "More details"
 /// disclosure state. Reaches back into the hosting
-/// [_TransactionsTabState] for the shared helpers (`_fxTransferBlock`,
+/// [TransactionsTabState] for the shared helpers (`_fxTransferBlock`,
 /// `_metaChip`, `_renameTransaction`, the split/move flows, the suggestion
 /// list, …) and the `widget.*` callbacks, so the editing behaviour is
 /// byte-for-byte the same as before — only the layout is regrouped.
 class _TransactionDetailPanel extends StatefulWidget {
-  final _TransactionsTabState state;
+  final TransactionsTabState state;
   final dynamic tx;
   // Narrow = bottom sheet (mobile); wide = right-docked side panel
   // (desktop/web). Drives the dismiss affordance: drag handle + swipe on
@@ -3681,7 +3703,7 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
   late final String _initialNotes;
   late final List<String> _categorySuggestions;
 
-  _TransactionsTabState get _state => widget.state;
+  TransactionsTabState get _state => widget.state;
   dynamic get tx => widget.tx;
 
   @override
@@ -3777,6 +3799,10 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
     final l = AppLocalizations.of(context);
     final s = _state;
     final isNarrow = widget.isNarrow;
+    // Vertical rhythm: the phone bottom sheet compacts the big gaps so a
+    // typical transaction lands around half-screen; the wide side panel
+    // keeps its roomier 18px rhythm.
+    final sectionGap = isNarrow ? 12.0 : 18.0;
 
     final date = DateTime.parse(tx['date'] as String);
     final sourceAmount = ((tx['amount'] as num?)?.toDouble() ?? 0.0);
@@ -3839,11 +3865,13 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
     );
     final merchantCount = merchantMatches.length + 1;
 
-    final autoCategoryLabel = ((tx['user_category'] ?? '')
-                .toString()
-                .isEmpty &&
-            (originalCategory.isNotEmpty ||
-                (tx['category_detailed'] ?? '').toString().isNotEmpty))
+    // Original auto-categorization (Plaid), independent of any user
+    // override. Only worth a row when the user HAS overridden it with a
+    // different label — otherwise the Category field above already shows
+    // the identical prettified string and the row is pure duplication.
+    final userCat = (tx['user_category'] ?? '').toString().trim();
+    final autoCategoryLabel = (originalCategory.isNotEmpty ||
+            (tx['category_detailed'] ?? '').toString().isNotEmpty)
         ? prettyCategory(
             detailed: tx['category_detailed']?.toString(),
             primary: tx['category']?.toString(),
@@ -3878,7 +3906,9 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
           _detailRow(Icons.account_balance, l.txAccount,
               s._accountLabel(tx),
               maskAware: true),
-        if (autoCategoryLabel != null)
+        if (autoCategoryLabel != null &&
+            userCat.isNotEmpty &&
+            autoCategoryLabel != userCat)
           _detailRow(
               Icons.label_outline, l.txAutoCategory, autoCategoryLabel),
         if (pending)
@@ -3906,18 +3936,115 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
       );
     }
 
+    // Overflow kebab + rename/edit action, shared by both layouts: the
+    // wide side panel keeps them in the dedicated header row; the narrow
+    // bottom sheet folds them into the hero row (the header row there
+    // held only X/kebab/edit, and X duplicates handle/swipe/barrier).
+    Widget overflowButton() {
+      return PopupMenuButton<String>(
+        tooltip: l.txMoreActions,
+        icon: const Icon(Icons.more_horiz, size: 22),
+        onSelected: (value) {
+          switch (value) {
+            case 'split':
+              s._openSplitDialog(tx, sourceCurrency, sourceAmount,
+                  titleDescription, originalCategory);
+              break;
+            case 'editSplit':
+              s._openEditSplitDialog(
+                (tx['parent_id'] ?? '').toString(),
+                sourceCurrency,
+                sourceAmount,
+                titleDescription,
+                originalCategory,
+              );
+              break;
+            case 'unsplit':
+              _unsplit(l);
+              break;
+            case 'move':
+              _showMoveSheet(l);
+              break;
+            case 'createLoan':
+              _close();
+              s.widget.onCreateLoanFromTx?.call(tx);
+              break;
+            case 'delete':
+              _confirmDelete(l);
+              break;
+          }
+        },
+        itemBuilder: (ctx) => [
+          if (canSplit)
+            PopupMenuItem(
+              value: 'split',
+              child: _menuRow(Icons.call_split, l.txSplitThisTransaction),
+            ),
+          if (canEditSplit)
+            PopupMenuItem(
+              value: 'editSplit',
+              child: _menuRow(Icons.edit_outlined, l.txEditSplit),
+            ),
+          if (canUnsplit)
+            PopupMenuItem(
+              value: 'unsplit',
+              child: _menuRow(Icons.call_merge, l.txUnsplitRestore),
+            ),
+          if (canMove)
+            PopupMenuItem(
+              value: 'move',
+              child: _menuRow(Icons.drive_file_move_outlined,
+                  l.txMoveToDifferentAccount),
+            ),
+          if (canCreateLoan)
+            PopupMenuItem(
+              value: 'createLoan',
+              child: _menuRow(
+                  Icons.monetization_on_outlined, l.txCreateLoanFromTx),
+            ),
+          if (canDelete)
+            PopupMenuItem(
+              value: 'delete',
+              child: _menuRow(Icons.delete_outline, l.actionDelete,
+                  color: context.negative),
+            ),
+        ],
+      );
+    }
+
+    Widget editButton() {
+      return IconButton(
+        tooltip: merchantMatches.isEmpty
+            ? l.txRename
+            : l.txRenamePlusMatching(merchantMatches.length),
+        iconSize: 20,
+        icon: const Icon(Icons.edit_outlined),
+        onPressed: () => s._renameTransaction(
+          tx,
+          similarIds: merchantMatches.map((m) => m['id'].toString()).toList(),
+        ),
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+      );
+    }
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+      // Narrow sheet uses a tighter frame (SafeArea below already covers
+      // the home indicator); wide side panel keeps the roomy 24s.
+      padding: isNarrow
+          ? const EdgeInsets.fromLTRB(20, 8, 20, 12)
+          : const EdgeInsets.fromLTRB(24, 16, 24, 24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // -- Header chrome ---------------------------------------------
-          // Close (X) sits on the LEADING (left) edge of the header on both
-          // layouts — on its own, away from the overflow/rename actions on
-          // the right, so it unmistakably reads as "close" and sits right
-          // next to the scrim a user instinctively clicks. Mobile also keeps
-          // the top-center drag handle (swipe down); desktop also has Esc.
+          // Wide (side panel): Close (X) sits on the LEADING (left) edge of
+          // the header — on its own, away from the overflow/rename actions
+          // on the right, so it unmistakably reads as "close" and sits
+          // right next to the scrim a user instinctively clicks; Esc works
+          // too. Narrow (bottom sheet): no header row — dismissal is the
+          // drag handle / swipe-down / barrier, and the kebab + edit
+          // actions ride the hero row instead, saving ~48px of chrome.
           if (isNarrow)
             Center(
               child: GestureDetector(
@@ -3936,106 +4063,22 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                 ),
               ),
             ),
-          Row(
-            children: [
-              // Primary dismiss — isolated on the leading edge.
-              IconButton(
-                icon: const Icon(Icons.close, size: 22),
-                onPressed: _close,
-                tooltip: l.actionClose,
-                constraints:
-                    const BoxConstraints(minWidth: 48, minHeight: 48),
-              ),
-              const Spacer(),
-              if (hasOverflow)
-                PopupMenuButton<String>(
-                  tooltip: l.txMoreActions,
-                  icon: const Icon(Icons.more_horiz, size: 22),
-                  onSelected: (value) {
-                    switch (value) {
-                      case 'split':
-                        s._openSplitDialog(tx, sourceCurrency, sourceAmount,
-                            titleDescription, originalCategory);
-                        break;
-                      case 'editSplit':
-                        s._openEditSplitDialog(
-                          (tx['parent_id'] ?? '').toString(),
-                          sourceCurrency,
-                          sourceAmount,
-                          titleDescription,
-                          originalCategory,
-                        );
-                        break;
-                      case 'unsplit':
-                        _unsplit(l);
-                        break;
-                      case 'move':
-                        _showMoveSheet(l);
-                        break;
-                      case 'createLoan':
-                        _close();
-                        s.widget.onCreateLoanFromTx?.call(tx);
-                        break;
-                      case 'delete':
-                        _confirmDelete(l);
-                        break;
-                    }
-                  },
-                  itemBuilder: (ctx) => [
-                    if (canSplit)
-                      PopupMenuItem(
-                        value: 'split',
-                        child: _menuRow(
-                            Icons.call_split, l.txSplitThisTransaction),
-                      ),
-                    if (canEditSplit)
-                      PopupMenuItem(
-                        value: 'editSplit',
-                        child: _menuRow(Icons.edit_outlined, l.txEditSplit),
-                      ),
-                    if (canUnsplit)
-                      PopupMenuItem(
-                        value: 'unsplit',
-                        child:
-                            _menuRow(Icons.call_merge, l.txUnsplitRestore),
-                      ),
-                    if (canMove)
-                      PopupMenuItem(
-                        value: 'move',
-                        child: _menuRow(Icons.drive_file_move_outlined,
-                            l.txMoveToDifferentAccount),
-                      ),
-                    if (canCreateLoan)
-                      PopupMenuItem(
-                        value: 'createLoan',
-                        child: _menuRow(
-                            Icons.monetization_on_outlined, l.txCreateLoanFromTx),
-                      ),
-                    if (canDelete)
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: _menuRow(Icons.delete_outline, l.actionDelete,
-                            color: context.negative),
-                      ),
-                  ],
-                ),
-              if (s.widget.onUpdate != null)
+          if (!isNarrow)
+            Row(
+              children: [
+                // Primary dismiss — isolated on the leading edge.
                 IconButton(
-                  tooltip: merchantMatches.isEmpty
-                      ? l.txRename
-                      : l.txRenamePlusMatching(merchantMatches.length),
-                  iconSize: 20,
-                  icon: const Icon(Icons.edit_outlined),
-                  onPressed: () => s._renameTransaction(
-                    tx,
-                    similarIds:
-                        merchantMatches.map((m) => m['id'].toString()).toList(),
-                  ),
+                  icon: const Icon(Icons.close, size: 22),
+                  onPressed: _close,
+                  tooltip: l.actionClose,
                   constraints:
                       const BoxConstraints(minWidth: 48, minHeight: 48),
                 ),
-            ],
-          ),
+                const Spacer(),
+                if (hasOverflow) overflowButton(),
+                if (s.widget.onUpdate != null) editButton(),
+              ],
+            ),
           // -- Scrollable body -------------------------------------------
           Flexible(
             child: SingleChildScrollView(
@@ -4097,14 +4140,20 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                           ],
                         ),
                       ),
+                      // Narrow: the kebab + edit actions ride the hero row
+                      // (there is no dedicated header row on the sheet).
+                      if (isNarrow) ...[
+                        if (hasOverflow) overflowButton(),
+                        if (s.widget.onUpdate != null) editButton(),
+                      ],
                     ],
                   ),
-                  const SizedBox(height: 18),
+                  SizedBox(height: sectionGap),
                   // -- Hero amount block -------------------------------
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 16),
+                    padding: EdgeInsets.symmetric(
+                        horizontal: 18, vertical: isNarrow ? 10 : 16),
                     decoration: BoxDecoration(
                       color: context.tint(0.04),
                       borderRadius: BorderRadius.circular(14),
@@ -4141,11 +4190,11 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 6),
+                        SizedBox(height: isNarrow ? 2 : 6),
                         Text(
                           '${isExpense ? '−' : '+'}${formatCurrencyAmount(sourceAmount.abs(), sourceCurrency)}',
                           style: brandDisplayStyle(
-                            fontSize: 32,
+                            fontSize: isNarrow ? 24 : 32,
                             color: flowAccent,
                           ),
                         ),
@@ -4164,7 +4213,7 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  SizedBox(height: sectionGap),
                   // -- Primary editable: Category then Notes -----------
                   RawAutocomplete<String>(
                     textEditingController: _catController,
@@ -4228,9 +4277,10 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                       border: const OutlineInputBorder(),
                       isDense: true,
                     ),
-                    maxLines: 3,
+                    minLines: 1,
+                    maxLines: 4,
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: isNarrow ? 12 : 16),
                   // -- Compact Details group ---------------------------
                   detailRows(),
                   // -- Linked FX transfer (inline, high-signal) --------
@@ -4318,31 +4368,61 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
           // secondary "Close" next to Save (which read as cancel-vs-save but
           // never actually reverted) is gone. SafeArea keeps Save clear of
           // the home indicator on mobile.
-          const SizedBox(height: 12),
-          SafeArea(
-            top: false,
-            bottom: isNarrow,
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  // Diff each field against its prefill: only what the
-                  // user actually edited is sent (null = "leave alone").
-                  final newCategory = diffEditedField(
-                      _catController.text, _initialCategoryLabel);
-                  final newNotes =
-                      diffEditedField(_notesController.text, _initialNotes);
-                  _close();
-                  if (newCategory == null && newNotes == null) return;
-                  s.widget.onUpdate?.call(
-                    tx['id'],
-                    userCategory: newCategory,
-                    userNotes: newNotes,
-                  );
-                },
-                child: Text(l.actionSave),
-              ),
-            ),
+          //
+          // Save only appears once a field is actually dirty (diffed with
+          // the same helper the handler uses), so a read-only open shows
+          // no footer at all. Dismissal still discards — deliberately NOT
+          // commit-on-dismiss.
+          ListenableBuilder(
+            listenable: Listenable.merge([_catController, _notesController]),
+            builder: (context, _) {
+              final dirty = diffEditedField(
+                          _catController.text, _initialCategoryLabel) !=
+                      null ||
+                  diffEditedField(_notesController.text, _initialNotes) != null;
+              if (!dirty) {
+                // Keep the home-indicator inset even without the button.
+                return SafeArea(
+                  top: false,
+                  bottom: isNarrow,
+                  child: const SizedBox.shrink(),
+                );
+              }
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 12),
+                  SafeArea(
+                    top: false,
+                    bottom: isNarrow,
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          // Diff each field against its prefill: only what
+                          // the user actually edited is sent (null = "leave
+                          // alone").
+                          final newCategory = diffEditedField(
+                              _catController.text, _initialCategoryLabel);
+                          final newNotes = diffEditedField(
+                              _notesController.text, _initialNotes);
+                          _close();
+                          if (newCategory == null && newNotes == null) {
+                            return;
+                          }
+                          s.widget.onUpdate?.call(
+                            tx['id'],
+                            userCategory: newCategory,
+                            userNotes: newNotes,
+                          );
+                        },
+                        child: Text(l.actionSave),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),

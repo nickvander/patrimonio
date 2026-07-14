@@ -415,6 +415,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get txFilterTransactions => 'Filtrar movimientos';
 
   @override
+  String get txFilterSort => 'Filtrar y ordenar';
+
+  @override
   String get txFilterLoadingHistory =>
       'Cargando todo tu historial para que todas las opciones estén disponibles…';
 
@@ -3916,6 +3919,12 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get pfMexicanPeso => 'Peso mexicano';
+
+  @override
+  String get pfTotalInMxn => 'Valor total en pesos';
+
+  @override
+  String get pfTotalInUsd => 'Valor total en dólares';
 
   @override
   String get pfHoldings => 'Posiciones';

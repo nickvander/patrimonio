@@ -247,6 +247,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // "Dividends/yr" tile tap can section-switch + ensureVisible it (O1;
   // same pattern as _holdingsTableKey above).
   final GlobalKey _dividendCardKey = GlobalKey();
+  // Reaches into the Activity tab's state so the compact-layout FAB
+  // (thumb-zone "Add transaction", docked above the bottom nav) can open
+  // the same Add-transaction dialog the toolbar '+' does on wide layouts.
+  final GlobalKey<TransactionsTabState> _txTabKey =
+      GlobalKey<TransactionsTabState>();
   // Portfolio-wide dividend summary (projected annual income + blended
   // yield), fetched best-effort alongside the other overview loads. null
   // (failure) or zero income simply hides the Overview dividends tile.
@@ -3620,6 +3625,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
               // screens get a left rail (built into the body Row below).
               bottomNavigationBar:
                   (!firstRun && isCompact) ? _buildBottomBar() : null,
+              // Thumb-zone creation for the Activity tab: on compact
+              // layouts the tab's toolbar '+' is hidden (hostProvidesAddFab)
+              // and "Add transaction" moves here, docked above the bottom
+              // nav. Wide layouts keep the inline '+' and never show the
+              // FAB — both affordances key off the same isCompact signal,
+              // so no width shows both. Section lookup mirrors _buildBody's
+              // clamped indexing so a transient out-of-range _section can't
+              // throw. The tab is mounted whenever its section is selected
+              // (IndexedStack marks it visited), so currentState is
+              // non-null here; `?.` keeps any edge case a no-op.
+              floatingActionButton: (!firstRun &&
+                      isCompact &&
+                      _destinations[_section.clamp(0, _destinations.length - 1)]
+                              .id ==
+                          NavId.transactions)
+                  ? FloatingActionButton(
+                      tooltip: l.txAddTransaction,
+                      onPressed: () => _txTabKey.currentState?.openAddDialog(),
+                      child: const Icon(Icons.add),
+                    )
+                  : null,
               body: Column(
                 children: [
                   if (!firstRun)
@@ -3690,6 +3716,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Idiomatic symbol ($/MX$) via the shared helper so the hero number and
     // every card fed this formatter read "$1,234.00" not "USD 1,234.00".
     final currencyFormat = moneyFormat(_targetCurrency);
+    // Same compact signal the Scaffold uses for the bottom bar + FAB, so
+    // the Activity tab's hostProvidesAddFab flips in lockstep with the
+    // FAB's visibility (no width band shows both '+' affordances or none).
+    final isCompact = MediaQuery.sizeOf(context).width < 720;
     Widget buildTabContainer(Widget child, {bool scrollable = true}) {
       final padding = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
       // Extra scrollable space at the very bottom so a transient SnackBar
@@ -4389,6 +4419,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // PortfolioCard (same data, same holdings list); performance and
     // allocation are their own widgets between them.
     final portfolioData = _portfolioData ?? {};
+    // Inter-card rhythm on the Invest tab: 16px on phones, 24px on wide
+    // screens. Screen-level tab layout keys off MediaQuery (the same signal
+    // buildTabContainer's padding uses) — the inner-LayoutBuilder rule
+    // applies to cards; this Column spans the screen.
+    final cardGap = SizedBox(
+        height: MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0);
     final portfolioTab = buildTabContainer(
       Column(
         children: [
@@ -4401,7 +4437,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             targetCurrency: _targetCurrency,
             usdMxnRate: fxRate,
           ),
-          const SizedBox(height: 24),
+          cardGap,
           // 2 · Performance — value-over-time + contribution-weighted return.
           RepaintBoundary(
             child: PerformanceCard(
@@ -4414,7 +4450,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   (portfolioData['total_value_usd'] as num?)?.toDouble(),
             ),
           ),
-          const SizedBox(height: 24),
+          cardGap,
           // 3 · Allocation — heatmap with dimension toggle + tap-to-filter.
           if (_allocationData != null) ...[
             // RepaintBoundary so this big card is cached as a layer and
@@ -4461,7 +4497,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 },
               ),
             ),
-            const SizedBox(height: 24),
+            cardGap,
             // 3b · Rebalancing (WS2r4) — drift vs the owner's target
             // percentages: the actionable conclusion OF the allocation view
             // above. The setup-CTA / repair states live inside the widget,
@@ -4474,7 +4510,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 currencyFormat: currencyFormat,
               ),
             ),
-            const SizedBox(height: 24),
+            cardGap,
           ],
           // 4 · Signals — biggest gainer / loser + concentration flag.
           PortfolioCard(
@@ -4485,7 +4521,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             targetCurrency: _targetCurrency,
             usdMxnRate: fxRate,
           ),
-          const SizedBox(height: 24),
+          cardGap,
           // 5 · Holdings — searchable table, drill-down filter from above.
           // Keyed so the allocation band-tap can ensureVisible it.
           PortfolioCard(
@@ -4502,7 +4538,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 setState(() => _portfolioCategoryFilter = null),
             searchOverride: _portfolioSearchOverride,
           ),
-          const SizedBox(height: 24),
+          cardGap,
           // 6 · Income — projected dividend income, blended yield, top payers,
           // upcoming ex-dates. Self-fetching; hides for non-paying portfolios.
           // Keyed so the Overview Dividends/yr tile tap can ensureVisible it.
@@ -4512,7 +4548,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             conversionFactor: conversionFactor,
             currencyFormat: currencyFormat,
           ),
-          const SizedBox(height: 24),
+          cardGap,
           RealizedGainsCard(
             apiService: _apiService,
             conversionFactor: conversionFactor,
@@ -4524,6 +4560,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final transactionsTab = buildTabContainer(
       TransactionsTab(
+        key: _txTabKey,
+        // Compact: creation moves to the Scaffold FAB (thumb zone); the
+        // tab hides its toolbar '+' and pads the list clear of the FAB.
+        hostProvidesAddFab: isCompact,
         transactions: _transactions ?? [],
         accounts: (_overview?['accounts'] as List?) ?? const [],
         conversionFactor: conversionFactor,
