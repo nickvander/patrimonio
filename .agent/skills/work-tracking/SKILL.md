@@ -6,17 +6,18 @@ description: How to track project progress, make decisions, and transition betwe
 # Work Tracking
 
 ## Finding what to work on
-1. Read `work/CURRENT.md` — this is the "you are here" pointer
-2. Open the phase spec referenced in CURRENT.md (e.g., `work/phases/PHASE-2-PLAID.md`)
-3. Work through the deliverables checklist in that phase spec
+1. Read `work/CURRENT.md` — the "you are here" pointer: a reverse-chronological
+   snapshot log, newest dated entry at the top
+2. `work/HANDOFF.md` is the cold-start companion (prod state, how to verify/ship);
+   `work/NEXT.md` / `work/FUTURE.md` hold the backlog
+3. If a phase spec is in play (`work/phases/PHASE-N-*.md`), work through its
+   deliverables checklist
 
-## Completing a phase
-1. Mark all items as `[x]` in the phase spec
-2. Update `work/CURRENT.md`:
-   - Move the completed phase to "What's Done"
-   - Update "What's Next" to point to the next phase
-   - Update the date and status at the top
-3. Commit: `git commit -m "docs: complete Phase N, start Phase N+1"`
+## Recording completed work
+1. Tick the relevant `[x]` items in the phase spec, if one applies
+2. Add a new dated entry at the **top** of `work/CURRENT.md` (below the header)
+   summarizing what shipped and why; update the "Last updated" line
+3. Commit with a conventional-commit `docs:` message
 
 ## Making architectural decisions
 When making a significant technical choice:
@@ -28,7 +29,8 @@ When making a significant technical choice:
    **Status:** Accepted | Rejected | Superseded by DEC-YYY
    **Context:** Why this decision was needed
    **Decision:** What was decided
-   **Alternatives:** What else was considered
+   **Rationale:** Why this option won
+   **Trade-off:** What we knowingly gave up
    ```
 3. Reference the decision number in related code comments
 
@@ -37,11 +39,7 @@ Each phase spec (`work/phases/PHASE-N-*.md`) should have:
 - **Goal** — one-sentence objective
 - **Deliverables** — checklist of items (`[ ]` / `[x]`)
 - **Success Criteria** — how we know it's done
-- **Notes** — anything else relevant
+- **Test Plan** / **Open Questions** — where relevant
 
-## Current phases
-1. PHASE-1-FOUNDATION — Backend scaffold, Docker, DB ✅
-2. PHASE-2-PLAID — US financial data integration
-3. PHASE-3-DASHBOARD — UI charts and breakdowns
-4. PHASE-4-MEXICO — CSV/PDF import for Mexican institutions
-5. PHASE-5-DEPLOY — Mobile, GCP, production hardening
+Don't enumerate phases here — `ls work/phases/` is the list (14+ so far), and
+`work/CURRENT.md` says where things actually stand.

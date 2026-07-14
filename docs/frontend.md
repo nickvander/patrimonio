@@ -4,16 +4,18 @@ The frontend is a Flutter application that builds for **web and Android** from o
 
 ## UI Architecture
 
-Patrimonio uses a responsive dashboard shell with navigation tabs, shared API clients, and domain-specific screens for financial workflows.
+Patrimonio uses a responsive dashboard shell with navigation tabs, shared API clients, and domain-specific screens for financial workflows. Wide layouts use a navigation rail with a static app bar; narrow layouts use a bottom bar (overflow tabs behind a **More** sheet) with a compact app bar that shows the current tab's name and scrolls away as you scroll. There is no app-bar overflow (kebab) menu — app-level settings live at the end of the Settings tab.
 
 ### Main Screens
 
 - **Overview**: Net worth, account balances, FX context, and high-level status.
 - **Portfolio**: Holdings, allocation, performance context, and benchmark views.
 - **Transactions**: Searchable transaction history with normalized descriptions and category icons.
+- **Cash flow**: Monthly income vs. spending, trends, and budgets.
 - **Projections**: FIRE and future wealth simulations.
-- **Tax Planning**: Filing-status controls, year selection, estimates, and exports.
-- **Management**: Account linking, crypto connections, manual accounts, and CSV/PDF imports.
+- **Tax planning**: Filing-status controls, year selection, estimates, and exports.
+- **Lending**: Loans you hold or extend, payment schedules, and interest tracking.
+- **Settings**: Account linking, crypto connections, manual accounts, CSV/PDF imports, and the app-level settings groups (language, theme, security, hidden items, sign out).
 
 ## State and Data Loading
 
@@ -21,8 +23,8 @@ The app keeps screen-level state close to the dashboard views and loads data thr
 
 ## Visual Design
 
-- **Theme**: Dark dashboard UI with high-contrast financial cards and charts.
-- **Typography**: Inter via Google Fonts.
+- **Theme**: Material 3 light and dark themes (system-default; switchable under Settings ➔ Preferences).
+- **Typography**: Inter (UI) and JetBrains Mono (large ledger figures), bundled locally — no font CDN.
 - **Charts**: `fl_chart` for net worth, cash flow, portfolio, and allocation visuals.
 - **Responsiveness**: Layouts adapt between wide dashboard views and narrower browser widths.
 
@@ -57,13 +59,13 @@ On **web** the API base URL is same-origin (derived from `window.location`, prox
 
 The app is **edge-agnostic**: a deployment behind **Cloudflare Access** enters a CF Access service token under the setup screen's *Advanced* section (sent as `CF-Access-Client-Id`/`CF-Access-Client-Secret` on every request and on the realtime WebSocket handshake); any other HTTPS front door needs only the URL. The setup screen's connection test detects a Cloudflare Access login page and prompts for the token instead of failing opaquely, and a native-only **Change server** button on the login screen reopens the setup screen. See the [Deployment guide](deployment.md#connecting-the-app-to-your-server) for the full connection matrix and the Cloudflare walkthrough.
 
-Because browser APIs (`dart:js_interop` / `package:web`) only compile for web, every web-only capability lives behind a **conditional-import platform seam** (API client, preferences, realtime WebSocket, splash, file-drop, Plaid/passkeys). Native session auth uses a cookie-persisting `dart:io` HTTP client (the browser cookie jar has no native equivalent). Passkeys are web-only; on native, password + TOTP is the auth path. Release signing is configured via `frontend/android/key.properties` (gitignored) — see the [Deployment guide](deployment.md#android-apk).
+Because browser APIs (`dart:js_interop` / `package:web`) only compile for web, every web-only capability lives behind a **conditional-import platform seam** (API client, preferences, realtime WebSocket, splash, file-drop, Plaid/passkeys). Native session auth uses a cookie-persisting `dart:io` HTTP client (the browser cookie jar has no native equivalent). Passkeys work on web **and** Android: the native seam performs real WebAuthn ceremonies through Android's Credential Manager (Google Password Manager passkeys and USB/NFC security keys), which needs `ANDROID_APK_CERT_SHA256` set server-side — see the [Deployment guide](deployment.md#native-passkeys-android). Bank linking is also platform-aware: the app sends its platform with link-token requests so the backend issues an Android OAuth-capable Plaid token (see [Plaid OAuth from the Android app](deployment.md#plaid-oauth-from-the-android-app)). Release signing is configured via `frontend/android/key.properties` (gitignored) — see the [Deployment guide](deployment.md#android-apk).
 
 ## Platform Support
 
 | Platform | Status | Notes |
 |----------|--------|-------|
 | Web | Primary | Dockerized, served by nginx, smoke-tested locally. |
-| Android | Supported | `flutter build apk` produces a signed APK; backend URL set at first run; HTTPS-only. Passkeys unavailable (password + TOTP). |
+| Android | Supported | `flutter build apk` produces a signed APK; backend URL set at first run; HTTPS-only. Passkeys via Credential Manager (needs `ANDROID_APK_CERT_SHA256` + asset links server-side). |
 | macOS/Windows/Linux | Supported by Flutter | Native packaging is not the current deployment target. |
 | iOS | Future | Shares the native seams with Android; no iOS signing/QA done yet. |

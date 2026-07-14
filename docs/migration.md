@@ -107,7 +107,7 @@ balances refresh, the Plaid tokens decrypted against the carried
   one-shot updater so existing items point at it:
 
   ```
-  POST /api/institutions/update-webhooks    # authenticated; updates all items
+  POST /api/institutions/update-webhook    # authenticated; updates all items
   ```
 
   Without a webhook URL, Plaid falls back to periodic polling — fine, just less

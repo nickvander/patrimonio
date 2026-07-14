@@ -4,6 +4,41 @@
 
 ---
 
+## Mobile / settings follow-ups — deferred 2026-07-14
+
+**Status:** Backlogged from the 2026-07-14 mobile UX + settings sprint
+(see CURRENT.md). Each is scoped enough to pick up cold.
+**Tracking:** This file.
+
+* **Android per-app language.** Surface the in-app language choice to
+  Android's per-app language settings (`android:localeConfig` in the
+  manifest + `AppCompatDelegate.setApplicationLocales`); needs a plugin
+  or a small MethodChannel, and an emulator smoke test (per the AGENTS.md
+  Android rule — a green build alone doesn't prove launch behavior).
+* **Server-side sync of theme/locale preferences.** Theme + language are
+  device-local today (preferences storage); syncing them across devices
+  needs a backend endpoint (natural home: an `app_settings` key, same
+  pattern as `projection_assumptions`).
+* **Net-worth chart y-axis shows "$" for MXN (pre-existing,
+  user-visible).** The axis labels are built with
+  `NumberFormat.compactSimpleCurrency(name: currencyName)`, and intl's
+  simple-symbol table maps MXN to the *local* symbol "$" — not the house
+  "MX$" from `utils/currency.dart`'s `currencySymbol()` — so in MXN
+  display mode compact labels read as USD. Same pattern in
+  `net_worth_card.dart`, `components/trends_chart.dart`,
+  `wealth_projection_screen.dart`, `instrument_detail_sheet.dart`; fix
+  once with a shared compact-axis helper that goes through the house
+  symbol.
+* **Fold the Settings tab's inline auto-archived-accounts card into the
+  Hidden-items row.** The collapsible "Auto-archived accounts" section
+  still renders inline in `dashboard_screen.dart`; HiddenItemsScreen is
+  the established home for restorable hidden things.
+* **Lending money fields hardcode the "MX$" glyph.** `lending_tab.dart`'s
+  `_sym` getter feeds `prefixText: '$_sym '` on every amount field
+  instead of going through the locale-aware currency helper.
+
+---
+
 ## prefer_const_literals_to_create_immutables sweep
 
 **Status:** Deferred, not blocking.
@@ -49,7 +84,12 @@ The companion lint `prefer_const_literals_to_create_immutables` covers the *chil
 
 ## Color palette overhaul (dark + light) and chart hover polish
 
-**Status:** Partially shipped; the remaining palette pass is **IN PROGRESS as of the 2026-07-07 session** (owner top priority, see NEXT.md).
+**Status:** Shipped in substance — the 2026-07-09 round-9 contrast pass
+landed the brightness-aware accents (luminance-aware `context.onAccent`,
+`BrandPalette` tearoffs for the nav rail, ~50 hardcoded-color swaps to the
+`context.*` extension; see CURRENT.md's 2026-07-09 entry). Remaining from
+the plan below: the M3 `surfaceContainer*` tonal layering and any long-tail
+`Color(0xFF...)` literals the sweep left as intentional.
 Already fixed since this was written — don't redo:
 - The net-worth tooltip contrast bug below (`net_worth_card.dart`) — shipped in `f3dfd97` (brightness-aware `tooltipSurface`/`tooltipOnSurface` tokens + WCAG-AA unit tests) and `dda5e3c`; the projections tooltip (`wealth_projection_screen.dart`) uses the same tokens.
 - The "hover feels mechanical" point — shipped 2026-05-27 (`touchSpotThreshold: 100000` + `getTouchedSpotIndicator` vertical guide on the net-worth + projection charts).

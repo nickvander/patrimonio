@@ -1,7 +1,125 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-13 (persistent native sessions)
+> **Last updated:** 2026-07-14 (mobile UX overhaul + Android Plaid link fixes)
 > **Branch:** `main`.
+
+## 2026-07-14 — App bar & Settings restructure (kebab retired, scroll-away bar)
+
+Third round of the 2026-07-14 mobile pass — the app-bar audit + Settings
+rehoming; each call researched + PM-evaluated in multi-agent workflows and
+logged as DEC-017…DEC-020. All eight of today's commits
+(`fad9351`…`097b2bd`) are deployed to prod on thelab and delivered to the
+phone as a release APK.
+
+* **Kebab retired on all widths (`57a6bc3`, DEC-017).** Every item the
+  top-bar overflow held was an app-level setting, so the menu is gone and
+  the Settings tab becomes the settings home: a Preferences group (Language
+  radio picker + System/Light/Dark theme control synced with
+  `themeModeNotifier`) and an Account & security group (Security, Hidden
+  items, native-only Server row, and a confirmation-gated Sign out — the
+  kebab's was one-tap). First-run, where nav chrome is hidden, keeps bar
+  escape hatches: theme cycle, EN↔ES language toggle, confirmed sign-out.
+  New tests pin the settings cards + sign-out confirmation; 560 tests green.
+* **Scroll-away compact app bar (same commit, DEC-018).** Enter-always +
+  snap via a notification-driven collapsing wrapper around the existing
+  AppBar (new `utils/bar_scroll.dart` decision helper) — force-visible at
+  scroll offset zero so pull-to-refresh never fights the bar, collapsing to
+  an opaque status-bar inset strip, restored on upward flicks and tab
+  switches. Deliberately NOT NestedScrollView / per-tab SliverAppBar:
+  scroll ownership spans 4 regimes across 5 files under an IndexedStack —
+  high regression surface for cosmetic parity.
+* **Compact bar slimmed to the M3 action budget (`e1261bd`).** The
+  standalone FX pill was both the over-budget item and an affordance bug
+  (bordered like the tappable currency pill beside it, but with no tap
+  handler). Gone on compact: the rate rides inside one combined 48dp
+  "USD · 17.51" tonal currency chip — tap toggles the display currency,
+  warning tint when the rate is >24h stale, toggle + equation in the
+  tooltip/semantics. The freed leading slot shows the current tab's name as
+  the title (wordmark stays on first-run). Wide layouts keep the separate
+  badge + toggle.
+* **Theme picker rebuilt as an M3 Expressive connected button group**
+  (`eaf920b`): equal-flex tonal segments with 2px gaps, selected segment
+  morphs to a filled fully-rounded pill (200ms); equal-flex always fits the
+  card, so the SegmentedButton scroll-guard fallback is gone.
+* **Credit-utilization card ranks by USD-normalised amount owed**
+  (`eaf920b`, DEC-019), largest first, instead of utilization % —
+  utilization ranked a nearly-empty low-limit card above four-figure
+  balances. Per-row % is still displayed.
+* **Accounts-list vault heuristic scoped (`097b2bd`, DEC-020):**
+  credit-category accounts never classify as "vaults". Card product names
+  ("Cash +", "Prime Visa") routinely match neither their type token nor
+  the bank, so U.S. Bank's Cash+ nested under a generic "Credit Card" row
+  with a bogus "base + 1 cards" line. Sibling cards now render as plain
+  rows inside the collapsible institution block; regression test pins the
+  U.S. Bank shape.
+
+## 2026-07-14 — Android Plaid linking fixed end-to-end (OAuth + cookie)
+
+* **Connect-bank 401 on native (`7b1757f`).** The screen made raw
+  `package:http` calls (top-level `http.get/post`), bypassing the
+  credentialed client — the browser attaches the session cookie for free
+  on web, but on Android only `createApiClient()`'s shared cookie jar
+  does, so setup-status / link-token / exchange-token all went out
+  anonymous and the backend answered 401 ("Failed to retrieve link
+  token"). All three now route through a credentialed client instance,
+  closed in `dispose()`.
+* **Android OAuth institutions (`90f5489`).** Link tokens always carried
+  the web `redirect_uri`, so OAuth banks linked from the APK completed
+  their OAuth in the browser — a context with no Link session to resume —
+  and the public token was never delivered; the link silently vanished
+  after Plaid's success screen. The client now sends its platform with
+  link-token + reconnect-token requests; for android the backend attaches
+  `android_package_name` (new `PLAID_ANDROID_PACKAGE_NAME` config,
+  default `com.patrimonio.patrimonio`) instead of `redirect_uri`, so the
+  Plaid SDK intercepts the OAuth return in-app. Bodyless requests (older
+  clients, web) keep the redirect_uri behavior. REQUIRES the package name
+  registered under "Allowed Android package names" in the Plaid dashboard
+  (done by the owner). **Verified working:** U.S. Bank Altitude Connect
+  linked via OAuth from the phone.
+* **Prod data cleanup (operational, not code).** The duplicate June-1
+  U.S. Bank Plaid connection in prod was deleted via the API — its Cash+
+  account was double-counting $458.39 of liability. Done with a minted
+  short-TTL owner session, revoked afterwards (the standard
+  act-on-prod-as-the-user procedure).
+
+## 2026-07-14 — Mobile UX overhaul (Invest / Activity / Home / Cash / More)
+
+First two rounds of the phone-ergonomics pass (`fad9351`, `e6317ff`):
+
+* **Invest tab compact layout:** compact overline title, compact-money
+  change pills, 2-up KPI tiles on phones (from a 300px card interior),
+  duplicate display-currency tile dropped — the other currency renders as
+  one 48dp FX-equivalence row ("Total value in pesos ≈ MX$…", the
+  Home-tab idiom), tighter card gaps, card chrome to house idiom
+  (elevation 4 / radius 20).
+* **Transaction detail sheet** hugs content instead of a fixed 90%
+  height: 24px amount on narrow, one-line growable Notes, auto-category
+  row only when overridden, Save button only when dirty, close-X folded
+  into the hero row on narrow.
+* **Activity toolbar restructure:** toolbar reduced to filter & sort
+  (tune icon + M3 count badge) + overflow, persistent full-width search
+  field, filters + sort in a bottom sheet on narrow (new sort section +
+  removable sort chip), Add moved to a thumb-zone FAB on compact layouts
+  (list gets 88dp clearance), transactions-list scrollbar transient on
+  touch platforms (forced thumb only on pointer platforms).
+* **Home:** single hero — the history card's header collapses to an
+  overline with the mode toggle and the range selector moves inside the
+  card below the chart; pull-to-refresh on the overview tab; 44dp+
+  range/mode/sync targets; span-derived chart x-axis labels;
+  assets/liabilities bar hidden at zero liabilities.
+* **Cash:** summary-first section order, period chips below 420px,
+  overline card headers, 2-up income/expense with an FX-equivalence net
+  row, tap-triggered info tooltips at 48dp, Confirm/Unlink +
+  subscription-dismiss raised to the touch floor, legend stacking bug
+  fixed, type floors raised (10→11/12).
+* **More:** sheet drag handle + selected-state tiles; Lending gets a
+  thumb-zone FAB + full-screen loan form (keyboard-safe pinned actions) +
+  house money formatters + l10n'd schedule headers; Tax gets 48dp
+  filing-status targets and 2-up compact liability tiles with tap-tooltip
+  caveats; Projections reordered summary-first with an overline header.
+* **Verified:** `flutter analyze` clean at every step (19 pre-existing
+  infos, zero new); 544 → 546 tests across the two commits (new
+  regression tests pin the compact headers + loan-form behavior).
 
 ## 2026-07-13 — Native session persists across app restarts/updates
 

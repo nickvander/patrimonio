@@ -1,6 +1,6 @@
 # System Architecture
 
-Patrimonio uses a Flutter web client, a Rust/Axum API, PostgreSQL as the source of truth, and Redis for cached exchange-rate and short-lived integration data.
+Patrimonio uses a Flutter client (web and a native Android APK), a Rust/Axum API, PostgreSQL as the source of truth, and Redis for cached exchange-rate and short-lived integration data.
 
 ## High-Level Diagram
 

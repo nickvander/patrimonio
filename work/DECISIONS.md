@@ -145,3 +145,39 @@ Tracking key architectural and design decisions with rationale.
 **Context:** Real data often has messy categorization or requires personal context (notes). Overlapping CSV imports could also lead to duplication.
 **Decision:** (1) Added `user_category` and `user_notes` fields to the transaction schema to support non-destructive overrides. (2) Implemented deterministic signature-based deduplication for CSV imports (hashing date+amount+desc). (3) Added `source` tracking (`plaid` vs `csv`) for auditability.
 **Rationale:** Users trust their own categorization more than a bank's ML model. Overrides allow "fixing" data without losing the original bank record. Signature-based deduplication is critical when users import the same statement file multiple times or have overlapping dates.
+
+---
+
+## DEC-017: One "More" Metaphor — Top-Bar Kebab Retired App-Wide
+**Date:** 2026-07-14
+**Status:** Accepted
+**Context:** The app bar's kebab menu held only app-level settings (theme, language, sign-out) — a top-bar overflow is for screen-contextual actions — and it was part of the compact bar's M3 action-budget overflow on phones.
+**Decision:** Remove the kebab on all widths. App-level settings live at the end of the Settings tab (Preferences + Account & security groups); first-run keeps bar escape hatches since nav chrome is hidden there. A kebab may return only for genuine per-screen actions.
+**Alternatives:** Keep the kebab on wide layouts only (rejected — two homes for the same settings); a dedicated settings icon in the bar (rejected — still over the compact action budget, and Settings is already one tap away in the nav).
+
+---
+
+## DEC-018: Scroll-Away App Bar via NotificationListener Wrapper
+**Date:** 2026-07-14
+**Status:** Accepted
+**Context:** The compact app bar should scroll away (enter-always + snap) to reclaim vertical space on phones, but the dashboard's scroll ownership spans 4 different scrolling regimes across 5 files under an IndexedStack, so the canonical Flutter approach would require re-plumbing every tab.
+**Decision:** A notification-driven collapsing wrapper around the existing AppBar (`frontend/lib/utils/bar_scroll.dart` decision helper): force-visible at scroll offset zero (never fights pull-to-refresh), restored on upward flicks and tab switches. Wide layouts keep a static bar.
+**Alternatives:** NestedScrollView / per-tab SliverAppBar (rejected — high regression surface across all 4 scroll regimes for what is cosmetic parity with the stock M3 behavior).
+
+---
+
+## DEC-019: Credit-Card List Ranks by Amount Owed, Not Utilization
+**Date:** 2026-07-14
+**Status:** Accepted
+**Context:** The credit-utilization card sorted rows by utilization %, which ranked a nearly-empty low-limit card above cards carrying four-figure balances — the list reads as "what do I owe", not "which limit is fullest".
+**Decision:** Rank by USD-normalised amount owed, largest first (mixed-currency safe); per-row utilization % is still displayed.
+**Alternatives:** Keep utilization ranking (rejected per above); a user-configurable sort (rejected — a settings surface for a single card isn't warranted).
+
+---
+
+## DEC-020: Vault Heuristic Never Applies to Credit-Category Accounts
+**Date:** 2026-07-14
+**Status:** Accepted
+**Context:** The accounts-list "vault" heuristic (nest a sub-account whose name matches neither its type token nor the bank) was written for SoFi-style savings buckets, but credit-card product names ("Cash +", "Prime Visa", "Bilt Blue Card") routinely match neither — so a card sharing an institution cluster with a generically-named sibling nested under it as a fake vault (U.S. Bank rendered Cash+ inside "Credit Card" with a bogus "base + 1 cards" line).
+**Decision:** Credit-category accounts always classify as products; sibling cards render as plain rows inside the collapsible institution block.
+**Alternatives:** Tuning the name-similarity threshold (rejected — card product naming is inherently arbitrary; category scoping is deterministic and testable).

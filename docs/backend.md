@@ -18,7 +18,7 @@ Fetches USD/MXN rates and caches recent responses in Redis to reduce API traffic
 
 ### Plaid Sync
 
-Handles link-token creation, public-token exchange, balance sync, transaction sync, holdings sync, and cursor tracking.
+Handles link-token creation, public-token exchange, balance sync, transaction sync, holdings sync, and cursor tracking. Link-token creation is platform-aware: a native Android client sends `{"platform": "android"}` and receives a token carrying `android_package_name` (config `PLAID_ANDROID_PACKAGE_NAME`, default `com.patrimonio.patrimonio`) instead of the web `redirect_uri`, so OAuth banks return into the app.
 
 ### Crypto Sync
 
@@ -42,7 +42,7 @@ Tax routes estimate US federal and Mexico ISR outcomes, use holding cost-basis d
 - `/api/dashboard`: Aggregated dashboard data.
 - `/api/fx`: Currency conversion and history.
 - `/api/imports`: File upload and statement parsing.
-- `/api/plaid`: Plaid link and sync routes.
+- `/api/institutions`: Plaid link, sync, reconnect, and webhook routes.
 - `/api/auth/coinbase`: Coinbase OAuth routes.
 - `/api/tax`: Tax estimates and exports.
 

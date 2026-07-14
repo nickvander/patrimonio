@@ -132,8 +132,9 @@ Two likely causes, both fixable:
 2. **The `exchange_rates` table doesn't have a USDMXN row for your
    sync date.** Fall-through path: latest rate is used; if there's
    no rate at all, a hardcoded 20.0 is the absolute last resort.
-   Check the FX badge in the dashboard header — if it's showing a
-   real number you're fine.
+   Check the FX rate in the app bar (its own badge on wide layouts;
+   inside the currency chip on phones) — if it's showing a real
+   number you're fine.
 
 ## Cheat sheet for reading the portfolio card
 

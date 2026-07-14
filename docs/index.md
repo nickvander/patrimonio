@@ -19,7 +19,7 @@ Provide a single view of net worth across institutions, countries, asset classes
 ## Technology Stack
 
 - **Backend**: Rust + Axum + SQLx
-- **Frontend**: Flutter Web
+- **Frontend**: Flutter (web + Android APK)
 - **Database**: PostgreSQL 17
 - **Cache**: Redis 7
 - **Infrastructure**: Docker Compose locally; static frontend hosting plus API container for production

@@ -14,14 +14,20 @@ description: How to add new API endpoints, database tables, and services to the 
    - `dashboard.rs` — aggregated dashboard data
    - Or create a new module and register it in `api/mod.rs`
 
-2. Write the handler function:
+2. Write the handler function — follow the **rust-backend skill** (ApiError,
+   `internal()`, user scoping); extractor order is State → Extension → Path/Query
+   → Json last:
    ```rust
-   async fn my_handler(State(state): State<AppState>) -> Json<MyResponse> {
-       let rows = sqlx::query("SELECT ...")
+   async fn my_handler(
+       State(state): State<AppState>,
+       Extension(ctx): Extension<AuthContext>,
+   ) -> Result<Json<MyResponse>, ApiError> {
+       let rows = sqlx::query("SELECT ... WHERE user_id = $1")
+           .bind(ctx.user_id)
            .fetch_all(&state.db)
            .await
-           .unwrap_or_default();
-       Json(/* map rows to response */)
+           .map_err(internal)?;
+       Ok(Json(/* map rows to response */))
    }
    ```
 
@@ -38,11 +44,13 @@ description: How to add new API endpoints, database tables, and services to the 
    .nest("/api/my-module", api::my_module::router())
    ```
 
-5. Rebuild: `docker compose up --build -d api`
+5. Rebuild and restart (no Docker on the dev VM): `cd backend && cargo build`,
+   then `pkill -x patrimonio` and relaunch `./target/debug/patrimonio`
+   (see the dev-workflow skill)
 
 ## IMPORTANT: SQL query rules
 - **Always use `sqlx::query()` (runtime)** — never `sqlx::query!()` (compile-time macro)
-- Docker builds set `SQLX_OFFLINE=true` and there's no `.sqlx/` cache
+- Prod Docker builds set `SQLX_OFFLINE=true` and there's no `.sqlx/` cache
 - Use `sqlx::Row` trait with `.get()` / `.try_get()` for column extraction
 - Use `.bind()` for parameterized queries
 
@@ -50,9 +58,11 @@ description: How to add new API endpoints, database tables, and services to the 
 
 1. Create a new migration file:
    ```
-   backend/migrations/YYYYMMDD_NNN_description.sql
+   backend/migrations/YYYYMMDDNN_description.sql
    ```
-   Use the date prefix format (e.g., `20260323_002_add_budgets.sql`)
+   Date + 2-digit sequence prefix, current style (e.g.,
+   `2026070701_asset_class_overrides.sql`). Additive only — never edit a
+   shipped migration.
 
 2. Write the SQL (CREATE TABLE, indexes, etc.)
 
@@ -67,7 +77,7 @@ description: How to add new API endpoints, database tables, and services to the 
 
 4. Register the model module in `backend/src/models/mod.rs`
 
-5. Migrations run automatically on startup — just rebuild the API container
+5. Migrations run automatically on startup — just rebuild and restart the backend binary
 
 ## Adding a new service
 

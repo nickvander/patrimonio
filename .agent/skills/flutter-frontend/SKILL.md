@@ -34,6 +34,10 @@ Cited anchors are `file:line` at time of writing; if drifted, grep for the named
    color extension. (§4)
 4. **Index-as-x charts** hide data gaps; **screen-width** breakpoints miss the real
    constraint. Use day-offset x and the *inner* `LayoutBuilder` width. (§4, §5)
+5. **Top-level `package:http` calls (`http.get`/`http.post`) from a screen** — the browser
+   attaches the session cookie for free on web, but on native Android they go out
+   **anonymous** → 401s that only reproduce in the APK. Use `ApiService` or a
+   `createApiClient()` instance. (§3, §8)
 
 ## 1. State management
 
@@ -120,6 +124,11 @@ conditional imports.
   `{"error": "..."}` string. Localize fallback strings with `_t(en, es)`. Add a **typed
   exception** (like `LoanTermsLockedException`, `UnauthorizedException`) only when a call site
   must distinguish that failure programmatically.
+- **Never call top-level `http.get`/`http.post`.** They bypass the shared cookie jar, so on
+  native the request carries no session cookie and 401s — web hides the bug because the
+  browser attaches it for free (this shipped: `connect_bank_screen.dart` went out anonymous
+  on Android). A screen that can't use `ApiService` holds a `createApiClient()` instance
+  (`final http.Client _http = createApiClient();`) and `close()`s it in `dispose()`.
 - **DTOs:** most endpoints return untyped `Map<String, dynamic>` / `List<dynamic>` cast
   field-by-field. This is the existing reality but it's fragile — for a **new complex
   response, add a typed `fromJson` model** (like `AuthUser`) rather than growing more
@@ -147,6 +156,16 @@ conditional imports.
   16 vs 24). Derive `chartHeight` / `barWidth` / label-thinning from the constraint. To avoid
   x-label overlap, compute an adaptive step (~1 label per 46px phone / 62px wide) and skip
   labels that don't land on it (always keep the last).
+- **Phone idioms (below the ~420 inner breakpoint):** touch targets ≥48dp with 8dp gaps;
+  card titles compress to a compact overline (12px w700 `context.textSubtle` — the bottom
+  nav already names the surface); gate every phone-only change on the inner `LayoutBuilder`
+  width so wide layouts don't regress. Forced-visible `Scrollbar` thumbs are a **pointer**
+  affordance — touch platforms get the transient auto-hiding thumb (`thumbVisibility:
+  !isTouch`, see `transactions_tab.dart`). Small fixed option sets use the M3 Expressive
+  **connected button group** (equal-flex tonal segments, 2px gaps, selected segment morphs
+  to a filled pill — theme picker in `dashboard_screen.dart`), not `SegmentedButton`. The
+  compact app bar scrolls away via `utils/bar_scroll.dart` (`barVisibleAfter` — pure,
+  unit-tested; `pixels <= 0` forces the bar visible so pull-to-refresh never fights it).
 - **StatelessWidget when there's no local state.**
 - **Accessibility:** custom-painted charts are pointer-only, so mirror their data into the
   semantics tree — `Semantics(container: true, label: summary)` + `ExcludeSemantics` on the
@@ -244,12 +263,18 @@ io impl under `if (dart.library.io)`).
   the setup screen on native until a URL is set; web goes straight to `AuthGate`.
 - **Session auth:** the browser cookie jar carries the session cookie for free;
   native `package:http` drops `Set-Cookie`, so `api_platform_io` wraps a
-  `dart:io` client that captures and re-sends it (in-memory — re-login after an
-  app restart). The cookie is `HttpOnly`+`Secure`+`Lax`; HttpOnly does **not**
-  block the native client (it only hides the cookie from browser JS).
+  `dart:io` client that captures and re-sends it — and the cookie only rides on
+  clients from `createApiClient()`, never top-level `http.get/post` (§3). The
+  jar is mirrored into Keystore-backed secure storage (`flutter_secure_storage`,
+  NOT shared_preferences — the cookie is a full-access credential) behind the
+  same `init()` gate as prefs: `main()` calls `initSessionPersistence()`, and
+  the mirror is cleared on logout, any 401, and "Change server". The cookie is
+  `HttpOnly`+`Secure`+`Lax`; HttpOnly does **not** block the native client (it
+  only hides the cookie from browser JS).
 - **Per-host headers + the WS handshake:** all three `api_platform` impls must
   export the same surface — `apiBaseUrl/apiWsUrl/currentHost/apiExtraHeaders/
-  wsHandshakeHeaders/createApiClient`. `apiExtraHeaders()` is stamped on every
+  wsHandshakeHeaders/createApiClient/initSessionPersistence/clearPersistedSession`
+  (the last two are no-ops on web/stub — the browser jar already persists). `apiExtraHeaders()` is stamped on every
   HTTP request (web: ngrok skip header; io: the optional **Cloudflare Access
   service token** from `BackendConfig` as `CF-Access-Client-Id/Secret`).
   `wsHandshakeHeaders()` exists because the browser WebSocket attaches
@@ -266,6 +291,8 @@ io impl under `if (dart.library.io)`).
 - Forking another copy of `chart_time_axis` / `chart_touch` — use the shared helpers.
 - `Colors.white70` / hex colors — use the `context` extension or fail light-mode contrast.
 - Raw `_client` calls bypassing the verb wrappers (lose CSRF / 401 / cache handling).
+- Top-level `http.get`/`http.post` anywhere (no cookie jar on native → APK-only 401s) —
+  use `ApiService` or a `createApiClient()` client.
 
 ## Definition of done (frontend change)
 
@@ -274,8 +301,10 @@ io impl under `if (dart.library.io)`).
 - [ ] Any new/changed l10n placeholder: call site matches the **alphabetical** generated
       signature, with a `// gen-l10n orders …` comment.
 - [ ] User-facing strings added to BOTH `app_en.arb` and `app_es.arb`.
-- [ ] Network calls go through `_get/_post/...`; dashboard GETs cached; errors via `_errorFromBody`.
-- [ ] Responsive sizing off the inner `LayoutBuilder` width with the established breakpoints.
+- [ ] Network calls go through `_get/_post/...` (or a `createApiClient()` client — never
+      top-level `http.*`); dashboard GETs cached; errors via `_errorFromBody`.
+- [ ] Responsive sizing off the inner `LayoutBuilder` width with the established breakpoints;
+      phone-only tweaks gated on it; touch targets ≥48dp.
 - [ ] Custom charts mirror data into the semantics tree.
 - [ ] Unit test for extracted logic; bilingual widget test for locale-sensitive strings.
 - [ ] No unconditional `dart:js_interop` / `package:web` / `browser_client` import outside a

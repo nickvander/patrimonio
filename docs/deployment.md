@@ -12,7 +12,7 @@ Patrimonio is designed to run locally with Docker Compose and to deploy as a sta
 - Optional ExchangeRate-API key for live FX data
 - `ENCRYPTION_KEY` configured in `.env` before storing integration tokens or API secrets
 
-For real Plaid users, also configure the Plaid dashboard environment, product access, and deployed HTTPS redirect/webhook URLs. Sandbox credentials are enough for local test data only.
+For real Plaid users, also configure the Plaid dashboard environment, product access, and deployed HTTPS redirect/webhook URLs. Linking OAuth banks from the Android APK additionally requires the app's package name to be registered in the Plaid dashboard — see [Plaid OAuth from the Android app](#plaid-oauth-from-the-android-app). Sandbox credentials are enough for local test data only.
 
 ### Start the Stack
 
@@ -51,7 +51,7 @@ The smoke test checks API health and uses Playwright to confirm the Flutter app 
 
 ### Setup Status
 
-The API exposes `GET /api/setup/status` for launch readiness checks. The Management tab uses it to show whether Plaid credentials and `ENCRYPTION_KEY` are configured before enabling real account linking.
+The API exposes `GET /api/setup/status` for launch readiness checks. The Settings tab uses it to show whether Plaid credentials and `ENCRYPTION_KEY` are configured before enabling real account linking.
 
 ## Android APK
 
@@ -170,6 +170,32 @@ debug signing so it still succeeds; it just isn't signed with the real upload ke
 Install by sideloading the APK onto the phone (enable "install unknown apps").
 The APK is not published to the Play Store.
 
+### Plaid OAuth from the Android app
+
+Plaid link tokens carry an OAuth return target. The web client uses the
+deployment's `PLAID_REDIRECT_URI`; a native Android client must **not** —
+the OAuth bank would send the user back to the browser at that URL, outside
+the app's Link session, and the linked item silently vanishes after Plaid's
+success screen. The app therefore sends `{"platform": "android"}` on
+`POST /api/institutions/link-token` and
+`POST /api/institutions/reconnect-token/{id}`, and the backend attaches
+`android_package_name` instead of `redirect_uri`, so the Plaid SDK
+intercepts the OAuth return in-app. Requests without a platform body
+(web, older clients) keep the `redirect_uri` behavior unchanged.
+
+Two operator pieces:
+
+1. **Register the package name in the Plaid dashboard** under **Allowed
+   Android package names** (**Developers ➔ API** — the same page as the
+   redirect URIs). Without this, OAuth institutions (e.g. U.S. Bank)
+   cannot link from the APK.
+2. **`PLAID_ANDROID_PACKAGE_NAME`** is the package name the backend
+   sends. It defaults to `com.patrimonio.patrimonio` — this repo's
+   `applicationId` — so a stock APK needs no configuration. Set it only
+   if you build the APK under a custom application id; it must match
+   what you registered in the dashboard. The compose file forwards it
+   from `.env` like the other Plaid variables.
+
 ### Native passkeys (Android)
 
 The app performs real WebAuthn ceremonies through Android's Credential
@@ -247,6 +273,10 @@ to reach `/api/institutions/webhook` at a public HTTPS URL.
     `operations.md`).
   - `FRONTEND_BASE_URL=https://patrimonio.example.com`.
   - `PLAID_WEBHOOK_URL=https://patrimonio.example.com/api/institutions/webhook`.
+  - If users will link OAuth banks from the Android app: register the
+    package name (`com.patrimonio.patrimonio` unless you changed the
+    APK's `applicationId`) in the Plaid dashboard — see
+    [Plaid OAuth from the Android app](#plaid-oauth-from-the-android-app).
   - `TRUSTED_PROXY_CIDRS=127.0.0.1/32` (the nginx loopback address —
     add the docker bridge if nginx runs in a container).
   - DB / Redis URLs can stay on the defaults if the compose stack
@@ -346,7 +376,7 @@ already has linked items, choose one of:
        -H 'X-Requested-With: patrimonio' | jq .
   ```
 
-  The Management tab also surfaces the "Webhook URL configured"
+  The Settings tab also surfaces the "Webhook URL configured"
   card from `GET /api/setup/status`.
 
 Once the URL is registered, Plaid pushes `INITIAL_UPDATE`,
