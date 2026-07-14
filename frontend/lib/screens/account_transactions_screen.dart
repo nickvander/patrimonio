@@ -1702,6 +1702,45 @@ Future<void> showAccountTransactionsPanel(
   final size = MediaQuery.sizeOf(context);
   final isNarrow = size.width < 700;
 
+  final panel = ScrollConfiguration(
+    behavior: const _PanelScrollBehavior(),
+    child: AccountTransactionsScreen(
+      account: account,
+      allAccounts: allAccounts,
+      conversionFactor: conversionFactor,
+      currencyFormat: currencyFormat,
+      targetCurrency: targetCurrency,
+      usdMxnRate: usdMxnRate,
+      onBalanceUpdate: onBalanceUpdate,
+      onRenameAccount: onRenameAccount,
+      onAlertsChanged: onAlertsChanged,
+    ),
+  );
+
+  if (isNarrow) {
+    // Phones: a standard modal bottom sheet, so the panel shares the
+    // transaction detail sheet's dismissal grammar — drag handle,
+    // swipe-down, and tap-outside. The previous showGeneralDialog DID set
+    // barrierDismissible, but a 92%-height panel leaves only a ~30px
+    // barrier sliver, half of it under the OS status bar, so "tap outside
+    // to close" effectively didn't exist here.
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SizedBox(
+        // Same visual height as before, minus the sheet's drag-handle row.
+        height: size.height * 0.92 - 32,
+        width: double.infinity,
+        child: panel,
+      ),
+    );
+  }
+
   return showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
@@ -1710,21 +1749,19 @@ Future<void> showAccountTransactionsPanel(
     transitionDuration: const Duration(milliseconds: 220),
     pageBuilder: (ctx, anim, secAnim) {
       return Align(
-        alignment:
-            isNarrow ? Alignment.bottomCenter : Alignment.centerRight,
+        alignment: Alignment.centerRight,
         child: Material(
           color: Colors.transparent,
           child: Container(
-            width: isNarrow ? size.width : 560,
-            height: isNarrow ? size.height * 0.92 : size.height,
+            width: 560,
+            height: size.height,
             decoration: BoxDecoration(
               // Theme-aware surface (white in light, charcoal in dark) so the
               // onSurface-derived text tokens keep their contrast. Was a
               // hardcoded dark (#15151E) — dark-on-dark in light mode.
               color: Theme.of(ctx).colorScheme.surface,
-              borderRadius: isNarrow
-                  ? const BorderRadius.vertical(top: Radius.circular(20))
-                  : const BorderRadius.horizontal(left: Radius.circular(20)),
+              borderRadius:
+                  const BorderRadius.horizontal(left: Radius.circular(20)),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(
@@ -1736,27 +1773,14 @@ Future<void> showAccountTransactionsPanel(
                 ),
               ],
             ),
-            child: ScrollConfiguration(
-              behavior: const _PanelScrollBehavior(),
-              child: AccountTransactionsScreen(
-                account: account,
-                allAccounts: allAccounts,
-                conversionFactor: conversionFactor,
-                currencyFormat: currencyFormat,
-                targetCurrency: targetCurrency,
-                usdMxnRate: usdMxnRate,
-                onBalanceUpdate: onBalanceUpdate,
-                onRenameAccount: onRenameAccount,
-                onAlertsChanged: onAlertsChanged,
-              ),
-            ),
+            child: panel,
           ),
         ),
       );
     },
     transitionBuilder: (ctx, anim, secAnim, child) {
       final tween = Tween<Offset>(
-        begin: isNarrow ? const Offset(0, 1) : const Offset(1, 0),
+        begin: const Offset(1, 0),
         end: Offset.zero,
       ).chain(CurveTween(curve: Curves.easeOutCubic));
       return SlideTransition(position: anim.drive(tween), child: child);
