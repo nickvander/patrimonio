@@ -579,6 +579,11 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
   }
 
   Widget _buildControls(AppLocalizations l) {
+    // Mirrors _buildContent's stackControls signal (width < 720). On wide
+    // layouts the segmented toggle stays compact so the control row fits on
+    // one line; on phones it keeps the default 48dp touch target instead of
+    // shrinkWrap's ~32dp strip (research rubric principle 1).
+    final wide = MediaQuery.sizeOf(context).width >= 720;
     final years = deriveTaxYears(
       _taxTransactions,
       _taxDisposals,
@@ -614,10 +619,12 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
             onSelectionChanged: (sel) {
               if (sel.isNotEmpty) _onFilingStatusChanged(sel.first);
             },
-            style: const ButtonStyle(
-              visualDensity: VisualDensity.compact,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
+            style: wide
+                ? const ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  )
+                : null,
           ),
         ),
         _labeledControl(
@@ -843,13 +850,53 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
     );
 
     if (stackKpis) {
+      // Phone hierarchy (research rubric principle 13): taxable income keeps
+      // the full-width hero card, but the US/MX scenario pair compresses to
+      // one 2-up row of compact tiles instead of two more stacked heroes —
+      // their multi-line explanatory prose folds into a tap-to-open info
+      // tooltip so the row stays glanceable.
+      final usTile = _compactLiabilityTile(
+        l,
+        label: l.taxUsEstimatedLiability,
+        value: liabUs,
+        subtitle: l.taxScenarioUsSubtitle,
+        caveat: l.taxScenarioUsCaveat,
+        rateLine: l.taxEffectiveRate(rateUs.toStringAsFixed(2)),
+        showRoughBadge: !gainsFromLots,
+      );
+      final mxTile = _compactLiabilityTile(
+        l,
+        label: l.taxMxEstimatedLiability,
+        value: liabMx,
+        subtitle: l.taxScenarioMxSubtitle,
+        caveat: l.taxScenarioMxCaveat,
+        rateLine: l.taxEffectiveRate(rateMx.toStringAsFixed(2)),
+        extra: isrWithheld > 0
+            ? Text(
+                l.taxMxWithheld(
+                  widget.currencyFormat.format(isrWithheld),
+                  widget.currencyFormat
+                      .format((liabMx - isrWithheld).clamp(0, double.infinity)),
+                ),
+                style: TextStyle(fontSize: 11, color: context.textMuted),
+              )
+            : null,
+        showRoughBadge: !gainsFromLots,
+      );
       return Column(
         children: [
           taxableCard,
           const SizedBox(height: 16),
-          usCard,
-          const SizedBox(height: 16),
-          mxCard,
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: usTile),
+                const SizedBox(width: 12),
+                Expanded(child: mxTile),
+              ],
+            ),
+          ),
         ],
       );
     }
@@ -894,6 +941,86 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
               ),
             ),
             child,
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Compact half-width scenario tile for the phone (stacked) KPI layout:
+  /// label + tap-tooltip info button, a 22px display value, the effective-
+  /// rate line, an optional extra line (MX withholding), and the rough-
+  /// estimate badge. The wide 3-across layout keeps the full [_kpiCard]s.
+  Widget _compactLiabilityTile(
+    AppLocalizations l, {
+    required String label,
+    required double value,
+    required String subtitle,
+    required String caveat,
+    required String rateLine,
+    Widget? extra,
+    required bool showRoughBadge,
+  }) {
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+    // The scenario prose (what the estimate assumes + its caveat) doesn't
+    // fit a half-width tile; it lives behind a tap-to-open tooltip instead.
+    // The manual key lets the 48dp IconButton (which wins the tap in the
+    // gesture arena over the Tooltip's own tap trigger) surface it.
+    final tooltipKey = GlobalKey<TooltipState>();
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(pad),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(fontSize: 12, color: context.textMuted),
+                  ),
+                ),
+                Tooltip(
+                  key: tooltipKey,
+                  triggerMode: TooltipTriggerMode.tap,
+                  message: '$subtitle\n$caveat',
+                  child: IconButton(
+                    iconSize: 16,
+                    icon: Icon(Icons.info_outline, color: context.textSubtle),
+                    onPressed: () =>
+                        tooltipKey.currentState?.ensureTooltipVisible(),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                widget.currencyFormat.format(value),
+                // Owed tax is not "good news": neutral primary text,
+                // matching the full-size cards (TAX-2).
+                style: brandDisplayStyle(
+                  fontSize: 22,
+                  color: context.textPrimary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              rateLine,
+              style: TextStyle(fontSize: 12, color: context.textSubtle),
+            ),
+            if (extra != null) ...[
+              const SizedBox(height: 6),
+              extra,
+            ],
+            if (showRoughBadge) ...[
+              const SizedBox(height: 8),
+              _roughEstimateBadge(l),
+            ],
           ],
         ),
       ),

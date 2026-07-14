@@ -438,40 +438,84 @@ class _BudgetsCardState extends State<BudgetsCard> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
         padding: EdgeInsets.all(pad),
-        child: Column(
+        // Width-responsive off the card's OWN constraint (inner
+        // LayoutBuilder, per the skill rule), not MediaQuery — the card can
+        // be narrower than the screen (outer tab padding, width clamps).
+        child: LayoutBuilder(builder: (context, c) {
+          // House ~420 phone breakpoint off the card interior: compact
+          // chrome — no leading icon, title compressed to a small uppercase
+          // overline (the portfolio_card idiom), and the two labelled header
+          // actions collapse to plain 48dp IconButtons. Distinct from the
+          // <720 MediaQuery `isPhone` above (padding/collapse limit only).
+          final isPhoneCard = c.maxWidth < 420;
+          return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.donut_small, color: context.tealAccent, size: 18),
-                const SizedBox(width: 8),
+                if (!isPhoneCard) ...[
+                  Icon(Icons.donut_small, color: context.tealAccent, size: 18),
+                  const SizedBox(width: 8),
+                ],
                 Expanded(
                   child: Text(
-                    l.cfBudgetsTitle,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
+                    isPhoneCard
+                        ? l.cfBudgetsTitle.toUpperCase()
+                        : l.cfBudgetsTitle,
+                    style: isPhoneCard
+                        ? TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                            color: context.textSubtle,
+                          )
+                        : const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    // maxLines only on the phone overline; wider layouts
+                    // keep the original wrap behaviour pixel-identical.
+                    maxLines: isPhoneCard ? 1 : null,
+                    overflow: isPhoneCard ? TextOverflow.ellipsis : null,
                   ),
                 ),
+                // NB: use a glyph that's actually in this build's bundled
+                // MaterialIcons font. The "magic/idea" icons
+                // (auto_awesome_outlined, auto_fix_high, lightbulb_outline)
+                // render blank here — their glyphs aren't present in the
+                // SDK font this image builds with — whereas the classic set
+                // (add_circle_outline, edit_outlined, donut_small) render
+                // fine. add_circle_outline reads as "add budgets".
+                //
+                // Phones: the two labelled actions crowd the overline out of
+                // the row, so they collapse to icon-only buttons (default
+                // constraints = the 48dp touch floor; the label moves into
+                // the tooltip). Wide keeps the labelled TextButtons.
                 if (widget.apiService != null)
-                  // NB: use a glyph that's actually in this build's bundled
-                  // MaterialIcons font. The "magic/idea" icons
-                  // (auto_awesome_outlined, auto_fix_high, lightbulb_outline)
-                  // render blank here — their glyphs aren't present in the
-                  // SDK font this image builds with — whereas the classic set
-                  // (add_circle_outline, edit_outlined, donut_small) render
-                  // fine. add_circle_outline reads as "add budgets".
+                  if (isPhoneCard)
+                    IconButton(
+                      onPressed: _suggesting ? null : _suggestBudgets,
+                      icon: const Icon(Icons.add_circle_outline, size: 20),
+                      tooltip: l.cfBudgetsSuggest,
+                    )
+                  else
+                    TextButton.icon(
+                      onPressed: _suggesting ? null : _suggestBudgets,
+                      icon: const Icon(Icons.add_circle_outline, size: 16),
+                      label: Text(l.cfBudgetsSuggest),
+                    ),
+                if (isPhoneCard)
+                  IconButton(
+                    onPressed: () => _openEditor(spend),
+                    icon: const Icon(Icons.edit_outlined, size: 20),
+                    tooltip: hasBudgets ? l.cfBudgetsEdit : l.actionAdd,
+                  )
+                else
                   TextButton.icon(
-                    onPressed: _suggesting ? null : _suggestBudgets,
-                    icon: const Icon(Icons.add_circle_outline, size: 16),
-                    label: Text(l.cfBudgetsSuggest),
+                    onPressed: () => _openEditor(spend),
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: Text(hasBudgets ? l.cfBudgetsEdit : l.actionAdd),
                   ),
-                TextButton.icon(
-                  onPressed: () => _openEditor(spend),
-                  icon: const Icon(Icons.edit_outlined, size: 16),
-                  label: Text(hasBudgets ? l.cfBudgetsEdit : l.actionAdd),
-                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -588,7 +632,7 @@ class _BudgetsCardState extends State<BudgetsCard> {
                                             .clamp(0, double.infinity) *
                                         widget.conversionFactor)),
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 12,
                           color: over
                               ? context.pinkAccent
                               : state == _BudgetState.pacing
@@ -616,7 +660,8 @@ class _BudgetsCardState extends State<BudgetsCard> {
                 ),
             ],
           ],
-        ),
+          );
+        }),
       ),
     );
   }

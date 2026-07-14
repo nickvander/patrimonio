@@ -252,7 +252,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
 
     return Card(
       elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
         padding: EdgeInsets.all(pad),
         child: Column(
@@ -559,7 +559,10 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
               // Left inset that lines the subtitle / currency pills up with
               // the title text's left edge in the header Row:
               // chevron (20) + gap (4) + icon chip (8 + 18 + 8) + gap (12).
-              const subLeft = 70.0;
+              // On narrow phones the inset is dropped so the pills and
+              // subtitle align with the card padding and both currency
+              // pills fit one Wrap line.
+              final subLeft = isNarrow ? 0.0 : 70.0;
 
               // Only worth showing when the group spans >1 currency. Each
               // currency reads as its own self-labelled pill ("USD 9,591.00")
@@ -581,7 +584,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
               final currencyLine = byCurrency.length < 2
                   ? null
                   : Padding(
-                      padding: const EdgeInsets.only(top: 8, left: subLeft),
+                      padding: EdgeInsets.only(top: 8, left: subLeft),
                       child: Wrap(
                         spacing: 8,
                         runSpacing: 6,
@@ -636,7 +639,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
               final subtitleText = subtitle == null
                   ? null
                   : Padding(
-                      padding: const EdgeInsets.only(top: 4, left: subLeft),
+                      padding: EdgeInsets.only(top: 4, left: subLeft),
                       child: Text(
                         subtitle,
                         style: TextStyle(
@@ -650,8 +653,9 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                     );
 
               if (isNarrow) {
-                // Stack the total below the title so a long number can't
-                // shove the title into ellipsis territory.
+                // Compact header: the total shares the title row (scaled
+                // down if a long number would otherwise squeeze the title
+                // into ellipsis territory) — one row instead of two.
                 return Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
@@ -664,15 +668,17 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                           headerIcon,
                           const SizedBox(width: 12),
                           Expanded(child: titleText),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: totalText,
+                            ),
+                          ),
                         ],
                       ),
                       ?subtitleText,
                       ?currencyLine,
-                      const SizedBox(height: 6),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: totalText,
-                      ),
                     ],
                   ),
                 );

@@ -933,7 +933,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
       decoration: BoxDecoration(
         color: accent.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: accent.withValues(alpha: 0.32), width: 1.2),
       ),
       child: Column(
@@ -2061,7 +2061,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        // Same responsive 16/24 padding as the tab's other cards
+        // (e.g. monthly_cash_flow_card.dart).
+        padding: EdgeInsets.all(
+            MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2821,7 +2824,58 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// the SegmentedButton style used elsewhere (e.g. the portfolio Flat/By
   /// account toggle) so it reads as native. Horizontally scrollable so the
   /// four labels never overflow on a phone.
+  ///
+  /// Below ~420px the compact-density SegmentedButton's segments fall under
+  /// the 48dp touch floor and the four labels crowd; phones instead get a
+  /// horizontally scrolling row of ChoiceChips — the same pattern as
+  /// SpendingByCategoryCard's `_rangeSelector`.
   Widget _buildCashFlowPeriodSelector(AppLocalizations l) {
+    if (MediaQuery.sizeOf(context).width < 420) {
+      final periods = <(CashFlowPeriod, String)>[
+        (CashFlowPeriod.thisMonth, l.cfPeriodThisMonth),
+        (CashFlowPeriod.lastMonth, l.cfPeriodLastMonth),
+        (CashFlowPeriod.threeMonths, l.cfPeriod3Months),
+        (CashFlowPeriod.ytd, l.cfPeriodYtd),
+      ];
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < periods.length; i++) ...[
+              if (i > 0) const SizedBox(width: 8),
+              ChoiceChip(
+                label: Text(periods[i].$2),
+                selected: _cashFlowPeriod == periods[i].$1,
+                labelStyle: TextStyle(
+                  fontSize: 12,
+                  color: _cashFlowPeriod == periods[i].$1
+                      ? context.positive
+                      : context.textMuted,
+                  fontWeight: _cashFlowPeriod == periods[i].$1
+                      ? FontWeight.bold
+                      : FontWeight.normal,
+                ),
+                showCheckmark: false,
+                // Null while a period fetch is in flight — disables the
+                // chips the same way the SegmentedButton branch disables
+                // onSelectionChanged.
+                onSelected: _cashFlowLoading
+                    ? null
+                    : (_) {
+                        final value = periods[i].$1;
+                        if (value == _cashFlowPeriod) return;
+                        _onCashFlowPeriodChanged(value);
+                      },
+              ),
+            ],
+            // Trailing breathing room so the last chip never touches the
+            // screen edge mid-scroll.
+            const SizedBox(width: 16),
+          ],
+        ),
+      );
+    }
     return Align(
       alignment: Alignment.centerLeft,
       child: SingleChildScrollView(
@@ -3429,14 +3483,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
           autofocus: true,
           child: Scaffold(
               appBar: AppBar(
-          title: const FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Patrimonio',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
+          // Compact widths: the actions row owns nearly the whole bar, so
+          // the FittedBox could only render this wordmark at an unreadable
+          // ~8px (it was fully crowded out before the theme button moved
+          // into the overflow menu). No title beats a squeezed one there.
+          title: isCompact
+              ? null
+              : const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Patrimonio',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
           actions: [
             // First-run hides the dashboard chrome (FX, notifications,
             // currency toggle) because none of it has data yet. Sign
@@ -3511,7 +3571,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             ],
-            _ThemeCycleButton(),
+            // Compact widths move theme selection into the overflow menu
+            // below — five always-on icons crowded a 360px AppBar.
+            if (!isCompact) _ThemeCycleButton(),
             if (!firstRun)
               _CurrencyToggleButton(
                 targetCurrency: _targetCurrency,
@@ -3603,6 +3665,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ),
                     ),
+                    // Theme picker, compact widths only — the AppBar's
+                    // _ThemeCycleButton is hidden there to save space.
+                    // Mirrors the cycle button's set-and-persist logic.
+                    if (isCompact)
+                      SubmenuButton(
+                        leadingIcon:
+                            const Icon(Icons.brightness_6_outlined, size: 20),
+                        menuChildren: [
+                          for (final (mode, icon, label) in [
+                            (
+                              ThemeMode.system,
+                              Icons.brightness_auto,
+                              l.dashThemeSystemDefault
+                            ),
+                            (
+                              ThemeMode.light,
+                              Icons.light_mode_outlined,
+                              l.dashThemeLightShort
+                            ),
+                            (
+                              ThemeMode.dark,
+                              Icons.dark_mode_outlined,
+                              l.dashThemeDarkShort
+                            ),
+                          ])
+                            MenuItemButton(
+                              leadingIcon: Icon(icon, size: 20),
+                              onPressed: () {
+                                themeModeNotifier.value = mode;
+                                Preferences.setThemeMode(switch (mode) {
+                                  ThemeMode.system => 'system',
+                                  ThemeMode.light => 'light',
+                                  ThemeMode.dark => 'dark',
+                                });
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.only(right: 16),
+                                child: Text(label),
+                              ),
+                            ),
+                        ],
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 16),
+                          child: Text(l.dashThemeMenu),
+                        ),
+                      ),
                     const Divider(height: 8, indent: 12, endIndent: 12),
                     MenuItemButton(
                       leadingIcon:
@@ -3720,7 +3828,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // the Activity tab's hostProvidesAddFab flips in lockstep with the
     // FAB's visibility (no width band shows both '+' affordances or none).
     final isCompact = MediaQuery.sizeOf(context).width < 720;
-    Widget buildTabContainer(Widget child, {bool scrollable = true}) {
+    Widget buildTabContainer(Widget child,
+        {bool scrollable = true, Future<void> Function()? onRefresh}) {
       final padding = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
       // Extra scrollable space at the very bottom so a transient SnackBar
       // (notably the 30s "Syncing…" one) never sits on top of the last
@@ -3735,13 +3844,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       );
 
-      return scrollable
-          ? SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                  padding, padding, padding, padding + snackbarClearance),
-              child: content,
-            )
-          : Padding(padding: EdgeInsets.all(padding), child: content);
+      if (!scrollable) {
+        return Padding(padding: EdgeInsets.all(padding), child: content);
+      }
+      final scrollView = SingleChildScrollView(
+        // Pull-to-refresh needs a scrollable even when the content fits.
+        physics: onRefresh != null
+            ? const AlwaysScrollableScrollPhysics()
+            : null,
+        padding: EdgeInsets.fromLTRB(
+            padding, padding, padding, padding + snackbarClearance),
+        child: content,
+      );
+      // Mobile-native refresh gesture (mirrors LendingTab). Callers pass the
+      // light data refetch, never runSync — a 30s bank sync is too heavy for
+      // an accidental overscroll.
+      return onRefresh == null
+          ? scrollView
+          : RefreshIndicator(onRefresh: onRefresh, child: scrollView);
     }
 
     Widget buildAccountsColumn() {
@@ -3993,7 +4113,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               icon: const Icon(Icons.refresh, size: 16),
               label: Text(l.dashSyncNow),
               style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
                 foregroundColor: context.info,
               ),
             ),
@@ -4237,11 +4356,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
 
-    Widget buildChartsColumn() {
+    Widget buildChartsColumn({required bool compact}) {
+      // Same horizontally-scrolling range selector buildNetWorthHeader
+      // builds. On compact layouts it moves INSIDE the card, below the
+      // chart, so range switching is thumb-reachable and visually bound to
+      // the plot it controls.
+      final rangeSelector = SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DateRangeSelector(
+          selectedRange: _selectedRange,
+          onRangeChanged: (range) {
+            setState(() => _selectedRange = range);
+            Preferences.setDateRange(range.name);
+          },
+        ),
+      );
       return Column(
+        // Stretch, not the default center: children fill the column width
+        // instead of centering when one is intrinsically narrower.
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          buildNetWorthHeader(),
-          const SizedBox(height: 12),
+          // Compact skips the floating 20px header — the card renders its
+          // own overline title, and the range selector moves in-card.
+          if (!compact) ...[
+            buildNetWorthHeader(),
+            const SizedBox(height: 12),
+          ],
           // The card sizes itself: header at natural height + a
           // guaranteed chart height inside NetWorthCard. Pinning the card
           // to a fixed box here is what squished the chart to a sliver on
@@ -4258,12 +4398,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             sourceBreakdown: _overview?['currency_breakdown'] ?? [],
             usdMxnRate: fxRate,
             selectedRange: _selectedRange,
+            // The dashboard hero block directly above already shows the
+            // net-worth figure — suppress the card's duplicate summary on
+            // phones.
+            showSummary: !compact,
+            rangeSelector: compact ? rangeSelector : null,
           ),
           // Glanceable assets-vs-liabilities split. Skipped during
           // first-run when typeBreakdown is empty (the widget renders
           // a SizedBox.shrink in that case anyway).
           if ((_overview?['type_breakdown'] as List?)?.isNotEmpty ?? false) ...[
-            const SizedBox(height: 12),
+            SizedBox(height: compact ? 16 : 12),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: AssetsLiabilitiesBar(
@@ -4277,6 +4422,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     final overviewTab = buildTabContainer(
+      // Pull-to-refresh: the light data refetch (stock re-price + cached
+      // reads bypassed) — deliberately NOT runSync's 30s bank sync.
+      onRefresh: _refreshData,
       LayoutBuilder(
         builder: (context, constraints) {
           final isNarrow = constraints.maxWidth < 900;
@@ -4298,8 +4446,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     // On mobile the net-worth trend is the canonical glance,
                     // so it leads — the long accounts list follows. (On wide
                     // screens they sit side by side, order doesn't matter.)
-                    buildChartsColumn(),
-                    const SizedBox(height: 20),
+                    buildChartsColumn(compact: true),
+                    const SizedBox(height: 16),
                     buildAccountsColumn(),
                   ],
                 )
@@ -4311,7 +4459,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     // charts still have the larger 2/3 share.
                     Expanded(flex: 1, child: buildAccountsColumn()),
                     const SizedBox(width: 24),
-                    Expanded(flex: 2, child: buildChartsColumn()),
+                    Expanded(flex: 2, child: buildChartsColumn(compact: false)),
                   ],
                 );
 
@@ -4369,9 +4517,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               buildSyncBar(),
               const SizedBox(height: 12),
               if (isNarrow) ...[
-                // GLANCE (always visible): trend + accounts.
+                // GLANCE (always visible): trend + accounts. 16px card gaps
+                // on phones (house rubric).
                 body,
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 // DETAILS (one tap): stat strip, goal, emergency fund. Folded
                 // away by default so the phone view isn't a wall of cards;
                 // expand-state is remembered across visits.
@@ -4381,12 +4530,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(height: 12),
                     currencySubStrip,
                   ],
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   goalTile,
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   emergencyCard,
                   if (lendingGlance != null) ...[
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
                     lendingGlance,
                   ],
                 ]),
@@ -4723,6 +4872,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // thisMonth: leave selectedMonthIso null -> card headlines the latest
       // (only) month in the 1-month window.
     }
+    // Cash-flow tab ordering: summary first (period + monthly headline),
+    // then actionable cards (budgets, subscriptions + their un-hide panel,
+    // upcoming bills), then analytic/occasional ones (category breakdown,
+    // FX transfers, debt payoff).
     final cashFlowTab = buildTabContainer(
       Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -4735,9 +4888,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
             currencyFormat: currencyFormat,
             selectedMonthIso: cfSelectedMonthIso,
             periodLabel: cfPeriodLabel,
+            usdMxnRate: fxRate,
+            targetCurrency: _targetCurrency,
           ),
           SizedBox(height: gap),
-          if (cashFlowSeries != null)
+          BudgetsCard(
+            transactions: _transactions ?? const [],
+            conversionFactor: conversionFactor,
+            usdMxnRate: fxRate,
+            currencyFormat: currencyFormat,
+            apiService: _apiService,
+            // Item #11: a monthly target priced against the selected period's
+            // most-recent month. 'This month' resolves to the current month,
+            // leaving the pre-#11 behavior (incl. #10 pacing) unchanged.
+            periodMonth: _budgetMonthForCashFlowPeriod(_cashFlowPeriod),
+          ),
+          SizedBox(height: gap),
+          if (cashFlowSeries != null) ...[
             CashFlowTrendsChart(
               trends: cashFlowSeries,
               conversionFactor: conversionFactor,
@@ -4756,6 +4923,67 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _goToNav(NavId.transactions);
               },
             ),
+            SizedBox(height: gap),
+          ],
+          // Detected recurring outflows — surfaces what's silently
+          // eating the budget every month. Tapping a row seeds the
+          // transactions search with the merchant.
+          if ((_subscriptions ?? const []).isNotEmpty) ...[
+            SubscriptionsCard(
+              subscriptions: _subscriptions!,
+              conversionFactor: conversionFactor,
+              usdMxnRate: fxRate,
+              currencyFormat: currencyFormat,
+              targetCurrency: _targetCurrency,
+              onTapMerchant: (m) {
+                setState(() => _transactionsSearchOverride = m);
+                _goToNav(NavId.transactions);
+              },
+              onIgnoreMerchant: (m) async {
+                try {
+                  await _apiService.ignoreSubscription(m);
+                  await _refreshSubscriptionLists();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(l.dashMerchantHidden(m))),
+                  );
+                } catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(l.dashFailedGeneric(e.toString()))),
+                  );
+                }
+              },
+            ),
+            SizedBox(height: gap),
+          ],
+          // Hidden-from-subscriptions list, directly below the
+          // subscriptions it un-hides. Surfaces only when there's
+          // something to un-hide — keeps the cash-flow tab quiet for
+          // users who never dismissed anything.
+          if ((_ignoredSubscriptions ?? const []).isNotEmpty) ...[
+            _buildIgnoredSubscriptionsPanel(),
+            SizedBox(height: gap),
+          ],
+          // Bills derive from the detected subscriptions, so the card (which
+          // self-hides without them) and its gap are gated together.
+          if ((_subscriptions ?? const []).isNotEmpty) ...[
+            UpcomingBillsCard(
+              subscriptions: _subscriptions ?? const [],
+              conversionFactor: conversionFactor,
+              currencyFormat: currencyFormat,
+            ),
+            SizedBox(height: gap),
+          ],
+          SpendingByCategoryCard(
+            apiService: _apiService,
+            conversionFactor: conversionFactor,
+            currencyFormat: currencyFormat,
+            // Item #11: track the Cash Flow period selector so the category
+            // chart's window matches the rest of the tab instead of its own
+            // fixed default.
+            months: _monthsForCashFlowPeriod(_cashFlowPeriod),
+          ),
           SizedBox(height: gap),
           // Cross-currency cash transfers (Wise / Remitly / wires).
           // Lists each detected link with implied vs spot FX, plus
@@ -4801,74 +5029,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             SizedBox(height: gap),
           ],
-          // Hidden-from-subscriptions list. Surfaces only when there's
-          // something to un-hide — keeps the cash-flow tab quiet for
-          // users who never dismissed anything.
-          if ((_ignoredSubscriptions ?? const []).isNotEmpty)
-            _buildIgnoredSubscriptionsPanel(),
-          if ((_ignoredSubscriptions ?? const []).isNotEmpty)
-            SizedBox(height: gap),
-          // Detected recurring outflows — surfaces what's silently
-          // eating the budget every month. Tapping a row seeds the
-          // transactions search with the merchant.
-          if ((_subscriptions ?? const []).isNotEmpty) ...[
-            SubscriptionsCard(
-              subscriptions: _subscriptions!,
-              conversionFactor: conversionFactor,
-              usdMxnRate: fxRate,
-              currencyFormat: currencyFormat,
-              targetCurrency: _targetCurrency,
-              onTapMerchant: (m) {
-                setState(() => _transactionsSearchOverride = m);
-                _goToNav(NavId.transactions);
-              },
-              onIgnoreMerchant: (m) async {
-                try {
-                  await _apiService.ignoreSubscription(m);
-                  await _refreshSubscriptionLists();
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(l.dashMerchantHidden(m))),
-                  );
-                } catch (e) {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(l.dashFailedGeneric(e.toString()))),
-                  );
-                }
-              },
-            ),
-            SizedBox(height: gap),
-          ],
-          UpcomingBillsCard(
-            subscriptions: _subscriptions ?? const [],
-            conversionFactor: conversionFactor,
-            currencyFormat: currencyFormat,
-          ),
-          if ((_subscriptions ?? const []).isNotEmpty)
-            SizedBox(height: gap),
-          SpendingByCategoryCard(
-            apiService: _apiService,
-            conversionFactor: conversionFactor,
-            currencyFormat: currencyFormat,
-            // Item #11: track the Cash Flow period selector so the category
-            // chart's window matches the rest of the tab instead of its own
-            // fixed default.
-            months: _monthsForCashFlowPeriod(_cashFlowPeriod),
-          ),
-          SizedBox(height: gap),
-          BudgetsCard(
-            transactions: _transactions ?? const [],
-            conversionFactor: conversionFactor,
-            usdMxnRate: fxRate,
-            currencyFormat: currencyFormat,
-            apiService: _apiService,
-            // Item #11: a monthly target priced against the selected period's
-            // most-recent month. 'This month' resolves to the current month,
-            // leaving the pre-#11 behavior (incl. #10 pacing) unchanged.
-            periodMonth: _budgetMonthForCashFlowPeriod(_cashFlowPeriod),
-          ),
-          SizedBox(height: gap),
           DebtPayoffCard(
             accounts: (_overview?['accounts'] as List?) ?? const [],
             apiService: _apiService,
@@ -5616,8 +5776,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _openMoreSheet() {
     final l = AppLocalizations.of(context);
-    final secondary =
-        _destinations.where((d) => d.tier == NavTier.secondary).toList();
+    final dests = _destinations;
+    final secondary = dests.where((d) => d.tier == NavTier.secondary).toList();
+    // Same guarded lookup as _buildBottomBar: which destination is showing
+    // right now, so the sheet can tint the active row (the NavigationBar
+    // highlight, mirrored) instead of presenting six identical tiles.
+    final current =
+        (_section >= 0 && _section < dests.length) ? dests[_section] : dests.first;
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -5635,6 +5800,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     leading:
                         Icon(d.icon, color: d.accent(Theme.of(context).brightness)),
                     title: Text(_navLabel(l, d.id)),
+                    // Soft active-destination tint (ListTile.selected also
+                    // exposes the state to assistive tech).
+                    selected: d.id == current.id,
+                    selectedTileColor: Theme.of(context)
+                        .colorScheme
+                        .secondaryContainer
+                        .withValues(alpha: 0.5),
+                    selectedColor:
+                        Theme.of(context).colorScheme.onSecondaryContainer,
                     onTap: () {
                       Navigator.of(sheetCtx).pop();
                       _goToNav(d.id);

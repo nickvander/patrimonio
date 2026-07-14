@@ -385,27 +385,56 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
         padding: EdgeInsets.all(pad),
-        child: Column(
+        // Width-responsive off the card's OWN constraint (inner
+        // LayoutBuilder, per the skill rule), not MediaQuery — the card can
+        // be narrower than the screen (outer tab padding, width clamps).
+        child: LayoutBuilder(builder: (context, c) {
+          // House ~420 phone breakpoint off the card interior: compact
+          // chrome — no leading icon, title compressed to a small uppercase
+          // overline (the portfolio_card idiom). Deliberately NOT the <720
+          // MediaQuery `isPhone` above (that gates tiles/padding); the
+          // overline keys off the card's own width.
+          final isPhoneCard = c.maxWidth < 420;
+          return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.trending_down_rounded,
-                    color: context.pinkAccent, size: 18),
-                const SizedBox(width: 8),
-                Text(
-                  l.dpTitle,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: context.textPrimary,
+                if (!isPhoneCard) ...[
+                  Icon(Icons.trending_down_rounded,
+                      color: context.pinkAccent, size: 18),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: Text(
+                    isPhoneCard ? l.dpTitle.toUpperCase() : l.dpTitle,
+                    style: isPhoneCard
+                        ? TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                            color: context.textSubtle,
+                          )
+                        : TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: context.textPrimary,
+                          ),
+                    // maxLines only on the phone overline; wider layouts
+                    // keep the original wrap behaviour pixel-identical.
+                    maxLines: isPhoneCard ? 1 : null,
+                    overflow: isPhoneCard ? TextOverflow.ellipsis : null,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            // Header→content gap tightens with the phone overline header.
+            SizedBox(height: isPhoneCard ? 12 : 16),
             _dueSoonStrip(debts, l),
-            _summaryStrip(debts, l),
+            // Phones (the same <720 flag that stacks the strategy tiles):
+            // the 3-up metric row crushes at phone widths, so it wraps to a
+            // 2-column grid (cash-10).
+            _summaryStrip(debts, l, twoUp: isPhone),
             const SizedBox(height: 16),
             Divider(height: 1, color: context.hairline),
             const SizedBox(height: 12),
@@ -470,7 +499,8 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
               ],
             ],
           ],
-        ),
+          );
+        }),
       ),
     );
   }
@@ -479,7 +509,11 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
   // monthly interest) plus a muted credit-vs-loan split. All client-derived
   // from the already-built debt list; no backend. Monthly interest is the
   // headline cost, tinted `warning` when the debts are bleeding interest.
-  Widget _summaryStrip(List<Debt> debts, AppLocalizations l) {
+  // [twoUp]: phones wrap the strip to a 2-column grid — total owed + monthly
+  // interest (the two money headlines) on the first row, weighted APR below —
+  // because three money figures side by side crush at phone widths.
+  Widget _summaryStrip(List<Debt> debts, AppLocalizations l,
+      {bool twoUp = false}) {
     final s = DebtSummary.from(debts);
     final split = _split;
     final splitParts = <String>[];
@@ -492,28 +526,46 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
       splitParts
           .add(l.dpSplitLoan(_money(split.loanOwed), '${split.loanCount}'));
     }
+    final totalOwedMetric = _metric(l.dpTotalOwed, _money(s.totalOwed));
+    final weightedAprMetric = _metric(
+      l.dpWeightedApr,
+      formatPercent(context, s.weightedApr * 100, digits: 2),
+    );
+    final monthlyInterestMetric = _metric(
+      l.dpMonthlyInterest,
+      _money(s.monthlyInterest),
+      valueColor: s.monthlyInterest > 0 ? context.warning : null,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: _metric(l.dpTotalOwed, _money(s.totalOwed))),
-            Expanded(
-              child: _metric(
-                l.dpWeightedApr,
-                formatPercent(context, s.weightedApr * 100, digits: 2),
-              ),
-            ),
-            Expanded(
-              child: _metric(
-                l.dpMonthlyInterest,
-                _money(s.monthlyInterest),
-                valueColor: s.monthlyInterest > 0 ? context.warning : null,
-              ),
-            ),
-          ],
-        ),
+        if (twoUp) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: totalOwedMetric),
+              const SizedBox(width: 12),
+              Expanded(child: monthlyInterestMetric),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: weightedAprMetric),
+              const SizedBox(width: 12),
+              const Expanded(child: SizedBox.shrink()),
+            ],
+          ),
+        ] else
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: totalOwedMetric),
+              Expanded(child: weightedAprMetric),
+              Expanded(child: monthlyInterestMetric),
+            ],
+          ),
         if (splitParts.isNotEmpty) ...[
           const SizedBox(height: 10),
           Text(
@@ -583,31 +635,37 @@ class _DebtPayoffCardState extends State<DebtPayoffCard> {
             ),
           ),
           const SizedBox(width: 12),
-          // Tappable APR chip.
+          // Tappable APR chip. The Padding inside the InkWell extends the
+          // hit area toward the 48dp touch floor without growing the visual
+          // chip itself.
           InkWell(
             borderRadius: BorderRadius.circular(8),
             onTap: () => _editApr(d),
-            child: Container(
+            child: Padding(
               padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: context.pinkAccent.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    formatPercent(context, d.aprAnnual * 100, digits: 2),
-                    style: TextStyle(
-                      color: context.pinkAccent,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
+                  const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: context.pinkAccent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      formatPercent(context, d.aprAnnual * 100, digits: 2),
+                      style: TextStyle(
+                        color: context.pinkAccent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(Icons.edit, size: 11, color: context.pinkAccent),
-                ],
+                    const SizedBox(width: 4),
+                    Icon(Icons.edit, size: 11, color: context.pinkAccent),
+                  ],
+                ),
               ),
             ),
           ),

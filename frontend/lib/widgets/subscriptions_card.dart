@@ -86,24 +86,45 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
         padding: EdgeInsets.all(pad),
-        child: Column(
+        // Width-responsive off the card's OWN constraint (inner
+        // LayoutBuilder, per the skill rule), not MediaQuery — the card can
+        // be narrower than the screen (outer tab padding, width clamps).
+        child: LayoutBuilder(builder: (context, c) {
+          // House ~420 phone breakpoint: compact chrome — no leading icon,
+          // title compressed to a small uppercase overline (the
+          // portfolio_card idiom). Wider layouts are unchanged.
+          final isPhone = c.maxWidth < 420;
+          return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(
-                  Icons.autorenew_rounded,
-                  size: 18,
-                  color: context.purpleAccent,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  l.cfSubscriptionsTitle,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: context.textPrimary,
+                if (!isPhone) ...[
+                  Icon(
+                    Icons.autorenew_rounded,
+                    size: 18,
+                    color: context.purpleAccent,
                   ),
+                  const SizedBox(width: 8),
+                ],
+                Text(
+                  isPhone
+                      ? l.cfSubscriptionsTitle.toUpperCase()
+                      : l.cfSubscriptionsTitle,
+                  style: isPhone
+                      ? TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.6,
+                          color: context.textSubtle,
+                        )
+                      : TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: context.textPrimary,
+                        ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -204,7 +225,8 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
                 ],
             ],
           ],
-        ),
+          );
+        }),
       ),
     );
   }
@@ -359,14 +381,18 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
             // rows — they're already historical, dismissing wouldn't add
             // info and the affordance would be confusing ("not a
             // subscription" vs "stopped subscription").
-            if (!cancelled && widget.onIgnoreMerchant != null)
+            if (!cancelled && widget.onIgnoreMerchant != null) ...[
+              // Gap separates the dismiss button from the row's own
+              // navigation InkWell; default constraints (no compact
+              // density) keep the button on the 48dp touch floor.
+              const SizedBox(width: 4),
               IconButton(
                 tooltip: l.cfNotASubscription,
                 iconSize: 16,
-                visualDensity: VisualDensity.compact,
                 icon: const Icon(Icons.close),
                 onPressed: () => widget.onIgnoreMerchant!(merchant),
               ),
+            ],
           ],
         ),
       ),
@@ -406,7 +432,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
                   ? (((slice['share'] as num?)?.toDouble() ?? 0.0) * 100).round()
                   : '<1'}%',
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 11,
                 color: accent,
                 fontWeight: FontWeight.w600,
               ),
@@ -418,7 +444,7 @@ class _SubscriptionsCardState extends State<SubscriptionsCard> {
             child: Text(
               l.cfPlusNMore(hidden),
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 11,
                 color: context.textSubtle,
               ),
             ),

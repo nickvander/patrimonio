@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
-import '../utils/currency.dart' show MoneyDisplayFormat;
+import '../utils/currency.dart' show MoneyDisplayFormat, moneyFormat;
 import '../utils/flat_schedule.dart';
 import '../utils/lending_summary.dart';
 import '../utils/theme_colors.dart';
@@ -128,16 +128,12 @@ class _LendingTabState extends State<LendingTab> {
   }
 
   String _money(num v, String currency) {
-    final fmt = NumberFormat.currency(
-      symbol: currency == 'MXN' ? r'MX$' : r'$',
-      decimalDigits: 2,
-    );
     // Anything whose magnitude rounds below half a cent is zero for display.
     // Without this, a negative zero (-0.0) or sub-cent residue formats as an
     // ugly "-$0.00" — e.g. the "Interest earned" stat with no payments yet.
     // Summary tiles and list rows are display surfaces, so cents drop at the
     // whole-money threshold ("$16,000" rather than "$16,000.00").
-    return fmt.displayMoney(v.abs() < 0.005 ? 0 : v);
+    return moneyFormat(currency).displayMoney(v.abs() < 0.005 ? 0 : v);
   }
 
   /// "≈ $1,729.18 USD" — the [amount] (in [fromCurrency]) converted to the
@@ -173,10 +169,15 @@ class _LendingTabState extends State<LendingTab> {
       );
     }
 
-    return RefreshIndicator(
+    // Thumb-zone creation on phones: the header drops its labelled
+    // "Add loan" button (it overflowed at 390px) and the affordance moves
+    // to a FAB pinned bottom-right. The list keeps 88dp of clearance so
+    // the last loan card is never hidden under the FAB.
+    final phone = MediaQuery.sizeOf(context).width < 720;
+    final list = RefreshIndicator(
       onRefresh: _load,
       child: ListView(
-        padding: const EdgeInsets.only(bottom: 32),
+        padding: EdgeInsets.only(bottom: phone ? 96 : 32),
         children: [
           _buildHeader(),
           if (_buildAgingSection() case final w?) ...[
@@ -190,6 +191,21 @@ class _LendingTabState extends State<LendingTab> {
             ..._loans.map((l) => _buildLoanCard(l as Map<String, dynamic>)),
         ],
       ),
+    );
+    if (!phone) return list;
+    return Stack(
+      children: [
+        list,
+        Positioned(
+          right: 16,
+          bottom: 16,
+          child: FloatingActionButton(
+            onPressed: _openAddLoanDialog,
+            tooltip: AppLocalizations.of(context).lendingAddLoan,
+            child: const Icon(Icons.add),
+          ),
+        ),
+      ],
     );
   }
 
@@ -251,15 +267,22 @@ class _LendingTabState extends State<LendingTab> {
                 const SizedBox(width: 8),
                 // A7 (round 3, a11y): card header landmark. container:
                 // forces the boundary so the flag can't absorb the card.
-                Semantics(
-                  container: true,
-                  header: true,
-                  child: Text(
-                    AppLocalizations.of(context).lendingTitle,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: context.textPrimary,
+                // Flexible + ellipsis: the title yields to the action
+                // cluster instead of RenderFlex-overflowing at narrow
+                // widths (it did at 390px once interest was earned).
+                Flexible(
+                  child: Semantics(
+                    container: true,
+                    header: true,
+                    child: Text(
+                      AppLocalizations.of(context).lendingTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: context.textPrimary,
+                      ),
                     ),
                   ),
                 ),
@@ -267,14 +290,22 @@ class _LendingTabState extends State<LendingTab> {
                 // Drill into the full cash-basis interest-income report
                 // (per-month series, per-loan + per-currency totals,
                 // §7872 below-market flag). Only meaningful once interest
-                // has actually been received.
+                // has actually been received. On phones the labelled
+                // button shrinks to a 48dp icon so the header row fits.
                 if (interestEarned > 0)
-                  TextButton.icon(
-                    onPressed: _openInterestIncome,
-                    icon: const Icon(Icons.insights_outlined, size: 18),
-                    label: Text(
-                        AppLocalizations.of(context).lendingInterestIncomeTitle),
-                  ),
+                  phone
+                      ? IconButton(
+                          icon: const Icon(Icons.insights_outlined),
+                          tooltip: AppLocalizations.of(context)
+                              .lendingInterestIncomeTitle,
+                          onPressed: _openInterestIncome,
+                        )
+                      : TextButton.icon(
+                          onPressed: _openInterestIncome,
+                          icon: const Icon(Icons.insights_outlined, size: 18),
+                          label: Text(AppLocalizations.of(context)
+                              .lendingInterestIncomeTitle),
+                        ),
                 // Export the loan-interest CSV (cash-basis interest
                 // income — hand to an accountant at tax time).
                 if (interestEarned > 0)
@@ -302,11 +333,13 @@ class _LendingTabState extends State<LendingTab> {
                       ),
                     ],
                   ),
-                FilledButton.icon(
-                  onPressed: _openAddLoanDialog,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: Text(AppLocalizations.of(context).lendingAddLoan),
-                ),
+                // Phones get the thumb-zone FAB instead (see build()).
+                if (!phone)
+                  FilledButton.icon(
+                    onPressed: _openAddLoanDialog,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: Text(AppLocalizations.of(context).lendingAddLoan),
+                  ),
               ],
             ),
             const SizedBox(height: 16),
@@ -1019,10 +1052,7 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
         paymentFrequency: _paymentFrequency,
       );
 
-  String _fmtMoney(double v) {
-    final f = NumberFormat.currency(symbol: '$_sym ', decimalDigits: 2);
-    return f.format(v);
-  }
+  String _fmtMoney(double v) => moneyFormat(_currency).format(v);
 
   @override
   void initState() {
@@ -1084,48 +1114,40 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
         (media.size.height - media.viewInsets.bottom - 220)
             .clamp(220.0, 620.0);
 
-    return AlertDialog(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-      contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-      title: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: context.accentSoft(context.tealAccent),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(Icons.monetization_on,
-                color: context.tealAccent, size: 20),
+    // Presentation-only split: the same title row, scrollable content
+    // column, and action buttons render either as the classic AlertDialog
+    // (>=720) or as a fullscreen phone form with a pinned save bar. All
+    // controllers, state, and validation stay on this State either way.
+    final titleRow = Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: context.accentSoft(context.tealAccent),
+            borderRadius: BorderRadius.circular(10),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(AppLocalizations.of(context).lendingAddLoan,
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: context.textPrimary)),
-                Text(AppLocalizations.of(context).lendAddLoanSubtitle,
-                    style: TextStyle(fontSize: 12, color: context.textMuted)),
-              ],
-            ),
-          ),
-        ],
-      ),
-      content: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: dialogWidth,
-          maxHeight: contentMaxHeight,
+          child: Icon(Icons.monetization_on,
+              color: context.tealAccent, size: 20),
         ),
-        child: SizedBox(
-          width: dialogWidth,
-          child: SingleChildScrollView(
-            child: Column(
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(AppLocalizations.of(context).lendingAddLoan,
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: context.textPrimary)),
+              Text(AppLocalizations.of(context).lendAddLoanSubtitle,
+                  style: TextStyle(fontSize: 12, color: context.textMuted)),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    final contentColumn = Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1243,26 +1265,101 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
                 const SizedBox(height: 16),
                 _buildPreviewCard(),
               ],
-            ),
+    );
+
+    final cancelButton = TextButton(
+      onPressed: _submitting ? null : () => Navigator.pop(context, false),
+      child: Text(AppLocalizations.of(context).actionCancel),
+    );
+    // The one and only save affordance — both wrappers pin this exact
+    // button (same _submit, same spinner state).
+    final saveButton = FilledButton.icon(
+      onPressed: _submitting ? null : _submit,
+      icon: _submitting
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2))
+          : const Icon(Icons.add, size: 18),
+      label: Text(AppLocalizations.of(context).lendingAddLoan),
+    );
+
+    // Phones: a fullscreen form (no cramped 620px dialog well) with the
+    // header up top, the fields scrolling in between, and the save bar
+    // pinned at the bottom of the screen — research rubric principle 11.
+    if (media.size.width < 720) {
+      return Dialog.fullscreen(
+        child: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Expanded(child: titleRow),
+                    IconButton(
+                      tooltip:
+                          MaterialLocalizations.of(context).closeButtonTooltip,
+                      icon: const Icon(Icons.close),
+                      onPressed: _submitting
+                          ? null
+                          : () => Navigator.pop(context, false),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: contentColumn,
+                ),
+              ),
+              // Pinned save bar. The viewInsets term keeps Save above the
+              // keyboard even if this subtree is ever hosted outside a
+              // Dialog; inside Dialog.fullscreen it reads 0 because the
+              // Dialog itself already pads the route above the keyboard
+              // and strips viewInsets from descendants (Builder scopes the
+              // lookup to a descendant context for exactly that reason —
+              // this State's context still sees the raw inset and would
+              // double-pad).
+              Builder(builder: (ctx) {
+                return Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      16, 8, 16, 16 + MediaQuery.viewInsetsOf(ctx).bottom),
+                  child: Row(
+                    children: [
+                      cancelButton,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: SizedBox(height: 48, child: saveButton),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
           ),
         ),
+      );
+    }
+
+    return AlertDialog(
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+      contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+      title: titleRow,
+      content: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: dialogWidth,
+          maxHeight: contentMaxHeight,
+        ),
+        child: SizedBox(
+          width: dialogWidth,
+          child: SingleChildScrollView(child: contentColumn),
+        ),
       ),
-      actions: [
-        TextButton(
-          onPressed: _submitting ? null : () => Navigator.pop(context, false),
-          child: Text(AppLocalizations.of(context).actionCancel),
-        ),
-        FilledButton.icon(
-          onPressed: _submitting ? null : _submit,
-          icon: _submitting
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(Icons.add, size: 18),
-          label: Text(AppLocalizations.of(context).lendingAddLoan),
-        ),
-      ],
+      actions: [cancelButton, saveButton],
     );
   }
 
@@ -1534,9 +1631,11 @@ class _AddLoanDialogState extends State<_AddLoanDialog> {
       onChanged: (_) => setState(() {}),
       decoration: _decoration(
         AppLocalizations.of(context).lendFieldInterestRate,
-        hint: 'e.g. 5',
+        hint: AppLocalizations.of(context).lendRateHintExample,
         icon: Icons.percent,
-        suffixText: _ratePeriod == 'monthly' ? '% / month' : '% / year',
+        suffixText: _ratePeriod == 'monthly'
+            ? AppLocalizations.of(context).lendRatePerMonthSuffix
+            : AppLocalizations.of(context).lendRatePerYearSuffix,
       ),
     );
   }
@@ -2816,7 +2915,8 @@ class _EditLoanDialogState extends State<_EditLoanDialog> {
                       decoration: _decoration(
                           AppLocalizations.of(context)
                               .lendEditRatePerPeriod(_ratePeriod),
-                          hint: 'e.g. 5',
+                          hint: AppLocalizations.of(context)
+                              .lendRateHintExample,
                           icon: Icons.percent),
                     ),
                   ],
@@ -3083,22 +3183,14 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
     }
   }
 
-  String _money(num v) {
-    final fmt = NumberFormat.currency(
-        symbol: _currency == 'MXN' ? r'MX$' : r'$', decimalDigits: 2);
-    return fmt.format(v);
-  }
+  String _money(num v) => moneyFormat(_currency).format(v);
 
   /// Display variant of [_money] for headline figures (principal, total
   /// owed, interest earned/accrued, amount remaining): cents drop at the
   /// whole-money threshold. Schedule rows, payment history, and the
   /// transaction picker keep the exact [_money] — those are reconciled
   /// line by line.
-  String _moneyDisplay(num v) {
-    final fmt = NumberFormat.currency(
-        symbol: _currency == 'MXN' ? r'MX$' : r'$', decimalDigits: 2);
-    return fmt.displayMoney(v);
-  }
+  String _moneyDisplay(num v) => moneyFormat(_currency).displayMoney(v);
 
   @override
   Widget build(BuildContext context) {
@@ -3413,7 +3505,6 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
               IconButton(
                 icon: const Icon(Icons.link_off, size: 16),
                 tooltip: l.lendTooltipUnlink,
-                visualDensity: VisualDensity.compact,
                 onPressed: () => _unreconcile(m['id'].toString()),
               ),
             ],
@@ -3926,10 +4017,10 @@ class _LoanDetailSheetState extends State<_LoanDetailSheet> {
           child: Row(
             children: [
               _schCell('#', flex: 1),
-              _schCell('Due', flex: 3),
+              _schCell(l10n.lendScheduleColDue, flex: 3),
               _schCell(l10n.lendScheduleColPayment, flex: 3, alignRight: true),
               if (showInterest && !narrow)
-                _schCell('Interest', flex: 3, alignRight: true),
+                _schCell(l10n.lendScheduleColInterest, flex: 3, alignRight: true),
               if (!narrow)
                 _schCell(l10n.lendScheduleColBalance, flex: 3, alignRight: true),
               _schCell('', flex: 1, alignRight: true),
@@ -4469,11 +4560,7 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
     _searchDebounce = Timer(const Duration(milliseconds: 300), _load);
   }
 
-  String _money(num v) {
-    final fmt = NumberFormat.currency(
-        symbol: widget.currency == 'MXN' ? r'MX$' : r'$', decimalDigits: 2);
-    return fmt.format(v);
-  }
+  String _money(num v) => moneyFormat(widget.currency).format(v);
 
   /// Candidate transactions. Sign (inflow vs outflow), currency, and the
   /// search query are all applied by the backend now (see [_load]), so this

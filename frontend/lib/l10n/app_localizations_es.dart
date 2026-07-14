@@ -1292,6 +1292,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String get cfMonthlyTitle => 'Flujo de efectivo de este mes';
 
   @override
+  String get cfCashFlowShort => 'Flujo de efectivo';
+
+  @override
+  String cfNetEquivalence(Object amount) {
+    return 'Neto del periodo ≈ $amount';
+  }
+
+  @override
   String get cfMonthlyExcludesTooltip =>
       'No incluye operaciones de inversión ni transferencias internas entre tus cuentas, ni pagos de tarjeta de crédito: ese dinero se mueve dentro de tu balance sin cambiar tus ingresos ni gastos. Los montos se muestran abajo.';
 
@@ -2689,6 +2697,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get dashThemeDarkShort => 'Oscuro';
+
+  @override
+  String get dashThemeMenu => 'Tema';
 
   @override
   String dashThemeTooltip(Object label) {
@@ -5528,6 +5539,12 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get lendScheduleColDue => 'Vence';
+
+  @override
+  String get lendScheduleColInterest => 'Interés';
+
+  @override
   String get lendScheduleColPayment => 'Pago';
 
   @override
@@ -5608,6 +5625,15 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get lendRatePeriodMonth => 'Mes';
+
+  @override
+  String get lendRateHintExample => 'p. ej. 5';
+
+  @override
+  String get lendRatePerMonthSuffix => '% / mes';
+
+  @override
+  String get lendRatePerYearSuffix => '% / año';
 
   @override
   String get lendFreqLumpSum => 'Pago único';

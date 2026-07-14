@@ -51,26 +51,34 @@ class DateRangeSelector extends StatelessWidget {
     double horizontalPadding,
   ) {
     final isSelected = selectedRange == range;
-    return GestureDetector(
+    // InkWell (focusable, keyboard-activatable, ripple) with a guaranteed
+    // >=44dp hit height — the visual pill inside stays its compact size.
+    return InkWell(
       onTap: () => onRangeChanged(range),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: EdgeInsets.symmetric(
-          horizontal: horizontalPadding,
-          vertical: 8,
-        ),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? context.accentSoft(context.positive)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? context.positive : context.textMuted,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            fontSize: 12,
+      borderRadius: BorderRadius.circular(8),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: Center(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: EdgeInsets.symmetric(
+              horizontal: horizontalPadding,
+              vertical: 8,
+            ),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? context.accentSoft(context.positive)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? context.positive : context.textMuted,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                fontSize: 12,
+              ),
+            ),
           ),
         ),
       ),

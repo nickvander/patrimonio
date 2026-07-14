@@ -30,6 +30,15 @@ class MonthlyCashFlowCard extends StatelessWidget {
   /// When null the card names the displayed month itself.
   final String? periodLabel;
 
+  /// USD<->MXN spot rate, powering the phone FX-equivalence row (the net
+  /// figure restated in the OTHER currency). 0.0 (the default) disables the
+  /// row entirely so legacy call sites render unchanged.
+  final double usdMxnRate;
+
+  /// The display currency the injected [currencyFormat] renders in; the
+  /// FX-equivalence row converts net to the opposite of this.
+  final String targetCurrency;
+
   const MonthlyCashFlowCard({
     super.key,
     required this.trends,
@@ -37,6 +46,8 @@ class MonthlyCashFlowCard extends StatelessWidget {
     required this.currencyFormat,
     this.selectedMonthIso,
     this.periodLabel,
+    this.usdMxnRate = 0.0,
+    this.targetCurrency = 'USD',
   });
 
   @override
@@ -138,43 +149,79 @@ class MonthlyCashFlowCard extends StatelessWidget {
         child: LayoutBuilder(
           builder: (ctx, c) {
             final isNarrow = c.maxWidth < 560;
+            // House ~420 phone breakpoint off the card's OWN interior width
+            // (see portfolio_card.dart): compact chrome — no leading icon,
+            // the title compressed to a small uppercase overline. The period
+            // selector chip above the card already names the period, so the
+            // overline folds title + month into ONE line instead of tripling
+            // the period signal (title, month subtitle, selector chip).
+            final isPhone = c.maxWidth < 420;
             final header = Row(
               children: [
-                Icon(
-                  Icons.account_balance_wallet_outlined,
-                  size: 18,
-                  color: context.tealAccent,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  l.cfMonthlyTitle,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: context.textPrimary,
+                if (!isPhone) ...[
+                  Icon(
+                    Icons.account_balance_wallet_outlined,
+                    size: 18,
+                    color: context.tealAccent,
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    monthLabel,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: context.textSubtle,
+                  const SizedBox(width: 8),
+                ],
+                if (isPhone)
+                  Expanded(
+                    child: Text(
+                      '${l.cfCashFlowShort} — $monthLabel'.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.6,
+                        color: context.textSubtle,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  )
+                else ...[
+                  Text(
+                    l.cfMonthlyTitle,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: context.textPrimary,
+                    ),
                   ),
-                ),
-                // Hover hint so the user understands why the numbers
-                // don't equal "sum of every transaction this month."
-                // Without this, a bulk-import month looks suspicious.
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      monthLabel,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: context.textSubtle,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+                // Hint so the user understands why the numbers don't equal
+                // "sum of every transaction this month." Without this, a
+                // bulk-import month looks suspicious. Tap-triggered (hover
+                // never fires on touch devices) with a 48dp target around
+                // the small glyph; the child is deliberately NOT a button —
+                // Tooltip's own tap recognizer must win the gesture arena,
+                // and an inner IconButton would swallow the tap.
                 Tooltip(
                   message: l.cfMonthlyExcludesTooltip,
-                  child: Icon(
-                    Icons.info_outline,
-                    size: 14,
-                    color: context.textFaint,
+                  triggerMode: TooltipTriggerMode.tap,
+                  child: SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Center(
+                      child: Icon(
+                        Icons.info_outline,
+                        size: 16,
+                        color: context.textFaint,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -234,6 +281,41 @@ class MonthlyCashFlowCard extends StatelessWidget {
                     ),
                   );
 
+            // FX-equivalence row (the portfolio_card "Total value in pesos
+            // ≈ MX$…" idiom): the net figure restated in the OTHER currency
+            // so a bi-currency user sees both readings without a second
+            // stat tile. Only on the narrow layout, and only when a real
+            // spot rate arrived (usdMxnRate 0.0 = legacy call sites → off).
+            final other =
+                targetCurrency.toUpperCase() == 'USD' ? 'MXN' : 'USD';
+            final Widget? fxEquivalence = usdMxnRate > 0
+                ? ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        l.cfNetEquivalence(
+                          moneyFormat(other).displayMoney(
+                            convertCurrency(
+                              net,
+                              from: targetCurrency,
+                              to: other,
+                              usdMxnRate: usdMxnRate,
+                            ),
+                          ),
+                        ),
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: context.textSubtle,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  )
+                : null;
+
             final spark = _NetSparkline(
               points: sparkSource
                   .map((m) =>
@@ -257,6 +339,7 @@ class MonthlyCashFlowCard extends StatelessWidget {
                   netLine,
                   const SizedBox(height: 12),
                   stats,
+                  ?fxEquivalence,
                   ?contextLine,
                   const SizedBox(height: 12),
                   SizedBox(height: 48, child: spark),
@@ -494,7 +577,7 @@ class _StatBlock extends StatelessWidget {
           Text(
             label.toUpperCase(),
             style: TextStyle(
-              fontSize: 10,
+              fontSize: 11,
               letterSpacing: 1.1,
               fontWeight: FontWeight.w700,
               color: accent.withValues(alpha: 0.9),

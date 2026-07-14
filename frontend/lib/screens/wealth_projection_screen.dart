@@ -550,16 +550,17 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     return LayoutBuilder(builder: (context, constraints) {
       final isNarrow = constraints.maxWidth < 800;
       if (isNarrow) {
+        // Summary-first phone order (research rubric principle 13): the
+        // chart and its verdicts (FIRE strip, milestones) lead; the
+        // assumptions sliders and the glossary move below them. The
+        // sliders still live-update the chart — scrolling back up shows
+        // the new curve.
         return SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildHeader(),
+              _buildHeader(isPhone: constraints.maxWidth < 420),
               const SizedBox(height: 16),
-              _buildGlossaryCard(),
-              const SizedBox(height: 24),
-              _buildControls(scrollable: false),
-              const SizedBox(height: 24),
               // Intrinsic height: the card self-sizes (title + legend at
               // natural height, plot at a guaranteed width-derived height),
               // so a legend that wraps to extra lines grows the card instead
@@ -579,6 +580,10 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
               // off its own LayoutBuilder), so it's safe at intrinsic height
               // inside this scroll view — no unbounded-height Row blowup (F1).
               _buildMilestonesRow(),
+              const SizedBox(height: 24),
+              _buildGlossaryCard(),
+              const SizedBox(height: 24),
+              _buildControls(scrollable: false),
             ],
           ),
         );
@@ -697,7 +702,7 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
     });
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader({bool isPhone = false}) {
     final l = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -707,13 +712,23 @@ class _WealthProjectionScreenState extends State<WealthProjectionScreen> {
           spacing: 12,
           runSpacing: 8,
           children: [
+            // <420 the 28px display title becomes a 12px overline (the
+            // compact-header idiom the Invest/Activity tabs adopted), so
+            // the title row stops crowding out the first card of content.
             Text(
-              l.projTitle,
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: context.textPrimary,
-              ),
+              isPhone ? l.projTitle.toUpperCase() : l.projTitle,
+              style: isPhone
+                  ? TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                      color: context.textSubtle,
+                    )
+                  : TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: context.textPrimary,
+                    ),
             ),
             // Dollar-basis badge: the model is computed in today's purchasing
             // power; the toggle re-expresses the same figures in future nominal

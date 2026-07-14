@@ -50,7 +50,8 @@ Widget _host(Widget child) => MaterialApp(
       home: Scaffold(body: SingleChildScrollView(child: child)),
     );
 
-NetWorthCard _card() => NetWorthCard(
+NetWorthCard _card({bool showSummary = true, Widget? rangeSelector}) =>
+    NetWorthCard(
       netWorth: 1550514.0,
       history: _history(),
       conversionFactor: 1.0,
@@ -61,6 +62,8 @@ NetWorthCard _card() => NetWorthCard(
         {'currency': 'MXN', 'net': 1005969.0},
       ],
       usdMxnRate: 17.51,
+      showSummary: showSummary,
+      rangeSelector: rangeSelector,
     );
 
 void _usePhoneSurface(WidgetTester tester, {Size size = const Size(380, 800)}) {
@@ -109,6 +112,43 @@ void main() {
 
       final chartSize = tester.getSize(find.byType(LineChart));
       expect(chartSize.height, 280.0);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('NetWorthCard compact header (showSummary: false)', () {
+    testWidgets(
+        'phone branch: overline title replaces the summary hero and the '
+        'injected range selector renders below the chart', (tester) async {
+      _usePhoneSurface(tester);
+      const selectorKey = Key('in-card-range-selector');
+      await tester.pumpWidget(_host(_card(
+        showSummary: false,
+        rangeSelector: const SizedBox(key: selectorKey, height: 44),
+      )));
+      await tester.pumpAndSettle();
+
+      // Overline title (the fad9351 idiom) instead of the duplicate hero.
+      expect(find.text('NET WORTH HISTORY'), findsOneWidget);
+      // displayMoney drops cents at this magnitude → "$1,550,514".
+      expect(find.text(r'$1,550,514'), findsNothing,
+          reason: 'summary hero number must be suppressed — the dashboard '
+              'hero block directly above already shows it');
+
+      // Range selector sits inside the card, below the plot.
+      final selectorTop = tester.getTopLeft(find.byKey(selectorKey)).dy;
+      final chartBottom = tester.getBottomLeft(find.byType(LineChart)).dy;
+      expect(selectorTop, greaterThanOrEqualTo(chartBottom));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('default (wide) keeps the full summary hero', (tester) async {
+      _usePhoneSurface(tester, size: const Size(1440, 900));
+      await tester.pumpWidget(_host(_card()));
+      await tester.pumpAndSettle();
+
+      expect(find.text(r'$1,550,514'), findsOneWidget);
+      expect(find.text('NET WORTH HISTORY'), findsNothing);
       expect(tester.takeException(), isNull);
     });
   });

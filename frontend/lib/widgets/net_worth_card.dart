@@ -24,6 +24,17 @@ class NetWorthCard extends StatefulWidget {
   final double usdMxnRate;
   final DateRange selectedRange;
 
+  /// When false the full summary header (hero number, delta chips, currency
+  /// pills) is replaced by a compact overline title — used on phones, where
+  /// the dashboard hero block directly above already shows the same figures.
+  final bool showSummary;
+
+  /// Optional range selector rendered inside the card, below the chart, so
+  /// range switching is thumb-reachable and visually bound to the plot it
+  /// controls (phone layout). Null on wide layouts, where the selector lives
+  /// in the floating header above the card.
+  final Widget? rangeSelector;
+
   const NetWorthCard({
     super.key,
     required this.netWorth,
@@ -34,6 +45,8 @@ class NetWorthCard extends StatefulWidget {
     required this.sourceBreakdown,
     required this.usdMxnRate,
     this.selectedRange = DateRange.all,
+    this.showSummary = true,
+    this.rangeSelector,
   });
 
   @override
@@ -119,11 +132,14 @@ class _NetWorthCardState extends State<NetWorthCard> {
 
   @override
   Widget build(BuildContext context) {
+    // House card chrome: radius 20 everywhere, 16px interior on phones
+    // (matches accounts_list_widget), 24px on wide screens.
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
     return Card(
       elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: EdgeInsets.all(pad),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final isCompact = constraints.maxWidth < 640;
@@ -159,6 +175,12 @@ class _NetWorthCardState extends State<NetWorthCard> {
                         filtered, institutions, constraints.maxWidth),
                   ),
                 ),
+                // Phone layout: the range selector lives inside the card,
+                // right under the plot it controls (thumb-reachable).
+                if (widget.rangeSelector != null) ...[
+                  const SizedBox(height: 12),
+                  widget.rangeSelector!,
+                ],
               ],
             );
           },
@@ -181,21 +203,26 @@ class _NetWorthCardState extends State<NetWorthCard> {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(20),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: active
-                  ? context.accentSoft(context.positive)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: active ? context.positive : context.textMuted,
-                letterSpacing: 0.4,
+          // Vertical padding extends the TAP target toward the 48dp floor
+          // without growing the visual pill.
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: active
+                    ? context.accentSoft(context.positive)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: active ? context.positive : context.textMuted,
+                  letterSpacing: 0.4,
+                ),
               ),
             ),
           ),
@@ -236,6 +263,56 @@ class _NetWorthCardState extends State<NetWorthCard> {
 
   Widget _buildHeader(
       bool isCompact, List<MapEntry<String, Color>> institutions) {
+    // Phone chrome: the dashboard hero block directly above this card
+    // already shows the net-worth figure, delta and currency pills, so the
+    // in-card summary collapses to a small overline title (the fad9351
+    // idiom) with the mode toggle / legend on the same row.
+    if (!widget.showSummary) {
+      final legend = _buildLegend(institutions);
+      // FittedBox: the toggle's segmented Row has a fixed intrinsic width,
+      // so on a very narrow card (or a long localized title) it scales down
+      // instead of overflowing its share of the header row.
+      final modeToggle = FittedBox(
+        fit: BoxFit.scaleDown,
+        child: _buildModeToggle(),
+      );
+      final rightSide = _detailed
+          ? Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [modeToggle, legend],
+            )
+          : modeToggle;
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Flexible(
+            child: Semantics(
+              container: true,
+              header: true,
+              child: Text(
+                AppLocalizations.of(context).dashNetWorthHistory.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.6,
+                  color: context.textSubtle,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Flexible so the detailed-mode legend wraps within its share of
+          // the row instead of overflowing a 320px card.
+          Flexible(child: rightSide),
+        ],
+      );
+    }
+
     final summary = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -657,6 +734,18 @@ class _NetWorthCardState extends State<NetWorthCard> {
       List<MapEntry<String, Color>> institutions, double chartWidth) {
     if (data.isEmpty) return const SizedBox.shrink();
 
+    // Bottom-axis label format follows the FILTERED data's real span, not
+    // the selected range chip: 1Y/ALL over a few weeks of history used to
+    // paint four identical "Jul 2026" ticks. Short spans get day precision.
+    final firstDate = DateTime.tryParse(data.first['date']?.toString() ?? '');
+    final lastDate = DateTime.tryParse(data.last['date']?.toString() ?? '');
+    final spanDays = (firstDate != null && lastDate != null)
+        ? lastDate.difference(firstDate).inDays.abs()
+        : null;
+    final bottomLabelFormat = (spanDays != null && spanDays < 120)
+        ? DateFormat('MMM d')
+        : DateFormat('MMM y');
+
     // For a true "where the total comes from" stacked-area visualisation we
     // build a series of cumulative lines from the top down. Filling each
     // line's BarArea down to the X axis layers the bands such that the
@@ -947,12 +1036,8 @@ class _NetWorthCardState extends State<NetWorthCard> {
                 final dateStr = data[index]['date'].toString();
                 if (dateStr.length >= 10) {
                   final date = DateTime.parse(dateStr);
-                  // Adapt format based on range
-                  final fmt = selectedRange == DateRange.oneMonth
-                      ? DateFormat('MMM d')
-                      : DateFormat('MMM y');
                   return Text(
-                    fmt.format(date),
+                    bottomLabelFormat.format(date),
                     style: TextStyle(color: context.textSubtle, fontSize: 10),
                   );
                 }

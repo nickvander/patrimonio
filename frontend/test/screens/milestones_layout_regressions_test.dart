@@ -31,26 +31,39 @@ void main() {
     // over 1,700px of blank space.
     expect(position.maxScrollExtent, lessThan(2200));
 
-    position.jumpTo(position.maxScrollExtent);
+    // The milestones now sit mid-page (summary-first phone order: the
+    // glossary and the assumptions sliders trail them), so scroll the tile
+    // grid into view rather than jumping to the end of the page. Aligning
+    // the first tile ('Success rate', top row of the 2×2 grid) at the top
+    // puts the whole grid inside the 844px viewport.
+    await tester.ensureVisible(find.text('Success rate').first);
+    await tester.pumpAndSettle();
+    // ensureVisible pins the anchor text itself to y=0; back off enough to
+    // reveal the full tile chrome around it (its card padding plus the
+    // neighboring tile's slightly-higher title).
+    position.jumpTo((position.pixels - 60).clamp(0.0, position.maxScrollExtent));
     await tester.pumpAndSettle();
 
-    // All four tile titles visible in the viewport after scrolling to the
-    // end ('FI number' also appears as a glossary term earlier in the tree,
-    // so take the last match).
+    // All four tile titles visible in the viewport ('FI number' also
+    // appears as a glossary term later in the tree — the glossary follows
+    // the tiles now — so take the first match).
     for (final title in ['Success rate', 'FI number', 'Years to FI', 'FI income']) {
-      final f = find.text(title).last;
+      final f = find.text(title).first;
       expect(f, findsOneWidget, reason: 'missing tile title: $title');
       final rect = tester.getRect(f);
       expect(rect.top, greaterThanOrEqualTo(0), reason: '$title above viewport');
       expect(rect.bottom, lessThanOrEqualTo(844), reason: '$title below viewport');
     }
 
-    // No blank void: the last tile's card ends near the bottom of the
-    // scrolled content (within 200px of the viewport bottom at max extent).
-    final lastTile = find
-        .ancestor(of: find.text('FI income'), matching: find.byType(Card))
+    // No blank void: at max scroll extent the page still ends with real
+    // content — the controls card (now the last section) reaches within
+    // 200px of the viewport bottom.
+    position.jumpTo(position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    final controlsCard = find
+        .ancestor(of: find.text('Monthly savings'), matching: find.byType(Card))
         .first;
-    expect(tester.getRect(lastTile).bottom, greaterThan(844 - 200));
+    expect(tester.getRect(controlsCard).bottom, greaterThan(844 - 200));
 
     expect(tester.takeException(), isNull);
   });

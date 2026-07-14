@@ -102,22 +102,46 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
         padding: EdgeInsets.all(pad),
-        child: Column(
+        // Width-responsive off the card's OWN constraint (inner
+        // LayoutBuilder, per the skill rule), not MediaQuery — the card can
+        // be narrower than the screen (outer tab padding, width clamps).
+        child: LayoutBuilder(builder: (context, c) {
+          // House ~420 phone breakpoint off the card interior: compact
+          // chrome — no leading icon, title compressed to a small uppercase
+          // overline (the portfolio_card idiom). Distinct from the <720
+          // MediaQuery `isPhone` above, which only drives padding/height.
+          final isPhoneCard = c.maxWidth < 420;
+          return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.bar_chart_rounded,
-                    color: context.tealAccent, size: 18),
-                const SizedBox(width: 8),
+                if (!isPhoneCard) ...[
+                  Icon(Icons.bar_chart_rounded,
+                      color: context.tealAccent, size: 18),
+                  const SizedBox(width: 8),
+                ],
                 Expanded(
                   child: Text(
-                    l.spendByCatTitle,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: context.textPrimary,
-                    ),
+                    isPhoneCard
+                        ? l.spendByCatTitle.toUpperCase()
+                        : l.spendByCatTitle,
+                    style: isPhoneCard
+                        ? TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                            color: context.textSubtle,
+                          )
+                        : TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: context.textPrimary,
+                          ),
+                    // maxLines only on the phone overline; wider layouts
+                    // keep the original wrap behaviour pixel-identical.
+                    maxLines: isPhoneCard ? 1 : null,
+                    overflow: isPhoneCard ? TextOverflow.ellipsis : null,
                   ),
                 ),
                 // Hidden when the window is driven by the Cash Flow period
@@ -126,7 +150,8 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
                 if (widget.months == null) _rangeSelector(),
               ],
             ),
-            const SizedBox(height: 16),
+            // Header→content gap tightens with the phone overline header.
+            SizedBox(height: isPhoneCard ? 12 : 16),
             if (_loading)
               const SizedBox(
                 height: 220,
@@ -175,7 +200,8 @@ class _SpendingByCategoryCardState extends State<SpendingByCategoryCard> {
               _buildLegend(cats, months.length),
             ],
           ],
-        ),
+          );
+        }),
       ),
     );
   }

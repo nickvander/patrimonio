@@ -55,6 +55,10 @@ class AssetsLiabilitiesBar extends StatelessWidget {
     final assetPct = totalAssets / grandTotal;
     final liabilityPct = totalLiabilities / grandTotal;
 
+    // A bar that would read "Assets 100% / Liabilities 0%" carries no
+    // information — suppress it entirely for debt-free portfolios.
+    if (liabilityPct < 0.005) return const SizedBox.shrink();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

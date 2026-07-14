@@ -2246,6 +2246,18 @@ abstract class AppLocalizations {
   /// **'Cash flow this month'**
   String get cfMonthlyTitle;
 
+  /// No description provided for @cfCashFlowShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Cash flow'**
+  String get cfCashFlowShort;
+
+  /// No description provided for @cfNetEquivalence.
+  ///
+  /// In en, this message translates to:
+  /// **'Net this period ≈ {amount}'**
+  String cfNetEquivalence(Object amount);
+
   /// No description provided for @cfMonthlyExcludesTooltip.
   ///
   /// In en, this message translates to:
@@ -4429,6 +4441,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Dark'**
   String get dashThemeDarkShort;
+
+  /// No description provided for @dashThemeMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme'**
+  String get dashThemeMenu;
 
   /// No description provided for @dashThemeTooltip.
   ///
@@ -8816,6 +8834,18 @@ abstract class AppLocalizations {
   /// **'{amount} remaining'**
   String lendScheduleRemaining(String amount);
 
+  /// No description provided for @lendScheduleColDue.
+  ///
+  /// In en, this message translates to:
+  /// **'Due'**
+  String get lendScheduleColDue;
+
+  /// No description provided for @lendScheduleColInterest.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest'**
+  String get lendScheduleColInterest;
+
   /// No description provided for @lendScheduleColPayment.
   ///
   /// In en, this message translates to:
@@ -8959,6 +8989,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Month'**
   String get lendRatePeriodMonth;
+
+  /// No description provided for @lendRateHintExample.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. 5'**
+  String get lendRateHintExample;
+
+  /// No description provided for @lendRatePerMonthSuffix.
+  ///
+  /// In en, this message translates to:
+  /// **'% / month'**
+  String get lendRatePerMonthSuffix;
+
+  /// No description provided for @lendRatePerYearSuffix.
+  ///
+  /// In en, this message translates to:
+  /// **'% / year'**
+  String get lendRatePerYearSuffix;
 
   /// No description provided for @lendFreqLumpSum.
   ///

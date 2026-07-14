@@ -72,15 +72,41 @@ class CashFlowTrendsChart extends StatelessWidget {
                 );
 
                 if (constraints.maxWidth < 520) {
+                  // Stacked header (title row, then legend). Below the ~420
+                  // phone breakpoint the title further compresses to the
+                  // small uppercase overline (portfolio_card idiom); the
+                  // 420–520 band keeps the regular 16px title.
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        l.lwTrendsTitle,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              isPhone
+                                  ? l.lwTrendsTitle.toUpperCase()
+                                  : l.lwTrendsTitle,
+                              overflow: TextOverflow.ellipsis,
+                              // maxLines only on the phone overline; the
+                              // 420–520 band keeps the original (unbounded)
+                              // wrap behaviour pixel-identical.
+                              maxLines: isPhone ? 1 : null,
+                              style: isPhone
+                                  ? TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.6,
+                                      color: context.textSubtle,
+                                    )
+                                  : const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          _buildInfoTooltip(context, l.lwTrendsInfoTooltip),
+                        ],
                       ),
                       const SizedBox(height: 12),
                       legend,
@@ -110,14 +136,7 @@ class CashFlowTrendsChart extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          Tooltip(
-                            message: l.lwTrendsInfoTooltip,
-                            child: Icon(
-                              Icons.info_outline,
-                              size: 14,
-                              color: context.textFaint,
-                            ),
-                          ),
+                          _buildInfoTooltip(context, l.lwTrendsInfoTooltip),
                         ],
                       ),
                     ),
@@ -126,7 +145,8 @@ class CashFlowTrendsChart extends StatelessWidget {
                 );
               },
             ),
-            const SizedBox(height: 24),
+            // Header→chart gap tightens with the phone overline header.
+            SizedBox(height: isPhone ? 12 : 24),
             // Screen readers can't see the bar geometry or reach the
             // pointer-only hover tooltip, so we mirror the data as text:
             // a one-line summary on the container plus an offstage,
@@ -424,8 +444,34 @@ class CashFlowTrendsChart extends StatelessWidget {
     return max == 0 ? 100 : max * 1.2;
   }
 
+  /// Tap-triggered info tooltip (hover-only tooltips are unreachable on
+  /// touch devices) with a 48dp touch target around the small glyph. The
+  /// child is deliberately NOT a button: Tooltip's own tap recognizer must
+  /// win the gesture arena, and an inner IconButton would swallow the tap
+  /// so the message never shows.
+  Widget _buildInfoTooltip(BuildContext context, String message) {
+    return Tooltip(
+      message: message,
+      triggerMode: TooltipTriggerMode.tap,
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: Center(
+          child: Icon(
+            Icons.info_outline,
+            size: 16,
+            color: context.textFaint,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildLegendItem(BuildContext context, Color color, String label) {
     return Row(
+      // min: as a Wrap child the Row would otherwise expand to the Wrap's
+      // full width, forcing Income/Spending onto separate lines.
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           width: 12,

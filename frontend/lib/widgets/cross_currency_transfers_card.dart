@@ -33,27 +33,53 @@ class CrossCurrencyTransfersCard extends StatelessWidget {
     final l = AppLocalizations.of(context);
     if (transfers.isEmpty) return const SizedBox.shrink();
 
+    // House card idiom (elevation 4 / radius 20 / responsive 16-24 padding),
+    // matching monthly_cash_flow_card.dart so the tab's cards read as one set.
+    final pad = MediaQuery.sizeOf(context).width < 720 ? 16.0 : 24.0;
+
     return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: context.hairline),
-      ),
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-        child: Column(
+        padding: EdgeInsets.all(pad),
+        // Width-responsive off the card's OWN constraint (inner
+        // LayoutBuilder, per the skill rule), not MediaQuery — the card can
+        // be narrower than the screen (outer tab padding, width clamps).
+        child: LayoutBuilder(builder: (context, c) {
+          // House ~420 phone breakpoint: compact chrome — no leading icon,
+          // title compressed to a small uppercase overline (the
+          // portfolio_card idiom). Wider layouts are unchanged.
+          final isPhone = c.maxWidth < 420;
+          return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.swap_horiz, size: 18, color: context.tealAccent),
-                const SizedBox(width: 8),
-                Text(
-                  l.cfTransfersTitle,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: context.textPrimary,
+                if (!isPhone) ...[
+                  Icon(Icons.swap_horiz, size: 18, color: context.tealAccent),
+                  const SizedBox(width: 8),
+                ],
+                Flexible(
+                  child: Text(
+                    isPhone
+                        ? l.cfTransfersTitle.toUpperCase()
+                        : l.cfTransfersTitle,
+                    style: isPhone
+                        ? TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                            color: context.textSubtle,
+                          )
+                        : TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: context.textPrimary,
+                          ),
+                    // maxLines only on the phone overline; wider layouts
+                    // keep the original wrap behaviour pixel-identical.
+                    maxLines: isPhone ? 1 : null,
+                    overflow: isPhone ? TextOverflow.ellipsis : null,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -86,7 +112,8 @@ class CrossCurrencyTransfersCard extends StatelessWidget {
             const SizedBox(height: 12),
             ...transfers.map((t) => _buildRow(context, t as Map)),
           ],
-        ),
+          );
+        }),
       ),
     );
   }
@@ -225,8 +252,10 @@ class CrossCurrencyTransfersCard extends StatelessWidget {
                   style: TextButton.styleFrom(
                     foregroundColor: context.tealAccent,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: const Size(0, 28),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    // 48dp touch-target floor: these trigger backend writes,
+                    // so no shrinkWrap — the default tapTargetSize pads the
+                    // 40px visual button out to a 48dp hit area.
+                    minimumSize: const Size(48, 40),
                   ),
                 ),
               if (confirmed)
@@ -257,8 +286,10 @@ class CrossCurrencyTransfersCard extends StatelessWidget {
                   style: TextButton.styleFrom(
                     foregroundColor: context.textSubtle,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: const Size(0, 28),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    // 48dp touch-target floor: these trigger backend writes,
+                    // so no shrinkWrap — the default tapTargetSize pads the
+                    // 40px visual button out to a 48dp hit area.
+                    minimumSize: const Size(48, 40),
                   ),
                 ),
             ],

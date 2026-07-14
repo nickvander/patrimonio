@@ -1274,6 +1274,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cfMonthlyTitle => 'Cash flow this month';
 
   @override
+  String get cfCashFlowShort => 'Cash flow';
+
+  @override
+  String cfNetEquivalence(Object amount) {
+    return 'Net this period ≈ $amount';
+  }
+
+  @override
   String get cfMonthlyExcludesTooltip =>
       'Excludes securities trades and internal transfers between your own accounts, plus credit-card payments — that money moves around your balance sheet without changing your income or spending. The amounts are shown below.';
 
@@ -2662,6 +2670,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get dashThemeDarkShort => 'Dark';
+
+  @override
+  String get dashThemeMenu => 'Theme';
 
   @override
   String dashThemeTooltip(Object label) {
@@ -5485,6 +5496,12 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get lendScheduleColDue => 'Due';
+
+  @override
+  String get lendScheduleColInterest => 'Interest';
+
+  @override
   String get lendScheduleColPayment => 'Payment';
 
   @override
@@ -5564,6 +5581,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lendRatePeriodMonth => 'Month';
+
+  @override
+  String get lendRateHintExample => 'e.g. 5';
+
+  @override
+  String get lendRatePerMonthSuffix => '% / month';
+
+  @override
+  String get lendRatePerYearSuffix => '% / year';
 
   @override
   String get lendFreqLumpSum => 'Lump sum';

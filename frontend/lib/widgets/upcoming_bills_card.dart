@@ -51,22 +51,43 @@ class UpcomingBillsCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
         padding: EdgeInsets.all(pad),
-        child: Column(
+        // Width-responsive off the card's OWN constraint (inner
+        // LayoutBuilder, per the skill rule), not MediaQuery — the card can
+        // be narrower than the screen (outer tab padding, width clamps).
+        child: LayoutBuilder(builder: (context, c) {
+          // House ~420 phone breakpoint: compact chrome — no leading icon,
+          // title compressed to a small uppercase overline (the
+          // portfolio_card idiom). Wider layouts are unchanged.
+          final isPhone = c.maxWidth < 420;
+          return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.event_repeat_rounded,
-                    color: context.purpleAccent, size: 18),
-                const SizedBox(width: 8),
+                if (!isPhone) ...[
+                  Icon(Icons.event_repeat_rounded,
+                      color: context.purpleAccent, size: 18),
+                  const SizedBox(width: 8),
+                ],
                 Expanded(
                   child: Text(
-                    l.billsTitle,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: context.textPrimary,
-                    ),
+                    isPhone ? l.billsTitle.toUpperCase() : l.billsTitle,
+                    style: isPhone
+                        ? TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                            color: context.textSubtle,
+                          )
+                        : TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: context.textPrimary,
+                          ),
+                    // maxLines only on the phone overline; wider layouts
+                    // keep the original wrap behaviour pixel-identical.
+                    maxLines: isPhone ? 1 : null,
+                    overflow: isPhone ? TextOverflow.ellipsis : null,
                   ),
                 ),
                 Column(
@@ -98,7 +119,8 @@ class UpcomingBillsCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            // Header→chart gap tightens with the phone overline header.
+            SizedBox(height: isPhone ? 12 : 20),
             LayoutBuilder(builder: (context, outer) {
               // Month-label density off the inner width (~1 per 46px, keep
               // the last) — a full 12-month forecast rendered a two-line
@@ -116,7 +138,8 @@ class UpcomingBillsCard extends StatelessWidget {
               );
             }),
           ],
-        ),
+          );
+        }),
       ),
     );
   }
