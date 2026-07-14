@@ -41,7 +41,10 @@ void main() {
       // Subtitle is the autonym of the ACTIVE locale.
       expect(find.text('English'), findsOneWidget);
       expect(find.text('Theme'), findsOneWidget);
-      expect(find.byType(SegmentedButton<ThemeMode>), findsOneWidget);
+      // Connected button group: all three segment labels visible at rest.
+      expect(find.text('System'), findsOneWidget);
+      expect(find.text('Light'), findsOneWidget);
+      expect(find.text('Dark'), findsOneWidget);
     });
 
     testWidgets('es: localized headers + Spanish autonym subtitle',
@@ -88,16 +91,19 @@ void main() {
       await tester.pumpWidget(_host(const SettingsPreferencesCard()));
       await tester.pumpAndSettle();
 
-      SegmentedButton<ThemeMode> segmented() => tester.widget(
-            find.byType(SegmentedButton<ThemeMode>),
-          );
-      expect(segmented().selected, {ThemeMode.light});
+      // The selected segment of the connected group renders its label at
+      // w700; unselected segments at w600.
+      FontWeight weightOf(String label) =>
+          tester.widget<Text>(find.text(label)).style!.fontWeight!;
+      expect(weightOf('Light'), FontWeight.w700);
+      expect(weightOf('Dark'), FontWeight.w600);
 
       // External change (what the AppBar theme-cycle button does) must be
       // reflected without rebuilding the card from outside.
       themeModeNotifier.value = ThemeMode.dark;
       await tester.pumpAndSettle();
-      expect(segmented().selected, {ThemeMode.dark});
+      expect(weightOf('Dark'), FontWeight.w700);
+      expect(weightOf('Light'), FontWeight.w600);
     });
 
     testWidgets('renders without overflow on a narrow phone in es (long '
@@ -114,7 +120,8 @@ void main() {
       await tester.pumpAndSettle();
       // Narrow layout stacks the picker under the label; an overflow would
       // fail the test via FlutterError.
-      expect(find.byType(SegmentedButton<ThemeMode>), findsOneWidget);
+      expect(find.text('Sistema'), findsOneWidget);
+      expect(find.text('Oscuro'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

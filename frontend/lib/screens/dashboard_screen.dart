@@ -6376,61 +6376,111 @@ class SettingsPreferencesCard extends StatelessWidget {
                 );
                 // ValueListenableBuilder keeps the selection in step with
                 // theme changes made elsewhere (the wide AppBar's
-                // theme-cycle button writes the same notifier).
+                // theme-cycle button writes the same notifier). Rendered as
+                // an M3 Expressive connected button group (2px gaps, no
+                // shared outline, selected segment morphs to a filled
+                // fully-rounded pill) — the classic SegmentedButton's
+                // outline+checkmark read as dated chrome, and equal-flex
+                // segments always fit the card, no scroll guard needed.
                 final picker = ValueListenableBuilder<ThemeMode>(
                   valueListenable: themeModeNotifier,
-                  builder: (_, mode, _) => SegmentedButton<ThemeMode>(
-                    segments: [
-                      ButtonSegment(
-                        value: ThemeMode.system,
-                        icon: const Icon(Icons.brightness_auto),
-                        // Short label ("System"/"Sistema") — the long
-                        // "System default"/"Predeterminado del sistema"
-                        // pushed the Dark segment past a 390px card edge,
-                        // leaving the picker scroll-clipped with no
-                        // affordance. All three segments must fit at rest.
-                        label: Text(l.dashThemeSystemShort),
-                      ),
-                      ButtonSegment(
-                        value: ThemeMode.light,
-                        icon: const Icon(Icons.light_mode_outlined),
-                        label: Text(l.dashThemeLightShort),
-                      ),
-                      ButtonSegment(
-                        value: ThemeMode.dark,
-                        icon: const Icon(Icons.dark_mode_outlined),
-                        label: Text(l.dashThemeDarkShort),
-                      ),
-                    ],
-                    selected: {mode},
-                    onSelectionChanged: (sel) {
-                      final next = sel.first;
-                      themeModeNotifier.value = next;
-                      // Same persist mapping as the AppBar theme controls.
-                      Preferences.setThemeMode(switch (next) {
-                        ThemeMode.system => 'system',
-                        ThemeMode.light => 'light',
-                        ThemeMode.dark => 'dark',
-                      });
-                    },
-                  ),
+                  builder: (pickerCtx, mode, _) {
+                    final scheme = Theme.of(pickerCtx).colorScheme;
+                    Widget seg(ThemeMode value, IconData icon, String text,
+                        {bool first = false, bool last = false}) {
+                      final selected = mode == value;
+                      // Outer ends stay pill-round; inner corners sit at 8
+                      // until selection morphs the segment fully round.
+                      final radius = BorderRadius.horizontal(
+                        left: Radius.circular(selected || first ? 22 : 8),
+                        right: Radius.circular(selected || last ? 22 : 8),
+                      );
+                      return Expanded(
+                        child: Semantics(
+                          selected: selected,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeOut,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? scheme.secondaryContainer
+                                  : pickerCtx.tint(0.05),
+                              borderRadius: radius,
+                            ),
+                            child: Material(
+                              type: MaterialType.transparency,
+                              child: InkWell(
+                                borderRadius: radius,
+                                onTap: () {
+                                  themeModeNotifier.value = value;
+                                  // Same persist mapping as the AppBar
+                                  // theme controls.
+                                  Preferences.setThemeMode(switch (value) {
+                                    ThemeMode.system => 'system',
+                                    ThemeMode.light => 'light',
+                                    ThemeMode.dark => 'dark',
+                                  });
+                                },
+                                child: Center(
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(icon,
+                                          size: 18,
+                                          color: selected
+                                              ? scheme.onSecondaryContainer
+                                              : pickerCtx.textSubtle),
+                                      const SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          text,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 13.5,
+                                            fontWeight: selected
+                                                ? FontWeight.w700
+                                                : FontWeight.w600,
+                                            color: selected
+                                                ? scheme.onSecondaryContainer
+                                                : pickerCtx.textSubtle,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+
+                    return Row(
+                      children: [
+                        seg(ThemeMode.system, Icons.brightness_auto,
+                            l.dashThemeSystemShort, first: true),
+                        const SizedBox(width: 2),
+                        seg(ThemeMode.light, Icons.light_mode_outlined,
+                            l.dashThemeLightShort),
+                        const SizedBox(width: 2),
+                        seg(ThemeMode.dark, Icons.dark_mode_outlined,
+                            l.dashThemeDarkShort, last: true),
+                      ],
+                    );
+                  },
                 );
                 if (c.maxWidth < 520) {
-                  // Narrow: the picker gets its own line under the label; a
-                  // horizontal scroll guards against the long es-MX
-                  // "Predeterminado del sistema" segment on small phones.
+                  // Narrow: the group gets its own full-width line under
+                  // the label.
                   return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      label,
+                      Align(alignment: Alignment.centerLeft, child: label),
                       const SizedBox(height: 12),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: picker,
-                        ),
-                      ),
+                      picker,
                     ],
                   );
                 }
@@ -6438,12 +6488,7 @@ class SettingsPreferencesCard extends StatelessWidget {
                   children: [
                     Expanded(child: label),
                     const SizedBox(width: 16),
-                    Flexible(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: picker,
-                      ),
-                    ),
+                    SizedBox(width: 360, child: picker),
                   ],
                 );
               }),

@@ -129,9 +129,14 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
     );
   }
 
-  /// Sort by utilization (highest first) and cap at `_collapsedLimit`
+  /// Sort by amount owed (largest first) and cap at `_collapsedLimit`
   /// unless the user has expanded the list. Caps prevent a portfolio of
-  /// 10+ credit cards from dominating the Overview tab.
+  /// 10+ credit cards from dominating the Overview tab. Owed beats
+  /// utilization as the ranking: the user reads this list as "what do I
+  /// owe", and utilization put a nearly-empty low-limit card above a
+  /// four-figure balance (the per-row % is still shown). Balances are
+  /// USD-normalised before comparing — a native MXN figure sorted 1:1
+  /// against USD balances would rank ~17x too high.
   List<Widget> _buildCreditRows() {
     final l = AppLocalizations.of(context);
     final creditData = widget.creditData;
@@ -139,12 +144,13 @@ class _CreditUtilizationCardState extends State<CreditUtilizationCard> {
     final currencyFormat = widget.currencyFormat;
 
     final sorted = [...creditData]..sort((a, b) {
-        double util(dynamic x) {
-          final balance = ((x['balance'] ?? 0.0) as num).toDouble();
-          final limit = ((x['credit_limit'] ?? 0.0) as num).toDouble();
-          return limit > 0 ? balance / limit : 0.0;
-        }
-        return util(b).compareTo(util(a));
+        double owedUsd(dynamic x) => convertCurrency(
+              ((x['balance'] ?? 0.0) as num).toDouble(),
+              from: (x['currency'] ?? 'USD').toString(),
+              to: 'USD',
+              usdMxnRate: widget.usdMxnRate,
+            );
+        return owedUsd(b).compareTo(owedUsd(a));
       });
 
     final visible = _expanded || sorted.length <= _collapsedLimit
