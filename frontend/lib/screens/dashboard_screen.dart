@@ -3600,17 +3600,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // two paths.
     final appBar = AppBar(
           // Compact widths: the slimmed actions row (app-bar audit) leaves
-          // room for the current destination's name — same label as the
-          // selected bottom-nav item, and a page heading for screen
-          // readers. First-run keeps the wordmark (its chrome is hidden,
-          // so there's room and no destination to name).
+          // room for the current destination's name, which doubles as a page
+          // heading for screen readers. Uses the full label, not the
+          // bottom-nav short one — the nav abbreviates to fit five items
+          // across ("Proj."), and the title has room for the real name.
+          // Scales down rather than clipping the longest es-MX labels.
+          // First-run keeps the wordmark (its chrome is hidden, so there's
+          // room and no destination to name).
           title: isCompact
-              ? Text(
-                  firstRun
-                      ? 'Patrimonio'
-                      : _navShortLabel(
-                          AppLocalizations.of(context), _currentDest.id),
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+              ? FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    firstRun
+                        ? 'Patrimonio'
+                        : _navLabel(
+                            AppLocalizations.of(context), _currentDest.id),
+                    maxLines: 1,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 )
               : const FittedBox(
                   fit: BoxFit.scaleDown,
