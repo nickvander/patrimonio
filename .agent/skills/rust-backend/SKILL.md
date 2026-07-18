@@ -76,6 +76,17 @@ Read these first — they are the recurring, expensive mistakes:
   outermost): `require_csrf_header` (outer) → `require_auth` (populates `AuthContext`) →
   `require_owner` (inner, per business router). The `main.rs` comment explains it — don't
   reorder without understanding it.
+- **Don't run long, multi-item work inline in a request handler.** axum drops the handler
+  future when the client disconnects, so a mobile client backgrounding mid-request
+  *cancels the work server-side*, not just visually. The manual sync hit exactly this
+  (`POST /institutions/sync` used to block on the whole ~13-institution Plaid sync → the
+  app held the socket open for a minute+ → backgrounding aborted it). Pattern: stamp a
+  visible status synchronously, `tokio::spawn` the work as a detached task (clone `db` /
+  `config` / `realtime` into it — all cheap `Arc`s), and return **`202 Accepted`**
+  immediately; let the client poll a status endpoint for progress/completion. And give
+  every outbound HTTP client a `.timeout(..)` — one hung upstream call otherwise wedges the
+  whole job (that's what stuck the sync progress at "12/13"). See `spawn_sync` in
+  `api/institutions.rs` + `mark_syncable_syncing` / `SYNC_HTTP_TIMEOUT` in `services/sync.rs`.
 
 ## 3. Database access
 

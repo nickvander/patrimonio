@@ -56,36 +56,72 @@ async fn trigger_sync(
     Extension(ctx): Extension<AuthContext>,
     body: Option<Json<SyncRequest>>,
 ) -> axum::response::Response {
-    let config = state.config.clone();
-    let db = state.db.clone();
     let only_ids = body.and_then(|b| b.0.ids);
-    if let Err(e) = crate::services::sync::sync_user_institutions(
-        &db,
-        &config,
-        ctx.user_id,
-        only_ids,
-    )
-    .await
-    {
-        // Log the detail server-side; don't echo internals (SQL / upstream
-        // Plaid text) to the client where they'd leak implementation detail.
-        tracing::error!("Manual Plaid sync failed: {}", e);
-        return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, axum::response::Json(serde_json::json!({
-            "error": "Sync failed"
-        }))).into_response();
-    }
-    // Wake every open dashboard tab for this user. The event is
-    // coarse — the client refetches /dashboard/* on receipt rather
-    // than trying to apply a delta. Cheap because no tabs open ==
-    // no subscribers == no work.
-    state
-        .realtime
-        .publish(
-            ctx.user_id,
-            crate::services::realtime::RealtimeEvent::TransactionsChanged,
+    spawn_sync(state, ctx.user_id, only_ids).await
+}
+
+/// Stamp the targeted institutions `syncing`, kick the sync off as a
+/// DETACHED task, and return `202 Accepted` immediately.
+///
+/// The sync used to run inline in this request, which meant it was tied to
+/// the request's lifetime: a manual "Sync now" over a dozen institutions
+/// held the socket open for a minute-plus, and when the app was
+/// backgrounded (the OS tears down the socket) axum dropped the handler
+/// future — cancelling the sync mid-flight and surfacing a
+/// "connection abort" error even though the work was the backend's to do.
+///
+/// Now the request only *starts* the sync. The engine runs to completion on
+/// its own regardless of the client, and the app watches
+/// `GET /dashboard/sync-status` to drive progress and detect completion
+/// (no institution left in `syncing`). We pre-stamp `syncing` here,
+/// synchronously, so that poll sees the in-progress state the instant this
+/// returns — no race against the spawned task starting.
+async fn spawn_sync(
+    state: AppState,
+    user_id: uuid::Uuid,
+    only_ids: Option<Vec<uuid::Uuid>>,
+) -> axum::response::Response {
+    let db = state.db.clone();
+    let config = state.config.clone();
+    let realtime = state.realtime.clone();
+
+    if let Err(e) = crate::services::sync::mark_syncable_syncing(&db, user_id, &only_ids).await {
+        // The pre-stamp is a plain UPDATE scoped to the caller; a failure
+        // here means the DB is unhealthy, so don't pretend we started.
+        tracing::error!("Failed to mark institutions syncing: {}", e);
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            axum::response::Json(serde_json::json!({"error": "Sync failed"})),
         )
-        .await;
-    Json(serde_json::json!({"status": "ok"})).into_response()
+            .into_response();
+    }
+
+    tokio::spawn(async move {
+        if let Err(e) =
+            crate::services::sync::sync_user_institutions(&db, &config, user_id, only_ids).await
+        {
+            // Per-institution failures are already isolated and stamped on
+            // their own rows; an Err here is an engine-level fault (e.g. the
+            // initial SELECT). Log it — the client sees it via sync-status.
+            tracing::error!("Manual Plaid sync failed: {}", e);
+        }
+        // Wake every open dashboard tab for this user once the sync settles.
+        // The event is coarse — the client refetches /dashboard/* on receipt
+        // rather than applying a delta. Cheap because no tabs open == no
+        // subscribers == no work.
+        realtime
+            .publish(
+                user_id,
+                crate::services::realtime::RealtimeEvent::TransactionsChanged,
+            )
+            .await;
+    });
+
+    (
+        axum::http::StatusCode::ACCEPTED,
+        Json(serde_json::json!({"status": "accepted"})),
+    )
+        .into_response()
 }
 
 /// Sync a single institution by id — used by the per-institution
@@ -97,33 +133,8 @@ async fn trigger_sync_one(
     Extension(ctx): Extension<AuthContext>,
     axum::extract::Path(id): axum::extract::Path<uuid::Uuid>,
 ) -> axum::response::Response {
-    let config = state.config.clone();
-    let db = state.db.clone();
-    if let Err(e) = crate::services::sync::sync_user_institutions(
-        &db,
-        &config,
-        ctx.user_id,
-        Some(vec![id]),
-    )
-    .await
-    {
-        tracing::error!("Per-institution sync failed for {id}: {e}");
-        return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            axum::response::Json(serde_json::json!({
-                "error": "Sync failed"
-            })),
-        )
-            .into_response();
-    }
-    state
-        .realtime
-        .publish(
-            ctx.user_id,
-            crate::services::realtime::RealtimeEvent::TransactionsChanged,
-        )
-        .await;
-    Json(serde_json::json!({"status": "ok"})).into_response()
+    // Same detached-task treatment as the global sync, scoped to one id.
+    spawn_sync(state, ctx.user_id, Some(vec![id])).await
 }
 
 /// List all linked institutions for the authenticated user.

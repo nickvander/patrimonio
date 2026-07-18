@@ -14,6 +14,15 @@ use futures_util::stream::StreamExt;
 /// latency to ~N/5.
 const SYNC_CONCURRENCY: usize = 5;
 
+/// Per-request ceiling on every upstream (Plaid / Coinbase / Bitso) HTTP
+/// call the sync makes. Without it a single hung upstream request pins its
+/// institution in `syncing` forever — the "stuck at 12/13" symptom — with
+/// no way to recover short of a process restart. reqwest applies this from
+/// connect through the full response body, *per request*, so the
+/// `/transactions/sync` pagination loop gets a fresh budget for each page.
+/// 60s is generous for a healthy call while still bounding a wedged one.
+const SYNC_HTTP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
 /// Plain-data snapshot of one `institutions` row, read off the
 /// `sqlx::Row` BEFORE the concurrent boundary so no non-`Send`/borrowed
 /// row state is held across an `.await` inside a spawned future.
@@ -61,6 +70,47 @@ pub async fn sync_one_institution(
     sync_institutions(db, config, None, Some(vec![id])).await
 }
 
+/// Integration types the sync engine actually contacts an upstream for.
+/// Kept in one place so the "mark syncing" pre-stamp and any future
+/// type-scoped logic agree. Manual/CSV/PDF are excluded — they never make
+/// a network call, so surfacing them as `syncing` would be misleading. The
+/// frontend's `kSyncableInstitutionTypes` must mirror this list.
+const SYNCABLE_TYPES: &[&str] = &["plaid", "coinbase", "coinbase_oauth", "bitso"];
+
+/// Stamp every *syncable* institution for `user_id` (optionally narrowed to
+/// `only_ids`) as `syncing`, synchronously. The manual "Sync now" trigger
+/// calls this before it spawns the detached sync task and returns, so a
+/// client polling `/dashboard/sync-status` sees the in-progress state the
+/// instant the trigger responds — with no race against the background task
+/// having started to flip rows yet. Returns the number of rows marked.
+pub async fn mark_syncable_syncing(
+    db: &PgPool,
+    user_id: uuid::Uuid,
+    only_ids: &Option<Vec<uuid::Uuid>>,
+) -> Result<u64> {
+    let types: Vec<&str> = SYNCABLE_TYPES.to_vec();
+    let res = match only_ids {
+        Some(ids) => sqlx::query(
+            "UPDATE institutions SET sync_status = 'syncing' \
+             WHERE user_id = $1 AND id = ANY($2) AND integration_type = ANY($3)",
+        )
+        .bind(user_id)
+        .bind(ids)
+        .bind(&types)
+        .execute(db)
+        .await?,
+        None => sqlx::query(
+            "UPDATE institutions SET sync_status = 'syncing' \
+             WHERE user_id = $1 AND integration_type = ANY($2)",
+        )
+        .bind(user_id)
+        .bind(&types)
+        .execute(db)
+        .await?,
+    };
+    Ok(res.rows_affected())
+}
+
 /// Internal sync loop.
 ///
 /// * `user_filter` — when `Some`, only institutions owned by this user
@@ -83,7 +133,13 @@ pub async fn sync_institutions(
             .map(|u| u.to_string())
             .unwrap_or_else(|| "<all>".to_string()),
     );
-    let client = Client::new();
+    // Bound every upstream call so one hung request can't wedge the sync
+    // (see SYNC_HTTP_TIMEOUT). Fall back to a default client if the builder
+    // ever fails to construct — a missing timeout is better than no sync.
+    let client = Client::builder()
+        .timeout(SYNC_HTTP_TIMEOUT)
+        .build()
+        .unwrap_or_else(|_| Client::new());
 
     let rows = match (&only_ids, &user_filter) {
         (Some(ids), Some(uid)) => sqlx::query(

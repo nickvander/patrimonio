@@ -1,7 +1,52 @@
 # Current state — snapshot
 
-> **Last updated:** 2026-07-14 (mobile UX overhaul + Android Plaid link fixes)
+> **Last updated:** 2026-07-17 (manual sync made fire-and-forget + poll)
 > **Branch:** `main`.
+
+## 2026-07-17 — Manual sync no longer blocks the request (DEC-021)
+
+Fixes two reported symptoms: (1) backgrounding the app during a sync
+surfaced `HttpException: Software caused connection abort` and (2) the
+progress counter stuck at "12/13". Root cause was one design flaw —
+`POST /api/institutions/sync` ran the *entire* multi-institution sync inline
+in the request and only returned when the last institution finished, so the
+app held the socket open for a minute-plus. Backgrounding kills that socket;
+worse, axum drops the handler future on client disconnect, so the sync was
+**cancelled server-side**, not just visually errored.
+
+* **Backend — fire-and-forget (`api/institutions.rs`).** `trigger_sync` /
+  `trigger_sync_one` now share a `spawn_sync` helper that (a) synchronously
+  stamps the caller's syncable institutions `sync_status = 'syncing'`, (b)
+  spawns the sync as a detached `tokio::task`, and (c) returns **202
+  Accepted** immediately (measured: ~11ms vs. the old minute+). The realtime
+  `TransactionsChanged` publish moved to the end of the spawned task. New
+  public `sync::mark_syncable_syncing()` does the pre-stamp (scoped to
+  `SYNCABLE_TYPES` = plaid/coinbase/coinbase_oauth/bitso, `WHERE user_id`).
+* **Backend — HTTP timeout (`services/sync.rs`).** The reqwest client had no
+  timeout, so one hung Plaid call pinned its institution in `syncing`
+  forever (the "12/13" stick). Added `SYNC_HTTP_TIMEOUT` (60s) via
+  `Client::builder().timeout(..)` — a wedged upstream call now flips the
+  institution to `error` instead of hanging the whole sync.
+* **Frontend — poll to completion (`dashboard_screen.dart`).** `runSync`
+  fires the (fast) trigger, then polls `/dashboard/sync-status` until no
+  syncable institution is still `syncing`. Progress is `total − syncing`, so
+  an errored/timed-out institution counts as *done* and can't wedge the
+  bar. Backgrounding is now a non-event: the detached backend task keeps
+  running and the poll picks up wherever it got to on resume. 8-min safety
+  cap on the spinner (backend keeps going regardless). New `syncingCount()`
+  in `utils/sync_progress.dart` replaces the old `last_synced_at`-delta
+  count; `kSyncableInstitutionTypes` gained `bitso` to mirror the backend.
+  `syncInstitutions()` accepts 202 (200 still tolerated for older backends).
+* **Tests.** New backend integration tests (`dashboard_endpoints.rs`):
+  `manual_sync_trigger_returns_202_immediately` and
+  `mark_syncable_syncing_scopes_to_syncable_types_and_user` (type + tenant
+  scoping + `only_ids`). Rewrote `sync_progress_test.dart` around
+  `syncingCount`. All suites green (125 backend dashboard tests, 563 frontend
+  tests), clippy clean, analyze clean. Live-smoked against the running dev
+  backend: 202 in 11ms, institution settled to a terminal state
+  independently of the client.
+* **Not yet deployed to prod / not committed** — changes are on the working
+  tree; the local dev backend was restarted onto the new binary.
 
 ## 2026-07-14 — App bar & Settings restructure (kebab retired, scroll-away bar)
 

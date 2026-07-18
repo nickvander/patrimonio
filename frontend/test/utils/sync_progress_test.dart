@@ -3,16 +3,17 @@ import 'package:patrimonio/utils/sync_progress.dart';
 
 void main() {
   group('syncableInstitutionCount', () {
-    test('counts only Plaid/crypto institutions, not manual/CSV/PDF', () {
+    test('counts Plaid/crypto institutions, not manual/CSV/PDF', () {
       final data = [
         {'integration_type': 'plaid'},
         {'integration_type': 'coinbase'},
         {'integration_type': 'coinbase_oauth'},
+        {'integration_type': 'bitso'},
         {'integration_type': 'manual'},
         {'integration_type': 'csv'},
         {'integration_type': 'pdf'},
       ];
-      expect(syncableInstitutionCount(data), 3);
+      expect(syncableInstitutionCount(data), 4);
     });
 
     test('null / empty / malformed rows are tolerated', () {
@@ -23,30 +24,42 @@ void main() {
     });
   });
 
-  group('syncedSinceCount', () {
-    final start = DateTime.parse('2026-06-15T10:00:00Z');
-
-    test('counts institutions whose last_synced_at advanced past start', () {
+  group('syncingCount', () {
+    test('counts syncable institutions still in the syncing state', () {
       final data = [
-        {'last_synced_at': '2026-06-15T10:00:05Z'}, // after start → done
-        {'last_synced_at': '2026-06-15T10:00:30Z'}, // after start → done
-        {'last_synced_at': '2026-06-15T09:59:59Z'}, // before start → not yet
-        {'last_synced_at': null}, // never synced → not yet
-        {}, // missing field → not yet
+        {'integration_type': 'plaid', 'sync_status': 'syncing'}, // in progress
+        {'integration_type': 'coinbase', 'sync_status': 'syncing'}, // in progress
+        {'integration_type': 'plaid', 'sync_status': 'synced'}, // done
+        {'integration_type': 'plaid', 'sync_status': 'error'}, // done (errored)
       ];
-      expect(syncedSinceCount(data, start), 2);
+      expect(syncingCount(data), 2);
     });
 
-    test('a leg exactly at start does not count (strictly after)', () {
+    test('an errored institution counts as done, not stuck', () {
+      // The whole point of the status-based count: a failing/timed-out
+      // institution leaves 'syncing', so it no longer wedges progress.
       final data = [
-        {'last_synced_at': '2026-06-15T10:00:00Z'},
+        {'integration_type': 'plaid', 'sync_status': 'synced'},
+        {'integration_type': 'plaid', 'sync_status': 'error'},
       ];
-      expect(syncedSinceCount(data, start), 0);
+      expect(syncingCount(data), 0);
     });
 
-    test('null / unparseable timestamps are tolerated', () {
-      expect(syncedSinceCount(null, start), 0);
-      expect(syncedSinceCount([{'last_synced_at': 'not-a-date'}], start), 0);
+    test('non-syncable rows in a transient syncing state are ignored', () {
+      // The engine briefly stamps manual rows 'syncing' before flipping them
+      // to 'manual'; those must not count toward the syncable progress.
+      final data = [
+        {'integration_type': 'manual', 'sync_status': 'syncing'},
+        {'integration_type': 'csv', 'sync_status': 'syncing'},
+      ];
+      expect(syncingCount(data), 0);
+    });
+
+    test('null / empty / malformed rows are tolerated', () {
+      expect(syncingCount(null), 0);
+      expect(syncingCount(const []), 0);
+      expect(syncingCount([1, 'x', null]), 0);
+      expect(syncingCount([{'integration_type': 'plaid'}]), 0); // no status
     });
   });
 }

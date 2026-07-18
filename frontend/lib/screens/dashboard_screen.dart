@@ -4089,50 +4089,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // Only Plaid/crypto institutions actually sync (manual/CSV/PDF are
       // skipped server-side), so the total reflects what will really update.
       final total = syncableInstitutionCount(_syncData);
-      final startedAt = DateTime.now();
       setState(() {
         _isSyncing = true;
         _syncTotal = total;
         _syncDone = 0;
       });
       final messenger = ScaffoldMessenger.of(context);
-      // While the backend syncs institutions concurrently, poll /sync-status
-      // so the SyncStatusCard shows each account flip syncing→synced live and
-      // the button shows a "(done/total)" count. An institution counts as done
-      // once its last_synced_at advances past the moment we kicked off.
-      Timer? poll;
-      poll = Timer.periodic(const Duration(milliseconds: 1200), (_) async {
-        try {
-          final fresh = await _apiService.getSyncStatus(forceRefresh: true);
-          if (!mounted) return;
-          setState(() {
-            _syncData = fresh;
-            _syncDone = syncedSinceCount(fresh, startedAt);
-          });
-        } catch (_) {
-          // Transient poll failure — keep going; the awaited call below is the
-          // source of truth for completion.
-        }
-      });
+
+      // Fire the sync. The backend stamps the syncable institutions
+      // 'syncing' and returns 202 immediately, then runs the sync as a
+      // DETACHED task — so it keeps running (and finishes) even if we
+      // background the app or the socket drops. We never hold the request
+      // open; we just watch /sync-status until nothing is 'syncing'. That's
+      // what turns backgrounding from a "connection abort" error into a
+      // non-event.
       try {
         await _apiService.syncInstitutions();
-        if (!mounted) return;
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(l.dashSyncComplete),
-            duration: const Duration(seconds: 2),
-          ),
-        );
       } catch (e) {
-        debugPrint("Sync error: $e");
+        // Couldn't even start the sync (network/auth) — surface and bail.
+        debugPrint("Sync trigger failed: $e");
         if (!mounted) return;
         messenger.showSnackBar(
           SnackBar(content: Text(l.dashSyncFailed(e.toString()))),
         );
-      } finally {
-        poll.cancel();
-        if (mounted) setState(() => _isSyncing = false);
+        setState(() => _isSyncing = false);
+        return;
       }
+
+      // Poll /sync-status until the backend reports no syncable institution
+      // still 'syncing' (each flips to synced/error/reconnect_required/… as
+      // it settles), or we hit a generous safety cap. Completion is derived
+      // from status, not from a held request, so a slow or hung institution
+      // can't wedge the UI — its per-request timeout flips it to 'error',
+      // which still counts as done. The cap only stops the spinner; the
+      // backend task keeps running regardless.
+      final deadline = DateTime.now().add(const Duration(minutes: 8));
+      final done = Completer<void>();
+      Timer? poll;
+      void finish() {
+        poll?.cancel();
+        if (!done.isCompleted) done.complete();
+      }
+
+      poll = Timer.periodic(const Duration(milliseconds: 1200), (_) async {
+        if (!mounted) return finish();
+        try {
+          final fresh = await _apiService.getSyncStatus(forceRefresh: true);
+          if (!mounted) return finish();
+          final syncing = syncingCount(fresh);
+          final doneCount = _syncTotal - syncing;
+          setState(() {
+            _syncData = fresh;
+            _syncDone = doneCount < 0
+                ? 0
+                : (doneCount > _syncTotal ? _syncTotal : doneCount);
+          });
+          if (syncing == 0 || DateTime.now().isAfter(deadline)) finish();
+        } catch (_) {
+          // Transient poll failure (e.g. briefly backgrounded and the socket
+          // dropped) — keep polling; the backend sync is unaffected.
+          if (DateTime.now().isAfter(deadline)) finish();
+        }
+      });
+
+      await done.future;
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(l.dashSyncComplete),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      setState(() => _isSyncing = false);
       // Reload without flipping _isLoading — just refresh the data fields.
       await _refreshData();
     }

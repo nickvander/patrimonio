@@ -1075,9 +1075,14 @@ class ApiService {
         'No se pudieron cargar los movimientos de la cuenta'));
   }
 
+  /// Kick off a sync of all the caller's institutions. The backend now runs
+  /// the sync as a detached task and returns 202 immediately (it used to run
+  /// the whole sync inline and return 200 only when done); the caller watches
+  /// [getSyncStatus] for progress and completion. 200 is still accepted for
+  /// backward compatibility with an older backend.
   Future<void> syncInstitutions() async {
     final response = await _post(Uri.parse('$_baseUrl/institutions/sync'));
-    if (response.statusCode != 200) {
+    if (response.statusCode != 200 && response.statusCode != 202) {
       throw Exception(_t('Failed to sync institutions',
           'No se pudieron sincronizar las instituciones'));
     }
@@ -2382,7 +2387,8 @@ class ApiService {
     final response = await _post(
       Uri.parse('$_baseUrl/institutions/$institutionId/sync'),
     );
-    if (response.statusCode != 200) {
+    // 202 = accepted (detached sync started); 200 = older synchronous backend.
+    if (response.statusCode != 200 && response.statusCode != 202) {
       throw Exception(_t('Sync failed: ${response.statusCode}',
           'La sincronización falló: ${response.statusCode}'));
     }
@@ -2421,7 +2427,8 @@ class ApiService {
       headers: _withCsrf({'Content-Type': 'application/json'}),
       body: json.encode({'ids': institutionIds}),
     );
-    if (response.statusCode != 200) {
+    // 202 = accepted (detached sync started); 200 = older synchronous backend.
+    if (response.statusCode != 200 && response.statusCode != 202) {
       throw Exception(_t('Batched sync failed: ${response.statusCode}',
           'La sincronización en lote falló: ${response.statusCode}'));
     }
