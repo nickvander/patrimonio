@@ -1081,7 +1081,16 @@ class ApiService {
   /// [getSyncStatus] for progress and completion. 200 is still accepted for
   /// backward compatibility with an older backend.
   Future<void> syncInstitutions() async {
-    final response = await _post(Uri.parse('$_baseUrl/institutions/sync'));
+    // Send an explicit empty-JSON body. With no body/headers the browser
+    // stamps its own Content-Type (text/plain) on the POST, and a backend
+    // whose optional-body extractor is strict about media types answers
+    // 415 Unsupported Media Type — which is exactly how "Sync now" broke
+    // on web. An explicit application/json '{}' is unambiguous everywhere.
+    final response = await _post(
+      Uri.parse('$_baseUrl/institutions/sync'),
+      headers: const {'Content-Type': 'application/json'},
+      body: '{}',
+    );
     if (response.statusCode != 200 && response.statusCode != 202) {
       throw Exception(_t('Failed to sync institutions',
           'No se pudieron sincronizar las instituciones'));

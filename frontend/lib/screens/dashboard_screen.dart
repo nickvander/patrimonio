@@ -4109,8 +4109,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // Couldn't even start the sync (network/auth) — surface and bail.
         debugPrint("Sync trigger failed: $e");
         if (!mounted) return;
+        // ApiService throws `Exception(<localized message>)`, and
+        // Exception.toString() prepends "Exception: " — strip it so the
+        // snackbar shows the human message, not Dart exception plumbing.
         messenger.showSnackBar(
-          SnackBar(content: Text(l.dashSyncFailed(e.toString()))),
+          SnackBar(
+            content: Text(l.dashSyncFailed(
+                e.toString().replaceFirst('Exception: ', ''))),
+          ),
         );
         setState(() => _isSyncing = false);
         return;

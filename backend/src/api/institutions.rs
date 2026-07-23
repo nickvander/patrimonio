@@ -51,12 +51,33 @@ struct SyncRequest {
 /// against only those (each id is verified to belong to the caller —
 /// foreign ids are silently filtered out so an attacker can't probe
 /// for the existence of another user's institutions).
+///
+/// The body is read as raw `Bytes` rather than `Option<Json<SyncRequest>>`
+/// on purpose: `Option<Json>` still 415s when a Content-Type is present but
+/// isn't JSON, and browsers stamp `text/plain` on a body-less POST — which
+/// made "Sync now" fail on web with 415 Unsupported Media Type. An empty
+/// (or whitespace-only) body of ANY content type means "sync everything";
+/// a non-empty body must parse as `SyncRequest` or we 400 rather than
+/// silently syncing every institution when the client asked for a subset.
 async fn trigger_sync(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
-    body: Option<Json<SyncRequest>>,
+    body: axum::body::Bytes,
 ) -> axum::response::Response {
-    let only_ids = body.and_then(|b| b.0.ids);
+    let only_ids = if body.iter().all(u8::is_ascii_whitespace) {
+        None
+    } else {
+        match serde_json::from_slice::<SyncRequest>(&body) {
+            Ok(req) => req.ids,
+            Err(_) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(serde_json::json!({"error": "Invalid sync request body"})),
+                )
+                    .into_response();
+            }
+        }
+    };
     spawn_sync(state, ctx.user_id, only_ids).await
 }
 
