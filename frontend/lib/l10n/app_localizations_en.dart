@@ -6933,4 +6933,88 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fxcRefreshFailed => 'Couldn\'t refresh the rate';
+
+  @override
+  String get recTitle => 'Recurring';
+
+  @override
+  String get recExpectedChip => 'Expected';
+
+  @override
+  String get recExpectedNote =>
+      'Expected from your recurring rules — not actual transactions.';
+
+  @override
+  String get recExpectedIn => 'Expected in';
+
+  @override
+  String get recExpectedOut => 'Expected out';
+
+  @override
+  String get recManage => 'Manage';
+
+  @override
+  String get recManageTitle => 'Recurring rules';
+
+  @override
+  String get recNoRules =>
+      'No recurring rules yet. Use \"Make recurring\" on a transaction, or the Repeats option when adding one.';
+
+  @override
+  String get recNothingUpcoming => 'Nothing more expected this period.';
+
+  @override
+  String get recPaused => 'Paused';
+
+  @override
+  String get recPauseRule => 'Pause';
+
+  @override
+  String get recResumeRule => 'Resume';
+
+  @override
+  String get recCadenceWeekly => 'Weekly';
+
+  @override
+  String get recCadenceBiweekly => 'Every 2 weeks';
+
+  @override
+  String get recCadenceMonthly => 'Monthly';
+
+  @override
+  String get recCadenceYearly => 'Yearly';
+
+  @override
+  String recNextDue(Object date) {
+    return 'Next: $date';
+  }
+
+  @override
+  String get recMakeRecurring => 'Make recurring';
+
+  @override
+  String get recRuleCreated => 'Recurring rule created';
+
+  @override
+  String get recRuleDeleted => 'Recurring rule deleted';
+
+  @override
+  String get recDeleteConfirmTitle => 'Delete recurring rule?';
+
+  @override
+  String recDeleteConfirmBody(Object description) {
+    return '\"$description\" will no longer appear in expected cash flow. Past transactions are not affected.';
+  }
+
+  @override
+  String get recRepeats => 'Repeats';
+
+  @override
+  String get recRepeatsNever => 'Does not repeat';
+
+  @override
+  String get recNextDueDate => 'Next due date';
+
+  @override
+  String get recCreateRule => 'Create rule';
 }

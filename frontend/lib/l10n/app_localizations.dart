@@ -11151,6 +11151,162 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t refresh the rate'**
   String get fxcRefreshFailed;
+
+  /// No description provided for @recTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recurring'**
+  String get recTitle;
+
+  /// No description provided for @recExpectedChip.
+  ///
+  /// In en, this message translates to:
+  /// **'Expected'**
+  String get recExpectedChip;
+
+  /// No description provided for @recExpectedNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Expected from your recurring rules — not actual transactions.'**
+  String get recExpectedNote;
+
+  /// No description provided for @recExpectedIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Expected in'**
+  String get recExpectedIn;
+
+  /// No description provided for @recExpectedOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Expected out'**
+  String get recExpectedOut;
+
+  /// No description provided for @recManage.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage'**
+  String get recManage;
+
+  /// No description provided for @recManageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recurring rules'**
+  String get recManageTitle;
+
+  /// No description provided for @recNoRules.
+  ///
+  /// In en, this message translates to:
+  /// **'No recurring rules yet. Use \"Make recurring\" on a transaction, or the Repeats option when adding one.'**
+  String get recNoRules;
+
+  /// No description provided for @recNothingUpcoming.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing more expected this period.'**
+  String get recNothingUpcoming;
+
+  /// No description provided for @recPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused'**
+  String get recPaused;
+
+  /// No description provided for @recPauseRule.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get recPauseRule;
+
+  /// No description provided for @recResumeRule.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume'**
+  String get recResumeRule;
+
+  /// No description provided for @recCadenceWeekly.
+  ///
+  /// In en, this message translates to:
+  /// **'Weekly'**
+  String get recCadenceWeekly;
+
+  /// No description provided for @recCadenceBiweekly.
+  ///
+  /// In en, this message translates to:
+  /// **'Every 2 weeks'**
+  String get recCadenceBiweekly;
+
+  /// No description provided for @recCadenceMonthly.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly'**
+  String get recCadenceMonthly;
+
+  /// No description provided for @recCadenceYearly.
+  ///
+  /// In en, this message translates to:
+  /// **'Yearly'**
+  String get recCadenceYearly;
+
+  /// No description provided for @recNextDue.
+  ///
+  /// In en, this message translates to:
+  /// **'Next: {date}'**
+  String recNextDue(Object date);
+
+  /// No description provided for @recMakeRecurring.
+  ///
+  /// In en, this message translates to:
+  /// **'Make recurring'**
+  String get recMakeRecurring;
+
+  /// No description provided for @recRuleCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'Recurring rule created'**
+  String get recRuleCreated;
+
+  /// No description provided for @recRuleDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Recurring rule deleted'**
+  String get recRuleDeleted;
+
+  /// No description provided for @recDeleteConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete recurring rule?'**
+  String get recDeleteConfirmTitle;
+
+  /// No description provided for @recDeleteConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'\"{description}\" will no longer appear in expected cash flow. Past transactions are not affected.'**
+  String recDeleteConfirmBody(Object description);
+
+  /// No description provided for @recRepeats.
+  ///
+  /// In en, this message translates to:
+  /// **'Repeats'**
+  String get recRepeats;
+
+  /// No description provided for @recRepeatsNever.
+  ///
+  /// In en, this message translates to:
+  /// **'Does not repeat'**
+  String get recRepeatsNever;
+
+  /// No description provided for @recNextDueDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Next due date'**
+  String get recNextDueDate;
+
+  /// No description provided for @recCreateRule.
+  ///
+  /// In en, this message translates to:
+  /// **'Create rule'**
+  String get recCreateRule;
 }
 
 class _AppLocalizationsDelegate

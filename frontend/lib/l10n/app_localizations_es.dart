@@ -6995,4 +6995,88 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get fxcRefreshFailed => 'No se pudo actualizar el tipo de cambio';
+
+  @override
+  String get recTitle => 'Recurrentes';
+
+  @override
+  String get recExpectedChip => 'Previsto';
+
+  @override
+  String get recExpectedNote =>
+      'Previsto según tus reglas recurrentes — no son transacciones reales.';
+
+  @override
+  String get recExpectedIn => 'Entradas previstas';
+
+  @override
+  String get recExpectedOut => 'Salidas previstas';
+
+  @override
+  String get recManage => 'Administrar';
+
+  @override
+  String get recManageTitle => 'Reglas recurrentes';
+
+  @override
+  String get recNoRules =>
+      'Aún no hay reglas recurrentes. Usa \"Hacer recurrente\" en una transacción o la opción Se repite al agregarla.';
+
+  @override
+  String get recNothingUpcoming => 'No se espera nada más en este período.';
+
+  @override
+  String get recPaused => 'En pausa';
+
+  @override
+  String get recPauseRule => 'Pausar';
+
+  @override
+  String get recResumeRule => 'Reanudar';
+
+  @override
+  String get recCadenceWeekly => 'Semanal';
+
+  @override
+  String get recCadenceBiweekly => 'Cada 2 semanas';
+
+  @override
+  String get recCadenceMonthly => 'Mensual';
+
+  @override
+  String get recCadenceYearly => 'Anual';
+
+  @override
+  String recNextDue(Object date) {
+    return 'Próximo: $date';
+  }
+
+  @override
+  String get recMakeRecurring => 'Hacer recurrente';
+
+  @override
+  String get recRuleCreated => 'Regla recurrente creada';
+
+  @override
+  String get recRuleDeleted => 'Regla recurrente eliminada';
+
+  @override
+  String get recDeleteConfirmTitle => '¿Eliminar la regla recurrente?';
+
+  @override
+  String recDeleteConfirmBody(Object description) {
+    return '\"$description\" ya no aparecerá en el flujo de efectivo previsto. Las transacciones pasadas no se ven afectadas.';
+  }
+
+  @override
+  String get recRepeats => 'Se repite';
+
+  @override
+  String get recRepeatsNever => 'No se repite';
+
+  @override
+  String get recNextDueDate => 'Próxima fecha';
+
+  @override
+  String get recCreateRule => 'Crear regla';
 }

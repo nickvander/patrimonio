@@ -1083,6 +1083,102 @@ class ApiService {
     }
   }
 
+  // --- Recurring & scheduled transactions (expected-only MVP) ----------
+
+  /// The management list: every recurring rule (active and paused).
+  /// Rows carry `effective_next_due` — the first occurrence on/after
+  /// today — which is what the UI should display as "next".
+  Future<List<dynamic>> getRecurringRules({bool forceRefresh = false}) {
+    return _cachedGet('recurring/rules', () async {
+      final response = await _get(Uri.parse('$_baseUrl/recurring'));
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as List<dynamic>;
+      }
+      throw _errorFromBody(response,
+          fallback: _t('Failed to load recurring rules',
+              'No se pudieron cargar las reglas recurrentes'));
+    }, forceRefresh: forceRefresh);
+  }
+
+  /// Expected occurrences from active rules. Default window (no args) is
+  /// [today, end of the current month] — "what's still expected this
+  /// period". Display-only: the backend never posts these.
+  Future<Map<String, dynamic>> getUpcomingRecurring(
+      {bool forceRefresh = false}) {
+    return _cachedGet('recurring/upcoming', () async {
+      final response = await _get(Uri.parse('$_baseUrl/recurring/upcoming'));
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+      throw _errorFromBody(response,
+          fallback: _t('Failed to load expected transactions',
+              'No se pudieron cargar las transacciones previstas'));
+    }, forceRefresh: forceRefresh);
+  }
+
+  /// Create a recurring rule. [amount] is signed like transactions:
+  /// negative = expected outflow. [anchorDay] defaults server-side to
+  /// [nextDueDate]'s day-of-month.
+  Future<Map<String, dynamic>> createRecurringRule({
+    required String accountId,
+    required String description,
+    required double amount,
+    required String currency,
+    required String cadence,
+    required DateTime nextDueDate,
+    String? category,
+    int? anchorDay,
+  }) async {
+    final body = <String, dynamic>{
+      'account_id': accountId,
+      'description': description,
+      'amount': amount,
+      'currency': currency,
+      'cadence': cadence,
+      'next_due_date': '${nextDueDate.year.toString().padLeft(4, '0')}-'
+          '${nextDueDate.month.toString().padLeft(2, '0')}-'
+          '${nextDueDate.day.toString().padLeft(2, '0')}',
+      if (category != null && category.isNotEmpty) 'category': category,
+      'anchor_day': ?anchorDay,
+    };
+    final response = await _post(
+      Uri.parse('$_baseUrl/recurring'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode(body),
+    );
+    if (response.statusCode != 201) {
+      throw _errorFromBody(response,
+          fallback: _t('Failed to create recurring rule',
+              'No se pudo crear la regla recurrente'));
+    }
+    return json.decode(response.body) as Map<String, dynamic>;
+  }
+
+  /// Pause/resume a rule. Paused rules stay listed but stop contributing
+  /// to expected cash flow.
+  Future<void> setRecurringRuleActive(String id, bool active) async {
+    final response = await _patch(
+      Uri.parse('$_baseUrl/recurring/$id'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'active': active}),
+    );
+    if (response.statusCode != 200) {
+      throw _errorFromBody(response,
+          fallback: _t('Failed to update recurring rule',
+              'No se pudo actualizar la regla recurrente'));
+    }
+  }
+
+  /// Delete a rule. Idempotent — 204 either way.
+  Future<void> deleteRecurringRule(String id) async {
+    final response = await _delete(Uri.parse('$_baseUrl/recurring/$id'));
+    if (response.statusCode != 204) {
+      throw _errorFromBody(response,
+          fallback: _t('Failed to delete recurring rule',
+              'No se pudo eliminar la regla recurrente'));
+    }
+  }
+
   /// One newest-first page of transactions across all accounts. The
   /// optional [currency], [sign] (`'inflow'` / `'outflow'`), and [query]
   /// filters are applied server-side over the WHOLE table — the loan

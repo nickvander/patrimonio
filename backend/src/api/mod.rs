@@ -13,3 +13,4 @@ pub mod settings;
 pub mod invites;
 pub mod realtime;
 pub mod loans;
+pub mod recurring;

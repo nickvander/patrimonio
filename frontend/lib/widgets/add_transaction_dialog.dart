@@ -4,7 +4,9 @@ import 'package:intl/intl.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../utils/mask_aware_name.dart';
+import '../utils/recurrence.dart';
 import '../utils/theme_colors.dart';
+import 'add_recurring_rule_dialog.dart' show cadenceLabel;
 
 /// Dialog for manually entering a transaction — for cash spend, gifts,
 /// reimbursements, anything Plaid never sees. Default sign convention
@@ -54,6 +56,13 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
   bool _isExpense = true;
   String? _accountId;
   bool _saving = false;
+
+  /// "Repeats" cadence, or null for a one-off transaction. When set, a
+  /// recurring rule is created alongside the transaction — expected-only
+  /// (it feeds the cash-flow "Recurring" card; nothing auto-posts). The
+  /// first due date is the entered date advanced one cadence, since the
+  /// transaction being added already covers the current occurrence.
+  String? _repeats;
 
   @override
   void initState() {
@@ -124,12 +133,38 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
             ? null
             : _notesController.text.trim(),
       );
+      // The transaction itself is committed; the optional rule is a
+      // separate best-effort write. A rule failure must not look like a
+      // failed transaction (retrying would double-post), so it reports
+      // its own error and the dialog still closes.
+      String? ruleError;
+      if (_repeats != null) {
+        try {
+          await widget.apiService.createRecurringRule(
+            accountId: _accountId!,
+            description: desc,
+            amount: signed,
+            currency: currency,
+            cadence: _repeats!,
+            nextDueDate: advanceCadence(_date, _repeats!),
+            category: _categoryController.text.trim().isEmpty
+                ? null
+                : _categoryController.text.trim(),
+          );
+        } catch (e) {
+          ruleError = e.toString().replaceFirst('Exception: ', '');
+        }
+      }
       if (!mounted) return;
       final l = AppLocalizations.of(context);
       Navigator.pop(context);
       widget.onCreated();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.dlgTxAdded)),
+        SnackBar(
+            content: Text(ruleError ??
+                (_repeats != null
+                    ? '${l.dlgTxAdded} · ${l.recRuleCreated}'
+                    : l.dlgTxAdded))),
       );
     } catch (e) {
       if (!mounted) return;
@@ -284,6 +319,30 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                   isDense: true,
                 ),
                 maxLines: 2,
+              ),
+              const SizedBox(height: 12),
+              // "Repeats" — creates a recurring rule alongside the
+              // transaction (expected-only; nothing auto-posts).
+              DropdownButtonFormField<String?>(
+                initialValue: _repeats,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: l.recRepeats,
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: [
+                  DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text(l.recRepeatsNever),
+                  ),
+                  for (final c in kRecurringCadences)
+                    DropdownMenuItem<String?>(
+                      value: c,
+                      child: Text(cadenceLabel(l, c)),
+                    ),
+                ],
+                onChanged: (v) => setState(() => _repeats = v),
               ),
             ],
           ),

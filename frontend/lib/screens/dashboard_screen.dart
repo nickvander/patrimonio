@@ -38,6 +38,7 @@ import '../utils/web_env.dart';
 import '../widgets/accounts_list_widget.dart';
 import '../widgets/add_account_dialog.dart';
 import '../widgets/add_crypto_dialog.dart';
+import '../widgets/add_recurring_rule_dialog.dart';
 import '../widgets/assets_liabilities_bar.dart';
 import '../widgets/budgets_card.dart';
 import '../widgets/command_palette.dart';
@@ -57,6 +58,7 @@ import '../widgets/performance_card.dart';
 import '../widgets/portfolio_card.dart';
 import '../widgets/realized_gains_card.dart';
 import '../widgets/rebalancing_card.dart';
+import '../widgets/recurring_card.dart';
 import '../widgets/since_last_login_banner.dart';
 import '../widgets/skeleton.dart';
 import '../widgets/spending_by_category_card.dart';
@@ -179,6 +181,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic>? _sinceLastLogin;
   List<dynamic>? _subscriptions;
   List<dynamic>? _ignoredSubscriptions;
+  // Recurring & scheduled transactions (expected-only MVP): the
+  // management list + the current-period expected expansion for the
+  // cash-flow tab's Recurring card.
+  List<dynamic>? _recurringRules;
+  Map<String, dynamic>? _recurringUpcoming;
   // Accounts the sync auto-archived (closed at the bank — Plaid stopped
   // returning them). Surfaced as a notification so the user can restore or
   // remove them. Best-effort: null when the fetch fails — the bell just omits
@@ -3167,6 +3174,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  /// Targeted refresh after any recurring-rule mutation (create, pause,
+  /// delete). Only the rules list and the expected expansion can change —
+  /// same rationale as [_refreshSubscriptionLists].
+  Future<void> _refreshRecurring() async {
+    final results = await Future.wait([
+      _apiService
+          .getRecurringRules(forceRefresh: true)
+          .catchError((_) => <dynamic>[]),
+      _apiService
+          .getUpcomingRecurring(forceRefresh: true)
+          .catchError((_) => <String, dynamic>{}),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _recurringRules = results[0] as List<dynamic>;
+      final upcomingRaw = results[1];
+      _recurringUpcoming =
+          upcomingRaw is Map<String, dynamic> && upcomingRaw.isNotEmpty
+              ? upcomingRaw
+              : null;
+    });
+  }
+
+  /// "Make recurring" from a transaction's detail-panel action: opens the
+  /// Add-recurring-rule dialog pre-filled from the tx.
+  void _openMakeRecurring(dynamic tx) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AddRecurringRuleDialog(
+        accounts: (_overview?['accounts'] as List?) ?? const [],
+        apiService: _apiService,
+        sourceTx: tx is Map ? Map<String, dynamic>.from(tx) : null,
+        onCreated: _refreshRecurring,
+      ),
+    );
+  }
+
   /// Append the next page. [limit] overrides the default page size — the
   /// filter cascade in [TransactionsTab] passes the backend's per-request
   /// cap (see [kTxBackendMaxPageSize]) so loading the whole history costs
@@ -3470,6 +3514,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _apiService
             .getSetting(kImportStaleDaysSettingKey)
             .catchError((_) => null),
+        // Recurring rules + their expected current-period expansion for
+        // the cash-flow Recurring card. Best-effort — a failure just
+        // renders the card's empty state, never takes the dashboard down.
+        _apiService
+            .getRecurringRules(forceRefresh: forceRefresh)
+            .catchError((_) => <dynamic>[]),
+        _apiService
+            .getUpcomingRecurring(forceRefresh: forceRefresh)
+            .catchError((_) => <String, dynamic>{}),
       ]);
 
       debugPrint("All data loaded successfully");
@@ -3527,6 +3580,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _loans = results[19] as List<dynamic>;
         _portfolioDividends = results[20] as Map<String, dynamic>?;
         _importStaleDays = staleThresholdFrom(results[21]);
+        _recurringRules = results[22] as List<dynamic>;
+        final recurringUpcomingRaw = results[23];
+        _recurringUpcoming = recurringUpcomingRaw is Map<String, dynamic> &&
+                recurringUpcomingRaw.isNotEmpty
+            ? recurringUpcomingRaw
+            : null;
         _isLoading = false;
       });
 
@@ -5085,6 +5144,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // disbursement. LendingTab owns loan people; the borrower here is
         // prefilled from the tx, so an empty people list is fine.
         onCreateLoanFromTx: (tx) => _openCreateLoanFromTx(tx),
+        // "Make recurring" — expected-only rule pre-filled from the tx.
+        onMakeRecurring: _openMakeRecurring,
       ),
     );
 
@@ -5170,6 +5231,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             SizedBox(height: gap),
           ],
+          // User-defined recurring rules: expected upcoming inflows/
+          // outflows for the current period, clearly marked as expected
+          // (nothing auto-posts). Always visible — this card is also the
+          // management home for rules, so hiding it when empty would make
+          // the feature undiscoverable.
+          RecurringCard(
+            upcoming: _recurringUpcoming,
+            rules: _recurringRules ?? const [],
+            conversionFactor: conversionFactor,
+            targetCurrency: _targetCurrency,
+            onToggleRule: (id, active) async {
+              await _apiService.setRecurringRuleActive(id, active);
+              await _refreshRecurring();
+            },
+            onDeleteRule: (id) async {
+              await _apiService.deleteRecurringRule(id);
+              await _refreshRecurring();
+            },
+          ),
+          SizedBox(height: gap),
           // Detected recurring outflows — surfaces what's silently
           // eating the budget every month. Tapping a row seeds the
           // transactions search with the merchant.

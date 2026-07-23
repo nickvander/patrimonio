@@ -263,6 +263,11 @@ class TransactionsTab extends StatefulWidget {
   /// Add-loan dialog (principal = |amount|, currency, date, borrower from
   /// the tx, disbursement linked to this tx). Null hides the action.
   final void Function(dynamic tx)? onCreateLoanFromTx;
+  /// "Make recurring" — shown in the detail panel's overflow menu. The
+  /// dashboard opens the Add-recurring-rule dialog pre-filled from the
+  /// tx (account, description, amount, currency, category). Null hides
+  /// the action.
+  final void Function(dynamic tx)? onMakeRecurring;
   /// The host renders its own Add-transaction affordance (the dashboard's
   /// compact-layout FAB, wired to [TransactionsTabState.openAddDialog] via
   /// a GlobalKey). When true the toolbar hides its inline '+' and the
@@ -303,6 +308,7 @@ class TransactionsTab extends StatefulWidget {
     this.singleAccountContext = false,
     this.runningBalanceAnchor,
     this.onCreateLoanFromTx,
+    this.onMakeRecurring,
     this.hostProvidesAddFab = false,
   });
 
@@ -3895,11 +3901,13 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
     // Only an outflow can fund a loan (money left the account).
     final canCreateLoan =
         s.widget.onCreateLoanFromTx != null && sourceAmount < 0;
+    final canMakeRecurring = s.widget.onMakeRecurring != null;
     final hasOverflow = canMove ||
         canSplit ||
         canEditSplit ||
         canUnsplit ||
         canCreateLoan ||
+        canMakeRecurring ||
         canDelete;
 
     Widget detailRows() {
@@ -3973,6 +3981,10 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
               _close();
               s.widget.onCreateLoanFromTx?.call(tx);
               break;
+            case 'makeRecurring':
+              _close();
+              s.widget.onMakeRecurring?.call(tx);
+              break;
             case 'delete':
               _confirmDelete(l);
               break;
@@ -4005,6 +4017,11 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
               value: 'createLoan',
               child: _menuRow(
                   Icons.monetization_on_outlined, l.txCreateLoanFromTx),
+            ),
+          if (canMakeRecurring)
+            PopupMenuItem(
+              value: 'makeRecurring',
+              child: _menuRow(Icons.autorenew_rounded, l.recMakeRecurring),
             ),
           if (canDelete)
             PopupMenuItem(
