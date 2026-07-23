@@ -4,6 +4,7 @@ import '../l10n/app_localizations.dart';
 import '../screens/account_transactions_screen.dart';
 import '../utils/account_category.dart';
 import '../utils/currency.dart';
+import '../utils/import_staleness.dart';
 import '../utils/mask_aware_name.dart';
 import '../utils/theme_colors.dart';
 
@@ -48,6 +49,10 @@ class AccountsListWidget extends StatefulWidget {
   /// Forwarded to the account panel so a low-balance threshold change
   /// refreshes the dashboard's notifications bell immediately.
   final VoidCallback? onAlertsChanged;
+  /// Days after which an import-only account's "as of `<date>`" chip turns
+  /// warning-colored. The dashboard passes the user's persisted
+  /// `import_staleness_days` setting so chip and banner flip together.
+  final int importStaleThresholdDays;
 
   const AccountsListWidget({
     super.key,
@@ -62,6 +67,7 @@ class AccountsListWidget extends StatefulWidget {
     this.onRevalueAccount,
     this.onAddAccount,
     this.onAlertsChanged,
+    this.importStaleThresholdDays = kDefaultImportStaleDays,
   });
 
   @override
@@ -1136,6 +1142,47 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
             ),
           );
 
+    // "as of <date>" freshness chip — only import-only (manual) accounts
+    // carry last_data_at (synced accounts' freshness is the sync banner's
+    // job), so the chip doubles as a provenance marker: this balance came
+    // from a statement import or a hand edit. Warning-tinted once older
+    // than the user's staleness threshold, matching the dashboard banner.
+    final lastDataAt = accountLastDataAt(acc);
+    final dataAgeDays = accountDataAgeDays(acc);
+    Widget asOfChip = const SizedBox.shrink();
+    if (lastDataAt != null && dataAgeDays != null) {
+      final isStale = dataAgeDays >= widget.importStaleThresholdDays;
+      final chipColor = isStale ? context.warning : context.textFaint;
+      asOfChip = Padding(
+        padding: const EdgeInsets.only(top: 3),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          decoration: BoxDecoration(
+            color: isStale
+                ? context.accentSoft(context.warning)
+                : context.tint(0.05),
+            borderRadius: BorderRadius.circular(6),
+            border: isStale
+                ? Border.all(color: context.accentBorder(context.warning))
+                : null,
+          ),
+          child: Text(
+            // Locale-aware skeleton, not a hardcoded pattern (es-MX reads
+            // "12 jul 2026", en "Jul 12, 2026").
+            l.impAsOfDate(
+                DateFormat.yMMMd(l.localeName).format(lastDataAt.toLocal())),
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: isStale ? FontWeight.w600 : FontWeight.w400,
+              color: chipColor,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      );
+    }
+
     // Primary line is the NATIVE-currency value (what the bank actually
     // reports). The estimated conversion only appears when needed.
     final Widget balanceText = Text(
@@ -1344,6 +1391,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                         children: [
                           primaryName,
                           secondaryMeta,
+                          asOfChip,
                           const SizedBox(height: 8),
                           balanceText,
                           if (subBalance != null) ...[
@@ -1371,7 +1419,7 @@ class _AccountsListWidgetState extends State<AccountsListWidget> {
                   child: ExcludeSemantics(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [primaryName, secondaryMeta],
+                      children: [primaryName, secondaryMeta, asOfChip],
                     ),
                   ),
                 ),

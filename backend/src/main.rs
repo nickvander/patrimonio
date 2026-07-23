@@ -133,6 +133,19 @@ async fn main() -> Result<()> {
                 )
                 .bind(today)
                 .execute(&db).await;
+
+                // Staleness reminders for import-only (manual) institutions:
+                // once the day's snapshots are written, record a
+                // user_notifications row for any institution whose imported
+                // data is past the user's threshold. Best-effort — a failure
+                // here must never break the snapshot cron.
+                match patrimonio::services::staleness::record_staleness_notifications(&db).await {
+                    Ok(n) if n > 0 => {
+                        tracing::info!("Recorded {n} import-staleness notification(s)");
+                    }
+                    Ok(_) => {}
+                    Err(e) => tracing::warn!("Import-staleness sweep failed: {e}"),
+                }
             })
         }).expect("Failed to add cron job")
     ).await.expect("Failed to register job");

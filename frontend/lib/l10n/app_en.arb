@@ -1731,6 +1731,29 @@
   },
   "impCoverageMaybeDue": "A newer statement may be available",
   "impCoverageEmpty": "No statements imported yet",
+  "impAsOfDate": "as of {date}",
+  "impStaleBannerSummary": "{name} data is {days, plural, =1{1 day} other{{days} days}} old — import a statement",
+  "@impStaleBannerSummary": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      },
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "impStaleBannerMore": "{count, plural, =1{1 more institution also needs} other{{count} more institutions also need}} a fresh import",
+  "@impStaleBannerMore": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "impStaleBannerImport": "Import statement",
+  "impStaleThresholdTitle": "Import staleness reminder",
+  "impStaleThresholdSubtitle": "Remind me when imported data is older than this",
   "impContinuityGap": "Possible missing statement: ‘{fromFile}’ ends at {fromBalance} ({fromDate}), but ‘{toFile}’ opens at {toBalance} ({toDate}) — an unexplained difference of {diff}. A statement covering the period between them may be missing.",
   "@impContinuityGap": {
     "placeholders": {

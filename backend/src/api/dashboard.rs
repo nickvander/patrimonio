@@ -243,9 +243,23 @@ async fn dashboard_overview(
             r#"
             SELECT a.id, a.name, a.nickname, a.account_type, a.current_balance, a.currency,
                    i.name as institution_name, i.integration_type, a.ticker_symbol, a.crypto_amount,
-                   a.clabe, a.holder_name
+                   a.clabe, a.holder_name,
+                   -- Freshness of import-only accounts: last import confirm /
+                   -- manual balance edit (updated_at) or last transaction
+                   -- INSERT, whichever is later (GREATEST skips NULLs). NULL
+                   -- for synced integrations — their staleness is the sync
+                   -- status, and computing the LATERAL there is wasted work.
+                   CASE WHEN i.integration_type = 'manual'
+                        THEN GREATEST(a.updated_at, tx.last_tx_at)
+                   END AS last_data_at
             FROM accounts a
             JOIN institutions i ON a.institution_id = i.id
+            LEFT JOIN LATERAL (
+                SELECT MAX(t.created_at) AS last_tx_at
+                FROM transactions t
+                WHERE t.account_id = a.id AND t.user_id = $1
+                  AND i.integration_type = 'manual'
+            ) tx ON TRUE
             WHERE a.user_id = $1 AND a.archived_at IS NULL
             ORDER BY a.account_type, a.name
             "#
@@ -361,6 +375,11 @@ async fn dashboard_overview(
             clabe: r.try_get::<Option<String>, _>("clabe").ok().flatten(),
             holder_name: r.try_get::<Option<String>, _>("holder_name").ok().flatten(),
             integration_type: r.try_get::<String, _>("integration_type").unwrap_or_default(),
+            last_data_at: r
+                .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_data_at")
+                .ok()
+                .flatten()
+                .map(|d| d.to_rfc3339()),
         })
         .collect();
 
@@ -3011,6 +3030,15 @@ struct AccountDetail {
     /// integration (e.g. "plaid"). Lets the UI offer manual-holding editing
     /// only where it's safe (never on a Plaid-synced account).
     integration_type: String,
+    /// Import-only (manual) accounts: when data last arrived — the later of
+    /// the account row's last update (import confirm / manual balance edit)
+    /// and the last transaction INSERT time. RFC3339; None for synced
+    /// accounts (their freshness is the institution's sync status). Feeds
+    /// the "as of <date>" chip and the dashboard staleness banner.
+    /// ⚠ NOT derivable from balance_snapshots — the daily snapshot cron
+    /// stamps every account every night, so that timestamp is always fresh.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_data_at: Option<String>,
 }
 
 #[derive(Serialize)]

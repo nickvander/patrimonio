@@ -25,6 +25,7 @@ import '../utils/account_category.dart';
 import '../utils/app_locale.dart';
 import '../utils/bar_scroll.dart';
 import '../utils/currency.dart';
+import '../utils/import_staleness.dart';
 import '../utils/lending_summary.dart'
     show sumLoansConverted, loansAreMixedCurrency;
 import '../utils/percent_format.dart';
@@ -46,6 +47,7 @@ import '../widgets/debt_payoff_card.dart';
 import '../widgets/emergency_fund_card.dart';
 import '../widgets/fx_center_sheet.dart';
 import '../widgets/fx_widget.dart';
+import '../widgets/import_staleness_banner.dart';
 import '../widgets/lending_tab.dart';
 import '../widgets/monthly_cash_flow_card.dart';
 import '../widgets/net_worth_card.dart';
@@ -223,6 +225,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // (app_settings 'lending_reminder_lead_days'), surfaced in the
   // Management-tab Modules card.
   int _lendingReminderLeadDays = 7;
+  // Staleness threshold (days) for import-only institutions. Server-stored
+  // (app_settings 'import_staleness_days' — the backend's daily notification
+  // sweep reads the same key), surfaced as a stepper in the Modules card.
+  // Drives both the dashboard banner and the accounts-list "as of" chips.
+  int _importStaleDays = kDefaultImportStaleDays;
   List<dynamic>? _fxTransfers;
   // Pending date-window seed from a chart-bar tap. When non-null, the
   // TransactionsTab seeds its filters with a custom date range covering
@@ -2235,6 +2242,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
+            // Staleness threshold for import-only (manual) institutions:
+            // past this many days without an import, the dashboard banner +
+            // "as of" chips flag the institution and the nightly sweep
+            // records a notification. Steps of 5 — the useful range is
+            // 5..180 and ±1 taps would make 30→90 a 60-tap trip.
+            ListTile(
+              leading: Icon(Icons.history_toggle_off, color: context.info),
+              title: Text(l.impStaleThresholdTitle,
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: context.textPrimary)),
+              subtitle: Text(
+                l.impStaleThresholdSubtitle,
+                style: TextStyle(fontSize: 12, color: context.textSubtle),
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.remove_circle_outline, size: 20),
+                    tooltip: l.dashFewerDays,
+                    onPressed: _importStaleDays <= 5
+                        ? null
+                        : () => _setImportStaleDays(_importStaleDays - 5),
+                  ),
+                  Text(l.dashDaysShort(_importStaleDays),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: context.textPrimary,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      )),
+                  IconButton(
+                    icon: const Icon(Icons.add_circle_outline, size: 20),
+                    tooltip: l.dashMoreDays,
+                    onPressed: _importStaleDays >= 180
+                        ? null
+                        : () => _setImportStaleDays(_importStaleDays + 5),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -2289,6 +2337,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() => _lendingReminderLeadDays = prev);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(AppLocalizations.of(context).dashReminderSaveFailed)),
+      );
+    }
+  }
+
+  Future<void> _setImportStaleDays(int days) async {
+    final clamped = days.clamp(1, 365);
+    final prev = _importStaleDays;
+    setState(() => _importStaleDays = clamped);
+    try {
+      await _apiService.putSetting(kImportStaleDaysSettingKey, clamped);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _importStaleDays = prev);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content:
+                Text(AppLocalizations.of(context).dashSettingSaveFailed)),
       );
     }
   }
@@ -3400,6 +3465,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // served from the backend's cached dividend fan-out — one request,
         // no per-tile quote storm.
         _apiService.getPortfolioDividends(),
+        // Staleness threshold for import-only institutions. Best-effort —
+        // absent/failed just keeps the 30-day default.
+        _apiService
+            .getSetting(kImportStaleDaysSettingKey)
+            .catchError((_) => null),
       ]);
 
       debugPrint("All data loaded successfully");
@@ -3456,6 +3526,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _archivedAccounts = results[18] as List<dynamic>;
         _loans = results[19] as List<dynamic>;
         _portfolioDividends = results[20] as Map<String, dynamic>?;
+        _importStaleDays = staleThresholdFrom(results[21]);
         _isLoading = false;
       });
 
@@ -3887,6 +3958,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       dismissedUntil: _syncBannerSnoozeUntil,
                       onDismiss: _snoozeSyncBanner,
                     ),
+                  // Gentle nudge when an import-only (manual) institution's
+                  // data is past the user's staleness threshold. Computed
+                  // client-side off the overview accounts' last_data_at so
+                  // it always agrees with the "as of" chips below.
+                  if (!firstRun)
+                    ImportStalenessBanner(
+                      stale: staleImportInstitutions(
+                        _overview?['accounts'] ?? const [],
+                        thresholdDays: _importStaleDays,
+                      ),
+                      onImport: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ImportScreen(),
+                          ),
+                        ).then((_) => _loadAllData(silent: true));
+                      },
+                    ),
                   Expanded(
                     child: (!firstRun && !isCompact)
                         ? Row(
@@ -3993,6 +4083,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             currencyFormat: currencyFormat,
             targetCurrency: _targetCurrency,
             usdMxnRate: fxRate,
+            importStaleThresholdDays: _importStaleDays,
             onAddAccount: _openAddAccount,
             onAlertsChanged: _reloadAccountAlerts,
             onBalanceUpdate: (id, bal) async {

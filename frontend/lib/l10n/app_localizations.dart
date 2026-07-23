@@ -6942,6 +6942,42 @@ abstract class AppLocalizations {
   /// **'No statements imported yet'**
   String get impCoverageEmpty;
 
+  /// No description provided for @impAsOfDate.
+  ///
+  /// In en, this message translates to:
+  /// **'as of {date}'**
+  String impAsOfDate(Object date);
+
+  /// No description provided for @impStaleBannerSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} data is {days, plural, =1{1 day} other{{days} days}} old — import a statement'**
+  String impStaleBannerSummary(int days, Object name);
+
+  /// No description provided for @impStaleBannerMore.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 more institution also needs} other{{count} more institutions also need}} a fresh import'**
+  String impStaleBannerMore(int count);
+
+  /// No description provided for @impStaleBannerImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Import statement'**
+  String get impStaleBannerImport;
+
+  /// No description provided for @impStaleThresholdTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Import staleness reminder'**
+  String get impStaleThresholdTitle;
+
+  /// No description provided for @impStaleThresholdSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remind me when imported data is older than this'**
+  String get impStaleThresholdSubtitle;
+
   /// No description provided for @impContinuityGap.
   ///
   /// In en, this message translates to:

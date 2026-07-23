@@ -4273,6 +4273,43 @@ class AppLocalizationsEs extends AppLocalizations {
   String get impCoverageEmpty => 'Aún no se han importado estados de cuenta';
 
   @override
+  String impAsOfDate(Object date) {
+    return 'al $date';
+  }
+
+  @override
+  String impStaleBannerSummary(int days, Object name) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days días',
+      one: '1 día',
+    );
+    return 'Los datos de $name tienen $_temp0 — importa un estado de cuenta';
+  }
+
+  @override
+  String impStaleBannerMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count instituciones más también necesitan',
+      one: '1 institución más también necesita',
+    );
+    return '$_temp0 una importación reciente';
+  }
+
+  @override
+  String get impStaleBannerImport => 'Importar estado de cuenta';
+
+  @override
+  String get impStaleThresholdTitle => 'Recordatorio de datos importados';
+
+  @override
+  String get impStaleThresholdSubtitle =>
+      'Recuérdame cuando los datos importados sean más antiguos que esto';
+
+  @override
   String impContinuityGap(
     Object fromFile,
     Object fromBalance,

@@ -4234,6 +4234,43 @@ class AppLocalizationsEn extends AppLocalizations {
   String get impCoverageEmpty => 'No statements imported yet';
 
   @override
+  String impAsOfDate(Object date) {
+    return 'as of $date';
+  }
+
+  @override
+  String impStaleBannerSummary(int days, Object name) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days days',
+      one: '1 day',
+    );
+    return '$name data is $_temp0 old — import a statement';
+  }
+
+  @override
+  String impStaleBannerMore(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count more institutions also need',
+      one: '1 more institution also needs',
+    );
+    return '$_temp0 a fresh import';
+  }
+
+  @override
+  String get impStaleBannerImport => 'Import statement';
+
+  @override
+  String get impStaleThresholdTitle => 'Import staleness reminder';
+
+  @override
+  String get impStaleThresholdSubtitle =>
+      'Remind me when imported data is older than this';
+
+  @override
   String impContinuityGap(
     Object fromFile,
     Object fromBalance,
