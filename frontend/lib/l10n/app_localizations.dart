@@ -5102,6 +5102,66 @@ abstract class AppLocalizations {
   /// **'PDF'**
   String get taxExportPdf;
 
+  /// No description provided for @taxExportsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Year-end export pack'**
+  String get taxExportsTitle;
+
+  /// No description provided for @taxExportsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Filing-shaped documents generated from the figures on this screen — pick a tax year and download each one.'**
+  String get taxExportsSubtitle;
+
+  /// No description provided for @taxExportsFbar.
+  ///
+  /// In en, this message translates to:
+  /// **'FBAR worksheet (FinCEN 114)'**
+  String get taxExportsFbar;
+
+  /// No description provided for @taxExportsFbarDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum annual balance per foreign account, in USD. Printable.'**
+  String get taxExportsFbarDesc;
+
+  /// No description provided for @taxExports8949.
+  ///
+  /// In en, this message translates to:
+  /// **'Form 8949 CSV'**
+  String get taxExports8949;
+
+  /// No description provided for @taxExports8949Desc.
+  ///
+  /// In en, this message translates to:
+  /// **'Realized gains split short/long-term with proceeds, cost basis, and gain.'**
+  String get taxExports8949Desc;
+
+  /// No description provided for @taxExportsScheduleB.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedule B interest CSV'**
+  String get taxExportsScheduleB;
+
+  /// No description provided for @taxExportsScheduleBDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Interest income by payer — personal loans plus bank and CETES/bond interest.'**
+  String get taxExportsScheduleBDesc;
+
+  /// No description provided for @taxExportsMx.
+  ///
+  /// In en, this message translates to:
+  /// **'MX annual summary CSV'**
+  String get taxExportsMx;
+
+  /// No description provided for @taxExportsMxDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Income, dividends, interest, and realized gains with the simplified SAT estimate.'**
+  String get taxExportsMxDesc;
+
   /// No description provided for @taxTotalTaxableIncome.
   ///
   /// In en, this message translates to:

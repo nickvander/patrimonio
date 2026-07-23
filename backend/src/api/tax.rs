@@ -20,6 +20,10 @@ pub fn router() -> Router<AppState> {
         .route("/contributions", get(get_retirement_contributions))
         .route("/export", get(export_tax_csv))
         .route("/export/pdf", get(export_tax_pdf))
+        // Tax-filing export pack (FBAR worksheet, 8949 / Schedule B / MX
+        // CSVs) — merged here so the routes share this router's mount point
+        // (and therefore the auth stack and the integration-test harness).
+        .merge(crate::api::tax_exports::router())
 }
 
 #[derive(Deserialize)]
@@ -43,7 +47,7 @@ const FILING_STATUS_SETTING_KEY: &str = "tax_filing_status";
 /// tables key on (`Single` / `Married` / `Head of Household`) — anything else
 /// (including a stale or malformed persisted value) collapses to `Single`,
 /// matching `TaxYearTables::us_status`'s own fall-through.
-async fn resolve_filing_status(
+pub(crate) async fn resolve_filing_status(
     state: &AppState,
     user_id: uuid::Uuid,
     query_status: Option<String>,

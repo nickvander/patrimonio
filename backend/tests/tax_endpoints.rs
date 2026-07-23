@@ -2489,3 +2489,330 @@ async fn retirement_detects_hsa_cash_nets_dividends_and_flags_backdoor_megabackd
     assert!((k["overall_limit_usd"].as_f64().unwrap() - 72000.0).abs() < 0.01, "401k §415c overall: {k}");
     assert_eq!(k["mega_backdoor"], serde_json::json!(true), "mega-backdoor flag: {k}");
 }
+
+// =====================================================================
+// Tax-filing export pack — FBAR worksheet, 8949 / Schedule B / MX CSVs
+// =====================================================================
+
+/// Read a non-JSON (CSV / HTML) response body as UTF-8 text.
+async fn body_text(body: Body) -> String {
+    let bytes = to_bytes(body, 1024 * 1024).await.expect("read body");
+    String::from_utf8(bytes.to_vec()).expect("utf8 body")
+}
+
+fn content_type(res: &axum::response::Response) -> String {
+    res.headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default()
+        .to_string()
+}
+
+/// Seed one personal loan with a single reconciled repayment carrying a
+/// principal/interest split (cash basis, paid in the given year).
+async fn seed_loan_with_interest_payment(
+    pool: &PgPool,
+    user_id: uuid::Uuid,
+    borrower: &str,
+    currency: &str,
+    paid_date: &str,
+    principal_portion: &str,
+    interest_portion: &str,
+) {
+    let loan_id: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO loans (user_id, borrower_name, principal, currency, interest_rate, \
+         interest_type, origination_date, status) \
+         VALUES ($1, $2, 10000, $3, 0.10, 'simple', '2025-06-01', 'active') RETURNING id",
+    )
+    .bind(user_id)
+    .bind(borrower)
+    .bind(currency)
+    .fetch_one(pool)
+    .await
+    .expect("seed loan");
+    sqlx::query(
+        "INSERT INTO loan_payments (user_id, loan_id, installment_number, paid_amount, \
+         paid_date, principal_portion, interest_portion, balance_after, status) \
+         VALUES ($1, $2, 1, $3::numeric + $4::numeric, $5::date, $3::numeric, $4::numeric, 0, 'paid')",
+    )
+    .bind(user_id)
+    .bind(loan_id)
+    .bind(Decimal::from_str(principal_portion).unwrap())
+    .bind(Decimal::from_str(interest_portion).unwrap())
+    .bind(paid_date)
+    .execute(pool)
+    .await
+    .expect("seed loan payment");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn export_fbar_worksheet_lists_foreign_max_balances_and_skips_domestic() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+
+    let mx_bank = seed_account_with_country_currency(
+        &pool, user_id, "Banamex", "MX", "Cuenta MXN", "MXN",
+    )
+    .await;
+    let domestic = seed_account_with_country_currency(
+        &pool, user_id, "Chase", "US", "Domestic Checking", "USD",
+    )
+    .await;
+    // The foreign account's annual max is the 6,000 snapshot, not the later 4,000.
+    seed_snapshot(&pool, user_id, mx_bank, "2026-03-10", "MXN", "6000").await;
+    seed_snapshot(&pool, user_id, mx_bank, "2026-08-01", "MXN", "4000").await;
+    seed_snapshot(&pool, user_id, domestic, "2026-03-10", "USD", "50000").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/export/fbar?year=2026",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK, "fbar worksheet should render");
+    assert!(
+        content_type(&res).starts_with("text/html"),
+        "worksheet is HTML (loan-printable pattern)"
+    );
+    let html = body_text(res.into_body()).await;
+    assert!(html.contains("Banamex"), "institution name listed: {html}");
+    assert!(html.contains("Cuenta MXN"), "account label listed");
+    assert!(
+        html.contains("6,000.00"),
+        "per-account max annual balance (USD, grouped) listed"
+    );
+    // The FBAR monitor's aggregate (sum of per-account maxima) is echoed.
+    assert!(html.contains("10,000.00"), "threshold shown");
+    // Domestic US/USD accounts are not FBAR-reportable rows.
+    assert!(
+        !html.contains("Domestic Checking"),
+        "domestic account must not appear"
+    );
+    assert!(!html.contains("50,000.00"), "domestic balance must not appear");
+
+    // Bilingual: the ?lang=es variant renders the Spanish worksheet.
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/export/fbar?year=2026&lang=es",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let html_es = body_text(res.into_body()).await;
+    assert!(
+        html_es.contains("Cuentas extranjeras"),
+        "es variant renders Spanish headings"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn export_8949_buckets_short_long_and_excludes_advantaged() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+
+    let brokerage = seed_typed_account(&pool, user_id, "brokerage").await;
+    let k401 = seed_typed_account(&pool, user_id, "401k").await;
+    // Short-term: acquired within a calendar year of the 2026-06-01 sale.
+    seed_disposal(&pool, user_id, brokerage, "SHORTSYM", "2026-01-02", "st", "400").await;
+    // Long-term: acquired years earlier.
+    seed_disposal(&pool, user_id, brokerage, "LONGSYM", "2023-01-02", "lt", "400").await;
+    // Tax-advantaged: must be excluded from the 8949 entirely.
+    seed_disposal(&pool, user_id, k401, "ADVSYM", "2023-01-02", "adv", "100").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/export/8949?year=2026",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert!(content_type(&res).starts_with("text/csv"));
+    let csv = body_text(res.into_body()).await;
+
+    let part1 = csv.find("Part I").expect("Part I section present");
+    let part2 = csv.find("Part II").expect("Part II section present");
+    let short_at = csv.find("SHORTSYM").expect("short-term row present");
+    let long_at = csv.find("LONGSYM").expect("long-term row present");
+    assert!(
+        part1 < short_at && short_at < part2,
+        "short-term disposal must sit in Part I: {csv}"
+    );
+    assert!(part2 < long_at, "long-term disposal must sit in Part II: {csv}");
+    assert!(
+        !csv.contains("ADVSYM"),
+        "tax-advantaged disposal must be excluded from the 8949: {csv}"
+    );
+    // Proceeds / basis / gain columns from the stored per-unit figures
+    // (10 sh. × $100 sell / × $60 cost — the seed helper's fixture).
+    assert!(
+        csv.contains("1000.00,600.00,400.00"),
+        "proceeds/basis/gain columns present: {csv}"
+    );
+    // The excluded-activity note keeps the exclusion visible, not silent.
+    assert!(
+        csv.contains("tax-advantaged account disposals excluded (not taxable events),1"),
+        "excluded-count note present: {csv}"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn export_schedule_b_combines_loan_and_account_interest_with_per_row_fx() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+
+    // 20 MXN/USD on every relevant date → clean division in the assertions.
+    seed_usd_mxn_rate(&pool, "2026-01-01", "20").await;
+
+    // Personal-loan interest: 100 MXN received 2026-04-01 → 5.00 USD.
+    seed_loan_with_interest_payment(
+        &pool, user_id, "Jose Perez", "MXN", "2026-04-01", "1000", "100",
+    )
+    .await;
+    // A prior-year payment that must NOT leak into the 2026 export.
+    seed_loan_with_interest_payment(
+        &pool, user_id, "Old Borrower", "MXN", "2025-04-01", "500", "50",
+    )
+    .await;
+
+    // CETES yield: an INCOME_INTEREST_EARNED transaction on a cetesdirecto
+    // account — 200 MXN → 10.00 USD (the same bucket the summary's
+    // interest_income decomposition counts).
+    let cetes = seed_account_with_country_currency(
+        &pool, user_id, "cetesdirecto", "MX", "CETES", "MXN",
+    )
+    .await;
+    seed_categorized_tx_in(
+        &pool,
+        user_id,
+        cetes,
+        "2026-05-01",
+        "Intereses CETES",
+        "200",
+        "MXN",
+        Some("INCOME"),
+        Some("INCOME_INTEREST_EARNED"),
+        None,
+    )
+    .await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/export/schedule-b?year=2026",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert!(content_type(&res).starts_with("text/csv"));
+    let csv = body_text(res.into_body()).await;
+
+    assert!(
+        csv.contains("Jose Perez,Personal loan (cash basis),MXN,100.00,5.00"),
+        "loan interest row with per-row FX→USD: {csv}"
+    );
+    assert!(
+        csv.contains("cetesdirecto,Account interest - CETES,MXN,200.00,10.00"),
+        "CETES account-interest row with per-row FX→USD: {csv}"
+    );
+    assert!(
+        csv.contains("Total interest (USD),15.00"),
+        "USD total sums both sources: {csv}"
+    );
+    assert!(
+        !csv.contains("Old Borrower"),
+        "other years' payments must not leak into the selected year: {csv}"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn export_mx_summary_echoes_the_summary_figures() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup().await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+
+    seed_usd_mxn_rate(&pool, "2026-01-01", "17.5").await;
+    let checking = seed_typed_account(&pool, user_id, "checking").await;
+    seed_categorized_tx(
+        &pool, user_id, checking, "2026-02-01", "Paycheck", "1000",
+        Some("INCOME"), Some("INCOME_WAGES"), None,
+    )
+    .await;
+    seed_categorized_tx(
+        &pool, user_id, checking, "2026-03-01", "Interest", "200",
+        Some("INCOME"), Some("INCOME_INTEREST_EARNED"), None,
+    )
+    .await;
+
+    // The export must echo the same figures the summary endpoint (the MX
+    // card's source) computes — no independent tax math.
+    let summary = fetch_summary(&app, &token).await;
+    let total_taxable_mxn = summary["total_taxable_mxn"].as_f64().unwrap();
+    assert!(
+        (total_taxable_mxn - 21000.0).abs() < 0.01,
+        "fixture sanity: 1,200 USD × 17.5 = 21,000 MXN: {summary}"
+    );
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/tax/export/mx?year=2026",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert!(content_type(&res).starts_with("text/csv"));
+    let csv = body_text(res.into_body()).await;
+
+    assert!(
+        csv.contains("Ordinary income,21000.00,1200.00"),
+        "ordinary income line (MXN per-row, USD): {csv}"
+    );
+    assert!(
+        csv.contains("of which interest (MXN at year rate)\",3500.00,200.00")
+            || csv.contains("of which interest (MXN at year rate),3500.00,200.00"),
+        "interest decomposition at the year rate: {csv}"
+    );
+    assert!(
+        csv.contains("Total taxable (tarifa base),21000.00,1200.00"),
+        "tarifa base echoes total_taxable_mxn: {csv}"
+    );
+    // The estimated ISR line must match the summary's MXN liability figure.
+    let liab_mxn = summary["estimated_liability_mx_mxn"].as_f64().unwrap();
+    assert!(
+        csv.contains(&format!("Estimated ISR liability,{liab_mxn:.2}")),
+        "ISR liability echoes the summary (liab {liab_mxn:.2}): {csv}"
+    );
+    assert!(
+        csv.contains("USD/MXN rate used for year-level conversions,17.5"),
+        "year rate is reported for auditability: {csv}"
+    );
+}

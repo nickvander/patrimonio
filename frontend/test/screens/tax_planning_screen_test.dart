@@ -312,7 +312,9 @@ void main() {
     // 2024 exists only in the realized-gains by_year fixture — before the
     // fix the dropdown derived its options from the year-filtered fetches,
     // so a past year with disposals was unreachable app-wide.
-    await tester.tap(find.byType(DropdownButton<int>));
+    // `.first` = the screen-header year dropdown; the export-pack card at the
+    // bottom now contributes a second DropdownButton<int> (same derived list).
+    await tester.tap(find.byType(DropdownButton<int>).first);
     await tester.pumpAndSettle();
     expect(find.text('2024'), findsWidgets);
   });

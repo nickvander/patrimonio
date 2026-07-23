@@ -3088,6 +3088,41 @@ class AppLocalizationsEs extends AppLocalizations {
   String get taxExportPdf => 'PDF';
 
   @override
+  String get taxExportsTitle => 'Paquete de exportación fiscal';
+
+  @override
+  String get taxExportsSubtitle =>
+      'Documentos con formato de declaración generados a partir de las cifras de esta pantalla — elige un año fiscal y descarga cada uno.';
+
+  @override
+  String get taxExportsFbar => 'Hoja de trabajo FBAR (FinCEN 114)';
+
+  @override
+  String get taxExportsFbarDesc =>
+      'Saldo máximo anual por cuenta extranjera, en USD. Imprimible.';
+
+  @override
+  String get taxExports8949 => 'CSV Formulario 8949';
+
+  @override
+  String get taxExports8949Desc =>
+      'Ganancias realizadas divididas en corto/largo plazo con ingresos, costo base y ganancia.';
+
+  @override
+  String get taxExportsScheduleB => 'CSV de intereses (Anexo B)';
+
+  @override
+  String get taxExportsScheduleBDesc =>
+      'Intereses por pagador — préstamos personales más intereses bancarios y de CETES/bonos.';
+
+  @override
+  String get taxExportsMx => 'CSV resumen anual MX';
+
+  @override
+  String get taxExportsMxDesc =>
+      'Ingresos, dividendos, intereses y ganancias realizadas con la estimación simplificada del SAT.';
+
+  @override
   String get taxTotalTaxableIncome => 'Ingreso gravable total';
 
   @override

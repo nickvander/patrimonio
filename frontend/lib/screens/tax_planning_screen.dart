@@ -10,6 +10,7 @@ import '../utils/percent_format.dart';
 import '../utils/theme_colors.dart';
 import '../utils/url_opener.dart';
 import '../widgets/skeleton.dart';
+import '../widgets/tax_exports_card.dart';
 import 'tax_planning_logic.dart';
 
 /// Test seams: the screen fetches through these typedefs so widget tests can
@@ -522,6 +523,21 @@ class _TaxPlanningScreenState extends State<TaxPlanningScreen> {
             isPhone,
             l.taxIncomeSectionTitle,
             (header) => _buildIncomeSection(l, header: header),
+          ),
+          SizedBox(height: gap),
+          // Year-end export pack: one button per filing-shaped document
+          // (FBAR worksheet, 8949 / Schedule B / MX CSVs) + its own year
+          // selector (follows the screen's, overridable for e.g. last year).
+          TaxExportsCard(
+            baseUrl: _apiService.baseUrl,
+            years: deriveTaxYears(
+              _taxTransactions,
+              _taxDisposals,
+              currentYear: DateTime.now().year,
+              byYear: _realizedByYear,
+            ),
+            initialYear: _selectedYear,
+            filingStatus: _filingStatus,
           ),
           const SizedBox(height: 12),
           Text(

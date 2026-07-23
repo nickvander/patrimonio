@@ -329,7 +329,7 @@ pub(crate) const USD_MXN_ROW_RATE_SQL: &str = r#"COALESCE(
 /// LATERAL-projected `USD_MXN_ROW_RATE_SQL`). Currencies other than MXN are
 /// treated as USD-equivalent (fx = 1) — the same "trust the native amount"
 /// stance sync.rs takes for unknown currencies.
-const AMOUNT_USD_SQL: &str =
+pub(crate) const AMOUNT_USD_SQL: &str =
     "(CASE WHEN UPPER(t.currency) = 'MXN' THEN t.amount / fx.rate ELSE t.amount END)";
 const AMOUNT_MXN_SQL: &str =
     "(CASE WHEN UPPER(t.currency) = 'MXN' THEN t.amount ELSE t.amount * fx.rate END)";

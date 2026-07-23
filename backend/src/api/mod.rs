@@ -8,6 +8,7 @@ pub mod auth;
 pub mod passkeys;
 pub mod session;
 pub mod tax;
+pub mod tax_exports;
 pub mod setup;
 pub mod settings;
 pub mod invites;

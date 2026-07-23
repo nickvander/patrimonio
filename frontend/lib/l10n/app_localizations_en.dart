@@ -3061,6 +3061,41 @@ class AppLocalizationsEn extends AppLocalizations {
   String get taxExportPdf => 'PDF';
 
   @override
+  String get taxExportsTitle => 'Year-end export pack';
+
+  @override
+  String get taxExportsSubtitle =>
+      'Filing-shaped documents generated from the figures on this screen — pick a tax year and download each one.';
+
+  @override
+  String get taxExportsFbar => 'FBAR worksheet (FinCEN 114)';
+
+  @override
+  String get taxExportsFbarDesc =>
+      'Maximum annual balance per foreign account, in USD. Printable.';
+
+  @override
+  String get taxExports8949 => 'Form 8949 CSV';
+
+  @override
+  String get taxExports8949Desc =>
+      'Realized gains split short/long-term with proceeds, cost basis, and gain.';
+
+  @override
+  String get taxExportsScheduleB => 'Schedule B interest CSV';
+
+  @override
+  String get taxExportsScheduleBDesc =>
+      'Interest income by payer — personal loans plus bank and CETES/bond interest.';
+
+  @override
+  String get taxExportsMx => 'MX annual summary CSV';
+
+  @override
+  String get taxExportsMxDesc =>
+      'Income, dividends, interest, and realized gains with the simplified SAT estimate.';
+
+  @override
   String get taxTotalTaxableIncome => 'Total taxable income';
 
   @override
