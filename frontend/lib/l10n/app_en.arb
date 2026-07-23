@@ -1946,6 +1946,14 @@
       }
     }
   },
+  "lwNotifSinceVisitDetail": "Since your last visit · {date}. Tap to review.",
+  "@lwNotifSinceVisitDetail": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
   "lwNotifSpendingUpTitle": "{category} up {pct}",
   "@lwNotifSpendingUpTitle": {
     "placeholders": {

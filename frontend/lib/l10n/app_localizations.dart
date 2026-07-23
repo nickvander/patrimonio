@@ -7709,6 +7709,12 @@ abstract class AppLocalizations {
   /// **'Since your last sync · {date}'**
   String lwNotifNetWorthSinceSyncDetail(String date);
 
+  /// No description provided for @lwNotifSinceVisitDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Since your last visit · {date}. Tap to review.'**
+  String lwNotifSinceVisitDetail(String date);
+
   /// No description provided for @lwNotifSpendingUpTitle.
   ///
   /// In en, this message translates to:

@@ -4754,6 +4754,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String lwNotifSinceVisitDetail(String date) {
+    return 'Since your last visit · $date. Tap to review.';
+  }
+
+  @override
   String lwNotifSpendingUpTitle(String category, String pct) {
     return '$category up $pct';
   }

@@ -810,6 +810,38 @@ class ApiService {
     }, forceRefresh: forceRefresh);
   }
 
+  /// Unified notifications inbox for the bell: every stored
+  /// `user_notifications` row (FX alerts, import staleness, loan due
+  /// reminders — generated server-side on read) plus the true unread
+  /// count for the badge. Shape:
+  /// `{notifications: [{id, kind, title, body, created_at, read_at,
+  /// link_kind, link_id}], unread_count}`.
+  Future<Map<String, dynamic>?> getNotifications({bool forceRefresh = false}) {
+    return _cachedGet('notifications', () async {
+      final response = await _get(Uri.parse('$_baseUrl/notifications'));
+      if (response.statusCode != 200) return null;
+      return json.decode(response.body) as Map<String, dynamic>;
+    }, forceRefresh: forceRefresh);
+  }
+
+  /// Server-side read state: mark specific inbox ids — or with [all],
+  /// the whole inbox — as read. Fire-and-forget friendly: callers that
+  /// only care about the optimistic local state can ignore the result.
+  Future<void> markNotificationsRead({
+    List<String> ids = const [],
+    bool all = false,
+  }) async {
+    final response = await _post(
+      Uri.parse('$_baseUrl/notifications/read'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'ids': ids, 'all': all}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(_t('Failed to update notifications',
+          'No se pudieron actualizar las notificaciones'));
+    }
+  }
+
   /// List every dismissed subscription merchant. Returned shape:
   /// `[{merchant_key, ignored_at}, ...]`.
   Future<List<dynamic>> getIgnoredSubscriptions({bool forceRefresh = false}) {

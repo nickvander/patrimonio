@@ -26,3 +26,4 @@ pub mod loan_match;
 pub mod loan_schedule;
 pub mod holdings;
 pub mod staleness;
+pub mod notifications;

@@ -1569,6 +1569,7 @@
   "lwNotifNetWorthUpTitle": "El patrimonio subió {amount} ({pct})",
   "lwNotifNetWorthDownTitle": "El patrimonio bajó {amount} ({pct})",
   "lwNotifNetWorthSinceSyncDetail": "Desde tu última sincronización · {date}",
+  "lwNotifSinceVisitDetail": "Desde tu última visita · {date}. Toca para revisar.",
   "lwNotifSpendingUpTitle": "{category} subió {pct}",
   "lwNotifSpendingUpDetail": "vs tu promedio de {months} meses de {avg}",
   "lwNotifSubPriceUpTitle": "Subió el precio de {merchant}",

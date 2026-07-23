@@ -285,6 +285,14 @@ async fn main() -> Result<()> {
             "/api/auth",
             patrimonio::api::passkeys::reauth_protected_router(),
         )
+        // Notifications inbox (the bell). Strictly self-scoped rows +
+        // read state — a read-only member marking their own inbox read
+        // mutates nothing shared, so like the session routes it is NOT
+        // owner-gated (require_owner would 403 their POST /read).
+        .nest(
+            "/api/notifications",
+            patrimonio::api::notifications::router(),
+        )
         // Coinbase OAuth lives under /api/auth/coinbase historically.
         // Initiating an OAuth link MUTATES (writes the new
         // institution row), so when roles ship this should arguably

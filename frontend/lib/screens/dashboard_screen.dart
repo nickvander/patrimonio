@@ -211,7 +211,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, double> _accountAlerts = const {};
   // Notification ids the user has marked as read — the bell badge only lights
   // for ids not in this set. Persisted in localStorage so it survives refresh.
+  // Covers only the client-DERIVED rows; server inbox rows carry their own
+  // read_at and merge in via _serverReadIds().
   Set<String> _dismissedNotifs = const {};
+  // Server-side notifications inbox (GET /api/notifications): stored
+  // user_notifications rows (FX alerts, import staleness, loan due
+  // reminders) + the true unread count. Best-effort — null when the fetch
+  // fails; the bell then shows only the client-derived rows.
+  Map<String, dynamic>? _serverNotifications;
   // Whether the mobile Overview "Details" disclosure (stat strip, goal,
   // emergency fund) is expanded. Collapsed by default for a calm Glance view;
   // remembered across visits via Preferences.
@@ -2555,6 +2562,67 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  /// Seed the transactions date filter from [anchor] through today and
+  /// jump to the Transactions tab. Shared by the since-last-visit banner
+  /// and the bell's digest rows, so both drill into exactly the rows
+  /// they're talking about.
+  void _jumpToTransactionsSince(DateTime anchor) {
+    setState(() => _txDateSeed = (
+      start: DateTime(anchor.year, anchor.month, anchor.day),
+      end: DateTime.now(),
+    ));
+    _goToNav(NavId.transactions);
+  }
+
+  /// Ids of server inbox rows already marked read (`read_at` set). They
+  /// merge into the bell's dismissed set so the badge counts only
+  /// truly-unread rows — "All clear" must never show while something
+  /// unread exists, and a read row must never re-badge.
+  Set<String> _serverReadIds() {
+    final rows = _serverNotifications?['notifications'];
+    if (rows is! List) return const {};
+    return {
+      for (final r in rows)
+        if (r is Map && r['read_at'] != null && r['id'] != null)
+          '$kServerNotificationIdPrefix${r['id']}',
+    };
+  }
+
+  /// Read-state sink for the bell — fired on panel open AND on "Mark all
+  /// read" (opening the panel marks read; the open panel still renders
+  /// its pre-open snapshot so the unread dots survive that viewing).
+  ///
+  /// Derived (condition) rows go to the localStorage dismissed set,
+  /// replaced wholesale so the set stays bounded and a condition that
+  /// clears then recurs re-alerts. Server inbox rows are stamped read
+  /// via POST /api/notifications/read — optimistically locally first so
+  /// the badge doesn't flicker back while the POST is in flight.
+  void _markNotificationsRead(Set<String> shownIds) {
+    final derived = shownIds
+        .where((id) => !id.startsWith(kServerNotificationIdPrefix))
+        .toSet();
+    final hadUnreadServer =
+        ((_serverNotifications?['unread_count'] as num?) ?? 0) > 0;
+    setState(() {
+      _dismissedNotifs = derived;
+      final rows = _serverNotifications?['notifications'];
+      if (rows is List) {
+        for (final r in rows) {
+          if (r is Map && r['read_at'] == null) {
+            r['read_at'] = DateTime.now().toUtc().toIso8601String();
+          }
+        }
+      }
+      _serverNotifications?['unread_count'] = 0;
+    });
+    Preferences.setDismissedNotifications(derived);
+    if (hadUnreadServer) {
+      // Best-effort: on failure the server still reports the rows unread
+      // on the next full load, which only re-badges — never loses data.
+      _apiService.markNotificationsRead(all: true).catchError((_) {});
+    }
+  }
+
   /// Compact-width combined currency control: "USD · 17.51" in one tappable
   /// tonal chip (tap toggles the display currency). Replaces two bar
   /// elements from the pre-audit design — the bordered-but-inert FX pill
@@ -3523,6 +3591,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _apiService
             .getUpcomingRecurring(forceRefresh: forceRefresh)
             .catchError((_) => <String, dynamic>{}),
+        // Unified notifications inbox for the bell. Best-effort — a
+        // failure just drops the server-backed rows, never the dashboard.
+        _apiService
+            .getNotifications(forceRefresh: forceRefresh)
+            .catchError((_) => null),
       ]);
 
       debugPrint("All data loaded successfully");
@@ -3586,6 +3659,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 recurringUpcomingRaw.isNotEmpty
             ? recurringUpcomingRaw
             : null;
+        _serverNotifications = results[24] as Map<String, dynamic>?;
         _isLoading = false;
       });
 
@@ -3825,12 +3899,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(width: 8),
               ],
               NotificationsBell(
-                dismissedIds: _dismissedNotifs,
-                onMarkAllRead: (ids) {
-                  setState(() => _dismissedNotifs = ids);
-                  Preferences.setDismissedNotifications(ids);
-                },
-                notifications: deriveNotifications(
+                // Server rows already marked read merge into the dismissed
+                // set — the badge/"All clear" reflect only truly-unread.
+                dismissedIds: {..._dismissedNotifs, ..._serverReadIds()},
+                onMarkAllRead: _markNotificationsRead,
+                // Opening the panel marks everything currently shown read
+                // (server-side for inbox rows, localStorage for derived).
+                onOpened: _markNotificationsRead,
+                notifications: [
+                  // Live condition rows first (overdue loans, sync
+                  // failures, low balances, the since-visit digest) —
+                  // the actionable "now" stuff leads the panel.
+                  ...deriveNotifications(
                   l: AppLocalizations.of(context),
                   brightness: Theme.of(context).brightness,
                   syncData: _syncData ?? const [],
@@ -3849,6 +3929,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   onJumpToClosedAccounts: () => Navigator.of(context).push(
                       MaterialPageRoute(
                           builder: (_) => const HiddenItemsScreen())),
+                  sinceLastLogin: _sinceLastLogin,
+                  onJumpToTransactions: _jumpToTransactionsSince,
                   onJumpToAccount: (account) => showAccountTransactionsPanel(
                     context,
                     account: account,
@@ -3872,7 +3954,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     },
                     onAlertsChanged: _reloadAccountAlerts,
                   ),
-                ),
+                  ),
+                  // Then the server-backed inbox (dated events, newest
+                  // first from the API): FX alert crossings, import
+                  // staleness, loan due reminders — everything fx-center
+                  // and staleness wrote lands in this one list.
+                  //
+                  // Server loan_due rows whose loan already has a derived
+                  // reminder row above are hidden: both describe the same
+                  // installment, and the derived row is richer (localized,
+                  // day-precise, overdue-escalated). The server row still
+                  // exists for cross-device read state and shows on
+                  // clients where the reminders fetch failed.
+                  ...serverNotificationsToApp(
+                    rows: ((_serverNotifications?['notifications'] as List?) ??
+                            const [])
+                        .where((r) {
+                      if (r is! Map || r['kind'] != 'loan_due') return true;
+                      final reminderLoanIds = {
+                        for (final rem in _loanReminders)
+                          if (rem is Map && rem['loan_id'] != null)
+                            rem['loan_id'].toString(),
+                      };
+                      return !reminderLoanIds
+                          .contains(r['link_id']?.toString());
+                    }).toList(),
+                    brightness: Theme.of(context).brightness,
+                    onOpenFxCenter: _openFxCenter,
+                    onJumpToManagement: () => _goToNav(NavId.settings),
+                    onJumpToLending: () => _goToNav(NavId.lending),
+                  ),
+                ],
               ),
             ],
             // Compact widths get theme selection from the Settings tab
@@ -4798,17 +4910,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 summary: _sinceLastLogin,
                 currencyFormat: currencyFormat,
                 conversionFactor: conversionFactor,
-                onJumpToTransactions: (anchor) {
-                  // Seed a custom date range from the previous-login
-                  // anchor through today so the transactions list is
-                  // pre-filtered to exactly the rows the banner is
-                  // talking about.
-                  setState(() => _txDateSeed = (
-                    start: DateTime(anchor.year, anchor.month, anchor.day),
-                    end: DateTime.now(),
-                  ));
-                  _goToNav(NavId.transactions);
-                },
+                // Seeds a custom date range from the previous-login
+                // anchor through today so the transactions list is
+                // pre-filtered to exactly the rows the banner is
+                // talking about (shared with the bell's digest rows).
+                onJumpToTransactions: _jumpToTransactionsSince,
                 onJumpToManagement: () => _goToNav(NavId.settings),
               ),
               if (_sinceLastLogin != null) const SizedBox(height: 12),

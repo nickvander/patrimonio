@@ -140,4 +140,210 @@ void main() {
       expect(out, isEmpty);
     });
   });
+
+  group('since-last-visit digest rows', () {
+    final digest = <String, dynamic>{
+      'previous_login_at': '2026-07-20T10:00:00Z',
+      'new_transactions': 5,
+      'largest_move': {'account_name': 'Chase Checking', 'delta_usd': -1234.5},
+      'sync_errors': <String>[],
+    };
+
+    List<AppNotification> deriveDigest(
+      AppLocalizations loc, {
+      Map<String, dynamic>? since,
+      void Function(DateTime)? onJump,
+    }) {
+      return deriveNotifications(
+        l: loc,
+        syncData: const [],
+        netWorthHistory: const [],
+        onJumpToManagement: () {},
+        sinceLastLogin: since,
+        onJumpToTransactions: onJump ?? (_) {},
+      );
+    }
+
+    test('surfaces new transactions and the biggest move, keyed on the anchor',
+        () {
+      final out = deriveDigest(l, since: digest);
+      expect(out, hasLength(2));
+      final tx = out.firstWhere((n) => n.id.startsWith('since_tx:'));
+      expect(tx.id, 'since_tx:2026-07-20T10:00:00Z',
+          reason: 'anchor-keyed id: a new login re-alerts, a re-render does not');
+      expect(tx.title, '5 new transactions');
+      final mover = out.firstWhere((n) => n.id.startsWith('since_move:'));
+      // gen-l10n signature is (account, amount): "{amount} on {account}".
+      expect(mover.title, contains('Chase Checking'));
+      expect(mover.title, contains('1,234.50'));
+      expect(mover.title, contains('on Chase Checking'),
+          reason: 'amount and account must not be transposed');
+    });
+
+    test('renders es-MX copy for the same digest', () {
+      final es = lookupAppLocalizations(const Locale('es'));
+      final out = deriveDigest(es, since: digest);
+      final tx = out.firstWhere((n) => n.id.startsWith('since_tx:'));
+      expect(tx.title, '5 transacciones nuevas');
+      expect(tx.detail, contains('Desde tu última visita'));
+      final mover = out.firstWhere((n) => n.id.startsWith('since_move:'));
+      expect(mover.title, contains('en Chase Checking'));
+    });
+
+    test('no digest payload (or nothing new) produces no rows', () {
+      expect(deriveDigest(l, since: null), isEmpty);
+      expect(
+        deriveDigest(l, since: {
+          'previous_login_at': '2026-07-20T10:00:00Z',
+          'new_transactions': 0,
+          'sync_errors': <String>[],
+        }),
+        isEmpty,
+      );
+    });
+
+    test('tapping a digest row deep-links with the previous-login anchor', () {
+      DateTime? received;
+      final out = deriveDigest(l, since: digest, onJump: (a) => received = a);
+      out.firstWhere((n) => n.id.startsWith('since_tx:')).onTap!();
+      expect(received, DateTime.parse('2026-07-20T10:00:00Z'));
+    });
+  });
+
+  group('serverNotificationsToApp', () {
+    Map<String, dynamic> row(String id, String kind) => {
+          'id': id,
+          'kind': kind,
+          'title': 'title-$kind',
+          'body': 'body-$kind',
+          'created_at': '2026-07-22T12:00:00Z',
+          'read_at': null,
+        };
+
+    test('maps kinds to their deep links and namespaces ids with srv:', () {
+      var fx = 0, mgmt = 0, lending = 0;
+      final out = serverNotificationsToApp(
+        rows: [
+          row('aaa', 'fx_alert'),
+          row('bbb', 'import_stale'),
+          row('ccc', 'loan_due'),
+        ],
+        onOpenFxCenter: () => fx++,
+        onJumpToManagement: () => mgmt++,
+        onJumpToLending: () => lending++,
+      );
+      expect(out.map((n) => n.id),
+          ['srv:aaa', 'srv:bbb', 'srv:ccc']);
+      expect(out[0].title, 'title-fx_alert');
+      expect(out[0].detail, 'body-fx_alert');
+      expect(out[0].createdAt, DateTime.parse('2026-07-22T12:00:00Z'));
+      out[0].onTap!();
+      out[1].onTap!();
+      out[2].onTap!();
+      expect((fx, mgmt, lending), (1, 1, 1));
+    });
+
+    test('an unknown kind from a newer server renders inert, not crashing',
+        () {
+      final out = serverNotificationsToApp(rows: [row('zzz', 'brand_new')]);
+      expect(out, hasLength(1));
+      expect(out.single.onTap, isNull);
+      expect(out.single.title, 'title-brand_new');
+    });
+
+    test('rows without an id are skipped (no unkeyable read state)', () {
+      final out = serverNotificationsToApp(rows: [
+        {'kind': 'fx_alert', 'title': 't', 'body': 'b'},
+        'not-a-map',
+      ]);
+      expect(out, isEmpty);
+    });
+  });
+
+  group('NotificationsBell badge & read state', () {
+    AppNotification notif(String id) => AppNotification(
+          id: id,
+          icon: Icons.info_outline,
+          accent: const Color(0xFF808080),
+          title: 'title $id',
+          detail: 'detail $id',
+        );
+
+    Future<void> pumpBell(
+      WidgetTester tester, {
+      required List<AppNotification> notifications,
+      Set<String> dismissedIds = const {},
+      void Function(Set<String>)? onOpened,
+    }) async {
+      await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          appBar: AppBar(actions: [
+            NotificationsBell(
+              notifications: notifications,
+              dismissedIds: dismissedIds,
+              onOpened: onOpened,
+            ),
+          ]),
+        ),
+      ));
+    }
+
+    testWidgets('badge shows the unread COUNT, not just a dot',
+        (tester) async {
+      await pumpBell(
+        tester,
+        notifications: [notif('a'), notif('b'), notif('c')],
+        dismissedIds: {'c'},
+      );
+      expect(find.text('2'), findsOneWidget);
+    });
+
+    testWidgets('badge caps at 9+', (tester) async {
+      await pumpBell(
+        tester,
+        notifications: [for (var i = 0; i < 12; i++) notif('n$i')],
+      );
+      expect(find.text('9+'), findsOneWidget);
+    });
+
+    testWidgets(
+        'no badge when everything is read — but only then (truthful all-clear)',
+        (tester) async {
+      // One unread row → badge present.
+      await pumpBell(
+        tester,
+        notifications: [notif('a'), notif('b')],
+        dismissedIds: {'a'},
+      );
+      expect(find.text('1'), findsOneWidget);
+      // Everything read → badge gone.
+      await pumpBell(
+        tester,
+        notifications: [notif('a'), notif('b')],
+        dismissedIds: {'a', 'b'},
+      );
+      expect(find.text('1'), findsNothing);
+      expect(find.text('2'), findsNothing);
+    });
+
+    testWidgets('opening the panel reports every shown id for read-marking',
+        (tester) async {
+      Set<String>? opened;
+      await pumpBell(
+        tester,
+        notifications: [notif('a'), notif('srv:b')],
+        dismissedIds: {'a'},
+        onOpened: (ids) => opened = ids,
+      );
+      // The default 800px test surface takes the desktop popup path.
+      await tester.tap(find.byIcon(Icons.notifications_none));
+      await tester.pumpAndSettle();
+      expect(opened, {'a', 'srv:b'},
+          reason: 'ALL shown ids are reported, read and unread alike');
+      // The panel itself renders below the app bar with the rows visible.
+      expect(find.text('title srv:b'), findsOneWidget);
+    });
+  });
 }

@@ -21,6 +21,11 @@ class AppNotification {
   final String detail;
   final VoidCallback? onTap;
 
+  /// When the notification was recorded, for inbox rows that come from
+  /// the server's `user_notifications` store. Null for condition-derived
+  /// rows (a stale sync "is" stale — it didn't happen at an instant).
+  final DateTime? createdAt;
+
   AppNotification({
     required this.id,
     required this.icon,
@@ -28,7 +33,69 @@ class AppNotification {
     required this.title,
     required this.detail,
     this.onTap,
+    this.createdAt,
   });
+}
+
+/// Id prefix for rows backed by a server `user_notifications` row. The
+/// dashboard splits on this to route read-state: `srv:` ids are marked
+/// read via POST /api/notifications/read; everything else goes to the
+/// localStorage dismissed-ids set.
+const String kServerNotificationIdPrefix = 'srv:';
+
+/// Map `GET /api/notifications` rows (the server-side inbox: FX alert
+/// crossings, import-staleness reminders, loan payment due reminders —
+/// whatever fx-center/staleness/loans wrote) into bell rows, so every
+/// source appears in one list. Title/body are stored server-side in
+/// English (see the backend writers); icon, accent and deep link are
+/// derived locale-independently from `kind`, with a neutral fallback for
+/// kinds this build doesn't know yet (an older app against a newer
+/// server must render, not crash).
+List<AppNotification> serverNotificationsToApp({
+  required List<dynamic> rows,
+  Brightness brightness = Brightness.dark,
+  /// Opens the FX center sheet (fx_alert rows deep-link to their subject).
+  VoidCallback? onOpenFxCenter,
+  /// Jump to Management/sync (import_stale rows: the fix is an import).
+  VoidCallback? onJumpToManagement,
+  /// Jump to the Lending tab (loan_due rows).
+  VoidCallback? onJumpToLending,
+}) {
+  final out = <AppNotification>[];
+  for (final raw in rows) {
+    if (raw is! Map) continue;
+    final id = raw['id']?.toString();
+    if (id == null || id.isEmpty) continue;
+    final kind = (raw['kind'] ?? '').toString();
+    final (IconData icon, Color accent, VoidCallback? onTap) = switch (kind) {
+      'fx_alert' => (
+          Icons.currency_exchange,
+          BrandPalette.info(brightness),
+          onOpenFxCenter,
+        ),
+      'import_stale' => (
+          Icons.upload_file,
+          BrandPalette.warning(brightness),
+          onJumpToManagement,
+        ),
+      'loan_due' => (
+          Icons.event,
+          BrandPalette.warning(brightness),
+          onJumpToLending,
+        ),
+      _ => (Icons.notifications_none, BrandPalette.neutral(brightness), null),
+    };
+    out.add(AppNotification(
+      id: '$kServerNotificationIdPrefix$id',
+      icon: icon,
+      accent: accent,
+      title: (raw['title'] ?? '').toString(),
+      detail: (raw['body'] ?? '').toString(),
+      onTap: onTap,
+      createdAt: DateTime.tryParse(raw['created_at']?.toString() ?? ''),
+    ));
+  }
+  return out;
 }
 
 /// Pure derivation: walks the existing sync data + net-worth history and
@@ -78,6 +145,15 @@ List<AppNotification> deriveNotifications({
   /// Opens the Hidden/closed items screen when an archived-account row is
   /// tapped (where the user can restore or remove it).
   VoidCallback? onJumpToClosedAccounts,
+  /// "What changed since your last visit" payload from
+  /// GET /api/dashboard/since-last-login (same data as the Overview
+  /// banner): {previous_login_at, new_transactions, largest_move?,
+  /// sync_errors}. Null when there's no anchor yet (first-ever login) or
+  /// the fetch failed — the digest rows simply don't appear.
+  Map<String, dynamic>? sinceLastLogin,
+  /// Jump to the Transactions tab pre-filtered to "since [anchor]" when a
+  /// digest row is tapped. Receives the previous-login anchor.
+  void Function(DateTime anchor)? onJumpToTransactions,
 }) {
   final out = <AppNotification>[];
 
@@ -273,6 +349,59 @@ List<AppNotification> deriveNotifications({
     }
   }
 
+  // 2b) Since-last-visit digest — the same "what changed while you were
+  //     away" data the Overview banner shows (new transactions, biggest
+  //     single-account move), surfaced as bell rows so the inbox is the
+  //     one place that collects everything. Ids are keyed on the anchor
+  //     (previous_login_at): a new login produces a new anchor, so the
+  //     rows re-alert; re-renders within one session stay read.
+  //     sync_errors from the digest are deliberately NOT emitted here —
+  //     section 1 above already surfaces live sync problems and a
+  //     duplicate row would double-badge the same condition.
+  final sinceAnchorIso = sinceLastLogin?['previous_login_at']?.toString();
+  final sinceAnchor =
+      sinceAnchorIso != null ? DateTime.tryParse(sinceAnchorIso) : null;
+  if (sinceAnchor != null) {
+    final anchorStr = DateFormat('MMM d').format(sinceAnchor.toLocal());
+    final newTx = (sinceLastLogin?['new_transactions'] as num?)?.toInt() ?? 0;
+    if (newTx > 0) {
+      out.add(AppNotification(
+        id: 'since_tx:$sinceAnchorIso',
+        icon: Icons.receipt_long,
+        accent: BrandPalette.info(brightness),
+        title: l.lwSinceNewTransactions(newTx),
+        detail: l.lwNotifSinceVisitDetail(anchorStr),
+        onTap: onJumpToTransactions == null
+            ? null
+            : () => onJumpToTransactions(sinceAnchor),
+      ));
+    }
+    final move = sinceLastLogin?['largest_move'];
+    if (move is Map) {
+      final deltaUsd = (move['delta_usd'] as num?)?.toDouble() ?? 0.0;
+      final account =
+          (move['account_name'] ?? l.lwNotifAccountFallback).toString();
+      if (deltaUsd != 0) {
+        final up = deltaUsd >= 0;
+        final signed =
+            '${up ? '+' : '−'}${money(deltaUsd.abs(), 'USD')}';
+        out.add(AppNotification(
+          id: 'since_move:$sinceAnchorIso',
+          icon: up ? Icons.trending_up : Icons.trending_down,
+          accent: up
+              ? BrandPalette.teal(brightness)
+              : BrandPalette.warning(brightness),
+          // gen-l10n orders these alphabetically → (account, amount).
+          title: l.lwSinceLargestMove(account, signed),
+          detail: l.lwNotifSinceVisitDetail(anchorStr),
+          onTap: onJumpToTransactions == null
+              ? null
+              : () => onJumpToTransactions(sinceAnchor),
+        ));
+      }
+    }
+  }
+
   // 3) Spending spikes — a category whose most-recent complete month ran
   //    meaningfully above its trailing average. Amounts are USD-normalised by
   //    the backend (same as the cash-flow card). Thresholds keep the signal
@@ -443,11 +572,21 @@ class NotificationsBell extends StatelessWidget {
   /// the set (see Preferences.setDismissedNotifications) and rebuilds.
   final void Function(Set<String> currentIds)? onMarkAllRead;
 
+  /// Fired when the panel opens (popup or sheet), with the ids of every
+  /// currently-shown notification. The dashboard uses it to mark the
+  /// inbox read ("opening the panel marks read"): server-backed rows via
+  /// POST /api/notifications/read, derived rows via the dismissed-ids
+  /// set. The open panel itself keeps rendering the pre-open snapshot,
+  /// so the unread dots stay visible for this viewing; the badge clears
+  /// once the panel closes.
+  final void Function(Set<String> currentIds)? onOpened;
+
   const NotificationsBell({
     super.key,
     required this.notifications,
     this.dismissedIds = const {},
     this.onMarkAllRead,
+    this.onOpened,
   });
 
   @override
@@ -467,14 +606,21 @@ class NotificationsBell extends StatelessWidget {
     if (isNarrow) {
       return IconButton(
         tooltip: tooltip,
-        icon: _bellIcon(context, unseen.isNotEmpty),
+        icon: _bellIcon(context, unseen.length),
         onPressed: () => _openSheet(context, l, unseen),
       );
     }
 
     return PopupMenuButton<void>(
       tooltip: tooltip,
-      icon: _bellIcon(context, unseen.isNotEmpty),
+      icon: _bellIcon(context, unseen.length),
+      // Anchor the panel BELOW the bell (i.e. below the app bar). The
+      // default `over` position opened the menu on top of the button,
+      // covering the app bar and looking detached from the bell that
+      // spawned it — the long-standing anchoring complaint.
+      position: PopupMenuPosition.under,
+      onOpened: () =>
+          onOpened?.call(notifications.map((n) => n.id).toSet()),
       itemBuilder: (menuContext) {
         if (notifications.isEmpty) {
           return [
@@ -511,26 +657,42 @@ class NotificationsBell extends StatelessWidget {
     );
   }
 
-  /// The bell glyph + unseen badge, shared by the mobile button and the
-  /// desktop dropdown trigger.
-  Widget _bellIcon(BuildContext context, bool hasUnseen) {
+  /// The bell glyph + unread-count badge, shared by the mobile button and
+  /// the desktop dropdown trigger. A numeric count (not just a dot) so
+  /// "3 things need attention" is visible without opening the panel;
+  /// capped at 9+ to keep the pill inside the 24dp icon box.
+  Widget _bellIcon(BuildContext context, int unseenCount) {
     return Stack(
       clipBehavior: Clip.none,
       children: [
         const Icon(Icons.notifications_none),
-        if (hasUnseen)
+        if (unseenCount > 0)
           Positioned(
-            right: -2,
-            top: -2,
+            right: -5,
+            top: -4,
             child: Container(
-              width: 10,
-              height: 10,
+              padding: const EdgeInsets.symmetric(horizontal: 3.5),
+              constraints: const BoxConstraints(minWidth: 14),
+              height: 14,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: context.warning,
-                shape: BoxShape.circle,
+                borderRadius: BorderRadius.circular(7),
                 border: Border.all(
                   color: Theme.of(context).colorScheme.surface,
                   width: 1.5,
+                ),
+              ),
+              child: Text(
+                unseenCount > 9 ? '9+' : '$unseenCount',
+                style: TextStyle(
+                  fontSize: 8,
+                  height: 1.0,
+                  fontWeight: FontWeight.w700,
+                  // On the warning fill, the surface color is the
+                  // high-contrast pair in both brightnesses (same trick
+                  // as the badge border).
+                  color: Theme.of(context).colorScheme.surface,
                 ),
               ),
             ),
@@ -544,6 +706,10 @@ class NotificationsBell extends StatelessWidget {
     AppLocalizations l,
     List<AppNotification> unseen,
   ) {
+    // Same "opening marks read" semantics as the desktop popup — the
+    // sheet below renders from the snapshot captured right here, so the
+    // unread dots survive for this viewing.
+    onOpened?.call(notifications.map((n) => n.id).toSet());
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -673,6 +839,21 @@ class NotificationsBell extends StatelessWidget {
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
                 ),
+                // Inbox rows carry the moment they were recorded;
+                // condition-derived rows (createdAt == null) don't — a
+                // "sync is stale" condition has no meaningful timestamp.
+                if (n.createdAt != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    DateFormat.MMMd(
+                      Localizations.localeOf(context).toString(),
+                    ).format(n.createdAt!.toLocal()),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.textFaint,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
