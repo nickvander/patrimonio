@@ -2899,7 +2899,13 @@ async fn loan_agreement(
     } else {
         total_sched_payment
     };
-    let total_paid = v.total_repaid + v.interest_earned;
+    // total_repaid is Σ paid_amount, which already INCLUDES each payment's
+    // interest portion — adding interest_earned on top double-counted it
+    // (one $70 repayment on a $120 + $20 flat-interest loan rendered as
+    // PAID $80 / REMAINING $60 while the app correctly showed $70 / $70).
+    // Keep these figures identical to the loan view's total_repaid /
+    // total_owed so the document handed to the borrower matches the app.
+    let total_paid = v.total_repaid;
     let remaining_owed = (total_to_repay - total_paid).max(0.0);
     let interest_desc = if !has_interest {
         t("no interest", "sin intereses").to_string()
