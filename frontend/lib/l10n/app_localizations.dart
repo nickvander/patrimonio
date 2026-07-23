@@ -11013,6 +11013,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'What drove this change'**
   String get nwMoversToggleTooltip;
+
+  /// FX center: appended to the app-bar FX pill tooltip/semantics now that tapping it opens the FX center sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap for rate history & tools'**
+  String get fxcPillTapHint;
+
+  /// FX center: appended to the compact combined currency chip tooltip — long-pressing the chip opens the FX center sheet (tap still toggles the display currency).
+  ///
+  /// In en, this message translates to:
+  /// **'Hold for rate history & tools'**
+  String get fxcChipHoldHint;
+
+  /// No description provided for @fxcRange30d.
+  ///
+  /// In en, this message translates to:
+  /// **'30 days'**
+  String get fxcRange30d;
+
+  /// No description provided for @fxcRange90d.
+  ///
+  /// In en, this message translates to:
+  /// **'90 days'**
+  String get fxcRange90d;
+
+  /// No description provided for @fxcNoHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'No rate history yet'**
+  String get fxcNoHistory;
+
+  /// No description provided for @fxcHistoryFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load rate history'**
+  String get fxcHistoryFailed;
+
+  /// FX center: screen-reader summary mirrored over the pointer-only sparkline. gen-l10n orders placeholders alphabetically: (count, latest, pair).
+  ///
+  /// In en, this message translates to:
+  /// **'{pair} rate history: {count, plural, one{{count} daily point} other{{count} daily points}}, latest {latest}'**
+  String fxcChartSemantics(int count, String latest, String pair);
+
+  /// No description provided for @fxcConverterTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Converter'**
+  String get fxcConverterTitle;
+
+  /// No description provided for @fxcAlertTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rate alert'**
+  String get fxcAlertTitle;
+
+  /// FX center: helper text under the alert-threshold field. Placeholders alphabetical: (base, target).
+  ///
+  /// In en, this message translates to:
+  /// **'Get notified when the {base}/{target} rate crosses this value.'**
+  String fxcAlertHint(String base, String target);
+
+  /// FX center: confirmation line shown while an alert threshold is configured.
+  ///
+  /// In en, this message translates to:
+  /// **'Alert set: you\'ll be notified when the rate crosses {threshold}'**
+  String fxcAlertActive(String threshold);
+
+  /// No description provided for @fxcAlertClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove alert'**
+  String get fxcAlertClear;
+
+  /// No description provided for @fxcAlertSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Rate alert saved'**
+  String get fxcAlertSaved;
+
+  /// No description provided for @fxcAlertCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'Rate alert removed'**
+  String get fxcAlertCleared;
+
+  /// No description provided for @fxcAlertInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a threshold greater than zero'**
+  String get fxcAlertInvalid;
+
+  /// No description provided for @fxcAlertFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save the alert'**
+  String get fxcAlertFailed;
+
+  /// No description provided for @fxcRefreshFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t refresh the rate'**
+  String get fxcRefreshFailed;
 }
 
 class _AppLocalizationsDelegate

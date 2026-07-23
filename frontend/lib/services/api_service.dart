@@ -1017,6 +1017,72 @@ class ApiService {
         'No se pudo guardar el tipo de cambio'));
   }
 
+  /// Historical rate points for the FX center sparkline. [days] windows
+  /// the series server-side (30/90 in the UI) so the payload stays small.
+  Future<List<dynamic>> getExchangeRateHistory(
+    String base,
+    String target, {
+    int days = 90,
+  }) async {
+    final response = await _get(
+      Uri.parse('$_baseUrl/fx/history/$base/$target?days=$days'),
+    );
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw _errorFromBody(response,
+        fallback: _t('Failed to load rate history',
+            'No se pudo cargar el historial del tipo de cambio'));
+  }
+
+  /// The caller's FX alert threshold for the pair, or null when none is
+  /// configured (server returns an explicit `{"alert": null}`).
+  Future<Map<String, dynamic>?> getFxAlert(String base, String target) async {
+    final response =
+        await _get(Uri.parse('$_baseUrl/fx/alert/$base/$target'));
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body);
+      return (body is Map && body['alert'] is Map)
+          ? Map<String, dynamic>.from(body['alert'] as Map)
+          : null;
+    }
+    throw _errorFromBody(response,
+        fallback: _t('Failed to load FX alert',
+            'No se pudo cargar la alerta de tipo de cambio'));
+  }
+
+  /// Upserts the caller's FX alert threshold ("notify me when the rate
+  /// crosses X"); returns the stored alert.
+  Future<Map<String, dynamic>> putFxAlert({
+    required String base,
+    required String target,
+    required double threshold,
+  }) async {
+    final response = await _put(
+      Uri.parse('$_baseUrl/fx/alert/$base/$target'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'threshold': threshold}),
+    );
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body);
+      return Map<String, dynamic>.from(body['alert'] as Map);
+    }
+    throw _errorFromBody(response,
+        fallback: _t('Failed to save FX alert',
+            'No se pudo guardar la alerta de tipo de cambio'));
+  }
+
+  /// Removes the caller's FX alert for the pair. Idempotent server-side.
+  Future<void> deleteFxAlert(String base, String target) async {
+    final response =
+        await _delete(Uri.parse('$_baseUrl/fx/alert/$base/$target'));
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw _errorFromBody(response,
+          fallback: _t('Failed to remove FX alert',
+              'No se pudo eliminar la alerta de tipo de cambio'));
+    }
+  }
+
   /// One newest-first page of transactions across all accounts. The
   /// optional [currency], [sign] (`'inflow'` / `'outflow'`), and [query]
   /// filters are applied server-side over the WHOLE table — the loan

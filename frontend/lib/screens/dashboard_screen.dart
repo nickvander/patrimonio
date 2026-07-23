@@ -44,6 +44,7 @@ import '../widgets/credit_utilization_card.dart';
 import '../widgets/cross_currency_transfers_card.dart';
 import '../widgets/debt_payoff_card.dart';
 import '../widgets/emergency_fund_card.dart';
+import '../widgets/fx_center_sheet.dart';
 import '../widgets/fx_widget.dart';
 import '../widgets/lending_tab.dart';
 import '../widgets/monthly_cash_flow_card.dart';
@@ -2408,10 +2409,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     '${DateFormat('MMM d, y · h:mm a').format(recordedLocal)} '
                     '${recordedLocal.timeZoneName}'));
     // Tooltip / screen-reader label: lead with the full equation
-    // ("1 USD = MXN 17.58"), then the freshness/source line the badge already had.
+    // ("1 USD = MXN 17.58"), then the freshness/source line the badge already
+    // had, then the tap affordance — the pill now opens the FX center.
     final tooltip = rateMoney == null
-        ? freshness
-        : '${l.dashFxRateEquation(base, rateMoney)}\n$freshness';
+        ? '$freshness\n${l.fxcPillTapHint}'
+        : '${l.dashFxRateEquation(base, rateMoney)}\n$freshness\n'
+            '${l.fxcPillTapHint}';
 
     return Tooltip(
       message: tooltip,
@@ -2419,33 +2422,64 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // announces "1 USD = MXN 17.58 …" rather than the terse visible pill.
       child: Semantics(
         container: true,
+        button: true,
         label: tooltip,
         child: ExcludeSemantics(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: context.tint(0.06),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: context.accentBorder(accent)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.swap_horiz, size: 14, color: accent),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: accent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+          // The app-bar audit flagged this pill as "bordered chip with no tap
+          // handler" — it now opens the FX center sheet (history sparkline,
+          // converter, refresh, alert threshold). 48dp hit floor around the
+          // compact visual, same pattern as the combined currency chip.
+          child: InkWell(
+            borderRadius: BorderRadius.circular(24),
+            onTap: _openFxCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+              child: Center(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: context.tint(0.06),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: context.accentBorder(accent)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.swap_horiz, size: 14, color: accent),
+                      const SizedBox(width: 6),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          color: accent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  /// Opens the FX center sheet (behind the app-bar rate pill): 30/90-day
+  /// sparkline, always-visible freshness, linked USD↔MXN converter, manual
+  /// refresh, and the server-persisted alert threshold. A refresh inside
+  /// the sheet re-points `_fxRate` so every card converts off the fresh
+  /// value without a full dashboard reload.
+  void _openFxCenter() {
+    showFxCenterSheet(
+      context,
+      apiService: _apiService,
+      latestRate: _fxRate ?? {},
+      onRateChanged: (fx) {
+        if (mounted) setState(() => _fxRate = fx);
+      },
     );
   }
 
@@ -2481,15 +2515,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // screen reader explains both of the chip's facts.
     final rateMoney = rate == null ? null : formatCurrencyAmount(rate, target);
     final tooltip = rateMoney == null
-        ? l.currencyToggleTooltip(_targetCurrency)
+        ? '${l.currencyToggleTooltip(_targetCurrency)}\n${l.fxcChipHoldHint}'
         : '${l.currencyToggleTooltip(_targetCurrency)}\n'
-            '${l.dashFxRateEquation(base, rateMoney)}';
+            '${l.dashFxRateEquation(base, rateMoney)}\n'
+            '${l.fxcChipHoldHint}';
     return Tooltip(
       message: tooltip,
       child: InkWell(
         borderRadius: BorderRadius.circular(24),
         onTap: () =>
             _setTargetCurrency(_targetCurrency == 'USD' ? 'MXN' : 'USD'),
+        // Compact widths have no standalone FX pill (app-bar audit), so the
+        // combined chip carries the FX center entry point on long-press —
+        // tap keeps its established meaning (toggle the display currency).
+        onLongPress: _openFxCenter,
         // 48dp touch floor: the visual pill stays compact; the hit area
         // doesn't shrink with it.
         child: ConstrainedBox(

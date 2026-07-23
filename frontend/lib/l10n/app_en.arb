@@ -3660,5 +3660,61 @@
   "nwMoversToggleTooltip": "What drove this change",
   "@nwMoversToggleTooltip": {
     "description": "WS-B: tooltip / accessibility label on the expandable movers row that reveals the top institution movers."
-  }
+  },
+  "fxcPillTapHint": "Tap for rate history & tools",
+  "@fxcPillTapHint": {
+    "description": "FX center: appended to the app-bar FX pill tooltip/semantics now that tapping it opens the FX center sheet."
+  },
+  "fxcChipHoldHint": "Hold for rate history & tools",
+  "@fxcChipHoldHint": {
+    "description": "FX center: appended to the compact combined currency chip tooltip — long-pressing the chip opens the FX center sheet (tap still toggles the display currency)."
+  },
+  "fxcRange30d": "30 days",
+  "fxcRange90d": "90 days",
+  "fxcNoHistory": "No rate history yet",
+  "fxcHistoryFailed": "Couldn't load rate history",
+  "fxcChartSemantics": "{pair} rate history: {count, plural, one{{count} daily point} other{{count} daily points}}, latest {latest}",
+  "@fxcChartSemantics": {
+    "description": "FX center: screen-reader summary mirrored over the pointer-only sparkline. gen-l10n orders placeholders alphabetically: (count, latest, pair).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "latest": {
+        "type": "String"
+      },
+      "pair": {
+        "type": "String"
+      }
+    }
+  },
+  "fxcConverterTitle": "Converter",
+  "fxcAlertTitle": "Rate alert",
+  "fxcAlertHint": "Get notified when the {base}/{target} rate crosses this value.",
+  "@fxcAlertHint": {
+    "description": "FX center: helper text under the alert-threshold field. Placeholders alphabetical: (base, target).",
+    "placeholders": {
+      "base": {
+        "type": "String"
+      },
+      "target": {
+        "type": "String"
+      }
+    }
+  },
+  "fxcAlertActive": "Alert set: you'll be notified when the rate crosses {threshold}",
+  "@fxcAlertActive": {
+    "description": "FX center: confirmation line shown while an alert threshold is configured.",
+    "placeholders": {
+      "threshold": {
+        "type": "String"
+      }
+    }
+  },
+  "fxcAlertClear": "Remove alert",
+  "fxcAlertSaved": "Rate alert saved",
+  "fxcAlertCleared": "Rate alert removed",
+  "fxcAlertInvalid": "Enter a threshold greater than zero",
+  "fxcAlertFailed": "Couldn't save the alert",
+  "fxcRefreshFailed": "Couldn't refresh the rate"
 }

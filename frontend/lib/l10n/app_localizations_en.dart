@@ -6833,4 +6833,67 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get nwMoversToggleTooltip => 'What drove this change';
+
+  @override
+  String get fxcPillTapHint => 'Tap for rate history & tools';
+
+  @override
+  String get fxcChipHoldHint => 'Hold for rate history & tools';
+
+  @override
+  String get fxcRange30d => '30 days';
+
+  @override
+  String get fxcRange90d => '90 days';
+
+  @override
+  String get fxcNoHistory => 'No rate history yet';
+
+  @override
+  String get fxcHistoryFailed => 'Couldn\'t load rate history';
+
+  @override
+  String fxcChartSemantics(int count, String latest, String pair) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count daily points',
+      one: '$count daily point',
+    );
+    return '$pair rate history: $_temp0, latest $latest';
+  }
+
+  @override
+  String get fxcConverterTitle => 'Converter';
+
+  @override
+  String get fxcAlertTitle => 'Rate alert';
+
+  @override
+  String fxcAlertHint(String base, String target) {
+    return 'Get notified when the $base/$target rate crosses this value.';
+  }
+
+  @override
+  String fxcAlertActive(String threshold) {
+    return 'Alert set: you\'ll be notified when the rate crosses $threshold';
+  }
+
+  @override
+  String get fxcAlertClear => 'Remove alert';
+
+  @override
+  String get fxcAlertSaved => 'Rate alert saved';
+
+  @override
+  String get fxcAlertCleared => 'Rate alert removed';
+
+  @override
+  String get fxcAlertInvalid => 'Enter a threshold greater than zero';
+
+  @override
+  String get fxcAlertFailed => 'Couldn\'t save the alert';
+
+  @override
+  String get fxcRefreshFailed => 'Couldn\'t refresh the rate';
 }

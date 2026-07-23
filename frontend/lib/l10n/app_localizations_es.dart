@@ -6893,4 +6893,69 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get nwMoversToggleTooltip => 'Qué impulsó este cambio';
+
+  @override
+  String get fxcPillTapHint => 'Toca para ver historial y herramientas';
+
+  @override
+  String get fxcChipHoldHint =>
+      'Mantén presionado para ver historial y herramientas';
+
+  @override
+  String get fxcRange30d => '30 días';
+
+  @override
+  String get fxcRange90d => '90 días';
+
+  @override
+  String get fxcNoHistory => 'Aún no hay historial del tipo de cambio';
+
+  @override
+  String get fxcHistoryFailed =>
+      'No se pudo cargar el historial del tipo de cambio';
+
+  @override
+  String fxcChartSemantics(int count, String latest, String pair) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count puntos diarios',
+      one: '$count punto diario',
+    );
+    return 'Historial del tipo de cambio $pair: $_temp0, último $latest';
+  }
+
+  @override
+  String get fxcConverterTitle => 'Convertidor';
+
+  @override
+  String get fxcAlertTitle => 'Alerta de tipo de cambio';
+
+  @override
+  String fxcAlertHint(String base, String target) {
+    return 'Recibe una notificación cuando el tipo de cambio $base/$target cruce este valor.';
+  }
+
+  @override
+  String fxcAlertActive(String threshold) {
+    return 'Alerta configurada: se te notificará cuando el tipo de cambio cruce $threshold';
+  }
+
+  @override
+  String get fxcAlertClear => 'Quitar alerta';
+
+  @override
+  String get fxcAlertSaved => 'Alerta de tipo de cambio guardada';
+
+  @override
+  String get fxcAlertCleared => 'Alerta de tipo de cambio eliminada';
+
+  @override
+  String get fxcAlertInvalid => 'Ingresa un umbral mayor que cero';
+
+  @override
+  String get fxcAlertFailed => 'No se pudo guardar la alerta';
+
+  @override
+  String get fxcRefreshFailed => 'No se pudo actualizar el tipo de cambio';
 }

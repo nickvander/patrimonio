@@ -2,13 +2,14 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     routing::{get, post},
-    Json, Router,
+    Extension, Json, Router,
 };
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::str::FromStr;
 
+use crate::api::session::{internal, ApiError, AuthContext};
 use crate::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -16,6 +17,14 @@ pub fn router() -> Router<AppState> {
         .route("/latest/{base}/{target}", get(get_latest_rate))
         .route("/history/{base}/{target}", get(get_rate_history))
         .route("/manual", post(post_manual_rate))
+        // Per-user alert threshold for the FX center ("notify me when the
+        // rate crosses X"). GET is readable by every authenticated user;
+        // PUT/DELETE are mutations and thus owner-gated by the business
+        // router's require_owner layer.
+        .route(
+            "/alert/{base}/{target}",
+            get(get_fx_alert).put(put_fx_alert).delete(delete_fx_alert),
+        )
 }
 
 #[derive(Deserialize, Default)]
@@ -160,21 +169,34 @@ async fn get_latest_rate(
     }
 }
 
+#[derive(Deserialize, Default)]
+struct RateHistoryQuery {
+    /// Optional trailing window in days (the FX center sparkline requests
+    /// 30 or 90). Absent = full history, preserving the original contract.
+    days: Option<i64>,
+}
+
 /// Get rate history for charting
 async fn get_rate_history(
     State(state): State<AppState>,
     Path((base, target)): Path<(String, String)>,
+    Query(q): Query<RateHistoryQuery>,
 ) -> Json<Vec<RatePoint>> {
+    // DoS clamp: a hostile ?days= value must not turn into an unbounded
+    // interval multiplication. 1..=3650 covers every legitimate chart.
+    let days = q.days.map(|d| d.clamp(1, 3650));
     let rows = sqlx::query(
         r#"
         SELECT rate, recorded_at
         FROM exchange_rates
         WHERE base_currency = $1 AND target_currency = $2
+          AND ($3::bigint IS NULL OR recorded_at >= NOW() - $3 * INTERVAL '1 day')
         ORDER BY recorded_at ASC
         "#
     )
     .bind(base.to_uppercase())
     .bind(target.to_uppercase())
+    .bind(days)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
@@ -295,4 +317,142 @@ async fn post_manual_rate(
 struct RatePoint {
     rate: f64,
     timestamp: String,
+}
+
+// ----- FX alert threshold (FX center) -----
+
+#[derive(Serialize)]
+struct FxAlertDto {
+    base: String,
+    target: String,
+    /// Decimal serializes as a JSON number (serde-float feature), matching
+    /// the money convention elsewhere.
+    threshold: Decimal,
+    created_at: String,
+    updated_at: String,
+    last_notified_at: Option<String>,
+}
+
+/// Envelope so "no alert configured" is an explicit `{"alert": null}`
+/// instead of a bare null body.
+#[derive(Serialize)]
+struct FxAlertEnvelope {
+    alert: Option<FxAlertDto>,
+}
+
+fn alert_dto_from_row(row: &sqlx::postgres::PgRow, base: &str, target: &str) -> Result<FxAlertDto, sqlx::Error> {
+    Ok(FxAlertDto {
+        base: base.to_string(),
+        target: target.to_string(),
+        threshold: row.try_get("threshold")?,
+        created_at: row
+            .try_get::<chrono::DateTime<chrono::Utc>, _>("created_at")?
+            .to_rfc3339(),
+        updated_at: row
+            .try_get::<chrono::DateTime<chrono::Utc>, _>("updated_at")?
+            .to_rfc3339(),
+        last_notified_at: row
+            .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_notified_at")?
+            .map(|d| d.to_rfc3339()),
+    })
+}
+
+/// GET /fx/alert/{base}/{target} — the caller's configured threshold, if any.
+async fn get_fx_alert(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path((base, target)): Path<(String, String)>,
+) -> Result<Json<FxAlertEnvelope>, ApiError> {
+    let base = base.to_uppercase();
+    let target = target.to_uppercase();
+    let row = sqlx::query(
+        r#"
+        SELECT threshold, created_at, updated_at, last_notified_at
+        FROM user_fx_alerts
+        WHERE user_id = $1 AND base_currency = $2 AND target_currency = $3
+        "#,
+    )
+    .bind(ctx.user_id)
+    .bind(&base)
+    .bind(&target)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(internal)?;
+
+    let alert = match row {
+        Some(r) => Some(alert_dto_from_row(&r, &base, &target).map_err(internal)?),
+        None => None,
+    };
+    Ok(Json(FxAlertEnvelope { alert }))
+}
+
+#[derive(Deserialize)]
+struct PutFxAlertRequest {
+    threshold: Decimal,
+}
+
+/// PUT /fx/alert/{base}/{target} — upsert the caller's alert threshold.
+///
+/// Changing the threshold resets `last_notified_at`: the old stamp
+/// described a different alert.
+async fn put_fx_alert(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path((base, target)): Path<(String, String)>,
+    Json(req): Json<PutFxAlertRequest>,
+) -> Result<Json<FxAlertEnvelope>, ApiError> {
+    // Same spirit as post_manual_rate's guard: a non-positive threshold
+    // can never be crossed by a real FX rate and only poisons the table.
+    // An absurdly large one is equally meaningless — clamp the range.
+    if req.threshold <= Decimal::ZERO || req.threshold > Decimal::from(1_000_000) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "threshold must be a positive number",
+        ));
+    }
+    let base = base.to_uppercase();
+    let target = target.to_uppercase();
+    let row = sqlx::query(
+        r#"
+        INSERT INTO user_fx_alerts (user_id, base_currency, target_currency, threshold)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (user_id, base_currency, target_currency) DO UPDATE
+        SET threshold = EXCLUDED.threshold,
+            updated_at = NOW(),
+            last_notified_at = NULL
+        RETURNING threshold, created_at, updated_at, last_notified_at
+        "#,
+    )
+    .bind(ctx.user_id)
+    .bind(&base)
+    .bind(&target)
+    .bind(req.threshold)
+    .fetch_one(&state.db)
+    .await
+    .map_err(internal)?;
+
+    Ok(Json(FxAlertEnvelope {
+        alert: Some(alert_dto_from_row(&row, &base, &target).map_err(internal)?),
+    }))
+}
+
+/// DELETE /fx/alert/{base}/{target} — remove the caller's alert. Idempotent.
+async fn delete_fx_alert(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<AuthContext>,
+    Path((base, target)): Path<(String, String)>,
+) -> Result<StatusCode, ApiError> {
+    sqlx::query(
+        r#"
+        DELETE FROM user_fx_alerts
+        WHERE user_id = $1 AND base_currency = $2 AND target_currency = $3
+        "#,
+    )
+    .bind(ctx.user_id)
+    .bind(base.to_uppercase())
+    .bind(target.to_uppercase())
+    .execute(&state.db)
+    .await
+    .map_err(internal)?;
+    Ok(StatusCode::NO_CONTENT)
 }

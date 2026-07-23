@@ -2764,5 +2764,22 @@
   "rebSaveError": "No se pudieron guardar los objetivos. Inténtalo de nuevo.",
   "rebRemoveError": "No se pudieron quitar los objetivos. Inténtalo de nuevo.",
   "nwMoversSince": "Desde {date}",
-  "nwMoversToggleTooltip": "Qué impulsó este cambio"
+  "nwMoversToggleTooltip": "Qué impulsó este cambio",
+  "fxcPillTapHint": "Toca para ver historial y herramientas",
+  "fxcChipHoldHint": "Mantén presionado para ver historial y herramientas",
+  "fxcRange30d": "30 días",
+  "fxcRange90d": "90 días",
+  "fxcNoHistory": "Aún no hay historial del tipo de cambio",
+  "fxcHistoryFailed": "No se pudo cargar el historial del tipo de cambio",
+  "fxcChartSemantics": "Historial del tipo de cambio {pair}: {count, plural, one{{count} punto diario} other{{count} puntos diarios}}, último {latest}",
+  "fxcConverterTitle": "Convertidor",
+  "fxcAlertTitle": "Alerta de tipo de cambio",
+  "fxcAlertHint": "Recibe una notificación cuando el tipo de cambio {base}/{target} cruce este valor.",
+  "fxcAlertActive": "Alerta configurada: se te notificará cuando el tipo de cambio cruce {threshold}",
+  "fxcAlertClear": "Quitar alerta",
+  "fxcAlertSaved": "Alerta de tipo de cambio guardada",
+  "fxcAlertCleared": "Alerta de tipo de cambio eliminada",
+  "fxcAlertInvalid": "Ingresa un umbral mayor que cero",
+  "fxcAlertFailed": "No se pudo guardar la alerta",
+  "fxcRefreshFailed": "No se pudo actualizar el tipo de cambio"
 }
