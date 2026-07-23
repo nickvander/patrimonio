@@ -525,6 +525,54 @@ async fn upload_with_no_files_is_400() {
 }
 
 // =====================================================================
+// /api/dashboard/transactions — provenance (fix-3)
+// =====================================================================
+
+#[tokio::test]
+#[serial_test::serial]
+async fn transactions_listing_includes_source_field() {
+    // fix-3: the listing omitted `source`, so the frontend assumed
+    // 'plaid' and stamped "Synced via Plaid" on hand-entered rows.
+    // The field must be present on every row (explicitly null at
+    // worst — provenance is never left to be guessed client-side).
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (_inst, account) = seed_account(&pool, user_id).await;
+    let manual = seed_tx(&pool, user_id, account, "CRITIC TEST coffee", "-4.50").await;
+
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::GET,
+            "/api/dashboard/transactions?limit=100",
+            None,
+            Some(&token),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    let rows = body.as_array().unwrap();
+    let row = rows
+        .iter()
+        .find(|r| r["id"].as_str().unwrap_or_default() == manual.to_string())
+        .expect("seeded manual tx should be listed");
+    assert_eq!(
+        row["source"], "manual",
+        "listing must carry the row's provenance"
+    );
+    // Every row serializes the key, even if the column were null.
+    for r in rows {
+        assert!(
+            r.as_object().unwrap().contains_key("source"),
+            "source key must be present on every row"
+        );
+    }
+}
+
+// =====================================================================
 // /api/accounts/transactions/{id}/splits — split + unsplit + edit-split
 // =====================================================================
 
@@ -5192,6 +5240,74 @@ async fn loan_agreement_html_renders_and_is_scoped() {
     assert_eq!(res.status(), StatusCode::NOT_FOUND, "agreement must be owner-scoped");
 }
 
+/// Regression: the agreement printable double-counted interest in its
+/// PAID/REMAINING figures. total_repaid (Σ paid_amount) already includes
+/// each payment's interest portion, but loan_agreement added
+/// interest_earned on top — so one $70 repayment on a $120 + $20
+/// flat-interest loan rendered "PAID $80.00 / REMAINING $60.00" while the
+/// app correctly showed $70 / $70. The document must match the loan view.
+#[tokio::test]
+#[serial_test::serial]
+async fn loan_agreement_paid_matches_loan_view_with_interest() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, _user) = bootstrap(&app, &pool).await;
+    // $120 principal + $20 agreed flat interest, modeled as a custom
+    // schedule (one $140 row; interest inferred as rows − principal).
+    let loan_id = create_loan(&app, &token, &serde_json::json!({
+        "borrower_name": "Jose Ramirez", "principal": 120.0, "currency": "USD",
+        "origination_date": "2026-01-15"
+    })).await;
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/schedule/custom"),
+        Some(&serde_json::json!({ "rows": [{ "due_date": "2026-12-15", "amount": 140.0 }] })),
+        Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED, "custom schedule should 201");
+    // One $70 cash repayment — carries a non-zero interest portion, which
+    // is exactly what the old code double-counted.
+    let res = app.clone().oneshot(req(
+        Method::POST, &format!("/api/loans/{loan_id}/payments"),
+        Some(&serde_json::json!({ "amount": 70.0, "paid_date": "2026-06-01" })),
+        Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CREATED, "cash payment should 201");
+
+    // The app's source of truth: Repaid $70, owed $70.
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{loan_id}"), None, Some(&token),
+    )).await.unwrap();
+    let l = body_json(res.into_body()).await;
+    assert!((l["total_repaid"].as_f64().unwrap() - 70.0).abs() < 0.01);
+    assert!((l["total_owed"].as_f64().unwrap() - 70.0).abs() < 0.01);
+    assert!(
+        l["interest_earned"].as_f64().unwrap() > 0.0,
+        "payment must carry an interest portion or this test can't catch the double-count"
+    );
+
+    // The agreement must show the SAME figures: PAID $70.00 / REMAINING
+    // $70.00, "$70.00 of $140.00 paid · 50%" — not $80 / $60 / 57%.
+    let res = app.clone().oneshot(req(
+        Method::GET, &format!("/api/loans/{loan_id}/agreement"), None, Some(&token),
+    )).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(res.into_body(), 1024 * 64).await.unwrap();
+    let html = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(
+        html.contains(r#"<div class="k">Paid</div><div class="val">$70.00</div>"#),
+        "agreement PAID must equal the loan view's total_repaid ($70.00)"
+    );
+    assert!(
+        html.contains(r#"<div class="k">Remaining</div><div class="val">$70.00</div>"#),
+        "agreement REMAINING must equal the loan view's total_owed ($70.00)"
+    );
+    assert!(
+        html.contains("$70.00 of $140.00 paid · 50%"),
+        "progress bar label must read $70.00 of $140.00 paid · 50%"
+    );
+}
+
 // =====================================================================
 // Overpay-spill — a payment exceeding one installment spills onto later
 // installments (in installment_number order), inside one write tx.
@@ -6154,6 +6270,76 @@ async fn allocation_unclassified_band_for_holdingsless_investment_account() {
     assert!(rows
         .iter()
         .any(|r| r["asset_class"] == "equity" && r["sub_category"] == "VTI"));
+}
+
+/// fix-5: a balance-only account whose account_type IS an asset class
+/// ('bonds' — the CETES Directo case: literally Mexican treasury bills)
+/// lands in the Bonds band, not "Unclassified (account balance)"; ambiguous
+/// types ('brokerage') still surface as unclassified. The MXN balance also
+/// pins the FX swap: the allocation endpoint now goes through the shared
+/// `latest_usd_mxn_rate` (manual-override precedence), not its old inline
+/// newest-row query with a silent `.unwrap_or(20.0)` fallback.
+#[tokio::test]
+#[serial_test::serial]
+async fn allocation_bonds_account_type_classifies_as_bonds() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (token, user_id) = bootstrap(&app, &pool).await;
+    let (inst, _acct) = seed_account(&pool, user_id).await;
+
+    // Balance-only bonds account in MXN (CETES Directo).
+    sqlx::query(
+        "INSERT INTO accounts (institution_id, name, account_type, currency, current_balance, user_id) \
+         VALUES ($1, 'CETES Directo', 'bonds', 'MXN', 180000.00, $2)",
+    )
+    .bind(inst)
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .expect("seed CETES account");
+    // Balance-only AMBIGUOUS type — must stay unclassified.
+    seed_typed_account(&pool, user_id, inst, "Mystery Brokerage", "brokerage", "5000.00").await;
+
+    // A newer 'api' rate AND an older 'manual' override: the shared
+    // latest_usd_mxn_rate picks the manual row (18.0); the old inline query
+    // ordered by recorded_at alone and would have used 17.0.
+    sqlx::query(
+        "INSERT INTO exchange_rates (base_currency, target_currency, rate, recorded_at, source) \
+         VALUES ('USD', 'MXN', 17.00, NOW(), 'api'), \
+                ('USD', 'MXN', 18.00, NOW() - INTERVAL '1 hour', 'manual')",
+    )
+    .execute(&pool)
+    .await
+    .expect("seed fx rates");
+
+    let res = app
+        .clone()
+        .oneshot(req(Method::GET, "/api/dashboard/allocation", None, Some(&token)))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body = body_json(res.into_body()).await;
+    let rows = body.as_array().unwrap();
+
+    // CETES → Bonds, converted at the manual 18.0 rate: 180000 / 18 = 10000.
+    let bonds: Vec<_> = rows.iter().filter(|r| r["asset_class"] == "bonds").collect();
+    assert_eq!(bonds.len(), 1, "exactly the CETES band: {rows:#?}");
+    assert_eq!(bonds[0]["category"], "Bonds");
+    assert_eq!(bonds[0]["sub_category"], "CETES Directo");
+    assert!(
+        (bonds[0]["value"].as_f64().unwrap() - 10000.0).abs() < 0.01,
+        "expected 180000 MXN / 18.0 manual rate = 10000 USD, got {}",
+        bonds[0]["value"]
+    );
+
+    // The ambiguous brokerage balance is the ONLY unclassified band.
+    let unclassified: Vec<_> = rows
+        .iter()
+        .filter(|r| r["asset_class"] == "unclassified")
+        .collect();
+    assert_eq!(unclassified.len(), 1, "only the brokerage band: {rows:#?}");
+    assert_eq!(unclassified[0]["sub_category"], "Mystery Brokerage");
 }
 
 // =====================================================================
@@ -7622,6 +7808,77 @@ async fn manual_sync_trigger_returns_202_immediately() {
         "sync trigger must return 202, not block on the sync"
     );
     assert_eq!(body["status"], "accepted");
+}
+
+/// Regression: "Sync now" on web 415'd. The browser stamps `text/plain`
+/// on a body-less POST, and the old `Option<Json<SyncRequest>>` extractor
+/// rejects any present-but-non-JSON Content-Type with 415 Unsupported
+/// Media Type. The handler now reads raw bytes and treats an empty body —
+/// whatever its Content-Type — as "sync everything", while a non-empty
+/// body that isn't valid JSON gets a 400 (never a silent sync-all when
+/// the client asked for a subset).
+#[tokio::test]
+async fn manual_sync_tolerates_empty_non_json_body() {
+    let Some((app, pool, _lock)) = skip_if_no_db(try_setup(false, None).await) else {
+        return;
+    };
+    let (cookie, user_id) = bootstrap(&app, &pool).await;
+    seed_inst(&pool, user_id, "manual", "ok").await;
+
+    // Empty body with Content-Type: text/plain — what a browser sends for
+    // the frontend's old body-less POST. Must be accepted, not 415.
+    let plain_empty = Request::builder()
+        .method(Method::POST)
+        .uri("/api/institutions/sync")
+        .header("X-Requested-With", "patrimonio")
+        .header(header::CONTENT_TYPE, "text/plain")
+        .header(header::COOKIE, cookie_header(&cookie))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(plain_empty).await.unwrap();
+    let status = res.status();
+    let body = body_json(res.into_body()).await;
+    assert_eq!(
+        status,
+        StatusCode::ACCEPTED,
+        "empty text/plain body must be treated as 'sync everything', not 415"
+    );
+    assert_eq!(body["status"], "accepted");
+
+    // A non-empty body that isn't JSON is a malformed request — 400, so a
+    // broken batch client can't accidentally fan out to every institution.
+    let garbage = Request::builder()
+        .method(Method::POST)
+        .uri("/api/institutions/sync")
+        .header("X-Requested-With", "patrimonio")
+        .header(header::CONTENT_TYPE, "text/plain")
+        .header(header::COOKIE, cookie_header(&cookie))
+        .body(Body::from("definitely not json"))
+        .unwrap();
+    let res = app.clone().oneshot(garbage).await.unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::BAD_REQUEST,
+        "non-empty non-JSON body must 400, not sync everything"
+    );
+
+    // The JSON contract is unchanged: `{"ids": [...]}` still narrows the
+    // sync, and the new frontend's explicit `{}` body still means "all".
+    let res = app
+        .clone()
+        .oneshot(req(
+            Method::POST,
+            "/api/institutions/sync",
+            Some(&serde_json::json!({})),
+            Some(&cookie),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::ACCEPTED,
+        "explicit empty-JSON body ('{{}}') must be accepted"
+    );
 }
 
 /// `mark_syncable_syncing` is the synchronous pre-stamp the trigger runs

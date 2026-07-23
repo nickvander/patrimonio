@@ -67,9 +67,13 @@ bool _looksGeneric(String s) {
 ///   5. `description`           — Plaid's cleaned `name`. The default.
 ///
 /// Plaid-side strings are run through [cleanTransactionDescription] to
-/// normalise case, drop POS reference codes, etc. Raw values are
-/// preserved on the transaction map — only the *display* string is
-/// derived here. Clearing `user_description` reverts to the auto pick.
+/// normalise case, drop POS reference codes, etc. — but ONLY for rows
+/// whose `source` is not 'manual'. A manual row's description is the
+/// user's own typed words: re-casing it ("CRITIC TEST coffee" →
+/// "Critic TEST coffee") silently rewrote user input, so manual rows
+/// display verbatim. Raw values are preserved on the transaction map —
+/// only the *display* string is derived here. Clearing
+/// `user_description` reverts to the auto pick.
 String displayLabel(Map<String, dynamic> tx) {
   String? nonEmpty(dynamic v) {
     if (v == null) return null;
@@ -77,15 +81,20 @@ String displayLabel(Map<String, dynamic> tx) {
     return s.isEmpty ? null : s;
   }
 
+  // Manual entries are user-authored text, never bank noise — the
+  // normaliser must not touch them.
+  final isManual = (tx['source'] ?? '').toString() == 'manual';
+  String clean(String s) => isManual ? s : cleanTransactionDescription(s);
+
   // User-supplied override wins — exact text, no normalisation.
   final userDescription = nonEmpty(tx['user_description']);
   if (userDescription != null) return userDescription;
 
   final counterparty = nonEmpty(tx['counterparty_name']);
-  if (counterparty != null) return cleanTransactionDescription(counterparty);
+  if (counterparty != null) return clean(counterparty);
 
   final merchant = nonEmpty(tx['merchant_name']);
-  if (merchant != null) return cleanTransactionDescription(merchant);
+  if (merchant != null) return clean(merchant);
 
   final desc = nonEmpty(tx['description']);
   final orig = nonEmpty(tx['original_description']);
@@ -104,15 +113,15 @@ String displayLabel(Map<String, dynamic> tx) {
     // Skip past the generic description in favour of any specific
     // identifier we have. Ordered: payment_meta → original_description
     // → the generic description as a last resort.
-    if (paymentSide != null) return cleanTransactionDescription(paymentSide);
+    if (paymentSide != null) return clean(paymentSide);
     if (orig != null && !_looksGeneric(orig)) {
-      return cleanTransactionDescription(orig);
+      return clean(orig);
     }
   }
 
-  if (desc != null) return cleanTransactionDescription(desc);
-  if (paymentSide != null) return cleanTransactionDescription(paymentSide);
-  if (orig != null) return cleanTransactionDescription(orig);
+  if (desc != null) return clean(desc);
+  if (paymentSide != null) return clean(paymentSide);
+  if (orig != null) return clean(orig);
   return 'Unknown';
 }
 

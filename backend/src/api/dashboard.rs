@@ -1152,7 +1152,8 @@ async fn recent_transactions(
                t.original_description, t.counterparty_name, t.counterparty_logo_url,
                t.user_description, t.payment_payee, t.payment_payer,
                t.parent_id,
-               t.pending
+               t.pending,
+               t.source
         FROM transactions t
         JOIN accounts a ON t.account_id = a.id
         JOIN institutions i ON a.institution_id = i.id
@@ -1251,6 +1252,10 @@ async fn recent_transactions(
                         .flatten()
                         .map(|u| u.to_string()),
                     pending: r.get("pending"),
+                    source: r
+                        .try_get::<Option<String>, _>("source")
+                        .ok()
+                        .flatten(),
                 }
             })
             .collect(),
@@ -1677,16 +1682,12 @@ async fn asset_allocation(
     State(state): State<AppState>,
     Extension(ctx): Extension<AuthContext>,
 ) -> Json<Vec<AllocationEntry>> {
-    let fx_rate = sqlx::query(
-        "SELECT rate FROM exchange_rates WHERE base_currency = 'USD' AND target_currency = 'MXN' ORDER BY recorded_at DESC LIMIT 1"
-    )
-    .fetch_optional(&state.db)
-    .await
-    .ok()
-    .flatten()
-    .map(|r| r.get::<rust_decimal::Decimal, _>("rate"))
-    .and_then(|d| d.to_string().parse::<f64>().ok())
-    .unwrap_or(20.0);
+    // Shared FX path (manual-override precedence + missing/stale policy in
+    // one place) — this handler used to run its own inline query with a
+    // silent `.unwrap_or(20.0)` fallback that the holdings endpoint had
+    // already dropped, so the two portfolio surfaces could value the same
+    // MXN balance at different rates.
+    let fx_rate = latest_usd_mxn_rate(&state.db).await.rate;
 
     let rows = sqlx::query(
         r#"
@@ -1748,7 +1749,14 @@ async fn asset_allocation(
             -- Surfacing the balance as an 'unclassified' band reconciles the
             -- asset-class view with net worth; accounts WITH holdings are
             -- covered by the holdings branch and never double-counted here.
-            SELECT 'unclassified' as kind,
+            -- An UNAMBIGUOUS account type maps straight to its asset class:
+            -- 'bonds' (CETES Directo — literally Mexican treasury bills) is
+            -- bonds, full stop; leaving it 'unclassified' skewed the Bonds
+            -- target to a false "on target" and showed an impossible
+            -- "classify these holdings" nudge. Ambiguous types ('brokerage',
+            -- 'ira', …) could hold anything and stay unclassified.
+            SELECT CASE WHEN account_type = 'bonds' THEN 'bonds'
+                        ELSE 'unclassified' END as kind,
                    NULL as holding_type,
                    NULL as symbol,
                    name,
@@ -1810,6 +1818,10 @@ async fn asset_allocation(
         let asset_class: String = match kind.as_str() {
             "cash" => "cash".to_string(),
             "crypto" => "crypto".to_string(),
+            // Balance-only account whose type IS an asset class (C-G, e.g.
+            // account_type='bonds') — classified in SQL, no holdings row to
+            // run through the classifier.
+            "bonds" => "bonds".to_string(),
             "unclassified" => "unclassified".to_string(),
             _ => {
                 let holding_type: String = r
@@ -3247,6 +3259,12 @@ struct TransactionEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     parent_id: Option<String>,
     pending: bool,
+    /// Provenance: 'plaid' | 'csv' | 'manual' | 'split' (see the
+    /// `transactions.source` column). Deliberately NOT skipped when
+    /// absent — the frontend must never have to guess provenance
+    /// (assuming 'plaid' put a "Synced via Plaid" chip on hand-typed
+    /// rows); a null here renders as an explicit "unknown" state.
+    source: Option<String>,
 }
 
 #[derive(Serialize)]

@@ -1058,6 +1058,12 @@ abstract class AppLocalizations {
   /// **'Raw bank text'**
   String get txRawBankText;
 
+  /// No description provided for @txOriginalText.
+  ///
+  /// In en, this message translates to:
+  /// **'Original text'**
+  String get txOriginalText;
+
   /// No description provided for @txCategoryAndNotes.
   ///
   /// In en, this message translates to:
@@ -10905,6 +10911,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unclassified: {pct} — classify these holdings to include them in targets'**
   String rebUnclassifiedFootnote(String pct);
+
+  /// fix-5: footnote when the unclassified share comes ONLY from balance-only account bands (nothing to classify) — no 'classify these holdings' nudge.
+  ///
+  /// In en, this message translates to:
+  /// **'Unclassified: {pct} — account balances without holdings detail, kept in the totals'**
+  String rebUnclassifiedBalanceFootnote(String pct);
 
   /// WS2r4: section header above the move-guidance lines (sentence case, matching the dividend card's section headers).
   ///

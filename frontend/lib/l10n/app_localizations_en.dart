@@ -556,6 +556,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get txRawBankText => 'Raw bank text';
 
   @override
+  String get txOriginalText => 'Original text';
+
+  @override
   String get txCategoryAndNotes => 'Category & notes';
 
   @override
@@ -6767,6 +6770,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String rebUnclassifiedFootnote(String pct) {
     return 'Unclassified: $pct — classify these holdings to include them in targets';
+  }
+
+  @override
+  String rebUnclassifiedBalanceFootnote(String pct) {
+    return 'Unclassified: $pct — account balances without holdings detail, kept in the totals';
   }
 
   @override

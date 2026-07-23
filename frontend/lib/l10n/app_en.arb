@@ -176,6 +176,7 @@
   "txInflow": "INFLOW",
   "txApproxEstimated": "≈ {amount} (estimated)",
   "txRawBankText": "Raw bank text",
+  "txOriginalText": "Original text",
   "txCategoryAndNotes": "Category & notes",
   "txCategory": "Category",
   "txCategoryExample": "e.g. {category}",
@@ -3560,6 +3561,15 @@
   "rebUnclassifiedFootnote": "Unclassified: {pct} — classify these holdings to include them in targets",
   "@rebUnclassifiedFootnote": {
     "description": "WS2r4: muted footnote when unclassified balances are part of the denominator (decision #5).",
+    "placeholders": {
+      "pct": {
+        "type": "String"
+      }
+    }
+  },
+  "rebUnclassifiedBalanceFootnote": "Unclassified: {pct} — account balances without holdings detail, kept in the totals",
+  "@rebUnclassifiedBalanceFootnote": {
+    "description": "fix-5: footnote when the unclassified share comes ONLY from balance-only account bands (nothing to classify) — no 'classify these holdings' nudge.",
     "placeholders": {
       "pct": {
         "type": "String"

@@ -13,7 +13,8 @@ import 'package:patrimonio/widgets/rebalancing_card.dart';
 // ApiService — package:web breaks the test VM — and must not hit the
 // network); the required apiService instance is real but never called.
 
-Widget _host(Widget child) => MaterialApp(
+Widget _host(Widget child, {Locale? locale}) => MaterialApp(
+      locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(body: SingleChildScrollView(child: child)),
@@ -215,6 +216,10 @@ void main() {
     testWidgets(
         'unclassified balances stay in the denominator and get the footnote',
         (tester) async {
+      // fix-5: 'unclassified' entries from the backend are C-G BALANCE-ONLY
+      // account bands — there are no holdings to classify, so the footnote
+      // must be the descriptive note, never the "classify these holdings"
+      // nudge (impossible advice for a CETES-style balance-only account).
       await tester.pumpWidget(_host(card(
         data: [
           AllocationData('Stocks/ETFs', 'VTI', 60000, Colors.teal,
@@ -234,6 +239,60 @@ void main() {
       // Actuals are computed over the FULL total (decision #5): equity is
       // 60%, not 75% — and the unclassified money is called out.
       expect(find.text('60.0% / 75%'), findsOneWidget);
+      expect(
+          find.text(
+              'Unclassified: 20.0% — account balances without holdings detail, kept in the totals'),
+          findsOneWidget);
+      expect(find.textContaining('classify these holdings'), findsNothing);
+    });
+
+    testWidgets(
+        'fix-5 es: balance-only unclassified footnote localizes (no nudge)',
+        (tester) async {
+      await tester.pumpWidget(_host(
+        card(
+          data: [
+            AllocationData('Stocks/ETFs', 'VTI', 80000, Colors.teal,
+                assetClassKey: 'equity'),
+            AllocationData('Unclassified', 'CETES Directo', 20000, Colors.grey,
+                assetClassKey: 'unclassified'),
+          ],
+          load: () async => {
+            'v': 1,
+            'targets': {'equity': 100},
+          },
+        ),
+        locale: const Locale('es'),
+      ));
+      await tester.pumpAndSettle();
+
+      // es-MX shares en's period decimal + no space before % (see
+      // percent_format.dart), so the pct renders "20.0%" here too.
+      expect(
+          find.text(
+              'Sin clasificar: 20.0% — saldos de cuentas sin detalle de posiciones, incluidos en los totales'),
+          findsOneWidget);
+      expect(find.textContaining('clasifica estas posiciones'), findsNothing);
+    });
+
+    testWidgets(
+        'holdings-sourced unclassified (legacy backend, no asset_class) '
+        'still gets the classify-holdings nudge', (tester) async {
+      await tester.pumpWidget(_host(card(
+        data: [
+          AllocationData('Stocks/ETFs', 'VTI', 80000, Colors.teal,
+              assetClassKey: 'equity'),
+          // Legacy backend row: no asset_class key at all — an actual
+          // holding the user CAN classify.
+          AllocationData('Other', 'MYSTERY', 20000, Colors.grey),
+        ],
+        load: () async => {
+          'v': 1,
+          'targets': {'equity': 100},
+        },
+      )));
+      await tester.pumpAndSettle();
+
       expect(
           find.text(
               'Unclassified: 20.0% — classify these holdings to include them in targets'),

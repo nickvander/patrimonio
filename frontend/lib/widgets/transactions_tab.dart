@@ -3823,7 +3823,11 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
     // positive, outflow = neutral text. The red `negative` token stays
     // reserved for destructive affordances; teal for transfer/linked.
     final flowAccent = isExpense ? context.textPrimary : context.positive;
-    final source = (tx['source'] ?? 'plaid').toString();
+    // Provenance comes only from the payload — an absent/null source
+    // renders as the explicit "unknown" state, never assumed 'plaid'
+    // (that assumption once stamped "Synced via Plaid" on hand-typed
+    // rows).
+    final source = (tx['source'] ?? '').toString();
     final originalCategory = (tx['category'] ?? '').toString();
     final merchant = (tx['merchant_name'] ?? '').toString();
     final pending = tx['pending'] == true;
@@ -4307,7 +4311,11 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                       ),
                       children: [
                         if (rawDescription != titleDescription) ...[
-                          s._sectionLabel(l.txRawBankText),
+                          // Manual rows hold the user's own words, not
+                          // bank data — neutral copy, not "raw bank text".
+                          s._sectionLabel(source == 'manual'
+                              ? l.txOriginalText
+                              : l.txRawBankText),
                           const SizedBox(height: 4),
                           SelectableText(
                             rawDescription,
@@ -4323,7 +4331,18 @@ class _TransactionDetailPanelState extends State<_TransactionDetailPanel> {
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            s._metaChip(Icons.cloud_download,
+                            // Icon mirrors provenance: hand-typed rows
+                            // get a pencil, imports a file, synced rows
+                            // the cloud — a cloud on a manual row would
+                            // re-assert the "synced" claim the label
+                            // just corrected.
+                            s._metaChip(
+                                switch (source) {
+                                  'manual' => Icons.edit_outlined,
+                                  'csv' => Icons.upload_file_outlined,
+                                  'plaid' => Icons.cloud_download,
+                                  _ => Icons.help_outline,
+                                },
                                 s._sourceLabel(context, source)),
                             if (hasChannel)
                               s._metaChip(

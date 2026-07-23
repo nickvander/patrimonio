@@ -300,9 +300,16 @@ class _RebalancingCardState extends State<RebalancingCard> {
 
   /// Aggregate the allocation entries into per-class USD sums + the full
   /// total (incl. unclassified — decision #5 keeps it in the denominator).
-  (Map<String, double>, double) _aggregate() {
+  ///
+  /// The third value is the slice of the unclassified bucket that came from
+  /// HOLDINGS rows (a legacy backend omitting `asset_class`), as opposed to
+  /// C-G balance-only account bands (`asset_class == 'unclassified'`). Only
+  /// the former can be fixed by classifying holdings, so only it earns the
+  /// "classify these holdings" nudge (fix-5).
+  (Map<String, double>, double, double) _aggregate() {
     final byClass = <String, double>{};
     var total = 0.0;
+    var unclassifiedHoldingsUsd = 0.0;
     for (final item in widget.allocationData) {
       final rawKey = item.assetClassKey;
       // A missing class means the holding is unclassified (a legacy backend
@@ -310,10 +317,13 @@ class _RebalancingCardState extends State<RebalancingCard> {
       // the denominator and surfaces in the footnote, not silently folded
       // into 'other' where it would inflate a targetable class.
       final key = (rawKey != null && rawKey.isNotEmpty) ? rawKey : 'unclassified';
+      if (rawKey == null || rawKey.isEmpty) {
+        unclassifiedHoldingsUsd += item.value;
+      }
       byClass[key] = (byClass[key] ?? 0) + item.value;
       total += item.value;
     }
-    return (byClass, total);
+    return (byClass, total, unclassifiedHoldingsUsd);
   }
 
   String _money(double usd) =>
@@ -326,7 +336,7 @@ class _RebalancingCardState extends State<RebalancingCard> {
 
   @override
   Widget build(BuildContext context) {
-    final (actualUsd, totalUsd) = _aggregate();
+    final (actualUsd, totalUsd, unclassifiedHoldingsUsd) = _aggregate();
     // Nothing to reconcile against — an empty allocation renders no card
     // (the heatmap guard upstream makes this near-unreachable).
     if (totalUsd <= 0) return const SizedBox.shrink();
@@ -342,7 +352,8 @@ class _RebalancingCardState extends State<RebalancingCard> {
     return switch (_status) {
       _TargetsStatus.unset => _buildCta(context),
       _TargetsStatus.malformed => _buildRepair(context),
-      _ => _buildFull(context, actualPct, totalUsd),
+      _ => _buildFull(context, actualPct, totalUsd,
+          unclassifiedHoldingsUsd / totalUsd * 100),
     };
   }
 
@@ -512,8 +523,8 @@ class _RebalancingCardState extends State<RebalancingCard> {
   // Full card — drift rows + guidance.
   // ---------------------------------------------------------------------
 
-  Widget _buildFull(
-      BuildContext context, Map<String, double> actualPct, double totalUsd) {
+  Widget _buildFull(BuildContext context, Map<String, double> actualPct,
+      double totalUsd, double unclassifiedHoldingsPct) {
     final l = AppLocalizations.of(context);
 
     final rows = kAllocationClassKeys
@@ -554,8 +565,17 @@ class _RebalancingCardState extends State<RebalancingCard> {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    l.rebUnclassifiedFootnote(localizePercentString(
-                        context, unclassifiedPct.toStringAsFixed(1))),
+                    // fix-5: the "classify these holdings" nudge only when
+                    // some unclassified value really is holdings-sourced.
+                    // C-G balance-only bands (asset_class 'unclassified')
+                    // have no holdings rows to classify — nudging there is
+                    // impossible advice, so they get the descriptive note.
+                    unclassifiedHoldingsPct >= 0.05
+                        ? l.rebUnclassifiedFootnote(localizePercentString(
+                            context, unclassifiedPct.toStringAsFixed(1)))
+                        : l.rebUnclassifiedBalanceFootnote(
+                            localizePercentString(
+                                context, unclassifiedPct.toStringAsFixed(1))),
                     style:
                         TextStyle(fontSize: 11.5, color: context.textFaint),
                   ),
@@ -805,7 +825,7 @@ class _RebalancingCardState extends State<RebalancingCard> {
   // ---------------------------------------------------------------------
 
   Future<void> _openEditor() async {
-    final (actualUsd, totalUsd) = _aggregate();
+    final (actualUsd, totalUsd, _) = _aggregate();
     // Prefill priority: current targets → values salvaged from a malformed
     // setting → current actuals rounded to integers (best-guess starting
     // point, normalized to 100 via the "Distribute remainder" helper).
